@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
+import Link from "next/link";
 import { Search } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -139,7 +140,11 @@ export function TenantsTable({ initialTenants }: { initialTenants: TenantRow[] }
             )}
             {paged.map((tenant) => (
               <TableRow key={tenant.id}>
-                <TableCell className="font-medium">{tenant.name}</TableCell>
+                <TableCell className="font-medium">
+                  <Link href={`/admin/tenants/${tenant.id}`} className="hover:underline">
+                    {tenant.name}
+                  </Link>
+                </TableCell>
                 <TableCell className="text-muted-foreground">
                   {tenant.owner ? (
                     <>
