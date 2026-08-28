@@ -1,0 +1,36 @@
+// The fixed set of actions this app currently logs. Not exhaustive of what SA-0.3 lists — the
+// rest (plan/price/subscription/invoice/payment/tenant-suspend events) don't exist until SA-1/2/3
+// add the routes that produce them; add each one here as it lands.
+export const AUDIT_ACTIONS = [
+  "admin.login",
+  "admin.created",
+  "admin.updated",
+  "tenant.created",
+  "user.created",
+  "user.invite_resent",
+  "user.updated",
+  "user.password_reset_sent",
+  "user.email_change_requested",
+  "user.activated",
+  "user.deactivated",
+  "user.suspended",
+  "user.unsuspended",
+] as const;
+
+export type AuditAction = (typeof AUDIT_ACTIONS)[number];
+
+export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
+  "admin.login": "Admin login",
+  "admin.created": "Admin created",
+  "admin.updated": "Admin updated",
+  "tenant.created": "Tenant created",
+  "user.created": "User created",
+  "user.invite_resent": "Invitation resent",
+  "user.updated": "User updated",
+  "user.password_reset_sent": "Password reset sent",
+  "user.email_change_requested": "Email change requested",
+  "user.activated": "User activated",
+  "user.deactivated": "User deactivated",
+  "user.suspended": "User suspended",
+  "user.unsuspended": "User unsuspended",
+};

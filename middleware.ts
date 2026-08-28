@@ -1,0 +1,51 @@
+import { NextResponse, type NextRequest } from "next/server";
+
+import { ADMIN_SESSION_COOKIE, verifyAdminSessionToken } from "@/lib/adminAuth/session";
+import { TENANT_SESSION_COOKIE, verifyTenantSessionToken } from "@/lib/tenantAuth/session";
+
+export async function middleware(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+
+  if (pathname.startsWith("/admin/login")) {
+    return NextResponse.next();
+  }
+
+  if (pathname.startsWith("/admin")) {
+    const token = request.cookies.get(ADMIN_SESSION_COOKIE)?.value;
+    const session = token ? await verifyAdminSessionToken(token) : null;
+
+    if (!session) return redirectTo(request, "/admin/login");
+    return NextResponse.next();
+  }
+
+  // All reached by people who aren't (or can't be) signed in: an invitee setting their first
+  // password (SA-1.2), and someone confirming a new email address from their inbox (SA-1.3).
+  if (
+    pathname.startsWith("/app/login") ||
+    pathname.startsWith("/app/set-password") ||
+    pathname.startsWith("/app/confirm-email")
+  ) {
+    return NextResponse.next();
+  }
+
+  if (pathname.startsWith("/app")) {
+    const token = request.cookies.get(TENANT_SESSION_COOKIE)?.value;
+    const session = token ? await verifyTenantSessionToken(token) : null;
+
+    if (!session) return redirectTo(request, "/app/login");
+    return NextResponse.next();
+  }
+
+  return NextResponse.next();
+}
+
+function redirectTo(request: NextRequest, pathname: string) {
+  const url = request.nextUrl.clone();
+  url.pathname = pathname;
+  url.search = "";
+  return NextResponse.redirect(url);
+}
+
+export const config = {
+  matcher: ["/admin/:path*", "/app/:path*"],
+};
