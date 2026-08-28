@@ -84,6 +84,383 @@ export type Database = {
         };
         Relationships: [];
       };
+      feature_modules: {
+        Row: {
+          created_at: string;
+          key: string;
+          label: string;
+          sort_order: number;
+        };
+        Insert: {
+          created_at?: string;
+          key: string;
+          label: string;
+          sort_order: number;
+        };
+        Update: {
+          created_at?: string;
+          key?: string;
+          label?: string;
+          sort_order?: number;
+        };
+        Relationships: [];
+      };
+      features: {
+        Row: {
+          created_at: string;
+          description: string | null;
+          feature_key: string;
+          id: string;
+          is_archived: boolean;
+          label: string;
+          module: string;
+          sort_order: number;
+        };
+        Insert: {
+          created_at?: string;
+          description?: string | null;
+          feature_key: string;
+          id?: string;
+          is_archived?: boolean;
+          label: string;
+          module: string;
+          sort_order?: number;
+        };
+        Update: {
+          created_at?: string;
+          description?: string | null;
+          feature_key?: string;
+          id?: string;
+          is_archived?: boolean;
+          label?: string;
+          module?: string;
+          sort_order?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "features_module_fkey";
+            columns: ["module"];
+            isOneToOne: false;
+            referencedRelation: "feature_modules";
+            referencedColumns: ["key"];
+          },
+        ];
+      };
+      plans: {
+        Row: {
+          code: string;
+          created_at: string;
+          description: string | null;
+          id: string;
+          is_archived: boolean;
+          is_public: boolean;
+          name: string;
+          plan_type: Database["public"]["Enums"]["plan_type"];
+          sort_order: number;
+          version: number;
+        };
+        Insert: {
+          code: string;
+          created_at?: string;
+          description?: string | null;
+          id?: string;
+          is_archived?: boolean;
+          is_public?: boolean;
+          name: string;
+          plan_type: Database["public"]["Enums"]["plan_type"];
+          sort_order?: number;
+          version?: number;
+        };
+        Update: {
+          code?: string;
+          created_at?: string;
+          description?: string | null;
+          id?: string;
+          is_archived?: boolean;
+          is_public?: boolean;
+          name?: string;
+          plan_type?: Database["public"]["Enums"]["plan_type"];
+          sort_order?: number;
+          version?: number;
+        };
+        Relationships: [];
+      };
+      plan_features: {
+        Row: {
+          created_at: string;
+          feature_key: string;
+          plan_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          feature_key: string;
+          plan_id: string;
+        };
+        Update: {
+          created_at?: string;
+          feature_key?: string;
+          plan_id?: string;
+        };
+        Relationships: [];
+      };
+      addons: {
+        Row: {
+          billing_cycle: Database["public"]["Enums"]["billing_cycle"];
+          code: string;
+          created_at: string;
+          description: string | null;
+          id: string;
+          is_active: boolean;
+          name: string;
+          price_cents: number;
+          sort_order: number;
+        };
+        Insert: {
+          billing_cycle?: Database["public"]["Enums"]["billing_cycle"];
+          code: string;
+          created_at?: string;
+          description?: string | null;
+          id?: string;
+          is_active?: boolean;
+          name: string;
+          price_cents: number;
+          sort_order?: number;
+        };
+        Update: {
+          billing_cycle?: Database["public"]["Enums"]["billing_cycle"];
+          code?: string;
+          created_at?: string;
+          description?: string | null;
+          id?: string;
+          is_active?: boolean;
+          name?: string;
+          price_cents?: number;
+          sort_order?: number;
+        };
+        Relationships: [];
+      };
+      addon_features: {
+        Row: { addon_id: string; feature_key: string };
+        Insert: { addon_id: string; feature_key: string };
+        Update: { addon_id?: string; feature_key?: string };
+        Relationships: [];
+      };
+      addon_meters: {
+        Row: { addon_id: string; included_qty: number; meter_key: string };
+        Insert: { addon_id: string; included_qty: number; meter_key: string };
+        Update: { addon_id?: string; included_qty?: number; meter_key?: string };
+        Relationships: [];
+      };
+      plan_available_addons: {
+        Row: { addon_id: string; plan_id: string };
+        Insert: { addon_id: string; plan_id: string };
+        Update: { addon_id?: string; plan_id?: string };
+        Relationships: [];
+      };
+      subscription_addons: {
+        Row: {
+          addon_id: string;
+          attached_at: string;
+          attached_by: string | null;
+          availability_overridden: boolean;
+          detached_at: string | null;
+          id: string;
+          subscription_id: string;
+        };
+        Insert: {
+          addon_id: string;
+          attached_at?: string;
+          attached_by?: string | null;
+          availability_overridden?: boolean;
+          detached_at?: string | null;
+          id?: string;
+          subscription_id: string;
+        };
+        Update: {
+          addon_id?: string;
+          attached_at?: string;
+          attached_by?: string | null;
+          availability_overridden?: boolean;
+          detached_at?: string | null;
+          id?: string;
+          subscription_id?: string;
+        };
+        Relationships: [];
+      };
+      tenant_entitlements: {
+        Row: { computed_at: string; entitlement: Json; tenant_id: string; version: number };
+        Insert: { computed_at?: string; entitlement: Json; tenant_id: string; version?: number };
+        Update: { computed_at?: string; entitlement?: Json; tenant_id?: string; version?: number };
+        Relationships: [];
+      };
+      meters: {
+        Row: {
+          default_hard_cap: boolean;
+          label: string;
+          meter_key: string;
+          sort_order: number;
+          unit: string;
+        };
+        Insert: {
+          default_hard_cap?: boolean;
+          label: string;
+          meter_key: string;
+          sort_order?: number;
+          unit: string;
+        };
+        Update: {
+          default_hard_cap?: boolean;
+          label?: string;
+          meter_key?: string;
+          sort_order?: number;
+          unit?: string;
+        };
+        Relationships: [];
+      };
+      plan_meters: {
+        Row: { hard_cap: boolean; included_qty: number | null; meter_key: string; plan_id: string };
+        Insert: { hard_cap?: boolean; included_qty?: number | null; meter_key: string; plan_id: string };
+        Update: { hard_cap?: boolean; included_qty?: number | null; meter_key?: string; plan_id?: string };
+        Relationships: [];
+      };
+      plan_limits: {
+        Row: { max_carriers: number | null; max_seats: number | null; plan_id: string };
+        Insert: { max_carriers?: number | null; max_seats?: number | null; plan_id: string };
+        Update: { max_carriers?: number | null; max_seats?: number | null; plan_id?: string };
+        Relationships: [];
+      };
+      usage_events: {
+        Row: {
+          id: string;
+          idempotency_key: string;
+          meter_key: string;
+          period_start: string;
+          qty: number;
+          ref: string | null;
+          tenant_id: string;
+          ts: string;
+        };
+        Insert: {
+          id?: string;
+          idempotency_key: string;
+          meter_key: string;
+          period_start: string;
+          qty: number;
+          ref?: string | null;
+          tenant_id: string;
+          ts?: string;
+        };
+        Update: never;
+        Relationships: [];
+      };
+      usage_totals: {
+        Row: {
+          meter_key: string;
+          period_start: string;
+          tenant_id: string;
+          updated_at: string;
+          used_qty: number;
+        };
+        Insert: {
+          meter_key: string;
+          period_start: string;
+          tenant_id: string;
+          updated_at?: string;
+          used_qty?: number;
+        };
+        Update: {
+          meter_key?: string;
+          period_start?: string;
+          tenant_id?: string;
+          updated_at?: string;
+          used_qty?: number;
+        };
+        Relationships: [];
+      };
+      plan_prices: {
+        Row: {
+          currency: string;
+          plan_id: string;
+          price_monthly_cents: number | null;
+          price_quarterly_cents: number | null;
+          price_yearly_cents: number | null;
+          setup_fee_cents: number;
+          trial_days: number;
+          updated_at: string;
+        };
+        Insert: {
+          currency?: string;
+          plan_id: string;
+          price_monthly_cents?: number | null;
+          price_quarterly_cents?: number | null;
+          price_yearly_cents?: number | null;
+          setup_fee_cents?: number;
+          trial_days?: number;
+          updated_at?: string;
+        };
+        Update: {
+          currency?: string;
+          plan_id?: string;
+          price_monthly_cents?: number | null;
+          price_quarterly_cents?: number | null;
+          price_yearly_cents?: number | null;
+          setup_fee_cents?: number;
+          trial_days?: number;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      subscriptions: {
+        Row: {
+          billing_cycle: Database["public"]["Enums"]["billing_cycle"];
+          cancel_at_period_end: boolean;
+          cancel_reason: string | null;
+          cancelled_at: string | null;
+          created_at: string;
+          current_period_end: string | null;
+          current_period_start: string;
+          id: string;
+          pending_plan_id: string | null;
+          plan_id: string;
+          started_at: string;
+          status: Database["public"]["Enums"]["subscription_status"];
+          tenant_id: string;
+          trial_ends_at: string | null;
+        };
+        Insert: {
+          billing_cycle?: Database["public"]["Enums"]["billing_cycle"];
+          cancel_at_period_end?: boolean;
+          cancel_reason?: string | null;
+          cancelled_at?: string | null;
+          created_at?: string;
+          current_period_end?: string | null;
+          current_period_start?: string;
+          id?: string;
+          pending_plan_id?: string | null;
+          plan_id: string;
+          started_at?: string;
+          status?: Database["public"]["Enums"]["subscription_status"];
+          tenant_id: string;
+          trial_ends_at?: string | null;
+        };
+        Update: {
+          billing_cycle?: Database["public"]["Enums"]["billing_cycle"];
+          cancel_at_period_end?: boolean;
+          cancel_reason?: string | null;
+          cancelled_at?: string | null;
+          created_at?: string;
+          current_period_end?: string | null;
+          current_period_start?: string;
+          id?: string;
+          pending_plan_id?: string | null;
+          plan_id?: string;
+          started_at?: string;
+          status?: Database["public"]["Enums"]["subscription_status"];
+          tenant_id?: string;
+          trial_ends_at?: string | null;
+        };
+        Relationships: [];
+      };
       login_events: {
         Row: {
           actor_type: Database["public"]["Enums"]["login_actor_type"];
@@ -270,6 +647,24 @@ export type Database = {
       };
     };
     Views: {
+      admin_plan_list: {
+        Row: {
+          code: string | null;
+          created_at: string | null;
+          description: string | null;
+          ever_subscribed_count: number | null;
+          id: string | null;
+          is_archived: boolean | null;
+          is_public: boolean | null;
+          name: string | null;
+          plan_type: Database["public"]["Enums"]["plan_type"] | null;
+          sort_order: number | null;
+          subscriber_count: number | null;
+          version: number | null;
+          version_count: number | null;
+        };
+        Relationships: [];
+      };
       admin_user_list: {
         Row: {
           created_at: string | null;
@@ -325,6 +720,127 @@ export type Database = {
           old_role: Database["public"]["Enums"]["tenant_user_role"];
         }[];
       };
+      admin_create_plan_version: {
+        Args: { p_plan_id: string };
+        Returns: string;
+      };
+      admin_attach_addon: {
+        Args: {
+          p_addon_id: string;
+          p_attached_by: string | null;
+          p_override_availability: boolean;
+          p_subscription_id: string;
+        };
+        Returns: string;
+      };
+      admin_detach_addon: {
+        Args: { p_subscription_addon_id: string };
+        Returns: boolean;
+      };
+      refresh_tenant_entitlement: {
+        Args: { p_tenant_id: string };
+        Returns: Json;
+      };
+      resolve_tenant_entitlement: {
+        Args: { p_tenant_id: string };
+        Returns: {
+          feature_keys: string[];
+          max_seats: number | null;
+          meter_allowances: Json;
+          plan_id: string | null;
+          subscription_status: Database["public"]["Enums"]["subscription_status"] | null;
+        }[];
+      };
+      admin_assign_subscription: {
+        Args: {
+          p_billing_cycle: Database["public"]["Enums"]["billing_cycle"];
+          p_plan_id: string;
+          p_start: string;
+          p_tenant_id: string;
+        };
+        Returns: string;
+      };
+      admin_change_subscription_plan: {
+        Args: { p_apply_now: boolean; p_new_plan_id: string; p_subscription_id: string };
+        Returns: { applied_now: boolean; effective_at: string }[];
+      };
+      admin_cancel_subscription: {
+        Args: { p_immediate: boolean; p_reason: string; p_subscription_id: string };
+        Returns: { cancelled_now: boolean; effective_at: string }[];
+      };
+      advance_billing_periods: {
+        Args: never;
+        Returns: {
+          action: string;
+          new_period_end: string;
+          new_period_start: string;
+          subscription_id: string;
+        }[];
+      };
+      period_end_for: {
+        Args: { p_cycle: Database["public"]["Enums"]["billing_cycle"]; p_start: string };
+        Returns: string;
+      };
+      check_meter_capacity: {
+        Args: { p_meter_key: string; p_qty: number; p_tenant_id: string };
+        Returns: {
+          allowed: boolean;
+          hard_cap: boolean;
+          included: number | null;
+          pct_used: number | null;
+          reason: string;
+          used: number;
+        }[];
+      };
+      record_usage: {
+        Args: {
+          p_idempotency_key: string;
+          p_meter_key: string;
+          p_qty: number;
+          p_ref: string | null;
+          p_tenant_id: string;
+        };
+        Returns: { billing_period_start: string; new_total: number; recorded: boolean }[];
+      };
+      rebuild_usage_totals: { Args: never; Returns: number };
+      tenant_current_period_start: { Args: { p_tenant_id: string }; Returns: string };
+      tenant_current_plan: { Args: { p_tenant_id: string }; Returns: string | null };
+      tenant_seats_used: { Args: { p_tenant_id: string }; Returns: number };
+      admin_save_plan_version: {
+        Args: {
+          p_feature_keys: string[];
+          p_plan_id: string;
+          p_price_monthly: number | null;
+          p_price_quarterly: number | null;
+          p_price_yearly: number | null;
+          p_setup_fee: number;
+          p_trial_days: number;
+        };
+        Returns: {
+          created_new_version: boolean;
+          target_plan_id: string;
+          target_version: number;
+        }[];
+      };
+      admin_update_plan: {
+        Args: {
+          p_code: string;
+          p_description: string | null;
+          p_is_archived: boolean;
+          p_is_public: boolean;
+          p_name: string;
+          p_plan_id: string;
+          p_sort_order: number;
+        };
+        Returns: {
+          new_code: string;
+          new_is_archived: boolean;
+          new_name: string;
+          old_code: string;
+          old_is_archived: boolean;
+          old_name: string;
+        }[];
+      };
       admin_login_activity_stats: {
         Args: never;
         Returns: {
@@ -360,7 +876,17 @@ export type Database = {
     Enums: {
       admin_role: "super_admin" | "support_agent" | "billing_admin" | "platform_config";
       audit_actor_type: "admin" | "system";
+      billing_cycle: "monthly" | "quarterly" | "yearly";
       login_actor_type: "user" | "admin";
+      plan_type: "individual" | "agency_no_teams" | "agency_with_teams" | "management";
+      subscription_status:
+        | "trialing"
+        | "active"
+        | "past_due"
+        | "suspended"
+        | "paused"
+        | "cancelling"
+        | "cancelled";
       tenant_status: "provisioning" | "active" | "suspended" | "cancelled";
       tenant_user_role: "owner" | "producer" | "assistant" | "bookkeeper";
       user_status: "active" | "inactive" | "suspended" | "deleted";

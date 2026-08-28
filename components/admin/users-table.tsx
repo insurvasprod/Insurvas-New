@@ -116,8 +116,13 @@ export function UsersTable({
   const [refreshKey, setRefreshKey] = useState(0);
   const [resendingId, setResendingId] = useState<string | null>(null);
   const [resentInvite, setResentInvite] = useState<{ url: string; expiresAt: string; email: string } | null>(null);
+  // `editing` holds the row and outlives the close, so the dialog still has content to render
+  // while it animates out; `editOpen` drives visibility. Keeping the row (and therefore the
+  // dialog's key) stable during close is what preserves the exit animation.
   const [editing, setEditing] = useState<UserListRow | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
   const [suspending, setSuspending] = useState<UserListRow | null>(null);
+  const [suspendOpen, setSuspendOpen] = useState(false);
   const isFirstRun = useRef(true);
   const isFirstStatsRun = useRef(true);
 
@@ -413,7 +418,14 @@ export function UsersTable({
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem onSelect={() => setEditing(user)}>Edit user</DropdownMenuItem>
+                          <DropdownMenuItem
+                            onSelect={() => {
+                              setEditing(user);
+                              setEditOpen(true);
+                            }}
+                          >
+                            Edit user
+                          </DropdownMenuItem>
                           {/* Exactly one of these applies: you either haven't set a password yet,
                               or you have one to reset. */}
                           {user.has_password ? (
@@ -445,7 +457,13 @@ export function UsersTable({
                               Lift suspension
                             </DropdownMenuItem>
                           ) : (
-                            <DropdownMenuItem variant="destructive" onSelect={() => setSuspending(user)}>
+                            <DropdownMenuItem
+                              variant="destructive"
+                              onSelect={() => {
+                                setSuspending(user);
+                                setSuspendOpen(true);
+                              }}
+                            >
                               Suspend…
                             </DropdownMenuItem>
                           )}
@@ -467,15 +485,21 @@ export function UsersTable({
         </div>
       </div>
 
+      {/* Keyed by row id so each dialog remounts with fresh state when a *different* user is
+          opened — that's what lets them seed from props instead of resetting in an effect. */}
       <EditUserDialog
+        key={`edit-${editing?.id ?? "none"}`}
         user={editing}
-        onClose={() => setEditing(null)}
+        open={editOpen}
+        onClose={() => setEditOpen(false)}
         onSaved={() => setRefreshKey((k) => k + 1)}
       />
 
       <SuspendUserDialog
+        key={`suspend-${suspending?.id ?? "none"}`}
         user={suspending}
-        onClose={() => setSuspending(null)}
+        open={suspendOpen}
+        onClose={() => setSuspendOpen(false)}
         onSuspended={() => setRefreshKey((k) => k + 1)}
       />
 

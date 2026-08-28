@@ -63,9 +63,23 @@ export async function POST(request: NextRequest) {
   if (error) {
     // 23505 = unique violation on users.email. The whole function is one transaction, so
     // nothing was created.
-    const message =
-      error.code === "23505" ? "This email is already registered" : "Could not create user";
-    return NextResponse.json({ error: message }, { status: error.code === "23505" ? 409 : 500 });
+    if (error.code === "23505") {
+      return NextResponse.json({ error: "This email is already registered" }, { status: 409 });
+    }
+
+    // SA-2.5 seat limit, raised as `seat_limit_reached:<used>:<max>`.
+    const seatLimit = /seat_limit_reached:(\d+):(\d+)/.exec(error.message ?? "");
+    if (seatLimit) {
+      const [, used, max] = seatLimit;
+      return NextResponse.json(
+        {
+          error: `This tenant is using all ${max} seat${max === "1" ? "" : "s"} on its plan (${used} in use). Deactivate a user or move them to a larger plan.`,
+        },
+        { status: 409 },
+      );
+    }
+
+    return NextResponse.json({ error: "Could not create user" }, { status: 500 });
   }
 
   const result = Array.isArray(data) ? data[0] : data;

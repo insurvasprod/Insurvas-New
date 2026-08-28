@@ -2,7 +2,18 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Users, Building2, ScrollText, UserRound, Activity } from "lucide-react";
+import {
+  LayoutDashboard,
+  Users,
+  Building2,
+  ScrollText,
+  UserRound,
+  Activity,
+  ToggleRight,
+  Package,
+  Repeat,
+  Puzzle,
+} from "lucide-react";
 
 // Icon components (functions with methods) can't cross the server->client boundary as props —
 // the layout (a Server Component) passes a key instead, resolved to a component here.
@@ -11,6 +22,10 @@ const ICONS = {
   tenants: Building2,
   users: UserRound,
   activity: Activity,
+  features: ToggleRight,
+  plans: Package,
+  subscriptions: Repeat,
+  addons: Puzzle,
   admins: Users,
   "audit-log": ScrollText,
 } as const;

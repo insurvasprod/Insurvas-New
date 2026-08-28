@@ -7,6 +7,9 @@ import { LogoutButton } from "@/components/admin/logout-button";
 import { SidebarNav, type SidebarNavItem } from "@/components/admin/sidebar-nav";
 import { canViewUsers } from "@/lib/users/permissions";
 import { canViewTenants } from "@/lib/tenants/permissions";
+import { canManageFeatures } from "@/lib/features/permissions";
+import { canManagePlans } from "@/lib/plans/permissions";
+import { canManageSubscriptions } from "@/lib/subscriptions/permissions";
 
 // Matches the Insurvas CRM sidebar surface (lib/theme.ts navSurfaceBg): a radial glow over a
 // diagonal navy gradient, rather than a flat fill.
@@ -27,6 +30,18 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   if (canViewUsers(admin.role)) {
     navItems.push({ href: "/admin/users", label: "Users", icon: "users" });
     navItems.push({ href: "/admin/activity", label: "Login activity", icon: "activity" });
+  }
+  if (canManagePlans(admin.role)) {
+    navItems.push({ href: "/admin/plans", label: "Plans", icon: "plans" });
+  }
+  if (canManagePlans(admin.role)) {
+    navItems.push({ href: "/admin/addons", label: "Add-ons", icon: "addons" });
+  }
+  if (canManageSubscriptions(admin.role)) {
+    navItems.push({ href: "/admin/subscriptions", label: "Subscriptions", icon: "subscriptions" });
+  }
+  if (canManageFeatures(admin.role)) {
+    navItems.push({ href: "/admin/features", label: "Features", icon: "features" });
   }
   if (admin.role === "super_admin") {
     navItems.push({ href: "/admin/admins", label: "Admin users", icon: "admins" });

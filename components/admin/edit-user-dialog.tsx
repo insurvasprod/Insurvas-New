@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -27,29 +27,25 @@ import { InviteLinkPanel } from "./invite-link-panel";
 
 export function EditUserDialog({
   user,
+  open,
   onClose,
   onSaved,
 }: {
   user: UserListRow | null;
+  /** Separate from `user` so the row stays rendered while the dialog animates closed. */
+  open: boolean;
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const [name, setName] = useState("");
+  // Seeded straight from props. The parent gives this component a `key` of the row id, so
+  // opening a different user remounts it with fresh initial state — which is why there's no
+  // effect here re-seeding the fields (that would be a cascading render).
+  const [name, setName] = useState(user?.name ?? "");
   const [phone, setPhone] = useState("");
-  const [email, setEmail] = useState("");
-  const [role, setRole] = useState<TenantRole>("producer");
+  const [email, setEmail] = useState(user?.email ?? "");
+  const [role, setRole] = useState<TenantRole>((user?.tenant_role as TenantRole) ?? "producer");
   const [loading, setLoading] = useState(false);
   const [emailChange, setEmailChange] = useState<{ url: string; expiresAt: string; newEmail: string } | null>(null);
-
-  // Re-seed the form whenever a different row is opened.
-  useEffect(() => {
-    if (!user) return;
-    setName(user.name);
-    setPhone("");
-    setEmail(user.email);
-    setRole((user.tenant_role as TenantRole) ?? "producer");
-    setEmailChange(null);
-  }, [user]);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -83,7 +79,7 @@ export function EditUserDialog({
   }
 
   return (
-    <Dialog open={user !== null} onOpenChange={(open) => !open && onClose()}>
+    <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
       <DialogContent>
         {emailChange ? (
           <>
