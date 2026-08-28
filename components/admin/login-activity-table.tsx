@@ -7,8 +7,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { loginFailureLabel } from "@/lib/loginEvents/constants";
-import type { LoginEventRow } from "@/lib/loginEvents/queries";
+import { loginFailureLabel, type LoginEventRow } from "@/lib/loginEvents/constants";
 import { tableHeaderRow, tableHeadCell, tableShell } from "./table-styles";
 
 export function LoginActivityTable({

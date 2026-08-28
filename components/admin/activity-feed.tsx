@@ -9,7 +9,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ACTIVITY_PAGE_SIZE, type LoginEventRow } from "@/lib/loginEvents/queries";
+// From ./constants, not ./queries — this is a client component, and queries.ts is server-only.
+import { ACTIVITY_PAGE_SIZE, type LoginEventRow } from "@/lib/loginEvents/constants";
 import { LoginActivityTable } from "./login-activity-table";
 import { PaginationBar } from "./pagination-bar";
 

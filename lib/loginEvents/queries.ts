@@ -1,19 +1,12 @@
 import "server-only";
 
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
+import { ACTIVITY_PAGE_SIZE, type LoginEventRow } from "./constants";
 
-export type LoginEventRow = {
-  id: string;
-  actor_type: "user" | "admin";
-  user_id: string | null;
-  admin_id: string | null;
-  email: string;
-  ts: string;
-  ip: string | null;
-  user_agent: string | null;
-  success: boolean;
-  failure_reason: string | null;
-};
+// Re-exported for server-side callers' convenience. Client components must import these from
+// ./constants directly — importing them from here would drag `server-only` into the browser
+// bundle and fail the build.
+export { ACTIVITY_PAGE_SIZE, type LoginEventRow };
 
 export type LoginActivityStats = {
   logins_today: number;
@@ -47,8 +40,6 @@ export async function fetchLoginActivityStats(): Promise<LoginActivityStats> {
     active_last_15_min: 0,
   }) as LoginActivityStats;
 }
-
-export const ACTIVITY_PAGE_SIZE = 25;
 
 /** Platform-wide feed. Always paginated — this table is the fastest-growing one in the schema. */
 export async function fetchLoginActivityPage(options: {
