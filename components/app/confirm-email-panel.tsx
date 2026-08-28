@@ -16,15 +16,14 @@ type State =
 export function ConfirmEmailPanel() {
   const router = useRouter();
   const token = useSearchParams().get("token") ?? "";
-  const [state, setState] = useState<State>({ status: "checking" });
+  // A missing token is knowable at first render, so it's the initial state rather than
+  // something an effect corrects afterwards.
+  const [state, setState] = useState<State>(token ? { status: "checking" } : { status: "invalid" });
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!token) {
-      setState({ status: "invalid" });
-      return;
-    }
+    if (!token) return;
 
     let cancelled = false;
     fetch(`/api/app/auth/confirm-email?token=${encodeURIComponent(token)}`)

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -17,19 +17,20 @@ import type { UserListRow } from "@/lib/users/list";
 
 export function SuspendUserDialog({
   user,
+  open,
   onClose,
   onSuspended,
 }: {
   user: UserListRow | null;
+  /** Separate from `user` so the row stays rendered while the dialog animates closed. */
+  open: boolean;
   onClose: () => void;
   onSuspended: () => void;
 }) {
+  // The parent keys this component by row id, so it remounts (and the reason clears) when a
+  // different user is opened — no effect needed to reset it.
   const [reason, setReason] = useState("");
   const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    if (user) setReason("");
-  }, [user]);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -55,7 +56,7 @@ export function SuspendUserDialog({
   }
 
   return (
-    <Dialog open={user !== null} onOpenChange={(open) => !open && onClose()}>
+    <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
       <DialogContent>
         <form onSubmit={handleSubmit}>
           <DialogHeader>

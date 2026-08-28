@@ -15,7 +15,11 @@ export function SetPasswordForm() {
   const router = useRouter();
   const token = useSearchParams().get("token") ?? "";
 
-  const [tokenState, setTokenState] = useState<TokenState>({ status: "checking" });
+  // A missing token is knowable at first render, so it's the initial state rather than
+  // something an effect corrects afterwards.
+  const [tokenState, setTokenState] = useState<TokenState>(
+    token ? { status: "checking" } : { status: "invalid" },
+  );
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -24,10 +28,7 @@ export function SetPasswordForm() {
 
   // Check the link up front so an expired invite says so before anyone types a password.
   useEffect(() => {
-    if (!token) {
-      setTokenState({ status: "invalid" });
-      return;
-    }
+    if (!token) return;
 
     let cancelled = false;
     fetch(`/api/app/auth/set-password?token=${encodeURIComponent(token)}`)
