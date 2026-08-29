@@ -42,6 +42,113 @@ export type Database = {
         };
         Relationships: [];
       };
+      provider_settings: {
+        Row: {
+          created_at: string;
+          display_label: string;
+          is_default: boolean;
+          is_enabled: boolean;
+          provider: string;
+          sort_order: number;
+          updated_at: string;
+        };
+        Insert: {
+          created_at?: string;
+          display_label: string;
+          is_default?: boolean;
+          is_enabled?: boolean;
+          provider: string;
+          sort_order?: number;
+          updated_at?: string;
+        };
+        Update: {
+          created_at?: string;
+          display_label?: string;
+          is_default?: boolean;
+          is_enabled?: boolean;
+          provider?: string;
+          sort_order?: number;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      payment_providers: {
+        Row: {
+          created_at: string;
+          id: string;
+          is_default: boolean;
+          payment_method_label: string | null;
+          provider: string;
+          provider_customer_id: string | null;
+          simulate_outcome: string;
+          tenant_id: string;
+          updated_at: string;
+        };
+        Insert: {
+          created_at?: string;
+          id?: string;
+          is_default?: boolean;
+          payment_method_label?: string | null;
+          provider: string;
+          provider_customer_id?: string | null;
+          simulate_outcome?: string;
+          tenant_id: string;
+          updated_at?: string;
+        };
+        Update: {
+          created_at?: string;
+          id?: string;
+          is_default?: boolean;
+          payment_method_label?: string | null;
+          provider?: string;
+          provider_customer_id?: string | null;
+          simulate_outcome?: string;
+          tenant_id?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      provider_calls: {
+        Row: {
+          duration_ms: number | null;
+          id: string;
+          idempotency_key: string | null;
+          method: string;
+          provider: string;
+          request: Json;
+          response: Json | null;
+          status: string;
+          tenant_id: string | null;
+          ts: string;
+        };
+        Insert: {
+          duration_ms?: number | null;
+          id?: string;
+          idempotency_key?: string | null;
+          method: string;
+          provider: string;
+          request: Json;
+          response?: Json | null;
+          status: string;
+          tenant_id?: string | null;
+          ts?: string;
+        };
+        // UPDATE is revoked on this table — the type exists because Supabase generates it, but any
+        // update will be refused by the database.
+        Update: {
+          duration_ms?: number | null;
+          id?: string;
+          idempotency_key?: string | null;
+          method?: string;
+          provider?: string;
+          request?: Json;
+          response?: Json | null;
+          status?: string;
+          tenant_id?: string | null;
+          ts?: string;
+        };
+        Relationships: [];
+      };
       audit_log: {
         Row: {
           action: string;

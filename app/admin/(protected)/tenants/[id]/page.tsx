@@ -15,6 +15,10 @@ import { TenantUsagePanel } from "@/components/admin/tenant-usage-panel";
 import { SubscriptionPanel } from "@/components/admin/subscription-panel";
 import { AddonsPanel } from "@/components/admin/addons-panel";
 import { fetchAddons, fetchAttachedAddons, fetchAvailableAddonIds } from "@/lib/addons/queries";
+import { PaymentProviderPanel } from "@/components/admin/payment-provider-panel";
+import { canManagePaymentProviders } from "@/lib/payments/permissions";
+import { fetchProviderSettings, fetchRecentProviderCalls } from "@/lib/payments/queries";
+import { fetchTenantProviderRecord } from "@/lib/payments/registry";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 
@@ -55,6 +59,11 @@ export default async function TenantDetailPage({ params }: { params: Promise<{ i
     subscription ? fetchAttachedAddons(subscription.id) : Promise.resolve([]),
     subscription ? fetchAvailableAddonIds(subscription.plan_id) : Promise.resolve([]),
   ]);
+  const showPaymentProvider = canManagePaymentProviders(admin.role);
+  const [providerRecord, providerSettings, providerCalls] = showPaymentProvider
+    ? await Promise.all([fetchTenantProviderRecord(id), fetchProviderSettings(), fetchRecentProviderCalls(id)])
+    : [null, [], []];
+
   const assignablePlans = plans.map((p) => ({
     id: p.id,
     code: p.code,
@@ -123,6 +132,16 @@ export default async function TenantDetailPage({ params }: { params: Promise<{ i
             </p>
           </CardContent>
         </Card>
+      )}
+
+      {showPaymentProvider && (
+        <PaymentProviderPanel
+          tenantId={id}
+          record={providerRecord}
+          settings={providerSettings}
+          calls={providerCalls}
+          platformDefault={providerSettings.find((s) => s.is_default)?.display_label ?? null}
+        />
       )}
 
       <TenantUsagePanel usage={usage} />
