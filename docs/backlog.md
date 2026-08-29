@@ -284,6 +284,41 @@ Not a code fix — it's an export. Either `supabase db pull` into `supabase/migr
 the DDL in order and verify by replaying it into a scratch project. Worth doing **before SA-3**
 writes invoices, because financial tables are the worst ones to hold only in a live database.
 
+### 30. `createCharge` is the wrong shape for Whop
+**From:** the Whop decision (2026-08-29) · **Significant**
+
+SA-3.1 shipped a `PaymentProvider` interface built for a card processor: `createCharge(amount,
+customer)`, where *we* decide to move money. Whop doesn't work that way — it hosts checkout and
+raises the charge itself on renewal. The correct primary method is `createCheckoutSession(...)`,
+and the charge arrives later as a webhook.
+
+What survives untouched: `payment_providers`, `provider_settings`, `provider_calls`, the call-logging
+decorator, the required idempotency key, and `ProviderTimeoutError`. What has to change is the one
+method and its callers — of which there are currently **none**, because SA-3.2 and SA-3.4 haven't
+been built. This is the cheapest possible moment to reshape it, and it stops being cheap the
+moment the first caller exists.
+
+### 31. Nothing receives webhooks yet
+**From:** the Whop decision (2026-08-29) · **Blocks SA-3.4**
+
+There is no `/api/webhooks/whop` route and no `webhook_events` table. Three things it needs that
+are easy to leave out and expensive to add later:
+
+1. **Signature verification.** An unverified webhook endpoint is an unauthenticated API that marks
+   invoices paid. Anyone who learns the URL can grant themselves a subscription.
+2. **Idempotency on the provider event id.** Whop retries deliveries. Without a unique constraint,
+   one retry is a second invoice — or a second refund.
+3. **A public URL.** Webhooks cannot reach `localhost`. This has to point at the deployed app,
+   which means the Vercel deployment is now on the critical path for local billing work.
+
+### 32. The provider panel has never been opened in a browser
+**From:** SA-3.1 · Minor
+
+The tenant Payment provider panel, its API route and the call-logging decorator are verified by
+`npm run verify:payments` at the database level and by unit tests at the logic level, but the wired
+path — click Save, see a `provider_calls` row appear — has not been exercised. Same root cause as
+[#8]: admin login needs a TOTP code. Folds into that item's browser pass.
+
 ---
 
 ## ✅ Resolved
