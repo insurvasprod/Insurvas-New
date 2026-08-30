@@ -6,7 +6,7 @@ import { LogOut } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 
-export function LogoutButton() {
+export function LogoutButton({ compact = false }: { compact?: boolean } = {}) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
 
@@ -23,10 +23,12 @@ export function LogoutButton() {
       size="sm"
       onClick={handleLogout}
       disabled={loading}
+      title={compact ? "Sign out" : undefined}
+      aria-label={compact ? "Sign out" : undefined}
       className="w-full justify-center border-white/20 bg-transparent text-white hover:bg-white/10"
     >
       <LogOut className="size-4" />
-      {loading ? "Signing out…" : "Sign out"}
+      {!compact && (loading ? "Signing out…" : "Sign out")}
     </Button>
   );
 }

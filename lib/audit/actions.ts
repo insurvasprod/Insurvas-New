@@ -39,6 +39,12 @@ export const AUDIT_ACTIONS = [
   "tenant.billing_mode_changed",
   "credit_note.requested",
   "credit_note.approved",
+  "trial.extended",
+  "trial.converted_early",
+  "trial.cancelled",
+  "trial.reminder_sent",
+  "legal_document.published",
+  "legal_document.reacceptance_cleared",
 ] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
@@ -81,4 +87,10 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   "tenant.billing_mode_changed": "Billing mode changed",
   "credit_note.requested": "Credit note raised",
   "credit_note.approved": "Credit note approved",
+  "trial.extended": "Trial extended",
+  "trial.converted_early": "Trial converted early",
+  "trial.cancelled": "Trial cancelled",
+  "trial.reminder_sent": "Trial reminder sent",
+  "legal_document.published": "Legal document published",
+  "legal_document.reacceptance_cleared": "Re-acceptance requirement cleared",
 };

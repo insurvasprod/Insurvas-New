@@ -1,10 +1,12 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Check, CreditCard, ListChecks } from "lucide-react";
+import { Check, ListChecks } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { OnboardingFrame } from "@/components/public/onboarding-frame";
+import { CheckoutStart } from "@/components/public/checkout-start";
+import { TRIAL_DAYS } from "@/lib/checkout/constants";
 import { resolveSignupContext, signupDestination } from "@/lib/signup/context";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 
@@ -54,10 +56,7 @@ export default async function CheckoutHandoffPage() {
             </div>
           )}
 
-          <Button size="lg" className="w-full" disabled>
-            <CreditCard /> Continue to secure checkout · SA-5.2
-          </Button>
-          <p className="text-center text-xs text-[var(--color-text-muted)]">Hosted Whop checkout and trial activation are deliberately connected in SA-5.2.</p>
+          <CheckoutStart trialDays={TRIAL_DAYS} />
           <div className="text-center"><Button asChild variant="link"><Link href="/pricing">Change selected plan</Link></Button></div>
         </CardContent>
       </Card>

@@ -18,6 +18,10 @@ export const publicSignupSchema = z.object({
   phone: z.string().trim().min(7, "Enter a valid mobile phone").max(40),
   planCode: z.string().trim().regex(/^[a-z][a-z0-9_]*$/, "Choose a valid plan"),
   billingCycle: z.enum(BILLING_CYCLES),
+  // SA-5.4: the ids of the document versions the box was ticked for. Ids, not a boolean — a
+  // boolean records that someone agreed to *something*, which is worth nothing in a dispute.
+  // The server checks these against what is published right now rather than trusting them.
+  acceptedDocumentIds: z.array(z.string().uuid()).max(5).default([]),
 });
 
 export const verificationActionSchema = z.discriminatedUnion("action", [
@@ -38,7 +42,12 @@ export const businessProfileSchema = z
     productsSold: z.array(z.string()).min(1, "Select at least one product"),
     monthlyVolumeRange: z.string(),
     leadSources: z.array(z.string()).min(1, "Select at least one lead source"),
-    leadSourceOther: z.string().trim().max(120).optional().or(z.literal("")),
+    // Nullable, not merely optional. The field is rendered only when "other" is ticked, so
+    // FormData.get returns null the rest of the time and the form posts a literal null — which an
+    // `.optional()` string rejects, failing EVERY onboarding that does not pick "other" with a
+    // generic "Invalid input". Found by driving signup in a browser; no script had posted this
+    // shape. The server tolerating null is the right fix: absent is absent, however it is spelled.
+    leadSourceOther: z.string().trim().max(120).nullish(),
   })
   .superRefine((data, context) => {
     if (data.productsSold.some((value) => !productValues.includes(value as never))) {

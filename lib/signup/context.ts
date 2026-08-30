@@ -49,5 +49,8 @@ export function signupDestination(context: Pick<SignupContext, "userStatus" | "o
   if (context.userStatus !== "active") return null;
   if (context.onboardingState === "business_profile") return "/app/onboarding/business-profile";
   if (context.onboardingState === "ready_for_checkout") return "/app/checkout";
+  // SA-5.2: a customer who opened checkout and abandoned it comes back to the same place rather
+  // than being stranded — "recoverable by returning, not a broken half-account".
+  if (context.onboardingState === "awaiting_payment") return "/app/checkout";
   return null;
 }

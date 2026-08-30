@@ -42,6 +42,122 @@ export type Database = {
         };
         Relationships: [];
       };
+      legal_documents: {
+        Row: {
+          change_summary: string | null;
+          content: string;
+          doc_type: Database["public"]["Enums"]["legal_doc_type"];
+          effective_date: string;
+          id: string;
+          is_draft: boolean;
+          published_at: string;
+          published_by: string | null;
+          requires_reacceptance: boolean;
+          title: string;
+          version: number;
+        };
+        Insert: {
+          change_summary?: string | null;
+          content: string;
+          doc_type: Database["public"]["Enums"]["legal_doc_type"];
+          effective_date: string;
+          id?: string;
+          is_draft?: boolean;
+          published_at?: string;
+          published_by?: string | null;
+          requires_reacceptance?: boolean;
+          title: string;
+          version: number;
+        };
+        // UPDATE and DELETE are revoked at the database. Typed as never so a call that would be
+        // refused at runtime fails to compile instead.
+        Update: never;
+        Relationships: [];
+      };
+      legal_acceptances: {
+        Row: {
+          accepted_at: string;
+          context: string;
+          doc_type: Database["public"]["Enums"]["legal_doc_type"];
+          document_id: string;
+          id: string;
+          ip: string | null;
+          user_agent: string | null;
+          user_id: string;
+          version: number;
+        };
+        Insert: {
+          accepted_at?: string;
+          context?: string;
+          doc_type: Database["public"]["Enums"]["legal_doc_type"];
+          document_id: string;
+          id?: string;
+          ip?: string | null;
+          user_agent?: string | null;
+          user_id: string;
+          version: number;
+        };
+        Update: never;
+        Relationships: [];
+      };
+      trial_reminders: {
+        Row: {
+          delivered: boolean;
+          due_at: string;
+          id: string;
+          kind: Database["public"]["Enums"]["trial_reminder_kind"];
+          sent_at: string;
+          subscription_id: string;
+          trial_ends_at: string;
+        };
+        Insert: {
+          delivered?: boolean;
+          due_at: string;
+          id?: string;
+          kind: Database["public"]["Enums"]["trial_reminder_kind"];
+          sent_at?: string;
+          subscription_id: string;
+          trial_ends_at: string;
+        };
+        Update: { delivered?: boolean };
+        Relationships: [];
+      };
+      checkout_sessions: {
+        Row: {
+          billing_cycle: Database["public"]["Enums"]["billing_cycle"];
+          checkout_url: string;
+          completed_at: string | null;
+          coupon_id: string | null;
+          created_at: string;
+          id: string;
+          plan_id: string;
+          provider: string;
+          provider_config_id: string;
+          status: string;
+          tenant_id: string;
+        };
+        Insert: {
+          billing_cycle: Database["public"]["Enums"]["billing_cycle"];
+          checkout_url: string;
+          completed_at?: string | null;
+          coupon_id?: string | null;
+          created_at?: string;
+          id?: string;
+          plan_id: string;
+          provider?: string;
+          provider_config_id: string;
+          status?: string;
+          tenant_id: string;
+        };
+        Update: { status?: string; completed_at?: string | null };
+        Relationships: [];
+      };
+      rate_limits: {
+        Row: { bucket_key: string; window_start: string; hits: number };
+        Insert: { bucket_key: string; window_start: string; hits?: number };
+        Update: { hits?: number };
+        Relationships: [];
+      };
       metrics_daily: {
         Row: {
           active_customers: number;
@@ -1199,6 +1315,54 @@ export type Database = {
       };
     };
     Views: {
+      current_legal_documents: {
+        Row: {
+          change_summary: string | null;
+          doc_type: Database["public"]["Enums"]["legal_doc_type"];
+          effective_date: string;
+          id: string;
+          is_draft: boolean;
+          published_at: string;
+          requires_reacceptance: boolean;
+          title: string;
+          version: number;
+        };
+        Relationships: [];
+      };
+      admin_legal_acceptance_stats: {
+        Row: {
+          accepted_count: number;
+          doc_type: Database["public"]["Enums"]["legal_doc_type"];
+          document_id: string;
+          eligible_users: number;
+          is_draft: boolean;
+          published_at: string;
+          requires_reacceptance: boolean;
+          title: string;
+          version: number;
+        };
+        Relationships: [];
+      };
+      admin_trials_in_flight: {
+        Row: {
+          billing_cycle: Database["public"]["Enums"]["billing_cycle"];
+          business_name: string | null;
+          days_elapsed: number;
+          days_remaining: number;
+          has_payment_method: boolean;
+          last_login_at: string | null;
+          owner_email: string | null;
+          owner_name: string | null;
+          plan_code: string;
+          plan_name: string;
+          started_at: string;
+          subscription_id: string;
+          tenant_id: string;
+          tenant_name: string;
+          trial_ends_at: string;
+        };
+        Relationships: [];
+      };
       admin_plan_list: {
         Row: {
           code: string | null;
@@ -1342,6 +1506,62 @@ export type Database = {
           p_lines: Json;
         };
         Returns: { invoice_id: string; number: string; created: boolean; reconciliation: string }[];
+      };
+      publish_legal_document: {
+        Args: {
+          p_doc_type: Database["public"]["Enums"]["legal_doc_type"];
+          p_title: string;
+          p_content: string;
+          p_effective_date: string;
+          p_change_summary: string | null;
+          p_requires_reacceptance: boolean;
+          p_published_by: string | null;
+        };
+        Returns: Database["public"]["Tables"]["legal_documents"]["Row"];
+      };
+      clear_reacceptance_requirement: {
+        Args: { p_document_id: string };
+        Returns: Database["public"]["Tables"]["legal_documents"]["Row"];
+      };
+      record_legal_acceptance: {
+        Args: {
+          p_user_id: string;
+          p_document_id: string;
+          p_ip: string | null;
+          p_user_agent: string | null;
+          p_context: string;
+        };
+        Returns: Database["public"]["Tables"]["legal_acceptances"]["Row"];
+      };
+      outstanding_legal_documents: {
+        Args: { p_user_id: string };
+        Returns: Database["public"]["Views"]["current_legal_documents"]["Row"][];
+      };
+      extend_trial: {
+        Args: { p_subscription_id: string; p_days: number };
+        Returns: { trial_ends_at: string; current_period_end: string }[];
+      };
+      create_subscription_from_checkout: {
+        Args: {
+          p_tenant_id: string;
+          p_plan_id: string;
+          p_billing_cycle: Database["public"]["Enums"]["billing_cycle"];
+          p_whop_membership_id: string | null;
+          p_trial_days: number;
+        };
+        Returns: {
+          subscription_id: string;
+          created: boolean;
+          status: Database["public"]["Enums"]["subscription_status"];
+        }[];
+      };
+      claim_rate_limit: {
+        Args: { p_key: string; p_max: number; p_window_seconds: number };
+        Returns: boolean;
+      };
+      prune_rate_limits: {
+        Args: Record<string, never>;
+        Returns: number;
       };
       compute_metrics_for_date: {
         Args: { p_date: string };
@@ -1544,12 +1764,14 @@ export type Database = {
       };
     };
     Enums: {
+      legal_doc_type: "tos" | "privacy" | "dpa";
       admin_role: "super_admin" | "support_agent" | "billing_admin" | "platform_config";
       audit_actor_type: "admin" | "system";
       billing_cycle: "monthly" | "quarterly" | "yearly";
       invoice_status: "draft" | "issued" | "paid" | "overdue" | "void" | "uncollectible";
       invoice_line_kind: "plan" | "addon" | "overage" | "discount" | "setup_fee" | "credit";
       billing_mode: "automatic" | "manual";
+      trial_reminder_kind: "four_days_left" | "final_day";
       credit_note_type: "refund" | "credit" | "waiver";
       credit_note_status: "pending_approval" | "approved" | "processing" | "succeeded" | "failed" | "rejected";
       credit_reason: "duplicate_charge" | "service_issue" | "goodwill" | "billing_error" | "cancellation" | "other";

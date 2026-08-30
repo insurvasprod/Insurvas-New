@@ -1,10 +1,13 @@
 import { NextResponse, type NextRequest } from "next/server";
 
+import { SIGNUP_PER_EMAIL, SIGNUP_PER_IP, callerIp, claimAll, retryAfterSeconds } from "@/lib/rateLimit";
+
 import { sendVerificationEmail } from "@/lib/email/sendVerificationEmail";
 import { hashPassword } from "@/lib/password";
 import { fetchPlans } from "@/lib/plans/queries";
 import { publicSignupSchema } from "@/lib/signup/schemas";
 import { buildVerificationUrl, createEmailVerification } from "@/lib/signup/verification";
+import { documentsRequiredAtSignup, recordAcceptances, verifySignupAcceptance } from "@/lib/legal/acceptance";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import {
   signTenantSessionToken,
@@ -20,6 +23,36 @@ export async function POST(request: NextRequest) {
   }
 
   const input = parsed.data;
+
+  // Before anything is created or sent. This endpoint is open to the internet and each call makes
+  // a user, a tenant and an email from our sending domain — unthrottled, it is both a way to fill
+  // the database and a way to use us to mail somebody repeatedly.
+  const limited = await claimAll([
+    { rule: SIGNUP_PER_IP, subject: callerIp(request.headers) },
+    { rule: SIGNUP_PER_EMAIL, subject: input.email },
+  ]);
+  if (!limited.allowed) {
+    return NextResponse.json(
+      { error: "Too many signup attempts. Please try again shortly." },
+      { status: 429, headers: { "retry-after": String(retryAfterSeconds(limited.rule)) } },
+    );
+  }
+
+  // SA-5.4: checked before an account exists, and against what is published right now rather than
+  // the ids the browser sent. A form left open while a new version was published must not record
+  // agreement to the old text — the person would be agreeing to something that is no longer offered.
+  const required = await documentsRequiredAtSignup();
+  if (required.missing.length > 0) {
+    console.error("[signup] blocked: no published legal documents for", required.missing.join(", "));
+    return NextResponse.json(
+      { error: "Signup is temporarily unavailable. Please try again shortly." },
+      { status: 503 },
+    );
+  }
+
+  const acceptance = verifySignupAcceptance(input.acceptedDocumentIds, required.documents);
+  if (!acceptance.ok) return NextResponse.json({ error: acceptance.error }, { status: 400 });
+
   const plan = (await fetchPlans({ includeArchived: false })).find(
     (candidate) => candidate.code === input.planCode && candidate.is_public,
   );
@@ -53,12 +86,34 @@ export async function POST(request: NextRequest) {
   const created = data?.[0];
   if (!created) return NextResponse.json({ error: "Could not create your account" }, { status: 500 });
 
+  // After the user exists and before they are let in. Throws rather than logs: an acceptance we
+  // failed to record is one we cannot prove, and the account has just been created on the strength
+  // of it.
+  try {
+    await recordAcceptances(created.user_id, acceptance.documentIds, "signup", request);
+  } catch (recordError) {
+    console.error("[signup] acceptance could not be recorded for", created.user_id, recordError);
+    return NextResponse.json(
+      { error: "Your account was created but your acceptance could not be recorded. Please contact support." },
+      { status: 500 },
+    );
+  }
+
   const delivery = await sendVerificationEmail({
     email: input.email,
     name: input.fullName,
-    verificationUrl: buildVerificationUrl(verification.token, request.nextUrl.origin),
+    verificationUrl: buildVerificationUrl(verification.token),
     verificationId: created.verification_id,
   });
+
+  // Signup issues a session, which is a sign-in. Without this, last_login_at stays null for a user
+  // who signed up and never used the login FORM — so SA-5.3's trials screen would report an
+  // actively-engaged brand-new customer as "never signed in" and prompt a needless phone call.
+  // Found by driving the whole journey in a browser.
+  await supabase
+    .from("users")
+    .update({ last_login_at: new Date().toISOString() })
+    .eq("id", created.user_id);
 
   const token = await signTenantSessionToken(created.user_id, created.tenant_id);
   const response = NextResponse.json({

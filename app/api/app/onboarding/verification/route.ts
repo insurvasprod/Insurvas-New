@@ -1,5 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
+import { VERIFICATION_RESEND, claim, retryAfterSeconds } from "@/lib/rateLimit";
+
 import { sendVerificationEmail } from "@/lib/email/sendVerificationEmail";
 import { resolveSignupContext } from "@/lib/signup/context";
 import { verificationActionSchema } from "@/lib/signup/schemas";
@@ -17,6 +19,17 @@ export async function POST(request: NextRequest) {
   const parsed = verificationActionSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid request" }, { status: 400 });
+  }
+
+  // The SQL side already enforces a 60-second cooldown, but `change_email` sends to an ARBITRARY
+  // address — so without an hourly cap an authenticated account is a mail relay pointed at anyone,
+  // at roughly sixty messages an hour from our sending domain.
+  const limited = await claim(VERIFICATION_RESEND, context.userId);
+  if (!limited.allowed) {
+    return NextResponse.json(
+      { error: "Too many verification emails requested. Please try again later." },
+      { status: 429, headers: { "retry-after": String(retryAfterSeconds(limited.rule)) } },
+    );
   }
 
   const verification = createEmailVerification();
@@ -45,7 +58,7 @@ export async function POST(request: NextRequest) {
   const delivery = await sendVerificationEmail({
     email: refreshed.email,
     name: context.name,
-    verificationUrl: buildVerificationUrl(verification.token, request.nextUrl.origin),
+    verificationUrl: buildVerificationUrl(verification.token),
     verificationId: refreshed.verification_id,
   });
   if (!delivery.delivered) {

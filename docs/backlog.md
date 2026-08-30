@@ -65,6 +65,11 @@ expiry, hashed tokens, resend, revocation. Only the transport is missing.
 
 **Fix:** replace that one function body when SA-4.11 picks a provider. No caller changes.
 
+SA-5.3 added a second caller with the same shape: `scripts/send-trial-reminders.mjs` composes the
+real reminder — the customer's own plan, price and end date — decides delivery, and records a row
+with `delivered: false`. Everything except the transport is real, and the column says which it was,
+so the day keys arrive nothing about the job changes.
+
 ### 6. Users list still reads the wrong plan source — STILL OPEN
 **From:** SA-1.1 · ⚠️ **Now definitely wrong, not just empty. Worth doing next.**
 
@@ -77,17 +82,6 @@ Users list shows "No plan yet". Two notions of the same fact, and the screen rea
 
 Fix: repoint `admin_user_list.plan_code` at the subscription's plan, then drop `tenants.plan_code`
 rather than leaving a decoy column that will mislead the next person.
-
-### 21. "Only monthly at checkout" can't be verified yet
-**From:** SA-2.4 · **Belongs to:** SA-5.2
-
-SA-2.4's criterion is *"a plan with only `price_monthly` set offers only monthly at checkout."*
-There is no checkout — that's SA-5.2.
-
-The **data half is done and tested**: a null cycle price means that cycle isn't offered, and
-`availableBillingCycles()` is the single helper that answers the question, with unit tests
-(including that **zero is a price but null is an absence** — a free plan must still be buyable).
-SA-5.2 should call that helper rather than re-deriving the rule.
 
 ### 20. Removing an archived feature from a plan needs a detour
 **From:** SA-2.3 · Minor
@@ -280,22 +274,6 @@ overdue-only and mismatched-only; **tenant and date range are supported by `GET 
 but have no control**. Both are a couple of inputs once there are enough invoices for filtering to
 matter — with two rows it would be furniture.
 
-### 47. A provider checkout creates no subscription on our side
-**From:** SA-3.9 (2026-08-30) · **Significant — found by the dashboard**
-
-Your tenant has paid twice through Whop checkout and has **no subscription row**. `subscriptions`
-is empty; `membership.activated` arrived twice and did nothing, because `applyProviderEvent`
-updates an existing subscription and never creates one.
-
-Consequences, all visible on the revenue screen: contracted MRR is $0 while $447 has been
-collected, active customers is 0, there is no plan breakdown, and the entitlement engine has
-nothing to resolve — so a paying customer would get no features.
-
-An admin assigning a plan by hand is the only path that currently produces a subscription. Either
-`membership.activated` should create one from the plan metadata Whop returns (which carries
-`insurvas_plan_id` and the cycle, so everything needed is already on the event), or self-serve
-checkout should be closed off until it does.
-
 ### 48. The 2-second / 500-tenant target is unverified
 **From:** SA-3.9 · Unverified
 
@@ -405,11 +383,146 @@ remain uninstrumented. This is honest UI, but several explicit SA-3.9 outcomes a
 **Fix:** record plan-change MRR deltas and real funnel events, extend `metrics_daily` for per-plan
 churn and trial conversion, and add date/plan filters. Performance against 500 tenants remains [#48].
 
+### 52. Setup-step completion is recorded nowhere, so trial conversion can't be correlated with it
+**From:** SA-5.3 · **Significant**
+
+SA-5.3 asks for a setup-progress column on the trials screen and for conversion correlated with
+setup completion. `business_profiles.recommended_setup_steps` stores the *list* of steps; nothing
+anywhere records which of them a tenant has **finished**, so a progress figure would read the same
+for every trial — a confident number with nothing behind it.
+
+The screen shows a measured engagement signal instead (owner's `last_login_at`), labelled as
+exactly that on both the table and the stats block. The conversion cut is engaged vs never-signed-in
+rather than setup-complete vs not.
+
+**Fix:** record step completion (a `tenant_setup_steps` table, or completion timestamps on the
+profile), then swap the two cuts. The screen's shape does not need to change — only what feeds it.
+
+### 53. The provider leg of extend/cancel has never executed against a real membership
+**From:** SA-5.3 · **Unverified, same class as [#45]**
+
+`extendTrial` calls `addFreeDays` and `cancelTrial` calls `pauseMembership` when the subscription
+carries a `whop_membership_id`. Both methods are individually verified against the sandbox (SA-3.2,
+SA-3.4), but never on a **trialing** membership, and `verify:trials` deliberately builds trials with
+no membership id so no sandbox state is mutated — pausing a real membership is not reversible from
+a test, and the only trialing memberships in the sandbox are the ones SA-5.2 created.
+
+The failure handling is the part that matters and is exercised by inspection only: an extension
+refuses rather than half-applying, because moving our date while the provider still charges on the
+old one tells the customer one thing and bills another.
+
+**Fix:** run one manual sandbox extension on a trialing membership and record the response, the way
+SA-3.2's decisions were settled. Cheap, and it closes the last unproven path in SA-5.3.
+
+
+### 54. The seeded Terms and Privacy Policy are drafts, not legal copy
+**From:** SA-5.4 · **Blocks launch, not development**
+
+`content/legal/*-v1.md` were written so the acceptance machinery could be built and tested against
+real prose instead of filler. They have not been reviewed by a lawyer, and two sections say so
+explicitly ("governing law: to be determined", "contact: to be completed"). They are stored with
+`is_draft = true`, and that flag is surfaced on the public page, the signup checkbox, the
+re-acceptance screen and the admin list — nothing pretends they are reviewed.
+
+**Fix:** publish v2 of each from `/admin/legal` with counsel's copy. No code changes; the machinery
+already handles the version bump and the re-acceptance it triggers.
+
+### 55. `verify:legal` permanently advances the DPA version sequence
+**From:** SA-5.4 · **Accepted, not a defect**
+
+The script publishes real document versions and cannot delete them, because `legal_documents` is
+append-only and nothing — not even `service_role` — may DELETE from it. Adding a teardown function
+would destroy the exact guarantee under test, so it does not exist.
+
+Every version the script publishes therefore goes into the `dpa` type, which nothing else uses and
+which signup does not require, leaving Terms and Privacy Policy untouched at v1. Each run clears
+the re-acceptance requirement on what it published, so no real user is ever blocked by a
+verification artefact, and the run prints how many it left behind.
+
+**Consequence:** a real Data Processing Agreement will not start at v1. Acceptable; the alternative
+was a delete path into an evidence table.
+
+### 56. Most of the schema is still not in `supabase/migrations/`
+**From:** SA-5.4, superseding part of [#29] · **Significant**
+
+The database has 40 applied migrations. The repository has 9. SA-5.3's was applied and never
+written down at all until SA-5.4 backfilled it from
+`supabase_migrations.schema_migrations` — which is the failure mode [#29] describes, happening
+again in this session.
+
+Present in the repo: SA-5.1 (×3), SA-5.2, SA-5.3 (backfilled), SA-5.4 (×2), rate limits.
+Missing: everything from SA-0.1 through SA-3.9 — 31 migrations covering the entire core schema.
+
+A fresh database cannot be built from this repository. That is a restore problem and an onboarding
+problem, not a style one.
+
+**Fix:** dump the remaining 31 from `schema_migrations` (the statements are stored verbatim, as the
+SA-5.3 backfill proved) into correctly-named files. Mechanical, and worth doing before anyone needs
+a second environment.
+
+
 ---
 
 ## ✅ Resolved
 
 *Terse log — details live in git history.*
+
+- **SA-5.4 terms & privacy acceptance** -> verified 45/45 against the running app. Acceptance stores
+  a **document id and version**, never a boolean: recording "accepted the terms" and resolving the
+  version at read time would silently re-date every historical acceptance the moment a new version
+  was published. `legal_acceptances` is append-only by privilege — UPDATE and DELETE are revoked
+  from every role including `service_role` — and the script proves it by trying to back-date a
+  record and being refused. Published documents are equally immutable; the sole permitted mutation
+  is `clear_reacceptance_requirement`, which can only REMOVE an interruption, so a mistaken publish
+  cannot lock out every paying customer with no recovery. Two bugs found by the script, not by
+  reading: `select max(...) ... for update` is illegal in Postgres so the publish concurrency guard
+  never worked (replaced with an advisory lock), and grepping dev-server HTML for a UI string
+  matches Turbopack's **inlined component source** rather than the rendered page — which had made
+  one assertion vacuously pass. Seeded text is drafts, flagged as such everywhere [#54].
+
+- **SA-5.3 trial management** -> verified 32/32 against the running app. Reminders are defined as
+  offsets from the trial's **end**, not its start, which is what makes "extending a trial pushes
+  the charge date and every reminder with it" true by construction rather than by remembering to
+  move them. Idempotent on `(subscription, kind, trial_ends_at)`, so an extension deliberately
+  re-arms them for the new date. Converting early raises a `charge_automatically` invoice and does
+  **not** flip the status — the payment webhook does, so there is one path from money to state.
+  Two criteria are met by an honest substitute rather than in full: [#52] and [#53].
+  The day-13 in-app banner shares `REMINDER_OFFSET_DAYS` with the emails, so the banner turning
+  urgent and the final-day email going out are the same moment by definition and cannot drift.
+  Verified in a browser: an extension driven through the dialog moved the row to 12/21, re-sorted
+  it, and softened its own risk badge — the screen reacting to the new end date, not a cached one.
+
+- **#47 A provider checkout created no subscription** -> SA-5.2. `create_subscription_from_checkout`
+  is called from BOTH the return handler and `membership.activated`, idempotent on the tenant,
+  because either can arrive first and either can be the only one that arrives. Verified both paths
+  separately and together: returning twice creates one subscription, and a customer who closes the
+  tab still gets one.
+- **#21 "Only monthly at checkout" could not be verified** -> SA-5.2 calls `availableBillingCycles()`
+  on the raw price row rather than re-deriving the rule, so a cycle with no price cannot be sold.
+- **SA-5.2 hosted checkout** -> verified 17/17 against a real Whop sandbox checkout. The trial lives
+  on the mapped Whop plan, not the checkout configuration: Whop only accepts `trial_period_days` on
+  a plan, and a checkout takes either `plan_id` OR an inline plan, so putting it on the checkout
+  would have meant abandoning the (plan version, cycle) mapping that makes grandfathering work.
+
+- **SA-5.1 review (2026-08-30).** Host-header injection in verification links: `buildVerificationUrl`
+  fell back to `request.nextUrl.origin` when `NEXT_PUBLIC_APP_URL` was unset — and it was unset. An
+  attacker could sign up with a victim's address and a forged `Host`, and the victim would receive a
+  genuine email from our domain whose link handed the token over. The fallback is gone; missing
+  configuration now throws.
+- **Public endpoints had no rate limiting.** Signup created a user, a tenant and an email per call,
+  and `change_email` would send verification mail to an ARBITRARY address. Now database-backed
+  (serverless instances share no memory), claimed in a single statement so concurrent requests
+  cannot both take the last slot. Verified 7/7, including ten concurrent claims letting exactly
+  three through.
+- **The self-serve signup flow could not complete.** `save_signup_business_profile` raised 42702 —
+  its `RETURNS TABLE(tenant_id …)` OUT parameter collided with `on conflict (tenant_id)` — so the
+  business-profile step threw at runtime. Fixed with `#variable_conflict use_column`; the sibling
+  fix in `20260830010200` could not be reused because an ON CONFLICT target must name the column
+  bare. Codex's own `verify:signup` script now passes; it was failing before.
+- **A review finding of mine that was wrong:** I reported that the app shell did not gate
+  unverified users. It does — new users get `pending_verification` and `signupDestination` redirects
+  them to `/app/verify-email`. My grep pattern missed the helper names and I drew a conclusion from
+  an absence I had not established.
 
 - **SA-3.9 revenue dashboard** → MRR/ARR/ARPC, churn, plan breakdown and the activation funnel, off
   a nightly `metrics_daily` snapshot that is re-runnable for any past date. Contracted MRR is shown
