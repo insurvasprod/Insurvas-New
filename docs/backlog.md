@@ -185,6 +185,22 @@ two screens during an outage will see a difference.
 **Fix:** none wanted. If the preview should ever show outage state, it needs to say WHY an item is
 missing rather than silently omitting it — otherwise it just looks wrong.
 
+### 68. Six configuration sections keep the old table treatment
+**From:** the Module 4 UI pass · **Belongs to:** a second UI pass, or each section's own follow-up
+
+The structural fixes are global — every section gained the full page width, lost the ten-card audit
+strip above it, and lost the sprint id under its title. Four screens then had the detailed pass the
+mockups describe: the hub, credits &amp; limits, payments and features.
+
+Offers, Products, Templates, Compliance sources, System and Advanced still render their original
+tables. Nothing about them is broken and they look considerably better in the wider layout, but
+they have not been through the row-level review — save behaviour, empty states, whether a column
+earns its place.
+
+**Fix:** the patterns to copy are settled and in the repo. One save bar per screen instead of one
+button per row, an empty state that says what to do rather than "no rows", and the same header
+component every section already uses.
+
 ### 14. Delete user — not built
 **From:** SA-1.4 · **Descoped by user on 2026-08-29:** *"we will only do inactive"*
 
@@ -449,6 +465,20 @@ reading it quickly.
 **Fix:** none. If the switches ever become a genuine security boundary rather than an incident
 tool — blocking something that is dangerous rather than merely broken — this decision has to be
 revisited, and that feature needs its own hard gate rather than a kill switch.
+
+### 69. Margin cannot be shown for a meter whose vendor cost is zero
+**From:** the Module 4 UI pass · Minor
+
+The pricing table computes margin against vendor cost, so a meter with a cost of zero shows an em
+dash rather than a percentage. That is the divide-by-zero guard doing its job, and it is honest,
+but it is unhelpful: every meter currently has a vendor cost of $0.00 because none has been entered,
+so the margin column is a row of dashes on first use.
+
+The column still earns its place — it is what makes "below cost" mean something the moment real
+costs are entered, and SA-4.8's vendor integration is where those costs come from.
+
+**Fix:** either show "no cost set" instead of a dash so the reason is visible, or seed vendor costs
+from the compliance vendors that already carry a cost per lookup.
 
 ### 11. `middleware.ts` uses a deprecated convention
 **From:** SA-0.3
@@ -741,6 +771,12 @@ provider.
 ## ✅ Resolved
 
 *Terse log — details live in git history.*
+
+- **The connection probe counted its own success as a failure** → fixed during the Module 4 UI pass.
+  SA-4.2's test asks Whop for a payment id that cannot exist, and the expected 404 was logged as an
+  error, so every connection test made the payment health panel look worse. Surfaced within a minute
+  of the configuration hub starting to display that number. The probe now declares which statuses
+  mean success for it.
 
 ### 62. ✅ SA-4.9 credit packs, defaults and usage monitor completed
 **From:** SA-4.9 · **Verified in live project, 2026-08-30**
