@@ -13,6 +13,10 @@
     "esModuleInterop": true,
     "module": "esnext",
     "moduleResolution": "bundler",
+    // Lets a pure module import a sibling as "./thing.ts". Node's test runner resolves ESM
+    // strictly and cannot find extensionless "./thing", so without this any module with a local
+    // runtime import is untestable by `npm test`.
+    "allowImportingTsExtensions": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
     "jsx": "react-jsx",
