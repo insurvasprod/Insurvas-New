@@ -43,6 +43,7 @@ export const AGENT_MENU: MenuSection[] = [
     id: "leads",
     label: "Leads",
     items: [
+      { id: "leads", label: "Lead workspace", requiredFeature: "book_of_business" },
       { id: "inbound", label: "Inbound transfers", requiredFeature: "inbound_transfers" },
       { id: "dialer", label: "Dialer", requiredFeature: "outbound_dialing" },
       { id: "import", label: "List import", requiredFeature: "lead_import" },

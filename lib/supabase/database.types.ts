@@ -756,6 +756,75 @@ export type Database = {
         };
         Relationships: [];
       };
+      tenant_template_assignments: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          product_code: string;
+          template_id: string;
+          template_version: number;
+          assigned_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          tenant_id: string;
+          product_code: string;
+          template_id: string;
+          template_version: number;
+          assigned_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          tenant_id?: string;
+          product_code?: string;
+          template_id?: string;
+          template_version?: number;
+          assigned_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      agent_leads: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          template_id: string;
+          template_version: number;
+          stage_key: string;
+          values: Json;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          tenant_id: string;
+          template_id: string;
+          template_version: number;
+          stage_key: string;
+          values?: Json;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          tenant_id?: string;
+          template_id?: string;
+          template_version?: number;
+          stage_key?: string;
+          values?: Json;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       templates: {
         Row: {
           id: string;

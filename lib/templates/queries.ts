@@ -32,3 +32,26 @@ export async function fetchTemplates(options: { includeArchived: boolean } = { i
 export function fetchTemplatesForPicker(): Promise<TemplateRow[]> {
   return fetchTemplates({ includeArchived: false });
 }
+
+/** Load an immutable template version for a tenant-side assignment. */
+export async function fetchTemplateVersion(templateId: string, version: number): Promise<TemplateRow | null> {
+  const supabase = getSupabaseServiceClient();
+  const [{ data: template, error }, { data: product }, { data: fields }, { data: stages }, { data: form }] = await Promise.all([
+    supabase.from("templates").select(TEMPLATE_COLUMNS).eq("id", templateId).maybeSingle(),
+    supabase.from("products").select("code, name").eq("code", "term_life").maybeSingle(),
+    supabase.from("template_fields").select("template_id, version, field_key, label, type, is_required, options, sort_order").eq("template_id", templateId).eq("version", version).order("sort_order"),
+    supabase.from("template_stages").select("template_id, version, stage_key, label, stage_type, color, sort_order").eq("template_id", templateId).eq("version", version).order("sort_order"),
+    supabase.from("template_forms").select("template_id, version, form_definition").eq("template_id", templateId).eq("version", version).maybeSingle(),
+  ]);
+  if (error) throw new Error(`Could not load template version: ${error.message}`);
+  if (!template) return null;
+  const base = template as Omit<TemplateRow, "product_name" | "fields" | "stages" | "form_definition">;
+  return {
+    ...base,
+    version,
+    product_name: (product as Pick<ProductRow, "code" | "name"> | null)?.name ?? base.product_code,
+    fields: (fields ?? []) as TemplateField[],
+    stages: (stages ?? []) as TemplateStage[],
+    form_definition: (form?.form_definition as TemplateFormDefinition | undefined) ?? DEFAULT_TEMPLATE_FORM,
+  };
+}
