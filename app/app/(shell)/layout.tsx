@@ -1,5 +1,4 @@
 import { redirect } from "next/navigation";
-import { Building2 } from "lucide-react";
 
 import { resolveTenantContext } from "@/lib/tenantAuth/requireTenant";
 import { getEntitlement } from "@/lib/entitlements/get";
@@ -10,6 +9,7 @@ import { LogoutButton } from "@/components/app/logout-button";
 import { MaintenanceMessage } from "@/components/app/maintenance-message";
 import { AnnouncementStrip } from "@/components/app/announcement-strip";
 import { getMaintenanceStatus, getActiveAnnouncements } from "@/lib/system/service";
+import { planDisplayName } from "@/lib/plans/display";
 
 /**
  * Enforcement point 1 of 3: the MENU.
@@ -34,34 +34,36 @@ export default async function AgentShellLayout({ children }: { children: React.R
   const available = await effectiveFeatures(entitlement.features, context.tenantId);
   const menu = buildAgentMenu(available);
 
+  const footer = (
+    <div className="space-y-3">
+      {entitlement.plan_code && (
+        <p className="px-3 text-xs text-white/60">
+          {/* Was `plan_c · 14 features`. A plan code is a database key, and a feature count is a
+              number nobody asked for; the name they were sold is the thing they recognise. */}
+          {planDisplayName(entitlement.plan_code)} plan
+        </p>
+      )}
+      <div className="px-3">
+        <LogoutButton />
+      </div>
+    </div>
+  );
+
   return (
-    <div className="flex min-h-screen">
-      <aside className="flex w-60 shrink-0 flex-col justify-between bg-[var(--brand-700)] p-4 text-white">
-        <div>
-          <div className="mb-6 flex items-center gap-2 px-2">
-            <Building2 className="size-5" />
-            <span className="font-semibold tracking-tight">Insurvas</span>
-          </div>
-          <AgentSidebar menu={menu} />
-        </div>
+    <div className="flex min-h-screen flex-col md:flex-row">
+      <AgentSidebar menu={menu} footer={footer} />
 
-        <div className="space-y-3 border-t border-white/10 pt-4">
-          {entitlement.plan_code && (
-            <p className="px-2 text-xs text-white/70">
-              {entitlement.plan_code} · {entitlement.features.length} features
-            </p>
-          )}
-          <div className="px-2">
-            <LogoutButton />
-          </div>
-        </div>
-      </aside>
-
-      <main className="flex-1 bg-[var(--color-page-bg)] p-8">
+      {/* min-w-0 is load-bearing, for the same reason it is on the admin shell: a flex item
+          defaults to min-width:auto, so <main> refuses to shrink below its widest child and one
+          wide table drags the whole page sideways. */}
+      <main className="min-w-0 flex-1 bg-[var(--color-page-bg)] p-4 sm:p-6 lg:p-8">
         <MaintenanceMessage status={maintenance} />
         <AnnouncementStrip initialAnnouncements={announcements} />
         {entitlement.access === "read_only" && (
-          <div className="mb-6 rounded-lg border border-[var(--color-warning)]/30 bg-[var(--color-warning)]/10 p-4 text-sm">
+          <div
+            role="status"
+            className="mb-6 rounded-lg border border-[var(--color-warning)]/30 bg-[var(--color-warning)]/10 p-4 text-sm"
+          >
             <span className="font-medium">
               Your account is {entitlement.status === "paused" ? "paused" : "suspended"}.
             </span>{" "}

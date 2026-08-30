@@ -29,8 +29,12 @@ export default async function LapseRiskPage() {
         </p>
       </div>
       <Card>
-        <CardContent>
-          <p className="text-sm text-muted-foreground">Scaffolding for LA-0.1.</p>
+        <CardContent className="space-y-2 py-8 text-center">
+          <p className="text-sm font-medium">Nothing at risk right now</p>
+          <p className="mx-auto max-w-[46ch] text-sm text-muted-foreground">
+            Policies scored as likely to lapse in the next 30 days will appear here, most urgent
+            first.
+          </p>
         </CardContent>
       </Card>
     </div>

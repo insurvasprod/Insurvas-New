@@ -445,6 +445,57 @@ That is the same wiring [#47] needs, and worth doing at the same time.
 
 ---
 
+### 74. The agent app had no design pass, and most of its menu 404'd
+**From:** agent app design pass, 2026-08-31 · **Largely closed**
+
+Twenty-four of the thirty agent menu items had no route. Next answered every one with its default
+404, so a customer on a plan granting Quoting or Statements saw a sidebar where most of it was
+broken — features they were paying for, promised in the navigation, leading nowhere.
+
+Closed by `app/app/(shell)/[section]/page.tsx` plus `components/app/coming-soon.tsx`. A static
+segment beats a dynamic one, so the six real screens are untouched and the catch-all only ever runs
+for the rest. It decides in this order: not in the menu → 404, which is correct; in the menu but not
+granted → the existing gate notice; granted but unbuilt → "on the way". Entitlement is checked
+*before* build status on purpose, so someone without the plan is told about their plan rather than
+about our roadmap.
+
+Also in the pass:
+
+- **`built: true` is now data in the menu**, not inferred, and `lib/menu/definition.test.mjs`
+  asserts the flag and the filesystem agree in both directions. Adding a screen and forgetting to
+  flip it fails in CI rather than in front of a customer — which is exactly how this happened.
+- **The sidebar works on a phone.** It was a fixed 240px column with no way to reach navigation
+  below that width, while LA-0.1 requires the app to work on one.
+- **Internal vocabulary is gone from customer screens:** raw feature keys (`book_of_business`) and
+  meter keys (`dials`) resolve to their labels, `plan_c (v3)` reads as "Plan C", and "this screen is
+  scaffolding for LA-0.1" no longer quotes a ticket number at a paying customer.
+- **Usage got bars**, banded by the same `usageState()` the admin monitor uses, so an agent and an
+  operator cannot look at the same tenant and disagree about whether it is in trouble. Each says
+  what happens at the limit — a hard cap that stops work is a different sentence from overage that
+  lands on a bill.
+- **`min-w-0` on `<main>`**, the same fix the admin shell needed in #52.
+
+**Not verified in a browser.** Every one of these screens sits behind a login and this session could
+not mint a session cookie (#72). Mockups of the implemented design are at
+`design/AgentApp.design.html`; they are drawn from the code, not photographed from it.
+
+---
+
+### 75. The entitlement blob should carry the plan's display name
+**From:** agent app design pass, 2026-08-31 · Minor
+
+`planDisplayName()` tidies `plan_c` into "Plan C" because that is all it can honestly do. The real
+name lives in `plans.name`, and the agent app is forbidden from reading that table — "it reads this
+one object and obeys it; it never queries a plan, a subscription or a price". Hardcoding a second
+set of names in the tenant plane would be a copy that silently disagrees with the admin screen the
+first time somebody renames a plan.
+
+**Fix:** add `plan_name` to `resolve_tenant_entitlement`'s output and to the `Entitlement` type. It
+is a change to the contract between the two planes, so it wants its own migration and a note in the
+Basic Idea doc's Appendix A rather than being smuggled in with a UI change.
+
+---
+
 ## ⚪ Tech debt
 
 ### 51. The settings cache only invalidates on the instance that wrote

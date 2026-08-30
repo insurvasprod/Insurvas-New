@@ -32,16 +32,16 @@ export default async function PoliciesPage() {
       </div>
 
       <Card>
-        <CardContent className="space-y-2">
-          <p className="text-sm text-muted-foreground">
-            No policies yet — this screen is scaffolding for LA-0.1.
+        <CardContent className="space-y-2 py-8 text-center">
+          {/* An empty state that states a fact and stops is a dead end. This one says what will
+              fill the screen and where it comes from — and it no longer quotes a ticket number at
+              a paying customer, which is our vocabulary, not theirs. */}
+          <p className="text-sm font-medium">No policies yet</p>
+          <p className="mx-auto max-w-[46ch] text-sm text-muted-foreground">
+            {readOnly
+              ? "Your book of business will appear here. Adding a policy is disabled while the account is suspended."
+              : "Your book of business will appear here once policies are imported or added."}
           </p>
-          {readOnly && (
-            <p className="text-sm">
-              You can read this while suspended. Adding a policy is disabled until the account is
-              reactivated.
-            </p>
-          )}
         </CardContent>
       </Card>
     </div>

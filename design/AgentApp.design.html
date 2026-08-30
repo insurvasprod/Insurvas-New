@@ -1,0 +1,476 @@
+<title>Agent App Design Pass</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500;600;700;800&family=Source+Sans+3:wght@400;600&display=swap">
+
+<style>
+  :root{
+    --ground:#EEF1F4;
+    --surface:#FFFFFF;
+    --sunken:#E2E7EC;
+    --ink:#131A20;
+    --ink-mid:#4C5B67;
+    --ink-faint:#77848F;
+    --rule:#D3DAE1;
+    --navy:#00407F;
+    --before:#9C3B32;
+    --after:#186B4E;
+
+    /* The app's own tokens, used only inside the screen frames so the mockups are the product
+       rather than an impression of it. */
+    --app-page:#F7F9FB;
+    --app-card:#FFFFFF;
+    --app-border:#DFE4EB;
+    --app-border-light:#EEF1F5;
+    --app-navy:#00407F;
+    --app-blue:#0070CC;
+    --app-blue-faint:#EFF7FF;
+    --app-text:#1A1B1C;
+    --app-muted:#6B7280;
+    --app-danger:#D92D20;
+    --app-warning:#B54708;
+
+    --f-display:"Archivo",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    --f-body:"Source Sans 3",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    --f-mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+    --f-app:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,sans-serif;
+  }
+
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --ground:#0E1418; --surface:#161D23; --sunken:#1C242B;
+      --ink:#DFE6EC; --ink-mid:#98A6B2; --ink-faint:#6E7C88;
+      --rule:#252F37;
+      --navy:#7FB2E0;
+      --before:#D07A70; --after:#5FB791;
+    }
+  }
+  :root[data-theme="dark"]{
+    --ground:#0E1418; --surface:#161D23; --sunken:#1C242B;
+    --ink:#DFE6EC; --ink-mid:#98A6B2; --ink-faint:#6E7C88;
+    --rule:#252F37;
+    --navy:#7FB2E0;
+    --before:#D07A70; --after:#5FB791;
+  }
+
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--f-body);font-size:16px;line-height:1.6;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:1120px;margin:0 auto;padding:56px 24px 96px;}
+
+  h1{font-family:var(--f-display);font-weight:700;font-size:clamp(32px,5.5vw,52px);line-height:1.04;letter-spacing:-.025em;margin:0 0 14px;text-wrap:balance;}
+  h2{font-family:var(--f-display);font-weight:600;font-size:26px;letter-spacing:-.015em;margin:0 0 6px;text-wrap:balance;}
+  p{margin:0 0 12px;max-width:66ch;}
+  p:last-child{margin-bottom:0;}
+
+  .eyebrow{font-family:var(--f-mono);font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-faint);margin:0 0 18px;}
+  .lede{font-size:18px;color:var(--ink-mid);max-width:60ch;}
+
+  header{border-bottom:2px solid var(--ink);padding-bottom:28px;margin-bottom:40px;}
+
+  .thesis{display:flex;flex-wrap:wrap;align-items:baseline;gap:18px;background:var(--surface);border:1px solid var(--rule);border-radius:12px;padding:22px 26px;margin-bottom:56px;}
+  .thesis b{font-family:var(--f-display);font-size:54px;font-weight:700;line-height:1;color:var(--before);font-variant-numeric:tabular-nums;}
+  .thesis span{flex:1;min-width:260px;color:var(--ink-mid);font-size:15.5px;}
+
+  section{margin-bottom:64px;}
+  .case{border-left:3px solid var(--navy);padding-left:22px;margin-bottom:22px;}
+  .case p{font-size:15.5px;color:var(--ink-mid);}
+
+  .pair{display:grid;gap:20px;grid-template-columns:1fr;}
+  @media (min-width:900px){ .pair{grid-template-columns:1fr 1fr;} }
+
+  .panel{min-width:0;}
+  .tag{display:inline-flex;align-items:center;gap:7px;font-family:var(--f-mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;margin-bottom:9px;}
+  .tag::before{content:"";width:8px;height:8px;border-radius:2px;}
+  .tag.b{color:var(--before);}
+  .tag.b::before{background:var(--before);}
+  .tag.a{color:var(--after);}
+  .tag.a::before{background:var(--after);}
+
+  /* the screen frame */
+  .screen{border:1px solid var(--rule);border-radius:10px;overflow:hidden;background:var(--app-page);font-family:var(--f-app);color:var(--app-text);}
+  .screen .bar{display:flex;gap:5px;padding:9px 12px;background:var(--sunken);border-bottom:1px solid var(--rule);}
+  .screen .bar i{width:9px;height:9px;border-radius:50%;background:var(--rule);}
+  .screen .body{display:flex;min-height:330px;}
+  .screen .pad{padding:18px;flex:1;min-width:0;}
+
+  /* app sidebar */
+  .side{width:150px;flex-shrink:0;background:var(--app-navy);color:#fff;padding:12px 8px;font-size:11px;}
+  .side .brand{display:flex;align-items:center;gap:6px;font-weight:600;padding:0 6px 14px;font-size:12px;}
+  .side .grp, .phone .drawer .grp{font-size:8.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:rgba(255,255,255,.45);padding:0 8px;margin:10px 0 3px;}
+  .side a, .phone .drawer a{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:4px 8px;border-radius:4px;color:rgba(255,255,255,.82);text-decoration:none;}
+  .side a.on, .phone .drawer a.on{background:rgba(255,255,255,.15);color:#fff;font-weight:600;}
+  .side .dot, .phone .drawer .dot{width:5px;height:5px;border-radius:50%;background:rgba(255,255,255,.4);flex-shrink:0;}
+  .side .foot{margin-top:14px;padding:10px 8px 0;border-top:1px solid rgba(255,255,255,.12);color:rgba(255,255,255,.6);font-size:9.5px;}
+
+  /* app cards */
+  .c{background:var(--app-card);border:1px solid var(--app-border);border-radius:8px;padding:14px;}
+  .c + .c{margin-top:12px;}
+  .h1{font-size:17px;font-weight:800;letter-spacing:-.02em;margin:0 0 2px;}
+  .sub{font-size:11.5px;color:var(--app-muted);font-weight:500;margin:0 0 14px;}
+  .ch{font-size:9.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--app-navy);margin:0 0 10px;}
+
+  .keys{display:flex;flex-wrap:wrap;gap:4px;}
+  .key{font-family:var(--f-mono);font-size:9px;border:1px solid var(--app-border);border-radius:3px;padding:2px 5px;color:var(--app-muted);}
+
+  .meter{margin-bottom:12px;}
+  .meter:last-child{margin-bottom:0;}
+  .meter .top{display:flex;justify-content:space-between;align-items:baseline;font-size:11.5px;margin-bottom:5px;}
+  .meter .top b{font-weight:600;}
+  .meter .top span{color:var(--app-muted);font-variant-numeric:tabular-nums;}
+  .track{height:5px;border-radius:99px;background:var(--app-border-light);overflow:hidden;}
+  .track i{display:block;height:100%;border-radius:99px;}
+  .note{font-size:10px;color:var(--app-muted);margin-top:4px;}
+
+  .goto{display:grid;grid-template-columns:1fr 1fr;gap:5px;}
+  .goto a{display:flex;justify-content:space-between;align-items:center;gap:6px;border:1px solid var(--app-border);border-radius:5px;padding:6px 9px;text-decoration:none;color:var(--app-text);font-size:11px;}
+  .goto a b{font-weight:600;display:block;}
+  .goto a em{font-style:normal;font-size:9.5px;color:var(--app-muted);display:block;}
+  .goto a i{color:var(--app-muted);font-style:normal;}
+
+  .pills{display:flex;flex-wrap:wrap;gap:4px;}
+  .pill{font-size:9.5px;border:1px solid var(--app-border);background:var(--app-border-light);border-radius:99px;padding:2px 8px;color:var(--app-muted);}
+
+  .four04{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;height:100%;min-height:280px;color:var(--app-muted);}
+  .four04 b{font-family:var(--f-app);font-size:26px;font-weight:600;color:var(--app-text);}
+  .four04 span{font-size:12px;}
+
+  .soon .icon{width:34px;height:34px;border-radius:50%;background:var(--app-blue-faint);color:var(--app-blue);display:flex;align-items:center;justify-content:center;margin-bottom:14px;}
+  .soon .sect{font-size:9.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--app-muted);margin-bottom:5px;}
+  .soon h4{font-size:18px;font-weight:800;letter-spacing:-.02em;margin:0 0 6px;}
+  .soon .blurb{font-size:12px;color:var(--app-muted);margin:0 0 14px;max-width:44ch;}
+  .soon .rea{font-size:11.5px;color:var(--app-muted);border:1px solid var(--app-border);background:var(--app-border-light);border-radius:6px;padding:9px 12px;margin-bottom:14px;}
+  .soon .rea b{color:var(--app-text);font-weight:600;}
+  .soon .mean{border-top:1px solid var(--app-border);padding-top:12px;}
+  .soon .mean p{font-size:11.5px;font-weight:600;margin:0 0 5px;}
+  .soon .mean a{display:block;font-size:11.5px;color:var(--app-blue);text-decoration:none;padding:1px 0;}
+
+  .phone{width:216px;margin:0 auto;border:1px solid var(--rule);border-radius:16px;overflow:hidden;background:var(--app-page);font-family:var(--f-app);}
+  .phone .top{background:var(--app-navy);color:#fff;display:flex;align-items:center;gap:9px;padding:9px 11px;font-size:11.5px;font-weight:600;}
+  .phone .stage{position:relative;min-height:250px;}
+  .phone .scrim{position:absolute;inset:0;background:rgba(0,0,0,.45);}
+  .phone .drawer{position:absolute;inset:0 auto 0 0;width:160px;background:var(--app-navy);color:#fff;padding:11px 7px;font-size:10.5px;}
+
+  .ticks{list-style:none;padding:0;margin:0;display:grid;gap:10px;}
+  @media (min-width:760px){ .ticks{grid-template-columns:1fr 1fr;} }
+  .ticks li{background:var(--surface);border:1px solid var(--rule);border-radius:9px;padding:13px 15px;}
+  .ticks b{display:block;font-family:var(--f-display);font-weight:600;font-size:14.5px;margin-bottom:3px;}
+  .ticks span{font-size:13.5px;color:var(--ink-mid);}
+
+  code{font-family:var(--f-mono);font-size:.86em;background:var(--sunken);padding:1px 5px;border-radius:3px;}
+
+  footer{border-top:1px solid var(--rule);padding-top:22px;color:var(--ink-faint);font-size:13.5px;}
+  a:focus-visible,button:focus-visible{outline:2px solid var(--navy);outline-offset:2px;}
+</style>
+
+<div class="wrap">
+
+<header>
+  <p class="eyebrow">Insurvas &middot; Agent app &middot; design pass</p>
+  <h1>Most of the menu went nowhere</h1>
+  <p class="lede">Nine screens, thirty menu destinations, and six of them existed. This is what changed, and why each change is the one worth making.</p>
+</header>
+
+<div class="thesis">
+  <b>24</b>
+  <span>of thirty sidebar links answered with Next's default 404. Not features the customer hadn't bought &mdash; features their plan <em>granted</em>, promised in the navigation, leading nowhere. A paid feature that 404s doesn't read as unfinished. It reads as broken.</span>
+</div>
+
+<!-- ─────────────────────────────────────────────────────────────── -->
+<section>
+  <div class="case">
+    <h2>A dead link becomes an answer</h2>
+    <p>There were already good answers for two of the three ways a screen can be unreachable: <em>not on your plan</em> gets an upgrade prompt, <em>switched off for everyone</em> gets a maintenance notice. The third &mdash; <em>we haven't built it yet</em> &mdash; had none.</p>
+    <p>It never gives a date, because we don't have one and a missed date is worse than none. And it always offers somewhere to go: a dead end that apologises is still a dead end.</p>
+  </div>
+
+  <div class="pair">
+    <div class="panel">
+      <p class="tag b">Before</p>
+      <div class="screen">
+        <div class="bar"><i></i><i></i><i></i></div>
+        <div class="body">
+          <div class="pad">
+            <div class="four04">
+              <b>404</b>
+              <span>This page could not be found.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <p class="tag a">After</p>
+      <div class="screen">
+        <div class="bar"><i></i><i></i><i></i></div>
+        <div class="body">
+          <div class="pad">
+            <div class="c soon">
+              <div class="icon" aria-hidden="true">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 12-8.4 8.4a2.1 2.1 0 0 1-3-3L12 9"/><path d="M17.6 6.4 22 2"/><path d="m9 9 3-3"/><path d="M14.5 3.5 20.5 9.5"/></svg>
+              </div>
+              <p class="sect">Sell</p>
+              <h4>Quoting is on the way</h4>
+              <p class="blurb">Compare carrier rates and pull a quote into an application without re-typing anything.</p>
+              <p class="rea"><b>Your plan includes this.</b> Nothing to buy and nothing to switch on &mdash; it will appear here as soon as it is ready.</p>
+              <div class="mean">
+                <p>In the meantime</p>
+                <a href="#">Lead workspace &rarr;</a>
+                <a href="#">Dialer &rarr;</a>
+                <a href="#">Policies &rarr;</a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─────────────────────────────────────────────────────────────── -->
+<section>
+  <div class="case">
+    <h2>The sidebar stops over-promising</h2>
+    <p>Every link looked identical, so a working screen and a 404 were indistinguishable until you clicked. A small dot marks the ones still being built.</p>
+    <p>Deliberately not a warning colour. These are features the customer has paid for and will get &mdash; the dot says <em>not yet</em>, not <em>something is wrong</em>.</p>
+  </div>
+
+  <div class="pair">
+    <div class="panel">
+      <p class="tag b">Before &mdash; every link looks the same</p>
+      <div class="screen">
+        <div class="bar"><i></i><i></i><i></i></div>
+        <div class="body">
+          <div class="side">
+            <div class="brand">Insurvas</div>
+            <p class="grp">Home</p>
+            <a class="on" href="#">Dashboard</a>
+            <p class="grp">Book of Business</p>
+            <a href="#">Policies</a>
+            <a href="#">Statements</a>
+            <a href="#">Commission ledger</a>
+            <a href="#">Appointments</a>
+            <p class="grp">Sell</p>
+            <a href="#">Quoting</a>
+            <a href="#">Applications</a>
+            <a href="#">Callbacks</a>
+            <div class="foot">plan_c &middot; 14 features</div>
+          </div>
+          <div class="pad"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <p class="tag a">After &mdash; built, or on the way</p>
+      <div class="screen">
+        <div class="bar"><i></i><i></i><i></i></div>
+        <div class="body">
+          <div class="side">
+            <div class="brand">Insurvas</div>
+            <p class="grp">Home</p>
+            <a class="on" href="#">Dashboard</a>
+            <p class="grp">Book of Business</p>
+            <a href="#">Policies</a>
+            <a href="#">Statements<span class="dot"></span></a>
+            <a href="#">Commission ledger<span class="dot"></span></a>
+            <a href="#">Appointments<span class="dot"></span></a>
+            <p class="grp">Sell</p>
+            <a href="#">Quoting<span class="dot"></span></a>
+            <a href="#">Applications<span class="dot"></span></a>
+            <a href="#">Callbacks<span class="dot"></span></a>
+            <div class="foot">Plan C plan</div>
+          </div>
+          <div class="pad"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─────────────────────────────────────────────────────────────── -->
+<section>
+  <div class="case">
+    <h2>It works on a phone</h2>
+    <p>The shell was a fixed 240px column with no way to reach navigation below that width. LA-0.1 requires the agent app to work on a phone, and an agent between appointments is the person most likely to be holding one.</p>
+  </div>
+
+  <div class="pair">
+    <div class="panel">
+      <p class="tag b">Before &mdash; 375px</p>
+      <div class="screen">
+        <div class="bar"><i></i><i></i><i></i></div>
+        <div class="body" style="min-height:300px">
+          <div class="side" style="width:150px">
+            <div class="brand">Insurvas</div>
+            <p class="grp">Home</p>
+            <a class="on" href="#">Dashboard</a>
+            <p class="grp">Book of Business</p>
+            <a href="#">Policies</a>
+          </div>
+          <div class="pad" style="overflow:hidden">
+            <div class="c" style="width:290px">
+              <p class="h1">Dashboard</p>
+              <p class="sub">Content pushed off the edge &mdash; the sidebar takes 40% of the screen and never collapses.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <p class="tag a">After &mdash; bar plus drawer</p>
+      <div style="background:var(--sunken);border:1px solid var(--rule);border-radius:10px;padding:20px 0">
+        <div class="phone">
+          <div class="top">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+            Insurvas
+          </div>
+          <div class="stage">
+            <div style="padding:12px">
+              <p class="h1" style="font-size:15px">Dashboard</p>
+              <p class="sub" style="font-size:10.5px">You're on the Plan C plan.</p>
+              <div class="c" style="padding:11px">
+                <p class="ch">This period</p>
+                <div class="meter">
+                  <div class="top"><b>Dials</b><span>1,240 / 2,000</span></div>
+                  <div class="track"><i style="width:62%;background:var(--app-blue)"></i></div>
+                </div>
+              </div>
+            </div>
+            <div class="scrim"></div>
+            <div class="drawer">
+              <div style="display:flex;align-items:center;justify-content:space-between;padding:0 6px 12px;font-weight:600">Insurvas <span>&times;</span></div>
+              <p class="grp">Home</p>
+              <a class="on" href="#">Dashboard</a>
+              <p class="grp">Book of Business</p>
+              <a href="#">Policies</a>
+              <a href="#">Statements<span class="dot"></span></a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─────────────────────────────────────────────────────────────── -->
+<section>
+  <div class="case">
+    <h2>The dashboard says something</h2>
+    <p>It listed <code>book_of_business</code> and <code>chargeback_radar</code> back at the customer &mdash; our database keys on their screen &mdash; then <code>dials 1,240 / 2,000</code>, which is accurate and asks them to do the arithmetic.</p>
+    <p>Usage comes first now, because it's the only thing on the page that changes daily and the only thing with a deadline attached. The bar answers the real question &mdash; <em>am I about to run out</em> &mdash; before the numbers are read, and it says what happens when you do: a hard cap that stops work is a different sentence from overage that lands on a bill.</p>
+  </div>
+
+  <div class="pair">
+    <div class="panel">
+      <p class="tag b">Before</p>
+      <div class="screen">
+        <div class="bar"><i></i><i></i><i></i></div>
+        <div class="body">
+          <div class="pad">
+            <p class="h1">Dashboard</p>
+            <p class="sub">You're on plan_c (v3).</p>
+            <div class="c">
+              <p class="ch">What your plan includes</p>
+              <div class="keys">
+                <span class="key">book_of_business</span>
+                <span class="key">outbound_dialing</span>
+                <span class="key">chargeback_radar</span>
+                <span class="key">statement_ingestion</span>
+                <span class="key">commission_ledger</span>
+                <span class="key">quoting</span>
+                <span class="key">applications</span>
+                <span class="key">true_cpa</span>
+              </div>
+            </div>
+            <div class="c">
+              <p class="ch">This period</p>
+              <div style="display:flex;justify-content:space-between;font-size:11.5px;padding:2px 0"><span>dials</span><span style="color:var(--app-muted)">1,240 / 2,000</span></div>
+              <div style="display:flex;justify-content:space-between;font-size:11.5px;padding:2px 0"><span>sms</span><span style="color:var(--app-muted)">4,812 / 5,000</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <p class="tag a">After</p>
+      <div class="screen">
+        <div class="bar"><i></i><i></i><i></i></div>
+        <div class="body">
+          <div class="pad">
+            <p class="h1">Dashboard</p>
+            <p class="sub">You're on the Plan C plan.</p>
+
+            <div class="c">
+              <p class="ch">This period</p>
+              <div class="meter">
+                <div class="top"><b>Dials</b><span>1,240 / 2,000 dials</span></div>
+                <div class="track"><i style="width:62%;background:var(--app-blue)"></i></div>
+                <p class="note">760 dials left this period.</p>
+              </div>
+              <div class="meter">
+                <div class="top"><b>Text messages</b><span>4,812 / 5,000 messages</span></div>
+                <div class="track"><i style="width:96%;background:var(--app-warning)"></i></div>
+                <p class="note">188 messages left this period.</p>
+              </div>
+            </div>
+
+            <div class="c">
+              <p class="ch">Where to go</p>
+              <div class="goto">
+                <a href="#"><span><b>Policies</b><em>Book of Business</em></span><i>&rarr;</i></a>
+                <a href="#"><span><b>Lead workspace</b><em>Leads</em></span><i>&rarr;</i></a>
+                <a href="#"><span><b>Dialer</b><em>Leads</em></span><i>&rarr;</i></a>
+                <a href="#"><span><b>Lapse risk</b><em>Retention</em></span><i>&rarr;</i></a>
+              </div>
+            </div>
+
+            <div class="c">
+              <p class="ch">Included in your plan, on the way</p>
+              <div class="pills">
+                <span class="pill">Statements</span>
+                <span class="pill">Commission ledger</span>
+                <span class="pill">Quoting</span>
+                <span class="pill">Applications</span>
+                <span class="pill">True CPA</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─────────────────────────────────────────────────────────────── -->
+<section>
+  <div class="case">
+    <h2>Smaller things, same pass</h2>
+  </div>
+  <ul class="ticks">
+    <li>
+      <b>No more ticket numbers</b>
+      <span>&ldquo;No policies yet &mdash; this screen is scaffolding for LA-0.1&rdquo; was shown to paying customers. Empty states now say what will fill the screen and where it comes from.</span>
+    </li>
+    <li>
+      <b><code>plan_c</code> &rarr; Plan C</b>
+      <span>And the version number is gone. It tells an operator which plan version an entitlement came from; it tells a customer that something they don't understand has changed three times.</span>
+    </li>
+    <li>
+      <b>The <code>min-w-0</code> fix</b>
+      <span>The same bug the admin shell had: a flex item won't shrink below its widest child, so one wide table drags the whole page sideways. Fixed here before there's a table to prove it.</span>
+    </li>
+    <li>
+      <b>A test that stops the regression</b>
+      <span>The <code>built</code> flag and the filesystem must agree. Adding a screen and forgetting to flip it now fails in CI rather than in front of a customer &mdash; which is exactly how 24 dead links happened.</span>
+    </li>
+  </ul>
+</section>
+
+<footer>
+  <p>Mockups reproduce the implemented design using the app's own tokens &mdash; Inter, <code>#00407f</code>, <code>#0070cc</code>, <code>#f7f9fb</code>. The screens themselves have not been photographed, because every one of them sits behind a login and this session could not mint a session cookie; see backlog #72. <code>tsc 0 &middot; lint 0 &middot; tests 189/189 &middot; build clean</code>.</p>
+</footer>
+
+</div>
