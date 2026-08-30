@@ -249,10 +249,17 @@ export class WhopProvider implements PaymentProvider {
     amountCents: number;
     description: string;
     dueAt?: string | null;
+    /**
+     * `send_invoice` emails the customer a pay page; `charge_automatically` charges the card
+     * already on file. Sending is the default because a custom invoice is usually a negotiated
+     * amount the customer has not authorised — but converting a trial early IS authorised, and
+     * asking them to re-enter a card they already gave us would be absurd.
+     */
+    collectionMethod?: "send_invoice" | "charge_automatically";
   }): Promise<{ invoiceId: string; payOnlineUrl: string | null }> {
     const body: Record<string, unknown> = {
       company_id: input.companyId,
-      collection_method: "send_invoice",
+      collection_method: input.collectionMethod ?? "send_invoice",
       member_id: input.memberId,
       // A one-off invoice is a plan with no recurrence: a price and nothing to renew.
       plan: {

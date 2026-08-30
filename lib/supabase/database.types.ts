@@ -42,6 +42,28 @@ export type Database = {
         };
         Relationships: [];
       };
+      trial_reminders: {
+        Row: {
+          delivered: boolean;
+          due_at: string;
+          id: string;
+          kind: Database["public"]["Enums"]["trial_reminder_kind"];
+          sent_at: string;
+          subscription_id: string;
+          trial_ends_at: string;
+        };
+        Insert: {
+          delivered?: boolean;
+          due_at: string;
+          id?: string;
+          kind: Database["public"]["Enums"]["trial_reminder_kind"];
+          sent_at?: string;
+          subscription_id: string;
+          trial_ends_at: string;
+        };
+        Update: { delivered?: boolean };
+        Relationships: [];
+      };
       checkout_sessions: {
         Row: {
           billing_cycle: Database["public"]["Enums"]["billing_cycle"];
@@ -1235,6 +1257,26 @@ export type Database = {
       };
     };
     Views: {
+      admin_trials_in_flight: {
+        Row: {
+          billing_cycle: Database["public"]["Enums"]["billing_cycle"];
+          business_name: string | null;
+          days_elapsed: number;
+          days_remaining: number;
+          has_payment_method: boolean;
+          last_login_at: string | null;
+          owner_email: string | null;
+          owner_name: string | null;
+          plan_code: string;
+          plan_name: string;
+          started_at: string;
+          subscription_id: string;
+          tenant_id: string;
+          tenant_name: string;
+          trial_ends_at: string;
+        };
+        Relationships: [];
+      };
       admin_plan_list: {
         Row: {
           code: string | null;
@@ -1378,6 +1420,10 @@ export type Database = {
           p_lines: Json;
         };
         Returns: { invoice_id: string; number: string; created: boolean; reconciliation: string }[];
+      };
+      extend_trial: {
+        Args: { p_subscription_id: string; p_days: number };
+        Returns: { trial_ends_at: string; current_period_end: string }[];
       };
       create_subscription_from_checkout: {
         Args: {
@@ -1608,6 +1654,7 @@ export type Database = {
       invoice_status: "draft" | "issued" | "paid" | "overdue" | "void" | "uncollectible";
       invoice_line_kind: "plan" | "addon" | "overage" | "discount" | "setup_fee" | "credit";
       billing_mode: "automatic" | "manual";
+      trial_reminder_kind: "four_days_left" | "final_day";
       credit_note_type: "refund" | "credit" | "waiver";
       credit_note_status: "pending_approval" | "approved" | "processing" | "succeeded" | "failed" | "rejected";
       credit_reason: "duplicate_charge" | "service_issue" | "goodwill" | "billing_error" | "cancellation" | "other";

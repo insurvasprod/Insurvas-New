@@ -7,6 +7,8 @@ import { buildAgentMenu } from "@/lib/menu/definition";
 import { AgentSidebar } from "@/components/app/agent-sidebar";
 import { LogoutButton } from "@/components/app/logout-button";
 import { resolveSignupContext, signupDestination } from "@/lib/signup/context";
+import { trialBanner } from "@/lib/trials/banner";
+import { getSupabaseServiceClient } from "@/lib/supabase/service";
 
 /**
  * Enforcement point 1 of 3: the MENU.
@@ -29,6 +31,20 @@ export default async function AgentShellLayout({ children }: { children: React.R
 
   const entitlement = await getEntitlement(context.tenantId);
   const menu = buildAgentMenu(entitlement.features);
+
+  // SA-5.3: the in-app half of the day-13 reminder. Only queried for a tenant actually on trial,
+  // and trial_ends_at is deliberately not added to the entitlement contract — that object is the
+  // versioned agreement between the two planes, not a place for screen-level trivia.
+  let banner = null;
+  if (entitlement.status === "trialing") {
+    const { data: sub } = await getSupabaseServiceClient()
+      .from("subscriptions")
+      .select("trial_ends_at")
+      .eq("tenant_id", context.tenantId)
+      .eq("status", "trialing")
+      .maybeSingle();
+    banner = trialBanner(sub?.trial_ends_at ? new Date(sub.trial_ends_at) : null);
+  }
 
   return (
     <div className="flex min-h-screen">
@@ -54,6 +70,17 @@ export default async function AgentShellLayout({ children }: { children: React.R
       </aside>
 
       <main className="flex-1 bg-[var(--color-page-bg)] p-8">
+        {banner && (
+          <div
+            className={`mb-6 rounded-lg border p-4 text-sm ${
+              banner.tone === "urgent"
+                ? "border-[var(--color-warning)]/40 bg-[var(--color-warning)]/10"
+                : "border-border bg-muted/40"
+            }`}
+          >
+            {banner.message}
+          </div>
+        )}
         {entitlement.access === "read_only" && (
           <div className="mb-6 rounded-lg border border-[var(--color-warning)]/30 bg-[var(--color-warning)]/10 p-4 text-sm">
             <span className="font-medium">

@@ -65,6 +65,11 @@ expiry, hashed tokens, resend, revocation. Only the transport is missing.
 
 **Fix:** replace that one function body when SA-4.11 picks a provider. No caller changes.
 
+SA-5.3 added a second caller with the same shape: `scripts/send-trial-reminders.mjs` composes the
+real reminder — the customer's own plan, price and end date — decides delivery, and records a row
+with `delivered: false`. Everything except the transport is real, and the column says which it was,
+so the day keys arrive nothing about the job changes.
+
 ### 6. Users list still reads the wrong plan source — STILL OPEN
 **From:** SA-1.1 · ⚠️ **Now definitely wrong, not just empty. Worth doing next.**
 
@@ -378,11 +383,55 @@ remain uninstrumented. This is honest UI, but several explicit SA-3.9 outcomes a
 **Fix:** record plan-change MRR deltas and real funnel events, extend `metrics_daily` for per-plan
 churn and trial conversion, and add date/plan filters. Performance against 500 tenants remains [#48].
 
+### 52. Setup-step completion is recorded nowhere, so trial conversion can't be correlated with it
+**From:** SA-5.3 · **Significant**
+
+SA-5.3 asks for a setup-progress column on the trials screen and for conversion correlated with
+setup completion. `business_profiles.recommended_setup_steps` stores the *list* of steps; nothing
+anywhere records which of them a tenant has **finished**, so a progress figure would read the same
+for every trial — a confident number with nothing behind it.
+
+The screen shows a measured engagement signal instead (owner's `last_login_at`), labelled as
+exactly that on both the table and the stats block. The conversion cut is engaged vs never-signed-in
+rather than setup-complete vs not.
+
+**Fix:** record step completion (a `tenant_setup_steps` table, or completion timestamps on the
+profile), then swap the two cuts. The screen's shape does not need to change — only what feeds it.
+
+### 53. The provider leg of extend/cancel has never executed against a real membership
+**From:** SA-5.3 · **Unverified, same class as [#45]**
+
+`extendTrial` calls `addFreeDays` and `cancelTrial` calls `pauseMembership` when the subscription
+carries a `whop_membership_id`. Both methods are individually verified against the sandbox (SA-3.2,
+SA-3.4), but never on a **trialing** membership, and `verify:trials` deliberately builds trials with
+no membership id so no sandbox state is mutated — pausing a real membership is not reversible from
+a test, and the only trialing memberships in the sandbox are the ones SA-5.2 created.
+
+The failure handling is the part that matters and is exercised by inspection only: an extension
+refuses rather than half-applying, because moving our date while the provider still charges on the
+old one tells the customer one thing and bills another.
+
+**Fix:** run one manual sandbox extension on a trialing membership and record the response, the way
+SA-3.2's decisions were settled. Cheap, and it closes the last unproven path in SA-5.3.
+
+
 ---
 
 ## ✅ Resolved
 
 *Terse log — details live in git history.*
+
+- **SA-5.3 trial management** -> verified 32/32 against the running app. Reminders are defined as
+  offsets from the trial's **end**, not its start, which is what makes "extending a trial pushes
+  the charge date and every reminder with it" true by construction rather than by remembering to
+  move them. Idempotent on `(subscription, kind, trial_ends_at)`, so an extension deliberately
+  re-arms them for the new date. Converting early raises a `charge_automatically` invoice and does
+  **not** flip the status — the payment webhook does, so there is one path from money to state.
+  Two criteria are met by an honest substitute rather than in full: [#52] and [#53].
+  The day-13 in-app banner shares `REMINDER_OFFSET_DAYS` with the emails, so the banner turning
+  urgent and the final-day email going out are the same moment by definition and cannot drift.
+  Verified in a browser: an extension driven through the dialog moved the row to 12/21, re-sorted
+  it, and softened its own risk badge — the screen reacting to the new end date, not a cached one.
 
 - **#47 A provider checkout created no subscription** -> SA-5.2. `create_subscription_from_checkout`
   is called from BOTH the return handler and `membership.activated`, idempotent on the tenant,

@@ -41,6 +41,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   }
   if (canManageSubscriptions(admin.role)) {
     navItems.push({ href: "/admin/subscriptions", label: "Subscriptions", icon: "subscriptions" });
+    navItems.push({ href: "/admin/trials", label: "Trials", icon: "trials" });
   }
 
   // SA-3.3: a support_agent cannot open invoice screens at all, so the link is not rendered for
