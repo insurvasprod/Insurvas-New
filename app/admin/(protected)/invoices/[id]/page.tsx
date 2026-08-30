@@ -8,6 +8,7 @@ import { fetchInvoiceDetail } from "@/lib/invoices/queries";
 import { AdminPageHeader } from "@/components/admin/page-header";
 import { VoidInvoiceDialog } from "@/components/admin/void-invoice-dialog";
 import { MarkPaidDialog } from "@/components/admin/mark-paid-dialog";
+import { RefundDialog } from "@/components/admin/refund-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -50,6 +51,15 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
           </Button>
           {canVoidInvoices(admin.role) && settleable && (
             <MarkPaidDialog invoiceId={invoice.id} number={invoice.number} remainingCents={remainingCents} />
+          )}
+          {canVoidInvoices(admin.role) && invoice.status === "paid" && (
+            <RefundDialog
+              tenantId={invoice.tenant_id}
+              invoiceId={invoice.id}
+              number={invoice.number}
+              totalCents={invoice.total_cents}
+              hasProviderPayment={Boolean(invoice.provider_payment_id)}
+            />
           )}
           {canVoidInvoices(admin.role) && (
             <VoidInvoiceDialog

@@ -42,6 +42,61 @@ export type Database = {
         };
         Relationships: [];
       };
+      credit_notes: {
+        Row: {
+          amount_cents: number;
+          approved_at: string | null;
+          approved_by: string | null;
+          created_at: string;
+          failure_reason: string | null;
+          id: string;
+          invoice_id: string | null;
+          number: string;
+          provider_refund_id: string | null;
+          reason_code: Database["public"]["Enums"]["credit_reason"];
+          reason_text: string | null;
+          rejected_reason: string | null;
+          requested_by: string | null;
+          status: Database["public"]["Enums"]["credit_note_status"];
+          tenant_id: string;
+          type: Database["public"]["Enums"]["credit_note_type"];
+        };
+        Insert: {
+          amount_cents: number;
+          approved_at?: string | null;
+          approved_by?: string | null;
+          created_at?: string;
+          failure_reason?: string | null;
+          id?: string;
+          invoice_id?: string | null;
+          number: string;
+          provider_refund_id?: string | null;
+          reason_code: Database["public"]["Enums"]["credit_reason"];
+          reason_text?: string | null;
+          rejected_reason?: string | null;
+          requested_by?: string | null;
+          status?: Database["public"]["Enums"]["credit_note_status"];
+          tenant_id: string;
+          type: Database["public"]["Enums"]["credit_note_type"];
+        };
+        // Only progress through approval and the provider is updatable; the amount, type, reason
+        // and number are fixed once raised.
+        Update: {
+          approved_at?: string | null;
+          approved_by?: string | null;
+          failure_reason?: string | null;
+          provider_refund_id?: string | null;
+          rejected_reason?: string | null;
+          status?: Database["public"]["Enums"]["credit_note_status"];
+        };
+        Relationships: [];
+      };
+      tenant_credits: {
+        Row: { balance_cents: number; tenant_id: string; updated_at: string };
+        Insert: { balance_cents?: number; tenant_id: string; updated_at?: string };
+        Update: { balance_cents?: number; updated_at?: string };
+        Relationships: [];
+      };
       coupons: {
         Row: {
           amount_off_cents: number | null;
@@ -252,9 +307,9 @@ export type Database = {
         Relationships: [];
       };
       invoice_counters: {
-        Row: { year: number; month: number; next_number: number };
-        Insert: { year: number; month: number; next_number?: number };
-        Update: { year?: number; month?: number; next_number?: number };
+        Row: { series: string; year: number; month: number; next_number: number };
+        Insert: { series?: string; year: number; month: number; next_number?: number };
+        Update: { series?: string; year?: number; month?: number; next_number?: number };
         Relationships: [];
       };
       whop_plans: {
@@ -1149,6 +1204,31 @@ export type Database = {
         };
         Returns: { invoice_id: string; number: string; created: boolean; reconciliation: string }[];
       };
+      request_credit_note: {
+        Args: {
+          p_tenant_id: string;
+          p_invoice_id: string | null;
+          p_type: Database["public"]["Enums"]["credit_note_type"];
+          p_amount_cents: number;
+          p_reason_code: Database["public"]["Enums"]["credit_reason"];
+          p_reason_text: string | null;
+          p_requested_by: string;
+          p_threshold_cents: number;
+        };
+        Returns: {
+          credit_note_id: string;
+          number: string;
+          status: Database["public"]["Enums"]["credit_note_status"];
+        }[];
+      };
+      adjust_tenant_credit: {
+        Args: { p_tenant_id: string; p_delta_cents: number };
+        Returns: number;
+      };
+      allocate_document_number: {
+        Args: { p_series: string; p_at: string };
+        Returns: string;
+      };
       create_custom_invoice: {
         Args: {
           p_tenant_id: string;
@@ -1323,6 +1403,9 @@ export type Database = {
       invoice_status: "draft" | "issued" | "paid" | "overdue" | "void" | "uncollectible";
       invoice_line_kind: "plan" | "addon" | "overage" | "discount" | "setup_fee" | "credit";
       billing_mode: "automatic" | "manual";
+      credit_note_type: "refund" | "credit" | "waiver";
+      credit_note_status: "pending_approval" | "approved" | "processing" | "succeeded" | "failed" | "rejected";
+      credit_reason: "duplicate_charge" | "service_issue" | "goodwill" | "billing_error" | "cancellation" | "other";
       invoice_kind: "subscription" | "custom";
       discount_type: "percent" | "fixed";
       coupon_duration: "once" | "n_periods" | "forever";

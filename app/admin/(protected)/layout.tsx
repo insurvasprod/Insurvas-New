@@ -47,6 +47,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   // them either — a visible link to a 403 is a worse experience than no link.
   if (canViewInvoices(admin.role)) {
     navItems.push({ href: "/admin/invoices", label: "Invoices", icon: "invoices" });
+    navItems.push({ href: "/admin/credit-notes", label: "Refunds & credits", icon: "credit-notes" });
   }
 
   if (canManageCoupons(admin.role)) {

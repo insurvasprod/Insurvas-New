@@ -22,7 +22,8 @@
     "whop:sync-plan": "node --experimental-strip-types --env-file=.env.local scripts/whop-sync-plan.mjs",
     "verify:coupons": "node --env-file=.env.local scripts/verify-coupons.mjs",
     "mark:overdue": "node --env-file=.env.local scripts/mark-overdue-invoices.mjs",
-    "verify:custom": "node --env-file=.env.local scripts/verify-custom-invoices.mjs"
+    "verify:custom": "node --env-file=.env.local scripts/verify-custom-invoices.mjs",
+    "verify:credits": "node --env-file=.env.local scripts/verify-credit-notes.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.99.0",

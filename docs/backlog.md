@@ -324,6 +324,32 @@ overdue-only and mismatched-only; **tenant and date range are supported by `GET 
 but have no control**. Both are a couple of inputs once there are enough invoices for filtering to
 matter — with two rows it would be furniture.
 
+### 45. The provider refund call has never been executed
+**From:** SA-3.8 (2026-08-30) · **Unverified**
+
+Everything guarding a refund is verified: the threshold, the pending queue, the self-approval
+refusal (in the route *and* as a database constraint), and that a failed execution is left in
+`failed` with a reason. **The `POST /payments/{id}/refund` call itself has never run.**
+
+Deliberately: the only refundable payments are the two real sandbox charges, and a refund is
+irreversible. `WhopProvider.refund()` is written against the documented endpoint and unit-tested
+against a stubbed fetch, but the live path is unproven — the same status the plan and promo calls
+had before they were exercised, and both turned out to have bugs.
+
+Worth spending $1 of sandbox money on a partial refund to close it.
+
+### 46. Credit balances are never applied automatically
+**From:** SA-3.8 (2026-08-30) · Minor
+
+A credit reaches `tenant_credits.balance_cents`, and `redeemCreditAsFreeDays()` converts it into
+free days on the Whop membership. **Nothing calls that automatically** — there is no control on the
+tenant page and no job. The balance is recorded and visible; turning it into value is a manual step
+that currently has no button.
+
+The ticket's criterion "an unused credit balance is applied to the next invoice automatically and
+shown as its own line" is therefore **unmet**. On automatic billing there is no invoice of ours to
+apply it to before Whop charges; free days are the workable equivalent and they need wiring up.
+
 ### 44. Add-ons, overage and proration still do not reach an invoice
 **From:** SA-3.7 (2026-08-30) · **Significant** — supersedes the open half of [#27] and [#41]
 
@@ -382,6 +408,12 @@ Worth building both at once.
 ## ✅ Resolved
 
 *Terse log — details live in git history.*
+
+- **SA-3.8 refunds and credit notes** → verified 14/14. The control the ticket exists for is
+  enforced twice: the route refuses a self-approval, and so does a database CHECK constraint that
+  no code path can route around. Approval was exercised through the real HTTP route with a second
+  admin's session, not by writing the row. Credit notes take a `CN-` series from the same gap-free
+  counter as invoices, generalised to (series, year, month) rather than duplicated.
 
 - **#40 The void/mark-paid success path was never exercised through the API** → closed by SA-3.7.
   Custom invoices are born *issued*, which finally produced an unpaid invoice; `verify:custom`

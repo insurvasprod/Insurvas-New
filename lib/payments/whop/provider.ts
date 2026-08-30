@@ -4,7 +4,7 @@
 // Whop hosts checkout and raises charges itself, so we never originate one. That absence is the
 // honest shape of a hosted-checkout provider, not a gap.
 
-import { WhopClient, centsToWhopAmount, extractCheckoutUrl, idempotencyKey } from "./client.ts";
+import { WhopClient, centsToWhopAmount, extractCheckoutUrl, idempotencyKey, whopAmountToCents } from "./client.ts";
 import { ProviderUnsupportedError } from "../types.ts";
 import type {
   CheckoutSession,
@@ -287,5 +287,52 @@ export class WhopProvider implements PaymentProvider {
 
   async resumeMembership(membershipId: string): Promise<void> {
     await this.client.request("POST", `/memberships/${encodeURIComponent(membershipId)}/resume`, {});
+  }
+
+  /**
+   * What the provider says is still refundable on a payment (SA-3.8).
+   *
+   * Asked before every refund rather than trusting our own invoice total: Whop knows what was
+   * actually collected and what has already been returned, and refunding against our figure would
+   * let a second refund through on a payment Whop has already partly refunded.
+   */
+  async getRefundability(chargeId: string): Promise<{
+    refundable: boolean;
+    totalCents: number;
+    refundedCents: number;
+    remainingCents: number;
+  }> {
+    const payment = await this.client.request<Record<string, unknown>>(
+      "GET",
+      `/payments/${encodeURIComponent(chargeId)}`,
+    );
+
+    const toCents = (value: unknown) =>
+      typeof value === "number" || typeof value === "string" ? whopAmountToCents(value) : 0;
+
+    const totalCents = toCents(payment.total);
+    const refundedCents = toCents(payment.refunded_amount);
+
+    return {
+      refundable: payment.refundable === true,
+      totalCents,
+      refundedCents,
+      remainingCents: Math.max(0, totalCents - refundedCents),
+    };
+  }
+
+  /**
+   * Extends a membership's billing period, which is how a credit reaches a customer whose charge
+   * we cannot reduce. Whop bills the plan price regardless; days they are not billed for are worth
+   * the same to them.
+   */
+  async addFreeDays(membershipId: string, days: number): Promise<void> {
+    if (!Number.isInteger(days) || days <= 0) throw new Error(`days must be a positive integer, got ${days}`);
+    await this.client.request(
+      "POST",
+      `/memberships/${encodeURIComponent(membershipId)}/add_free_days`,
+      { days },
+      idempotencyKey(`freedays_${membershipId}`, { days }),
+    );
   }
 }
