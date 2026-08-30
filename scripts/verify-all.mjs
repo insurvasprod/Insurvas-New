@@ -36,12 +36,13 @@ const SUITES = [
   ["credit notes", "verify-credit-notes.mjs"],
   ["coupons", "verify-coupons.mjs"],
   ["subscription events", "verify-subscription-events.mjs"],
+  ["period billing", "verify-period-billing.mjs"],
 ];
 
 // verify-payment-provider.mjs imports TypeScript directly, so it needs the type-stripping flag the
 // others do not. Passing it to every script would work but would print an experimental warning
 // twenty times, which buries the actual output.
-const NEEDS_TYPE_STRIPPING = new Set(["verify-payment-provider.mjs"]);
+const NEEDS_TYPE_STRIPPING = new Set(["verify-payment-provider.mjs", "verify-period-billing.mjs"]);
 
 function run(file) {
   const flags = ["--env-file=.env.local"];

@@ -428,14 +428,20 @@ Until someone does, every row in #8 stays open and the "~12 of 33 screens verifi
 
 ---
 
-### 73. `payment_providers` is empty in the live database
-**From:** reference data export, 2026-08-30
+### 73. `payment_providers` is empty, and that has a consequence
+**From:** reference data export, 2026-08-30 · **Corrected 2026-08-31**
 
-`scripts/dump-reference-data.mjs` found zero rows. The Whop provider is selected in code
-(`lib/payments/registry.ts` branches on `code === "whop"`), so nothing reads the table today and
-nothing breaks — but a table that exists, is referenced by `provider_settings`, and holds no rows is
-either dead schema or an unfinished seed. Worth deciding which before SA-5 adds a second provider
-and the registry needs a real lookup.
+The original entry read this as a catalog of providers and wondered whether it was dead schema. It
+is not a catalog: it maps a **tenant** to its provider customer, and `lib/invoices/custom.ts` reads
+`provider_customer_id` from it to attach a pay-online link to an invoice.
+
+So the empty table has a real effect. Every invoice the new period billing run raises will come out
+with no pay-online link and the warning *"No provider customer is known for this tenant yet"* — it
+can still be settled by bank transfer, but the customer gets no button. Nothing populates this table
+today.
+
+**Fix:** write the row when a checkout completes, from the membership envelope Whop already sends.
+That is the same wiring [#47] needs, and worth doing at the same time.
 
 ---
 
@@ -514,15 +520,26 @@ Accepted for now: the overshoot is small and bounded, and SA-3 bills overage any
 ever needs a strict ceiling (a legal one, say), this needs to become a single transaction that
 locks the total row.
 
-### 24. Nothing *schedules* the period rollover
-**From:** SA-2.5, narrowed by SA-2.7 · **Belongs to:** SA-6.1
+### 24. Nothing *schedules* the billing run
+**From:** SA-2.5, narrowed by SA-2.7, widened by #44 on 2026-08-31 · **Belongs to:** SA-6.1
 
-SA-2.7 built `advance_billing_periods()` and `npm run advance:periods`, which rolls ended periods,
-applies queued downgrades, completes cancellations and resets meter allowances. Verified end to end.
+`npm run bill:periods` now does the whole rollover in the right order: bill the period that ended,
+then advance it. Verified end to end except for the part that needs the migration applied.
 
-What's still missing is a **scheduler**. Until SA-6.1 runs this on a cron, a queued downgrade only
-applies when a human runs the script — and per the doc, a job that silently never runs looks
-identical to a healthy one. SA-6.1 should schedule it *and* alert on missed runs.
+What is still missing is a **scheduler**, and the stakes went up. Before #44 an unrun job meant a
+queued downgrade applied late. Now it means invoices are never raised — add-ons go unbilled, overage
+is free, and a mid-period upgrade's difference sits in `pending_charges` forever. A job that
+silently never runs still looks identical to a healthy one.
+
+SA-6.1 should schedule it **and** alert on missed runs. `period_billing_runs.ran_at` is the natural
+signal: no row in the last N days for a subscription whose period has ended means the job is not
+running, and that query is cheap.
+
+Meanwhile `POST /api/admin/billing/run` lets a billing admin trigger it from the app, so the run is
+something a person can see and check rather than an SSH session away. That is not a substitute for
+a scheduler.
+
+---
 
 ### 26. Add-on CRUD is read-only in the UI
 **From:** SA-2.6 · Minor
@@ -551,16 +568,28 @@ else, and the difference is simply not collected. `subscription_addons` keeps de
 built — read that history rather than only current attachments, or an add-on cancelled mid-period
 vanishes from the bill it belongs on.
 
-### 37. The two real sandbox payments have no invoices
-**From:** SA-3.2 (2026-08-30) · Minor
+### 37. Already invoiced — this entry was stale
+**From:** SA-3.2 · **Checked and closed 2026-08-31**
 
-`plan_a` ($198, the double-charge) and `plan_b` ($249) were both collected before invoice
-generation existed, so neither produced an invoice. Replaying their stored envelopes through the
-receiver would create them — the generator is idempotent on the provider payment id, so it is safe.
+The entry said the two real sandbox payments produced no invoices. `npm run backfill:invoices`
+replays every stored payment envelope and reports what is missing; run against the live project it
+finds nothing to do:
 
-Worth deciding rather than drifting: the `plan_a` one would be created as **mismatched** (we say
-$99, the provider charged $198), which is correct and is exactly the record you would want of that
-incident.
+```
+= pay_HauFP0LxGqtuUm: already invoiced as INV-2026-08-0001 (mismatched)
+= pay_cqovMKvYNu6jZI: already invoiced as INV-2026-08-0002 (matched)
+x pay_xxxxxxxxxxxxxx: the event was never matched to a tenant
+```
+
+Both real payments have invoices, and the `plan_a` double-charge is recorded as **mismatched** —
+exactly the outcome this entry argued for. The third is a fixture with a placeholder id and no
+tenant; it is correctly skipped rather than invented.
+
+The script stays. It is a guard rather than a migration now: if a payment ever arrives while invoice
+generation is down, this finds it and replays it through the same line-building code the live
+receiver uses.
+
+---
 
 ### 38. An invoice can still be deleted
 **From:** SA-3.2 (2026-08-30) · Minor
@@ -662,31 +691,54 @@ had before they were exercised, and both turned out to have bugs.
 
 Worth spending $1 of sandbox money on a partial refund to close it.
 
-### 46. Credit balances are never applied automatically
-**From:** SA-3.8 (2026-08-30) · Minor
+### 46. Credit is applied automatically — resolved
+**From:** SA-3.8 · **Built 2026-08-31**
 
-A credit reaches `tenant_credits.balance_cents`, and `redeemCreditAsFreeDays()` converts it into
-free days on the Whop membership. **Nothing calls that automatically** — there is no control on the
-tenant page and no job. The balance is recorded and visible; turning it into value is a manual step
-that currently has no button.
+The ticket's criterion was "an unused credit balance is applied to the next invoice automatically
+and shown as its own line". It was unmet because on automatic billing there was no invoice of ours
+to apply it to.
 
-The ticket's criterion "an unused credit balance is applied to the next invoice automatically and
-shown as its own line" is therefore **unmet**. On automatic billing there is no invoice of ours to
-apply it to before Whop charges; free days are the workable equivalent and they need wiring up.
+#44 created one. The period billing run applies the balance as a `credit` line on the period invoice
+and deducts it — inside the same transaction that raises the invoice, because deducting afterwards
+means a crash in between gives the discount away twice.
 
-### 44. Add-ons, overage and proration still do not reach an invoice
-**From:** SA-3.7 (2026-08-30) · **Significant** — supersedes the open half of [#27] and [#41]
+Clamped to the bill, deliberately. Credit larger than the charges does not produce a negative
+invoice, and does not evaporate either: what could not be spent stays on the balance. When credit
+covers the charges completely, the run records that it happened and raises no invoice at all.
 
-SA-3.7 built the machinery both were waiting for: `create_custom_invoice` raises an arbitrary
-invoice from the shared number sequence, and `WhopProvider.createInvoice` sends it for online
-payment. **Nothing calls it for either purpose yet.**
+`redeemCreditAsFreeDays()` remains for the case where there is no invoice to discount, and still has
+no button. That is a convenience now rather than the only mechanism.
 
-What remains is a job that, at each period rollover, gathers a tenant's attached add-ons, their
-metered overage above the plan allowance, and any pending proration from a mid-period upgrade, and
-raises one custom invoice for the lot. The pieces all exist; assembling them does not.
+---
 
-Until then: a tenant with add-ons is billed for their plan only, overage is free, and a mid-period
-upgrade charges nobody the difference.
+### 44. The period billing run exists — one step left
+**From:** SA-3.7 · **Built 2026-08-31**
+
+The job now exists: `npm run bill:periods`. For each subscription whose period has ended it gathers
+attached add-ons, metered overage above the effective allowance, and any charge parked by a
+mid-period plan change, applies the tenant's credit balance, and raises one invoice for the lot —
+then advances the periods.
+
+Three decisions worth knowing:
+
+- **Bill, then roll, in one command.** Usage is keyed by `period_start`, so after
+  `advance_billing_periods()` runs, "this period's usage" means the new empty bucket. Billing after
+  the roll would charge everyone for zero overage forever and look healthy doing it. The two cannot
+  be scheduled apart because they are one script.
+- **Idempotent by primary key, not by a check.** `period_billing_runs (subscription_id,
+  period_start)` is written in the same transaction as the invoice. A check in application code
+  would race two concurrent runs; a primary key cannot.
+- **Overage is skipped for hard-capped or unpriced meters.** A hard cap means the usage was refused
+  at the door, so billing it would charge for something we blocked; an unpriced meter means an
+  operator has not priced it, and inventing a price to bill a customer is worse than billing
+  nothing.
+
+**Still owed:** `supabase/migrations/0017_period_billing.sql` has not been applied — no credential in
+this repository can run DDL. Until it is, `npm run verify:period-billing` stops with a clear message
+and the run has never executed against a real database. The arithmetic is covered by 19 unit tests
+and the migration parses against a real server; neither of those is the same as having run.
+
+---
 
 ### 42. Coupons are creatable but not yet attachable from a screen
 **From:** SA-3.6 (2026-08-30) · Minor
@@ -712,20 +764,26 @@ reconciliation would correctly flag as `mismatched`.
 
 Coupons applied **at checkout** are the verified path.
 
-### 41. Proration is exact, and nothing calls it
-**From:** SA-3.4 (2026-08-30) · **Significant**
+### 41. Proration now has a caller — resolved
+**From:** SA-3.4 · **Built 2026-08-31**
 
-`prorate()` produces the ticket's worked example to the cent ($152.61 credit, $275.19 charge, net
-**$122.58**) and is covered by twelve tests. **No code path invokes it.**
+`prorate()` produced the ticket's worked example to the cent and nothing invoked it, so a mid-period
+change moved our side, left Whop billing the old plan, and charged nobody the difference.
 
-The decision was: on a mid-period upgrade, switch our subscription and entitlement immediately,
-schedule the Whop membership to `cancel_at_period_end`, and raise a separate Whop invoice for the
-difference. Only the arithmetic exists. Changing a plan mid-period today moves our side and leaves
-Whop billing the old plan until renewal, and **nobody is charged the difference**.
+`lib/billing/planChange.ts` is the missing caller, wired into the change-plan route. On an immediate
+change it prorates against the real period length, writes **two** `pending_charges` rows — the old
+plan's unused days as a credit, the new plan's remaining days as a charge — and calls
+`WhopProvider.setCancelAtPeriodEnd()` so the old membership stops renewing at the old price. The
+difference is collected on the next invoice by the period billing run rather than raised as its own
+invoice today: one bill instead of two, and nothing is lost by waiting.
 
-Needs: `PATCH /memberships/{id}` with `cancel_at_period_end`, a new checkout on the new plan, and
-the difference invoice — which is the same separate-invoice mechanism [#27] needs for add-ons.
-Worth building both at once.
+Two rows rather than one on purpose. "$122.58 plan change" is something a customer can only accept
+or dispute; "$152.61 credited, $275.19 charged" is something they can check.
+
+A downgrade still raises nothing. The ticket is explicit that it is not refunded mid-period, and the
+route now records that as the reason rather than silently doing nothing.
+
+---
 
 ### 60. ✅ SA-4.7 agent template selection and tenant-owned copies completed
 **From:** SA-4.7 · **Belongs to:** SA-4.7 · **Resolved:** 2026-08-30

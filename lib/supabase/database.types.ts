@@ -1424,6 +1424,75 @@ export type Database = {
         };
         Relationships: [];
       };
+      // HAND-ADDED for the period billing run (backlog #41/#44/#46), not generated. Both tables
+      // ship in supabase/migrations/0017_period_billing.sql; regenerate this file once that
+      // migration has been applied and these blocks should come back identical.
+      pending_charges: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          subscription_id: string;
+          kind: string;
+          label: string;
+          quantity: number;
+          included_qty: number | null;
+          unit_cents: number;
+          amount_cents: number;
+          reason: string;
+          created_at: string;
+          created_by: string | null;
+          invoice_id: string | null;
+          billed_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          tenant_id: string;
+          subscription_id: string;
+          kind: string;
+          label: string;
+          quantity?: number;
+          included_qty?: number | null;
+          unit_cents?: number;
+          amount_cents: number;
+          reason: string;
+          created_at?: string;
+          created_by?: string | null;
+          invoice_id?: string | null;
+          billed_at?: string | null;
+        };
+        Update: {
+          invoice_id?: string | null;
+          billed_at?: string | null;
+        };
+        Relationships: [];
+      };
+      period_billing_runs: {
+        Row: {
+          subscription_id: string;
+          period_start: string;
+          period_end: string;
+          invoice_id: string | null;
+          total_cents: number;
+          line_count: number;
+          note: string | null;
+          ran_at: string;
+        };
+        Insert: {
+          subscription_id: string;
+          period_start: string;
+          period_end: string;
+          invoice_id?: string | null;
+          total_cents?: number;
+          line_count?: number;
+          note?: string | null;
+          ran_at?: string;
+        };
+        Update: {
+          invoice_id?: string | null;
+          note?: string | null;
+        };
+        Relationships: [];
+      };
       // HAND-ADDED by SA-4.1, not generated. The `settings` table ships in
       // supabase/migrations/0001_settings.sql; regenerate this file once that migration has been
       // applied to the project and this block should come back identical.
@@ -1928,6 +1997,28 @@ export type Database = {
           pct_used: number | null;
           reason: string;
           used: number;
+        }[];
+      };
+      // HAND-ADDED for the period billing run, not generated. Ships in
+      // supabase/migrations/0017_period_billing.sql.
+      bill_subscription_period: {
+        Args: {
+          p_subscription_id: string;
+          p_period_start: string;
+          p_period_end: string;
+          p_lines: Json;
+          p_pending_ids: string[];
+          p_reason: string;
+          p_credit_cents?: number;
+          p_due_at?: string | null;
+          p_created_by?: string | null;
+        };
+        Returns: {
+          invoice_id: string | null;
+          invoice_number: string | null;
+          total_cents: number;
+          line_count: number;
+          already_billed: boolean;
         }[];
       };
       admin_usage_monitor: {
