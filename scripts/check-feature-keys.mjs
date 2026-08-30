@@ -144,4 +144,6 @@ if (unguarded.length > 0) {
 }
 
 console.log(failed ? "Catalog, guards and menu are out of sync." : "No drift between catalog, guards and menu.");
-process.exit(failed ? 1 : 0);
+// Let Node close its handles normally on Windows. Calling process.exit() here can race the
+// runtime's async cleanup and produce UV_HANDLE_CLOSING after an otherwise valid check.
+process.exitCode = failed ? 1 : 0;

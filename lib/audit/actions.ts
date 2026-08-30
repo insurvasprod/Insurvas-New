@@ -38,6 +38,7 @@ export const AUDIT_ACTIONS = [
   "invoice.custom_created",
   "tenant.billing_mode_changed",
   "setting.updated",
+  "payment_provider.connection_tested",
   "credit_note.requested",
   "credit_note.approved",
 ] as const;
@@ -80,6 +81,7 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   "coupon.removed": "Coupon removed",
   "invoice.custom_created": "Custom invoice raised",
   "setting.updated": "Setting changed",
+  "payment_provider.connection_tested": "Provider connection tested",
   "tenant.billing_mode_changed": "Billing mode changed",
   "credit_note.requested": "Credit note raised",
   "credit_note.approved": "Credit note approved",

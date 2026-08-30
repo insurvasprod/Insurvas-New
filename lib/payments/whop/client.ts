@@ -84,12 +84,23 @@ export class WhopClient {
     this.fetchImpl = options.fetchImpl ?? fetch;
   }
 
+  /**
+   * Every Whop call goes through here, which is why the logging lives here rather than in a
+   * decorator around the provider (SA-4.2).
+   *
+   * `withCallLogging` wraps the PaymentProvider interface, but Whop-specific methods — createPlan,
+   * addFreeDays, pauseMembership, createInvoice, getRefundability, promo codes — are not on that
+   * interface, so seven call sites reached Whop without ever touching the decorator. The result
+   * was an empty provider_calls table alongside real sandbox payments. A method cannot be added
+   * that skips this one.
+   */
   async request<T>(
     method: "GET" | "POST",
     path: string,
     body?: unknown,
     idempotencyKey?: string,
   ): Promise<T> {
+    const startedAt = performance.now();
     const headers: Record<string, string> = {
       authorization: `Bearer ${this.apiKey}`,
       "content-type": "application/json",
@@ -98,11 +109,19 @@ export class WhopClient {
     // a timeout cannot create a second plan or a second refund.
     if (idempotencyKey) headers["idempotency-key"] = idempotencyKey;
 
-    const response = await this.fetchImpl(`${this.baseUrl}${path}`, {
-      method,
-      headers,
-      body: body === undefined ? undefined : JSON.stringify(body),
-    });
+    let response: Response;
+    try {
+      response = await this.fetchImpl(`${this.baseUrl}${path}`, {
+        method,
+        headers,
+        body: body === undefined ? undefined : JSON.stringify(body),
+      });
+    } catch (error) {
+      // The network never answered. Recorded as a timeout so "they said nothing" stays distinct
+      // from "they said no".
+      await this.log(method, path, startedAt, "timeout", null, idempotencyKey);
+      throw error;
+    }
 
     const text = await response.text();
     let parsed: unknown = null;
@@ -112,8 +131,55 @@ export class WhopClient {
       parsed = text;
     }
 
+    await this.log(
+      method,
+      path,
+      startedAt,
+      response.ok ? "ok" : "error",
+      { status: response.status, body: parsed as never },
+      idempotencyKey,
+    );
+
     if (!response.ok) throw new WhopApiError(method, path, response.status, parsed);
     return parsed as T;
+  }
+
+  /**
+   * The request body is deliberately NOT logged.
+   *
+   * `withCallLogging` builds its payloads by allowlist so nothing sensitive can leak in by
+   * accident. At this level the body is whatever the caller passed, so an allowlist is impossible
+   * — the method, path, status and duration are what the health panel and a 2am debugging session
+   * actually need, and the response is already enough to explain a failure.
+   */
+  private async log(
+    method: string,
+    path: string,
+    startedAt: number,
+    status: "ok" | "error" | "timeout",
+    response: { status: number; body: never } | null,
+    idempotencyKey?: string,
+  ): Promise<void> {
+    // Imported dynamically, and the whole thing swallowed. This file is imported directly by
+    // provider.test.mjs, which runs under plain node with no tsconfig path mapping — a static
+    // import would drag in `@/lib/supabase/service` and fail tests that have nothing to do with
+    // logging. Losing a log line must never break a payment either way.
+    try {
+      const { recordProviderCall } = await import("../logging");
+      await recordProviderCall({
+        tenantId: null,
+        provider: "whop",
+        method: `${method} ${path}`,
+        request: { method, path },
+        response,
+        status,
+        durationMs: Math.round(performance.now() - startedAt),
+        idempotencyKey,
+      });
+    } catch {
+      // Intentionally silent: recordProviderCall already logs its own failures, and this catch
+      // exists for the case where the module cannot even be loaded.
+    }
   }
 }
 

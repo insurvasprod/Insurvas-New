@@ -67,6 +67,52 @@ reads it — the machinery is built and tested.
 **Fix:** none. Recorded so that the gap between the ticket's list and the store is a decision on
 the record rather than something that looks like an oversight.
 
+### 54. Payment credentials remain environment configuration, not database data
+**From:** SA-4.2 · **Decided while building, 2026-08-30**
+
+The Whop API key, base URL, webhook secret, product ID and account ID remain in process
+environment variables. SA-4.2 deliberately does not add `credentials_enc`, a `mode` column, a
+custom encryption helper or a Postgres secret store. A master key for custom encryption would also
+live in the environment; moving the ciphertext into a service-role-readable table would widen the
+blast radius rather than create a secret manager. The Basic Idea document calls for a real secret
+manager, and a database row is not one. Swapping sandbox for production therefore remains a key
+and base URL change, not a code change.
+
+**Fix:** none. Keep credentials out of the settings store and database until a real secret-manager
+integration is selected.
+
+### 55. SA-4.2 original unchecked criteria not implemented after the Whop-only decision
+**From:** SA-4.2 acceptance checklist · **Decision:** Whop-only scope retained on 2026-08-30
+
+The original ticket still contains seven checkbox criteria, but most describe the two-provider
+product that was removed. The complete disposition is recorded here so the unchecked boxes are not
+mistaken for unfinished Whop work:
+
+- **Both providers enabled and shown at checkout — NOT APPLICABLE.** Stripe/PayPal-style parallel
+  provider selection was removed. The product has one active provider: Whop.
+- **Disable a provider without breaking existing subscriptions — NOT APPLICABLE.** There is no
+  provider toggle or second provider to disable under the Whop-only decision.
+- **Secrets never returned in full — DONE.** The Whop status page and status API expose only a
+  masked API-key fingerprint and webhook-secret presence. The response was checked for the real
+  configured secrets and did not contain them.
+- **Switch `dummy` to `test` without code changes — SUPERSEDED / NOT IMPLEMENTED LITERALLY.** The
+  dummy/test mode model was removed. The Whop equivalent is sandbox/production derived from the
+  base URL and key; the derivation is implemented and tested, but an actual production credential
+  switch has not been performed in QA.
+- **Failure simulator creates a real `past_due` subscription — NOT APPLICABLE.** The simulator
+  was removed from the settings workflow; Whop sandbox test cards are the selected failure path.
+- **Only `super_admin` can view or edit — DONE.** The standalone page and status/test APIs use the
+  super-admin-only configuration permission. Tenant provider assignment remains the separate
+  `super_admin` + `billing_admin` permission.
+- **Key changes are audit-logged — NOT IMPLEMENTED UNDER ENV-ONLY CONFIGURATION.** There is no
+  in-app key editor, so the application cannot observe or audit an environment-variable change.
+  The connection-test attempt is audited instead. Implementing this criterion would require a
+  selected secret/configuration manager and an audited application-side change flow.
+
+The original `provider_settings.credentials_enc` / encrypted-at-rest database design is also not
+implemented. Credentials intentionally remain in environment variables; see #54. Reopening any
+of these NOT APPLICABLE or NOT IMPLEMENTED decisions requires an explicit product-scope change.
+
 ### 50. The hardcoded-constant sweep is deliberately partial
 **From:** SA-4.1 · **Decided while building, 2026-08-30**
 
@@ -213,8 +259,15 @@ session token can be minted locally from `ADMIN_SESSION_SECRET` and set as the
 Still unverified by clicking: the invite → set-password → login round trip, the email-change →
 confirm round trip (the old address must keep working until confirmed), a role change appearing on
 the tenant side without re-login, seat-limit enforcement at the limit, and the plan version editor.
+For SA-4.2 specifically, there were no active `support_agent` or `platform_config` accounts to use
+for a live 403 check, and the forced provider-error UI/console-error capture was not exercised;
+the success path, `billing_admin` 403, anonymous/expired/forged 401s, and the safe API payload were
+verified.
 
-**Verified in a browser so far:** the invoice list, detail and print screens (SA-3.3).
+**Verified in a browser so far:** the invoice list, detail and print screens (SA-3.3), and the
+SA-4.2 payment-status screen, including the successful connection-test confirmation. The protected
+status API's safe-field-only response was also verified through an authenticated HTTP check; the
+API cannot be opened as a standalone browser document because the in-app browser blocks raw JSON.
 
 ### 9. No CI pipeline exists
 **From:** SA-0.2, SA-0.3, SA-2.1
@@ -407,12 +460,19 @@ Not a code fix — it's an export. Either `supabase db pull` into `supabase/migr
 the DDL in order and verify by replaying it into a scratch project. Worth doing **before SA-3**
 writes invoices, because financial tables are the worst ones to hold only in a live database.
 
-### 32. The provider panel has never been opened in a browser
-**From:** SA-3.1 · Minor
+### 32. The orphaned per-tenant provider panel is intentionally retained but dormant
+**From:** SA-3.1, resolved in SA-4.2 · **Decision:** keep dormant by user on 2026-08-30
 
-The tenant Payment provider panel, its API route and the call-logging decorator are verified at the
-database and unit level but never clicked. No longer blocked — see #8 for how to get a session —
-just not done.
+The Whop-only decision removed the need for a customer-level provider choice, the dummy failure
+simulator and multi-provider configuration. The existing tenant detail component and API route are
+still retained because they touch shared `payment_providers` runtime records used by provider
+resolution and future migration work. They are not part of the standalone platform status screen,
+and they were not deleted because removing them would also touch the tenant detail page and billing
+provider assignment behavior.
+
+**Fix:** none for SA-4.2. Revisit whether to hide or remove the dormant UI and route when SA-4.3
+defines the Configuration Center and the product makes an explicit decision about tenant-level
+provider records.
 
 ### 39. Two invoice filters exist in the API but not the UI
 **From:** SA-3.3 (2026-08-30) · Minor
@@ -529,6 +589,15 @@ Worth building both at once.
 ## ✅ Resolved
 
 *Terse log — details live in git history.*
+
+- **SA-4.2 payment provider status surface** → implemented 2026-08-30. The protected standalone
+  Whop status page, safe status API, environment-only credential policy, explicit permission split,
+  centralized request logging, connection-test auditing, and actual error categories are in place.
+  Live authenticated browser verification remains tracked under [#8].
+
+- **Windows feature-check shutdown assertion** → resolved 2026-08-30. The feature-key checker now
+  sets `process.exitCode` and lets Node close normally, so the required command reports its valid
+  no-drift result with exit code 0.
 
 - **#49 The settings store had never written a row** → resolved 2026-08-30. The migration was
   applied and the store was exercised end to end in a browser: saving moved `users.invite_expiry_hours`
