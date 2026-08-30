@@ -113,8 +113,18 @@ export type InvoiceDetail = {
     void_reason: string | null;
   };
   lines: InvoiceLineRow[];
-  /** Provider events touching this payment — our stand-in for a payment history until SA-3.4. */
   events: { id: string; event_type: string; occurred_at: string | null; received_at: string }[];
+  /** SA-3.4: money actually received against this invoice. */
+  payments: {
+    id: string;
+    amount_cents: number;
+    method: string;
+    manual_reference: string | null;
+    provider_charge_id: string | null;
+    paid_at: string;
+  }[];
+  paidCents: number;
+  remainingCents: number;
 };
 
 export async function fetchInvoiceDetail(id: string): Promise<InvoiceDetail | null> {
@@ -145,11 +155,24 @@ export async function fetchInvoiceDetail(id: string): Promise<InvoiceDetail | nu
         .order("received_at")
     : { data: [] };
 
+  const { data: payments } = await supabase
+    .from("payments")
+    .select("id, amount_cents, method, manual_reference, provider_charge_id, paid_at")
+    .eq("invoice_id", id)
+    .eq("status", "succeeded")
+    .order("paid_at");
+
   const { tenants, ...rest } = invoice;
+  const typed = rest as InvoiceDetail["invoice"];
+  const paidCents = (payments ?? []).reduce((sum, p) => sum + p.amount_cents, 0);
 
   return {
-    invoice: { ...(rest as InvoiceDetail["invoice"]), tenant_name: tenants?.name ?? "—" },
+    invoice: { ...typed, tenant_name: tenants?.name ?? "—" },
     lines: (lines as InvoiceLineRow[] | null) ?? [],
     events: events ?? [],
+    payments: payments ?? [],
+    paidCents,
+    // A partial payment leaves the invoice issued with this showing, per the ticket.
+    remainingCents: Math.max(0, typed.total_cents - paidCents),
   };
 }

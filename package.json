@@ -18,6 +18,7 @@
     "verify:payments": "node --experimental-strip-types --env-file=.env.local scripts/verify-payment-provider.mjs",
     "verify:webhook": "node --env-file=.env.local scripts/verify-whop-webhook.mjs",
     "verify:invoices": "node --env-file=.env.local scripts/verify-invoices.mjs",
+    "verify:events": "node --env-file=.env.local scripts/verify-subscription-events.mjs",
     "whop:sync-plan": "node --experimental-strip-types --env-file=.env.local scripts/whop-sync-plan.mjs"
   },
   "dependencies": {

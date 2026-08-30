@@ -7,6 +7,7 @@ import { canVoidInvoices, canViewInvoices, voidRefusalReason } from "@/lib/invoi
 import { fetchInvoiceDetail } from "@/lib/invoices/queries";
 import { AdminPageHeader } from "@/components/admin/page-header";
 import { VoidInvoiceDialog } from "@/components/admin/void-invoice-dialog";
+import { MarkPaidDialog } from "@/components/admin/mark-paid-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -24,7 +25,8 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
   const detail = await fetchInvoiceDetail(id);
   if (!detail) notFound();
 
-  const { invoice, lines, events } = detail;
+  const { invoice, lines, events, payments, paidCents, remainingCents } = detail;
+  const settleable = invoice.status !== "paid" && invoice.status !== "void";
   const mismatched = invoice.reconciliation === "mismatched";
 
   return (
@@ -46,6 +48,9 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
               Print
             </Link>
           </Button>
+          {canVoidInvoices(admin.role) && settleable && (
+            <MarkPaidDialog invoiceId={invoice.id} number={invoice.number} remainingCents={remainingCents} />
+          )}
           {canVoidInvoices(admin.role) && (
             <VoidInvoiceDialog
               invoiceId={invoice.id}
@@ -158,6 +163,18 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
             <span>Total</span>
             <span>{formatCentsAsCurrency(invoice.total_cents)}</span>
           </div>
+          {paidCents > 0 && (
+            <div className="flex justify-between text-[var(--color-success)]">
+              <span>Paid</span>
+              <span>{formatCentsAsCurrency(paidCents)}</span>
+            </div>
+          )}
+          {remainingCents > 0 && paidCents > 0 && (
+            <div className="flex justify-between font-medium text-[var(--color-warning)]">
+              <span>Outstanding</span>
+              <span>{formatCentsAsCurrency(remainingCents)}</span>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -166,6 +183,25 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
           <h2 className="text-sm font-bold uppercase tracking-wide text-[var(--brand-700)]">
             Provider activity
           </h2>
+          {payments.length > 0 && (
+            <ul className="space-y-1 text-sm">
+              {payments.map((payment) => (
+                <li key={payment.id} className="flex flex-wrap items-center gap-2">
+                  <span className="font-medium">{formatCentsAsCurrency(payment.amount_cents)}</span>
+                  <span className="text-muted-foreground">
+                    {payment.method === "manual_bank_transfer" ? "bank transfer" : "provider"}
+                  </span>
+                  <span className="text-muted-foreground">
+                    {new Date(payment.paid_at).toLocaleDateString()}
+                  </span>
+                  {payment.manual_reference && (
+                    <code className="rounded bg-muted px-1.5 py-0.5 text-xs">{payment.manual_reference}</code>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+
           {invoice.provider_payment_id && (
             <p className="text-sm">
               <span className="text-muted-foreground">Payment: </span>

@@ -42,6 +42,41 @@ export type Database = {
         };
         Relationships: [];
       };
+      payments: {
+        Row: {
+          amount_cents: number;
+          created_at: string;
+          currency: string;
+          id: string;
+          invoice_id: string | null;
+          manual_reference: string | null;
+          method: Database["public"]["Enums"]["payment_method"];
+          paid_at: string;
+          provider: string | null;
+          provider_charge_id: string | null;
+          recorded_by: string | null;
+          status: Database["public"]["Enums"]["payment_status"];
+          tenant_id: string;
+        };
+        Insert: {
+          amount_cents: number;
+          created_at?: string;
+          currency?: string;
+          id?: string;
+          invoice_id?: string | null;
+          manual_reference?: string | null;
+          method: Database["public"]["Enums"]["payment_method"];
+          paid_at?: string;
+          provider?: string | null;
+          provider_charge_id?: string | null;
+          recorded_by?: string | null;
+          status?: Database["public"]["Enums"]["payment_status"];
+          tenant_id: string;
+        };
+        // Only status is updatable — the amount, method and references are fixed once recorded.
+        Update: { status?: Database["public"]["Enums"]["payment_status"] };
+        Relationships: [];
+      };
       invoices: {
         Row: {
           created_at: string;
@@ -690,6 +725,7 @@ export type Database = {
           current_period_end: string | null;
           current_period_start: string;
           id: string;
+          last_provider_event_at: string | null;
           pending_plan_id: string | null;
           plan_id: string;
           started_at: string;
@@ -706,6 +742,7 @@ export type Database = {
           current_period_end?: string | null;
           current_period_start?: string;
           id?: string;
+          last_provider_event_at?: string | null;
           pending_plan_id?: string | null;
           plan_id: string;
           started_at?: string;
@@ -722,6 +759,7 @@ export type Database = {
           current_period_end?: string | null;
           current_period_start?: string;
           id?: string;
+          last_provider_event_at?: string | null;
           pending_plan_id?: string | null;
           plan_id?: string;
           started_at?: string;
@@ -1167,6 +1205,8 @@ export type Database = {
       billing_cycle: "monthly" | "quarterly" | "yearly";
       invoice_status: "draft" | "issued" | "paid" | "overdue" | "void" | "uncollectible";
       invoice_line_kind: "plan" | "addon" | "overage" | "discount" | "setup_fee" | "credit";
+      payment_method: "provider" | "manual_bank_transfer";
+      payment_status: "succeeded" | "failed" | "pending" | "refunded";
       login_actor_type: "user" | "admin";
       plan_type: "individual" | "agency_no_teams" | "agency_with_teams" | "management";
       subscription_status:

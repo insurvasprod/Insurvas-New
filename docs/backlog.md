@@ -334,31 +334,32 @@ void, and the audit entry it writes has never been seen.
 
 Closes itself the moment SA-3.4 produces a `past_due` or `overdue` invoice.
 
-### 34. Events are stored and marked handled, but nothing acts on them
-**From:** SA-3.1 webhook receiver (2026-08-30) · **SA-3.4**
+### 41. Proration is exact, and nothing calls it
+**From:** SA-3.4 (2026-08-30) · **Significant**
 
-The receiver verifies, stores, deduplicates and marks processed. The step in the middle — turning
-`payment.succeeded` into `subscription active` and rebuilding the entitlement — is a comment
-pointing at SA-3.4.
+`prorate()` produces the ticket's worked example to the cent ($152.61 credit, $275.19 charge, net
+**$122.58**) and is covered by twelve tests. **No code path invokes it.**
 
-This is safe rather than lossy: the full envelope is in `webhook_events`, so events arriving before
-the handler exists can be replayed once it does. But **nothing is reacting to payments today**, and
-that should not be mistaken for a working billing integration.
+The decision was: on a mid-period upgrade, switch our subscription and entitlement immediately,
+schedule the Whop membership to `cancel_at_period_end`, and raise a separate Whop invoice for the
+difference. Only the arithmetic exists. Changing a plan mid-period today moves our side and leaves
+Whop billing the old plan until renewal, and **nobody is charged the difference**.
 
-Two things SA-3.4 must handle that the receiver deliberately left alone:
-
-1. **Out-of-order delivery.** Whop does not guarantee ordering — `membership.deactivated` can
-   arrive before the `payment.succeeded` that precedes it. `occurred_at` is stored for exactly this
-   reason but nothing reads it yet. A handler that applies "last received wins" to subscription
-   status will eventually reactivate a cancelled tenant.
-2. **Whether `payment.failed` fires on every one of Whop's five retries** while `invoice.past_due`
-   fires once. Unconfirmed — the docs do not say. Test it in sandbox before choosing the trigger.
+Needs: `PATCH /memberships/{id}` with `cancel_at_period_end`, a new checkout on the new plan, and
+the difference invoice — which is the same separate-invoice mechanism [#27] needs for add-ons.
+Worth building both at once.
 
 ---
 
 ## ✅ Resolved
 
 *Terse log — details live in git history.*
+
+- **#34 Events stored but nothing acted on them** → SA-3.4. Provider events now drive subscription
+  status and rebuild the entitlement immediately. Out-of-order delivery is handled by discarding
+  any event older than the last one applied, verified with a deliberately stale event that would
+  otherwise have reactivated a failing tenant. `payment.failed` keeps FULL access while Whop
+  retries; read-only starts only when Whop gives up.
 
 - **SA-3.3 invoice screens** → list with totals strip, detail, print view and void. The strip's
   numbers are derived from the same rows the filters read, so "the overdue filter matches the strip"
