@@ -42,6 +42,102 @@ export type Database = {
         };
         Relationships: [];
       };
+      invoices: {
+        Row: {
+          created_at: string;
+          currency: string;
+          discount_cents: number;
+          due_at: string | null;
+          id: string;
+          issued_at: string | null;
+          number: string;
+          paid_at: string | null;
+          period_end: string | null;
+          period_start: string | null;
+          provider: string | null;
+          provider_payment_id: string | null;
+          provider_total_cents: number | null;
+          reconciliation: string;
+          status: Database["public"]["Enums"]["invoice_status"];
+          subscription_id: string | null;
+          subtotal_cents: number;
+          tax_cents: number;
+          tenant_id: string;
+          total_cents: number;
+          void_reason: string | null;
+          voided_at: string | null;
+        };
+        Insert: {
+          created_at?: string;
+          currency?: string;
+          discount_cents?: number;
+          due_at?: string | null;
+          id?: string;
+          issued_at?: string | null;
+          number: string;
+          paid_at?: string | null;
+          period_end?: string | null;
+          period_start?: string | null;
+          provider?: string | null;
+          provider_payment_id?: string | null;
+          provider_total_cents?: number | null;
+          reconciliation?: string;
+          status?: Database["public"]["Enums"]["invoice_status"];
+          subscription_id?: string | null;
+          subtotal_cents?: number;
+          tax_cents?: number;
+          tenant_id: string;
+          total_cents?: number;
+          void_reason?: string | null;
+          voided_at?: string | null;
+        };
+        // Only the lifecycle columns are updatable — the money, the period and the number have
+        // UPDATE revoked, so an issued invoice cannot be rewritten by any route.
+        Update: {
+          paid_at?: string | null;
+          reconciliation?: string;
+          status?: Database["public"]["Enums"]["invoice_status"];
+          void_reason?: string | null;
+          voided_at?: string | null;
+        };
+        Relationships: [];
+      };
+      invoice_lines: {
+        Row: {
+          amount_cents: number;
+          created_at: string;
+          id: string;
+          included_qty: number | null;
+          invoice_id: string;
+          kind: Database["public"]["Enums"]["invoice_line_kind"];
+          label: string;
+          position: number;
+          quantity: number;
+          unit_cents: number;
+        };
+        Insert: {
+          amount_cents: number;
+          created_at?: string;
+          id?: string;
+          included_qty?: number | null;
+          invoice_id: string;
+          kind: Database["public"]["Enums"]["invoice_line_kind"];
+          label: string;
+          position?: number;
+          quantity?: number;
+          unit_cents?: number;
+        };
+        // UPDATE and DELETE are both revoked: a line on an issued invoice is never edited or
+        // removed. A correction is a credit line.
+        Update: Record<string, never>;
+        Relationships: [];
+      };
+      invoice_counters: {
+        Row: { year: number; month: number; next_number: number };
+        Insert: { year: number; month: number; next_number?: number };
+        Update: { year?: number; month?: number; next_number?: number };
+        Relationships: [];
+      };
       whop_plans: {
         Row: {
           billing_cycle: Database["public"]["Enums"]["billing_cycle"];
@@ -911,6 +1007,24 @@ export type Database = {
         Args: { p_subscription_addon_id: string };
         Returns: boolean;
       };
+      create_invoice_for_payment: {
+        Args: {
+          p_tenant_id: string;
+          p_subscription_id: string | null;
+          p_provider: string;
+          p_provider_payment_id: string;
+          p_provider_total_cents: number | null;
+          p_period_start: string | null;
+          p_period_end: string | null;
+          p_paid_at: string | null;
+          p_lines: Json;
+        };
+        Returns: { invoice_id: string; number: string; created: boolean; reconciliation: string }[];
+      };
+      allocate_invoice_number: {
+        Args: { p_at: string };
+        Returns: string;
+      };
       refresh_tenant_entitlement: {
         Args: { p_tenant_id: string };
         Returns: Json;
@@ -1051,6 +1165,8 @@ export type Database = {
       admin_role: "super_admin" | "support_agent" | "billing_admin" | "platform_config";
       audit_actor_type: "admin" | "system";
       billing_cycle: "monthly" | "quarterly" | "yearly";
+      invoice_status: "draft" | "issued" | "paid" | "overdue" | "void" | "uncollectible";
+      invoice_line_kind: "plan" | "addon" | "overage" | "discount" | "setup_fee" | "credit";
       login_actor_type: "user" | "admin";
       plan_type: "individual" | "agency_no_teams" | "agency_with_teams" | "management";
       subscription_status:

@@ -252,15 +252,44 @@ to subscriptions **is** fully built.
 Adding a new add-on today means a migration. Worth a dialog (same shape as the plan editor) if the
 business starts iterating on them; not urgent while the catalog is four rows that rarely change.
 
-### 27. Add-on prices don't reach an invoice
-**From:** SA-2.6 · **Belongs to:** SA-3.2
+### 27. Add-ons and overage are still not charged
+**From:** SA-2.6 → **retargeted by SA-3.2 (2026-08-30)** · **Significant**
 
-SA-2.6's criterion *"add-on price appears as a separate line on the invoice"* is **not met** —
-there are no invoices. The data needed is in place: `subscription_addons` keeps detached rows with
-`attached_at` / `detached_at`, so a past period can be reconstructed exactly.
+SA-3.2 built the invoice, but only for what **Whop** charges — and Whop charges the plan price and
+nothing else. It knows nothing about our add-ons or metered overage, because those are our
+concepts, attached to our subscriptions, invisible to a Whop plan.
 
-SA-3.2 should read that history rather than only current attachments, or an add-on cancelled
-mid-period will silently vanish from the bill it should appear on.
+The decision was to bill extras on a **separate Whop invoice** each period, using their
+`create-invoice` API (arbitrary `line_items`, its own number, a hosted `pay_online_url`, and their
+collection and dunning for free). **That is not built.**
+
+So today: a tenant with three add-ons and 400 SMS of overage is invoiced for their plan and nothing
+else, and the difference is simply not collected. `subscription_addons` keeps detached rows with
+`attached_at` / `detached_at`, so a past period can still be reconstructed exactly when this is
+built — read that history rather than only current attachments, or an add-on cancelled mid-period
+vanishes from the bill it belongs on.
+
+### 37. The two real sandbox payments have no invoices
+**From:** SA-3.2 (2026-08-30) · Minor
+
+`plan_a` ($198, the double-charge) and `plan_b` ($249) were both collected before invoice
+generation existed, so neither produced an invoice. Replaying their stored envelopes through the
+receiver would create them — the generator is idempotent on the provider payment id, so it is safe.
+
+Worth deciding rather than drifting: the `plan_a` one would be created as **mismatched** (we say
+$99, the provider charged $198), which is correct and is exactly the record you would want of that
+incident.
+
+### 38. An invoice can still be deleted
+**From:** SA-3.2 (2026-08-30) · Minor
+
+UPDATE is revoked on every column of `invoices` except the lifecycle ones, and `invoice_lines`
+refuses UPDATE and DELETE outright. But `invoices` itself can still be DELETEd by the application.
+
+Deleting a financial record is worse than editing one, and the correct operation is already
+built — `void`. DELETE is currently retained only so verification scripts can clean up after
+themselves; the same tension as `usage_events`, resolved the other way. Before real customers,
+revoke it and give the test scripts a dedicated path.
 
 ### 29. The database schema lives only in Supabase, not in the repo
 **From:** end-of-SA-2 push · **Significant**
@@ -328,6 +357,13 @@ Two things SA-3.4 must handle that the receiver deliberately left alone:
 ## ✅ Resolved
 
 *Terse log — details live in git history.*
+
+- **SA-3.2 invoice generation** → built and verified. Numbering is gap-free via a counter row
+  updated in the invoice's own transaction, **not** a Postgres SEQUENCE — `nextval` does not roll
+  back, so a failed invoice would burn its number permanently. Generation is idempotent on
+  `(provider, provider_payment_id)`, which is what makes Whop's at-least-once delivery safe.
+  Verified end to end by replaying a real stored Whop payload: `INV-2026-08-0001`, ours 24900 =
+  provider 24900, matched.
 
 - **SA-3.1 proven end to end (2026-08-30).** A second sandbox payment on `plan_b` — whose Whop plan
   was created entirely by the corrected code rather than patched by hand — charged **$249.00 for a
