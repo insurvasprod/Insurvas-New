@@ -329,6 +329,12 @@ Two things SA-3.4 must handle that the receiver deliberately left alone:
 
 *Terse log — details live in git history.*
 
+- **SA-3.1 proven end to end (2026-08-30).** A second sandbox payment on `plan_b` — whose Whop plan
+  was created entirely by the corrected code rather than patched by hand — charged **$249.00 for a
+  $249.00 plan**, once. The earlier `plan_a` purchase charged $198 for a $99 plan under the
+  `initial_price` bug. Tenant resolved automatically from metadata on both `payment.succeeded` and
+  `membership.activated`, with no backfill.
+
 - **#33 Whop payload shapes unseen** → closed 2026-08-30 against three real sandbox events.
   `data.metadata.tenant_id` arrives exactly as sent and resolves to the right tenant on both
   `payment.succeeded` and `membership.activated`. The dashboard's own test event correctly resolves
