@@ -185,6 +185,25 @@ two screens during an outage will see a difference.
 **Fix:** none wanted. If the preview should ever show outage state, it needs to say WHY an item is
 missing rather than silently omitting it — otherwise it just looks wrong.
 
+### 70. A billing admin cannot open Payments, contradicting SA-4.3's stated matrix
+**From:** found while QA-ing Module 4 · **Belongs to:** a correction to SA-4.3 in Notion
+
+SA-4.3 specifies "billing_admin sees payments and offers only". The code gives that role **offers
+only** — `SECTION_ACCESS.payments` is `["super_admin"]`, and a billing admin gets a 403 on the page
+and on every payments API.
+
+This is deliberate and, I think, right: SA-4.2 decided the payments screen exposes live provider
+credentials and a button that makes an authenticated call as the platform, so it is super_admin
+only. That is a narrower rule than "assign a tenant to an already-configured provider", which
+billing admins can still do. The reasoning is already a comment above the matrix.
+
+Recording it because the deviation exists only in a code comment. Anyone reading SA-4.3's
+acceptance criteria would tick "billing_admin sees payments and offers" as passed, and it is not —
+by choice.
+
+**Fix:** amend SA-4.3's criterion in Notion to say offers only, and note that payments moved to
+super_admin under SA-4.2. No code change.
+
 ### 14. Delete user — not built
 **From:** SA-1.4 · **Descoped by user on 2026-08-29:** *"we will only do inactive"*
 
