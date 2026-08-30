@@ -276,27 +276,6 @@ entitlement engine. The grant is correct in the database; nothing reads it yet.
 
 ## 🔵 Unverified
 
-### 63. A kill switch is proven instant on one server, not across several
-**From:** SA-4.10 · **Belongs to:** the first multi-instance deployment
-
-The criterion is that killing a feature hides it from every agent within sixty seconds. It is
-proven, but only on a single running server: `npm run verify:switches` flips a switch and the very
-next request is refused, because the write and the read happen in the same process and the cache is
-cleared on the way through.
-
-On a platform running several instances at once — which is what Vercel does — the instance that
-handled the toggle clears its copy and the others do not. They keep serving the old answer until
-their own copy ages out, which is capped at thirty seconds. That is inside the sixty the criterion
-asks for, and it is why the cache is deliberately set to half the budget rather than to the whole
-of it. But nobody has yet watched it happen on more than one instance.
-
-**Worth knowing:** running the verification leaves rows in the audit log with the reason
-"automated verification". They are real records of real changes and the log is append-only by
-design, so they cannot be tidied away — and should not be.
-
-**Fix:** on the first real multi-instance deploy, toggle a switch and watch a second instance pick
-it up. If thirty seconds ever proves too slow, the answer is a shared cache, not a shorter TTL.
-
 ### 7. Users list performance at scale — NOT verified
 **From:** SA-1.1 · **User opted out on 2026-08-29**
 
@@ -789,6 +768,15 @@ queue; it creates the tenant invoice line now rather than changing Whop's provid
 
 Nothing added to the backlog for SA-4.9; all six acceptance criteria are covered by the live
 verification evidence above.
+
+### 66. ✅ SA-4.10 multi-process propagation verified
+**From:** SA-4.10 · **Belongs to:** SA-4.10 · **Resolved:** 2026-08-30
+
+The prior single-process check could not prove that one server's in-memory cache invalidation was
+not required. `npm run verify:switches:multi` now warms two independent production server processes,
+toggles through the first, and confirms that the second reads the database-backed change within the
+60-second requirement. It also confirms that restoration propagates within the same bound. The
+throwaway tenant and switch row are removed after the run; audit rows remain by design.
 
 - **SA-4.2 payment provider status surface** → implemented 2026-08-30. The protected standalone
   Whop status page, safe status API, environment-only credential policy, explicit permission split,

@@ -33,7 +33,8 @@
     "verify:custom": "node --env-file=.env.local scripts/verify-custom-invoices.mjs",
     "verify:credits": "node --env-file=.env.local scripts/verify-credit-notes.mjs",
     "metrics:build": "node --env-file=.env.local scripts/build-metrics.mjs",
-    "verify:switches": "node --env-file=.env.local scripts/verify-kill-switches.mjs"
+    "verify:switches": "node --env-file=.env.local scripts/verify-kill-switches.mjs",
+    "verify:switches:multi": "node --env-file=.env.local scripts/verify-kill-switches-multi.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.99.0",
