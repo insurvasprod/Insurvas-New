@@ -13,6 +13,7 @@
 import { createClient } from "@supabase/supabase-js";
 
 import { dueReminders, reminderBody, REMINDER_LABELS } from "../lib/trials/reminders.ts";
+import { calendarDaysUntil } from "../lib/trials/banner.ts";
 
 const dryRun = process.argv.includes("--dry");
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, {
@@ -66,7 +67,9 @@ for (const trial of trials) {
       businessName: trial.business_name,
       planName: trial.plan_name,
       priceLabel,
-      daysRemaining: trial.days_remaining,
+      // Counted here rather than taken from the view, whose ceil() reports "3 days" for a trial
+      // ending in two days and one minute — the email would then name a date that contradicts it.
+      daysRemaining: calendarDaysUntil(trialEndsAt, new Date()),
       trialEndsAt,
       hasLoggedIn: Boolean(trial.last_login_at),
     });

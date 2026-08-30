@@ -42,7 +42,12 @@ export const businessProfileSchema = z
     productsSold: z.array(z.string()).min(1, "Select at least one product"),
     monthlyVolumeRange: z.string(),
     leadSources: z.array(z.string()).min(1, "Select at least one lead source"),
-    leadSourceOther: z.string().trim().max(120).optional().or(z.literal("")),
+    // Nullable, not merely optional. The field is rendered only when "other" is ticked, so
+    // FormData.get returns null the rest of the time and the form posts a literal null — which an
+    // `.optional()` string rejects, failing EVERY onboarding that does not pick "other" with a
+    // generic "Invalid input". Found by driving signup in a browser; no script had posted this
+    // shape. The server tolerating null is the right fix: absent is absent, however it is spelled.
+    leadSourceOther: z.string().trim().max(120).nullish(),
   })
   .superRefine((data, context) => {
     if (data.productsSold.some((value) => !productValues.includes(value as never))) {

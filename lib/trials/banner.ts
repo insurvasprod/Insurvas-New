@@ -5,6 +5,21 @@
 
 import { REMINDER_OFFSET_DAYS } from "./reminders.ts";
 
+const DAY_MS = 86_400_000;
+
+/**
+ * Whole calendar days between now and the end date.
+ *
+ * NOT `ceil(millisecondsLeft / a day)`, which was the first attempt: two days and thirty seconds
+ * rounds up to "3 days left" while the same message names a date two days away, so the sentence
+ * contradicts itself. Counting dates is what a reader means by "days left" and always agrees with
+ * the date printed beside it. Found in a browser, on a trial set to end in exactly two days.
+ */
+export function calendarDaysUntil(end: Date, now: Date): number {
+  const midnight = (date: Date) => Date.UTC(date.getFullYear(), date.getMonth(), date.getDate());
+  return Math.round((midnight(end) - midnight(now)) / DAY_MS);
+}
+
 export type TrialBanner = {
   tone: "info" | "urgent";
   message: string;
@@ -20,12 +35,9 @@ export type TrialBanner = {
 export function trialBanner(trialEndsAt: Date | null, now: Date = new Date()): TrialBanner | null {
   if (!trialEndsAt) return null;
 
-  const msLeft = trialEndsAt.getTime() - now.getTime();
-  if (msLeft <= 0) return null; // over; the subscription's own status says what happened
+  if (trialEndsAt.getTime() <= now.getTime()) return null; // over; the status says what happened
 
-  // Ceiling, not floor: with 30 hours left a customer has "2 days", and rounding down to 1 would
-  // tell them the charge lands sooner than it does.
-  const daysRemaining = Math.ceil(msLeft / 86_400_000);
+  const daysRemaining = calendarDaysUntil(trialEndsAt, now);
   if (daysRemaining > REMINDER_OFFSET_DAYS.four_days_left) return null;
 
   const ends = trialEndsAt.toLocaleDateString("en-US", { month: "long", day: "numeric" });
@@ -34,7 +46,9 @@ export function trialBanner(trialEndsAt: Date | null, now: Date = new Date()): T
     return {
       tone: "urgent",
       daysRemaining,
-      message: `Your trial ends tomorrow. Your card will be charged on ${ends} and everything keeps working — nothing to do.`,
+      message:
+        `Your trial ends ${daysRemaining === 0 ? "today" : "tomorrow"}. Your card will be charged on ` +
+        `${ends} and everything keeps working — nothing to do.`,
     };
   }
 
