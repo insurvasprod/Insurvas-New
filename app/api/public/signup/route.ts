@@ -1,5 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
+import { SIGNUP_PER_EMAIL, SIGNUP_PER_IP, callerIp, claimAll, retryAfterSeconds } from "@/lib/rateLimit";
+
 import { sendVerificationEmail } from "@/lib/email/sendVerificationEmail";
 import { hashPassword } from "@/lib/password";
 import { fetchPlans } from "@/lib/plans/queries";
@@ -20,6 +22,21 @@ export async function POST(request: NextRequest) {
   }
 
   const input = parsed.data;
+
+  // Before anything is created or sent. This endpoint is open to the internet and each call makes
+  // a user, a tenant and an email from our sending domain — unthrottled, it is both a way to fill
+  // the database and a way to use us to mail somebody repeatedly.
+  const limited = await claimAll([
+    { rule: SIGNUP_PER_IP, subject: callerIp(request.headers) },
+    { rule: SIGNUP_PER_EMAIL, subject: input.email },
+  ]);
+  if (!limited.allowed) {
+    return NextResponse.json(
+      { error: "Too many signup attempts. Please try again shortly." },
+      { status: 429, headers: { "retry-after": String(retryAfterSeconds(limited.rule)) } },
+    );
+  }
+
   const plan = (await fetchPlans({ includeArchived: false })).find(
     (candidate) => candidate.code === input.planCode && candidate.is_public,
   );
@@ -56,7 +73,7 @@ export async function POST(request: NextRequest) {
   const delivery = await sendVerificationEmail({
     email: input.email,
     name: input.fullName,
-    verificationUrl: buildVerificationUrl(verification.token, request.nextUrl.origin),
+    verificationUrl: buildVerificationUrl(verification.token),
     verificationId: created.verification_id,
   });
 

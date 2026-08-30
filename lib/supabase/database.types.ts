@@ -42,6 +42,12 @@ export type Database = {
         };
         Relationships: [];
       };
+      rate_limits: {
+        Row: { bucket_key: string; window_start: string; hits: number };
+        Insert: { bucket_key: string; window_start: string; hits?: number };
+        Update: { hits?: number };
+        Relationships: [];
+      };
       metrics_daily: {
         Row: {
           active_customers: number;
@@ -1342,6 +1348,14 @@ export type Database = {
           p_lines: Json;
         };
         Returns: { invoice_id: string; number: string; created: boolean; reconciliation: string }[];
+      };
+      claim_rate_limit: {
+        Args: { p_key: string; p_max: number; p_window_seconds: number };
+        Returns: boolean;
+      };
+      prune_rate_limits: {
+        Args: Record<string, never>;
+        Returns: number;
       };
       compute_metrics_for_date: {
         Args: { p_date: string };

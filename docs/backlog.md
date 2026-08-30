@@ -411,6 +411,26 @@ churn and trial conversion, and add date/plan filters. Performance against 500 t
 
 *Terse log — details live in git history.*
 
+- **SA-5.1 review (2026-08-30).** Host-header injection in verification links: `buildVerificationUrl`
+  fell back to `request.nextUrl.origin` when `NEXT_PUBLIC_APP_URL` was unset — and it was unset. An
+  attacker could sign up with a victim's address and a forged `Host`, and the victim would receive a
+  genuine email from our domain whose link handed the token over. The fallback is gone; missing
+  configuration now throws.
+- **Public endpoints had no rate limiting.** Signup created a user, a tenant and an email per call,
+  and `change_email` would send verification mail to an ARBITRARY address. Now database-backed
+  (serverless instances share no memory), claimed in a single statement so concurrent requests
+  cannot both take the last slot. Verified 7/7, including ten concurrent claims letting exactly
+  three through.
+- **The self-serve signup flow could not complete.** `save_signup_business_profile` raised 42702 —
+  its `RETURNS TABLE(tenant_id …)` OUT parameter collided with `on conflict (tenant_id)` — so the
+  business-profile step threw at runtime. Fixed with `#variable_conflict use_column`; the sibling
+  fix in `20260830010200` could not be reused because an ON CONFLICT target must name the column
+  bare. Codex's own `verify:signup` script now passes; it was failing before.
+- **A review finding of mine that was wrong:** I reported that the app shell did not gate
+  unverified users. It does — new users get `pending_verification` and `signupDestination` redirects
+  them to `/app/verify-email`. My grep pattern missed the helper names and I drew a conclusion from
+  an absence I had not established.
+
 - **SA-3.9 revenue dashboard** → MRR/ARR/ARPC, churn, plan breakdown and the activation funnel, off
   a nightly `metrics_daily` snapshot that is re-runnable for any past date. Contracted MRR is shown
   beside collected, and the gap is called out — which immediately surfaced [#47]. Two funnel steps
