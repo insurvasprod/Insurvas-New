@@ -18,6 +18,8 @@ import {
 } from "@/lib/money";
 import { publicPriceForCycle, type PublicPlan } from "@/lib/publicPlans/types";
 
+type LegalDoc = { id: string; doc_type: string; version: number; title: string; is_draft: boolean };
+
 type Props = { initialPlanCode?: string; initialCycle?: string };
 
 export function SignupForm({ initialPlanCode, initialCycle }: Props) {
@@ -30,6 +32,16 @@ export function SignupForm({ initialPlanCode, initialCycle }: Props) {
   const [loadingPlans, setLoadingPlans] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [legalDocs, setLegalDocs] = useState<LegalDoc[]>([]);
+  // Unticked, and initialised unticked — never derived from anything that could arrive true.
+  const [accepted, setAccepted] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/public/legal", { cache: "no-store" })
+      .then((response) => response.json())
+      .then((body) => setLegalDocs(body?.documents ?? []))
+      .catch(() => setLegalDocs([]));
+  }, []);
 
   useEffect(() => {
     fetch("/api/public/plans", { cache: "no-store" })
@@ -64,6 +76,10 @@ export function SignupForm({ initialPlanCode, initialCycle }: Props) {
       setError("Choose an available plan and billing cycle");
       return;
     }
+    if (!accepted) {
+      setError("You must accept the terms and privacy policy to continue");
+      return;
+    }
 
     const form = new FormData(event.currentTarget);
     setSubmitting(true);
@@ -77,6 +93,8 @@ export function SignupForm({ initialPlanCode, initialCycle }: Props) {
         phone: form.get("phone"),
         planCode: selectedPlan.code,
         billingCycle: cycle,
+        // The exact versions shown next to the box that was ticked.
+        acceptedDocumentIds: accepted ? legalDocs.map((doc) => doc.id) : [],
       }),
     });
     const body = await response.json().catch(() => null);
@@ -138,13 +156,49 @@ export function SignupForm({ initialPlanCode, initialCycle }: Props) {
               </div>
             </div>
 
+            {legalDocs.length > 0 && (
+              <div className="space-y-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-page-bg)] p-4">
+                <label className="flex cursor-pointer items-start gap-3 text-sm">
+                  <input
+                    type="checkbox"
+                    name="acceptTerms"
+                    checked={accepted}
+                    onChange={(event) => setAccepted(event.target.checked)}
+                    className="mt-0.5 size-4 shrink-0 accent-[var(--brand-600)]"
+                  />
+                  <span>
+                    I have read and agree to the{" "}
+                    {legalDocs.map((doc, index) => (
+                      <span key={doc.id}>
+                        {index > 0 && (index === legalDocs.length - 1 ? " and " : ", ")}
+                        <Link
+                          href={`/legal/${doc.doc_type}?v=${doc.version}`}
+                          target="_blank"
+                          className="font-bold text-[var(--brand-600)] underline"
+                        >
+                          {doc.title}
+                        </Link>{" "}
+                        <span className="text-[var(--color-text-muted)]">(v{doc.version})</span>
+                      </span>
+                    ))}
+                    .
+                  </span>
+                </label>
+                {legalDocs.some((doc) => doc.is_draft) && (
+                  <p className="pl-7 text-xs text-[var(--color-warning)]">
+                    These documents are drafts and have not been reviewed by a lawyer.
+                  </p>
+                )}
+              </div>
+            )}
+
             {error && (
               <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-[var(--color-danger)]">
                 {error}
               </div>
             )}
 
-            <Button type="submit" size="lg" className="w-full" disabled={submitting || loadingPlans || !selectedPrice}>
+            <Button type="submit" size="lg" className="w-full" disabled={submitting || loadingPlans || !selectedPrice || !accepted}>
               {submitting ? <LoaderCircle className="animate-spin" /> : <LockKeyhole />}
               {submitting ? "Creating account…" : "Create account"}
             </Button>

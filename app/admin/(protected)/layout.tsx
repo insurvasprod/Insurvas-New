@@ -61,6 +61,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   if (admin.role === "super_admin") {
     navItems.push({ href: "/admin/admins", label: "Admin users", icon: "admins" });
   }
+  // Readable by every admin: an acceptance record is what a support agent needs during a dispute.
+  navItems.push({ href: "/admin/legal", label: "Legal", icon: "legal" });
   navItems.push({ href: "/admin/audit-log", label: "Audit log", icon: "audit-log" });
 
   return (

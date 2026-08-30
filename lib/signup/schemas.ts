@@ -18,6 +18,10 @@ export const publicSignupSchema = z.object({
   phone: z.string().trim().min(7, "Enter a valid mobile phone").max(40),
   planCode: z.string().trim().regex(/^[a-z][a-z0-9_]*$/, "Choose a valid plan"),
   billingCycle: z.enum(BILLING_CYCLES),
+  // SA-5.4: the ids of the document versions the box was ticked for. Ids, not a boolean — a
+  // boolean records that someone agreed to *something*, which is worth nothing in a dispute.
+  // The server checks these against what is published right now rather than trusting them.
+  acceptedDocumentIds: z.array(z.string().uuid()).max(5).default([]),
 });
 
 export const verificationActionSchema = z.discriminatedUnion("action", [

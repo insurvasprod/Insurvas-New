@@ -29,7 +29,9 @@
     "verify:ratelimit": "node --env-file=.env.local scripts/verify-rate-limits.mjs",
     "verify:checkout": "node --env-file=.env.local scripts/verify-checkout.mjs",
     "trials:remind": "node --env-file=.env.local scripts/send-trial-reminders.mjs",
-    "verify:trials": "node --env-file=.env.local scripts/verify-trials.mjs"
+    "verify:trials": "node --env-file=.env.local scripts/verify-trials.mjs",
+    "legal:seed": "node --env-file=.env.local scripts/seed-legal-documents.mjs",
+    "verify:legal": "node --env-file=.env.local scripts/verify-legal.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.99.0",

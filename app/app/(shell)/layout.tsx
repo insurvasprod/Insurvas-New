@@ -8,6 +8,7 @@ import { AgentSidebar } from "@/components/app/agent-sidebar";
 import { LogoutButton } from "@/components/app/logout-button";
 import { resolveSignupContext, signupDestination } from "@/lib/signup/context";
 import { trialBanner } from "@/lib/trials/banner";
+import { outstandingDocuments } from "@/lib/legal/acceptance";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 
 /**
@@ -28,6 +29,12 @@ export default async function AgentShellLayout({ children }: { children: React.R
 
   const context = await resolveTenantContext();
   if (!context) redirect("/app/login");
+
+  // SA-5.4: a material new version blocks the product until it is accepted. Placed after the
+  // session resolves and before the entitlement is read, so it cannot be skipped by deep-linking
+  // to any page inside the shell — every one of them renders through here.
+  const outstanding = await outstandingDocuments(context.userId);
+  if (outstanding.length > 0) redirect("/app/accept-terms");
 
   const entitlement = await getEntitlement(context.tenantId);
   const menu = buildAgentMenu(entitlement.features);

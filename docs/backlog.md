@@ -415,11 +415,70 @@ old one tells the customer one thing and bills another.
 SA-3.2's decisions were settled. Cheap, and it closes the last unproven path in SA-5.3.
 
 
+### 54. The seeded Terms and Privacy Policy are drafts, not legal copy
+**From:** SA-5.4 · **Blocks launch, not development**
+
+`content/legal/*-v1.md` were written so the acceptance machinery could be built and tested against
+real prose instead of filler. They have not been reviewed by a lawyer, and two sections say so
+explicitly ("governing law: to be determined", "contact: to be completed"). They are stored with
+`is_draft = true`, and that flag is surfaced on the public page, the signup checkbox, the
+re-acceptance screen and the admin list — nothing pretends they are reviewed.
+
+**Fix:** publish v2 of each from `/admin/legal` with counsel's copy. No code changes; the machinery
+already handles the version bump and the re-acceptance it triggers.
+
+### 55. `verify:legal` permanently advances the DPA version sequence
+**From:** SA-5.4 · **Accepted, not a defect**
+
+The script publishes real document versions and cannot delete them, because `legal_documents` is
+append-only and nothing — not even `service_role` — may DELETE from it. Adding a teardown function
+would destroy the exact guarantee under test, so it does not exist.
+
+Every version the script publishes therefore goes into the `dpa` type, which nothing else uses and
+which signup does not require, leaving Terms and Privacy Policy untouched at v1. Each run clears
+the re-acceptance requirement on what it published, so no real user is ever blocked by a
+verification artefact, and the run prints how many it left behind.
+
+**Consequence:** a real Data Processing Agreement will not start at v1. Acceptable; the alternative
+was a delete path into an evidence table.
+
+### 56. Most of the schema is still not in `supabase/migrations/`
+**From:** SA-5.4, superseding part of [#29] · **Significant**
+
+The database has 40 applied migrations. The repository has 9. SA-5.3's was applied and never
+written down at all until SA-5.4 backfilled it from
+`supabase_migrations.schema_migrations` — which is the failure mode [#29] describes, happening
+again in this session.
+
+Present in the repo: SA-5.1 (×3), SA-5.2, SA-5.3 (backfilled), SA-5.4 (×2), rate limits.
+Missing: everything from SA-0.1 through SA-3.9 — 31 migrations covering the entire core schema.
+
+A fresh database cannot be built from this repository. That is a restore problem and an onboarding
+problem, not a style one.
+
+**Fix:** dump the remaining 31 from `schema_migrations` (the statements are stored verbatim, as the
+SA-5.3 backfill proved) into correctly-named files. Mechanical, and worth doing before anyone needs
+a second environment.
+
+
 ---
 
 ## ✅ Resolved
 
 *Terse log — details live in git history.*
+
+- **SA-5.4 terms & privacy acceptance** -> verified 45/45 against the running app. Acceptance stores
+  a **document id and version**, never a boolean: recording "accepted the terms" and resolving the
+  version at read time would silently re-date every historical acceptance the moment a new version
+  was published. `legal_acceptances` is append-only by privilege — UPDATE and DELETE are revoked
+  from every role including `service_role` — and the script proves it by trying to back-date a
+  record and being refused. Published documents are equally immutable; the sole permitted mutation
+  is `clear_reacceptance_requirement`, which can only REMOVE an interruption, so a mistaken publish
+  cannot lock out every paying customer with no recovery. Two bugs found by the script, not by
+  reading: `select max(...) ... for update` is illegal in Postgres so the publish concurrency guard
+  never worked (replaced with an advisory lock), and grepping dev-server HTML for a UI string
+  matches Turbopack's **inlined component source** rather than the rendered page — which had made
+  one assertion vacuously pass. Seeded text is drafts, flagged as such everywhere [#54].
 
 - **SA-5.3 trial management** -> verified 32/32 against the running app. Reminders are defined as
   offsets from the trial's **end**, not its start, which is what makes "extending a trial pushes
