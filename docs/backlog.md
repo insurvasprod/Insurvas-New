@@ -313,6 +313,33 @@ errors, the blank-name validation message, deactivate/reactivate success confirm
 screenshots. Mobile overflow matched the existing admin shell and did not increase it. No unmet
 SA-4.4 verification criterion remains.
 
+### 58. SA-4.5 product catalog implemented and verified
+**From:** SA-4.5 · **Verified in live project, 2026-08-30**
+
+The `products` migration was applied to the Insurvas-Saas Supabase project as
+`sa_4_5_products`. It seeds Final Expense, Term Life, Whole Life, Indexed Universal Life,
+Medicare Advantage and Annuity. Product codes are stable references; the API exposes create,
+edit, archive and restore, and its DELETE operation is deliberately archive-only so future
+template, form, reporting and agent-setting references continue to resolve. `?picker=1` excludes
+archived products.
+
+The live `npm run verify:products` check passed adding a product without a deploy,
+platform-config editing/restoring, archive persistence, picker exclusion, audit logging, and
+403s for support agents and billing admins. The admin list retains archived products for restore.
+The six seed rows were verified directly in Supabase. No template or agent-setting reference
+tables exist yet; SA-4.6 should add the eventual foreign keys with delete restricted. Until then,
+the application has no hard-delete path and preserves the reference contract.
+
+The Playwright browser fallback verified
+`http://localhost:3101/admin/configuration/products` on desktop (1440x1000) and mobile (390x844):
+page identity, all seeded products, blank-form validation, create, archive, archived visibility,
+restore, no console/page errors, and no additional mobile overflow beyond the existing admin
+shell. `npm run verify:configuration` passed all 45 route/role checks, including Products access.
+
+Required checks passed: `npx tsc --noEmit`, `npm run lint`, `npm run build`, `npm test` (144),
+`npm run check:features`, `npm run verify:products`, and `npm run verify:configuration`.
+No SA-4.5 acceptance criterion remains unmet or unverified within the ticket's current scope.
+
 ### 9. No CI pipeline exists
 **From:** SA-0.2, SA-0.3, SA-2.1
 

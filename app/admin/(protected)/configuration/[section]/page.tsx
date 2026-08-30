@@ -5,6 +5,7 @@ import { forbidden, notFound } from "next/navigation";
 import { AdminPageHeader } from "@/components/admin/page-header";
 import { ConfigurationPlaceholder } from "@/components/admin/configuration/configuration-placeholder";
 import { OffersTable } from "@/components/admin/offers-table";
+import { ProductsTable } from "@/components/admin/products-table";
 import { FeatureCatalog } from "@/components/admin/feature-catalog";
 import { PaymentStatusPanel } from "@/components/admin/payment-status-panel";
 import { SettingsForm } from "@/components/admin/settings-form";
@@ -15,6 +16,7 @@ import { getProviderStatus } from "@/lib/payments/status";
 import { fetchPlans } from "@/lib/plans/queries";
 import { fetchSubscriptions } from "@/lib/subscriptions/queries";
 import { fetchOffers } from "@/lib/offers/queries";
+import { fetchProducts } from "@/lib/products/queries";
 import { getAllSettings } from "@/lib/settings/queries";
 
 export default async function ConfigurationSectionPage({ params }: { params: Promise<{ section: string }> }) {
@@ -33,6 +35,9 @@ export default async function ConfigurationSectionPage({ params }: { params: Pro
   } else if (section.slug === "offers") {
     const [offers, plans, subscriptions] = await Promise.all([fetchOffers(), fetchPlans(), fetchSubscriptions()]);
     content = <OffersTable initialOffers={offers} plans={plans} subscriptions={subscriptions.filter((item) => item.status !== "cancelled")} />;
+  } else if (section.slug === "products") {
+    const products = await fetchProducts();
+    content = <ProductsTable initialProducts={products} />;
   } else if (section.slug === "advanced") {
     const settings = await getAllSettings();
     content = (
