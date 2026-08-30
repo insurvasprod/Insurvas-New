@@ -44,7 +44,7 @@ if (!plan) {
 
 const { data: prices } = await supabase
   .from("plan_prices")
-  .select("price_monthly_cents, price_quarterly_cents, price_yearly_cents")
+  .select("price_monthly_cents, price_quarterly_cents, price_yearly_cents, setup_fee_cents")
   .eq("plan_id", plan.id)
   .maybeSingle();
 
@@ -76,6 +76,7 @@ if (existing) {
     productId: process.env.WHOP_PRODUCT_ID,
     accountId: process.env.WHOP_ACCOUNT_ID,
     priceCents,
+    setupFeeCents: prices?.setup_fee_cents ?? 0,
     billingCycle,
     ourPlanId: plan.id,
     planCode: plan.code,

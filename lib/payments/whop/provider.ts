@@ -115,6 +115,8 @@ export class WhopProvider implements PaymentProvider {
     productId: string;
     accountId?: string;
     priceCents: number;
+    /** Our plan_prices.setup_fee_cents. Charged once, on top of the first period. */
+    setupFeeCents?: number;
     billingCycle: string;
     ourPlanId: string;
     planCode: string;
@@ -126,11 +128,13 @@ export class WhopProvider implements PaymentProvider {
     const body = {
         product_id: input.productId,
         ...(input.accountId ? { account_id: input.accountId } : {}),
-        // BOTH prices are required for a renewal plan and they are not the same field:
-        // initial_price is the first charge, renewal_price is what recurs. Sending only
-        // initial_price makes Whop read the recurring price as zero and reject the plan with
-        // "must be at least $1.00" — confirmed against the sandbox, not guessed.
-        initial_price: centsToWhopAmount(input.priceCents),
+        // renewal_price is the recurring price. initial_price is an amount charged ON TOP of the
+        // first period, not the first period itself — setting both to the plan price charged $198
+        // for a $99 plan in the sandbox. It maps to our setup fee, which is usually zero.
+        //
+        // Both fields must be present: omitting renewal_price makes Whop read the recurring price
+        // as zero and reject the plan with "must be at least $1.00".
+        initial_price: centsToWhopAmount(input.setupFeeCents ?? 0),
         renewal_price: centsToWhopAmount(input.priceCents),
         currency: "usd",
         plan_type: "renewal",

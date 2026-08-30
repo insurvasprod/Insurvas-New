@@ -292,32 +292,16 @@ The tenant Payment provider panel, its API route and the call-logging decorator 
 path — click Save, see a `provider_calls` row appear — has not been exercised. Same root cause as
 [#8]: admin login needs a TOTP code. Folds into that item's browser pass.
 
-### 33. Whop payloads have never been seen, so resolution is unproven
-**From:** SA-3.1 (2026-08-30) · **Blocks SA-3.4**
+### 36. The deployed receiver is behind the code
+**From:** the first real payment (2026-08-30) · **Operational**
 
-Tenant resolution now prefers metadata: we stamp `tenant_id` on the checkout session and our plan
-identity on the Whop plan, and Whop returns both on payment and membership webhooks. That is an
-exact answer rather than the prefix-scanning guess it replaced, and the scan survives only as a
-fallback for events carrying no metadata.
+The first live webhooks resolved to no tenant, and the resolver was not at fault — `main` still
+carries the pre-metadata version of the receiver. Everything since commit `c808d98` (metadata-first
+resolution, the Whop provider, plan mapping) is local only.
 
-**Still unproven.** `webhook_events` has zero rows — no real Whop payload has ever reached us, so
-every path here is exercised only against hand-built envelopes. Two specific unknowns:
-
-1. Whether renewals carry the plan's metadata as the docs state. If not, every renewal resolves to
-   no tenant and silently does nothing.
-2. Whether the metadata survives Whop's own retry deliveries unchanged.
-
-Both answer themselves the moment one real event lands.
-
-### 35. Checkout needs a Whop product that does not exist yet
-**From:** SA-3.1 (2026-08-30) · **Blocks the first real payment**
-
-`ensureWhopPlan()` attaches every plan it creates to a Whop product, read from `WHOP_PRODUCT_ID`.
-Nothing has created that product, and the variable is unset, so the first checkout attempt throws
-a clear error rather than doing something surprising.
-
-Create one product in the sandbox dashboard, put its `prod_...` id in `.env.local`. One-time setup,
-listed in `.env.example`.
+The stored rows were backfilled by running the current resolver over them, which is what the
+column-level UPDATE grant on `webhook_events` exists for. But **until this deploys, every incoming
+webhook lands with `tenant_id` null** and SA-3.4 will have nothing to attach a payment to.
 
 ### 34. Events are stored and marked handled, but nothing acts on them
 **From:** SA-3.1 webhook receiver (2026-08-30) · **SA-3.4**
@@ -344,6 +328,13 @@ Two things SA-3.4 must handle that the receiver deliberately left alone:
 ## ✅ Resolved
 
 *Terse log — details live in git history.*
+
+- **#33 Whop payload shapes unseen** → closed 2026-08-30 against three real sandbox events.
+  `data.metadata.tenant_id` arrives exactly as sent and resolves to the right tenant on both
+  `payment.succeeded` and `membership.activated`. The dashboard's own test event correctly resolves
+  to **no** tenant — it carries placeholder ids and no metadata.
+- **#35 No Whop product** → created `prod_2hPt3oh77ziBp`, business `biz_Pj5jnt92mDCBZN`. Plan A
+  monthly maps to `plan_fCpKbKKfCqYZT`.
 
 - **#30 `createCharge` was the wrong shape for Whop** → SA-3.1. The interface now leads with
   `createCheckoutSession()`, and `createCharge` is **optional** — absent on Whop, which never lets
