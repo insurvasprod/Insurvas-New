@@ -7,8 +7,11 @@ import "server-only";
 
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { DummyPayPalProvider, DummyStripeProvider } from "./dummy";
+import { WhopProvider } from "./whop/provider";
+import { WhopClient } from "./whop/client";
 import { withCallLogging } from "./logging";
 import { isProviderCode, type ProviderCode, type SimulatedOutcome, type TenantPaymentProvider } from "./constants";
+import { ProviderUnsupportedError } from "./types";
 import type { PaymentProvider } from "./types";
 
 /**
@@ -17,6 +20,13 @@ import type { PaymentProvider } from "./types";
  */
 export function buildProvider(code: ProviderCode, options: { simulate?: SimulatedOutcome } = {}): PaymentProvider {
   switch (code) {
+    case "whop":
+      return new WhopProvider(
+        new WhopClient({
+          apiKey: process.env.WHOP_API_KEY ?? "",
+          baseUrl: process.env.WHOP_API_BASE_URL ?? "https://api.whop.com/api/v1",
+        }),
+      );
     case "dummy_stripe":
       return new DummyStripeProvider(options);
     case "dummy_paypal":
@@ -83,19 +93,29 @@ export async function getPaymentProviderForTenant(tenantId: string): Promise<Res
  * repeatedly — the dummy providers derive the id from the tenant id, and real providers are asked
  * only when the column is empty.
  */
+/**
+ * Gives a tenant a customer record at their provider, if one can be created up front.
+ *
+ * Returns null for hosted-checkout providers: Whop creates the customer when they check out, and
+ * we learn the identifier from the resulting webhook. That is not a failure, so it is a null
+ * rather than a throw.
+ */
 export async function ensureProviderCustomer(
   tenantId: string,
   tenantName: string,
   ownerEmail: string | null,
-): Promise<string> {
+): Promise<string | null> {
   const { provider, record } = await getPaymentProviderForTenant(tenantId);
   if (record?.provider_customer_id) return record.provider_customer_id;
 
-  const { providerCustomerId } = await provider.createCustomer({
-    tenantId,
-    name: tenantName,
-    email: ownerEmail,
-  });
+  let providerCustomerId: string;
+  try {
+    const result = await provider.createCustomer({ tenantId, name: tenantName, email: ownerEmail });
+    providerCustomerId = result.providerCustomerId;
+  } catch (error) {
+    if (error instanceof ProviderUnsupportedError) return null;
+    throw error;
+  }
 
   const supabase = getSupabaseServiceClient();
   await supabase

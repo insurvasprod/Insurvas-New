@@ -4,7 +4,9 @@
 // a client component and needs these labels. Anything that touches the database lives in
 // queries.ts / registry.ts / providerCalls.ts instead.
 
-export const PROVIDER_CODES = ["dummy_stripe", "dummy_paypal"] as const;
+// "whop" is the only provider in provider_settings. The dummy codes remain valid values so the
+// offline test doubles still type-check, but no tenant can be assigned one.
+export const PROVIDER_CODES = ["whop", "dummy_stripe", "dummy_paypal"] as const;
 export type ProviderCode = (typeof PROVIDER_CODES)[number];
 
 export function isProviderCode(value: string): value is ProviderCode {

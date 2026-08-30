@@ -89,3 +89,44 @@ export function extractCustomerIds(envelope: WhopEnvelope): string[] {
   walk(envelope.data, 0);
   return [...found];
 }
+
+/**
+ * Pulls our own tenant id back out of the event.
+ *
+ * Whop returns metadata we set on a checkout session AND on a plan, and includes it in payment and
+ * membership webhooks. That makes it an exact answer rather than an inference — which matters,
+ * because attributing a payment to the wrong tenant changes the wrong customer's access.
+ *
+ * Searches any nested `metadata` object rather than one fixed path, because the key sits under
+ * different parents depending on the event (the payment's own metadata, the plan's, the
+ * membership's). Returns null when absent; the caller falls back to the customer id.
+ */
+export function extractTenantIdFromMetadata(envelope: WhopEnvelope): string | null {
+  const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  let found: string | null = null;
+
+  function walk(value: unknown, depth: number): void {
+    if (found || depth > 5 || value === null || typeof value !== "object") return;
+
+    if (!Array.isArray(value)) {
+      const record = value as Record<string, unknown>;
+      const metadata = record.metadata;
+      if (metadata && typeof metadata === "object" && !Array.isArray(metadata)) {
+        const candidate = (metadata as Record<string, unknown>).tenant_id;
+        // Validated as a UUID before use: metadata is a free-text field, and a malformed value
+        // reaching a tenant lookup is not something to discover at query time.
+        if (typeof candidate === "string" && UUID.test(candidate)) {
+          found = candidate;
+          return;
+        }
+      }
+    }
+
+    for (const item of Array.isArray(value) ? value : Object.values(value as Record<string, unknown>)) {
+      walk(item, depth + 1);
+    }
+  }
+
+  walk(envelope.data, 0);
+  return found;
+}

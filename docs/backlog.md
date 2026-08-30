@@ -284,20 +284,6 @@ Not a code fix — it's an export. Either `supabase db pull` into `supabase/migr
 the DDL in order and verify by replaying it into a scratch project. Worth doing **before SA-3**
 writes invoices, because financial tables are the worst ones to hold only in a live database.
 
-### 30. `createCharge` is the wrong shape for Whop
-**From:** the Whop decision (2026-08-29) · **Significant**
-
-SA-3.1 shipped a `PaymentProvider` interface built for a card processor: `createCharge(amount,
-customer)`, where *we* decide to move money. Whop doesn't work that way — it hosts checkout and
-raises the charge itself on renewal. The correct primary method is `createCheckoutSession(...)`,
-and the charge arrives later as a webhook.
-
-What survives untouched: `payment_providers`, `provider_settings`, `provider_calls`, the call-logging
-decorator, the required idempotency key, and `ProviderTimeoutError`. What has to change is the one
-method and its callers — of which there are currently **none**, because SA-3.2 and SA-3.4 haven't
-been built. This is the cheapest possible moment to reshape it, and it stops being cheap the
-moment the first caller exists.
-
 ### 32. The provider panel has never been opened in a browser
 **From:** SA-3.1 · Minor
 
@@ -306,21 +292,16 @@ The tenant Payment provider panel, its API route and the call-logging decorator 
 path — click Save, see a `provider_calls` row appear — has not been exercised. Same root cause as
 [#8]: admin login needs a TOTP code. Folds into that item's browser pass.
 
-### 33. Whop payloads have never been seen, so tenant resolution is a guess
-**From:** SA-3.1 webhook receiver (2026-08-30) · **Blocks SA-3.4**
+### 36. The deployed receiver is behind the code
+**From:** the first real payment (2026-08-30) · **Operational**
 
-`extractCustomerIds()` walks the event payload looking for strings prefixed `user_`, `mem_` or
-`cus_` and matches them against `payment_providers.provider_customer_id`. That is deliberately
-shape-tolerant because **we have not yet seen a single real Whop payload** — the local tests use
-a hand-built envelope.
+The first live webhooks resolved to no tenant, and the resolver was not at fault — `main` still
+carries the pre-metadata version of the receiver. Everything since commit `c808d98` (metadata-first
+resolution, the Whop provider, plan mapping) is local only.
 
-It is written to fail safe: when zero or more than one tenant matches, it records `null` rather
-than picking one. A webhook attributed to the *wrong* tenant would change someone else's access,
-which is far worse than one attributed to nobody.
-
-Tighten it once real events are sitting in `webhook_events`. Right now every event resolves to
-unmapped anyway, because no tenant has a Whop customer id yet — `provider_settings` has no `whop`
-row and there is no `WhopProvider` class to create one.
+The stored rows were backfilled by running the current resolver over them, which is what the
+column-level UPDATE grant on `webhook_events` exists for. But **until this deploys, every incoming
+webhook lands with `tenant_id` null** and SA-3.4 will have nothing to attach a payment to.
 
 ### 34. Events are stored and marked handled, but nothing acts on them
 **From:** SA-3.1 webhook receiver (2026-08-30) · **SA-3.4**
@@ -347,6 +328,20 @@ Two things SA-3.4 must handle that the receiver deliberately left alone:
 ## ✅ Resolved
 
 *Terse log — details live in git history.*
+
+- **#33 Whop payload shapes unseen** → closed 2026-08-30 against three real sandbox events.
+  `data.metadata.tenant_id` arrives exactly as sent and resolves to the right tenant on both
+  `payment.succeeded` and `membership.activated`. The dashboard's own test event correctly resolves
+  to **no** tenant — it carries placeholder ids and no metadata.
+- **#35 No Whop product** → created `prod_2hPt3oh77ziBp`, business `biz_Pj5jnt92mDCBZN`. Plan A
+  monthly maps to `plan_fCpKbKKfCqYZT`.
+
+- **#30 `createCharge` was the wrong shape for Whop** → SA-3.1. The interface now leads with
+  `createCheckoutSession()`, and `createCharge` is **optional** — absent on Whop, which never lets
+  us originate a charge, present on the dummies so decline and timeout paths stay testable offline.
+  The logging decorator attaches it only when the wrapped provider has one, so
+  `provider.createCharge` is not falsely truthy for Whop. Reshaped while it still had zero callers,
+  as planned.
 
 - **#31 Nothing receives webhooks** → SA-3.1 built `/api/webhooks/whop`: hand-written Standard
   Webhooks HMAC-SHA256 verification (their SDK helper has not shipped), a 5-minute replay window,

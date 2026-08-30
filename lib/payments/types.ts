@@ -57,7 +57,13 @@ export type ChargeLookup = {
 export interface PaymentProvider {
   readonly code: ProviderCode;
   createCustomer(input: CreateCustomerInput): Promise<CreateCustomerResult>;
-  createCharge(input: CreateChargeInput): Promise<ChargeResult>;
+  createCheckoutSession(input: CreateCheckoutSessionInput): Promise<CheckoutSession>;
+  /**
+   * Direct card charge. OPTIONAL, and absent on hosted-checkout providers such as Whop, which
+   * never let us originate a charge. Present on the dummy providers so offline tests can exercise
+   * decline and timeout paths without a network.
+   */
+  createCharge?(input: CreateChargeInput): Promise<ChargeResult>;
   refund(input: RefundInput): Promise<RefundResult>;
   getCharge(chargeId: string): Promise<ChargeLookup>;
 }
@@ -81,5 +87,36 @@ export class ProviderTimeoutError extends Error {
     this.provider = provider;
     this.method = method;
     this.idempotencyKey = idempotencyKey;
+  }
+}
+
+// --- Hosted checkout (SA-3.1, Whop) -----------------------------------------
+// Backlog #30: `createCharge(amount, customer)` was designed for a card processor, where WE decide
+// to move money. Whop hosts checkout and raises the charge itself, so the primary method is
+// creating a session and handing the customer a URL. The charge arrives later as a webhook.
+
+export type CreateCheckoutSessionInput = {
+  /** The provider's own plan identifier — for Whop, a `plan_...` from the whop_plans mapping. */
+  providerPlanId: string;
+  tenantId: string;
+  /**
+   * Returned to us verbatim on the resulting webhook. This is how a payment is attributed to a
+   * tenant, and it is exact — unlike inferring it from identifiers in the payload.
+   */
+  metadata?: Record<string, string>;
+  returnUrl?: string;
+};
+
+export type CheckoutSession = {
+  id: string;
+  /** Where to send the customer to pay. */
+  url: string;
+};
+
+/** Thrown when a provider is asked for something its model doesn't have. */
+export class ProviderUnsupportedError extends Error {
+  constructor(provider: string, method: string) {
+    super(`${provider} does not support ${method}`);
+    this.name = "ProviderUnsupportedError";
   }
 }

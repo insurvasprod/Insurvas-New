@@ -8,6 +8,8 @@ import "server-only";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { ProviderTimeoutError } from "./types";
 import type {
+  CheckoutSession,
+  CreateCheckoutSessionInput,
   ChargeLookup,
   ChargeResult,
   CreateChargeInput,
@@ -102,7 +104,7 @@ export function withCallLogging(inner: PaymentProvider, ctx: LogContext): Paymen
     }
   }
 
-  return {
+  const wrapped: PaymentProvider = {
     code: inner.code,
 
     createCustomer(input: CreateCustomerInput): Promise<CreateCustomerResult> {
@@ -114,23 +116,12 @@ export function withCallLogging(inner: PaymentProvider, ctx: LogContext): Paymen
       );
     },
 
-    createCharge(input: CreateChargeInput): Promise<ChargeResult> {
+    createCheckoutSession(input: CreateCheckoutSessionInput): Promise<CheckoutSession> {
       return run(
-        "createCharge",
-        {
-          amountCents: input.amountCents,
-          providerCustomerId: input.providerCustomerId,
-          idempotencyKey: input.idempotencyKey,
-          description: input.description ?? null,
-        },
-        () => inner.createCharge(input),
-        (result) => ({
-          // A decline is a successful round trip with a negative answer, so it is logged as
-          // "declined" rather than "error". Only "error" means our code or the network broke.
-          status: result.status === "succeeded" ? "ok" : "declined",
-          response: { id: result.id, status: result.status, failureReason: result.failureReason ?? null },
-        }),
-        input.idempotencyKey,
+        "createCheckoutSession",
+        { providerPlanId: input.providerPlanId, tenantId: input.tenantId, returnUrl: input.returnUrl ?? null },
+        () => inner.createCheckoutSession(input),
+        (result) => ({ status: "ok", response: { id: result.id, url: result.url } }),
       );
     },
 
@@ -156,4 +147,31 @@ export function withCallLogging(inner: PaymentProvider, ctx: LogContext): Paymen
       );
     },
   };
+
+  // Only attach createCharge when the wrapped provider actually has one. Defining it
+  // unconditionally would make `provider.createCharge` truthy for Whop, so a caller testing for
+  // direct-charge support would get the wrong answer and fail at call time instead of at the check.
+  const directCharge = inner.createCharge?.bind(inner);
+  if (directCharge) {
+    wrapped.createCharge = (input: CreateChargeInput): Promise<ChargeResult> =>
+      run(
+        "createCharge",
+        {
+          amountCents: input.amountCents,
+          providerCustomerId: input.providerCustomerId,
+          idempotencyKey: input.idempotencyKey,
+          description: input.description ?? null,
+        },
+        () => directCharge(input),
+        (result) => ({
+          // A decline is a successful round trip with a negative answer, so it is logged as
+          // "declined" rather than "error". Only "error" means our code or the network broke.
+          status: result.status === "succeeded" ? "ok" : "declined",
+          response: { id: result.id, status: result.status, failureReason: result.failureReason ?? null },
+        }),
+        input.idempotencyKey,
+      );
+  }
+
+  return wrapped;
 }

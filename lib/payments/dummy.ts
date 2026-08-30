@@ -9,6 +9,8 @@
 // this module directly through Node's test runner, which cannot resolve "./types".
 import { ProviderTimeoutError } from "./types.ts";
 import type {
+  CheckoutSession,
+  CreateCheckoutSessionInput,
   ChargeLookup,
   ChargeResult,
   CreateChargeInput,
@@ -74,6 +76,15 @@ abstract class DummyProvider implements PaymentProvider {
     }
 
     return { id: `ch_${this.slug}_ok_${suffix}`, status: "succeeded" };
+  }
+
+  async createCheckoutSession(input: CreateCheckoutSessionInput): Promise<CheckoutSession> {
+    if (this.simulate === "timeout") {
+      throw new ProviderTimeoutError(this.code, "createCheckoutSession");
+    }
+    // A fake URL that is obviously fake. Nothing should ever navigate to it.
+    const id = `ch_session_${this.slug}_${stableHash(input.providerPlanId + input.tenantId)}`;
+    return { id, url: `https://dummy.invalid/checkout/${id}` };
   }
 
   async refund(input: RefundInput): Promise<RefundResult> {
