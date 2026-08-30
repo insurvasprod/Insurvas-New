@@ -35,6 +35,8 @@ export const AUDIT_ACTIONS = [
   "coupon.created",
   "coupon.applied",
   "coupon.removed",
+  "invoice.custom_created",
+  "tenant.billing_mode_changed",
 ] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
@@ -73,4 +75,6 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   "coupon.created": "Coupon created",
   "coupon.applied": "Coupon applied",
   "coupon.removed": "Coupon removed",
+  "invoice.custom_created": "Custom invoice raised",
+  "tenant.billing_mode_changed": "Billing mode changed",
 };

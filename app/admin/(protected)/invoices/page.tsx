@@ -5,6 +5,8 @@ import { canViewInvoices } from "@/lib/invoices/permissions";
 import { fetchInvoices, fetchInvoiceTotals } from "@/lib/invoices/queries";
 import { AdminPageHeader } from "@/components/admin/page-header";
 import { InvoicesTable } from "@/components/admin/invoices-table";
+import { CustomInvoiceDialog } from "@/components/admin/custom-invoice-dialog";
+import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatCentsAsCurrency } from "@/lib/money";
 
@@ -14,7 +16,12 @@ export default async function InvoicesPage() {
   // SA-3.3: a support_agent cannot open invoice screens at all.
   if (!canViewInvoices(admin.role)) redirect("/admin");
 
-  const [invoices, totals] = await Promise.all([fetchInvoices(), fetchInvoiceTotals()]);
+  const supabase = getSupabaseServiceClient();
+  const [invoices, totals, { data: tenants }] = await Promise.all([
+    fetchInvoices(),
+    fetchInvoiceTotals(),
+    supabase.from("tenants").select("id, name").order("name"),
+  ]);
 
   // "Outstanding" and "overdue" are structurally zero while Whop collects before we hear, so the
   // third tile is the number that actually carries information in a reconciliation model: invoices
@@ -33,7 +40,10 @@ export default async function InvoicesPage() {
 
   return (
     <div className="space-y-6">
-      <AdminPageHeader title="Invoices" subtitle="What we billed, and whether it matches what was charged" />
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <AdminPageHeader title="Invoices" subtitle="What we billed, and whether it matches what was charged" />
+        <CustomInvoiceDialog tenants={tenants ?? []} />
+      </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {tiles.map((tile) => (

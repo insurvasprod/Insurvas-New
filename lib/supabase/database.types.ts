@@ -152,6 +152,11 @@ export type Database = {
       invoices: {
         Row: {
           created_at: string;
+          created_by: string | null;
+          kind: Database["public"]["Enums"]["invoice_kind"];
+          pay_online_url: string | null;
+          provider_invoice_id: string | null;
+          reason: string | null;
           currency: string;
           discount_cents: number;
           due_at: string | null;
@@ -176,6 +181,11 @@ export type Database = {
         };
         Insert: {
           created_at?: string;
+          created_by?: string | null;
+          kind?: Database["public"]["Enums"]["invoice_kind"];
+          pay_online_url?: string | null;
+          provider_invoice_id?: string | null;
+          reason?: string | null;
           currency?: string;
           discount_cents?: number;
           due_at?: string | null;
@@ -201,6 +211,8 @@ export type Database = {
         // Only the lifecycle columns are updatable — the money, the period and the number have
         // UPDATE revoked, so an issued invoice cannot be rewritten by any route.
         Update: {
+          pay_online_url?: string | null;
+          provider_invoice_id?: string | null;
           paid_at?: string | null;
           reconciliation?: string;
           status?: Database["public"]["Enums"]["invoice_status"];
@@ -798,6 +810,7 @@ export type Database = {
           current_period_start: string;
           id: string;
           last_provider_event_at: string | null;
+          whop_membership_id: string | null;
           pending_plan_id: string | null;
           plan_id: string;
           started_at: string;
@@ -815,6 +828,7 @@ export type Database = {
           current_period_start?: string;
           id?: string;
           last_provider_event_at?: string | null;
+          whop_membership_id?: string | null;
           pending_plan_id?: string | null;
           plan_id: string;
           started_at?: string;
@@ -832,6 +846,7 @@ export type Database = {
           current_period_start?: string;
           id?: string;
           last_provider_event_at?: string | null;
+          whop_membership_id?: string | null;
           pending_plan_id?: string | null;
           plan_id?: string;
           started_at?: string;
@@ -921,6 +936,7 @@ export type Database = {
       };
       tenants: {
         Row: {
+          billing_mode: Database["public"]["Enums"]["billing_mode"];
           created_at: string;
           id: string;
           name: string;
@@ -930,6 +946,7 @@ export type Database = {
           suspended_at: string | null;
         };
         Insert: {
+          billing_mode?: Database["public"]["Enums"]["billing_mode"];
           created_at?: string;
           id?: string;
           name: string;
@@ -939,6 +956,7 @@ export type Database = {
           suspended_at?: string | null;
         };
         Update: {
+          billing_mode?: Database["public"]["Enums"]["billing_mode"];
           created_at?: string;
           id?: string;
           name?: string;
@@ -1131,6 +1149,21 @@ export type Database = {
         };
         Returns: { invoice_id: string; number: string; created: boolean; reconciliation: string }[];
       };
+      create_custom_invoice: {
+        Args: {
+          p_tenant_id: string;
+          p_subscription_id: string | null;
+          p_reason: string;
+          p_due_at: string | null;
+          p_created_by: string | null;
+          p_lines: Json;
+        };
+        Returns: { invoice_id: string; number: string; total_cents: number }[];
+      };
+      mark_overdue_invoices: {
+        Args: Record<string, never>;
+        Returns: number;
+      };
       admin_apply_coupon: {
         Args: { p_subscription_id: string; p_coupon_id: string; p_applied_by: string };
         Returns: string;
@@ -1289,6 +1322,8 @@ export type Database = {
       billing_cycle: "monthly" | "quarterly" | "yearly";
       invoice_status: "draft" | "issued" | "paid" | "overdue" | "void" | "uncollectible";
       invoice_line_kind: "plan" | "addon" | "overage" | "discount" | "setup_fee" | "credit";
+      billing_mode: "automatic" | "manual";
+      invoice_kind: "subscription" | "custom";
       discount_type: "percent" | "fixed";
       coupon_duration: "once" | "n_periods" | "forever";
       payment_method: "provider" | "manual_bank_transfer";

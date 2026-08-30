@@ -324,15 +324,19 @@ overdue-only and mismatched-only; **tenant and date range are supported by `GET 
 but have no control**. Both are a couple of inputs once there are enough invoices for filtering to
 matter — with two rows it would be furniture.
 
-### 40. The void API's success path is untested end to end
-**From:** SA-3.3 (2026-08-30) · Minor
+### 44. Add-ons, overage and proration still do not reach an invoice
+**From:** SA-3.7 (2026-08-30) · **Significant** — supersedes the open half of [#27] and [#41]
 
-Every invoice we hold is `paid`, so the UI can only ever exercise the REFUSAL path — which it does,
-correctly. Voiding is covered at the database layer by `verify:invoices` and the rule itself by unit
-tests, but no request has ever travelled through `POST /api/admin/invoices/:id/void` to a successful
-void, and the audit entry it writes has never been seen.
+SA-3.7 built the machinery both were waiting for: `create_custom_invoice` raises an arbitrary
+invoice from the shared number sequence, and `WhopProvider.createInvoice` sends it for online
+payment. **Nothing calls it for either purpose yet.**
 
-Closes itself the moment SA-3.4 produces a `past_due` or `overdue` invoice.
+What remains is a job that, at each period rollover, gathers a tenant's attached add-ons, their
+metered overage above the plan allowance, and any pending proration from a mid-period upgrade, and
+raises one custom invoice for the lot. The pieces all exist; assembling them does not.
+
+Until then: a tenant with add-ons is billed for their plan only, overage is free, and a mid-period
+upgrade charges nobody the difference.
 
 ### 42. Coupons are creatable but not yet attachable from a screen
 **From:** SA-3.6 (2026-08-30) · Minor
@@ -378,6 +382,14 @@ Worth building both at once.
 ## ✅ Resolved
 
 *Terse log — details live in git history.*
+
+- **#40 The void/mark-paid success path was never exercised through the API** → closed by SA-3.7.
+  Custom invoices are born *issued*, which finally produced an unpaid invoice; `verify:custom`
+  settles one through the real HTTP route with a minted admin session and asserts the subscription
+  reactivates and both actions are audit-logged.
+- **SA-3.7 custom invoices and manual billing** → verified 18/18. Manual billing pauses the Whop
+  membership: confirmed against the sandbox that this flips `payment_collection_paused` to true
+  while leaving `status` as "active" — reading `status` would wrongly suggest the pause failed.
 
 - **SA-3.6 coupons** → Whop promo codes are the real discount, mirrored locally for the UI, the
   invoice line and the audit trail. The redemption cap, one-coupon-per-subscription and the

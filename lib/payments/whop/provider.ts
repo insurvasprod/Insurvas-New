@@ -222,4 +222,70 @@ export class WhopProvider implements PaymentProvider {
 
     return { promoCodeId: response.id, code: input.code };
   }
+
+  /**
+   * Raises an invoice at Whop and has them send it (SA-3.7).
+   *
+   * `send_invoice` rather than `charge_automatically`: a custom invoice is usually a negotiated
+   * amount the customer has not authorised, and charging a stored card for it is how disputes
+   * start. Whop emails it and hosts the pay page.
+   */
+  async createInvoice(input: {
+    companyId: string;
+    memberId: string;
+    amountCents: number;
+    description: string;
+    dueAt?: string | null;
+  }): Promise<{ invoiceId: string; payOnlineUrl: string | null }> {
+    const body: Record<string, unknown> = {
+      company_id: input.companyId,
+      collection_method: "send_invoice",
+      member_id: input.memberId,
+      // A one-off invoice is a plan with no recurrence: a price and nothing to renew.
+      plan: {
+        initial_price: centsToWhopAmount(input.amountCents),
+        currency: "usd",
+        description: input.description,
+      },
+      ...(input.dueAt ? { due_date: input.dueAt } : {}),
+    };
+
+    const response = await this.client.request<Record<string, unknown>>(
+      "POST",
+      "/invoices",
+      body,
+      idempotencyKey(`invoice_${input.memberId}`, body),
+    );
+
+    let payOnlineUrl: string | null = null;
+    for (const key of ["pay_online_url", "hosted_invoice_url", "purchase_url"]) {
+      const value = response[key];
+      if (typeof value === "string" && value) {
+        payOnlineUrl = value;
+        break;
+      }
+    }
+
+    if (typeof response.id !== "string") {
+      throw new Error(`Whop invoice creation returned no id. Keys: ${Object.keys(response).join(", ")}`);
+    }
+
+    return { invoiceId: response.id, payOnlineUrl };
+  }
+
+  /**
+   * Stops Whop collecting, without ending the membership.
+   *
+   * Verified against the sandbox: pausing flips `payment_collection_paused` to true and leaves
+   * `status` as "active" with the renewal date untouched — the customer keeps access and is not
+   * charged, which is exactly what manual billing needs. Note that `status` is NOT the field to
+   * check; it does not move, and reading it would suggest the pause had failed.
+   */
+  async pauseMembership(membershipId: string): Promise<void> {
+    await this.client.request("POST", `/memberships/${encodeURIComponent(membershipId)}/pause`, {});
+  }
+
+  async resumeMembership(membershipId: string): Promise<void> {
+    await this.client.request("POST", `/memberships/${encodeURIComponent(membershipId)}/resume`, {});
+  }
 }

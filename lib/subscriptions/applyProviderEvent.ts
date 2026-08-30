@@ -45,6 +45,23 @@ function occurredAt(envelope: WhopEnvelope): Date | null {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
+/**
+ * The Whop membership id, wherever this event carries it.
+ *
+ * Needed so manual billing can pause the membership — without it there is no handle to pause. On a
+ * membership.* event the membership IS the subject; on a payment it hangs off `data.membership`.
+ */
+function membershipId(envelope: WhopEnvelope): string | null {
+  const data = (envelope.data ?? {}) as Record<string, unknown>;
+
+  if (envelope.type.startsWith("membership.")) {
+    return typeof data.id === "string" ? data.id : null;
+  }
+
+  const membership = data.membership as Record<string, unknown> | undefined;
+  return typeof membership?.id === "string" ? membership.id : null;
+}
+
 function targetStatus(envelope: WhopEnvelope): SubscriptionStatus | null {
   if (envelope.type === "membership.cancel_at_period_end_changed") {
     const data = (envelope.data ?? {}) as Record<string, unknown>;
@@ -122,6 +139,28 @@ export async function applyProviderEvent(
 
   if (envelope.type === "payment.succeeded") {
     await recordPayment(envelope, tenantId);
+  }
+
+  // Captured opportunistically from whichever event carries it, and never overwritten with null.
+  const membership = membershipId(envelope);
+  if (membership) {
+    await supabase
+      .from("subscriptions")
+      .update({ whop_membership_id: membership })
+      .eq("id", subscription.id);
+  }
+
+  // The Whop member id, which createCustomer could never give us because Whop creates the customer
+  // at checkout. Filled in the first time an event carries it, and left alone after.
+  const member = ((envelope.data ?? {}) as Record<string, unknown>).member as
+    | Record<string, unknown>
+    | undefined;
+  if (typeof member?.id === "string") {
+    await supabase
+      .from("payment_providers")
+      .update({ provider_customer_id: member.id })
+      .eq("tenant_id", tenantId)
+      .is("provider_customer_id", null);
   }
 
   const next = targetStatus(envelope);
