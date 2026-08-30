@@ -55,7 +55,7 @@ export function ProductsTable({ initialProducts }: { initialProducts: ProductRow
         <Table>
           <TableHeader><TableRow className={tableHeaderRow}><TableHead className={tableHeadCell}>Product</TableHead><TableHead className={tableHeadCell}>Code</TableHead><TableHead className={tableHeadCell}>Category</TableHead><TableHead className={tableHeadCell}>Description</TableHead><TableHead className={tableHeadCell}>Order</TableHead><TableHead className={`${tableHeadCell} w-10`} /></TableRow></TableHeader>
           <TableBody>
-            {visible.length === 0 && <TableRow><TableCell colSpan={6} className="h-20 text-center text-sm text-muted-foreground">No products yet.</TableCell></TableRow>}
+            {visible.length === 0 && <TableRow><TableCell colSpan={6} className="h-20 text-center text-sm text-muted-foreground">No products yet. Templates and reporting both reference this list, so add what agents actually sell.</TableCell></TableRow>}
             {visible.map((product) => <TableRow key={product.id} className={!product.is_active ? "opacity-55" : undefined}>
               <TableCell className="font-medium"><span className="flex items-center gap-2">{product.name}{!product.is_active && <Badge variant="outline" className="border-transparent bg-muted text-muted-foreground">Archived</Badge>}</span></TableCell>
               <TableCell><code className="rounded bg-muted px-1.5 py-0.5 text-xs">{product.code}</code></TableCell>

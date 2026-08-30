@@ -256,7 +256,7 @@ export function OffersTable({
             <TableHead className={tableHeadCell}>Actions</TableHead>
           </TableRow></TableHeader>
           <TableBody>
-            {offers.length === 0 ? <TableRow><TableCell colSpan={6} className="py-8 text-center text-sm text-muted-foreground">No offers yet.</TableCell></TableRow> : offers.map((offer) => (
+            {offers.length === 0 ? <TableRow><TableCell colSpan={6} className="py-8 text-center text-sm text-muted-foreground">No offers yet. An offer applies a discount to whoever qualifies, without touching each customer.</TableCell></TableRow> : offers.map((offer) => (
               <TableRow key={offer.id}>
                 <TableCell><div className="font-medium">{offer.name}</div><div className="text-xs text-muted-foreground">{offer.auto_apply ? "Auto-apply" : "Manual only"}{offer.is_active ? " · Active" : " · Inactive"}</div></TableCell>
                 <TableCell>{displayDiscount(offer)}<div className="text-xs text-muted-foreground">{offer.coupon ? OFFER_DURATION_LABELS[offer.coupon.duration] : ""}</div></TableCell>

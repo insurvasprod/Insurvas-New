@@ -185,22 +185,6 @@ two screens during an outage will see a difference.
 **Fix:** none wanted. If the preview should ever show outage state, it needs to say WHY an item is
 missing rather than silently omitting it — otherwise it just looks wrong.
 
-### 68. Six configuration sections keep the old table treatment
-**From:** the Module 4 UI pass · **Belongs to:** a second UI pass, or each section's own follow-up
-
-The structural fixes are global — every section gained the full page width, lost the ten-card audit
-strip above it, and lost the sprint id under its title. Four screens then had the detailed pass the
-mockups describe: the hub, credits &amp; limits, payments and features.
-
-Offers, Products, Templates, Compliance sources, System and Advanced still render their original
-tables. Nothing about them is broken and they look considerably better in the wider layout, but
-they have not been through the row-level review — save behaviour, empty states, whether a column
-earns its place.
-
-**Fix:** the patterns to copy are settled and in the repo. One save bar per screen instead of one
-button per row, an empty state that says what to do rather than "no rows", and the same header
-component every section already uses.
-
 ### 14. Delete user — not built
 **From:** SA-1.4 · **Descoped by user on 2026-08-29:** *"we will only do inactive"*
 
@@ -771,6 +755,14 @@ provider.
 ## ✅ Resolved
 
 *Terse log — details live in git history.*
+
+- **#68 Six sections kept the old table treatment** → closed 2026-08-30 after actually looking at
+  them. The premise was wrong: the entry assumed rows of Save buttons and thin empty states across
+  all six, and only one section had a per-row save at all. What the pass found instead was empty
+  states that stated a fact without naming the action — most sharply on Compliance sources, where a
+  red "dialing is blocked platform-wide" banner sat directly above a table reading "No compliance
+  vendors registered", never connecting the two. Those four now name the way out. Everything else on
+  those screens was already carrying its weight in the wider layout, so it was left alone.
 
 - **The connection probe counted its own success as a failure** → fixed during the Module 4 UI pass.
   SA-4.2's test asks Whop for a payment id that cannot exist, and the expected 404 was logged as an
