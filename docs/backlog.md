@@ -340,6 +340,26 @@ Required checks passed: `npx tsc --noEmit`, `npm run lint`, `npm run build`, `np
 `npm run check:features`, `npm run verify:products`, and `npm run verify:configuration`.
 No SA-4.5 acceptance criterion remains unmet or unverified within the ticket's current scope.
 
+### 59. SA-4.6 agent-side template consumption remains unverified
+**From:** SA-4.6 · **Belongs to:** SA-4.7 and the later agent lead-workspace ticket · 🟡
+
+The platform template builder is implemented and live-verified: templates can be created without a
+deploy, fields use a normalized schema with JSONB form definitions, duplicate copies all content in
+one transaction, and editing preserves the prior version. The remaining agent-side acceptance work
+cannot be proven in SA-4.6 because the repository has no tenant-template assignment, agent lead
+workspace, lead filtering/sorting/export API, or runtime form/board consumer yet. SA-4.7 should
+apply a pinned template version to a tenant, render the same field and stage definitions, and make
+custom-field values filterable, sortable, and exportable using the JSONB contract. Until that
+consumer exists, the platform preview is verified as a draft preview only, not as an exact
+comparison against the agent's production screen.
+
+Acceptance status recorded for SA-4.6: PASS — create without deploy; PASS — schema plus JSONB;
+NOT TESTABLE YET — agent-side filter/sort/export; PASS — version isolation at the template data
+layer; PASS — one-action duplication; NOT TESTABLE YET — exact agent preview parity. The two
+NOT TESTABLE YET items are blocked on the later consumer ticket, not missing from the platform
+builder implementation. The schema-plus-JSONB checkbox previously marked in the ticket is now
+backed by the migration and live SQL verification.
+
 ### 9. No CI pipeline exists
 **From:** SA-0.2, SA-0.3, SA-2.1
 

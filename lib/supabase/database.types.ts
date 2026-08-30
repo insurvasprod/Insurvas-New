@@ -756,6 +756,123 @@ export type Database = {
         };
         Relationships: [];
       };
+      templates: {
+        Row: {
+          id: string;
+          name: string;
+          product_code: string;
+          version: number;
+          description: string | null;
+          is_active: boolean;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          product_code: string;
+          version?: number;
+          description?: string | null;
+          is_active?: boolean;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          name?: string;
+          product_code?: string;
+          version?: number;
+          description?: string | null;
+          is_active?: boolean;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      template_fields: {
+        Row: {
+          template_id: string;
+          version: number;
+          field_key: string;
+          label: string;
+          type: string;
+          is_required: boolean;
+          options: Json;
+          sort_order: number;
+        };
+        Insert: {
+          template_id: string;
+          version: number;
+          field_key: string;
+          label: string;
+          type: string;
+          is_required?: boolean;
+          options?: Json;
+          sort_order?: number;
+        };
+        Update: {
+          template_id?: string;
+          version?: number;
+          field_key?: string;
+          label?: string;
+          type?: string;
+          is_required?: boolean;
+          options?: Json;
+          sort_order?: number;
+        };
+        Relationships: [];
+      };
+      template_stages: {
+        Row: {
+          template_id: string;
+          version: number;
+          stage_key: string;
+          label: string;
+          stage_type: string;
+          color: string;
+          sort_order: number;
+        };
+        Insert: {
+          template_id: string;
+          version: number;
+          stage_key: string;
+          label: string;
+          stage_type: string;
+          color: string;
+          sort_order?: number;
+        };
+        Update: {
+          template_id?: string;
+          version?: number;
+          stage_key?: string;
+          label?: string;
+          stage_type?: string;
+          color?: string;
+          sort_order?: number;
+        };
+        Relationships: [];
+      };
+      template_forms: {
+        Row: {
+          template_id: string;
+          version: number;
+          form_definition: Json;
+        };
+        Insert: {
+          template_id: string;
+          version: number;
+          form_definition: Json;
+        };
+        Update: {
+          template_id?: string;
+          version?: number;
+          form_definition?: Json;
+        };
+        Relationships: [];
+      };
       plan_features: {
         Row: {
           created_at: string;
@@ -1535,6 +1652,24 @@ export type Database = {
           old_is_archived: boolean;
           old_name: string;
         }[];
+      };
+      admin_save_template: {
+        Args: {
+          p_template_id: string | null;
+          p_name: string;
+          p_product_code: string;
+          p_description: string;
+          p_is_active: boolean;
+          p_fields: Json;
+          p_stages: Json;
+          p_form_definition: Json;
+          p_created_by: string | null;
+        };
+        Returns: { template_id: string; version: number }[];
+      };
+      admin_duplicate_template: {
+        Args: { p_template_id: string; p_name: string; p_created_by?: string | null };
+        Returns: { template_id: string; version: number }[];
       };
       admin_login_activity_stats: {
         Args: never;

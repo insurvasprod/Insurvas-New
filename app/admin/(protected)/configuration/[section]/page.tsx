@@ -6,6 +6,7 @@ import { AdminPageHeader } from "@/components/admin/page-header";
 import { ConfigurationPlaceholder } from "@/components/admin/configuration/configuration-placeholder";
 import { OffersTable } from "@/components/admin/offers-table";
 import { ProductsTable } from "@/components/admin/products-table";
+import { TemplatesTable } from "@/components/admin/templates-table";
 import { FeatureCatalog } from "@/components/admin/feature-catalog";
 import { PaymentStatusPanel } from "@/components/admin/payment-status-panel";
 import { SettingsForm } from "@/components/admin/settings-form";
@@ -17,6 +18,7 @@ import { fetchPlans } from "@/lib/plans/queries";
 import { fetchSubscriptions } from "@/lib/subscriptions/queries";
 import { fetchOffers } from "@/lib/offers/queries";
 import { fetchProducts } from "@/lib/products/queries";
+import { fetchTemplates } from "@/lib/templates/queries";
 import { getAllSettings } from "@/lib/settings/queries";
 
 export default async function ConfigurationSectionPage({ params }: { params: Promise<{ section: string }> }) {
@@ -38,6 +40,9 @@ export default async function ConfigurationSectionPage({ params }: { params: Pro
   } else if (section.slug === "products") {
     const products = await fetchProducts();
     content = <ProductsTable initialProducts={products} />;
+  } else if (section.slug === "templates") {
+    const [templates, products] = await Promise.all([fetchTemplates(), fetchProducts()]);
+    content = <TemplatesTable initialTemplates={templates} products={products} />;
   } else if (section.slug === "advanced") {
     const settings = await getAllSettings();
     content = (

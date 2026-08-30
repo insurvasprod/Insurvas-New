@@ -15,6 +15,7 @@
     "verify:configuration": "node --env-file=.env.local scripts/verify-configuration-center.mjs",
     "verify:offers": "node --env-file=.env.local scripts/verify-offers.mjs",
     "verify:products": "node --env-file=.env.local scripts/verify-products.mjs",
+    "verify:templates": "node --env-file=.env.local scripts/verify-templates.mjs",
     "rebuild:usage": "node --env-file=.env.local scripts/rebuild-usage-totals.mjs",
     "advance:periods": "node --env-file=.env.local scripts/advance-billing-periods.mjs",
     "verify:entitlements": "node --env-file=.env.local scripts/verify-entitlements.mjs",
