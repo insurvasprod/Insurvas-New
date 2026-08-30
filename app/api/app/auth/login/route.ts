@@ -6,6 +6,7 @@ import { verifyPassword } from "@/lib/password";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { signTenantSessionToken, tenantSessionCookieOptions, TENANT_SESSION_COOKIE } from "@/lib/tenantAuth/session";
 import { recordLoginEvent, type LoginFailureReason } from "@/lib/loginEvents/record";
+import { getMaintenanceStatus } from "@/lib/system/service";
 
 // Same anti-enumeration shape as admin login: identical response whether or not the email
 // exists, and a dummy hash compare so the timing doesn't leak it either.
@@ -13,6 +14,17 @@ const DUMMY_HASH = "$2b$12$C6UzMDM.H6dfI/f/IKcEeOG1JDFsDLK7g7HDkVK6PmVNv7HDvXe5S
 const GENERIC_ERROR = { error: "Invalid email or password" };
 
 export async function POST(request: NextRequest) {
+  const maintenance = await getMaintenanceStatus();
+  if (maintenance.level === "locked") {
+    return NextResponse.json(
+      {
+        error: maintenance.message ?? "The platform is temporarily locked for maintenance. Please try again later.",
+        code: "maintenance_locked",
+      },
+      { status: 503 },
+    );
+  }
+
   const body = await request.json().catch(() => null);
   const parsed = tenantLoginSchema.safeParse(body);
   if (!parsed.success) {

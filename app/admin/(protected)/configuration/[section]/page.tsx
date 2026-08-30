@@ -26,6 +26,8 @@ import { ComplianceVendorsTable } from "@/components/admin/compliance-vendors-ta
 import { listComplianceVendors } from "@/lib/compliance/service";
 import { CreditLimitsPanel } from "@/components/admin/credit-limits-panel";
 import { getCreditsLimitsData } from "@/lib/creditsLimits/service";
+import { SystemSettingsPanel } from "@/components/admin/system-settings-panel";
+import { getStoredMaintenance, listAnnouncements } from "@/lib/system/service";
 
 export default async function ConfigurationSectionPage({ params }: { params: Promise<{ section: string }> }) {
   const admin = await getCurrentAdmin();
@@ -102,6 +104,9 @@ export default async function ConfigurationSectionPage({ params }: { params: Pro
   } else if (section.slug === "credits-limits") {
     const data = await getCreditsLimitsData();
     content = <CreditLimitsPanel initialPacks={data.packs} initialPricing={data.pricing} initialMonitor={data.monitor} initialTenants={data.tenants} />;
+  } else if (section.slug === "system") {
+    const [maintenance, announcements] = await Promise.all([getStoredMaintenance(), listAnnouncements()]);
+    content = <SystemSettingsPanel initialMaintenance={maintenance} initialAnnouncements={announcements} />;
   } else {
     content = <ConfigurationPlaceholder section={section} />;
   }

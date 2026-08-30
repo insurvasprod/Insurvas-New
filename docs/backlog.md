@@ -904,6 +904,28 @@ throwaway tenant and switch row are removed after the run; audit rows remain by 
 - **Server-only code in the client bundle** → broke the first Vercel deploy. `tsc` cannot catch
   this class of bug; see [[verify-with-real-build-not-just-tsc]] in memory.
 
+### 67. ✅ SA-4.12 system maintenance and announcements completed
+**From:** SA-4.12 · **Belongs to:** SA-4.12 · **Resolved:** 2026-08-30
+
+The `maintenance`, `announcements` and `announcement_dismissals` tables were added in migration
+`0015_system_maintenance_announcements.sql` and applied to the live Supabase project. The System
+configuration route now provides independently saved maintenance and announcement controls with
+server-side role checks, audit rows, scheduled activation/clearance, tenant-facing banners,
+read-only write blocking, locked-mode routing, admin bypass, plan targeting and per-user
+dismissals. Onboarding password and email-confirmation writes also receive the same maintenance
+response, and dismissal failures are shown to the user.
+
+The focused `npm run verify:system` run passed all checks against the running application, including
+401/403 role handling, normal reads, clear 503 read-only writes, locked tenant login/read blocking,
+admin access while locked, future and active schedule behavior, announcement targeting, persistent
+dismissal, non-dismissible protection and audit logging. `npm run verify:configuration` also passed
+all 45 Configuration Center route and permission checks. Browser QA rendered
+`/admin/configuration/system` in the signed-in admin session with visible controls and no console
+errors.
+
+All five SA-4.12 acceptance criteria are PASS. Nothing was left unmet, deferred or unverified for
+this ticket, so nothing was added to the open backlog.
+
 ---
 
 ## Related

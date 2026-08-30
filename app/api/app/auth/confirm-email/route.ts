@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 
+import { getMaintenanceStatus } from "@/lib/system/service";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { hashInviteToken } from "@/lib/users/invitations";
 import { confirmEmailSchema } from "@/lib/users/schemas";
@@ -42,6 +43,17 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const maintenance = await getMaintenanceStatus();
+  if (maintenance.level === "locked" || maintenance.level === "read_only") {
+    return NextResponse.json(
+      {
+        error: maintenance.message,
+        code: maintenance.level === "locked" ? "maintenance_locked" : "maintenance_read_only",
+      },
+      { status: 503 },
+    );
+  }
+
   const body = await request.json().catch(() => null);
   const parsed = confirmEmailSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json(INVALID, { status: 400 });

@@ -5,6 +5,7 @@ import { requireTenant, type TenantContext } from "@/lib/tenantAuth/requireTenan
 import { getEntitlement } from "./get";
 import { canWrite, hasFeature, type Entitlement } from "./types";
 import { featureKillState } from "@/lib/features/killSwitch";
+import { getMaintenanceStatus } from "@/lib/system/service";
 
 export type EntitledContext = {
   context: TenantContext;
@@ -30,6 +31,24 @@ export async function requireFeature(
 ): Promise<EntitledContext | NextResponse> {
   const auth = await requireTenant();
   if (auth instanceof NextResponse) return auth;
+
+  // Platform maintenance is checked before entitlement so locked mode cannot reveal whether a
+  // tenant has a plan. Admin routes do not use this tenant gate and therefore always bypass it.
+  const maintenance = await getMaintenanceStatus();
+  if (maintenance.level === "locked" || (options.write && maintenance.level === "read_only")) {
+    return NextResponse.json(
+      {
+        error:
+          maintenance.message ??
+          (maintenance.level === "locked"
+            ? "The platform is temporarily unavailable while maintenance is underway."
+            : "The platform is read-only while maintenance is underway."),
+        code: maintenance.level === "locked" ? "maintenance_locked" : "maintenance_read_only",
+        level: maintenance.level,
+      },
+      { status: 503 },
+    );
+  }
 
   const entitlement = await getEntitlement(auth.context.tenantId);
 
@@ -87,6 +106,18 @@ export async function requireFeature(
 export async function requireWriteAccess(): Promise<EntitledContext | NextResponse> {
   const auth = await requireTenant();
   if (auth instanceof NextResponse) return auth;
+
+  const maintenance = await getMaintenanceStatus();
+  if (maintenance.level === "locked" || maintenance.level === "read_only") {
+    return NextResponse.json(
+      {
+        error: maintenance.message ?? "The platform is read-only while maintenance is underway.",
+        code: maintenance.level === "locked" ? "maintenance_locked" : "maintenance_read_only",
+        level: maintenance.level,
+      },
+      { status: 503 },
+    );
+  }
 
   const entitlement = await getEntitlement(auth.context.tenantId);
 

@@ -165,6 +165,77 @@ export type Database = {
         Update: never;
         Relationships: [];
       };
+      maintenance: {
+        Row: {
+          id: number;
+          level: string;
+          message: string;
+          scheduled_start: string | null;
+          scheduled_end: string | null;
+          updated_by: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          id?: number;
+          level: string;
+          message: string;
+          scheduled_start?: string | null;
+          scheduled_end?: string | null;
+          updated_by?: string | null;
+          updated_at?: string;
+        };
+        Update: {
+          level?: string;
+          message?: string;
+          scheduled_start?: string | null;
+          scheduled_end?: string | null;
+          updated_by?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      announcements: {
+        Row: {
+          id: string;
+          message: string;
+          type: string;
+          audience: string;
+          starts_at: string;
+          ends_at: string;
+          is_dismissible: boolean;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          message: string;
+          type: string;
+          audience?: string;
+          starts_at: string;
+          ends_at: string;
+          is_dismissible?: boolean;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          message?: string;
+          type?: string;
+          audience?: string;
+          starts_at?: string;
+          ends_at?: string;
+          is_dismissible?: boolean;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      announcement_dismissals: {
+        Row: { announcement_id: string; user_id: string; dismissed_at: string };
+        Insert: { announcement_id: string; user_id: string; dismissed_at?: string };
+        Update: { dismissed_at?: string };
+        Relationships: [];
+      };
       metrics_daily: {
         Row: {
           active_customers: number;

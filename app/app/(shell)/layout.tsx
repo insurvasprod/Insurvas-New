@@ -7,6 +7,9 @@ import { buildAgentMenu } from "@/lib/menu/definition";
 import { effectiveFeatures } from "@/lib/features/killSwitch";
 import { AgentSidebar } from "@/components/app/agent-sidebar";
 import { LogoutButton } from "@/components/app/logout-button";
+import { MaintenanceMessage } from "@/components/app/maintenance-message";
+import { AnnouncementStrip } from "@/components/app/announcement-strip";
+import { getMaintenanceStatus, getActiveAnnouncements } from "@/lib/system/service";
 
 /**
  * Enforcement point 1 of 3: the MENU.
@@ -20,6 +23,9 @@ export default async function AgentShellLayout({ children }: { children: React.R
   if (!context) redirect("/app/login");
 
   const entitlement = await getEntitlement(context.tenantId);
+  const maintenance = await getMaintenanceStatus();
+  if (maintenance.level === "locked") redirect("/maintenance");
+  const announcements = await getActiveAnnouncements(context.userId, context.tenantId);
 
   // The menu is built from EFFECTIVE features — what the plan grants, minus anything switched off
   // platform-wide right now (SA-4.10). Filtering here rather than inside buildAgentMenu keeps that
@@ -52,6 +58,8 @@ export default async function AgentShellLayout({ children }: { children: React.R
       </aside>
 
       <main className="flex-1 bg-[var(--color-page-bg)] p-8">
+        <MaintenanceMessage status={maintenance} />
+        <AnnouncementStrip initialAnnouncements={announcements} />
         {entitlement.access === "read_only" && (
           <div className="mb-6 rounded-lg border border-[var(--color-warning)]/30 bg-[var(--color-warning)]/10 p-4 text-sm">
             <span className="font-medium">
