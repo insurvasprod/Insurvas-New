@@ -890,6 +890,69 @@ export type Database = {
         };
         Relationships: [];
       };
+      signup_selections: {
+        Row: {
+          billing_cycle: Database["public"]["Enums"]["billing_cycle"];
+          plan_id: string;
+          selected_at: string;
+          tenant_id: string;
+        };
+        Insert: {
+          billing_cycle: Database["public"]["Enums"]["billing_cycle"];
+          plan_id: string;
+          selected_at?: string;
+          tenant_id: string;
+        };
+        Update: {
+          billing_cycle?: Database["public"]["Enums"]["billing_cycle"];
+          plan_id?: string;
+          selected_at?: string;
+          tenant_id?: string;
+        };
+        Relationships: [];
+      };
+      business_profiles: {
+        Row: {
+          business_name: string;
+          completed_at: string;
+          lead_source_other: string | null;
+          lead_sources: string[];
+          monthly_volume_range: string;
+          npn: string;
+          primary_state: string;
+          products_sold: string[];
+          recommended_setup_steps: string[];
+          tenant_id: string;
+          updated_at: string;
+        };
+        Insert: {
+          business_name: string;
+          completed_at?: string;
+          lead_source_other?: string | null;
+          lead_sources: string[];
+          monthly_volume_range: string;
+          npn: string;
+          primary_state: string;
+          products_sold: string[];
+          recommended_setup_steps?: string[];
+          tenant_id: string;
+          updated_at?: string;
+        };
+        Update: {
+          business_name?: string;
+          completed_at?: string;
+          lead_source_other?: string | null;
+          lead_sources?: string[];
+          monthly_volume_range?: string;
+          npn?: string;
+          primary_state?: string;
+          products_sold?: string[];
+          recommended_setup_steps?: string[];
+          tenant_id?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       subscriptions: {
         Row: {
           billing_cycle: Database["public"]["Enums"]["billing_cycle"];
@@ -1176,6 +1239,46 @@ export type Database = {
       };
     };
     Functions: {
+      self_serve_signup: {
+        Args: {
+          p_billing_cycle: Database["public"]["Enums"]["billing_cycle"];
+          p_email: string;
+          p_expires_at: string;
+          p_name: string;
+          p_password_hash: string;
+          p_phone: string;
+          p_plan_id: string;
+          p_token_hash: string;
+        };
+        Returns: { tenant_id: string; user_id: string; verification_id: string }[];
+      };
+      complete_signup_email_verification: {
+        Args: { p_token_hash: string };
+        Returns: { email: string; tenant_id: string; user_id: string }[];
+      };
+      refresh_signup_verification: {
+        Args: {
+          p_expires_at: string;
+          p_new_email: string;
+          p_token_hash: string;
+          p_user_id: string;
+        };
+        Returns: { email: string; verification_id: string }[];
+      };
+      save_signup_business_profile: {
+        Args: {
+          p_business_name: string;
+          p_lead_source_other: string;
+          p_lead_sources: string[];
+          p_monthly_volume_range: string;
+          p_npn: string;
+          p_primary_state: string;
+          p_products_sold: string[];
+          p_recommended_setup_steps: string[];
+          p_user_id: string;
+        };
+        Returns: { onboarding_state: string; tenant_id: string }[];
+      };
       admin_create_user: {
         Args: {
           p_created_by: string;
@@ -1467,8 +1570,8 @@ export type Database = {
         | "cancelled";
       tenant_status: "provisioning" | "active" | "suspended" | "cancelled";
       tenant_user_role: "owner" | "producer" | "assistant" | "bookkeeper";
-      user_status: "active" | "inactive" | "suspended" | "deleted";
-      user_token_purpose: "invite" | "password_reset" | "email_change";
+      user_status: "pending_verification" | "active" | "inactive" | "suspended" | "deleted";
+      user_token_purpose: "invite" | "password_reset" | "email_change" | "email_verification";
     };
     CompositeTypes: {
       [_ in never]: never;
