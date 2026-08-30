@@ -37,6 +37,7 @@ const ICONS = {
   revenue: TrendingUp,
   admins: Users,
   settings: Settings2,
+  configuration: Settings2,
   "audit-log": ScrollText,
 } as const;
 

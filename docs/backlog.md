@@ -113,6 +113,30 @@ The original `provider_settings.credentials_enc` / encrypted-at-rest database de
 implemented. Credentials intentionally remain in environment variables; see #54. Reopening any
 of these NOT APPLICABLE or NOT IMPLEMENTED decisions requires an explicit product-scope change.
 
+### 56. SA-4.3 has a deliberate role-scope deviation and future section saves are pending
+**From:** SA-4.3 acceptance checklist · **Decision:** option 1 selected by the user on 2026-08-30
+
+The Configuration Center is implemented as a shared route registry and shell. The role matrix is
+intentionally narrower than the raw ticket text: **Payments remains `super_admin`-only** because
+it exposes live provider credentials and can perform authenticated provider calls. `billing_admin`
+gets Offers & discounts when SA-4.4 is implemented, but does not get Payments. `platform_config`
+gets the non-payment, non-offer platform sections. `support_agent` gets no Configuration Center
+access and is denied server-side, even if a route is entered directly. The repeatable
+`npm run verify:configuration` check exercised all 45 role/route cases, including temporary active
+fixtures for `support_agent` and `platform_config`; those fixtures were removed after the run.
+
+The Advanced section currently saves each setting independently and was exercised through the
+browser. Payments reuses its existing independent connection-test workflow, and Offers now reuses
+the existing independent Coupons workflow. The remaining section
+routes are intentionally placeholders owned by SA-4.4 through SA-4.12, so their save behavior is
+**NOT TESTABLE YET** and the SA-4.3 criterion *"every section saves independently"* is not fully
+complete until those tickets provide their own forms and save actions. The recently changed strip
+reads the existing `audit_log`; operational payment connection tests are excluded because they are
+health activity, not configuration changes.
+
+**Fix:** implement and verify each section's own form in its owning ticket. Reopen the role matrix
+only if the product decision about payment credentials changes.
+
 ### 50. The hardcoded-constant sweep is deliberately partial
 **From:** SA-4.1 · **Decided while building, 2026-08-30**
 

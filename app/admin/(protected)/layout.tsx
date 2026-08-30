@@ -12,7 +12,7 @@ import { canViewTenants } from "@/lib/tenants/permissions";
 import { canManageFeatures } from "@/lib/features/permissions";
 import { canManagePlans } from "@/lib/plans/permissions";
 import { canManageSubscriptions } from "@/lib/subscriptions/permissions";
-import { canManageSettings } from "@/lib/settings/permissions";
+import { canAccessConfigurationCenter } from "@/lib/configuration/sections";
 
 // Matches the Insurvas CRM sidebar surface (lib/theme.ts navSurfaceBg): a radial glow over a
 // diagonal navy gradient, rather than a flat fill.
@@ -61,8 +61,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   if (admin.role === "super_admin") {
     navItems.push({ href: "/admin/admins", label: "Admin users", icon: "admins" });
   }
-  if (canManageSettings(admin.role)) {
-    navItems.push({ href: "/admin/settings", label: "Settings", icon: "settings" });
+  if (canAccessConfigurationCenter(admin.role)) {
+    navItems.push({ href: "/admin/configuration", label: "Configuration Center", icon: "configuration" });
   }
   navItems.push({ href: "/admin/audit-log", label: "Audit log", icon: "audit-log" });
 
