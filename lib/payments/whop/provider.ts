@@ -50,7 +50,10 @@ export class WhopProvider implements PaymentProvider {
       plan_id: input.providerPlanId,
       // Comes back to us on the webhook, which is how the payment is attributed to a tenant.
       metadata: { tenant_id: input.tenantId, ...input.metadata },
-      ...(input.returnUrl ? { redirect_url: input.returnUrl } : {}),
+      // Whop refuses anything that is not https, so a local http:// return URL is dropped rather
+      // than sent — otherwise every checkout in development fails with a 400 that looks like a
+      // code bug. The return handler is still reachable directly for local testing.
+      ...(input.returnUrl?.startsWith("https://") ? { redirect_url: input.returnUrl } : {}),
     };
 
     const response = await this.client.request<Record<string, unknown>>(
@@ -117,6 +120,15 @@ export class WhopProvider implements PaymentProvider {
     priceCents: number;
     /** Our plan_prices.setup_fee_cents. Charged once, on top of the first period. */
     setupFeeCents?: number;
+    /**
+     * Free days before the first charge (SA-5.2). Lives on the PLAN, not the checkout: Whop only
+     * accepts trial_period_days on a plan, and a checkout configuration takes either `plan_id` OR
+     * an inline plan — so putting the trial on the checkout would mean abandoning the
+     * (plan version, cycle) mapping that makes grandfathering work.
+     *
+     * Whop enforces one trial per user per plan, so a returning customer does not get a second.
+     */
+    trialDays?: number;
     billingCycle: string;
     ourPlanId: string;
     planCode: string;
@@ -139,6 +151,7 @@ export class WhopProvider implements PaymentProvider {
         currency: "usd",
         plan_type: "renewal",
         billing_period: billingPeriod,
+        ...(input.trialDays && input.trialDays > 0 ? { trial_period_days: input.trialDays } : {}),
         metadata: {
           insurvas_plan_id: input.ourPlanId,
           insurvas_plan_code: input.planCode,

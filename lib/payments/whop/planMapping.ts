@@ -10,6 +10,7 @@ import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { buildProvider } from "../registry";
 import { WhopProvider } from "./provider";
 import type { BillingCycle } from "@/lib/money";
+import { TRIAL_DAYS } from "@/lib/checkout/constants";
 
 const PRICE_COLUMN: Record<BillingCycle, "price_monthly_cents" | "price_quarterly_cents" | "price_yearly_cents"> = {
   monthly: "price_monthly_cents",
@@ -44,7 +45,7 @@ export async function ensureWhopPlan(
 
   const { data: prices } = await supabase
     .from("plan_prices")
-    .select("price_monthly_cents, price_quarterly_cents, price_yearly_cents")
+    .select("price_monthly_cents, price_quarterly_cents, price_yearly_cents, setup_fee_cents")
     .eq("plan_id", planId)
     .maybeSingle<Record<string, number | null>>();
 
@@ -86,6 +87,8 @@ export async function ensureWhopPlan(
     productId,
     accountId: process.env.WHOP_ACCOUNT_ID,
     priceCents,
+    setupFeeCents: prices?.setup_fee_cents ?? 0,
+    trialDays: TRIAL_DAYS,
     billingCycle,
     ourPlanId: plan.id,
     planCode: plan.code,

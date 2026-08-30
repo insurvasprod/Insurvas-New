@@ -26,7 +26,8 @@
     "verify:credits": "node --env-file=.env.local scripts/verify-credit-notes.mjs",
     "metrics:build": "node --env-file=.env.local scripts/build-metrics.mjs",
     "verify:signup": "node --env-file=.env.local scripts/verify-self-serve-signup.mjs",
-    "verify:ratelimit": "node --env-file=.env.local scripts/verify-rate-limits.mjs"
+    "verify:ratelimit": "node --env-file=.env.local scripts/verify-rate-limits.mjs",
+    "verify:checkout": "node --env-file=.env.local scripts/verify-checkout.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.99.0",

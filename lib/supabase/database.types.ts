@@ -42,6 +42,36 @@ export type Database = {
         };
         Relationships: [];
       };
+      checkout_sessions: {
+        Row: {
+          billing_cycle: Database["public"]["Enums"]["billing_cycle"];
+          checkout_url: string;
+          completed_at: string | null;
+          coupon_id: string | null;
+          created_at: string;
+          id: string;
+          plan_id: string;
+          provider: string;
+          provider_config_id: string;
+          status: string;
+          tenant_id: string;
+        };
+        Insert: {
+          billing_cycle: Database["public"]["Enums"]["billing_cycle"];
+          checkout_url: string;
+          completed_at?: string | null;
+          coupon_id?: string | null;
+          created_at?: string;
+          id?: string;
+          plan_id: string;
+          provider?: string;
+          provider_config_id: string;
+          status?: string;
+          tenant_id: string;
+        };
+        Update: { status?: string; completed_at?: string | null };
+        Relationships: [];
+      };
       rate_limits: {
         Row: { bucket_key: string; window_start: string; hits: number };
         Insert: { bucket_key: string; window_start: string; hits?: number };
@@ -1348,6 +1378,20 @@ export type Database = {
           p_lines: Json;
         };
         Returns: { invoice_id: string; number: string; created: boolean; reconciliation: string }[];
+      };
+      create_subscription_from_checkout: {
+        Args: {
+          p_tenant_id: string;
+          p_plan_id: string;
+          p_billing_cycle: Database["public"]["Enums"]["billing_cycle"];
+          p_whop_membership_id: string | null;
+          p_trial_days: number;
+        };
+        Returns: {
+          subscription_id: string;
+          created: boolean;
+          status: Database["public"]["Enums"]["subscription_status"];
+        }[];
       };
       claim_rate_limit: {
         Args: { p_key: string; p_max: number; p_window_seconds: number };

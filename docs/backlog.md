@@ -78,17 +78,6 @@ Users list shows "No plan yet". Two notions of the same fact, and the screen rea
 Fix: repoint `admin_user_list.plan_code` at the subscription's plan, then drop `tenants.plan_code`
 rather than leaving a decoy column that will mislead the next person.
 
-### 21. "Only monthly at checkout" can't be verified yet
-**From:** SA-2.4 · **Belongs to:** SA-5.2
-
-SA-2.4's criterion is *"a plan with only `price_monthly` set offers only monthly at checkout."*
-There is no checkout — that's SA-5.2.
-
-The **data half is done and tested**: a null cycle price means that cycle isn't offered, and
-`availableBillingCycles()` is the single helper that answers the question, with unit tests
-(including that **zero is a price but null is an absence** — a free plan must still be buyable).
-SA-5.2 should call that helper rather than re-deriving the rule.
-
 ### 20. Removing an archived feature from a plan needs a detour
 **From:** SA-2.3 · Minor
 
@@ -280,22 +269,6 @@ overdue-only and mismatched-only; **tenant and date range are supported by `GET 
 but have no control**. Both are a couple of inputs once there are enough invoices for filtering to
 matter — with two rows it would be furniture.
 
-### 47. A provider checkout creates no subscription on our side
-**From:** SA-3.9 (2026-08-30) · **Significant — found by the dashboard**
-
-Your tenant has paid twice through Whop checkout and has **no subscription row**. `subscriptions`
-is empty; `membership.activated` arrived twice and did nothing, because `applyProviderEvent`
-updates an existing subscription and never creates one.
-
-Consequences, all visible on the revenue screen: contracted MRR is $0 while $447 has been
-collected, active customers is 0, there is no plan breakdown, and the entitlement engine has
-nothing to resolve — so a paying customer would get no features.
-
-An admin assigning a plan by hand is the only path that currently produces a subscription. Either
-`membership.activated` should create one from the plan metadata Whop returns (which carries
-`insurvas_plan_id` and the cycle, so everything needed is already on the event), or self-serve
-checkout should be closed off until it does.
-
 ### 48. The 2-second / 500-tenant target is unverified
 **From:** SA-3.9 · Unverified
 
@@ -410,6 +383,18 @@ churn and trial conversion, and add date/plan filters. Performance against 500 t
 ## ✅ Resolved
 
 *Terse log — details live in git history.*
+
+- **#47 A provider checkout created no subscription** -> SA-5.2. `create_subscription_from_checkout`
+  is called from BOTH the return handler and `membership.activated`, idempotent on the tenant,
+  because either can arrive first and either can be the only one that arrives. Verified both paths
+  separately and together: returning twice creates one subscription, and a customer who closes the
+  tab still gets one.
+- **#21 "Only monthly at checkout" could not be verified** -> SA-5.2 calls `availableBillingCycles()`
+  on the raw price row rather than re-deriving the rule, so a cycle with no price cannot be sold.
+- **SA-5.2 hosted checkout** -> verified 17/17 against a real Whop sandbox checkout. The trial lives
+  on the mapped Whop plan, not the checkout configuration: Whop only accepts `trial_period_days` on
+  a plan, and a checkout takes either `plan_id` OR an inline plan, so putting it on the checkout
+  would have meant abandoning the (plan version, cycle) mapping that makes grandfathering work.
 
 - **SA-5.1 review (2026-08-30).** Host-header injection in verification links: `buildVerificationUrl`
   fell back to `request.nextUrl.origin` when `NEXT_PUBLIC_APP_URL` was unset — and it was unset. An

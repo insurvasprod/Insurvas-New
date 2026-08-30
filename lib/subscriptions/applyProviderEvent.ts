@@ -11,6 +11,7 @@ import "server-only";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { rebuildEntitlement } from "@/lib/entitlements/rebuild";
 import { whopAmountToCents } from "@/lib/payments/whop/client";
+import { completeCheckout } from "@/lib/checkout/complete";
 import type { SubscriptionStatus } from "./access";
 import type { WhopEnvelope } from "@/lib/payments/whop/events";
 
@@ -132,7 +133,36 @@ export async function applyProviderEvent(
     .eq("tenant_id", tenantId)
     .maybeSingle<{ id: string; status: SubscriptionStatus; last_provider_event_at: string | null }>();
 
-  if (!subscription) return { applied: false, reason: "tenant has no subscription" };
+  if (!subscription) {
+    // SA-5.2 / backlog #47. A customer who bought through hosted checkout has no subscription yet,
+    // and until this existed the event was dropped: they paid and got nothing. Creating it here
+    // covers the customer who closes the tab before being redirected back.
+    if (envelope.type === "membership.activated" || envelope.type === "payment.succeeded") {
+      const planMetadata = ((envelope.data ?? {}) as Record<string, unknown>).plan as
+        | Record<string, unknown>
+        | undefined;
+      const meta = (planMetadata?.metadata ?? {}) as Record<string, unknown>;
+
+      const completion = await completeCheckout(tenantId, {
+        membershipId: membershipId(envelope),
+        planId: typeof meta.insurvas_plan_id === "string" ? meta.insurvas_plan_id : null,
+        billingCycle:
+          typeof meta.insurvas_billing_cycle === "string"
+            ? (meta.insurvas_billing_cycle as "monthly" | "quarterly" | "yearly")
+            : null,
+        source: "webhook",
+      });
+
+      if (completion?.created) {
+        return {
+          applied: true,
+          reason: `${envelope.type} created a subscription for a self-serve checkout`,
+          newStatus: completion.status as SubscriptionStatus,
+        };
+      }
+    }
+    return { applied: false, reason: "tenant has no subscription" };
+  }
 
   // Ordering guard. Whop does not guarantee delivery order, so an event that happened BEFORE the
   // one we have already applied is discarded rather than applied on top of it. Without this, a
