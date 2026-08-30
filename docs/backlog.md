@@ -135,22 +135,18 @@ One thing worth watching if either is ever load-tested: `admin_user_list.distinc
 correlated subquery. Postgres should only evaluate it for rows surviving `LIMIT`, but that is a
 planner behaviour, not a guarantee — if the Users list ever slows down at scale, check this first.
 
-### 8. No browser verification yet for SA-1.1 / SA-1.2 / SA-1.3
-**From:** SA-1.1, SA-1.2, SA-1.3
+### 8. Browser verification — now unblocked, mostly still undone
+**From:** SA-1.1, SA-1.2, SA-1.3 · **Blocker removed 2026-08-30**
 
-All pass `tsc --noEmit`; SA-1.1 also passed a full `next build`. DB layers were verified directly
-in SQL — SA-1.2 (duplicate email → `23505`, no orphan tenant) and SA-1.3 (last-owner demotion
-blocked, role unchanged after the block, demotion succeeds with a second owner). But no screen has
-been driven in a browser yet. **Part of the end-of-module pass**, per the user's request to batch
-builds.
+The reason this never happened was admin login needing a TOTP code. That is solved: an admin
+session token can be minted locally from `ADMIN_SESSION_SECRET` and set as the
+`insurvas_admin_session` cookie, which is how SA-3.3's screens were verified in a real browser.
 
-Specifically worth clicking through at that point:
-- the full invite → set-password → login round trip
-- the email-change → confirm round trip (old address must keep working until confirmed)
-- a role change showing up on the tenant side without re-login
-- suspending a user with a live session, then confirming their next request drops them
-- a suspended user's login showing the suspension message, while a *wrong* password on the same
-  account still shows only the generic error
+Still unverified by clicking: the invite → set-password → login round trip, the email-change →
+confirm round trip (the old address must keep working until confirmed), a role change appearing on
+the tenant side without re-login, seat-limit enforcement at the limit, and the plan version editor.
+
+**Verified in a browser so far:** the invoice list, detail and print screens (SA-3.3).
 
 ### 9. No CI pipeline exists
 **From:** SA-0.2, SA-0.3, SA-2.1
@@ -252,15 +248,44 @@ to subscriptions **is** fully built.
 Adding a new add-on today means a migration. Worth a dialog (same shape as the plan editor) if the
 business starts iterating on them; not urgent while the catalog is four rows that rarely change.
 
-### 27. Add-on prices don't reach an invoice
-**From:** SA-2.6 · **Belongs to:** SA-3.2
+### 27. Add-ons and overage are still not charged
+**From:** SA-2.6 → **retargeted by SA-3.2 (2026-08-30)** · **Significant**
 
-SA-2.6's criterion *"add-on price appears as a separate line on the invoice"* is **not met** —
-there are no invoices. The data needed is in place: `subscription_addons` keeps detached rows with
-`attached_at` / `detached_at`, so a past period can be reconstructed exactly.
+SA-3.2 built the invoice, but only for what **Whop** charges — and Whop charges the plan price and
+nothing else. It knows nothing about our add-ons or metered overage, because those are our
+concepts, attached to our subscriptions, invisible to a Whop plan.
 
-SA-3.2 should read that history rather than only current attachments, or an add-on cancelled
-mid-period will silently vanish from the bill it should appear on.
+The decision was to bill extras on a **separate Whop invoice** each period, using their
+`create-invoice` API (arbitrary `line_items`, its own number, a hosted `pay_online_url`, and their
+collection and dunning for free). **That is not built.**
+
+So today: a tenant with three add-ons and 400 SMS of overage is invoiced for their plan and nothing
+else, and the difference is simply not collected. `subscription_addons` keeps detached rows with
+`attached_at` / `detached_at`, so a past period can still be reconstructed exactly when this is
+built — read that history rather than only current attachments, or an add-on cancelled mid-period
+vanishes from the bill it belongs on.
+
+### 37. The two real sandbox payments have no invoices
+**From:** SA-3.2 (2026-08-30) · Minor
+
+`plan_a` ($198, the double-charge) and `plan_b` ($249) were both collected before invoice
+generation existed, so neither produced an invoice. Replaying their stored envelopes through the
+receiver would create them — the generator is idempotent on the provider payment id, so it is safe.
+
+Worth deciding rather than drifting: the `plan_a` one would be created as **mismatched** (we say
+$99, the provider charged $198), which is correct and is exactly the record you would want of that
+incident.
+
+### 38. An invoice can still be deleted
+**From:** SA-3.2 (2026-08-30) · Minor
+
+UPDATE is revoked on every column of `invoices` except the lifecycle ones, and `invoice_lines`
+refuses UPDATE and DELETE outright. But `invoices` itself can still be DELETEd by the application.
+
+Deleting a financial record is worse than editing one, and the correct operation is already
+built — `void`. DELETE is currently retained only so verification scripts can clean up after
+themselves; the same tension as `usage_events`, resolved the other way. Before real customers,
+revoke it and give the test scripts a dedicated path.
 
 ### 29. The database schema lives only in Supabase, not in the repo
 **From:** end-of-SA-2 push · **Significant**
@@ -287,47 +312,182 @@ writes invoices, because financial tables are the worst ones to hold only in a l
 ### 32. The provider panel has never been opened in a browser
 **From:** SA-3.1 · Minor
 
-The tenant Payment provider panel, its API route and the call-logging decorator are verified by
-`npm run verify:payments` at the database level and by unit tests at the logic level, but the wired
-path — click Save, see a `provider_calls` row appear — has not been exercised. Same root cause as
-[#8]: admin login needs a TOTP code. Folds into that item's browser pass.
+The tenant Payment provider panel, its API route and the call-logging decorator are verified at the
+database and unit level but never clicked. No longer blocked — see #8 for how to get a session —
+just not done.
 
-### 36. The deployed receiver is behind the code
-**From:** the first real payment (2026-08-30) · **Operational**
+### 39. Two invoice filters exist in the API but not the UI
+**From:** SA-3.3 (2026-08-30) · Minor
 
-The first live webhooks resolved to no tenant, and the resolver was not at fault — `main` still
-carries the pre-metadata version of the receiver. Everything since commit `c808d98` (metadata-first
-resolution, the Whop provider, plan mapping) is local only.
+The ticket asked for filters on status, tenant, date range and overdue-only. The screen has status,
+overdue-only and mismatched-only; **tenant and date range are supported by `GET /api/admin/invoices`
+but have no control**. Both are a couple of inputs once there are enough invoices for filtering to
+matter — with two rows it would be furniture.
 
-The stored rows were backfilled by running the current resolver over them, which is what the
-column-level UPDATE grant on `webhook_events` exists for. But **until this deploys, every incoming
-webhook lands with `tenant_id` null** and SA-3.4 will have nothing to attach a payment to.
+### 47. A provider checkout creates no subscription on our side
+**From:** SA-3.9 (2026-08-30) · **Significant — found by the dashboard**
 
-### 34. Events are stored and marked handled, but nothing acts on them
-**From:** SA-3.1 webhook receiver (2026-08-30) · **SA-3.4**
+Your tenant has paid twice through Whop checkout and has **no subscription row**. `subscriptions`
+is empty; `membership.activated` arrived twice and did nothing, because `applyProviderEvent`
+updates an existing subscription and never creates one.
 
-The receiver verifies, stores, deduplicates and marks processed. The step in the middle — turning
-`payment.succeeded` into `subscription active` and rebuilding the entitlement — is a comment
-pointing at SA-3.4.
+Consequences, all visible on the revenue screen: contracted MRR is $0 while $447 has been
+collected, active customers is 0, there is no plan breakdown, and the entitlement engine has
+nothing to resolve — so a paying customer would get no features.
 
-This is safe rather than lossy: the full envelope is in `webhook_events`, so events arriving before
-the handler exists can be replayed once it does. But **nothing is reacting to payments today**, and
-that should not be mistaken for a working billing integration.
+An admin assigning a plan by hand is the only path that currently produces a subscription. Either
+`membership.activated` should create one from the plan metadata Whop returns (which carries
+`insurvas_plan_id` and the cycle, so everything needed is already on the event), or self-serve
+checkout should be closed off until it does.
 
-Two things SA-3.4 must handle that the receiver deliberately left alone:
+### 48. The 2-second / 500-tenant target is unverified
+**From:** SA-3.9 · Unverified
 
-1. **Out-of-order delivery.** Whop does not guarantee ordering — `membership.deactivated` can
-   arrive before the `payment.succeeded` that precedes it. `occurred_at` is stored for exactly this
-   reason but nothing reads it yet. A handler that applies "last received wins" to subscription
-   status will eventually reactivate a cancelled tenant.
-2. **Whether `payment.failed` fires on every one of Whop's five retries** while `invoice.past_due`
-   fires once. Unconfirmed — the docs do not say. Test it in sandbox before choosing the trigger.
+The dashboard reads a snapshot table rather than aggregating live, which is what the target asks
+for, and every figure comes from one indexed table scan over at most 31 rows. But it has never been
+run against 12 months of data and 500 tenants — the same position as [#7], and for the same reason.
+
+### 45. The provider refund call has never been executed
+**From:** SA-3.8 (2026-08-30) · **Unverified**
+
+Everything guarding a refund is verified: the threshold, the pending queue, the self-approval
+refusal (in the route *and* as a database constraint), and that a failed execution is left in
+`failed` with a reason. **The `POST /payments/{id}/refund` call itself has never run.**
+
+Deliberately: the only refundable payments are the two real sandbox charges, and a refund is
+irreversible. `WhopProvider.refund()` is written against the documented endpoint and unit-tested
+against a stubbed fetch, but the live path is unproven — the same status the plan and promo calls
+had before they were exercised, and both turned out to have bugs.
+
+Worth spending $1 of sandbox money on a partial refund to close it.
+
+### 46. Credit balances are never applied automatically
+**From:** SA-3.8 (2026-08-30) · Minor
+
+A credit reaches `tenant_credits.balance_cents`, and `redeemCreditAsFreeDays()` converts it into
+free days on the Whop membership. **Nothing calls that automatically** — there is no control on the
+tenant page and no job. The balance is recorded and visible; turning it into value is a manual step
+that currently has no button.
+
+The ticket's criterion "an unused credit balance is applied to the next invoice automatically and
+shown as its own line" is therefore **unmet**. On automatic billing there is no invoice of ours to
+apply it to before Whop charges; free days are the workable equivalent and they need wiring up.
+
+### 44. Add-ons, overage and proration still do not reach an invoice
+**From:** SA-3.7 (2026-08-30) · **Significant** — supersedes the open half of [#27] and [#41]
+
+SA-3.7 built the machinery both were waiting for: `create_custom_invoice` raises an arbitrary
+invoice from the shared number sequence, and `WhopProvider.createInvoice` sends it for online
+payment. **Nothing calls it for either purpose yet.**
+
+What remains is a job that, at each period rollover, gathers a tenant's attached add-ons, their
+metered overage above the plan allowance, and any pending proration from a mid-period upgrade, and
+raises one custom invoice for the lot. The pieces all exist; assembling them does not.
+
+Until then: a tenant with add-ons is billed for their plan only, overage is free, and a mid-period
+upgrade charges nobody the difference.
+
+### 42. Coupons are creatable but not yet attachable from a screen
+**From:** SA-3.6 (2026-08-30) · Minor
+
+`POST /api/admin/subscriptions/:id/coupon` applies a coupon and `DELETE` removes it, both
+audit-logged and enforced atomically in SQL. **Neither has a control on the tenant page** — the
+Coupons screen creates and lists them, but attaching one to a customer is API-only today.
+
+A picker on the subscription panel, next to add-ons. Small, and worth doing before anyone is asked
+to use coupons in anger.
+
+### 43. Applying a coupon to an ALREADY-RUNNING membership is unverified
+**From:** SA-3.6 (2026-08-30) · **Unverified**
+
+Our side attaches the coupon and the discount appears on the next invoice we generate. Whether the
+customer is actually charged less depends on Whop applying the promo to an existing membership,
+and **that has not been tested**.
+
+Whop documents an `existing_memberships_only` flag "for cancellation retention offers", which
+implies it is possible, but not the mechanism. Until it is confirmed in the sandbox, a coupon
+applied mid-subscription may show a discount on our invoice that the card never received — which
+reconciliation would correctly flag as `mismatched`.
+
+Coupons applied **at checkout** are the verified path.
+
+### 41. Proration is exact, and nothing calls it
+**From:** SA-3.4 (2026-08-30) · **Significant**
+
+`prorate()` produces the ticket's worked example to the cent ($152.61 credit, $275.19 charge, net
+**$122.58**) and is covered by twelve tests. **No code path invokes it.**
+
+The decision was: on a mid-period upgrade, switch our subscription and entitlement immediately,
+schedule the Whop membership to `cancel_at_period_end`, and raise a separate Whop invoice for the
+difference. Only the arithmetic exists. Changing a plan mid-period today moves our side and leaves
+Whop billing the old plan until renewal, and **nobody is charged the difference**.
+
+Needs: `PATCH /memberships/{id}` with `cancel_at_period_end`, a new checkout on the new plan, and
+the difference invoice — which is the same separate-invoice mechanism [#27] needs for add-ons.
+Worth building both at once.
 
 ---
 
 ## ✅ Resolved
 
 *Terse log — details live in git history.*
+
+- **SA-3.9 revenue dashboard** → MRR/ARR/ARPC, churn, plan breakdown and the activation funnel, off
+  a nightly `metrics_daily` snapshot that is re-runnable for any past date. Contracted MRR is shown
+  beside collected, and the gap is called out — which immediately surfaced [#47]. Two funnel steps
+  render as *not instrumented* rather than zero, and are excluded from the biggest-drop-off
+  sentence so it cannot name a step nobody measures.
+- **Payments were only recorded when a subscription already existed** → fixed in SA-3.9. The
+  `recordPayment` call sat after an early return in `applyProviderEvent`, so both real charges were
+  invisible. Moved before the subscription lookup and the two payments backfilled: money arriving
+  is a fact about the tenant, not about our subscription records.
+
+- **SA-3.8 refunds and credit notes** → verified 14/14. The control the ticket exists for is
+  enforced twice: the route refuses a self-approval, and so does a database CHECK constraint that
+  no code path can route around. Approval was exercised through the real HTTP route with a second
+  admin's session, not by writing the row. Credit notes take a `CN-` series from the same gap-free
+  counter as invoices, generalised to (series, year, month) rather than duplicated.
+
+- **#40 The void/mark-paid success path was never exercised through the API** → closed by SA-3.7.
+  Custom invoices are born *issued*, which finally produced an unpaid invoice; `verify:custom`
+  settles one through the real HTTP route with a minted admin session and asserts the subscription
+  reactivates and both actions are audit-logged.
+- **SA-3.7 custom invoices and manual billing** → verified 18/18. Manual billing pauses the Whop
+  membership: confirmed against the sandbox that this flips `payment_collection_paused` to true
+  while leaving `status` as "active" — reading `status` would wrongly suggest the pause failed.
+
+- **SA-3.6 coupons** → Whop promo codes are the real discount, mirrored locally for the UI, the
+  invoice line and the audit trail. The redemption cap, one-coupon-per-subscription and the
+  duration countdown are all enforced in SQL in a single locked transaction, because checking a
+  count and then incrementing it lets two admins both claim the last slot. Verified 13/13,
+  including that a 3-period coupon consumes exactly three periods and then deactivates itself with
+  no scheduled job. **`promo_duration_months: 0` means forever** — checked against the sandbox
+  rather than assumed, since Whop's docs never say.
+
+- **#34 Events stored but nothing acted on them** → SA-3.4. Provider events now drive subscription
+  status and rebuild the entitlement immediately. Out-of-order delivery is handled by discarding
+  any event older than the last one applied, verified with a deliberately stale event that would
+  otherwise have reactivated a failing tenant. `payment.failed` keeps FULL access while Whop
+  retries; read-only starts only when Whop gives up.
+
+- **SA-3.3 invoice screens** → list with totals strip, detail, print view and void. The strip's
+  numbers are derived from the same rows the filters read, so "the overdue filter matches the strip"
+  is true by construction rather than by two calculations agreeing. Verified in a real browser
+  against real data: mismatched filter 1 = strip 1, overdue 0 = strip 0. `INV-2026-08-0001` renders
+  its $99-vs-$198 disagreement, and Void is correctly refused on it because it was paid.
+
+- **SA-3.2 invoice generation** → built and verified. Numbering is gap-free via a counter row
+  updated in the invoice's own transaction, **not** a Postgres SEQUENCE — `nextval` does not roll
+  back, so a failed invoice would burn its number permanently. Generation is idempotent on
+  `(provider, provider_payment_id)`, which is what makes Whop's at-least-once delivery safe.
+  Verified end to end by replaying a real stored Whop payload: `INV-2026-08-0001`, ours 24900 =
+  provider 24900, matched.
+
+- **SA-3.1 proven end to end (2026-08-30).** A second sandbox payment on `plan_b` — whose Whop plan
+  was created entirely by the corrected code rather than patched by hand — charged **$249.00 for a
+  $249.00 plan**, once. The earlier `plan_a` purchase charged $198 for a $99 plan under the
+  `initial_price` bug. Tenant resolved automatically from metadata on both `payment.succeeded` and
+  `membership.activated`, with no backfill.
 
 - **#33 Whop payload shapes unseen** → closed 2026-08-30 against three real sandbox events.
   `data.metadata.tenant_id` arrives exactly as sent and resolves to the right tenant on both

@@ -3,6 +3,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import { verifyWhopSignature } from "@/lib/payments/whop/verify";
 import { isSubscribedEvent, parseEnvelope } from "@/lib/payments/whop/events";
 import { markFailed, markProcessed, recordWebhookEvent } from "@/lib/payments/whop/store";
+import { createInvoiceFromPayment } from "@/lib/invoices/generate";
+import { applyProviderEvent } from "@/lib/subscriptions/applyProviderEvent";
 
 // This route must read the raw body to verify the signature, so it cannot be statically analysed
 // or cached.
@@ -67,9 +69,23 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    // SA-3.4 fills this in: the event becomes subscription state and the entitlement is rebuilt.
-    // Until then the event is captured in full, so nothing is lost by the handler not existing —
-    // webhook_events can be replayed once the handler lands.
+    if (envelope.type === "payment.succeeded") {
+      // SA-3.2. Idempotent on the provider payment id, so a redelivery cannot bill twice.
+      const invoice = await createInvoiceFromPayment(envelope, stored.tenantId);
+      if (invoice?.created) {
+        console.log(`[whop-webhook] invoice ${invoice.number} created (${invoice.reconciliation})`);
+      }
+    }
+
+    // SA-3.4. The invoice records what was billed; this decides what the tenant may now do.
+    // Ordering-guarded inside, because Whop does not deliver events in order.
+    const outcome = await applyProviderEvent(envelope, stored.tenantId);
+    if (outcome.applied) {
+      console.log(
+        `[whop-webhook] tenant ${stored.tenantId}: ${outcome.previousStatus} -> ${outcome.newStatus} (${envelope.type})`,
+      );
+    }
+
     await markProcessed(stored.id);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

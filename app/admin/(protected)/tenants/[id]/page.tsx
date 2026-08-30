@@ -16,6 +16,7 @@ import { SubscriptionPanel } from "@/components/admin/subscription-panel";
 import { AddonsPanel } from "@/components/admin/addons-panel";
 import { fetchAddons, fetchAttachedAddons, fetchAvailableAddonIds } from "@/lib/addons/queries";
 import { PaymentProviderPanel } from "@/components/admin/payment-provider-panel";
+import { BillingModePanel } from "@/components/admin/billing-mode-panel";
 import { canManagePaymentProviders } from "@/lib/payments/permissions";
 import { fetchProviderSettings, fetchRecentProviderCalls } from "@/lib/payments/queries";
 import { fetchTenantProviderRecord } from "@/lib/payments/registry";
@@ -32,7 +33,7 @@ export default async function TenantDetailPage({ params }: { params: Promise<{ i
 
   const { data: tenant } = await supabase
     .from("tenants")
-    .select("id, name, status, plan_code, onboarding_state, created_at")
+    .select("id, name, status, plan_code, onboarding_state, created_at, billing_mode")
     .eq("id", id)
     .maybeSingle();
 
@@ -132,6 +133,10 @@ export default async function TenantDetailPage({ params }: { params: Promise<{ i
             </p>
           </CardContent>
         </Card>
+      )}
+
+      {showPaymentProvider && (
+        <BillingModePanel tenantId={id} mode={tenant.billing_mode as "automatic" | "manual"} />
       )}
 
       {showPaymentProvider && (

@@ -42,6 +42,312 @@ export type Database = {
         };
         Relationships: [];
       };
+      metrics_daily: {
+        Row: {
+          active_customers: number;
+          arr_cents: number;
+          churned_customers: number;
+          churned_mrr_cents: number;
+          collected_cents: number;
+          computed_at: string;
+          contraction_mrr_cents: number;
+          date: string;
+          expansion_mrr_cents: number;
+          mrr_cents: number;
+          new_customers: number;
+          new_mrr_cents: number;
+          plan_breakdown: Json;
+          trials_active: number;
+        };
+        Insert: {
+          active_customers?: number;
+          arr_cents?: number;
+          churned_customers?: number;
+          churned_mrr_cents?: number;
+          collected_cents?: number;
+          computed_at?: string;
+          contraction_mrr_cents?: number;
+          date: string;
+          expansion_mrr_cents?: number;
+          mrr_cents?: number;
+          new_customers?: number;
+          new_mrr_cents?: number;
+          plan_breakdown?: Json;
+          trials_active?: number;
+        };
+        Update: Record<string, never>;
+        Relationships: [];
+      };
+      credit_notes: {
+        Row: {
+          amount_cents: number;
+          approved_at: string | null;
+          approved_by: string | null;
+          created_at: string;
+          failure_reason: string | null;
+          id: string;
+          invoice_id: string | null;
+          number: string;
+          provider_refund_id: string | null;
+          reason_code: Database["public"]["Enums"]["credit_reason"];
+          reason_text: string | null;
+          rejected_reason: string | null;
+          requested_by: string | null;
+          status: Database["public"]["Enums"]["credit_note_status"];
+          tenant_id: string;
+          type: Database["public"]["Enums"]["credit_note_type"];
+        };
+        Insert: {
+          amount_cents: number;
+          approved_at?: string | null;
+          approved_by?: string | null;
+          created_at?: string;
+          failure_reason?: string | null;
+          id?: string;
+          invoice_id?: string | null;
+          number: string;
+          provider_refund_id?: string | null;
+          reason_code: Database["public"]["Enums"]["credit_reason"];
+          reason_text?: string | null;
+          rejected_reason?: string | null;
+          requested_by?: string | null;
+          status?: Database["public"]["Enums"]["credit_note_status"];
+          tenant_id: string;
+          type: Database["public"]["Enums"]["credit_note_type"];
+        };
+        // Only progress through approval and the provider is updatable; the amount, type, reason
+        // and number are fixed once raised.
+        Update: {
+          approved_at?: string | null;
+          approved_by?: string | null;
+          failure_reason?: string | null;
+          provider_refund_id?: string | null;
+          rejected_reason?: string | null;
+          status?: Database["public"]["Enums"]["credit_note_status"];
+        };
+        Relationships: [];
+      };
+      tenant_credits: {
+        Row: { balance_cents: number; tenant_id: string; updated_at: string };
+        Insert: { balance_cents?: number; tenant_id: string; updated_at?: string };
+        Update: { balance_cents?: number; updated_at?: string };
+        Relationships: [];
+      };
+      coupons: {
+        Row: {
+          amount_off_cents: number | null;
+          billing_cycle: Database["public"]["Enums"]["billing_cycle"] | null;
+          code: string;
+          created_at: string;
+          created_by: string | null;
+          discount_type: Database["public"]["Enums"]["discount_type"];
+          duration: Database["public"]["Enums"]["coupon_duration"];
+          duration_periods: number | null;
+          expires_at: string | null;
+          id: string;
+          is_active: boolean;
+          max_redemptions: number | null;
+          percent_off: number | null;
+          redeemed_count: number;
+          restricted_to_plan_ids: string[] | null;
+          whop_promo_code_id: string | null;
+        };
+        Insert: {
+          amount_off_cents?: number | null;
+          billing_cycle?: Database["public"]["Enums"]["billing_cycle"] | null;
+          code: string;
+          created_at?: string;
+          created_by?: string | null;
+          discount_type: Database["public"]["Enums"]["discount_type"];
+          duration: Database["public"]["Enums"]["coupon_duration"];
+          duration_periods?: number | null;
+          expires_at?: string | null;
+          id?: string;
+          is_active?: boolean;
+          max_redemptions?: number | null;
+          percent_off?: number | null;
+          redeemed_count?: number;
+          restricted_to_plan_ids?: string[] | null;
+          whop_promo_code_id?: string | null;
+        };
+        Update: {
+          is_active?: boolean;
+          redeemed_count?: number;
+          whop_promo_code_id?: string | null;
+        };
+        Relationships: [];
+      };
+      subscription_coupons: {
+        Row: {
+          applied_at: string;
+          applied_by: string | null;
+          coupon_id: string;
+          id: string;
+          is_active: boolean;
+          periods_remaining: number | null;
+          removed_at: string | null;
+          subscription_id: string;
+        };
+        Insert: {
+          applied_at?: string;
+          applied_by?: string | null;
+          coupon_id: string;
+          id?: string;
+          is_active?: boolean;
+          periods_remaining?: number | null;
+          removed_at?: string | null;
+          subscription_id: string;
+        };
+        Update: {
+          is_active?: boolean;
+          periods_remaining?: number | null;
+          removed_at?: string | null;
+        };
+        Relationships: [];
+      };
+      payments: {
+        Row: {
+          amount_cents: number;
+          created_at: string;
+          currency: string;
+          id: string;
+          invoice_id: string | null;
+          manual_reference: string | null;
+          method: Database["public"]["Enums"]["payment_method"];
+          paid_at: string;
+          provider: string | null;
+          provider_charge_id: string | null;
+          recorded_by: string | null;
+          status: Database["public"]["Enums"]["payment_status"];
+          tenant_id: string;
+        };
+        Insert: {
+          amount_cents: number;
+          created_at?: string;
+          currency?: string;
+          id?: string;
+          invoice_id?: string | null;
+          manual_reference?: string | null;
+          method: Database["public"]["Enums"]["payment_method"];
+          paid_at?: string;
+          provider?: string | null;
+          provider_charge_id?: string | null;
+          recorded_by?: string | null;
+          status?: Database["public"]["Enums"]["payment_status"];
+          tenant_id: string;
+        };
+        // Only status is updatable — the amount, method and references are fixed once recorded.
+        Update: { status?: Database["public"]["Enums"]["payment_status"] };
+        Relationships: [];
+      };
+      invoices: {
+        Row: {
+          created_at: string;
+          created_by: string | null;
+          kind: Database["public"]["Enums"]["invoice_kind"];
+          pay_online_url: string | null;
+          provider_invoice_id: string | null;
+          reason: string | null;
+          currency: string;
+          discount_cents: number;
+          due_at: string | null;
+          id: string;
+          issued_at: string | null;
+          number: string;
+          paid_at: string | null;
+          period_end: string | null;
+          period_start: string | null;
+          provider: string | null;
+          provider_payment_id: string | null;
+          provider_total_cents: number | null;
+          reconciliation: string;
+          status: Database["public"]["Enums"]["invoice_status"];
+          subscription_id: string | null;
+          subtotal_cents: number;
+          tax_cents: number;
+          tenant_id: string;
+          total_cents: number;
+          void_reason: string | null;
+          voided_at: string | null;
+        };
+        Insert: {
+          created_at?: string;
+          created_by?: string | null;
+          kind?: Database["public"]["Enums"]["invoice_kind"];
+          pay_online_url?: string | null;
+          provider_invoice_id?: string | null;
+          reason?: string | null;
+          currency?: string;
+          discount_cents?: number;
+          due_at?: string | null;
+          id?: string;
+          issued_at?: string | null;
+          number: string;
+          paid_at?: string | null;
+          period_end?: string | null;
+          period_start?: string | null;
+          provider?: string | null;
+          provider_payment_id?: string | null;
+          provider_total_cents?: number | null;
+          reconciliation?: string;
+          status?: Database["public"]["Enums"]["invoice_status"];
+          subscription_id?: string | null;
+          subtotal_cents?: number;
+          tax_cents?: number;
+          tenant_id: string;
+          total_cents?: number;
+          void_reason?: string | null;
+          voided_at?: string | null;
+        };
+        // Only the lifecycle columns are updatable — the money, the period and the number have
+        // UPDATE revoked, so an issued invoice cannot be rewritten by any route.
+        Update: {
+          pay_online_url?: string | null;
+          provider_invoice_id?: string | null;
+          paid_at?: string | null;
+          reconciliation?: string;
+          status?: Database["public"]["Enums"]["invoice_status"];
+          void_reason?: string | null;
+          voided_at?: string | null;
+        };
+        Relationships: [];
+      };
+      invoice_lines: {
+        Row: {
+          amount_cents: number;
+          created_at: string;
+          id: string;
+          included_qty: number | null;
+          invoice_id: string;
+          kind: Database["public"]["Enums"]["invoice_line_kind"];
+          label: string;
+          position: number;
+          quantity: number;
+          unit_cents: number;
+        };
+        Insert: {
+          amount_cents: number;
+          created_at?: string;
+          id?: string;
+          included_qty?: number | null;
+          invoice_id: string;
+          kind: Database["public"]["Enums"]["invoice_line_kind"];
+          label: string;
+          position?: number;
+          quantity?: number;
+          unit_cents?: number;
+        };
+        // UPDATE and DELETE are both revoked: a line on an issued invoice is never edited or
+        // removed. A correction is a credit line.
+        Update: Record<string, never>;
+        Relationships: [];
+      };
+      invoice_counters: {
+        Row: { series: string; year: number; month: number; next_number: number };
+        Insert: { series?: string; year: number; month: number; next_number?: number };
+        Update: { series?: string; year?: number; month?: number; next_number?: number };
+        Relationships: [];
+      };
       whop_plans: {
         Row: {
           billing_cycle: Database["public"]["Enums"]["billing_cycle"];
@@ -594,6 +900,8 @@ export type Database = {
           current_period_end: string | null;
           current_period_start: string;
           id: string;
+          last_provider_event_at: string | null;
+          whop_membership_id: string | null;
           pending_plan_id: string | null;
           plan_id: string;
           started_at: string;
@@ -610,6 +918,8 @@ export type Database = {
           current_period_end?: string | null;
           current_period_start?: string;
           id?: string;
+          last_provider_event_at?: string | null;
+          whop_membership_id?: string | null;
           pending_plan_id?: string | null;
           plan_id: string;
           started_at?: string;
@@ -626,6 +936,8 @@ export type Database = {
           current_period_end?: string | null;
           current_period_start?: string;
           id?: string;
+          last_provider_event_at?: string | null;
+          whop_membership_id?: string | null;
           pending_plan_id?: string | null;
           plan_id?: string;
           started_at?: string;
@@ -715,6 +1027,7 @@ export type Database = {
       };
       tenants: {
         Row: {
+          billing_mode: Database["public"]["Enums"]["billing_mode"];
           created_at: string;
           id: string;
           name: string;
@@ -724,6 +1037,7 @@ export type Database = {
           suspended_at: string | null;
         };
         Insert: {
+          billing_mode?: Database["public"]["Enums"]["billing_mode"];
           created_at?: string;
           id?: string;
           name: string;
@@ -733,6 +1047,7 @@ export type Database = {
           suspended_at?: string | null;
         };
         Update: {
+          billing_mode?: Database["public"]["Enums"]["billing_mode"];
           created_at?: string;
           id?: string;
           name?: string;
@@ -911,6 +1226,84 @@ export type Database = {
         Args: { p_subscription_addon_id: string };
         Returns: boolean;
       };
+      create_invoice_for_payment: {
+        Args: {
+          p_tenant_id: string;
+          p_subscription_id: string | null;
+          p_provider: string;
+          p_provider_payment_id: string;
+          p_provider_total_cents: number | null;
+          p_period_start: string | null;
+          p_period_end: string | null;
+          p_paid_at: string | null;
+          p_lines: Json;
+        };
+        Returns: { invoice_id: string; number: string; created: boolean; reconciliation: string }[];
+      };
+      compute_metrics_for_date: {
+        Args: { p_date: string };
+        Returns: Database["public"]["Tables"]["metrics_daily"]["Row"];
+      };
+      monthly_equivalent_cents: {
+        Args: { p_plan_id: string; p_cycle: Database["public"]["Enums"]["billing_cycle"] };
+        Returns: number;
+      };
+      request_credit_note: {
+        Args: {
+          p_tenant_id: string;
+          p_invoice_id: string | null;
+          p_type: Database["public"]["Enums"]["credit_note_type"];
+          p_amount_cents: number;
+          p_reason_code: Database["public"]["Enums"]["credit_reason"];
+          p_reason_text: string | null;
+          p_requested_by: string;
+          p_threshold_cents: number;
+        };
+        Returns: {
+          credit_note_id: string;
+          number: string;
+          status: Database["public"]["Enums"]["credit_note_status"];
+        }[];
+      };
+      adjust_tenant_credit: {
+        Args: { p_tenant_id: string; p_delta_cents: number };
+        Returns: number;
+      };
+      allocate_document_number: {
+        Args: { p_series: string; p_at: string };
+        Returns: string;
+      };
+      create_custom_invoice: {
+        Args: {
+          p_tenant_id: string;
+          p_subscription_id: string | null;
+          p_reason: string;
+          p_due_at: string | null;
+          p_created_by: string | null;
+          p_lines: Json;
+        };
+        Returns: { invoice_id: string; number: string; total_cents: number }[];
+      };
+      mark_overdue_invoices: {
+        Args: Record<string, never>;
+        Returns: number;
+      };
+      admin_apply_coupon: {
+        Args: { p_subscription_id: string; p_coupon_id: string; p_applied_by: string };
+        Returns: string;
+      };
+      consume_coupon_period: {
+        Args: { p_subscription_id: string };
+        Returns: number;
+      };
+      claim_coupon_redemption: {
+        Args: { p_coupon_id: string };
+        Returns: string;
+      };
+      allocate_invoice_number: {
+        Args: { p_at: string };
+        Returns: string;
+      };
       refresh_tenant_entitlement: {
         Args: { p_tenant_id: string };
         Returns: Json;
@@ -1051,6 +1444,17 @@ export type Database = {
       admin_role: "super_admin" | "support_agent" | "billing_admin" | "platform_config";
       audit_actor_type: "admin" | "system";
       billing_cycle: "monthly" | "quarterly" | "yearly";
+      invoice_status: "draft" | "issued" | "paid" | "overdue" | "void" | "uncollectible";
+      invoice_line_kind: "plan" | "addon" | "overage" | "discount" | "setup_fee" | "credit";
+      billing_mode: "automatic" | "manual";
+      credit_note_type: "refund" | "credit" | "waiver";
+      credit_note_status: "pending_approval" | "approved" | "processing" | "succeeded" | "failed" | "rejected";
+      credit_reason: "duplicate_charge" | "service_issue" | "goodwill" | "billing_error" | "cancellation" | "other";
+      invoice_kind: "subscription" | "custom";
+      discount_type: "percent" | "fixed";
+      coupon_duration: "once" | "n_periods" | "forever";
+      payment_method: "provider" | "manual_bank_transfer";
+      payment_status: "succeeded" | "failed" | "pending" | "refunded";
       login_actor_type: "user" | "admin";
       plan_type: "individual" | "agency_no_teams" | "agency_with_teams" | "management";
       subscription_status:

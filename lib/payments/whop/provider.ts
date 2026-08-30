@@ -4,7 +4,7 @@
 // Whop hosts checkout and raises charges itself, so we never originate one. That absence is the
 // honest shape of a hosted-checkout provider, not a gap.
 
-import { WhopClient, centsToWhopAmount, extractCheckoutUrl, idempotencyKey } from "./client.ts";
+import { WhopClient, centsToWhopAmount, extractCheckoutUrl, idempotencyKey, whopAmountToCents } from "./client.ts";
 import { ProviderUnsupportedError } from "../types.ts";
 import type {
   CheckoutSession,
@@ -171,5 +171,168 @@ export class WhopProvider implements PaymentProvider {
       productId: typeof response.product_id === "string" ? response.product_id : null,
       purchaseUrl,
     };
+  }
+
+  /**
+   * Creates the Whop promo code that actually reduces what the card is charged (SA-3.6).
+   *
+   * `durationMonths` is months, not billing periods — Whop counts in months and our plans do not
+   * always bill monthly, so the translation happens in lib/coupons/discount.ts before this call.
+   */
+  async createPromoCode(input: {
+    code: string;
+    companyId: string;
+    discountType: "percent" | "fixed";
+    /** Percent (e.g. 50) for percent, or DOLLARS off for fixed — Whop takes decimal currency. */
+    amountOff: number;
+    durationMonths: number;
+    expiresAt?: string | null;
+    maxRedemptions?: number | null;
+    planIds?: string[];
+  }): Promise<{ promoCodeId: string; code: string }> {
+    const body: Record<string, unknown> = {
+      code: input.code,
+      company_id: input.companyId,
+      promo_type: input.discountType === "percent" ? "percentage" : "flat_amount",
+      amount_off: input.amountOff,
+      base_currency: "usd",
+      new_users_only: false,
+      promo_duration_months: input.durationMonths,
+      ...(input.expiresAt ? { expires_at: input.expiresAt } : {}),
+      ...(input.planIds && input.planIds.length > 0 ? { plan_ids: input.planIds } : {}),
+    };
+
+    if (input.maxRedemptions && input.maxRedemptions > 0) {
+      body.stock = input.maxRedemptions;
+      body.unlimited_stock = false;
+    } else {
+      body.unlimited_stock = true;
+    }
+
+    const response = await this.client.request<Record<string, unknown>>(
+      "POST",
+      "/promo_codes",
+      body,
+      idempotencyKey(`promo_${input.code}`, body),
+    );
+
+    if (typeof response.id !== "string") {
+      throw new Error(`Whop promo creation returned no id. Keys: ${Object.keys(response).join(", ")}`);
+    }
+
+    return { promoCodeId: response.id, code: input.code };
+  }
+
+  /**
+   * Raises an invoice at Whop and has them send it (SA-3.7).
+   *
+   * `send_invoice` rather than `charge_automatically`: a custom invoice is usually a negotiated
+   * amount the customer has not authorised, and charging a stored card for it is how disputes
+   * start. Whop emails it and hosts the pay page.
+   */
+  async createInvoice(input: {
+    companyId: string;
+    memberId: string;
+    amountCents: number;
+    description: string;
+    dueAt?: string | null;
+  }): Promise<{ invoiceId: string; payOnlineUrl: string | null }> {
+    const body: Record<string, unknown> = {
+      company_id: input.companyId,
+      collection_method: "send_invoice",
+      member_id: input.memberId,
+      // A one-off invoice is a plan with no recurrence: a price and nothing to renew.
+      plan: {
+        initial_price: centsToWhopAmount(input.amountCents),
+        currency: "usd",
+        description: input.description,
+      },
+      ...(input.dueAt ? { due_date: input.dueAt } : {}),
+    };
+
+    const response = await this.client.request<Record<string, unknown>>(
+      "POST",
+      "/invoices",
+      body,
+      idempotencyKey(`invoice_${input.memberId}`, body),
+    );
+
+    let payOnlineUrl: string | null = null;
+    for (const key of ["pay_online_url", "hosted_invoice_url", "purchase_url"]) {
+      const value = response[key];
+      if (typeof value === "string" && value) {
+        payOnlineUrl = value;
+        break;
+      }
+    }
+
+    if (typeof response.id !== "string") {
+      throw new Error(`Whop invoice creation returned no id. Keys: ${Object.keys(response).join(", ")}`);
+    }
+
+    return { invoiceId: response.id, payOnlineUrl };
+  }
+
+  /**
+   * Stops Whop collecting, without ending the membership.
+   *
+   * Verified against the sandbox: pausing flips `payment_collection_paused` to true and leaves
+   * `status` as "active" with the renewal date untouched — the customer keeps access and is not
+   * charged, which is exactly what manual billing needs. Note that `status` is NOT the field to
+   * check; it does not move, and reading it would suggest the pause had failed.
+   */
+  async pauseMembership(membershipId: string): Promise<void> {
+    await this.client.request("POST", `/memberships/${encodeURIComponent(membershipId)}/pause`, {});
+  }
+
+  async resumeMembership(membershipId: string): Promise<void> {
+    await this.client.request("POST", `/memberships/${encodeURIComponent(membershipId)}/resume`, {});
+  }
+
+  /**
+   * What the provider says is still refundable on a payment (SA-3.8).
+   *
+   * Asked before every refund rather than trusting our own invoice total: Whop knows what was
+   * actually collected and what has already been returned, and refunding against our figure would
+   * let a second refund through on a payment Whop has already partly refunded.
+   */
+  async getRefundability(chargeId: string): Promise<{
+    refundable: boolean;
+    totalCents: number;
+    refundedCents: number;
+    remainingCents: number;
+  }> {
+    const payment = await this.client.request<Record<string, unknown>>(
+      "GET",
+      `/payments/${encodeURIComponent(chargeId)}`,
+    );
+
+    const toCents = (value: unknown) =>
+      typeof value === "number" || typeof value === "string" ? whopAmountToCents(value) : 0;
+
+    const totalCents = toCents(payment.total);
+    const refundedCents = toCents(payment.refunded_amount);
+
+    return {
+      refundable: payment.refundable === true,
+      totalCents,
+      refundedCents,
+      remainingCents: Math.max(0, totalCents - refundedCents),
+    };
+  }
+
+  /**
+   * Extends a membership's billing period, which is how a credit reaches a customer whose charge
+   * we cannot reduce. Whop bills the plan price regardless; days they are not billed for are worth
+   * the same to them.
+   */
+  async addFreeDays(membershipId: string, days: number): Promise<void> {
+    if (!Number.isInteger(days) || days <= 0) throw new Error(`days must be a positive integer, got ${days}`);
+    await this.client.request(
+      "POST",
+      `/memberships/${encodeURIComponent(membershipId)}/add_free_days`,
+      { days },
+      idempotencyKey(`freedays_${membershipId}`, { days }),
+    );
   }
 }

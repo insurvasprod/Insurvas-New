@@ -17,7 +17,14 @@
     "verify:entitlements": "node --env-file=.env.local scripts/verify-entitlements.mjs",
     "verify:payments": "node --experimental-strip-types --env-file=.env.local scripts/verify-payment-provider.mjs",
     "verify:webhook": "node --env-file=.env.local scripts/verify-whop-webhook.mjs",
-    "whop:sync-plan": "node --experimental-strip-types --env-file=.env.local scripts/whop-sync-plan.mjs"
+    "verify:invoices": "node --env-file=.env.local scripts/verify-invoices.mjs",
+    "verify:events": "node --env-file=.env.local scripts/verify-subscription-events.mjs",
+    "whop:sync-plan": "node --experimental-strip-types --env-file=.env.local scripts/whop-sync-plan.mjs",
+    "verify:coupons": "node --env-file=.env.local scripts/verify-coupons.mjs",
+    "mark:overdue": "node --env-file=.env.local scripts/mark-overdue-invoices.mjs",
+    "verify:custom": "node --env-file=.env.local scripts/verify-custom-invoices.mjs",
+    "verify:credits": "node --env-file=.env.local scripts/verify-credit-notes.mjs",
+    "metrics:build": "node --env-file=.env.local scripts/build-metrics.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.99.0",
