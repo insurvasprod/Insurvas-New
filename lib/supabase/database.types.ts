@@ -890,6 +890,39 @@ export type Database = {
         };
         Relationships: [];
       };
+      // HAND-ADDED by SA-4.1, not generated. The `settings` table ships in
+      // supabase/migrations/0001_settings.sql; regenerate this file once that migration has been
+      // applied to the project and this block should come back identical.
+      settings: {
+        Row: {
+          key: string;
+          value: Json;
+          type: string;
+          label: string;
+          group: string;
+          updated_by: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          key: string;
+          value: Json;
+          type: string;
+          label: string;
+          group: string;
+          updated_by?: string | null;
+          updated_at?: string;
+        };
+        Update: {
+          key?: string;
+          value?: Json;
+          type?: string;
+          label?: string;
+          group?: string;
+          updated_by?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       subscriptions: {
         Row: {
           billing_cycle: Database["public"]["Enums"]["billing_cycle"];

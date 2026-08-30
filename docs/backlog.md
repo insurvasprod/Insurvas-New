@@ -26,6 +26,74 @@ password, directly-created users get an invite link.
 
 ## 🟠 Descoped by decision
 
+### 53. Nine of the eleven settings the ticket lists were not created
+**From:** SA-4.1 · **Decided while building, 2026-08-30**
+
+SA-4.1 names eleven keys under *"Settings needed by the tasks above."* Two of them exist. The store
+holds four keys in total — the other two were added because they have real consumers that the
+ticket did not anticipate.
+
+**Created, and read by something today:**
+`users.invite_expiry_hours` · `platform.default_currency` ·
+`billing.refund_approval_threshold_cents` (added, from SA-3.8) ·
+`usage.warn_percent` (added, from SA-2.5)
+
+**Not created, and why:**
+
+- `billing.dunning_steps_days`, `billing.suspend_after_days`, `billing.cancel_after_days` — SA-3.5
+  was cancelled because Whop runs its own dunning on its own schedule. These three describe a
+  ladder this platform does not operate. Creating them would put three controls on a screen that
+  change nothing, and the next person would wire something to them to make them true.
+- `billing.default_trial_days` — `plan_prices.trial_days` already owns trial length, per plan,
+  which is finer-grained and already used. A global default would be a second answer to a question
+  that already has one.
+- `billing.invoice_due_days` — there is no due-date default to configure. `due_at` is nullable and
+  set per invoice by the admin raising it (SA-3.7); nothing computes one.
+- `billing.invoice_number_prefix` — the `INV` prefix is inside the SQL function
+  `allocate_invoice_number`, not in application code. It could be made configurable, but changing
+  a prefix partway through a sequence is exactly what SA-3.2's "sequential, no gaps" requirement
+  exists to prevent, so it should stay fixed unless somebody argues otherwise.
+- `users.soft_delete_days` — soft delete does not exist. Delete was descoped (#14 above).
+- `users.session_idle_hours` — no idle timeout is implemented anywhere. Session lifetime is a
+  fixed 12h TTL baked into the token at signing, which is a different thing (see #50).
+- `platform.maintenance_mode` — SA-4.12 owns maintenance mode and needs three states, not a
+  boolean. A boolean here would have to be migrated away the moment that ticket starts.
+
+The governing rule, applied throughout: **a setting nothing reads is worse than no setting.** It
+looks like a control, changes nothing, and invites someone to make it real later for the wrong
+reason. Each key above becomes one registry entry plus one call site on the day something actually
+reads it — the machinery is built and tested.
+
+**Fix:** none. Recorded so that the gap between the ticket's list and the store is a decision on
+the record rather than something that looks like an oversight.
+
+### 50. The hardcoded-constant sweep is deliberately partial
+**From:** SA-4.1 · **Decided while building, 2026-08-30**
+
+SA-4.1's first acceptance criterion is *"no dunning day, trial length or expiry window is hardcoded
+anywhere in SA-1 to SA-3."* Three constants moved into the store: the invitation link lifetime, the
+refund approval threshold, and the usage warning threshold. Several others were examined and
+deliberately left in code, so the criterion passes for what it names and does not pass as a blanket
+statement about every constant in the codebase.
+
+**Left in code as security parameters.** The admin and tenant session lifetimes, the pending-2FA
+window, and the webhook replay tolerance. A settings row that lengthens a session or widens a
+replay window is a privilege-escalation lever available to anyone who can edit settings. The
+session lifetime is also baked into the token when it is signed, so a settings row would look like
+a live control and change nothing for anyone already logged in — worse than no control at all.
+
+**Left in code as definitions rather than tunables.** The billing period lengths, which must agree
+with what the payment provider actually charges. A configurable value that disagrees with the
+provider mis-bills people silently.
+
+**Left in code as rendering details.** The users, login-activity and audit-log page sizes. They are
+imported by client components, so moving them would mean threading a server value through three
+tables for no operational benefit, and a page size that changed mid-session would break the
+pagination arithmetic already on the screen.
+
+**Fix:** none needed unless the product wants one of these tunable, in which case it is one registry
+entry plus a call site — the machinery is built.
+
 ### 14. Delete user — not built
 **From:** SA-1.4 · **Descoped by user on 2026-08-29:** *"we will only do inactive"*
 
@@ -117,6 +185,27 @@ entitlement engine. The grant is correct in the database; nothing reads it yet.
 
 ## 🔵 Unverified
 
+### 49. The settings store has never written a row
+**From:** SA-4.1 · **Belongs to:** SA-4.1, finishing it
+
+`supabase/migrations/0001_settings.sql` has not been applied to the project. The app connects as
+`tenant_app`, which cannot create tables — correctly, because that role is the one tenant isolation
+depends on — so applying it needs somebody with admin access to run the file in the Supabase SQL
+editor.
+
+Everything around the missing table behaves correctly and was checked in a browser: the screen
+renders every value from its coded default, a save fails with "Could not save this setting" and
+keeps what was typed, and the server logs one clear line rather than throwing. That is the
+fallback path proven under the harshest condition there is — the whole table absent, not just one
+key.
+
+What is therefore **unproven**: that a saved value survives a round trip, that the audit row
+records the old and new value, that the cache invalidates so the next request sees the change, and
+that a second admin sees it too. Those are four of the ticket's acceptance criteria and none can be
+tested until the migration runs.
+
+**Fix:** apply the migration, then re-run the settings screen end to end.
+
 ### 7. Users list performance at scale — NOT verified
 **From:** SA-1.1 · **User opted out on 2026-08-29**
 
@@ -170,6 +259,36 @@ broke the first Vercel deploy.
 ---
 
 ## ⚪ Tech debt
+
+### 51. The settings cache only invalidates on the instance that wrote
+**From:** SA-4.1 · Minor, bounded
+
+The read helper caches overrides in memory and clears that cache when a setting is saved. On a
+single server that is exact. On serverless every running instance holds its own copy, and only the
+one that handled the write clears it — so another instance keeps serving the old value until its
+own copy ages out.
+
+The staleness is bounded to thirty seconds by a TTL, which is why this is minor rather than a bug:
+nobody notices a thirty-second delay on a value that changes a few times a year. It is recorded
+because the failure mode is confusing rather than visible — two admins on two instances briefly
+disagreeing about a number, with nothing on screen to explain why.
+
+**Fix, if it ever matters:** a short-lived shared cache, or drop the in-memory layer and accept one
+indexed lookup per read.
+
+### 52. Every admin screen scrolls sideways below about 870px
+**From:** SA-4.1's front-end QA · **Belongs to:** a layout pass, not one ticket
+
+The admin shell is a fixed 240px sidebar plus a main area with fixed padding, and neither responds
+to width. Measured in a browser at a 560px viewport: the feature catalog needs 864px and overflows
+by 304, the new settings screen needs 608 and overflows by 48. So this is a property of the shell
+rather than of any one page, and it predates SA-4.1.
+
+It does not matter today — the product is used at a desk on a wide screen, and SA-00 scoped it that
+way. It is recorded because LA-0.1's acceptance criteria explicitly require the agent app to be
+desktop-first *without breaking on a phone*, and that app inherits this shell.
+
+**Fix:** a collapsible sidebar below a breakpoint, which is a single change in the admin layout.
 
 ### 11. `middleware.ts` uses a deprecated convention
 **From:** SA-0.3

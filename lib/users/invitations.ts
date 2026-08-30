@@ -1,7 +1,16 @@
 import "server-only";
 import { createHash, randomBytes } from "node:crypto";
 
-export const INVITE_TTL_HOURS = 72;
+import { inviteExpiryHours } from "@/lib/settings/queries";
+
+/**
+ * The coded default, kept so the store can be unreachable without breaking invitations.
+ *
+ * SA-4.1 moved the live value into `users.invite_expiry_hours`. Read it through
+ * `inviteExpiryFromNow()` rather than using this — a link built from the constant while the
+ * setting says something else expires at a time nobody expects.
+ */
+export const DEFAULT_INVITE_TTL_HOURS = 72;
 
 /** 32 random bytes, base64url-encoded. This is what goes in the link and is never stored. */
 export function generateInviteToken(): string {
@@ -16,8 +25,15 @@ export function hashInviteToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
 }
 
-export function inviteExpiryFromNow(): Date {
-  return new Date(Date.now() + INVITE_TTL_HOURS * 60 * 60 * 1000);
+/**
+ * Async since SA-4.1, because the lifetime is now a setting rather than a constant.
+ *
+ * Resolved at issue time and baked into the row, so shortening the window never retroactively
+ * expires a link somebody has already been sent.
+ */
+export async function inviteExpiryFromNow(): Promise<Date> {
+  const hours = await inviteExpiryHours();
+  return new Date(Date.now() + hours * 60 * 60 * 1000);
 }
 
 export function buildInviteUrl(token: string, origin: string): string {

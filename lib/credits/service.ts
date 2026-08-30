@@ -10,8 +10,8 @@ import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { buildProvider } from "@/lib/payments/registry";
 import { WhopProvider } from "@/lib/payments/whop/provider";
 import { rebuildEntitlement } from "@/lib/entitlements/rebuild";
+import { refundApprovalThresholdCents } from "@/lib/settings/queries";
 import {
-  REFUND_APPROVAL_THRESHOLD_CENTS,
   approvalRefusalReason,
   creditBalanceDelta,
   creditToFreeDays,
@@ -92,6 +92,10 @@ export async function requestCreditNote(input: RequestInput): Promise<CreditNote
     await assertRefundable(input.invoiceId, input.amountCents);
   }
 
+  // Resolved once and passed to BOTH the RPC and needsSecondApprover below. The database holds
+  // no copy of this number, so the two cannot drift apart (SA-4.1).
+  const thresholdCents = await refundApprovalThresholdCents();
+
   const supabase = getSupabaseServiceClient();
   const { data, error } = await supabase.rpc("request_credit_note", {
     p_tenant_id: input.tenantId,
@@ -101,7 +105,7 @@ export async function requestCreditNote(input: RequestInput): Promise<CreditNote
     p_reason_code: input.reasonCode,
     p_reason_text: input.reasonText,
     p_requested_by: input.requestedBy,
-    p_threshold_cents: REFUND_APPROVAL_THRESHOLD_CENTS,
+    p_threshold_cents: thresholdCents,
   });
 
   if (error) throw new CreditNoteError(error.message);
@@ -109,7 +113,7 @@ export async function requestCreditNote(input: RequestInput): Promise<CreditNote
   const row = Array.isArray(data) ? data[0] : data;
   if (!row) throw new CreditNoteError("The credit note was not created.");
 
-  if (needsSecondApprover(input.type, input.amountCents)) {
+  if (needsSecondApprover(input.type, input.amountCents, thresholdCents)) {
     return {
       id: row.credit_note_id,
       number: row.number,

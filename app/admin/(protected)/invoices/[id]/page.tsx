@@ -5,6 +5,7 @@ import { ArrowLeft, Printer, AlertTriangle } from "lucide-react";
 import { getCurrentAdmin } from "@/lib/adminAuth/getCurrentAdmin";
 import { canVoidInvoices, canViewInvoices, voidRefusalReason } from "@/lib/invoices/permissions";
 import { fetchInvoiceDetail } from "@/lib/invoices/queries";
+import { refundApprovalThresholdCents } from "@/lib/settings/queries";
 import { AdminPageHeader } from "@/components/admin/page-header";
 import { VoidInvoiceDialog } from "@/components/admin/void-invoice-dialog";
 import { MarkPaidDialog } from "@/components/admin/mark-paid-dialog";
@@ -27,6 +28,9 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
   if (!detail) notFound();
 
   const { invoice, lines, events, payments, paidCents, remainingCents } = detail;
+  // Resolved here rather than inside the dialog: the dialog is a client component and the
+  // settings store is server-only (SA-4.1).
+  const approvalThresholdCents = await refundApprovalThresholdCents();
   const settleable = invoice.status !== "paid" && invoice.status !== "void";
   const mismatched = invoice.reconciliation === "mismatched";
 
@@ -59,6 +63,7 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
               number={invoice.number}
               totalCents={invoice.total_cents}
               hasProviderPayment={Boolean(invoice.provider_payment_id)}
+              approvalThresholdCents={approvalThresholdCents}
             />
           )}
           {canVoidInvoices(admin.role) && (

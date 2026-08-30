@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
   const supabase = getSupabaseServiceClient();
 
   const token = generateInviteToken();
-  const expiresAt = inviteExpiryFromNow();
+  const expiresAt = await inviteExpiryFromNow();
 
   const { data, error } = await supabase.rpc("admin_create_user", {
     p_name: name,

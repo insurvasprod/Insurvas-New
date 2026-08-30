@@ -35,7 +35,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   }
 
   const token = generateInviteToken();
-  const expiresAt = inviteExpiryFromNow();
+  const expiresAt = await inviteExpiryFromNow();
 
   // Supersede any prior invitations so an older link can't still be redeemed.
   await supabase.from("user_invitations").delete().eq("user_id", id).is("accepted_at", null);

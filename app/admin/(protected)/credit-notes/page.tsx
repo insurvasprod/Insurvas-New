@@ -7,12 +7,14 @@ import { AdminPageHeader } from "@/components/admin/page-header";
 import { CreditNotesTable, type CreditNoteRow } from "@/components/admin/credit-notes-table";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatCentsAsCurrency } from "@/lib/money";
-import { REFUND_APPROVAL_THRESHOLD_CENTS } from "@/lib/credits/rules";
+import { refundApprovalThresholdCents } from "@/lib/settings/queries";
 
 export default async function CreditNotesPage() {
   const admin = await getCurrentAdmin();
   if (!admin) redirect("/admin/login");
   if (!canViewInvoices(admin.role)) redirect("/admin");
+
+  const thresholdCents = await refundApprovalThresholdCents();
 
   const supabase = getSupabaseServiceClient();
   const { data } = await supabase
@@ -28,7 +30,7 @@ export default async function CreditNotesPage() {
     <div className="space-y-6">
       <AdminPageHeader
         title="Refunds & credits"
-        subtitle={`Refunds above ${formatCentsAsCurrency(REFUND_APPROVAL_THRESHOLD_CENTS)} need a second admin`}
+        subtitle={`Refunds above ${formatCentsAsCurrency(thresholdCents)} need a second admin`}
       />
 
       {pending.length > 0 && (

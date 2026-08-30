@@ -89,7 +89,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     }
 
     const token = generateInviteToken();
-    const expiresAt = inviteExpiryFromNow();
+    const expiresAt = await inviteExpiryFromNow();
 
     // Supersede any earlier pending change so only the newest link works.
     await supabase

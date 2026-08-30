@@ -29,20 +29,28 @@ export type TenantUsageRow = {
   hard_cap: boolean;
 };
 
-/** Notify here, block at 100% when hard-capped (SA-2.5). */
-export const METER_WARN_THRESHOLD = 0.8;
+/**
+ * The coded default. Notify here, block at 100% when hard-capped (SA-2.5).
+ *
+ * SA-4.1 moved the live value into `usage.warn_percent`. Resolve it server-side with
+ * `meterWarnThreshold()` and pass it to `usageState` — this is the fallback, not the rule.
+ */
+export const DEFAULT_METER_WARN_THRESHOLD = 0.8;
 
 export function usagePercent(used: number, included: number | null): number | null {
   if (included === null || included === 0) return null;
   return Math.round((used / included) * 1000) / 10;
 }
 
-export function usageState(row: TenantUsageRow): "unlimited" | "ok" | "near" | "over" {
+export function usageState(
+  row: TenantUsageRow,
+  warnThreshold: number = DEFAULT_METER_WARN_THRESHOLD,
+): "unlimited" | "ok" | "near" | "over" {
   if (row.included_qty === null) return "unlimited";
   if (row.included_qty === 0) return row.used_qty > 0 ? "over" : "ok";
   const ratio = row.used_qty / row.included_qty;
   if (ratio >= 1) return "over";
-  if (ratio >= METER_WARN_THRESHOLD) return "near";
+  if (ratio >= warnThreshold) return "near";
   return "ok";
 }
 

@@ -13,7 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { formatCents, formatCentsAsCurrency } from "@/lib/money";
 import {
-  CREDIT_REASONS, CREDIT_REASON_LABELS, REFUND_APPROVAL_THRESHOLD_CENTS, needsSecondApprover,
+  CREDIT_REASONS, CREDIT_REASON_LABELS, needsSecondApprover,
   type CreditReason,
 } from "@/lib/credits/rules";
 
@@ -23,12 +23,15 @@ export function RefundDialog({
   number,
   totalCents,
   hasProviderPayment,
+  approvalThresholdCents,
 }: {
   tenantId: string;
   invoiceId: string;
   number: string;
   totalCents: number;
   hasProviderPayment: boolean;
+  /** Resolved from settings on the server (SA-4.1) — never read the constant here. */
+  approvalThresholdCents: number;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -39,7 +42,7 @@ export function RefundDialog({
   const [reasonText, setReasonText] = useState("");
 
   const cents = Math.round(Number(amount.replace(/[^0-9.]/g, "")) * 100) || 0;
-  const willNeedApproval = needsSecondApprover(type, cents);
+  const willNeedApproval = needsSecondApprover(type, cents, approvalThresholdCents);
 
   async function submit() {
     setBusy(true);
@@ -130,7 +133,7 @@ export function RefundDialog({
 
             {willNeedApproval && (
               <p className="rounded-md border border-[var(--color-warning)]/40 bg-[var(--color-warning)]/5 p-2.5 text-xs text-[var(--color-warning)]">
-                Above {formatCentsAsCurrency(REFUND_APPROVAL_THRESHOLD_CENTS)}, so this will wait for a second
+                Above {formatCentsAsCurrency(approvalThresholdCents)}, so this will wait for a second
                 admin. No money moves until then, and you cannot approve it yourself.
               </p>
             )}
