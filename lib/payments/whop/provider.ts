@@ -172,4 +172,54 @@ export class WhopProvider implements PaymentProvider {
       purchaseUrl,
     };
   }
+
+  /**
+   * Creates the Whop promo code that actually reduces what the card is charged (SA-3.6).
+   *
+   * `durationMonths` is months, not billing periods — Whop counts in months and our plans do not
+   * always bill monthly, so the translation happens in lib/coupons/discount.ts before this call.
+   */
+  async createPromoCode(input: {
+    code: string;
+    companyId: string;
+    discountType: "percent" | "fixed";
+    /** Percent (e.g. 50) for percent, or DOLLARS off for fixed — Whop takes decimal currency. */
+    amountOff: number;
+    durationMonths: number;
+    expiresAt?: string | null;
+    maxRedemptions?: number | null;
+    planIds?: string[];
+  }): Promise<{ promoCodeId: string; code: string }> {
+    const body: Record<string, unknown> = {
+      code: input.code,
+      company_id: input.companyId,
+      promo_type: input.discountType === "percent" ? "percentage" : "flat_amount",
+      amount_off: input.amountOff,
+      base_currency: "usd",
+      new_users_only: false,
+      promo_duration_months: input.durationMonths,
+      ...(input.expiresAt ? { expires_at: input.expiresAt } : {}),
+      ...(input.planIds && input.planIds.length > 0 ? { plan_ids: input.planIds } : {}),
+    };
+
+    if (input.maxRedemptions && input.maxRedemptions > 0) {
+      body.stock = input.maxRedemptions;
+      body.unlimited_stock = false;
+    } else {
+      body.unlimited_stock = true;
+    }
+
+    const response = await this.client.request<Record<string, unknown>>(
+      "POST",
+      "/promo_codes",
+      body,
+      idempotencyKey(`promo_${input.code}`, body),
+    );
+
+    if (typeof response.id !== "string") {
+      throw new Error(`Whop promo creation returned no id. Keys: ${Object.keys(response).join(", ")}`);
+    }
+
+    return { promoCodeId: response.id, code: input.code };
+  }
 }

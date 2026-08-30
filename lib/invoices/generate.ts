@@ -14,6 +14,8 @@ import "server-only";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { whopAmountToCents } from "@/lib/payments/whop/client";
 import { buildInvoiceLines } from "./lines";
+import { fetchActiveCoupon } from "@/lib/coupons/queries";
+import { discountCentsFor } from "@/lib/coupons/discount";
 import { RECONCILIATION_STATES } from "./constants";
 import type { InvoiceLineInput, ReconciliationState } from "./constants";
 import type { WhopEnvelope } from "@/lib/payments/whop/events";
@@ -99,6 +101,27 @@ export async function createInvoiceFromPayment(
     { isFirstPeriod },
   );
 
+  // SA-3.6. The discount is computed from OUR coupon record rather than inferred from the gap
+  // between our total and Whop's. Inferring it would make reconciliation vacuous — it would always
+  // match, and a genuinely wrong discount would look correct.
+  const coupon = subscription ? await fetchActiveCoupon(subscription.id) : null;
+  if (coupon) {
+    const discount = discountCentsFor(priceCents, {
+      discountType: coupon.discount_type,
+      percentOff: coupon.percent_off,
+      amountOffCents: coupon.amount_off_cents,
+    });
+    if (discount > 0) {
+      lines.push({
+        kind: "discount",
+        label: `Coupon ${coupon.code}`,
+        quantity: 1,
+        unit_cents: discount,
+        amount_cents: discount,
+      });
+    }
+  }
+
   const rawTotal = data.total;
   const providerTotalCents =
     typeof rawTotal === "number" || typeof rawTotal === "string" ? whopAmountToCents(rawTotal) : null;
@@ -127,6 +150,17 @@ export async function createInvoiceFromPayment(
       `[invoice] ${row.number} MISMATCH for tenant ${tenantId}: provider charged ${providerTotalCents} cents, ` +
         `our lines total ${lines.reduce((s, l) => s + l.amount_cents, 0)} cents (payment ${paymentId})`,
     );
+  }
+
+  // Consume a period only when an invoice was actually created. Doing it per delivery would burn
+  // a 3-period coupon on the first invoice's three webhook retries.
+  if (row.created && coupon && subscription) {
+    const { error: consumeError } = await supabase.rpc("consume_coupon_period", {
+      p_subscription_id: subscription.id,
+    });
+    if (consumeError) {
+      console.error(`[invoice] could not consume a coupon period for ${subscription.id}: ${consumeError.message}`);
+    }
   }
 
   return {

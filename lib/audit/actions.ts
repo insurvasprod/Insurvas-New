@@ -32,6 +32,9 @@ export const AUDIT_ACTIONS = [
   "payment_provider.simulator_set",
   "invoice.voided",
   "payment.recorded_manually",
+  "coupon.created",
+  "coupon.applied",
+  "coupon.removed",
 ] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
@@ -67,4 +70,7 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   "payment_provider.simulator_set": "Failure simulator changed",
   "invoice.voided": "Invoice voided",
   "payment.recorded_manually": "Payment recorded manually",
+  "coupon.created": "Coupon created",
+  "coupon.applied": "Coupon applied",
+  "coupon.removed": "Coupon removed",
 };

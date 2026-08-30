@@ -42,6 +42,78 @@ export type Database = {
         };
         Relationships: [];
       };
+      coupons: {
+        Row: {
+          amount_off_cents: number | null;
+          billing_cycle: Database["public"]["Enums"]["billing_cycle"] | null;
+          code: string;
+          created_at: string;
+          created_by: string | null;
+          discount_type: Database["public"]["Enums"]["discount_type"];
+          duration: Database["public"]["Enums"]["coupon_duration"];
+          duration_periods: number | null;
+          expires_at: string | null;
+          id: string;
+          is_active: boolean;
+          max_redemptions: number | null;
+          percent_off: number | null;
+          redeemed_count: number;
+          restricted_to_plan_ids: string[] | null;
+          whop_promo_code_id: string | null;
+        };
+        Insert: {
+          amount_off_cents?: number | null;
+          billing_cycle?: Database["public"]["Enums"]["billing_cycle"] | null;
+          code: string;
+          created_at?: string;
+          created_by?: string | null;
+          discount_type: Database["public"]["Enums"]["discount_type"];
+          duration: Database["public"]["Enums"]["coupon_duration"];
+          duration_periods?: number | null;
+          expires_at?: string | null;
+          id?: string;
+          is_active?: boolean;
+          max_redemptions?: number | null;
+          percent_off?: number | null;
+          redeemed_count?: number;
+          restricted_to_plan_ids?: string[] | null;
+          whop_promo_code_id?: string | null;
+        };
+        Update: {
+          is_active?: boolean;
+          redeemed_count?: number;
+          whop_promo_code_id?: string | null;
+        };
+        Relationships: [];
+      };
+      subscription_coupons: {
+        Row: {
+          applied_at: string;
+          applied_by: string | null;
+          coupon_id: string;
+          id: string;
+          is_active: boolean;
+          periods_remaining: number | null;
+          removed_at: string | null;
+          subscription_id: string;
+        };
+        Insert: {
+          applied_at?: string;
+          applied_by?: string | null;
+          coupon_id: string;
+          id?: string;
+          is_active?: boolean;
+          periods_remaining?: number | null;
+          removed_at?: string | null;
+          subscription_id: string;
+        };
+        Update: {
+          is_active?: boolean;
+          periods_remaining?: number | null;
+          removed_at?: string | null;
+        };
+        Relationships: [];
+      };
       payments: {
         Row: {
           amount_cents: number;
@@ -1059,6 +1131,18 @@ export type Database = {
         };
         Returns: { invoice_id: string; number: string; created: boolean; reconciliation: string }[];
       };
+      admin_apply_coupon: {
+        Args: { p_subscription_id: string; p_coupon_id: string; p_applied_by: string };
+        Returns: string;
+      };
+      consume_coupon_period: {
+        Args: { p_subscription_id: string };
+        Returns: number;
+      };
+      claim_coupon_redemption: {
+        Args: { p_coupon_id: string };
+        Returns: string;
+      };
       allocate_invoice_number: {
         Args: { p_at: string };
         Returns: string;
@@ -1205,6 +1289,8 @@ export type Database = {
       billing_cycle: "monthly" | "quarterly" | "yearly";
       invoice_status: "draft" | "issued" | "paid" | "overdue" | "void" | "uncollectible";
       invoice_line_kind: "plan" | "addon" | "overage" | "discount" | "setup_fee" | "credit";
+      discount_type: "percent" | "fixed";
+      coupon_duration: "once" | "n_periods" | "forever";
       payment_method: "provider" | "manual_bank_transfer";
       payment_status: "succeeded" | "failed" | "pending" | "refunded";
       login_actor_type: "user" | "admin";

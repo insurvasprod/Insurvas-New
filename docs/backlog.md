@@ -334,6 +334,30 @@ void, and the audit entry it writes has never been seen.
 
 Closes itself the moment SA-3.4 produces a `past_due` or `overdue` invoice.
 
+### 42. Coupons are creatable but not yet attachable from a screen
+**From:** SA-3.6 (2026-08-30) · Minor
+
+`POST /api/admin/subscriptions/:id/coupon` applies a coupon and `DELETE` removes it, both
+audit-logged and enforced atomically in SQL. **Neither has a control on the tenant page** — the
+Coupons screen creates and lists them, but attaching one to a customer is API-only today.
+
+A picker on the subscription panel, next to add-ons. Small, and worth doing before anyone is asked
+to use coupons in anger.
+
+### 43. Applying a coupon to an ALREADY-RUNNING membership is unverified
+**From:** SA-3.6 (2026-08-30) · **Unverified**
+
+Our side attaches the coupon and the discount appears on the next invoice we generate. Whether the
+customer is actually charged less depends on Whop applying the promo to an existing membership,
+and **that has not been tested**.
+
+Whop documents an `existing_memberships_only` flag "for cancellation retention offers", which
+implies it is possible, but not the mechanism. Until it is confirmed in the sandbox, a coupon
+applied mid-subscription may show a discount on our invoice that the card never received — which
+reconciliation would correctly flag as `mismatched`.
+
+Coupons applied **at checkout** are the verified path.
+
 ### 41. Proration is exact, and nothing calls it
 **From:** SA-3.4 (2026-08-30) · **Significant**
 
@@ -354,6 +378,14 @@ Worth building both at once.
 ## ✅ Resolved
 
 *Terse log — details live in git history.*
+
+- **SA-3.6 coupons** → Whop promo codes are the real discount, mirrored locally for the UI, the
+  invoice line and the audit trail. The redemption cap, one-coupon-per-subscription and the
+  duration countdown are all enforced in SQL in a single locked transaction, because checking a
+  count and then incrementing it lets two admins both claim the last slot. Verified 13/13,
+  including that a 3-period coupon consumes exactly three periods and then deactivates itself with
+  no scheduled job. **`promo_duration_months: 0` means forever** — checked against the sandbox
+  rather than assumed, since Whop's docs never say.
 
 - **#34 Events stored but nothing acted on them** → SA-3.4. Provider events now drive subscription
   status and rebuild the entitlement immediately. Out-of-order delivery is handled by discarding
