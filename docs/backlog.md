@@ -185,25 +185,6 @@ two screens during an outage will see a difference.
 **Fix:** none wanted. If the preview should ever show outage state, it needs to say WHY an item is
 missing rather than silently omitting it — otherwise it just looks wrong.
 
-### 70. A billing admin cannot open Payments, contradicting SA-4.3's stated matrix
-**From:** found while QA-ing Module 4 · **Belongs to:** a correction to SA-4.3 in Notion
-
-SA-4.3 specifies "billing_admin sees payments and offers only". The code gives that role **offers
-only** — `SECTION_ACCESS.payments` is `["super_admin"]`, and a billing admin gets a 403 on the page
-and on every payments API.
-
-This is deliberate and, I think, right: SA-4.2 decided the payments screen exposes live provider
-credentials and a button that makes an authenticated call as the platform, so it is super_admin
-only. That is a narrower rule than "assign a tenant to an already-configured provider", which
-billing admins can still do. The reasoning is already a comment above the matrix.
-
-Recording it because the deviation exists only in a code comment. Anyone reading SA-4.3's
-acceptance criteria would tick "billing_admin sees payments and offers" as passed, and it is not —
-by choice.
-
-**Fix:** amend SA-4.3's criterion in Notion to say offers only, and note that payments moved to
-super_admin under SA-4.2. No code change.
-
 ### 14. Delete user — not built
 **From:** SA-1.4 · **Descoped by user on 2026-08-29:** *"we will only do inactive"*
 
@@ -727,6 +708,17 @@ provider.
 ## ✅ Resolved
 
 *Terse log — details live in git history.*
+
+- **#65 Kill switches fail OPEN** → the decision stands and is recorded here because the entry was
+  removed when #63 was closed. If `feature_switches` cannot be read, every feature is treated as ON
+  and the error is logged loudly. Failing closed would turn one unreadable table into a total outage
+  for every tenant, triggered by exactly the partial failure a deploy produces; entitlements still
+  apply, so nobody gains anything unpaid-for. The reasoning also lives in `lib/features/killSwitch.ts`.
+  Revisit only if switches ever become a security boundary rather than an incident tool.
+- **#70 was a duplicate of #56** and has been removed. Both record the same deliberate deviation —
+  Payments staying `super_admin`-only against SA-4.3's stated matrix. #56 says it better and cites
+  the 45-case `verify:configuration` run. I grepped before adding it and missed #56 because it
+  phrases the decision differently.
 
 - **#52 Every admin screen scrolled sideways below ~870px** → fixed 2026-08-30, and the diagnosis in
   that entry was wrong. It blamed the fixed sidebar and prescribed collapsing it. The real cause was
