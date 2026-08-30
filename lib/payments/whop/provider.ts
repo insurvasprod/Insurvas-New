@@ -4,7 +4,7 @@
 // Whop hosts checkout and raises charges itself, so we never originate one. That absence is the
 // honest shape of a hosted-checkout provider, not a gap.
 
-import { WhopClient, centsToWhopAmount, extractCheckoutUrl } from "./client.ts";
+import { WhopClient, centsToWhopAmount, extractCheckoutUrl, idempotencyKey } from "./client.ts";
 import { ProviderUnsupportedError } from "../types.ts";
 import type {
   CheckoutSession,
@@ -46,17 +46,19 @@ export class WhopProvider implements PaymentProvider {
   }
 
   async createCheckoutSession(input: CreateCheckoutSessionInput): Promise<CheckoutSession> {
+    const body = {
+      plan_id: input.providerPlanId,
+      // Comes back to us on the webhook, which is how the payment is attributed to a tenant.
+      metadata: { tenant_id: input.tenantId, ...input.metadata },
+      ...(input.returnUrl ? { redirect_url: input.returnUrl } : {}),
+    };
+
     const response = await this.client.request<Record<string, unknown>>(
       "POST",
       "/checkout_configurations",
-      {
-        plan_id: input.providerPlanId,
-        // Comes back to us on the webhook, which is how the payment is attributed to a tenant.
-        metadata: { tenant_id: input.tenantId, ...input.metadata },
-        ...(input.returnUrl ? { redirect_url: input.returnUrl } : {}),
-      },
+      body,
       // Same tenant + same plan retried after a timeout must not open two checkouts.
-      `checkout_${input.tenantId}_${input.providerPlanId}`,
+      idempotencyKey(`checkout_${input.tenantId}`, body),
     );
 
     return {
@@ -121,13 +123,15 @@ export class WhopProvider implements PaymentProvider {
     const billingPeriod = BILLING_PERIOD_DAYS[input.billingCycle];
     if (!billingPeriod) throw new Error(`No Whop billing period for cycle "${input.billingCycle}"`);
 
-    const response = await this.client.request<WhopPlanResponse>(
-      "POST",
-      "/plans",
-      {
+    const body = {
         product_id: input.productId,
         ...(input.accountId ? { account_id: input.accountId } : {}),
+        // BOTH prices are required for a renewal plan and they are not the same field:
+        // initial_price is the first charge, renewal_price is what recurs. Sending only
+        // initial_price makes Whop read the recurring price as zero and reject the plan with
+        // "must be at least $1.00" — confirmed against the sandbox, not guessed.
         initial_price: centsToWhopAmount(input.priceCents),
+        renewal_price: centsToWhopAmount(input.priceCents),
         currency: "usd",
         plan_type: "renewal",
         billing_period: billingPeriod,
@@ -137,9 +141,14 @@ export class WhopProvider implements PaymentProvider {
           insurvas_plan_version: String(input.planVersion),
           insurvas_billing_cycle: input.billingCycle,
         },
-      },
+    };
+
+    const response = await this.client.request<WhopPlanResponse>(
+      "POST",
+      "/plans",
+      body,
       // One Whop plan per (our plan version, cycle) — a retry must not create a second.
-      `plan_${input.ourPlanId}_${input.billingCycle}`,
+      idempotencyKey(`plan_${input.ourPlanId}_${input.billingCycle}`, body),
     );
 
     if (typeof response.id !== "string") {

@@ -11,6 +11,25 @@
 //   POST /payments/{id}/refund      full or partial refund
 //   GET  /payments/{id}             read a payment's status
 
+/**
+ * FNV-1a over the request body, mixed into every idempotency key.
+ *
+ * Whop binds a key to the exact request it first saw: replaying the key with a different body is
+ * refused with "already used with a different request". A key derived only from what we are
+ * creating (plan id, cycle) therefore becomes permanently unusable the moment one request is
+ * malformed — the corrected retry can never get through. Including the body means a genuine retry
+ * (same bytes) reuses the key, while a corrected request gets a fresh one.
+ */
+export function idempotencyKey(prefix: string, body: unknown): string {
+  const text = JSON.stringify(body ?? {});
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return `${prefix}_${hash.toString(16).padStart(8, "0")}`;
+}
+
 export class WhopApiError extends Error {
   readonly status: number;
   readonly body: unknown;
