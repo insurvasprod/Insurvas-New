@@ -9,6 +9,7 @@ const stamp = Date.now(); let failures = 0; let removedPlanId = null; const temp
 const check = (label, ok, detail = "") => { if (ok) console.log(`  ok   ${label}`); else { console.log(`  FAIL ${label}${detail ? ` — ${detail}` : ""}`); failures++; } };
 async function api(path, cookie, options = {}) { return fetch(`${BASE}${path}`, { ...options, headers: { cookie, ...(options.headers ?? {}) }, redirect: "manual" }); }
 async function cookie(tenantId, userId) { const token = await new SignJWT({ tenantId }).setProtectedHeader({ alg: "HS256" }).setSubject(userId).setIssuedAt().setExpirationTime("10m").sign(new TextEncoder().encode(process.env.TENANT_SESSION_SECRET)); return `insurvas_tenant_session=${token}`; }
+async function forgedCookie(tenantId, userId) { const token = await new SignJWT({ tenantId }).setProtectedHeader({ alg: "HS256" }).setSubject(userId).setIssuedAt().setExpirationTime("10m").sign(new TextEncoder().encode(`${process.env.TENANT_SESSION_SECRET}-forged`)); return `insurvas_tenant_session=${token}`; }
 async function fixture(label) {
   const { data: tenant } = await supabase.from("tenants").insert({ name: `${label} ${stamp}`, status: "active" }).select("id").single();
   const { data: user } = await supabase.from("users").insert({ email: `${label.toLowerCase().replaceAll(" ", "-")}-${stamp}@insurvas.invalid`, name: label, status: "active" }).select("id").single();
@@ -22,6 +23,10 @@ const field = (key, label, type = "text", required = false, sort_order = 0) => (
 const stage = (key, label, stage_type = "open", color = "#2563eb", sort_order = 0) => ({ stage_key: key, label, stage_type, color, sort_order });
 async function main() {
   const first = await fixture("SA47 primary"); const second = await fixture("SA47 other");
+  const missingSession = await api("/api/app/templates", ""); check("missing tenant session returns 401", missingSession.status === 401, `status ${missingSession.status}`);
+  const expiredToken = await new SignJWT({ tenantId: first.tenantId }).setProtectedHeader({ alg: "HS256" }).setSubject(first.userId).setIssuedAt(Math.floor(Date.now() / 1000) - 30).setExpirationTime(Math.floor(Date.now() / 1000) - 10).sign(new TextEncoder().encode(process.env.TENANT_SESSION_SECRET));
+  const expiredSession = await api("/api/app/templates", `insurvas_tenant_session=${expiredToken}`); check("expired tenant session returns 401", expiredSession.status === 401, `status ${expiredSession.status}`);
+  const forgedSession = await api("/api/app/templates", await forgedCookie(first.tenantId, first.userId)); check("forged tenant session returns 401", forgedSession.status === 401, `status ${forgedSession.status}`);
   const initialResponse = await api("/api/app/templates", first.cookie); const initial = await initialResponse.json();
   check("template picker is available to an entitled agent", initialResponse.status === 200 && Array.isArray(initial.templates));
   check("onboarding GET creates a tenant-owned working copy", Boolean(initial.current?.tenant_template_id) && initial.current?.template?.fields?.length === 6 && initial.current?.template?.stages?.length === 7);
@@ -34,6 +39,10 @@ async function main() {
   const edited = { ...initial.current.template, name: `Only primary ${stamp}`, fields: initial.current.template.fields.map((item, index) => index === 0 ? { ...item, label: "Primary-only name" } : item), stages: initial.current.template.stages };
   const editResponse = await api(`/api/app/templates/${copyId}`, first.cookie, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: edited.name, description: edited.description, fields: edited.fields, stages: edited.stages, form_definition: edited.form_definition }) });
   check("editing the tenant copy succeeds", editResponse.status === 200);
+  const wrongTenant = await api(`/api/app/templates/${copyId}`, second.cookie, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: "Cross-tenant attempt", description: null, fields: edited.fields, stages: edited.stages, form_definition: edited.form_definition }) });
+  check("a tenant cannot edit another tenant's copy", wrongTenant.status === 400);
+  const hostileEdit = await api(`/api/app/templates/${copyId}`, first.cookie, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: "x".repeat(121), description: null, fields: edited.fields, stages: edited.stages, form_definition: edited.form_definition }) });
+  check("oversized free-text template input is rejected", hostileEdit.status === 400);
   const otherAfterEdit = await (await api("/api/app/templates", second.cookie)).json(); const platformAfterEdit = await supabase.from("templates").select("name").eq("id", copyRows.data?.template_id).maybeSingle();
   check("editing a copy does not affect another tenant or the platform", otherAfterEdit.current?.template?.name !== edited.name && otherAfterEdit.current?.template?.fields?.[0]?.label !== "Primary-only name" && platformAfterEdit.data?.name !== edited.name);
 
@@ -43,8 +52,8 @@ async function main() {
   if (saved.error) throw new Error(saved.error.message); const newVersion = Array.isArray(saved.data) ? saved.data[0] : saved.data; const version = newVersion?.version;
   const previewResponse = await api("/api/app/templates/preview", first.cookie, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ template_id: source, template_version: version }) }); const previewBody = await previewResponse.json();
   check("second-template preview lists exact fields, stages and sections before commit", previewResponse.status === 200 && previewBody.preview.fieldsToAdd.includes("Preferred contact") && previewBody.preview.stagesToAdd.includes("Review") && previewBody.preview.sectionsToAdd.includes("Review"));
-  const applyResponse = await api("/api/app/templates", first.cookie, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ template_id: source, template_version: version }) });
-  check("applying a second template merges into the tenant copy", applyResponse.status === 200);
+  const concurrentApplies = await Promise.all([1, 2].map(() => api("/api/app/templates", first.cookie, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ template_id: source, template_version: version }) })));
+  check("concurrent template applies remain safe", concurrentApplies.every((response) => response.status === 200));
   const afterApply = (await (await api("/api/app/templates", first.cookie)).json()).current;
   check("merge keeps custom edits and adds new definitions", afterApply.template.fields.some((item) => item.field_key === "preferred_contact") && afterApply.template.fields.some((item) => item.label === "Primary-only name") && afterApply.template.stages.some((item) => item.stage_key === "review"));
   const countBefore = { fields: afterApply.template.fields.length, stages: afterApply.template.stages.length };
