@@ -1,8 +1,5 @@
-import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
 import { forbidden, notFound } from "next/navigation";
 
-import { AdminPageHeader } from "@/components/admin/page-header";
 import { ConfigurationPlaceholder } from "@/components/admin/configuration/configuration-placeholder";
 import { OffersTable } from "@/components/admin/offers-table";
 import { ProductsTable } from "@/components/admin/products-table";
@@ -12,7 +9,12 @@ import { FeatureSwitchesPanel } from "@/components/admin/feature-switches-panel"
 import { PaymentStatusPanel } from "@/components/admin/payment-status-panel";
 import { SettingsForm } from "@/components/admin/settings-form";
 import { getCurrentAdmin } from "@/lib/adminAuth/getCurrentAdmin";
-import { canAccessConfigurationSection, getConfigurationSection } from "@/lib/configuration/sections";
+import {
+  accessibleConfigurationSections,
+  canAccessConfigurationSection,
+  getConfigurationSection,
+} from "@/lib/configuration/sections";
+import { ConfigurationSectionHeader } from "@/components/admin/configuration/section-header";
 import { fetchFeatureCatalog, fetchFeatureModules } from "@/lib/features/queries";
 import { fetchAllSwitches } from "@/lib/features/killSwitch";
 import { getProviderStatus } from "@/lib/payments/status";
@@ -112,15 +114,17 @@ export default async function ConfigurationSectionPage({ params }: { params: Pro
   }
 
   return (
-    <div className="space-y-6">
-      <Link
-        href="/admin/configuration"
-        className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      >
-        <ArrowLeft className="size-4" />
-        Configuration Center
-      </Link>
-      <AdminPageHeader title={section.label} subtitle={`${section.description} Owned by ${section.owner}.`} />
+    <div>
+      {/* Breadcrumb + section switcher replaces the back-link AND the 250px nav rail that used to
+          sit beside every section. `section.owner` is deliberately not rendered: the registry keeps
+          it for maintainers, but "Owned by SA-4.9" under a screen title is sprint bookkeeping, not
+          something the person configuring the platform needs. */}
+      <ConfigurationSectionHeader
+        section={section}
+        sections={accessibleConfigurationSections(admin.role)}
+        title={section.label}
+        description={section.description}
+      />
       {content}
     </div>
   );

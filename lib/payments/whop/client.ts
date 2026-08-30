@@ -99,6 +99,15 @@ export class WhopClient {
     path: string,
     body?: unknown,
     idempotencyKey?: string,
+    options?: {
+      /**
+       * Statuses that are a SUCCESS for this particular call, so the health panel does not count
+       * them as failures. The connection probe asks for a payment id that cannot exist: a 404 is
+       * the proof it worked. Without this, testing the connection made payments look unhealthy —
+       * a monitoring screen made worse by the act of monitoring.
+       */
+      okStatuses?: readonly number[];
+    },
   ): Promise<T> {
     const startedAt = performance.now();
     const headers: Record<string, string> = {
@@ -131,11 +140,13 @@ export class WhopClient {
       parsed = text;
     }
 
+    const treatAsOk = response.ok || (options?.okStatuses?.includes(response.status) ?? false);
+
     await this.log(
       method,
       path,
       startedAt,
-      response.ok ? "ok" : "error",
+      treatAsOk ? "ok" : "error",
       { status: response.status, body: parsed as never },
       idempotencyKey,
     );

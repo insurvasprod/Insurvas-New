@@ -77,13 +77,14 @@ export function PaymentStatusPanel({ status }: { status: StatusView }) {
   ];
 
   return (
-    <div className="space-y-6">
-      <div className={`rounded-lg border-2 p-4 ${MODE_STYLE[status.mode]}`}>
+    <div className="space-y-5">
+      <div className={`rounded-lg border-2 p-5 ${MODE_STYLE[status.mode]}`}>
         <p className="text-xs font-bold uppercase tracking-wider opacity-80">Mode</p>
         <p className="mt-0.5 text-2xl font-extrabold tracking-tight">{MODE_COPY[status.mode].label}</p>
         <p className="mt-1 text-sm font-medium">{MODE_COPY[status.mode].detail}</p>
       </div>
 
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] lg:items-start">
       <Card>
         <CardContent className="space-y-4">
           <h2 className="text-sm font-bold uppercase tracking-wide text-[var(--brand-700)]">Configuration</h2>
@@ -158,6 +159,7 @@ export function PaymentStatusPanel({ status }: { status: StatusView }) {
           )}
         </CardContent>
       </Card>
+      </div>
     </div>
   );
 }

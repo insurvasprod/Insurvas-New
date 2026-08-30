@@ -1,0 +1,133 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+  <style>
+    body { margin: 0; font-family: 'Inter', ui-sans-serif, system-ui, sans-serif; background: #f7f9fb; color: #1a1b1c; }
+    a { color: #0070cc; text-decoration: none; } a:hover { color: #005ba8; }
+    .th { font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: #fff; padding: 10px 16px; text-align: left; white-space: nowrap; }
+    .td { padding: 12px 16px; font-size: 14px; border-bottom: 1px solid #eef1f5; }
+    .inp { height: 36px; border: 1px solid #dfe4eb; border-radius: 8px; background: #fff; padding: 0 10px; font-size: 14px; display: flex; align-items: center; width: 110px; font-variant-numeric: tabular-nums; }
+  </style>
+</helmet>
+
+<div style="display: flex; min-height: 900px;">
+  <aside style="width: 240px; flex-shrink: 0; background: linear-gradient(135deg,#005ba8 0%,#00407f 32%,#003162 72%,#001f3f 100%);"></aside>
+
+  <main style="flex: 1; padding: 28px 40px 120px; min-width: 0;">
+
+    <!-- Breadcrumb replaces the second vertical rail. The section switcher is a dropdown, so the
+         content gets the full width instead of losing 190px to a nav that repeats the sidebar. -->
+    <div style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: #6b7280; margin-bottom: 16px;">
+      <a href="#">Configuration</a>
+      <span>/</span>
+      <div style="display: flex; align-items: center; gap: 6px; color: #1a1b1c; font-weight: 500;">
+        Credits &amp; limits
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+      </div>
+    </div>
+
+    <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; margin-bottom: 24px;">
+      <div>
+        <h1 style="margin: 0; font-size: 24px; font-weight: 800; letter-spacing: -.02em;">Credits &amp; limits</h1>
+        <p style="margin: 6px 0 0; font-size: 14px; color: #6b7280; max-width: 68ch;">
+          What a unit costs us, what we charge for it, and who is running out. Plan allowances always
+          win over these defaults.
+        </p>
+      </div>
+    </div>
+
+    <!-- Tabs: three genuinely separate jobs that were stacked vertically before. -->
+    <div style="display: flex; gap: 4px; border-bottom: 1px solid #dfe4eb; margin-bottom: 22px;">
+      <div style="padding: 10px 14px; font-size: 14px; font-weight: 600; color: #00407f; border-bottom: 2px solid #0070cc; margin-bottom: -1px;">Pricing</div>
+      <div style="padding: 10px 14px; font-size: 14px; color: #6b7280;">Credit packs</div>
+      <div style="padding: 10px 14px; font-size: 14px; color: #6b7280;">Usage monitor</div>
+    </div>
+
+    <div style="background: #fff; border: 1px solid #dfe4eb; border-radius: 12px; overflow: hidden;">
+      <table style="width: 100%; border-collapse: collapse;">
+        <thead>
+          <tr style="background: #00407f;">
+            <th class="th">Meter</th>
+            <th class="th" style="text-align: right;">Vendor cost</th>
+            <th class="th" style="text-align: right;">Sell price</th>
+            <th class="th" style="text-align: right;">Margin</th>
+            <th class="th" style="text-align: right;">Default included</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="td"><div style="font-weight: 500;">TCPA checks</div><div style="font-size: 12px; color: #6b7280;">tcpa_checks</div></td>
+            <td class="td" style="text-align: right; font-variant-numeric: tabular-nums;">$0.0080</td>
+            <td class="td"><div style="display: flex; justify-content: flex-end;"><div class="inp" style="justify-content: flex-end;">0.0120</div></div></td>
+            <td class="td" style="text-align: right;"><span style="color: #12894f; font-weight: 600; font-variant-numeric: tabular-nums;">+50%</span></td>
+            <td class="td"><div style="display: flex; justify-content: flex-end;"><div class="inp" style="justify-content: flex-end; color: #6b7280;">Unlimited</div></div></td>
+          </tr>
+
+          <!-- The one genuinely wrong row is the only one that looks wrong. Before, every row was
+               red by default, which teaches people to ignore red. -->
+          <tr style="background: rgba(181,71,8,.04);">
+            <td class="td"><div style="font-weight: 500;">DNC lookups</div><div style="font-size: 12px; color: #6b7280;">dnc_lookups</div></td>
+            <td class="td" style="text-align: right; font-variant-numeric: tabular-nums;">$0.0080</td>
+            <td class="td"><div style="display: flex; justify-content: flex-end;"><div class="inp" style="justify-content: flex-end; border-color: #b54708; border-width: 1.5px;">0.0060</div></div></td>
+            <td class="td" style="text-align: right;">
+              <span style="color: #b54708; font-weight: 600; font-variant-numeric: tabular-nums;">−25%</span>
+              <div style="font-size: 12px; color: #b54708;">Below cost</div>
+            </td>
+            <td class="td"><div style="display: flex; justify-content: flex-end;"><div class="inp" style="justify-content: flex-end;">2,000</div></div></td>
+          </tr>
+
+          <tr>
+            <td class="td"><div style="font-weight: 500;">Dialer minutes</div><div style="font-size: 12px; color: #6b7280;">dialer_minutes</div></td>
+            <td class="td" style="text-align: right; font-variant-numeric: tabular-nums;">$0.0140</td>
+            <td class="td"><div style="display: flex; justify-content: flex-end;"><div class="inp" style="justify-content: flex-end;">0.0250</div></div></td>
+            <td class="td" style="text-align: right;"><span style="color: #12894f; font-weight: 600; font-variant-numeric: tabular-nums;">+79%</span></td>
+            <td class="td"><div style="display: flex; justify-content: flex-end;"><div class="inp" style="justify-content: flex-end;">1,000</div></div></td>
+          </tr>
+          <tr>
+            <td class="td"><div style="font-weight: 500;">SMS segments</div><div style="font-size: 12px; color: #6b7280;">sms_segments</div></td>
+            <td class="td" style="text-align: right; font-variant-numeric: tabular-nums;">$0.0110</td>
+            <td class="td"><div style="display: flex; justify-content: flex-end;"><div class="inp" style="justify-content: flex-end;">0.0180</div></div></td>
+            <td class="td" style="text-align: right;"><span style="color: #12894f; font-weight: 600; font-variant-numeric: tabular-nums;">+64%</span></td>
+            <td class="td"><div style="display: flex; justify-content: flex-end;"><div class="inp" style="justify-content: flex-end;">500</div></div></td>
+          </tr>
+          <tr>
+            <td class="td" style="border-bottom: none;"><div style="font-weight: 500;">Statement pages</div><div style="font-size: 12px; color: #6b7280;">statement_pages · never hard-capped</div></td>
+            <td class="td" style="text-align: right; border-bottom: none; font-variant-numeric: tabular-nums;">$0.0600</td>
+            <td class="td" style="border-bottom: none;"><div style="display: flex; justify-content: flex-end;"><div class="inp" style="justify-content: flex-end;">0.1500</div></div></td>
+            <td class="td" style="text-align: right; border-bottom: none;"><span style="color: #12894f; font-weight: 600; font-variant-numeric: tabular-nums;">+150%</span></td>
+            <td class="td" style="border-bottom: none;"><div style="display: flex; justify-content: flex-end;"><div class="inp" style="justify-content: flex-end; color: #6b7280;">Unlimited</div></div></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p style="margin: 14px 0 0; font-size: 13px; color: #6b7280;">
+      Margin updates as you type. A price at or below vendor cost is flagged but never blocked —
+      sometimes you sell a meter at cost on purpose.
+    </p>
+
+  </main>
+</div>
+
+<!-- ONE save bar, appearing only when something is dirty. Replaces five stacked Save buttons,
+     one per row, which made the screen look like a form that had already gone wrong. -->
+<div style="position: fixed; left: 240px; right: 0; bottom: 0; background: #fff; border-top: 1px solid #dfe4eb; box-shadow: 0 -4px 16px rgba(0,32,64,.06); padding: 14px 40px; display: flex; align-items: center; justify-content: space-between; gap: 20px;">
+  <div style="font-size: 14px;">
+    <strong style="font-weight: 600;">2 unsaved changes</strong>
+    <span style="color: #6b7280;"> · DNC lookups, Dialer minutes</span>
+  </div>
+  <div style="display: flex; align-items: center; gap: 10px;">
+    <div style="height: 36px; padding: 0 14px; display: flex; align-items: center; font-size: 14px; font-weight: 500; color: #444; border-radius: 8px;">Discard</div>
+    <div style="height: 36px; padding: 0 18px; display: flex; align-items: center; background: #0070cc; color: #fff; font-size: 14px; font-weight: 500; border-radius: 8px;">Save changes</div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

@@ -39,7 +39,11 @@ export async function POST(request: NextRequest) {
   let message: string;
 
   try {
-    await client.request("GET", "/payments/pmt_connection_test_does_not_exist");
+    // 404 is the expected proof of success here, so it is declared as such and never counted
+    // against payment health.
+    await client.request("GET", "/payments/pmt_connection_test_does_not_exist", undefined, undefined, {
+      okStatuses: [404],
+    });
     ok = true;
     message = "Whop answered and accepted the API key.";
   } catch (error) {

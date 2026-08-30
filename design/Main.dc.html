@@ -1,0 +1,182 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+  <style>
+    body { margin: 0; font-family: 'Inter', ui-sans-serif, system-ui, sans-serif; background: #f7f9fb; color: #1a1b1c; }
+    a { color: #0070cc; text-decoration: none; } a:hover { color: #005ba8; }
+    .nav-item { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 8px; font-size: 14px; color: rgba(255,255,255,.82); }
+    .nav-item.on { background: rgba(255,255,255,.14); color: #fff; font-weight: 600; }
+    .card { background: #fff; border: 1px solid #dfe4eb; border-radius: 12px; }
+  </style>
+</helmet>
+
+<div style="display: flex; min-height: 900px;">
+
+  <!-- Sidebar — unchanged from the live app, shown for context -->
+  <aside style="width: 240px; flex-shrink: 0; background: linear-gradient(135deg,#005ba8 0%,#00407f 32%,#003162 72%,#001f3f 100%); padding: 16px; display: flex; flex-direction: column; gap: 2px;">
+    <div style="display: flex; align-items: center; gap: 8px; padding: 4px 8px 22px; color: #fff; font-weight: 600; font-size: 15px;">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+      Insurvas Admin
+    </div>
+    <div class="nav-item">Dashboard</div>
+    <div class="nav-item">Tenants</div>
+    <div class="nav-item">Users</div>
+    <div class="nav-item">Plans</div>
+    <div class="nav-item">Subscriptions</div>
+    <div class="nav-item">Invoices</div>
+    <div class="nav-item">Revenue</div>
+    <div class="nav-item on">Configuration</div>
+    <div class="nav-item">Audit log</div>
+  </aside>
+
+  <main style="flex: 1; padding: 32px 40px; min-width: 0;">
+
+    <!-- Header. No "Owned by SA-4.x" — sprint IDs are project management, not product. -->
+    <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; margin-bottom: 28px;">
+      <div>
+        <h1 style="margin: 0; font-size: 26px; font-weight: 800; letter-spacing: -.02em;">Configuration</h1>
+        <p style="margin: 6px 0 0; font-size: 14px; color: #6b7280; max-width: 62ch;">
+          Platform-wide settings, grouped by what they affect. Every change is recorded in the audit log.
+        </p>
+      </div>
+      <div style="display: flex; align-items: center; gap: 10px; flex-shrink: 0;">
+        <div style="position: relative;">
+          <svg style="position: absolute; left: 10px; top: 10px; color: #6b7280;" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          <div style="height: 36px; width: 260px; border: 1px solid #dfe4eb; border-radius: 8px; background: #fff; padding: 0 12px 0 32px; display: flex; align-items: center; font-size: 14px; color: #6b7280;">Search settings…</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Attention bar: the ONE thing that earns a place above the fold. Absent when nothing is wrong. -->
+    <div style="display: flex; align-items: center; gap: 12px; padding: 12px 16px; border: 1px solid rgba(181,71,8,.3); background: rgba(181,71,8,.06); border-radius: 10px; margin-bottom: 24px;">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#b54708" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+      <div style="flex: 1; font-size: 14px;">
+        <strong style="font-weight: 600;">2 areas need attention.</strong>
+        <span style="color: #444;">4 meters are priced at or below what the vendor charges, and no email provider is configured.</span>
+      </div>
+    </div>
+
+    <!-- The grid. Each card carries STATE — the hub's whole job is telling you where to go. -->
+    <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px;">
+
+      <div class="card" style="padding: 18px; display: flex; flex-direction: column; gap: 10px;">
+        <div style="display: flex; align-items: center; justify-content: space-between;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#00407f" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><path d="M2 10h20"/></svg>
+          <span style="font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #0070cc; background: #eff7ff; padding: 3px 8px; border-radius: 999px;">Sandbox</span>
+        </div>
+        <div>
+          <div style="font-size: 15px; font-weight: 600;">Payments</div>
+          <div style="font-size: 13px; color: #6b7280; margin-top: 2px;">Whop · key ••••e29f · last call 4m ago</div>
+        </div>
+      </div>
+
+      <div class="card" style="padding: 18px; display: flex; flex-direction: column; gap: 10px;">
+        <div style="display: flex; align-items: center; justify-content: space-between;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#00407f" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+          <span style="font-size: 12px; color: #6b7280;">3 active</span>
+        </div>
+        <div>
+          <div style="font-size: 15px; font-weight: 600;">Offers &amp; discounts</div>
+          <div style="font-size: 13px; color: #6b7280; margin-top: 2px;">1 expires in 6 days</div>
+        </div>
+      </div>
+
+      <div class="card" style="padding: 18px; display: flex; flex-direction: column; gap: 10px; border-color: rgba(181,71,8,.4);">
+        <div style="display: flex; align-items: center; justify-content: space-between;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#00407f" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><path d="M12 8v8"/><path d="M9.5 10.5h5"/></svg>
+          <span style="font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #b54708; background: rgba(181,71,8,.08); padding: 3px 8px; border-radius: 999px;">4 below cost</span>
+        </div>
+        <div>
+          <div style="font-size: 15px; font-weight: 600;">Credits &amp; limits</div>
+          <div style="font-size: 13px; color: #6b7280; margin-top: 2px;">6 meters · 2 tenants over 80%</div>
+        </div>
+      </div>
+
+      <div class="card" style="padding: 18px; display: flex; flex-direction: column; gap: 10px;">
+        <div style="display: flex; align-items: center; justify-content: space-between;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#00407f" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/></svg>
+          <span style="font-size: 12px; color: #6b7280;">1 template</span>
+        </div>
+        <div>
+          <div style="font-size: 15px; font-weight: 600;">Templates</div>
+          <div style="font-size: 13px; color: #6b7280; margin-top: 2px;">Term Life — standard</div>
+        </div>
+      </div>
+
+      <div class="card" style="padding: 18px; display: flex; flex-direction: column; gap: 10px;">
+        <div style="display: flex; align-items: center; justify-content: space-between;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#00407f" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          <span style="font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #12894f; background: rgba(18,137,79,.08); padding: 3px 8px; border-radius: 999px;">2 live</span>
+        </div>
+        <div>
+          <div style="font-size: 15px; font-weight: 600;">Compliance sources</div>
+          <div style="font-size: 13px; color: #6b7280; margin-top: 2px;">DNC scrub healthy · dialing allowed</div>
+        </div>
+      </div>
+
+      <div class="card" style="padding: 18px; display: flex; flex-direction: column; gap: 10px;">
+        <div style="display: flex; align-items: center; justify-content: space-between;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#00407f" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="7" rx="5.5"/><circle cx="8.5" cy="12.5" r="2.5"/></svg>
+          <span style="font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #12894f; background: rgba(18,137,79,.08); padding: 3px 8px; border-radius: 999px;">All on</span>
+        </div>
+        <div>
+          <div style="font-size: 15px; font-weight: 600;">Features</div>
+          <div style="font-size: 13px; color: #6b7280; margin-top: 2px;">27 features · no kill switches active</div>
+        </div>
+      </div>
+
+      <div class="card" style="padding: 18px; display: flex; flex-direction: column; gap: 10px; border-color: rgba(181,71,8,.4);">
+        <div style="display: flex; align-items: center; justify-content: space-between;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#00407f" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m2 7 10 6 10-6"/></svg>
+          <span style="font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #b54708; background: rgba(181,71,8,.08); padding: 3px 8px; border-radius: 999px;">Not set up</span>
+        </div>
+        <div>
+          <div style="font-size: 15px; font-weight: 600;">Email</div>
+          <div style="font-size: 13px; color: #6b7280; margin-top: 2px;">No provider — invitations aren't being sent</div>
+        </div>
+      </div>
+
+      <div class="card" style="padding: 18px; display: flex; flex-direction: column; gap: 10px;">
+        <div style="display: flex; align-items: center; justify-content: space-between;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#00407f" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 3 7v6c0 5 4 8 9 9 5-1 9-4 9-9V7z"/></svg>
+          <span style="font-size: 12px; color: #6b7280;">Normal</span>
+        </div>
+        <div>
+          <div style="font-size: 15px; font-weight: 600;">System</div>
+          <div style="font-size: 13px; color: #6b7280; margin-top: 2px;">No maintenance scheduled</div>
+        </div>
+      </div>
+
+      <div class="card" style="padding: 18px; display: flex; flex-direction: column; gap: 10px;">
+        <div style="display: flex; align-items: center; justify-content: space-between;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#00407f" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6h.09A1.65 1.65 0 0 0 10.6 3.09V3a2 2 0 1 1 4 0v.09A1.65 1.65 0 0 0 16.11 4.6"/></svg>
+          <span style="font-size: 12px; color: #6b7280;">4 keys</span>
+        </div>
+        <div>
+          <div style="font-size: 15px; font-weight: 600;">Advanced</div>
+          <div style="font-size: 13px; color: #6b7280; margin-top: 2px;">Raw platform values</div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Audit demoted to ONE line. It was 10 cards above the fold on every screen. -->
+    <div style="margin-top: 24px; padding: 12px 16px; border: 1px solid #eef1f5; border-radius: 10px; background: #fff; display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+      <div style="font-size: 13px; color: #6b7280;">
+        Last change: <span style="color: #1a1b1c;">Meter pricing changed</span> by Super Admin, 12 minutes ago
+      </div>
+      <a href="#" style="font-size: 13px; font-weight: 500;">View audit log →</a>
+    </div>
+
+  </main>
+</div>
+</x-dc>
+</body>
+</html>
