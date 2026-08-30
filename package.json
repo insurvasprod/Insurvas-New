@@ -24,13 +24,15 @@
     "mark:overdue": "node --env-file=.env.local scripts/mark-overdue-invoices.mjs",
     "verify:custom": "node --env-file=.env.local scripts/verify-custom-invoices.mjs",
     "verify:credits": "node --env-file=.env.local scripts/verify-credit-notes.mjs",
-    "metrics:build": "node --env-file=.env.local scripts/build-metrics.mjs"
+    "metrics:build": "node --env-file=.env.local scripts/build-metrics.mjs",
+    "verify:signup": "node --env-file=.env.local scripts/verify-self-serve-signup.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.99.0",
     "bcryptjs": "^3.0.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "disposable-email-domains-js": "1.25.0",
     "jose": "^6.1.0",
     "lucide-react": "^0.545.0",
     "next": "16.3.3",

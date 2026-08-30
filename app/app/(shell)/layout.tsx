@@ -6,6 +6,7 @@ import { getEntitlement } from "@/lib/entitlements/get";
 import { buildAgentMenu } from "@/lib/menu/definition";
 import { AgentSidebar } from "@/components/app/agent-sidebar";
 import { LogoutButton } from "@/components/app/logout-button";
+import { resolveSignupContext, signupDestination } from "@/lib/signup/context";
 
 /**
  * Enforcement point 1 of 3: the MENU.
@@ -15,6 +16,14 @@ import { LogoutButton } from "@/components/app/logout-button";
  * like it was built for the plan they bought.
  */
 export default async function AgentShellLayout({ children }: { children: React.ReactNode }) {
+  // Self-serve users must finish the gated signup states before the normal entitlement shell.
+  // Existing admin-created tenants use `not_started`, so they continue unchanged.
+  const signupContext = await resolveSignupContext();
+  if (signupContext) {
+    const destination = signupDestination(signupContext);
+    if (destination) redirect(destination);
+  }
+
   const context = await resolveTenantContext();
   if (!context) redirect("/app/login");
 
