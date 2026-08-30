@@ -298,19 +298,6 @@ method and its callers — of which there are currently **none**, because SA-3.2
 been built. This is the cheapest possible moment to reshape it, and it stops being cheap the
 moment the first caller exists.
 
-### 31. Nothing receives webhooks yet
-**From:** the Whop decision (2026-08-29) · **Blocks SA-3.4**
-
-There is no `/api/webhooks/whop` route and no `webhook_events` table. Three things it needs that
-are easy to leave out and expensive to add later:
-
-1. **Signature verification.** An unverified webhook endpoint is an unauthenticated API that marks
-   invoices paid. Anyone who learns the URL can grant themselves a subscription.
-2. **Idempotency on the provider event id.** Whop retries deliveries. Without a unique constraint,
-   one retry is a second invoice — or a second refund.
-3. **A public URL.** Webhooks cannot reach `localhost`. This has to point at the deployed app,
-   which means the Vercel deployment is now on the critical path for local billing work.
-
 ### 32. The provider panel has never been opened in a browser
 **From:** SA-3.1 · Minor
 
@@ -319,11 +306,55 @@ The tenant Payment provider panel, its API route and the call-logging decorator 
 path — click Save, see a `provider_calls` row appear — has not been exercised. Same root cause as
 [#8]: admin login needs a TOTP code. Folds into that item's browser pass.
 
+### 33. Whop payloads have never been seen, so tenant resolution is a guess
+**From:** SA-3.1 webhook receiver (2026-08-30) · **Blocks SA-3.4**
+
+`extractCustomerIds()` walks the event payload looking for strings prefixed `user_`, `mem_` or
+`cus_` and matches them against `payment_providers.provider_customer_id`. That is deliberately
+shape-tolerant because **we have not yet seen a single real Whop payload** — the local tests use
+a hand-built envelope.
+
+It is written to fail safe: when zero or more than one tenant matches, it records `null` rather
+than picking one. A webhook attributed to the *wrong* tenant would change someone else's access,
+which is far worse than one attributed to nobody.
+
+Tighten it once real events are sitting in `webhook_events`. Right now every event resolves to
+unmapped anyway, because no tenant has a Whop customer id yet — `provider_settings` has no `whop`
+row and there is no `WhopProvider` class to create one.
+
+### 34. Events are stored and marked handled, but nothing acts on them
+**From:** SA-3.1 webhook receiver (2026-08-30) · **SA-3.4**
+
+The receiver verifies, stores, deduplicates and marks processed. The step in the middle — turning
+`payment.succeeded` into `subscription active` and rebuilding the entitlement — is a comment
+pointing at SA-3.4.
+
+This is safe rather than lossy: the full envelope is in `webhook_events`, so events arriving before
+the handler exists can be replayed once it does. But **nothing is reacting to payments today**, and
+that should not be mistaken for a working billing integration.
+
+Two things SA-3.4 must handle that the receiver deliberately left alone:
+
+1. **Out-of-order delivery.** Whop does not guarantee ordering — `membership.deactivated` can
+   arrive before the `payment.succeeded` that precedes it. `occurred_at` is stored for exactly this
+   reason but nothing reads it yet. A handler that applies "last received wins" to subscription
+   status will eventually reactivate a cancelled tenant.
+2. **Whether `payment.failed` fires on every one of Whop's five retries** while `invoice.past_due`
+   fires once. Unconfirmed — the docs do not say. Test it in sandbox before choosing the trigger.
+
 ---
 
 ## ✅ Resolved
 
 *Terse log — details live in git history.*
+
+- **#31 Nothing receives webhooks** → SA-3.1 built `/api/webhooks/whop`: hand-written Standard
+  Webhooks HMAC-SHA256 verification (their SDK helper has not shipped), a 5-minute replay window,
+  and `webhook_events` unique on `(provider, event_id)`. Deduplication keys on **processed_at, not
+  row existence** — Whop reuses the webhook-id across 12 retries, so treating any repeat as a
+  duplicate would permanently lose an event we stored but failed to handle. Verified against the
+  running app with the real secret: 8/8, including a body altered after signing (401) and rejected
+  requests writing nothing to the table.
 
 - **#15 Seats were documentation-only** → SA-2.5 enforces `max_seats` at user creation. Verified:
   blocked at the limit, `inactive` frees a seat, `suspended` keeps one (matching SA-1.4's table).

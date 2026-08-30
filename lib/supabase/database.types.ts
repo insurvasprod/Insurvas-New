@@ -42,6 +42,43 @@ export type Database = {
         };
         Relationships: [];
       };
+      webhook_events: {
+        Row: {
+          attempts: number;
+          event_id: string;
+          event_type: string;
+          id: string;
+          occurred_at: string | null;
+          payload: Json;
+          process_error: string | null;
+          processed_at: string | null;
+          provider: string;
+          received_at: string;
+          tenant_id: string | null;
+        };
+        Insert: {
+          attempts?: number;
+          event_id: string;
+          event_type: string;
+          id?: string;
+          occurred_at?: string | null;
+          payload: Json;
+          process_error?: string | null;
+          processed_at?: string | null;
+          provider?: string;
+          received_at?: string;
+          tenant_id?: string | null;
+        };
+        // Only tenant_id, processed_at, process_error and attempts are actually updatable —
+        // UPDATE on the other columns is revoked so the recorded payload cannot be altered.
+        Update: {
+          attempts?: number;
+          process_error?: string | null;
+          processed_at?: string | null;
+          tenant_id?: string | null;
+        };
+        Relationships: [];
+      };
       provider_settings: {
         Row: {
           created_at: string;
