@@ -4,7 +4,7 @@ import "server-only";
 
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import type { Json } from "@/lib/supabase/database.types";
-import { extractCustomerIds, type WhopEnvelope } from "./events";
+import { extractCustomerIds, extractTenantIdFromMetadata, type WhopEnvelope } from "./events";
 
 export type StoredEvent = {
   id: string;
@@ -18,10 +18,28 @@ export type StoredEvent = {
  * Returns null when nothing matches, which is the normal case for dashboard test events and for
  * any Whop account that isn't one of our customers.
  */
-async function resolveTenant(customerIds: string[]): Promise<string | null> {
+async function resolveTenant(envelope: WhopEnvelope): Promise<string | null> {
+  const supabase = getSupabaseServiceClient();
+
+  // Exact answer first: the tenant id we ourselves attached at checkout or on the plan.
+  const fromMetadata = extractTenantIdFromMetadata(envelope);
+  if (fromMetadata) {
+    const { data: tenant } = await supabase
+      .from("tenants")
+      .select("id")
+      .eq("id", fromMetadata)
+      .maybeSingle<{ id: string }>();
+    if (tenant) return tenant.id;
+    // Metadata naming a tenant that does not exist is a real problem, not something to paper over
+    // by falling through to a fuzzy match.
+    console.error(`[whop-webhook] metadata names unknown tenant ${fromMetadata}`);
+    return null;
+  }
+
+  // Renewals carry no checkout session, so fall back to the customer identifier.
+  const customerIds = extractCustomerIds(envelope);
   if (customerIds.length === 0) return null;
 
-  const supabase = getSupabaseServiceClient();
   const { data } = await supabase
     .from("payment_providers")
     .select("tenant_id")
@@ -47,7 +65,7 @@ export async function recordWebhookEvent(
   envelope: WhopEnvelope,
 ): Promise<StoredEvent> {
   const supabase = getSupabaseServiceClient();
-  const tenantId = await resolveTenant(extractCustomerIds(envelope));
+  const tenantId = await resolveTenant(envelope);
 
   const { data: inserted, error } = await supabase
     .from("webhook_events")

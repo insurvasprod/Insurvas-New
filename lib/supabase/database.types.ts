@@ -42,6 +42,36 @@ export type Database = {
         };
         Relationships: [];
       };
+      whop_plans: {
+        Row: {
+          billing_cycle: Database["public"]["Enums"]["billing_cycle"];
+          created_at: string;
+          id: string;
+          plan_id: string;
+          price_cents: number;
+          whop_plan_id: string;
+          whop_product_id: string | null;
+        };
+        Insert: {
+          billing_cycle: Database["public"]["Enums"]["billing_cycle"];
+          created_at?: string;
+          id?: string;
+          plan_id: string;
+          price_cents: number;
+          whop_plan_id: string;
+          whop_product_id?: string | null;
+        };
+        Update: {
+          billing_cycle?: Database["public"]["Enums"]["billing_cycle"];
+          created_at?: string;
+          id?: string;
+          plan_id?: string;
+          price_cents?: number;
+          whop_plan_id?: string;
+          whop_product_id?: string | null;
+        };
+        Relationships: [];
+      };
       webhook_events: {
         Row: {
           attempts: number;

@@ -49,7 +49,21 @@ if (tenantError) {
 
 const tenantId = tenant.id;
 
+// Whop is now the only provider in the registry, but two are needed to prove that switching a
+// tenant between providers keeps exactly one default. This adds a throwaway second one and
+// removes it again, rather than weakening the check to fit the registry.
+const SECOND_PROVIDER = `zz_test_${stamp}`;
+await supabase.from("provider_settings").insert({
+  provider: SECOND_PROVIDER,
+  display_label: "Test provider",
+  is_enabled: true,
+  is_default: false,
+  sort_order: 99,
+});
+
 async function cleanup() {
+  await supabase.from("payment_providers").delete().eq("tenant_id", tenantId);
+  await supabase.from("provider_settings").delete().eq("provider", SECOND_PROVIDER);
   await supabase.from("provider_calls").delete().eq("tenant_id", tenantId);
   await supabase.from("payment_providers").delete().eq("tenant_id", tenantId);
   await supabase.from("tenants").delete().eq("id", tenantId);
@@ -66,13 +80,14 @@ try {
   const defaults = (settings ?? []).filter((s) => s.is_default);
   check("exactly one platform default provider", defaults.length === 1, `found ${defaults.length}`);
   check("the default provider is enabled", defaults[0]?.is_enabled === true);
+  check("the default provider is whop", defaults[0]?.provider === "whop", `got ${defaults[0]?.provider}`);
 
   // --- Assigning and switching ----------------------------------------------
   console.log("\nAssigning a provider\n");
 
   await supabase.from("payment_providers").insert({
     tenant_id: tenantId,
-    provider: "dummy_stripe",
+    provider: "whop",
     is_default: true,
   });
 
@@ -93,7 +108,7 @@ try {
   // must be impossible, or a tenant could end up with two "default" payment methods.
   const { error: twoDefaults } = await supabase.from("payment_providers").insert({
     tenant_id: tenantId,
-    provider: "dummy_paypal",
+    provider: SECOND_PROVIDER,
     is_default: true,
   });
   check("a second default for the same tenant is refused", twoDefaults !== null);
@@ -101,7 +116,7 @@ try {
   await supabase.from("payment_providers").update({ is_default: false }).eq("tenant_id", tenantId);
   const { error: switchError } = await supabase.from("payment_providers").insert({
     tenant_id: tenantId,
-    provider: "dummy_paypal",
+    provider: SECOND_PROVIDER,
     is_default: true,
   });
   check("switching provider works once the old default is stood down", switchError === null);
@@ -113,8 +128,8 @@ try {
     .from("provider_calls")
     .insert({
       tenant_id: tenantId,
-      provider: "dummy_stripe",
-      method: "createCharge",
+      provider: "whop",
+      method: "createCheckoutSession",
       request: { amountCents: 44999 },
       response: { status: "succeeded" },
       status: "ok",
@@ -189,7 +204,7 @@ try {
 
   await supabase.from("provider_calls").insert({
     tenant_id: tenantId,
-    provider: "dummy_stripe",
+    provider: "whop",
     method: "getCharge",
     request: { chargeId: "ch_x" },
     status: "ok",
