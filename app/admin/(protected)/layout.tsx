@@ -4,6 +4,7 @@ import { ShieldCheck } from "lucide-react";
 import { getCurrentAdmin } from "@/lib/adminAuth/getCurrentAdmin";
 import { ADMIN_ROLE_LABELS } from "@/lib/adminAuth/roles";
 import { LogoutButton } from "@/components/admin/logout-button";
+import { canViewInvoices } from "@/lib/invoices/permissions";
 import { SidebarNav, type SidebarNavItem } from "@/components/admin/sidebar-nav";
 import { canViewUsers } from "@/lib/users/permissions";
 import { canViewTenants } from "@/lib/tenants/permissions";
@@ -40,6 +41,12 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   if (canManageSubscriptions(admin.role)) {
     navItems.push({ href: "/admin/subscriptions", label: "Subscriptions", icon: "subscriptions" });
   }
+
+  // SA-3.3: a support_agent cannot open invoice screens at all, so the link is not rendered for
+  // them either — a visible link to a 403 is a worse experience than no link.
+  if (canViewInvoices(admin.role)) {
+    navItems.push({ href: "/admin/invoices", label: "Invoices", icon: "invoices" });
+  }
   if (canManageFeatures(admin.role)) {
     navItems.push({ href: "/admin/features", label: "Features", icon: "features" });
   }
@@ -50,7 +57,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   return (
     <div className="flex min-h-screen">
-      <aside
+      <aside data-print-hide
         className="flex w-60 shrink-0 flex-col justify-between rounded-br-3xl p-4 text-white"
         style={{ background: SIDEBAR_SURFACE }}
       >

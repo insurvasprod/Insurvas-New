@@ -135,22 +135,18 @@ One thing worth watching if either is ever load-tested: `admin_user_list.distinc
 correlated subquery. Postgres should only evaluate it for rows surviving `LIMIT`, but that is a
 planner behaviour, not a guarantee — if the Users list ever slows down at scale, check this first.
 
-### 8. No browser verification yet for SA-1.1 / SA-1.2 / SA-1.3
-**From:** SA-1.1, SA-1.2, SA-1.3
+### 8. Browser verification — now unblocked, mostly still undone
+**From:** SA-1.1, SA-1.2, SA-1.3 · **Blocker removed 2026-08-30**
 
-All pass `tsc --noEmit`; SA-1.1 also passed a full `next build`. DB layers were verified directly
-in SQL — SA-1.2 (duplicate email → `23505`, no orphan tenant) and SA-1.3 (last-owner demotion
-blocked, role unchanged after the block, demotion succeeds with a second owner). But no screen has
-been driven in a browser yet. **Part of the end-of-module pass**, per the user's request to batch
-builds.
+The reason this never happened was admin login needing a TOTP code. That is solved: an admin
+session token can be minted locally from `ADMIN_SESSION_SECRET` and set as the
+`insurvas_admin_session` cookie, which is how SA-3.3's screens were verified in a real browser.
 
-Specifically worth clicking through at that point:
-- the full invite → set-password → login round trip
-- the email-change → confirm round trip (old address must keep working until confirmed)
-- a role change showing up on the tenant side without re-login
-- suspending a user with a live session, then confirming their next request drops them
-- a suspended user's login showing the suspension message, while a *wrong* password on the same
-  account still shows only the generic error
+Still unverified by clicking: the invite → set-password → login round trip, the email-change →
+confirm round trip (the old address must keep working until confirmed), a role change appearing on
+the tenant side without re-login, seat-limit enforcement at the limit, and the plan version editor.
+
+**Verified in a browser so far:** the invoice list, detail and print screens (SA-3.3).
 
 ### 9. No CI pipeline exists
 **From:** SA-0.2, SA-0.3, SA-2.1
@@ -316,21 +312,27 @@ writes invoices, because financial tables are the worst ones to hold only in a l
 ### 32. The provider panel has never been opened in a browser
 **From:** SA-3.1 · Minor
 
-The tenant Payment provider panel, its API route and the call-logging decorator are verified by
-`npm run verify:payments` at the database level and by unit tests at the logic level, but the wired
-path — click Save, see a `provider_calls` row appear — has not been exercised. Same root cause as
-[#8]: admin login needs a TOTP code. Folds into that item's browser pass.
+The tenant Payment provider panel, its API route and the call-logging decorator are verified at the
+database and unit level but never clicked. No longer blocked — see #8 for how to get a session —
+just not done.
 
-### 36. The deployed receiver is behind the code
-**From:** the first real payment (2026-08-30) · **Operational**
+### 39. Two invoice filters exist in the API but not the UI
+**From:** SA-3.3 (2026-08-30) · Minor
 
-The first live webhooks resolved to no tenant, and the resolver was not at fault — `main` still
-carries the pre-metadata version of the receiver. Everything since commit `c808d98` (metadata-first
-resolution, the Whop provider, plan mapping) is local only.
+The ticket asked for filters on status, tenant, date range and overdue-only. The screen has status,
+overdue-only and mismatched-only; **tenant and date range are supported by `GET /api/admin/invoices`
+but have no control**. Both are a couple of inputs once there are enough invoices for filtering to
+matter — with two rows it would be furniture.
 
-The stored rows were backfilled by running the current resolver over them, which is what the
-column-level UPDATE grant on `webhook_events` exists for. But **until this deploys, every incoming
-webhook lands with `tenant_id` null** and SA-3.4 will have nothing to attach a payment to.
+### 40. The void API's success path is untested end to end
+**From:** SA-3.3 (2026-08-30) · Minor
+
+Every invoice we hold is `paid`, so the UI can only ever exercise the REFUSAL path — which it does,
+correctly. Voiding is covered at the database layer by `verify:invoices` and the rule itself by unit
+tests, but no request has ever travelled through `POST /api/admin/invoices/:id/void` to a successful
+void, and the audit entry it writes has never been seen.
+
+Closes itself the moment SA-3.4 produces a `past_due` or `overdue` invoice.
 
 ### 34. Events are stored and marked handled, but nothing acts on them
 **From:** SA-3.1 webhook receiver (2026-08-30) · **SA-3.4**
@@ -357,6 +359,12 @@ Two things SA-3.4 must handle that the receiver deliberately left alone:
 ## ✅ Resolved
 
 *Terse log — details live in git history.*
+
+- **SA-3.3 invoice screens** → list with totals strip, detail, print view and void. The strip's
+  numbers are derived from the same rows the filters read, so "the overdue filter matches the strip"
+  is true by construction rather than by two calculations agreeing. Verified in a real browser
+  against real data: mismatched filter 1 = strip 1, overdue 0 = strip 0. `INV-2026-08-0001` renders
+  its $99-vs-$198 disagreement, and Void is correctly refused on it because it was paid.
 
 - **SA-3.2 invoice generation** → built and verified. Numbering is gap-free via a counter row
   updated in the invoice's own transaction, **not** a Postgres SEQUENCE — `nextval` does not roll

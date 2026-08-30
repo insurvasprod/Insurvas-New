@@ -30,6 +30,7 @@ export const AUDIT_ACTIONS = [
   "subscription.addon_detached",
   "payment_provider.assigned",
   "payment_provider.simulator_set",
+  "invoice.voided",
 ] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
@@ -63,4 +64,5 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   "subscription.addon_detached": "Add-on detached",
   "payment_provider.assigned": "Payment provider assigned",
   "payment_provider.simulator_set": "Failure simulator changed",
+  "invoice.voided": "Invoice voided",
 };

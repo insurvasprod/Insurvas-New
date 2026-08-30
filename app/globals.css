@@ -67,3 +67,18 @@ body {
   color: var(--color-text-dark);
   font-family: var(--font-sans);
 }
+
+/* SA-3.3 · Printable invoice.
+   The print route lives inside the admin layout, so the sidebar has to be taken off the paper
+   rather than escaped structurally. Anything marked data-print-hide disappears when printing. */
+@media print {
+  [data-print-hide] {
+    display: none !important;
+  }
+  body {
+    background: #ffffff;
+  }
+  main {
+    padding: 0 !important;
+  }
+}
