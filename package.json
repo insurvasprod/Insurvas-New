@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "typecheck": "tsc --noEmit",
     "test": "node --experimental-strip-types --test \"lib/**/*.test.mjs\"",
     "seed:super-admin": "node --env-file=.env.local scripts/seed-super-admin.mjs",
     "reset:totp": "node --env-file=.env.local scripts/reset-admin-totp.mjs",
@@ -35,7 +36,13 @@
     "metrics:build": "node --env-file=.env.local scripts/build-metrics.mjs",
     "verify:switches": "node --env-file=.env.local scripts/verify-kill-switches.mjs",
     "verify:switches:multi": "node --env-file=.env.local scripts/verify-kill-switches-multi.mjs",
-    "verify:system": "node --env-file=.env.local scripts/verify-system-maintenance.mjs"
+    "verify:system": "node --env-file=.env.local scripts/verify-system-maintenance.mjs",
+    "verify:all": "node scripts/verify-all.mjs",
+    "db:dump": "node --env-file=.env.local scripts/dump-schema.mjs",
+    "db:dump-reference": "node --env-file=.env.local scripts/dump-reference-data.mjs",
+    "db:check": "node --env-file=.env.local scripts/check-migrations.mjs --fast",
+    "db:check:deep": "node --env-file=.env.local scripts/check-migrations.mjs",
+    "session": "node --env-file=.env.local scripts/mint-session.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.99.0",

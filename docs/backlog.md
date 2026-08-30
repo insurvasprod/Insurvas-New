@@ -378,24 +378,64 @@ in the ticket is now backed by the migration, live SQL verification, API verific
 verification. This entry was moved from the outstanding backlog into the resolved section after
 the agent consumer was added.
 
-### 9. No CI pipeline exists
-**From:** SA-0.2, SA-0.3, SA-2.1
+### 71. Dark mode is not implemented — and five components think it is
+**From:** UI verification, 2026-08-30 · **Corrects an earlier claim**
 
-Three tickets now specify acceptance as *"an automated test that runs in CI."* Two real,
-repeatable checks exist and neither is wired to anything:
+Previously logged as "tokens exist, nobody has looked at it." Verified in a browser and that was
+wrong in a way worth recording: dark mode is not partially built, it is **not built**.
 
-- `npm run verify:tenant-isolation` (SA-0.2) — passes
-- `npm run check:features` (SA-2.1) — currently **dormant by design**: it exits 0 while zero
-  `requireFeature()` guards exist, and flips to enforcing the moment the first one is written
-  (verified in both modes)
+Measured on `/admin/login` with the browser requesting dark:
 
-SA-2.4 added a third: `npm test` (Node's built-in runner, no new dependency) covering the money
-conversions — 9 tests, all passing.
+| | |
+|---|---|
+| `prefers-color-scheme: dark` | matches |
+| `<html>` class / `data-theme` | empty / null |
+| `body` background | `#f7f9fb` — the light token |
+| `ThemeProvider` mounted | nowhere |
+| dark palette in `globals.css` | absent — `:root` defines one light palette |
 
-This is now the most overdue item in the file. Standing up even a minimal GitHub Actions workflow
-running `next build`, `eslint`, `npm test`, `check:features` and `verify:tenant-isolation` would
-close three tickets' criteria at once — and would have caught the server-only bundling bug that
-broke the first Vercel deploy.
+The trap: `dark:` utilities survive in five stock shadcn primitives (`badge`, `button`,
+`dropdown-menu`, `input`, `select`) from the generator, and `next-themes` is imported by
+`components/ui/sonner.tsx` alone, with no provider above it. So the moment anyone mounts a
+`ThemeProvider`, those five components go dark and the other 28 screens stay light. It will look
+like a regression and it is pre-existing.
+
+**Decide before building:** either commit to a dark palette across all 33 screens, or strip the
+five `dark:` variants and the `useTheme` import so the codebase stops implying an option it does
+not offer. The second is an hour; the first is a design project.
+
+---
+
+### 72. The UI verification harness exists but this session could not run it
+**From:** browser verification, 2026-08-30 · **Needs an operator, not a fix**
+
+`scripts/mint-session.mjs` (`npm run session admin`) signs a session cookie with the same secret the
+app verifies against — the mechanism `verify-kill-switches-multi.mjs` already uses — so any admin or
+agent screen can be opened in a browser without typing a password. That was the blocker behind #8:
+33 screens, all behind a login.
+
+It is written and unused. The sandbox this session ran in refused to execute a script that mints an
+auth token, which is a reasonable thing for a sandbox to refuse. Someone with a normal shell can
+run it:
+
+```bash
+npm run session admin -- --js     # prints a document.cookie one-liner; paste into devtools
+npm run session admin -- --role billing_admin
+npm run session tenant
+```
+
+Until someone does, every row in #8 stays open and the "~12 of 33 screens verified" number stands.
+
+---
+
+### 73. `payment_providers` is empty in the live database
+**From:** reference data export, 2026-08-30
+
+`scripts/dump-reference-data.mjs` found zero rows. The Whop provider is selected in code
+(`lib/payments/registry.ts` branches on `code === "whop"`), so nothing reads the table today and
+nothing breaks — but a table that exists, is referenced by `provider_settings`, and holds no rows is
+either dead schema or an unfinished seed. Worth deciding which before SA-5 adds a second provider
+and the registry needs a real lookup.
 
 ---
 
@@ -533,27 +573,35 @@ built — `void`. DELETE is currently retained only so verification scripts can 
 themselves; the same tension as `usage_events`, resolved the other way. Before real customers,
 revoke it and give the test scripts a dedicated path.
 
-### 29. The database schema lives only in Supabase, not in the repo
-**From:** end-of-SA-2 push · **Significant**
+### 29. One step still owed: the baseline has never been replayed into an empty database
+**From:** end-of-SA-2 push · **Mostly closed 2026-08-30**
 
-Surfaced while preparing the SA-2 pull request: `git ls-files` shows no `.sql` anywhere. Every
-table, RLS policy, grant/REVOKE and all ~14 functions (`admin_save_plan_version`,
-`resolve_tenant_entitlement`, `refresh_tenant_entitlement`, `advance_billing_periods`,
-`record_usage`, …) were applied straight to project `iiimdgizjwnihpyrukbu` and exist nowhere else.
+The original of this entry said the schema existed nowhere but project `iiimdgizjwnihpyrukbu`. That
+is no longer true. `supabase/migrations/0000_baseline.sql` now carries **45 tables, 23 enums, 57
+indexes, 5 views, 47 functions, 61 foreign keys, 3 policies and the grant/revoke state of 50
+tables**, generated by `npm run db:dump`, and `0016_reference_data.sql` seeds the three catalogs the
+code asserts against. The `tenant_app` role is created by a migration for the first time.
 
-Three consequences, in order of how much they'd hurt:
+`supabase db pull` could not be used: the only credential this repo holds is `TENANT_DB_URL`, whose
+role is deliberately `NOBYPASSRLS` with no DDL rights, and the CLI wants an owner connection. The
+dump reads the catalog instead, which any role may do.
 
-1. **A fresh clone cannot run.** The TypeScript in this repo is a client of a schema it doesn't
-   contain. New machine, new environment, or a restore from a git backup all produce an app that
-   compiles and immediately fails at runtime.
-2. **No review of the security-critical half.** The REVOKEs that make `audit_log` and
-   `usage_events` append-only, and the `tenant_app` NOBYPASSRLS role that makes isolation real,
-   are the parts most worth a second pair of eyes — and they never appear in a diff.
-3. **No rollback.** There is no record of what a migration changed, so there's nothing to revert.
+All 17 files parse against a real PostgreSQL server (`npm run db:check`).
 
-Not a code fix — it's an export. Either `supabase db pull` into `supabase/migrations/`, or hand-write
-the DDL in order and verify by replaying it into a scratch project. Worth doing **before SA-3**
-writes invoices, because financial tables are the worst ones to hold only in a live database.
+**What is still owed:** parsing is not applying. Nobody has replayed `0000` → `0016` into an empty
+database with an owner connection and confirmed the result matches production. Until that happens
+the claim "a fresh clone can run" is inference, not evidence. The check is:
+
+```bash
+# against a scratch project, with an owner connection
+psql "$SCRATCH_DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/0000_baseline.sql
+# ... then 0001 through 0016 in order, then:
+npm run verify:tenant-isolation
+npm run verify:entitlements
+```
+
+Both suites must pass against the **replayed** schema, not the original. This needs an owner
+credential that this repository does not have, so it is the operator's step, not a code change.
 
 ### 32. The orphaned per-tenant provider panel is intentionally retained but dormant
 **From:** SA-3.1, resolved in SA-4.2 · **Decision:** keep dormant by user on 2026-08-30
@@ -708,6 +756,14 @@ provider.
 ## ✅ Resolved
 
 *Terse log — details live in git history.*
+
+- **#9 No CI pipeline** → `.github/workflows/ci.yml`. Two jobs: `verify` needs no secrets at all
+  (typecheck, lint, 159 unit tests, production build) and gates every push and pull request;
+  `database` runs all 20 suites via the new `npm run verify:all`, plus the cross-process kill-switch
+  check, and skips itself with a notice when the repository has no credentials configured. The
+  no-secret build was proven first — no module reads `process.env` at import time, so placeholders
+  exercise the same paths as real keys. This closes the "runs in CI" criterion on SA-1.4, SA-2.6
+  and SA-4.10.
 
 - **#65 Kill switches fail OPEN** → the decision stands and is recorded here because the entry was
   removed when #63 was closed. If `feature_switches` cannot be read, every feature is treated as ON
