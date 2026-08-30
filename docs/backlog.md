@@ -99,22 +99,6 @@ The picker shows it ticked and locked.
 Consequence: to genuinely remove one, an admin must un-archive the feature, untick it, then
 re-archive. Rare enough to be acceptable; worth a dedicated "revoke" action if it ever bites.
 
-### 16. Archive-doesn't-break-existing-plans — now verified at the data layer
-**From:** SA-2.1 → **mostly closed in SA-2.3** · Remaining part belongs to SA-2.8
-
-SA-2.1's criterion: *"archiving a feature does not break plans that already reference it — it
-stays enforced for existing subscribers and disappears from the picker."*
-
-Both halves now hold at the data layer, tested in SQL: archiving keeps the row, removes it from
-the picker, and **`admin_set_plan_features` re-adds any archived grant the plan already had**, so
-saving the picker can't silently revoke it. Verified: archive a granted feature, save without it,
-it survives.
-
-Still outstanding: "enforced" ultimately means the agent app honours it, which needs SA-2.8's
-entitlement engine. The grant is correct in the database; nothing reads it yet.
-
----
-
 ## 🔵 Unverified
 
 ### 7. Users list performance at scale — NOT verified
@@ -151,21 +135,20 @@ the tenant side without re-login, seat-limit enforcement at the limit, and the p
 ### 9. No CI pipeline exists
 **From:** SA-0.2, SA-0.3, SA-2.1
 
-Three tickets now specify acceptance as *"an automated test that runs in CI."* Two real,
-repeatable checks exist and neither is wired to anything:
+Several tickets specify acceptance as *"an automated test that runs in CI."* The repository now
+has a substantial verification surface — 119 unit tests at the end of SA-3 plus dedicated scripts
+for tenant isolation, feature keys, entitlements, payments, webhooks, invoices, subscription
+events, coupons, custom invoices and credit notes — but `.github/workflows/` still does not exist.
 
-- `npm run verify:tenant-isolation` (SA-0.2) — passes
-- `npm run check:features` (SA-2.1) — currently **dormant by design**: it exits 0 while zero
-  `requireFeature()` guards exist, and flips to enforcing the moment the first one is written
-  (verified in both modes)
+`npm run check:features` is no longer dormant: it hard-fails references to unknown feature keys and
+reports the remaining 25 unguarded features as TODO until the agent app exists. The flag that makes
+complete guard coverage mandatory still needs to be flipped when LA-0.1 ships those routes.
 
-SA-2.4 added a third: `npm test` (Node's built-in runner, no new dependency) covering the money
-conversions — 9 tests, all passing.
-
-This is now the most overdue item in the file. Standing up even a minimal GitHub Actions workflow
-running `next build`, `eslint`, `npm test`, `check:features` and `verify:tenant-isolation` would
-close three tickets' criteria at once — and would have caught the server-only bundling bug that
-broke the first Vercel deploy.
+**Fix:** add a PR workflow for `next build`, `eslint`, `npm test` and `check:features`. Database
+verification scripts should run against a disposable/staging Supabase project, not production,
+because several intentionally create and clean up rows. Add tenant isolation there or as a
+scheduled integration job. This would have caught the server-only bundling bug that broke the
+first Vercel deploy.
 
 ---
 
@@ -248,34 +231,6 @@ to subscriptions **is** fully built.
 Adding a new add-on today means a migration. Worth a dialog (same shape as the plan editor) if the
 business starts iterating on them; not urgent while the catalog is four rows that rarely change.
 
-### 27. Add-ons and overage are still not charged
-**From:** SA-2.6 → **retargeted by SA-3.2 (2026-08-30)** · **Significant**
-
-SA-3.2 built the invoice, but only for what **Whop** charges — and Whop charges the plan price and
-nothing else. It knows nothing about our add-ons or metered overage, because those are our
-concepts, attached to our subscriptions, invisible to a Whop plan.
-
-The decision was to bill extras on a **separate Whop invoice** each period, using their
-`create-invoice` API (arbitrary `line_items`, its own number, a hosted `pay_online_url`, and their
-collection and dunning for free). **That is not built.**
-
-So today: a tenant with three add-ons and 400 SMS of overage is invoiced for their plan and nothing
-else, and the difference is simply not collected. `subscription_addons` keeps detached rows with
-`attached_at` / `detached_at`, so a past period can still be reconstructed exactly when this is
-built — read that history rather than only current attachments, or an add-on cancelled mid-period
-vanishes from the bill it belongs on.
-
-### 37. The two real sandbox payments have no invoices
-**From:** SA-3.2 (2026-08-30) · Minor
-
-`plan_a` ($198, the double-charge) and `plan_b` ($249) were both collected before invoice
-generation existed, so neither produced an invoice. Replaying their stored envelopes through the
-receiver would create them — the generator is idempotent on the provider payment id, so it is safe.
-
-Worth deciding rather than drifting: the `plan_a` one would be created as **mismatched** (we say
-$99, the provider charged $198), which is correct and is exactly the record you would want of that
-incident.
-
 ### 38. An invoice can still be deleted
 **From:** SA-3.2 (2026-08-30) · Minor
 
@@ -306,8 +261,9 @@ Three consequences, in order of how much they'd hurt:
 3. **No rollback.** There is no record of what a migration changed, so there's nothing to revert.
 
 Not a code fix — it's an export. Either `supabase db pull` into `supabase/migrations/`, or hand-write
-the DDL in order and verify by replaying it into a scratch project. Worth doing **before SA-3**
-writes invoices, because financial tables are the worst ones to hold only in a live database.
+the DDL in order and verify by replaying it into a scratch project. This was already worth doing
+before SA-3; it is now overdue because the live-only schema also contains invoices, payments,
+coupons, credit notes and revenue metrics.
 
 ### 32. The provider panel has never been opened in a browser
 **From:** SA-3.1 · Minor
@@ -373,16 +329,18 @@ The ticket's criterion "an unused credit balance is applied to the next invoice 
 shown as its own line" is therefore **unmet**. On automatic billing there is no invoice of ours to
 apply it to before Whop charges; free days are the workable equivalent and they need wiring up.
 
-### 44. Add-ons, overage and proration still do not reach an invoice
-**From:** SA-3.7 (2026-08-30) · **Significant** — supersedes the open half of [#27] and [#41]
+### 44. Add-ons, overage, proration and waivers still do not reach an invoice
+**From:** SA-3.7 / SA-3.8 (2026-08-30) · **Significant** — consolidates former [#27] and [#41]
 
 SA-3.7 built the machinery both were waiting for: `create_custom_invoice` raises an arbitrary
 invoice from the shared number sequence, and `WhopProvider.createInvoice` sends it for online
 payment. **Nothing calls it for either purpose yet.**
 
 What remains is a job that, at each period rollover, gathers a tenant's attached add-ons, their
-metered overage above the plan allowance, and any pending proration from a mid-period upgrade, and
-raises one custom invoice for the lot. The pieces all exist; assembling them does not.
+metered overage above the plan allowance, any pending proration from a mid-period upgrade, and any
+billing-admin waiver that must remove an overage line before issue. It then raises one custom
+invoice for the lot. The custom-invoice pieces exist; the period billing assembler and waiver
+model do not.
 
 Until then: a tenant with add-ons is billed for their plan only, overage is free, and a mid-period
 upgrade charges nobody the difference.
@@ -411,20 +369,41 @@ reconciliation would correctly flag as `mismatched`.
 
 Coupons applied **at checkout** are the verified path.
 
-### 41. Proration is exact, and nothing calls it
-**From:** SA-3.4 (2026-08-30) · **Significant**
+### 49. A failed provider refund alerts nobody
+**From:** SA-3.8 acceptance criteria · **Significant**
 
-`prorate()` produces the ticket's worked example to the cent ($152.61 credit, $275.19 charge, net
-**$122.58**) and is covered by twelve tests. **No code path invokes it.**
+`executeCreditNote()` correctly leaves a refused refund in `failed`, stores `failure_reason`, logs
+to the server console and returns the failure to the admin who clicked. It does **not** alert a
+billing admin after that request ends. A failure during an automated retry or webhook path can sit
+unseen until someone opens Credit Notes.
 
-The decision was: on a mid-period upgrade, switch our subscription and entitlement immediately,
-schedule the Whop membership to `cancel_at_period_end`, and raise a separate Whop invoice for the
-difference. Only the arithmetic exists. Changing a plan mid-period today moves our side and leaves
-Whop billing the old plan until renewal, and **nobody is charged the difference**.
+**Fix:** emit an operational alert through the notification/email seam and record delivery. This
+depends naturally on SA-4.11 (email configuration) or the job/alert infrastructure in SA-6.1.
 
-Needs: `PATCH /memberships/{id}` with `cancel_at_period_end`, a new checkout on the new plan, and
-the difference invoice — which is the same separate-invoice mechanism [#27] needs for add-ons.
-Worth building both at once.
+### 50. Public-schema RPC functions still grant EXECUTE to PUBLIC
+**From:** live Supabase audit after SA-3 · **Security hardening**
+
+The inspected `admin_*`, billing, metering, entitlement and metrics functions are `SECURITY
+INVOKER`, which is safer than definer functions, but their ACL includes `=X/postgres`: every role
+inheriting PUBLIC — including `anon` and `authenticated` — may invoke them. RLS currently blocks
+the underlying tables for those roles, so this audit did not prove an immediate data escape.
+However, these functions are exposed as callable RPC surface and a future permissive policy could
+turn a harmless grant into a privilege escalation.
+
+**Fix:** revoke EXECUTE from PUBLIC, `anon` and `authenticated` for control-plane functions; grant
+only `service_role` (and a narrowly scoped tenant role only where genuinely required). Add a test
+that anonymous RPC calls are denied.
+
+### 51. The revenue dashboard is a truthful partial implementation, not the full ticket
+**From:** SA-3.9 acceptance criteria · **Significant**
+
+The page deliberately labels expansion and contraction as **not measured**. It also has a fixed
+31-day revenue window and 90-day funnel window, no date/plan controls, no churn-by-plan calculation,
+and no trial-to-paid conversion rate. Two funnel steps — completed profile and completed setup —
+remain uninstrumented. This is honest UI, but several explicit SA-3.9 outcomes are still unmet.
+
+**Fix:** record plan-change MRR deltas and real funnel events, extend `metrics_daily` for per-plan
+churn and trial conversion, and add date/plan filters. Performance against 500 tenants remains [#48].
 
 ---
 
@@ -479,9 +458,11 @@ Worth building both at once.
 - **SA-3.2 invoice generation** → built and verified. Numbering is gap-free via a counter row
   updated in the invoice's own transaction, **not** a Postgres SEQUENCE — `nextval` does not roll
   back, so a failed invoice would burn its number permanently. Generation is idempotent on
-  `(provider, provider_payment_id)`, which is what makes Whop's at-least-once delivery safe.
-  Verified end to end by replaying a real stored Whop payload: `INV-2026-08-0001`, ours 24900 =
-  provider 24900, matched.
+  `(provider, provider_payment_id)`, which is what makes Whop's at-least-once delivery safe. Real
+  stored Whop payloads verified both the matched and mismatched reconciliation paths.
+- **#37 The two pre-invoice sandbox payments had no invoices** → closed by replay/backfill. The
+  $198 Plan A double-charge is retained as a mismatched financial record ($99 expected), and the
+  $249 Plan B payment reconciles. Provider payment idempotency prevents replay duplicates.
 
 - **SA-3.1 proven end to end (2026-08-30).** A second sandbox payment on `plan_b` — whose Whop plan
   was created entirely by the corrected code rather than patched by hand — charged **$249.00 for a
@@ -531,8 +512,9 @@ Worth building both at once.
   planes, not just tenant users as the ticket specified. SA-6.2 inherits the signal.
 - **#2 Invited users read as "Active"** → SA-1.4, settled as a deliberate no-change: status is the
   admin lifecycle, invite acceptance is a separate axis with its own badge.
-- **#16 Archiving a feature could break a plan** → SA-2.3. `admin_set_plan_features` re-adds
-  archived grants the plan already had, so saving the picker can't silently revoke them.
+- **#16 Archiving a feature could break a plan** → fully closed by SA-2.3 + SA-2.8.
+  `admin_set_plan_features` preserves archived grants, and the shared entitlement/menu path now
+  continues enforcing those grants for existing subscribers.
 - **#18 Plan pricing not built** → SA-2.4.
 - **Audit log pagination** → fixed in the CRM-styling pass; was hard-capped at 100 rows.
 - **Sidebar icon crash** → Lucide components were being passed as props from a Server Component;
