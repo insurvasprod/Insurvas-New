@@ -93,10 +93,15 @@ export async function getAllSettings(): Promise<SettingRow[]> {
     const row = stored.get(def.key);
     const coerced = row ? coerceSettingValue(def, row.value) : null;
 
+    const value = coerced ?? def.default;
+
     return {
       def,
-      value: coerced ?? def.default,
-      isOverridden: row !== undefined && coerced !== null,
+      value,
+      // "Overridden" means somebody changed this from the coded default — not merely that a row
+      // exists. The migration seeds rows AT the defaults, so keying off row existence would badge
+      // every setting as overridden on day one and the badge would mean nothing.
+      isOverridden: value !== def.default,
       updatedAt: row?.updated_at ?? null,
       updatedBy: row?.updated_by ?? null,
     };

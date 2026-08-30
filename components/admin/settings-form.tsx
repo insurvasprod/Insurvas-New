@@ -41,8 +41,8 @@ export function SettingsForm({ initial }: { initial: SettingState[] }) {
 
   const overridden = new Set(initial.filter((s) => s.isOverridden).map((s) => s.key));
 
-  async function save(def: SettingDef) {
-    const raw = draft[def.key];
+  async function save(def: SettingDef, override?: SettingValue) {
+    const raw = override ?? draft[def.key];
 
     // Validated with the same function the API uses, so the form can never accept something the
     // server refuses — or refuse something it would have taken.
@@ -74,9 +74,17 @@ export function SettingsForm({ initial }: { initial: SettingState[] }) {
     toast.success(body.changed ? `${def.label} saved` : `${def.label} is already that`);
   }
 
+  /**
+   * Restores the coded default and saves it in one action.
+   *
+   * It used to only fill the field and leave you to press Save, which read the draft from its
+   * render closure — so clicking Default and Save in quick succession saved the OLD value and
+   * reported "already that". A button labelled "Default" should restore the default, not stage it.
+   */
   function reset(def: SettingDef) {
     setDraft((d) => ({ ...d, [def.key]: String(def.default) }));
     setErrors((e) => ({ ...e, [def.key]: null }));
+    void save(def, def.default);
   }
 
   return (

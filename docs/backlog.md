@@ -185,27 +185,6 @@ entitlement engine. The grant is correct in the database; nothing reads it yet.
 
 ## 🔵 Unverified
 
-### 49. The settings store has never written a row
-**From:** SA-4.1 · **Belongs to:** SA-4.1, finishing it
-
-`supabase/migrations/0001_settings.sql` has not been applied to the project. The app connects as
-`tenant_app`, which cannot create tables — correctly, because that role is the one tenant isolation
-depends on — so applying it needs somebody with admin access to run the file in the Supabase SQL
-editor.
-
-Everything around the missing table behaves correctly and was checked in a browser: the screen
-renders every value from its coded default, a save fails with "Could not save this setting" and
-keeps what was typed, and the server logs one clear line rather than throwing. That is the
-fallback path proven under the harshest condition there is — the whole table absent, not just one
-key.
-
-What is therefore **unproven**: that a saved value survives a round trip, that the audit row
-records the old and new value, that the cache invalidates so the next request sees the change, and
-that a second admin sees it too. Those are four of the ticket's acceptance criteria and none can be
-tested until the migration runs.
-
-**Fix:** apply the migration, then re-run the settings screen end to end.
-
 ### 7. Users list performance at scale — NOT verified
 **From:** SA-1.1 · **User opted out on 2026-08-29**
 
@@ -550,6 +529,15 @@ Worth building both at once.
 ## ✅ Resolved
 
 *Terse log — details live in git history.*
+
+- **#49 The settings store had never written a row** → resolved 2026-08-30. The migration was
+  applied and the store was exercised end to end in a browser: saving moved `users.invite_expiry_hours`
+  72 → 96 and it survived a reload; the audit row carried `{from: 72, to: 96}`; changing
+  `billing.refund_approval_threshold_cents` to 10000 changed the Refunds & credits subtitle from
+  "$500.00" to "$100.00" on a **different page, in the same running process, with no restart** —
+  which proves cache invalidation and that the value reaches its consumer. `tenant_app` is refused
+  the table outright (`permission denied for table settings`), so RLS and the REVOKEs hold. Both
+  values were then restored to their defaults; the four audit rows are the record of the test.
 
 - **SA-3.9 revenue dashboard** → MRR/ARR/ARPC, churn, plan breakdown and the activation funnel, off
   a nightly `metrics_daily` snapshot that is re-runnable for any past date. Contracted MRR is shown
