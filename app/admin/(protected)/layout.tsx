@@ -48,6 +48,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   if (canViewInvoices(admin.role)) {
     navItems.push({ href: "/admin/invoices", label: "Invoices", icon: "invoices" });
     navItems.push({ href: "/admin/credit-notes", label: "Refunds & credits", icon: "credit-notes" });
+    navItems.push({ href: "/admin/revenue", label: "Revenue", icon: "revenue" });
   }
 
   if (canManageCoupons(admin.role)) {

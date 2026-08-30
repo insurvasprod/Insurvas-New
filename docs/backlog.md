@@ -324,6 +324,29 @@ overdue-only and mismatched-only; **tenant and date range are supported by `GET 
 but have no control**. Both are a couple of inputs once there are enough invoices for filtering to
 matter — with two rows it would be furniture.
 
+### 47. A provider checkout creates no subscription on our side
+**From:** SA-3.9 (2026-08-30) · **Significant — found by the dashboard**
+
+Your tenant has paid twice through Whop checkout and has **no subscription row**. `subscriptions`
+is empty; `membership.activated` arrived twice and did nothing, because `applyProviderEvent`
+updates an existing subscription and never creates one.
+
+Consequences, all visible on the revenue screen: contracted MRR is $0 while $447 has been
+collected, active customers is 0, there is no plan breakdown, and the entitlement engine has
+nothing to resolve — so a paying customer would get no features.
+
+An admin assigning a plan by hand is the only path that currently produces a subscription. Either
+`membership.activated` should create one from the plan metadata Whop returns (which carries
+`insurvas_plan_id` and the cycle, so everything needed is already on the event), or self-serve
+checkout should be closed off until it does.
+
+### 48. The 2-second / 500-tenant target is unverified
+**From:** SA-3.9 · Unverified
+
+The dashboard reads a snapshot table rather than aggregating live, which is what the target asks
+for, and every figure comes from one indexed table scan over at most 31 rows. But it has never been
+run against 12 months of data and 500 tenants — the same position as [#7], and for the same reason.
+
 ### 45. The provider refund call has never been executed
 **From:** SA-3.8 (2026-08-30) · **Unverified**
 
@@ -408,6 +431,16 @@ Worth building both at once.
 ## ✅ Resolved
 
 *Terse log — details live in git history.*
+
+- **SA-3.9 revenue dashboard** → MRR/ARR/ARPC, churn, plan breakdown and the activation funnel, off
+  a nightly `metrics_daily` snapshot that is re-runnable for any past date. Contracted MRR is shown
+  beside collected, and the gap is called out — which immediately surfaced [#47]. Two funnel steps
+  render as *not instrumented* rather than zero, and are excluded from the biggest-drop-off
+  sentence so it cannot name a step nobody measures.
+- **Payments were only recorded when a subscription already existed** → fixed in SA-3.9. The
+  `recordPayment` call sat after an early return in `applyProviderEvent`, so both real charges were
+  invisible. Moved before the subscription lookup and the two payments backfilled: money arriving
+  is a fact about the tenant, not about our subscription records.
 
 - **SA-3.8 refunds and credit notes** → verified 14/14. The control the ticket exists for is
   enforced twice: the route refuses a self-approval, and so does a database CHECK constraint that

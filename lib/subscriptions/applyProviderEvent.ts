@@ -119,6 +119,13 @@ export async function applyProviderEvent(
 
   const supabase = getSupabaseServiceClient();
 
+  // BEFORE the subscription lookup, deliberately. Money arriving is a fact about the tenant, not
+  // about our subscription records — gating it behind a subscription meant a self-serve purchase
+  // recorded no payment at all, and the revenue was invisible.
+  if (envelope.type === "payment.succeeded") {
+    await recordPayment(envelope, tenantId);
+  }
+
   const { data: subscription } = await supabase
     .from("subscriptions")
     .select("id, status, last_provider_event_at")
@@ -135,10 +142,6 @@ export async function applyProviderEvent(
     if (eventAt.getTime() <= new Date(subscription.last_provider_event_at).getTime()) {
       return { applied: false, reason: "stale event, older than the last one applied" };
     }
-  }
-
-  if (envelope.type === "payment.succeeded") {
-    await recordPayment(envelope, tenantId);
   }
 
   // Captured opportunistically from whichever event carries it, and never overwritten with null.

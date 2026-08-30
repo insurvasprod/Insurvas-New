@@ -16,6 +16,7 @@ import {
   Receipt,
   Tag,
   Undo2,
+  TrendingUp,
 } from "lucide-react";
 
 // Icon components (functions with methods) can't cross the server->client boundary as props —
@@ -32,6 +33,7 @@ const ICONS = {
   invoices: Receipt,
   coupons: Tag,
   "credit-notes": Undo2,
+  revenue: TrendingUp,
   admins: Users,
   "audit-log": ScrollText,
 } as const;

@@ -42,6 +42,42 @@ export type Database = {
         };
         Relationships: [];
       };
+      metrics_daily: {
+        Row: {
+          active_customers: number;
+          arr_cents: number;
+          churned_customers: number;
+          churned_mrr_cents: number;
+          collected_cents: number;
+          computed_at: string;
+          contraction_mrr_cents: number;
+          date: string;
+          expansion_mrr_cents: number;
+          mrr_cents: number;
+          new_customers: number;
+          new_mrr_cents: number;
+          plan_breakdown: Json;
+          trials_active: number;
+        };
+        Insert: {
+          active_customers?: number;
+          arr_cents?: number;
+          churned_customers?: number;
+          churned_mrr_cents?: number;
+          collected_cents?: number;
+          computed_at?: string;
+          contraction_mrr_cents?: number;
+          date: string;
+          expansion_mrr_cents?: number;
+          mrr_cents?: number;
+          new_customers?: number;
+          new_mrr_cents?: number;
+          plan_breakdown?: Json;
+          trials_active?: number;
+        };
+        Update: Record<string, never>;
+        Relationships: [];
+      };
       credit_notes: {
         Row: {
           amount_cents: number;
@@ -1203,6 +1239,14 @@ export type Database = {
           p_lines: Json;
         };
         Returns: { invoice_id: string; number: string; created: boolean; reconciliation: string }[];
+      };
+      compute_metrics_for_date: {
+        Args: { p_date: string };
+        Returns: Database["public"]["Tables"]["metrics_daily"]["Row"];
+      };
+      monthly_equivalent_cents: {
+        Args: { p_plan_id: string; p_cycle: Database["public"]["Enums"]["billing_cycle"] };
+        Returns: number;
       };
       request_credit_note: {
         Args: {
