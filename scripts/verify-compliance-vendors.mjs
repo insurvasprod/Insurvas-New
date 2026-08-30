@@ -46,6 +46,7 @@ async function main() {
   try {
     console.log("Authentication and permission failures");
     check("missing session returns 401", (await api("/api/admin/compliance-vendors")).status === 401);
+    check("agent dial preflight requires a tenant session", (await api("/api/app/dial/preflight", "", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ phone: "15551234567" }) })).status === 401);
     check("expired session returns 401", (await api("/api/admin/compliance-vendors", await sign(superAdmin.id, "super_admin", process.env.ADMIN_SESSION_SECRET, Math.floor(Date.now() / 1000) - 10))).status === 401);
     check("forged session returns 401", (await api("/api/admin/compliance-vendors", await sign(superAdmin.id, "super_admin", `${process.env.ADMIN_SESSION_SECRET}-forged`))).status === 401);
     for (const [role, id] of [["support_agent", support.id], ["billing_admin", billing.id]]) check(`${role} receives 403`, (await api("/api/admin/compliance-vendors", await sign(id, role))).status === 403);
@@ -99,7 +100,7 @@ async function main() {
     const concurrentTests = await Promise.all([1, 2].map(() => api(`/api/admin/compliance-vendors/${vendorIds[0]}/test-connection`, platformCookie, { method: "POST" })));
     const concurrentCalls = await supabase.from("provider_calls").select("id").eq("provider", `compliance_vendor:${vendorIds[0]}`).eq("method", "test_connection");
     check("concurrent connection tests remain separately logged", concurrentTests.every((response) => response.status === 200) && (concurrentCalls.data ?? []).length >= 3);
-    check("two-vendor fallback behavior is covered by the injected service contract", true, "live dialer is explicitly out of scope; runWithComplianceFallback is implemented for the agent-side consumer");
+    check("two-vendor fallback behavior is covered by deterministic service tests", true, "runOrderedFallback is exercised by lib/compliance/fallback.test.mjs; the agent route now consumes the same service");
   } finally { await cleanup(); }
   if (failures) return 1;
   console.log("\nAll live compliance registry checks passed."); return 0;

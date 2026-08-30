@@ -6,6 +6,7 @@ import type { Database, Json } from "@/lib/supabase/database.types";
 import { decryptVendorCredentials, encryptVendorCredentials } from "./crypto";
 import { DNC_BLOCK_MESSAGE, type ComplianceVendor, type ComplianceVendorType } from "./constants";
 import { runOrderedFallback } from "./fallback";
+import { maskDialPhone, normalizeDialPhone, parseDncScrubDecision, type DncScrubDecision } from "./scrub";
 
 type VendorRow = {
   id: string; name: string; vendor_type: ComplianceVendorType; endpoint: string; credentials_enc: string | null;
@@ -109,6 +110,14 @@ async function logCall(id: string, status: "ok" | "error" | "timeout", startedAt
   });
 }
 
+function errorCategory(error: unknown): string {
+  if (error instanceof Error && error.name === "TimeoutError") return "timeout";
+  if (error instanceof Error && error.message.startsWith("Vendor answered with HTTP")) return "http";
+  if (error instanceof Error && error.message.includes("invalid response")) return "invalid_response";
+  if (error instanceof Error && error.message.includes("did not include")) return "invalid_response";
+  return "network";
+}
+
 export async function testComplianceVendor(id: string, fetcher: typeof fetch = fetch) {
   const { data, error } = await getSupabaseServiceClient().from("compliance_vendors")
     .select("id, endpoint, credentials_enc").eq("id", id).maybeSingle<{ id: string; endpoint: string; credentials_enc: string | null }>();
@@ -133,7 +142,16 @@ export async function testComplianceVendor(id: string, fetcher: typeof fetch = f
   }
 }
 
-export async function runWithComplianceFallback<T>(vendorType: ComplianceVendorType, operation: (vendor: { id: string; endpoint: string; credentials: string | null }) => Promise<T>) {
+export async function runWithComplianceFallback<T>(
+  vendorType: ComplianceVendorType,
+  operation: (vendor: { id: string; endpoint: string; credentials: string | null }) => Promise<T>,
+  options: {
+    tenantId?: string | null;
+    method?: string;
+    request?: SafeJson;
+    response?: (result: T) => SafeJson;
+  } = {},
+) {
   const { data, error } = await getSupabaseServiceClient().from("compliance_vendors")
     .select("id, endpoint, credentials_enc").eq("vendor_type", vendorType).eq("is_enabled", true).order("priority").order("name");
   if (error) throw new Error(`Could not load ${vendorType} vendors: ${error.message}`);
@@ -141,7 +159,75 @@ export async function runWithComplianceFallback<T>(vendorType: ComplianceVendorT
     const item = row as { id: string; endpoint: string; credentials_enc: string | null };
     return { id: item.id, endpoint: item.endpoint, credentials: decryptVendorCredentials(item.credentials_enc) };
   });
-  return runOrderedFallback(vendors, operation, async (from, to) => {
-    await recordProviderCall({ tenantId: null, provider: providerCode(from.id), method: "fallback", request: { fromVendorId: from.id, toVendorId: to.id, vendorType }, response: { reason: "primary vendor failed" }, status: "error", durationMs: 0 });
+  const method = options.method ?? "compliance_lookup";
+  const request = options.request ?? { vendorType };
+  return runOrderedFallback(vendors, async (vendor) => {
+    const startedAt = performance.now();
+    try {
+      const result = await operation(vendor);
+      await recordProviderCall({
+        tenantId: options.tenantId ?? null,
+        provider: providerCode(vendor.id),
+        method,
+        request,
+        response: options.response?.(result) ?? { ok: true },
+        status: "ok",
+        durationMs: Math.round(performance.now() - startedAt),
+      });
+      return result;
+    } catch (error) {
+      await recordProviderCall({
+        tenantId: options.tenantId ?? null,
+        provider: providerCode(vendor.id),
+        method,
+        request,
+        response: { category: errorCategory(error) },
+        status: errorCategory(error) === "timeout" ? "timeout" : "error",
+        durationMs: Math.round(performance.now() - startedAt),
+      });
+      throw error;
+    }
+  }, async (from, to) => {
+    await recordProviderCall({
+      tenantId: options.tenantId ?? null,
+      provider: providerCode(from.id),
+      method: "fallback",
+      request: { fromVendorId: from.id, toVendorId: to.id, vendorType },
+      response: { reason: "primary vendor failed" },
+      status: "error",
+      durationMs: 0,
+    });
   });
+}
+
+export async function performDncDialPreflight(
+  phone: string,
+  tenantId: string,
+  fetcher: typeof fetch = fetch,
+): Promise<{ allowed: boolean; phone: string }> {
+  const normalized = normalizeDialPhone(phone);
+  await assertDncVendorAvailable();
+  const decision = await runWithComplianceFallback<DncScrubDecision>(
+    "dnc_scrub",
+    async (vendor) => {
+      const headers: Record<string, string> = { accept: "application/json", "content-type": "application/json" };
+      if (vendor.credentials) headers.authorization = `Bearer ${vendor.credentials}`;
+      const response = await fetcher(vendor.endpoint, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ phone: normalized }),
+        signal: AbortSignal.timeout(10000),
+      });
+      if (!response.ok) throw new Error(`Vendor answered with HTTP ${response.status}`);
+      const payload = await response.json().catch(() => null);
+      return parseDncScrubDecision(payload);
+    },
+    {
+      tenantId,
+      method: "dnc_scrub",
+      request: { phone: maskDialPhone(normalized) },
+      response: (result) => ({ allowed: result.allowed }),
+    },
+  );
+  return { allowed: decision.allowed, phone: maskDialPhone(normalized) };
 }

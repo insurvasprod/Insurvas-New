@@ -681,22 +681,20 @@ idempotent re-application, and tenant-scoped RLS. The repository checks and sign
 screen verification also passed. Platform templates remain immutable inputs; agent edits are saved
 only to the tenant-owned copy.
 
-### 61. 🟡 SA-4.8 registry is ready, but the agent dialing consumer is not in this ticket
-**From:** SA-4.8 (2026-08-30) · **Belongs to:** the agent-side TCPA / DNC dialing ticket
+### 61. ✅ SA-4.8 agent-side DNC preflight is now wired
+**From:** SA-4.8 (2026-08-30) · **Belongs to:** SA-4.8 · **Resolved:** 2026-08-30
 
-SA-4.8 now stores encrypted vendor credentials, masks them from every admin response, exposes
-enabled vendors in priority order, records sanitized provider calls and fallback events, and blocks
-the registry when no enabled DNC vendor exists. The reusable `assertDncVendorAvailable()` gate is
-ready for the dialing path. The actual outbound scrub request, agent-facing blocked-dial response,
-and an end-to-end primary-fails/secondary-succeeds call cannot be verified here because the ticket
-explicitly puts the scrub call and scrub-result handling on the agent side. The fallback algorithm
-itself is covered by deterministic unit tests, but the real consumer still needs to call it.
+The agent now has a protected `/app/dialer` screen and `/api/app/dial/preflight` endpoint. Every
+preflight checks for an enabled DNC vendor, calls vendors in priority order, falls back when a
+vendor is unreachable or returns an unusable response, and fails closed when no vendor can verify
+the number. Listed numbers return a clear blocked response. Each scrub attempt and fallback is
+recorded in `provider_calls` with only the masked last four digits; credentials and the full phone
+number are never retained in the provider log. The pure fallback and response-contract tests pass.
 
-**Fix:** wire the agent dialing flow to `assertDncVendorAvailable()` and
-`runWithComplianceFallback("dnc_scrub", ...)`, return the DNC reason to the agent, and add an
-authenticated integration test that forces the primary adapter to fail, confirms the secondary is
-used, and checks the sanitized fallback row. Until then, SA-4.8's two end-to-end dialing criteria
-remain unverified rather than being treated as complete.
+The repository still has no PSTN/calling-provider adapter, so the endpoint returns “ready for your
+connected dialer” after a successful scrub rather than pretending to place a telephone call. A
+future telephony ticket must invoke this same preflight immediately before handing a number to its
+provider.
 
 ---
 
