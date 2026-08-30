@@ -436,53 +436,6 @@ disagreeing about a number, with nothing on screen to explain why.
 **Fix, if it ever matters:** a short-lived shared cache, or drop the in-memory layer and accept one
 indexed lookup per read.
 
-### 52. Every admin screen scrolls sideways below about 870px
-**From:** SA-4.1's front-end QA · **Belongs to:** a layout pass, not one ticket
-
-The admin shell is a fixed 240px sidebar plus a main area with fixed padding, and neither responds
-to width. Measured in a browser at a 560px viewport: the feature catalog needs 864px and overflows
-by 304, the new settings screen needs 608 and overflows by 48. So this is a property of the shell
-rather than of any one page, and it predates SA-4.1.
-
-It does not matter today — the product is used at a desk on a wide screen, and SA-00 scoped it that
-way. It is recorded because LA-0.1's acceptance criteria explicitly require the agent app to be
-desktop-first *without breaking on a phone*, and that app inherits this shell.
-
-**Fix:** a collapsible sidebar below a breakpoint, which is a single change in the admin layout.
-
-### 65. Kill switches fail OPEN, and that is the decision
-**From:** SA-4.10 · Deliberate, recorded so nobody "fixes" it
-
-If `feature_switches` cannot be read — the table is missing, the database is unreachable, a
-migration is half-applied — every feature is treated as ON and the error is logged loudly.
-
-The alternative is failing closed, which sounds safer and is not. It would turn one unreadable
-table into a total product outage for every tenant at once, triggered by exactly the kind of
-partial failure that happens during a deploy. A killed feature staying reachable for a few more
-seconds is a much smaller problem than the whole platform going dark, and entitlements still apply
-either way, so nobody gets anything they have not paid for.
-
-This is the one line in `lib/features/killSwitch.ts` most likely to look like a bug to somebody
-reading it quickly.
-
-**Fix:** none. If the switches ever become a genuine security boundary rather than an incident
-tool — blocking something that is dangerous rather than merely broken — this decision has to be
-revisited, and that feature needs its own hard gate rather than a kill switch.
-
-### 69. Margin cannot be shown for a meter whose vendor cost is zero
-**From:** the Module 4 UI pass · Minor
-
-The pricing table computes margin against vendor cost, so a meter with a cost of zero shows an em
-dash rather than a percentage. That is the divide-by-zero guard doing its job, and it is honest,
-but it is unhelpful: every meter currently has a vendor cost of $0.00 because none has been entered,
-so the margin column is a row of dashes on first use.
-
-The column still earns its place — it is what makes "below cost" mean something the moment real
-costs are entered, and SA-4.8's vendor integration is where those costs come from.
-
-**Fix:** either show "no cost set" instead of a dash so the reason is visible, or seed vendor costs
-from the compliance vendors that already carry a cost per lookup.
-
 ### 11. `middleware.ts` uses a deprecated convention
 **From:** SA-0.3
 
@@ -774,6 +727,15 @@ provider.
 ## ✅ Resolved
 
 *Terse log — details live in git history.*
+
+- **#52 Every admin screen scrolled sideways below ~870px** → fixed 2026-08-30, and the diagnosis in
+  that entry was wrong. It blamed the fixed sidebar and prescribed collapsing it. The real cause was
+  two lines: `<main>` is a flex item, so `min-width: auto` stopped it shrinking below its widest
+  child, and `tableShell` used `overflow-hidden` so a wide table had nowhere to scroll. A wide table
+  therefore pushed main, main pushed the page, and the sidebar slid off the left. Adding `min-w-0`
+  to main and switching the table container to `overflow-x-auto` fixed every admin screen at once:
+  measured at a 560px viewport, Users went from 652px of page overflow to 0 and Features from 304 to
+  0, with the table scrolling inside its own container instead.
 
 - **#68 Six sections kept the old table treatment** → closed 2026-08-30 after actually looking at
   them. The premise was wrong: the entry assumed rows of Save buttons and thin empty states across

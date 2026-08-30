@@ -87,7 +87,12 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           </div>
         </div>
       </aside>
-      <main className="flex-1 bg-[var(--color-page-bg)] p-8">{children}</main>
+      {/* min-w-0 is load-bearing. A flex item defaults to min-width:auto, so <main> refused to
+          shrink below its widest child — a wide table pushed main, main pushed the page, and the
+          sidebar scrolled off the left on every screen with a table. With it, main can shrink and
+          the table scrolls inside its own overflow-x-auto container instead (see table-styles.ts).
+          This is what backlog #52 was actually describing. */}
+      <main className="min-w-0 flex-1 bg-[var(--color-page-bg)] p-8">{children}</main>
     </div>
   );
 }
