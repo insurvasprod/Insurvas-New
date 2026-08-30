@@ -20,6 +20,8 @@ import { fetchOffers } from "@/lib/offers/queries";
 import { fetchProducts } from "@/lib/products/queries";
 import { fetchTemplates } from "@/lib/templates/queries";
 import { getAllSettings } from "@/lib/settings/queries";
+import { ComplianceVendorsTable } from "@/components/admin/compliance-vendors-table";
+import { listComplianceVendors } from "@/lib/compliance/service";
 
 export default async function ConfigurationSectionPage({ params }: { params: Promise<{ section: string }> }) {
   const admin = await getCurrentAdmin();
@@ -58,6 +60,9 @@ export default async function ConfigurationSectionPage({ params }: { params: Pro
   } else if (section.slug === "features") {
     const [groups, modules] = await Promise.all([fetchFeatureCatalog(), fetchFeatureModules()]);
     content = <FeatureCatalog initialGroups={groups} modules={modules} />;
+  } else if (section.slug === "compliance-sources") {
+    const vendors = await listComplianceVendors();
+    content = <ComplianceVendorsTable initialVendors={vendors} />;
   } else {
     content = <ConfigurationPlaceholder section={section} />;
   }

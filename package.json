@@ -16,6 +16,7 @@
     "verify:offers": "node --env-file=.env.local scripts/verify-offers.mjs",
     "verify:products": "node --env-file=.env.local scripts/verify-products.mjs",
     "verify:templates": "node --env-file=.env.local scripts/verify-templates.mjs",
+    "verify:compliance": "node --env-file=.env.local scripts/verify-compliance-vendors.mjs",
     "verify:agent-templates": "node --env-file=.env.local scripts/verify-agent-templates.mjs",
     "rebuild:usage": "node --env-file=.env.local scripts/rebuild-usage-totals.mjs",
     "advance:periods": "node --env-file=.env.local scripts/advance-billing-periods.mjs",

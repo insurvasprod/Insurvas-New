@@ -42,6 +42,49 @@ export type Database = {
         };
         Relationships: [];
       };
+      compliance_vendors: {
+        Row: {
+          id: string;
+          name: string;
+          vendor_type: string;
+          endpoint: string;
+          credentials_enc: string | null;
+          is_enabled: boolean;
+          priority: number;
+          cost_per_lookup_cents: number;
+          last_success_at: string | null;
+          failure_count_24h: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          vendor_type: string;
+          endpoint: string;
+          credentials_enc?: string | null;
+          is_enabled?: boolean;
+          priority?: number;
+          cost_per_lookup_cents?: number;
+          last_success_at?: string | null;
+          failure_count_24h?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          name?: string;
+          vendor_type?: string;
+          endpoint?: string;
+          credentials_enc?: string | null;
+          is_enabled?: boolean;
+          priority?: number;
+          cost_per_lookup_cents?: number;
+          last_success_at?: string | null;
+          failure_count_24h?: number;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       metrics_daily: {
         Row: {
           active_customers: number;

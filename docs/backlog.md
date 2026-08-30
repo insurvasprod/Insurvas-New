@@ -681,6 +681,23 @@ idempotent re-application, and tenant-scoped RLS. The repository checks and sign
 screen verification also passed. Platform templates remain immutable inputs; agent edits are saved
 only to the tenant-owned copy.
 
+### 61. 🟡 SA-4.8 registry is ready, but the agent dialing consumer is not in this ticket
+**From:** SA-4.8 (2026-08-30) · **Belongs to:** the agent-side TCPA / DNC dialing ticket
+
+SA-4.8 now stores encrypted vendor credentials, masks them from every admin response, exposes
+enabled vendors in priority order, records sanitized provider calls and fallback events, and blocks
+the registry when no enabled DNC vendor exists. The reusable `assertDncVendorAvailable()` gate is
+ready for the dialing path. The actual outbound scrub request, agent-facing blocked-dial response,
+and an end-to-end primary-fails/secondary-succeeds call cannot be verified here because the ticket
+explicitly puts the scrub call and scrub-result handling on the agent side. The fallback algorithm
+itself is covered by deterministic unit tests, but the real consumer still needs to call it.
+
+**Fix:** wire the agent dialing flow to `assertDncVendorAvailable()` and
+`runWithComplianceFallback("dnc_scrub", ...)`, return the DNC reason to the agent, and add an
+authenticated integration test that forces the primary adapter to fail, confirms the secondary is
+used, and checks the sanitized fallback row. Until then, SA-4.8's two end-to-end dialing criteria
+remain unverified rather than being treated as complete.
+
 ---
 
 ## ✅ Resolved
