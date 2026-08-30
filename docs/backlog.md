@@ -293,6 +293,26 @@ SA-4.2 payment-status screen, including the successful connection-test confirmat
 status API's safe-field-only response was also verified through an authenticated HTTP check; the
 API cannot be opened as a standalone browser document because the in-app browser blocks raw JSON.
 
+### 57. SA-4.4 live and browser verification completed
+**From:** SA-4.4 · **Verified in live project, 2026-08-30**
+
+The `offers` migration was applied to the Insurvas-Saas Supabase project as
+`sa_4_4_offers`. The live verification script passes auto-apply, apply-time redemption caps,
+rejected-capacity preservation, three-invoice duration, end-date auto-apply cutoff, admin API
+visibility, offer editing, and offer-edit audit logging. Temporary verification tenants, coupons,
+offers, subscriptions, and audit rows are cleaned up by the script.
+
+`npm run verify:configuration` also passes all 45 checks on `http://localhost:3101`: super-admin
+access, support-agent 403s on every route, platform-config exclusion from payments/offers, and
+billing-admin access only to offers among the restricted sections.
+
+The Playwright browser fallback verified the signed-in page at
+`http://localhost:3101/admin/configuration/offers` on desktop (1440x1000) and mobile (390x844).
+It verified page identity, meaningful rendered content, no framework overlay, no console/page
+errors, the blank-name validation message, deactivate/reactivate success confirmations, and
+screenshots. Mobile overflow matched the existing admin shell and did not increase it. No unmet
+SA-4.4 verification criterion remains.
+
 ### 9. No CI pipeline exists
 **From:** SA-0.2, SA-0.3, SA-2.1
 

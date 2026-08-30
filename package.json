@@ -13,6 +13,7 @@
     "verify:tenant-isolation": "node --env-file=.env.local scripts/verify-tenant-isolation.mjs",
     "check:features": "node --env-file=.env.local scripts/check-feature-keys.mjs",
     "verify:configuration": "node --env-file=.env.local scripts/verify-configuration-center.mjs",
+    "verify:offers": "node --env-file=.env.local scripts/verify-offers.mjs",
     "rebuild:usage": "node --env-file=.env.local scripts/rebuild-usage-totals.mjs",
     "advance:periods": "node --env-file=.env.local scripts/advance-billing-periods.mjs",
     "verify:entitlements": "node --env-file=.env.local scripts/verify-entitlements.mjs",

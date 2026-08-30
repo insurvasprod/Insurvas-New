@@ -4,15 +4,17 @@ import { forbidden, notFound } from "next/navigation";
 
 import { AdminPageHeader } from "@/components/admin/page-header";
 import { ConfigurationPlaceholder } from "@/components/admin/configuration/configuration-placeholder";
-import { CouponsTable } from "@/components/admin/coupons-table";
+import { OffersTable } from "@/components/admin/offers-table";
 import { FeatureCatalog } from "@/components/admin/feature-catalog";
 import { PaymentStatusPanel } from "@/components/admin/payment-status-panel";
 import { SettingsForm } from "@/components/admin/settings-form";
 import { getCurrentAdmin } from "@/lib/adminAuth/getCurrentAdmin";
-import { fetchCoupons } from "@/lib/coupons/queries";
 import { canAccessConfigurationSection, getConfigurationSection } from "@/lib/configuration/sections";
 import { fetchFeatureCatalog, fetchFeatureModules } from "@/lib/features/queries";
 import { getProviderStatus } from "@/lib/payments/status";
+import { fetchPlans } from "@/lib/plans/queries";
+import { fetchSubscriptions } from "@/lib/subscriptions/queries";
+import { fetchOffers } from "@/lib/offers/queries";
 import { getAllSettings } from "@/lib/settings/queries";
 
 export default async function ConfigurationSectionPage({ params }: { params: Promise<{ section: string }> }) {
@@ -29,7 +31,8 @@ export default async function ConfigurationSectionPage({ params }: { params: Pro
     const status = await getProviderStatus();
     content = <PaymentStatusPanel status={status} />;
   } else if (section.slug === "offers") {
-    content = <CouponsTable initialCoupons={await fetchCoupons()} />;
+    const [offers, plans, subscriptions] = await Promise.all([fetchOffers(), fetchPlans(), fetchSubscriptions()]);
+    content = <OffersTable initialOffers={offers} plans={plans} subscriptions={subscriptions.filter((item) => item.status !== "cancelled")} />;
   } else if (section.slug === "advanced") {
     const settings = await getAllSettings();
     content = (

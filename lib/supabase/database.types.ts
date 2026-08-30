@@ -177,6 +177,61 @@ export type Database = {
         };
         Relationships: [];
       };
+      offers: {
+        Row: {
+          auto_apply: boolean;
+          coupon_id: string;
+          created_at: string;
+          created_by: string | null;
+          eligible_cycles: Database["public"]["Enums"]["billing_cycle"][];
+          eligible_plan_ids: string[];
+          eligible_plan_types: Database["public"]["Enums"]["plan_type"][];
+          ends_at: string | null;
+          existing_customers_only: boolean;
+          id: string;
+          is_active: boolean;
+          max_redemptions: number | null;
+          name: string;
+          new_customers_only: boolean;
+          redeemed_count: number;
+          starts_at: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          auto_apply?: boolean;
+          coupon_id: string;
+          created_at?: string;
+          created_by?: string | null;
+          eligible_cycles?: Database["public"]["Enums"]["billing_cycle"][];
+          eligible_plan_ids?: string[];
+          eligible_plan_types?: Database["public"]["Enums"]["plan_type"][];
+          ends_at?: string | null;
+          existing_customers_only?: boolean;
+          id?: string;
+          is_active?: boolean;
+          max_redemptions?: number | null;
+          name: string;
+          new_customers_only?: boolean;
+          redeemed_count?: number;
+          starts_at?: string | null;
+          updated_at?: string;
+        };
+        Update: {
+          auto_apply?: boolean;
+          eligible_cycles?: Database["public"]["Enums"]["billing_cycle"][];
+          eligible_plan_ids?: string[];
+          eligible_plan_types?: Database["public"]["Enums"]["plan_type"][];
+          ends_at?: string | null;
+          existing_customers_only?: boolean;
+          is_active?: boolean;
+          max_redemptions?: number | null;
+          name?: string;
+          new_customers_only?: boolean;
+          starts_at?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       subscription_coupons: {
         Row: {
           applied_at: string;
@@ -1322,8 +1377,12 @@ export type Database = {
         Returns: number;
       };
       admin_apply_coupon: {
-        Args: { p_subscription_id: string; p_coupon_id: string; p_applied_by: string };
+        Args: { p_subscription_id: string; p_coupon_id: string; p_applied_by: string | null };
         Returns: string;
+      };
+      apply_auto_offer_to_subscription: {
+        Args: { p_subscription_id: string };
+        Returns: string | null;
       };
       consume_coupon_period: {
         Args: { p_subscription_id: string };
