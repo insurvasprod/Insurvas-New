@@ -4,8 +4,7 @@ import { ConfigurationPlaceholder } from "@/components/admin/configuration/confi
 import { OffersTable } from "@/components/admin/offers-table";
 import { ProductsTable } from "@/components/admin/products-table";
 import { TemplatesTable } from "@/components/admin/templates-table";
-import { FeatureCatalog } from "@/components/admin/feature-catalog";
-import { FeatureSwitchesPanel } from "@/components/admin/feature-switches-panel";
+import { FeaturesSection } from "@/components/admin/configuration/features-section";
 import { PaymentStatusPanel } from "@/components/admin/payment-status-panel";
 import { SettingsForm } from "@/components/admin/settings-form";
 import { getCurrentAdmin } from "@/lib/adminAuth/getCurrentAdmin";
@@ -87,18 +86,13 @@ export default async function ConfigurationSectionPage({ params }: { params: Pro
     );
 
     content = (
-      <div className="space-y-8">
-        <FeatureCatalog initialGroups={groups} modules={modules} />
-        <div>
-          <h2 className="mb-1 text-lg font-semibold tracking-tight">Kill switches</h2>
-          <p className="mb-4 max-w-2xl text-sm text-muted-foreground">
-            Switching a feature off takes it away from every tenant immediately, whatever their plan
-            says. This is not the same as a plan not including it &mdash; entitlements are untouched,
-            and agents see a maintenance notice rather than an upgrade prompt.
-          </p>
-          <FeatureSwitchesPanel features={switchable} initialSwitches={[...switches.values()]} />
-        </div>
-      </div>
+      <FeaturesSection
+        groups={groups}
+        modules={modules}
+        switchable={switchable}
+        switches={[...switches.values()]}
+        canToggle={admin.role === "super_admin"}
+      />
     );
   } else if (section.slug === "compliance-sources") {
     const vendors = await listComplianceVendors();
