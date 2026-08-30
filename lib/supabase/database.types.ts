@@ -763,6 +763,36 @@ export type Database = {
         };
         Relationships: [];
       };
+      // HAND-ADDED by SA-4.10, not generated. feature_switches ships in
+      // supabase/migrations/0014_feature_switches.sql; regenerate this file once that migration has
+      // been applied and this block should come back identical.
+      feature_switches: {
+        Row: {
+          feature_key: string;
+          state: string;
+          beta_tenant_ids: string[];
+          off_message: string | null;
+          updated_by: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          feature_key: string;
+          state?: string;
+          beta_tenant_ids?: string[];
+          off_message?: string | null;
+          updated_by?: string | null;
+          updated_at?: string;
+        };
+        Update: {
+          feature_key?: string;
+          state?: string;
+          beta_tenant_ids?: string[];
+          off_message?: string | null;
+          updated_by?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       features: {
         Row: {
           created_at: string;

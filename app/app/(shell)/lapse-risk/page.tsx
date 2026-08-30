@@ -1,6 +1,6 @@
 import { guardPage } from "@/lib/entitlements/guardPage";
 import { Card, CardContent } from "@/components/ui/card";
-import { UpgradePrompt } from "@/components/app/upgrade-prompt";
+import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 
 /**
  * Gated on `chargeback_radar`, which only plan_c grants — so this is the page that demonstrates
@@ -12,10 +12,10 @@ export default async function LapseRiskPage() {
 
   if (!guard.entitled) {
     return (
-      <UpgradePrompt
+      <FeatureGateNotice
+        guard={guard}
         featureLabel="Lapse risk"
         description="Predictive scoring that flags policies likely to lapse before they do."
-        planCode={guard.entitlement.plan_code}
       />
     );
   }

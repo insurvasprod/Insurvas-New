@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { requireTenant, type TenantContext } from "@/lib/tenantAuth/requireTenant";
 import { getEntitlement } from "./get";
 import { canWrite, hasFeature, type Entitlement } from "./types";
+import { featureKillState } from "@/lib/features/killSwitch";
 
 export type EntitledContext = {
   context: TenantContext;
@@ -31,6 +32,25 @@ export async function requireFeature(
   if (auth instanceof NextResponse) return auth;
 
   const entitlement = await getEntitlement(auth.context.tenantId);
+
+  // KILL SWITCH FIRST, THEN ENTITLEMENT (SA-4.10).
+  //
+  // The order matters and is not interchangeable. A killed feature is off for everyone, including
+  // a tenant whose plan grants it — so telling them their plan doesn't include it would be a lie,
+  // and would send a paying customer to an upgrade page for something they already bought.
+  const kill = await featureKillState(featureKey, auth.context.tenantId);
+  if (kill.killed) {
+    return NextResponse.json(
+      {
+        // A distinct code from feature_not_entitled, so the agent app shows a maintenance notice
+        // rather than an upgrade prompt.
+        error: kill.notice ?? "This feature is temporarily unavailable.",
+        code: "feature_unavailable",
+        feature: featureKey,
+      },
+      { status: 503 },
+    );
+  }
 
   if (!hasFeature(entitlement, featureKey)) {
     // 403 with a machine-readable reason, so the agent app can show an upgrade prompt rather

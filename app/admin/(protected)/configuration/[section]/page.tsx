@@ -8,11 +8,13 @@ import { OffersTable } from "@/components/admin/offers-table";
 import { ProductsTable } from "@/components/admin/products-table";
 import { TemplatesTable } from "@/components/admin/templates-table";
 import { FeatureCatalog } from "@/components/admin/feature-catalog";
+import { FeatureSwitchesPanel } from "@/components/admin/feature-switches-panel";
 import { PaymentStatusPanel } from "@/components/admin/payment-status-panel";
 import { SettingsForm } from "@/components/admin/settings-form";
 import { getCurrentAdmin } from "@/lib/adminAuth/getCurrentAdmin";
 import { canAccessConfigurationSection, getConfigurationSection } from "@/lib/configuration/sections";
 import { fetchFeatureCatalog, fetchFeatureModules } from "@/lib/features/queries";
+import { fetchAllSwitches } from "@/lib/features/killSwitch";
 import { getProviderStatus } from "@/lib/payments/status";
 import { fetchPlans } from "@/lib/plans/queries";
 import { fetchSubscriptions } from "@/lib/subscriptions/queries";
@@ -60,8 +62,40 @@ export default async function ConfigurationSectionPage({ params }: { params: Pro
       />
     );
   } else if (section.slug === "features") {
-    const [groups, modules] = await Promise.all([fetchFeatureCatalog(), fetchFeatureModules()]);
-    content = <FeatureCatalog initialGroups={groups} modules={modules} />;
+    const [groups, modules, switches] = await Promise.all([
+      fetchFeatureCatalog(),
+      fetchFeatureModules(),
+      fetchAllSwitches(),
+    ]);
+
+    // Archived features are excluded from the switch list: they are already unavailable to any new
+    // plan, so a kill switch on one would be a control that changes nothing.
+    const moduleLabels = new Map(modules.map((m) => [m.key, m.label]));
+    const switchable = groups.flatMap((g) =>
+      g.features
+        .filter((f) => !f.is_archived)
+        .map((f) => ({
+          featureKey: f.feature_key,
+          label: f.label,
+          module: f.module,
+          moduleLabel: moduleLabels.get(f.module) ?? f.module,
+        })),
+    );
+
+    content = (
+      <div className="space-y-8">
+        <FeatureCatalog initialGroups={groups} modules={modules} />
+        <div>
+          <h2 className="mb-1 text-lg font-semibold tracking-tight">Kill switches</h2>
+          <p className="mb-4 max-w-2xl text-sm text-muted-foreground">
+            Switching a feature off takes it away from every tenant immediately, whatever their plan
+            says. This is not the same as a plan not including it &mdash; entitlements are untouched,
+            and agents see a maintenance notice rather than an upgrade prompt.
+          </p>
+          <FeatureSwitchesPanel features={switchable} initialSwitches={[...switches.values()]} />
+        </div>
+      </div>
+    );
   } else if (section.slug === "compliance-sources") {
     const vendors = await listComplianceVendors();
     content = <ComplianceVendorsTable initialVendors={vendors} />;

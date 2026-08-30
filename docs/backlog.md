@@ -164,6 +164,27 @@ pagination arithmetic already on the screen.
 **Fix:** none needed unless the product wants one of these tunable, in which case it is one registry
 entry plus a call site — the machinery is built.
 
+### 64. The admin plan preview deliberately ignores kill switches
+**From:** SA-4.10 · **Decided with the product owner, 2026-08-30**
+
+SA-2.3 built the plan editor's menu preview so that "the preview matches what the agent actually
+sees", by sharing the same `buildAgentMenu` function rather than by anyone remembering to update
+two lists. SA-4.10 breaks that equivalence on purpose.
+
+The agent's real menu is now built from *effective* features — what the plan grants, minus anything
+switched off platform-wide right now. The preview still shows what the plan grants.
+
+The reasoning: the preview answers "what does this plan include?", which is a question about the
+product being sold. A temporary outage should not make a plan look like it does not include
+something you are still charging for. An admin pricing a plan during an incident would otherwise
+see a smaller product than the one the customer is buying.
+
+The cost is that SA-2.3's "matches exactly" claim now carries a footnote, and someone comparing the
+two screens during an outage will see a difference.
+
+**Fix:** none wanted. If the preview should ever show outage state, it needs to say WHY an item is
+missing rather than silently omitting it — otherwise it just looks wrong.
+
 ### 14. Delete user — not built
 **From:** SA-1.4 · **Descoped by user on 2026-08-29:** *"we will only do inactive"*
 
@@ -254,6 +275,27 @@ entitlement engine. The grant is correct in the database; nothing reads it yet.
 ---
 
 ## 🔵 Unverified
+
+### 63. A kill switch is proven instant on one server, not across several
+**From:** SA-4.10 · **Belongs to:** the first multi-instance deployment
+
+The criterion is that killing a feature hides it from every agent within sixty seconds. It is
+proven, but only on a single running server: `npm run verify:switches` flips a switch and the very
+next request is refused, because the write and the read happen in the same process and the cache is
+cleared on the way through.
+
+On a platform running several instances at once — which is what Vercel does — the instance that
+handled the toggle clears its copy and the others do not. They keep serving the old answer until
+their own copy ages out, which is capped at thirty seconds. That is inside the sixty the criterion
+asks for, and it is why the cache is deliberately set to half the budget rather than to the whole
+of it. But nobody has yet watched it happen on more than one instance.
+
+**Worth knowing:** running the verification leaves rows in the audit log with the reason
+"automated verification". They are real records of real changes and the log is append-only by
+design, so they cannot be tidied away — and should not be.
+
+**Fix:** on the first real multi-instance deploy, toggle a switch and watch a second instance pick
+it up. If thirty seconds ever proves too slow, the answer is a shared cache, not a shorter TTL.
 
 ### 7. Users list performance at scale — NOT verified
 **From:** SA-1.1 · **User opted out on 2026-08-29**
@@ -409,6 +451,25 @@ way. It is recorded because LA-0.1's acceptance criteria explicitly require the 
 desktop-first *without breaking on a phone*, and that app inherits this shell.
 
 **Fix:** a collapsible sidebar below a breakpoint, which is a single change in the admin layout.
+
+### 65. Kill switches fail OPEN, and that is the decision
+**From:** SA-4.10 · Deliberate, recorded so nobody "fixes" it
+
+If `feature_switches` cannot be read — the table is missing, the database is unreachable, a
+migration is half-applied — every feature is treated as ON and the error is logged loudly.
+
+The alternative is failing closed, which sounds safer and is not. It would turn one unreadable
+table into a total product outage for every tenant at once, triggered by exactly the kind of
+partial failure that happens during a deploy. A killed feature staying reachable for a few more
+seconds is a much smaller problem than the whole platform going dark, and entitlements still apply
+either way, so nobody gets anything they have not paid for.
+
+This is the one line in `lib/features/killSwitch.ts` most likely to look like a bug to somebody
+reading it quickly.
+
+**Fix:** none. If the switches ever become a genuine security boundary rather than an incident
+tool — blocking something that is dangerous rather than merely broken — this decision has to be
+revisited, and that feature needs its own hard gate rather than a kill switch.
 
 ### 11. `middleware.ts` uses a deprecated convention
 **From:** SA-0.3

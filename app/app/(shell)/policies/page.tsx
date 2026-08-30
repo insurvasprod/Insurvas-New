@@ -1,6 +1,6 @@
 import { guardPage } from "@/lib/entitlements/guardPage";
 import { Card, CardContent } from "@/components/ui/card";
-import { UpgradePrompt } from "@/components/app/upgrade-prompt";
+import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 
 /**
  * Scaffolding for LA-0.1 to replace — it exists so SA-2.8's three enforcement points are real
@@ -14,10 +14,10 @@ export default async function PoliciesPage() {
 
   if (!guard.entitled) {
     return (
-      <UpgradePrompt
+      <FeatureGateNotice
+        guard={guard}
         featureLabel="Book of business"
         description="Your policies, premiums and carriers in one place."
-        planCode={guard.entitlement.plan_code}
       />
     );
   }

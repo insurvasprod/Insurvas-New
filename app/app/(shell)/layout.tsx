@@ -4,6 +4,7 @@ import { Building2 } from "lucide-react";
 import { resolveTenantContext } from "@/lib/tenantAuth/requireTenant";
 import { getEntitlement } from "@/lib/entitlements/get";
 import { buildAgentMenu } from "@/lib/menu/definition";
+import { effectiveFeatures } from "@/lib/features/killSwitch";
 import { AgentSidebar } from "@/components/app/agent-sidebar";
 import { LogoutButton } from "@/components/app/logout-button";
 
@@ -19,7 +20,13 @@ export default async function AgentShellLayout({ children }: { children: React.R
   if (!context) redirect("/app/login");
 
   const entitlement = await getEntitlement(context.tenantId);
-  const menu = buildAgentMenu(entitlement.features);
+
+  // The menu is built from EFFECTIVE features — what the plan grants, minus anything switched off
+  // platform-wide right now (SA-4.10). Filtering here rather than inside buildAgentMenu keeps that
+  // function pure and shared with the admin plan preview, which deliberately shows plan grants
+  // rather than the current outage state.
+  const available = await effectiveFeatures(entitlement.features, context.tenantId);
+  const menu = buildAgentMenu(available);
 
   return (
     <div className="flex min-h-screen">
