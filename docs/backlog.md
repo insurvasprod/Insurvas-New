@@ -672,6 +672,15 @@ Needs: `PATCH /memberships/{id}` with `cancel_at_period_end`, a new checkout on 
 the difference invoice — which is the same separate-invoice mechanism [#27] needs for add-ons.
 Worth building both at once.
 
+### 60. ✅ SA-4.7 agent template selection and tenant-owned copies completed
+**From:** SA-4.7 · **Belongs to:** SA-4.7 · **Resolved:** 2026-08-30
+
+Nothing added to the backlog for SA-4.7. The live verification covered onboarding copy creation,
+subscription-filtered template discovery, tenant isolation, second-template preview and merge,
+idempotent re-application, and tenant-scoped RLS. The repository checks and signed-in browser
+screen verification also passed. Platform templates remain immutable inputs; agent edits are saved
+only to the tenant-owned copy.
+
 ---
 
 ## ✅ Resolved

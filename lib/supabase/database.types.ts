@@ -756,6 +756,36 @@ export type Database = {
         };
         Relationships: [];
       };
+      plan_product_access: {
+        Row: { plan_id: string; product_code: string; created_at: string };
+        Insert: { plan_id: string; product_code: string; created_at?: string };
+        Update: { plan_id?: string; product_code?: string; created_at?: string };
+        Relationships: [];
+      };
+      tenant_templates: {
+        Row: { id: string; tenant_id: string; template_id: string; template_version: number; product_code: string; name: string; description: string | null; applied_at: string; applied_by: string | null; created_at: string; updated_at: string };
+        Insert: { id?: string; tenant_id: string; template_id: string; template_version: number; product_code: string; name: string; description?: string | null; applied_at?: string; applied_by?: string | null; created_at?: string; updated_at?: string };
+        Update: { id?: string; tenant_id?: string; template_id?: string; template_version?: number; product_code?: string; name?: string; description?: string | null; applied_at?: string; applied_by?: string | null; created_at?: string; updated_at?: string };
+        Relationships: [];
+      };
+      tenant_template_fields: {
+        Row: { tenant_template_id: string; field_key: string; label: string; type: string; is_required: boolean; options: Json; sort_order: number };
+        Insert: { tenant_template_id: string; field_key: string; label: string; type: string; is_required?: boolean; options?: Json; sort_order?: number };
+        Update: { tenant_template_id?: string; field_key?: string; label?: string; type?: string; is_required?: boolean; options?: Json; sort_order?: number };
+        Relationships: [];
+      };
+      tenant_template_stages: {
+        Row: { tenant_template_id: string; stage_key: string; label: string; stage_type: string; color: string; sort_order: number };
+        Insert: { tenant_template_id: string; stage_key: string; label: string; stage_type: string; color: string; sort_order?: number };
+        Update: { tenant_template_id?: string; stage_key?: string; label?: string; stage_type?: string; color?: string; sort_order?: number };
+        Relationships: [];
+      };
+      tenant_template_forms: {
+        Row: { tenant_template_id: string; form_definition: Json };
+        Insert: { tenant_template_id: string; form_definition: Json };
+        Update: { tenant_template_id?: string; form_definition?: Json };
+        Relationships: [];
+      };
       tenant_template_assignments: {
         Row: {
           id: string;
@@ -793,6 +823,7 @@ export type Database = {
         Row: {
           id: string;
           tenant_id: string;
+          tenant_template_id: string | null;
           template_id: string;
           template_version: number;
           stage_key: string;
@@ -804,6 +835,7 @@ export type Database = {
         Insert: {
           id?: string;
           tenant_id: string;
+          tenant_template_id?: string | null;
           template_id: string;
           template_version: number;
           stage_key: string;
@@ -815,6 +847,7 @@ export type Database = {
         Update: {
           id?: string;
           tenant_id?: string;
+          tenant_template_id?: string | null;
           template_id?: string;
           template_version?: number;
           stage_key?: string;
@@ -1739,6 +1772,14 @@ export type Database = {
       admin_duplicate_template: {
         Args: { p_template_id: string; p_name: string; p_created_by?: string | null };
         Returns: { template_id: string; version: number }[];
+      };
+      admin_apply_tenant_template: {
+        Args: { p_tenant_id: string; p_template_id: string; p_template_version: number; p_product_code: string; p_name: string; p_description: string | null; p_applied_by: string | null; p_fields: Json; p_stages: Json; p_form_definition: Json };
+        Returns: string;
+      };
+      admin_update_tenant_template: {
+        Args: { p_tenant_template_id: string; p_tenant_id: string; p_name: string; p_description: string | null; p_fields: Json; p_stages: Json; p_form_definition: Json };
+        Returns: string;
       };
       admin_login_activity_stats: {
         Args: never;
