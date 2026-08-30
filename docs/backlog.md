@@ -702,6 +702,33 @@ provider.
 
 *Terse log — details live in git history.*
 
+### 62. ✅ SA-4.9 credit packs, defaults and usage monitor completed
+**From:** SA-4.9 · **Verified in live project, 2026-08-30**
+
+The `credit_packs`, `meter_pricing` and `credit_grants` tables were added in migrations
+`0012_credit_limits.sql` and `0013_credit_limits_plan_precedence.sql`, applied to the Insurvas
+Supabase project, with control-plane RLS and service-role-only access. The existing SA-2.5
+`usage_events` / `usage_totals` counters remain the only usage counters. Grants are additive
+current-period allowances, and a plan's own allowance wins over a platform default, including an
+explicit unlimited (`NULL`) value.
+
+The admin route and screen support independent pack create/edit/archive, per-meter sell price and
+defaults, live DNC vendor cost, manual grants with a mandatory reason, invoice-line creation through
+the existing custom-invoice path, and a server-side usage grid with 80%/100% alerts. All writes
+are server-gated to `super_admin` and `platform_config` and audit-logged; support agents and billing
+admins receive 403, and missing, expired and forged sessions receive 401.
+
+The focused `npm run verify:credits-limits` check passed: concurrent grants, immediate capacity and
+monitor updates, invoice-line creation, margin data, plan-default precedence, hostile and missing
+inputs, audit rows, and a 500-tenant × 6-meter response. Browser QA at
+`http://localhost:3000/admin/configuration/credits-limits` passed with visible focus, native
+mandatory-reason validation, successful rendering and no console errors. The pack action uses the
+existing issued custom-invoice workflow because this repository has no deferred recurring-invoice
+queue; it creates the tenant invoice line now rather than changing Whop's provider charge flow.
+
+Nothing added to the backlog for SA-4.9; all six acceptance criteria are covered by the live
+verification evidence above.
+
 - **SA-4.2 payment provider status surface** → implemented 2026-08-30. The protected standalone
   Whop status page, safe status API, environment-only credential policy, explicit permission split,
   centralized request logging, connection-test auditing, and actual error categories are in place.

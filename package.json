@@ -17,6 +17,7 @@
     "verify:products": "node --env-file=.env.local scripts/verify-products.mjs",
     "verify:templates": "node --env-file=.env.local scripts/verify-templates.mjs",
     "verify:compliance": "node --env-file=.env.local scripts/verify-compliance-vendors.mjs",
+    "verify:credits-limits": "node --env-file=.env.local scripts/verify-credits-limits.mjs",
     "verify:dial-preflight": "node --env-file=.env.local scripts/verify-dial-preflight.mjs",
     "verify:agent-templates": "node --env-file=.env.local scripts/verify-agent-templates.mjs",
     "rebuild:usage": "node --env-file=.env.local scripts/rebuild-usage-totals.mjs",

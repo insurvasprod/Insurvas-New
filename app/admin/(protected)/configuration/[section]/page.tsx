@@ -22,6 +22,8 @@ import { fetchTemplates } from "@/lib/templates/queries";
 import { getAllSettings } from "@/lib/settings/queries";
 import { ComplianceVendorsTable } from "@/components/admin/compliance-vendors-table";
 import { listComplianceVendors } from "@/lib/compliance/service";
+import { CreditLimitsPanel } from "@/components/admin/credit-limits-panel";
+import { getCreditsLimitsData } from "@/lib/creditsLimits/service";
 
 export default async function ConfigurationSectionPage({ params }: { params: Promise<{ section: string }> }) {
   const admin = await getCurrentAdmin();
@@ -63,6 +65,9 @@ export default async function ConfigurationSectionPage({ params }: { params: Pro
   } else if (section.slug === "compliance-sources") {
     const vendors = await listComplianceVendors();
     content = <ComplianceVendorsTable initialVendors={vendors} />;
+  } else if (section.slug === "credits-limits") {
+    const data = await getCreditsLimitsData();
+    content = <CreditLimitsPanel initialPacks={data.packs} initialPricing={data.pricing} initialMonitor={data.monitor} initialTenants={data.tenants} />;
   } else {
     content = <ConfigurationPlaceholder section={section} />;
   }

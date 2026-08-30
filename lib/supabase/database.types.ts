@@ -85,6 +85,86 @@ export type Database = {
         };
         Relationships: [];
       };
+      credit_packs: {
+        Row: {
+          id: string;
+          name: string;
+          meter_key: string;
+          quantity: number;
+          price_cents: number;
+          is_active: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          meter_key: string;
+          quantity: number;
+          price_cents: number;
+          is_active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          name?: string;
+          meter_key?: string;
+          quantity?: number;
+          price_cents?: number;
+          is_active?: boolean;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      meter_pricing: {
+        Row: {
+          meter_key: string;
+          cost_cents: number;
+          sell_cents: number;
+          default_included: number | null;
+          updated_at: string;
+          updated_by: string | null;
+        };
+        Insert: {
+          meter_key: string;
+          cost_cents?: number;
+          sell_cents?: number;
+          default_included?: number | null;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Update: {
+          meter_key?: string;
+          cost_cents?: number;
+          sell_cents?: number;
+          default_included?: number | null;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Relationships: [];
+      };
+      credit_grants: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          meter_key: string;
+          quantity: number;
+          reason: string;
+          granted_by: string | null;
+          granted_at: string;
+        };
+        Insert: {
+          id?: string;
+          tenant_id: string;
+          meter_key: string;
+          quantity: number;
+          reason: string;
+          granted_by?: string | null;
+          granted_at?: string;
+        };
+        Update: never;
+        Relationships: [];
+      };
       metrics_daily: {
         Row: {
           active_customers: number;
@@ -1747,6 +1827,25 @@ export type Database = {
           pct_used: number | null;
           reason: string;
           used: number;
+        }[];
+      };
+      admin_usage_monitor: {
+        Args: { p_over_80?: boolean };
+        Returns: {
+          tenant_id: string;
+          tenant_name: string;
+          tenant_status: string;
+          meter_key: string;
+          meter_label: string;
+          unit: string;
+          used_qty: number;
+          included_qty: number | null;
+          grant_qty: number;
+          plan_included_qty: number | null;
+          hard_cap: boolean;
+          percent_used: number | null;
+          alert_level: string;
+          period_start: string | null;
         }[];
       };
       record_usage: {
