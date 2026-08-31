@@ -25,7 +25,15 @@ export const SIDEBAR_ICONS = [
   "catalog",
   "monitoring",
   "platform",
-  "configuration",
+  "payments",
+  "offers",
+  "products",
+  "templates",
+  "compliance",
+  "limits",
+  "email",
+  "system",
+  "advanced",
 ] as const;
 
 export type SidebarIconKey = (typeof SIDEBAR_ICONS)[number];

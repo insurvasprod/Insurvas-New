@@ -5,9 +5,11 @@ import { canManagePlans } from "../plans/permissions.ts";
 import { canManageSubscriptions } from "../subscriptions/permissions.ts";
 import { canViewInvoices } from "../invoices/permissions.ts";
 import { canManageCoupons } from "../coupons/permissions.ts";
-import { canManageFeatures } from "../features/permissions.ts";
-import { canAccessConfigurationCenter } from "../configuration/sections.ts";
-import { group, link, type SidebarNode } from "./types.ts";
+import {
+  canAccessConfigurationSection,
+  type ConfigurationSectionSlug,
+} from "../configuration/sections.ts";
+import { group, link, type SidebarIconKey, type SidebarNode } from "./types.ts";
 
 /**
  * The admin sidebar, grouped.
@@ -20,6 +22,12 @@ import { group, link, type SidebarNode } from "./types.ts";
  * customer data, but they are gated by canManageSubscriptions — the same permission as Invoices and
  * Revenue, not the one that gates Tenants. Filing them by how they read would leave both groups
  * showing gaps to the role that uses them most.
+ *
+ * Platform holds every platform-configuration screen. These used to sit behind a "Configuration
+ * Center" hub page; the hub is gone and each section is its own route, so they appear here
+ * directly. They are still gated by the same per-section role map the hub used, which is why they
+ * ask `canAccessConfigurationSection` rather than a permission of their own — one place decides,
+ * and the page and the link can never disagree about it.
  */
 export function buildAdminNav(role: AdminRole): SidebarNode[] {
   const tenants = canViewTenants(role);
@@ -28,9 +36,15 @@ export function buildAdminNav(role: AdminRole): SidebarNode[] {
   const subscriptions = canManageSubscriptions(role);
   const invoices = canViewInvoices(role);
   const coupons = canManageCoupons(role);
-  const features = canManageFeatures(role);
-  const configuration = canAccessConfigurationCenter(role);
   const isSuperAdmin = role === "super_admin";
+
+  /** A platform-configuration screen, rendered only for a role the section registry admits. */
+  const section = (
+    slug: ConfigurationSectionSlug,
+    href: string,
+    label: string,
+    icon: SidebarIconKey,
+  ) => (canAccessConfigurationSection(role, slug) ? link(href, label, icon) : null);
 
   return [
     link("/admin", "Dashboard", "dashboard"),
@@ -54,7 +68,6 @@ export function buildAdminNav(role: AdminRole): SidebarNode[] {
     ...group("catalog", "Catalog", "catalog", [
       plans ? link("/admin/plans", "Plans", "plans") : null,
       plans ? link("/admin/addons", "Add-ons", "addons") : null,
-      features ? link("/admin/features", "Features", "features") : null,
     ]),
 
     ...group("monitoring", "Monitoring", "monitoring", [
@@ -63,11 +76,17 @@ export function buildAdminNav(role: AdminRole): SidebarNode[] {
     ]),
 
     ...group("platform", "Platform", "platform", [
-      // SA-4.3's hub. Sits here rather than at top level because it configures the platform
-      // itself, which is exactly what this group means.
-      configuration
-        ? link("/admin/configuration", "Configuration Center", "configuration")
-        : null,
+      section("payments", "/admin/payments", "Payments", "payments"),
+      section("offers", "/admin/offers", "Offers & discounts", "offers"),
+      section("products", "/admin/products", "Products", "products"),
+      section("templates", "/admin/templates", "Templates", "templates"),
+      section("compliance-sources", "/admin/compliance-sources", "Compliance sources", "compliance"),
+      section("credits-limits", "/admin/credits-limits", "Credits & limits", "limits"),
+      // Feature catalog AND kill switches. Previously two screens showing the same catalog.
+      section("features", "/admin/features", "Features", "features"),
+      section("email", "/admin/email", "Email", "email"),
+      section("system", "/admin/system", "System", "system"),
+      section("advanced", "/admin/advanced", "Advanced", "advanced"),
       isSuperAdmin ? link("/admin/admins", "Admin users", "admins") : null,
       // Readable by every admin: an acceptance record is what a support agent needs in a dispute.
       link("/admin/legal", "Legal", "legal"),
