@@ -1,6 +1,6 @@
 "use client";
 
-import { useTheme } from "next-themes";
+import { useTheme } from "@/components/theme-provider";
 import { Sun, Moon, Monitor } from "lucide-react";
 
 /**
@@ -10,9 +10,8 @@ import { Sun, Moon, Monitor } from "lucide-react";
  * doing", and someone who lands on the wrong one at 9am is stuck with it. Three states costs one
  * extra button and removes that trap.
  *
- * Rendered as a placeholder until mounted: the server does not know the viewer's theme, so drawing
- * the resolved state on the server guarantees a wrong first paint and a hydration mismatch. The
- * placeholder holds the same space so nothing shifts when the real control appears.
+ * The provider uses a stable server snapshot, so this control can render the same three choices on
+ * the server and the first client pass without a placeholder or hydration mismatch.
  */
 const OPTIONS = [
   { value: "light", label: "Light", Icon: Sun },
@@ -21,10 +20,7 @@ const OPTIONS = [
 ] as const;
 
 export function ThemeToggle({ tone = "default" }: { tone?: "default" | "onBrand" }) {
-  // `resolvedTheme` is undefined until next-themes has read the stored choice on the client, which
-  // makes it the mount signal — no effect and no second state to keep in step with it.
-  const { theme, setTheme, resolvedTheme } = useTheme();
-  const mounted = resolvedTheme !== undefined;
+  const { theme, setTheme } = useTheme();
 
   // The agent and admin shells put this on a navy sidebar, where the normal border and muted
   // foreground tokens are invisible.
@@ -42,10 +38,6 @@ export function ThemeToggle({ tone = "default" }: { tone?: "default" | "onBrand"
     tone === "onBrand"
       ? "bg-white/20 text-white"
       : "bg-muted text-foreground";
-
-  if (!mounted) {
-    return <div className={`h-7 rounded-md border ${shell}`} aria-hidden="true" />;
-  }
 
   return (
     <div

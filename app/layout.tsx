@@ -14,9 +14,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    // suppressHydrationWarning is required, not defensive: next-themes writes the class on <html>
-    // before React hydrates so the page never flashes the wrong theme, which by definition makes
-    // the server markup and the client markup differ on this one element.
+    // The theme class is applied after hydration by ThemeProvider; suppressing the html attribute
+    // keeps browser theme extensions from turning a cosmetic class change into a hydration error.
     <html lang="en" suppressHydrationWarning>
       <body>
         <ThemeProvider>

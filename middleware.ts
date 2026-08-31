@@ -5,6 +5,17 @@ import { TENANT_SESSION_COOKIE, verifyTenantSessionToken } from "@/lib/tenantAut
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  const hostname = (request.headers.get("x-forwarded-host") ?? request.headers.get("host") ?? request.nextUrl.hostname)
+    .split(",")[0]
+    .trim()
+    .split(":")[0]
+    .toLowerCase();
+
+  // The customer/agent application has its own host. Keep the local /app path available for
+  // development, while making https://app.insurvas.com the tenant entry point when deployed.
+  if (pathname === "/" && hostname === "app.insurvas.com") {
+    return redirectTo(request, "/app/login");
+  }
 
   if (pathname.startsWith("/admin/login")) {
     return NextResponse.next();
@@ -22,6 +33,7 @@ export async function middleware(request: NextRequest) {
   // password (SA-1.2), and someone confirming a new email address from their inbox (SA-1.3).
   if (
     pathname.startsWith("/app/login") ||
+    pathname.startsWith("/app/signup") ||
     pathname.startsWith("/app/set-password") ||
     pathname.startsWith("/app/confirm-email")
   ) {
@@ -47,5 +59,5 @@ function redirectTo(request: NextRequest, pathname: string) {
 }
 
 export const config = {
-  matcher: ["/admin/:path*", "/app/:path*"],
+  matcher: ["/", "/admin/:path*", "/app/:path*"],
 };

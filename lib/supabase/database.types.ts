@@ -1812,6 +1812,10 @@ export type Database = {
       };
     };
     Functions: {
+      claim_rate_limit: {
+        Args: { p_key: string; p_max: number; p_window_seconds: number };
+        Returns: boolean;
+      };
       admin_create_user: {
         Args: {
           p_created_by: string;
@@ -2144,6 +2148,21 @@ export type Database = {
         Returns: {
           tenant_id: string;
           user_id: string;
+        }[];
+      };
+      self_serve_signup_with_subscription: {
+        Args: {
+          p_billing_cycle: Database["public"]["Enums"]["billing_cycle"];
+          p_owner_email: string;
+          p_owner_name: string;
+          p_owner_password_hash: string;
+          p_plan_id: string;
+          p_tenant_name: string;
+        };
+        Returns: {
+          tenant_id: string;
+          user_id: string;
+          subscription_id: string;
         }[];
       };
     };

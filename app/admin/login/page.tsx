@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { ShieldCheck } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -125,6 +126,14 @@ export default function AdminLoginPage() {
                 {loading ? "Verifying…" : "Verify & sign in"}
               </Button>
             </form>
+          )}
+          {step === "credentials" && (
+            <p className="mt-4 text-center text-sm text-muted-foreground">
+              Tenant or agent?{" "}
+              <Link className="font-medium text-[var(--color-blue)] underline-offset-4 hover:underline" href="/app/login">
+                Sign in to the Insurvas app
+              </Link>
+            </p>
           )}
         </CardContent>
       </Card>

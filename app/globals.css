@@ -2,7 +2,7 @@
 @import "tailwindcss";
 
 /*
- * Tailwind v4 has no `dark:` variant until one is declared. next-themes puts `class="dark"` on
+ * Tailwind v4 has no `dark:` variant until one is declared. ThemeProvider puts `class="dark"` on
  * <html>, including when it resolves the OS preference itself, so a single class drives both the
  * explicit choice and the system default — and the CSS below can never disagree with the class,
  * which is the usual bug when a media query and a toggle are wired separately.

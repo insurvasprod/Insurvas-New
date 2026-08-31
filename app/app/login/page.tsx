@@ -3,6 +3,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Building2 } from "lucide-react";
+import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -92,6 +93,9 @@ export default function TenantLoginPage() {
               {loading ? "Signing in…" : "Sign in"}
             </Button>
           </form>
+          <p className="mt-5 text-center text-sm text-muted-foreground">
+            New to Insurvas? <Link className="font-medium text-[var(--color-blue)] hover:underline" href="/app/signup">Create a workspace</Link>
+          </p>
         </CardContent>
       </Card>
     </div>
