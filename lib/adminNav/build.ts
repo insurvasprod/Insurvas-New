@@ -102,8 +102,8 @@ export function buildAdminNav(role: AdminRole): SidebarNode[] {
     ]),
 
     ...group("platform", "Platform", "platform", [
-      section("compliance-sources", "/admin/compliance-sources", "Compliance sources", "compliance"),
-      section("email", "/admin/email", "Email", "email"),
+      section("compliance-sources", "/admin/compliance-sources", "Compliance", "compliance"),
+      section("email", "/admin/email", "Mail Setup", "email"),
       section("system", "/admin/system", "Maintenance", "system"),
       section("advanced", "/admin/advanced", "Advanced", "advanced"),
       isSuperAdmin ? link("/admin/admins", "Admin users", "admins") : null,

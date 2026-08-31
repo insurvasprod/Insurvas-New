@@ -19,7 +19,8 @@ export default async function EmailPage() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
-      <AdminPageHeader title="Email" subtitle="Mail server, sender identity, and templates." />
+      {/* "Mail Setup" to match the sidebar. Route stays /admin/email. */}
+      <AdminPageHeader title="Mail Setup" subtitle="Mail server, sender identity, and templates." />
       <ConfigurationPlaceholder section={section} />
     </div>
   );

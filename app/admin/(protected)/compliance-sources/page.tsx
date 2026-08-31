@@ -17,7 +17,9 @@ export default async function ComplianceSourcesPage() {
 
   return (
     <div className="space-y-6">
-      <AdminPageHeader title="Compliance sources" subtitle="TCPA and Do Not Call vendors and their availability." />
+      {/* "Compliance" to match the sidebar; the subtitle already says which vendors. Route stays
+          /admin/compliance-sources so existing links keep working. */}
+      <AdminPageHeader title="Compliance" subtitle="TCPA and Do Not Call vendors and their availability." />
       <ComplianceVendorsTable initialVendors={vendors} />
     </div>
   );
