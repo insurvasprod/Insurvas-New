@@ -1476,6 +1476,22 @@ export type Database = {
           old_role: Database["public"]["Enums"]["tenant_user_role"];
         }[];
       };
+      consume_user_email_change_token: {
+        Args: { p_token_hash: string };
+        Returns: {
+          accepted_at: string;
+          email: string;
+          user_id: string;
+        }[];
+      };
+      consume_user_password_token: {
+        Args: { p_password_hash: string; p_token_hash: string };
+        Returns: {
+          accepted_at: string;
+          purpose: Database["public"]["Enums"]["user_token_purpose"];
+          user_id: string;
+        }[];
+      };
       admin_create_plan_version: {
         Args: { p_plan_id: string };
         Returns: string;

@@ -50,34 +50,22 @@ export async function POST(request: NextRequest) {
   if (!change) return NextResponse.json(INVALID, { status: 400 });
 
   const supabase = getSupabaseServiceClient();
-
-  // Re-check at the moment of confirmation: someone else may have taken this address while the
-  // change was pending.
-  const { data: clash } = await supabase
-    .from("users")
-    .select("id")
-    .eq("email", change.new_email!)
-    .neq("id", change.user_id)
-    .maybeSingle<{ id: string }>();
-
-  if (clash) {
-    return NextResponse.json({ error: "That email address is no longer available" }, { status: 409 });
-  }
-
-  const { error } = await supabase
-    .from("users")
-    .update({ email: change.new_email! })
-    .eq("id", change.user_id);
+  const { error } = await supabase.rpc("consume_user_email_change_token", {
+    p_token_hash: hashInviteToken(parsed.data.token),
+  });
 
   if (error) {
+    if (error.message?.includes("EMAIL_ALREADY_REGISTERED")) {
+      return NextResponse.json({ error: "That email address is no longer available" }, { status: 409 });
+    }
+    if (
+      error.message?.includes("EMAIL_CHANGE_TOKEN_INVALID_OR_EXPIRED") ||
+      error.message?.includes("EMAIL_CHANGE_TOKEN_ALREADY_USED")
+    ) {
+      return NextResponse.json(INVALID, { status: 400 });
+    }
     return NextResponse.json({ error: "Could not confirm email address" }, { status: 500 });
   }
-
-  // Burn the token so the link can't be replayed.
-  await supabase
-    .from("user_invitations")
-    .update({ accepted_at: new Date().toISOString() })
-    .eq("id", change.id);
 
   return NextResponse.json({ ok: true, email: change.new_email });
 }

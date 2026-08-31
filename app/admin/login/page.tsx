@@ -38,7 +38,14 @@ export default function AdminLoginPage() {
       return;
     }
 
-    setStep("totp");
+    const body = await res.json().catch(() => null);
+    if (body?.requires2fa) {
+      setStep("totp");
+      return;
+    }
+
+    router.push("/admin");
+    router.refresh();
   }
 
   async function handleTotp(event: FormEvent) {

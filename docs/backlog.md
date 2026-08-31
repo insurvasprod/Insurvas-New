@@ -130,7 +130,7 @@ the tenant side without re-login, seat-limit enforcement at the limit, and the p
 **From:** SA-0.2, SA-0.3, SA-2.1
 
 Several tickets specify acceptance as *"an automated test that runs in CI."* The repository now
-has a substantial verification surface — 119 unit tests at the end of SA-3 plus dedicated scripts
+has a substantial verification surface — 169 unit tests currently, plus dedicated scripts
 for tenant isolation, feature keys, entitlements, payments, webhooks, invoices, subscription
 events, coupons, custom invoices and credit notes — but `.github/workflows/` still does not exist.
 
@@ -372,13 +372,18 @@ turn a harmless grant into a privilege escalation.
 only `service_role` (and a narrowly scoped tenant role only where genuinely required). Add a test
 that anonymous RPC calls are denied.
 
-### 51. The revenue dashboard is a truthful partial implementation, not the full ticket
+### 51. The revenue dashboard is partial and has financial-correctness defects
 **From:** SA-3.9 acceptance criteria · **Significant**
 
 The page deliberately labels expansion and contraction as **not measured**. It also has a fixed
 31-day revenue window and 90-day funnel window, no date/plan controls, no churn-by-plan calculation,
 and no trial-to-paid conversion rate. Two funnel steps — completed profile and completed setup —
-remain uninstrumented. This is honest UI, but several explicit SA-3.9 outcomes are still unmet.
+remain uninstrumented.
+
+The Module 3 audit also found that historical snapshot rebuilds use the subscription's **current**
+status/plan, and the page compares all collected cash with only new MRR. Those are correctness
+bugs rather than missing polish: cancellation can rewrite history, while ordinary renewals create
+a false “gap.” See M3-7, M3-8 and M3-12 in `bugs_sa.md`.
 
 **Fix:** record plan-change MRR deltas and real funnel events, extend `metrics_daily` for per-plan
 churn and trial conversion, and add date/plan filters. Performance against 500 tenants remains [#48].
@@ -460,12 +465,158 @@ problem, not a style one.
 SA-5.3 backfill proved) into correctly-named files. Mechanical, and worth doing before anyone needs
 a second environment.
 
+### 57. Webhook completion is not durable
+**From:** Module 3 audit · **Release blocker**
+
+`markProcessed` and `markFailed` ignore Supabase update errors. The route can acknowledge Whop even
+though the event still looks unfinished locally. A real `payment.succeeded` can also be marked
+processed when invoice generation returns null. See M3-1 and M3-2 in `bugs_sa.md`.
+
+### 58. Invoice creation and coupon consumption are not atomic
+**From:** Module 3 audit · **Financial correctness**
+
+The invoice commits before `consume_coupon_period`. If consumption fails, retry finds the existing
+invoice and never consumes the period. Move both effects into one idempotent transaction. See M3-3.
+
+### 59. Manual payment settlement is non-atomic and permits overpayment
+**From:** Module 3 audit · **Financial correctness; live data affected**
+
+Settlement inserts the payment, updates the invoice, activates subscriptions, rebuilds entitlement,
+and audits in separate operations. It activates by tenant rather than the invoice's subscription.
+The live database already has one $99 invoice with $198 in successful payments. See M3-4.
+
+### 60. Coupon plan and billing-cycle restrictions are not enforced by the admin RPC
+**From:** Module 3 audit · **Financial correctness**
+
+`admin_apply_coupon` ignores `restricted_to_plan_ids` and `billing_cycle`. Current rows are clean,
+but the database permits an incompatible coupon assignment. See M3-5.
+
+### 61. Refund and credit execution needs recoverable reconciliation states
+**From:** Module 3 audit · **Financial correctness**
+
+Whop can succeed while the following local update fails; local credit adjustment errors can also be
+reported as success. Add checked writes, idempotent retries, and a provider-success/local-reconcile
+state. See M3-6.
+
+### 62. Provider-call logging covers only part of Whop
+**From:** SA-3.1 audit · **Observability**
+
+Whop-specific plan, promo, invoice, refundability, membership, and free-day methods bypass the
+logging decorator. Live `provider_calls` contains only three connection-test lookups. See M3-9.
+
+### 63. Cross-tenant billing relationships are not enforced
+**From:** Module 3 audit · **Data integrity**
+
+Custom invoices can pair one tenant with another tenant's subscription, and credit notes can pair a
+tenant with another tenant's invoice. No live mismatch exists, but both RPCs permit one. See M3-10.
+
+### 64. Credit-to-free-days conversion uses the monthly price for every cycle
+**From:** SA-3.8 audit · **Latent billing defect**
+
+The not-yet-wired redemption function ignores the subscription billing cycle. Correct this before
+automatic credit consumption is enabled. See M3-11.
+
+### 65. Plan versioning drops limits, meters and available add-ons
+**From:** Module 2 audit · **Release blocker**
+
+`admin_create_plan_version` copies features and prices only. A new live-plan version loses seat and
+carrier limits, all meter allowances, and plan add-on availability. See M2-1 in `bugs_sa.md`.
+
+### 66. Entitlement refresh failures are acknowledged as successful changes
+**From:** SA-2.7 / SA-2.8 audit · **Access-control correctness**
+
+`rebuildEntitlement` catches and logs failures, so a downgrade, suspension, cancellation, feature
+removal or add-on removal can return success while stale access remains cached. See M2-2.
+
+### 67. Add-on meter credits do not reach enforcement or usage display
+**From:** SA-2.6 audit · **Entitlement correctness**
+
+The resolver stacks add-on credits, but `check_meter_capacity` and the usage screen read plan meters
+only. The displayed entitlement and enforced allowance can disagree. See M2-3.
+
+### 68. Add-on detach is not bound to the route subscription
+**From:** SA-2.6 audit · **Cross-tenant/data-integrity risk**
+
+An attachment ID from subscription B can be sent through subscription A's URL. B is modified while
+A is audited and refreshed, leaving B's cached entitlement stale. See M2-4.
+
+### 69. Subscription transition rules are enforced only by the UI
+**From:** SA-2.7 audit · **Access-control correctness**
+
+A crafted `resume` can activate a cancelled or suspended subscription; cancel/pause/change-plan
+also accept invalid source states. Move the state machine into a locked RPC. See M2-5.
+
+### 70. Archived plans are still assignable by API
+**From:** SA-2.2 / SA-2.7 audit · **Product-control bypass**
+
+The picker hides archived plans, but assignment and change-plan RPCs do not reject them. See M2-6.
+
+### 71. New individual plans are not seeded with their mandatory one-seat limit
+**From:** SA-2.2 / SA-2.5 audit · **Plan configuration defect**
+
+Plan creation inserts no `plan_limits` or `plan_meters`, and no editor writes those tables. A new
+individual plan is unlimited until Supabase is edited manually. See M2-7.
+
+### 72. Entitlement verification does not pin the intended plan contents
+**From:** SA-2.8 audit · **Test gap**
+
+`verify-entitlements` reads its expected list from `plan_features`, so an incorrectly configured
+plan still passes. Pin reviewed arrays for Plan A/B/C and assert all three exist. See M2-10.
+
+### 74. Edit User and token replacement can partially commit
+**From:** SA-1.3 audit · **Transactional correctness**
+
+Name/phone/role can commit before a duplicate-email conflict is returned. Replacement links delete
+the old token before the new token commits; Resend Invite can also delete other token purposes.
+Make these operations atomic and check every result. See M1-3/M1-8.
+
+### 75. Lifecycle changes block sessions but do not revoke them
+**From:** SA-1.4 audit · **Authentication correctness**
+
+The live status check blocks the old cookie while a user is inactive/suspended, but the same 12-hour
+cookie works again after reactivation. Add a per-user session version or revocation timestamp and
+advance it on every state change. See M1-4.
+
+### 76. User reactivation bypasses seat limits and lifecycle transition rules
+**From:** SA-1.4 / SA-2.5 audit · **Licensing and state-machine correctness**
+
+Activation is a direct update with no seat check, and all four lifecycle endpoints accept source
+states that their buttons hide. Put the seat check and allowed transition graph in one locked RPC.
+See M1-5/M1-7.
+
+### 77. The database does not guarantee that every tenant keeps an owner
+**From:** SA-1.2 / SA-1.3 audit · **Authorization invariant**
+
+A new tenant can be created with its only user as `producer`; concurrent demotions lock different
+membership rows and can both pass the owner count. Force the first member to owner and serialize
+role changes with a tenant-scoped lock. See M1-6.
+
+### 78. Module 1 links still fall back to the request Host
+**From:** SA-1.2 / SA-1.3 audit · **Security hardening**
+
+Invitation, reset, and email-change routes still use `request.nextUrl.origin` when the canonical URL
+is missing. Reuse SA-5.1's strict configured-origin helper and fail before mutating tokens. See M1-9.
+
+### 79. Login activity can silently stop recording
+**From:** SA-1.5 audit · **Observability**
+
+Supabase write errors are returned, not thrown, but login-event and last-login writes ignore the
+returned errors. Keep authentication available while surfacing and retrying telemetry failures.
+See M1-10.
+
 
 ---
 
 ## ✅ Resolved
 
 *Terse log — details live in git history.*
+
+- **#73 / M1-1 / M1-2 atomic user-token redemption** → fixed with two service-role-only,
+  security-invoker RPCs stored in a repository migration. Password/reset redemption now locks the
+  token and commits password, token consumption, and invite membership acceptance together.
+  Email change now commits the unique address and token consumption together; a duplicate rolls
+  everything back and leaves the token usable. `verify:user-tokens` exercised real concurrent
+  requests: **11/11 passed**, and cleanup was confirmed at zero leftover rows.
 
 - **SA-5.4 terms & privacy acceptance** -> verified 45/45 against the running app. Acceptance stores
   a **document id and version**, never a boolean: recording "accepted the terms" and resolving the
@@ -526,7 +677,8 @@ a second environment.
 
 - **SA-3.9 revenue dashboard** → MRR/ARR/ARPC, churn, plan breakdown and the activation funnel, off
   a nightly `metrics_daily` snapshot that is re-runnable for any past date. Contracted MRR is shown
-  beside collected, and the gap is called out — which immediately surfaced [#47]. Two funnel steps
+  beside collected. The later Module 3 audit found that the gap calculation and historical rebuild
+  are not financially reliable; that work is reopened in [#51], M3-7 and M3-8. Two funnel steps
   render as *not instrumented* rather than zero, and are excluded from the biggest-drop-off
   sentence so it cannot name a step nobody measures.
 - **Payments were only recorded when a subscription already existed** → fixed in SA-3.9. The

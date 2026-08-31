@@ -1,10 +1,20 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { loginSchema } from "@/lib/adminAuth/schemas";
+import { isAdmin2faEnabled } from "@/lib/adminAuth/config";
+import { isAdminRole } from "@/lib/adminAuth/roles";
 import { verifyPassword } from "@/lib/password";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
-import { pending2faCookieOptions, signPending2faToken, ADMIN_PENDING_2FA_COOKIE } from "@/lib/adminAuth/session";
+import {
+  ADMIN_PENDING_2FA_COOKIE,
+  ADMIN_SESSION_COOKIE,
+  pending2faCookieOptions,
+  sessionCookieOptions,
+  signAdminSessionToken,
+  signPending2faToken,
+} from "@/lib/adminAuth/session";
 import { recordLoginEvent } from "@/lib/loginEvents/record";
+import { audit } from "@/lib/audit/log";
 
 // A hash of a value nobody will ever type, used to keep the response time and
 // shape identical whether or not the email exists — login must not reveal it.
@@ -23,15 +33,15 @@ export async function POST(request: NextRequest) {
 
   const { data: admin } = await supabase
     .from("admin_users")
-    .select("id, password_hash, is_active")
+    .select("id, email, password_hash, role, is_active")
     .eq("email", email)
-    .maybeSingle<{ id: string; password_hash: string; is_active: boolean }>();
+    .maybeSingle<{ id: string; email: string; password_hash: string; role: string; is_active: boolean }>();
 
   const passwordOk = await verifyPassword(password, admin?.password_hash ?? DUMMY_HASH);
 
-  if (!admin || !admin.is_active || !passwordOk) {
-    // Recorded here, not on success: this step only proves the password. The login isn't
-    // complete until 2FA passes, so that route records the success (SA-1.5).
+  if (!admin || !admin.is_active || !passwordOk || !isAdminRole(admin.role)) {
+    // Failed credentials are recorded here. Successful login is recorded below when 2FA is
+    // disabled, or by the verification route after the authenticator code passes.
     await recordLoginEvent({
       request,
       email,
@@ -41,6 +51,32 @@ export async function POST(request: NextRequest) {
       failureReason: admin && !admin.is_active ? "inactive" : "invalid_credentials",
     });
     return NextResponse.json(GENERIC_ERROR, { status: 401 });
+  }
+
+  if (!isAdmin2faEnabled()) {
+    await supabase.from("admin_users").update({ last_login_at: new Date().toISOString() }).eq("id", admin.id);
+
+    await recordLoginEvent({
+      request,
+      email: admin.email,
+      success: true,
+      adminId: admin.id,
+      actorType: "admin",
+    });
+
+    await audit({
+      actorId: admin.id,
+      action: "admin.login",
+      targetType: "admin_user",
+      targetId: admin.id,
+      request,
+    });
+
+    const sessionToken = await signAdminSessionToken(admin.id, admin.role);
+    const response = NextResponse.json({ requires2fa: false });
+    response.cookies.set(ADMIN_SESSION_COOKIE, sessionToken, sessionCookieOptions);
+    response.cookies.delete(ADMIN_PENDING_2FA_COOKIE);
+    return response;
   }
 
   const pendingToken = await signPending2faToken(admin.id);
