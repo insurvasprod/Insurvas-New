@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { verifyWhopSignature } from "@/lib/payments/whop/verify";
 import { isSubscribedEvent, parseEnvelope } from "@/lib/payments/whop/events";
 import { markFailed, markProcessed, recordWebhookEvent } from "@/lib/payments/whop/store";
-import { createInvoiceFromPayment } from "@/lib/invoices/generate";
+import { createInvoiceFromPayment, isBenignNoInvoice } from "@/lib/invoices/generate";
 import { applyProviderEvent } from "@/lib/subscriptions/applyProviderEvent";
 
 // This route must read the raw body to verify the signature, so it cannot be statically analysed
@@ -71,9 +71,25 @@ export async function POST(request: NextRequest) {
   try {
     if (envelope.type === "payment.succeeded") {
       // SA-3.2. Idempotent on the provider payment id, so a redelivery cannot bill twice.
-      const invoice = await createInvoiceFromPayment(envelope, stored.tenantId);
-      if (invoice?.created) {
-        console.log(`[whop-webhook] invoice ${invoice.number} created (${invoice.reconciliation})`);
+      const outcome = await createInvoiceFromPayment(envelope, stored.tenantId);
+
+      if (outcome.ok) {
+        if (outcome.invoice.created) {
+          console.log(`[whop-webhook] invoice ${outcome.invoice.number} created (${outcome.invoice.reconciliation})`);
+        }
+      } else if (isBenignNoInvoice(outcome.reason)) {
+        // No tenant could be resolved — the shape of Whop's own dashboard test event, which
+        // carries placeholder ids and no metadata. Nothing was collected from anyone, so
+        // acknowledging it is correct.
+        console.log(`[whop-webhook] payment not attributable to a tenant (${outcome.detail}); ignoring`);
+      } else {
+        // bugs_sa.md M3-2. We KNOW which tenant paid and could not write down what for. Previously
+        // this was acknowledged with a 200 and the money simply never appeared in the ledger.
+        // Throwing leaves processed_at null, records the reason on the event, and asks Whop to
+        // retry — so it is visible and recoverable instead of silently lost.
+        throw new Error(
+          `payment.succeeded for tenant ${stored.tenantId} produced no invoice (${outcome.reason}: ${outcome.detail})`,
+        );
       }
     }
 

@@ -2285,6 +2285,23 @@ export type Database = {
         Args: { p_series: string; p_at: string };
         Returns: string;
       };
+      admin_settle_invoice_manually: {
+        Args: {
+          p_invoice_id: string;
+          p_amount_cents: number;
+          p_reference: string;
+          p_paid_at: string | null;
+          p_recorded_by: string | null;
+        };
+        Returns: {
+          payment_id: string;
+          invoice_status: Database["public"]["Enums"]["invoice_status"];
+          paid_cents: number;
+          settled: boolean;
+          subscription_id: string | null;
+          subscription_activated: boolean;
+        }[];
+      };
       admin_set_subscription_pause_state: {
         Args: { p_subscription_id: string; p_pause: boolean };
         Returns: {

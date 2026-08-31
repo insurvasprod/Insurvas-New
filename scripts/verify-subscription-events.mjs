@@ -54,6 +54,11 @@ async function send(type, { offset, chargeId = null, extra = {}, suffix = "" }) 
     data: {
       id: chargeId ?? `pay_ev_${stamp}${suffix}`,
       metadata: { tenant_id: tenantId },
+      // The plan node a genuine Whop payment for one of our plans carries. It used to be omitted,
+      // which meant every payment.succeeded here produced no invoice — silently accepted before
+      // bugs_sa.md M3-2 was fixed, and now correctly refused. Sending the realistic shape keeps
+      // this script testing subscription state rather than depending on that hole.
+      plan: { id: "plan_ev", metadata: { insurvas_plan_id: plan.id, insurvas_billing_cycle: "monthly" } },
       total: 99,
       paid_at: at(offset),
       ...extra,
