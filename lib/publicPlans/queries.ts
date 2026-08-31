@@ -65,7 +65,7 @@ export async function fetchPublicPlans(): Promise<PublicPlan[]> {
     grantsByPlan.set(grant.plan_id, labels);
   }
 
-  return latest.map((plan, index) => {
+  return latest.map((plan) => {
     const price = priceByPlan.get(plan.id);
     return {
       code: plan.code,
@@ -77,7 +77,9 @@ export async function fetchPublicPlans(): Promise<PublicPlan[]> {
       blurb: plan.description,
       feature_bullets: grantsByPlan.get(plan.id) ?? [],
       trial_days: price?.trial_days ?? 0,
-      is_default: index === 0,
+      // Read, not inferred. This was `index === 0`, which silently meant "the cheapest published
+      // plan" — and the plan a business wants to lead with is rarely the cheapest one.
+      is_default: plan.is_default,
     };
   });
 }

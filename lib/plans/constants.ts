@@ -34,6 +34,8 @@ export type PlanListRow = {
   plan_type: PlanType;
   description: string | null;
   is_public: boolean;
+  /** The plan the public pricing page leads with. At most one, enforced by a partial index. */
+  is_default: boolean;
   is_archived: boolean;
   sort_order: number;
   created_at: string;
