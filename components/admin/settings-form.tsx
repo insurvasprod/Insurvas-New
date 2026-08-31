@@ -92,7 +92,7 @@ export function SettingsForm({ initial }: { initial: SettingState[] }) {
       {settingGroups().map(({ group, defs }) => (
         <Card key={group}>
           <CardContent className="space-y-5">
-            <h2 className="text-sm font-bold uppercase tracking-wide text-[var(--brand-700)]">{group}</h2>
+            <h2 className="text-sm font-bold uppercase tracking-wide text-[var(--color-accent-ink)]">{group}</h2>
 
             {defs.map((def) => {
               const dirty = draft[def.key] !== String(live[def.key]);

@@ -125,7 +125,7 @@ export default async function TenantDetailPage({ params }: { params: Promise<{ i
       ) : (
         <Card>
           <CardContent>
-            <h2 className="text-sm font-bold uppercase tracking-wide text-[var(--brand-700)]">Subscription</h2>
+            <h2 className="text-sm font-bold uppercase tracking-wide text-[var(--color-accent-ink)]">Subscription</h2>
             <p className="mt-2 text-sm text-muted-foreground">
               {subscription
                 ? `${subscription.plan_name} v${subscription.plan_version} · ${subscription.status}`

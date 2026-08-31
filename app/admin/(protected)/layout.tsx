@@ -4,6 +4,7 @@ import { ShieldCheck } from "lucide-react";
 import { getCurrentAdmin } from "@/lib/adminAuth/getCurrentAdmin";
 import { ADMIN_ROLE_LABELS } from "@/lib/adminAuth/roles";
 import { LogoutButton } from "@/components/admin/logout-button";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { canViewInvoices } from "@/lib/invoices/permissions";
 import { canManageCoupons } from "@/lib/coupons/permissions";
 import { SidebarNav, type SidebarNavItem } from "@/components/admin/sidebar-nav";
@@ -82,7 +83,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         <div className="border-t border-white/10 pt-4">
           <p className="truncate px-2 text-sm font-medium">{admin.name}</p>
           <p className="px-2 text-xs text-white/70">{ADMIN_ROLE_LABELS[admin.role]}</p>
-          <div className="mt-3 px-2">
+          <div className="mt-3 space-y-2 px-2">
+            <ThemeToggle tone="onBrand" />
             <LogoutButton />
           </div>
         </div>

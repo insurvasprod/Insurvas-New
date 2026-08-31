@@ -93,7 +93,7 @@ export function FeatureCatalog({
         return (
           <div key={group.module.key} className="space-y-2">
             <div className="flex items-baseline gap-2">
-              <h2 className="text-sm font-bold uppercase tracking-wide text-[var(--brand-700)]">
+              <h2 className="text-sm font-bold uppercase tracking-wide text-[var(--color-accent-ink)]">
                 {group.module.label}
               </h2>
               <span className="text-xs text-muted-foreground">{group.module.key}</span>

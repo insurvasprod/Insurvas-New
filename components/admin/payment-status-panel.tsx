@@ -87,7 +87,7 @@ export function PaymentStatusPanel({ status }: { status: StatusView }) {
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] lg:items-start">
       <Card>
         <CardContent className="space-y-4">
-          <h2 className="text-sm font-bold uppercase tracking-wide text-[var(--brand-700)]">Configuration</h2>
+          <h2 className="text-sm font-bold uppercase tracking-wide text-[var(--color-accent-ink)]">Configuration</h2>
 
           <dl className="space-y-3">
             {facts.map((f) => (
@@ -108,7 +108,7 @@ export function PaymentStatusPanel({ status }: { status: StatusView }) {
 
       <Card>
         <CardContent className="space-y-4">
-          <h2 className="text-sm font-bold uppercase tracking-wide text-[var(--brand-700)]">Health</h2>
+          <h2 className="text-sm font-bold uppercase tracking-wide text-[var(--color-accent-ink)]">Health</h2>
 
           <dl className="space-y-2">
             <div className="flex justify-between gap-4 text-sm">

@@ -93,6 +93,8 @@ export function CreateAdminDialog({ onCreated }: { onCreated: () => void }) {
                 alt="TOTP enrollment QR code"
                 width={180}
                 height={180}
+                // Stays white in dark mode on purpose: a QR code needs a light quiet zone, and a
+                // scanner reading it off a dark card is a support ticket nobody enjoys.
                 className="rounded-md border border-border bg-white p-2"
               />
               <p className="w-full break-all rounded-md bg-muted px-3 py-2 text-center text-xs text-muted-foreground">

@@ -32,6 +32,7 @@ import { ADMIN_ROLES, ADMIN_ROLE_LABELS, type AdminRole } from "@/lib/adminAuth/
 import { CreateAdminDialog } from "./create-admin-dialog";
 import { PaginationBar } from "./pagination-bar";
 import { tableHeaderRow, tableHeadCell, tableShell } from "./table-styles";
+import { NoMatches } from "@/components/admin/empty-state";
 
 const PAGE_SIZE = 10;
 
@@ -164,8 +165,11 @@ export function AdminUsersTable({
           <TableBody>
             {filtered.length === 0 && (
               <TableRow>
-                <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
-                  No admins match these filters.
+                <TableCell colSpan={6} className="p-0">
+                  <NoMatches
+                    noun="admins"
+                    onClear={() => { setSearch(""); setRoleFilter("all"); setStatusFilter("all"); setPage(1); }}
+                  />
                 </TableCell>
               </TableRow>
             )}

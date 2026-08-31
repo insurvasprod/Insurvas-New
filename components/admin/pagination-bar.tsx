@@ -24,11 +24,11 @@ export function PaginationBar({
 
   return (
     <div className="flex flex-col items-center justify-between gap-3 border-t border-border bg-[var(--color-row-bg)] px-5 py-3 sm:flex-row">
-      <span className="text-xs font-semibold text-[var(--brand-700)]">
+      <span className="text-xs font-semibold text-[var(--color-accent-ink)]">
         Showing {start}-{end} of {totalItems} {itemLabel}
       </span>
       <div className="flex items-center gap-3">
-        <span className="text-xs font-bold text-[var(--brand-700)]">
+        <span className="text-xs font-bold text-[var(--color-accent-ink)]">
           Page {safePage} of {totalPages}
         </span>
         <div className="flex items-center gap-2">

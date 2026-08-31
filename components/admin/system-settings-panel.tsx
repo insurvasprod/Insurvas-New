@@ -132,7 +132,7 @@ export function SystemSettingsPanel({
       <Card>
         <CardContent className="space-y-5">
           <div>
-            <h2 className="text-sm font-bold uppercase tracking-wide text-[var(--brand-700)]">Maintenance mode</h2>
+            <h2 className="text-sm font-bold uppercase tracking-wide text-[var(--color-accent-ink)]">Maintenance mode</h2>
             <p className="mt-1 text-sm text-muted-foreground">Admin sessions always bypass this control, including locked mode.</p>
           </div>
           <div className="space-y-1.5">
@@ -165,7 +165,7 @@ export function SystemSettingsPanel({
 
       <Card>
         <CardContent className="space-y-5">
-          <div><h2 className="text-sm font-bold uppercase tracking-wide text-[var(--brand-700)]">Announcements</h2><p className="mt-1 text-sm text-muted-foreground">Show a dated message to everyone or one plan type. Dismissals are stored per user.</p></div>
+          <div><h2 className="text-sm font-bold uppercase tracking-wide text-[var(--color-accent-ink)]">Announcements</h2><p className="mt-1 text-sm text-muted-foreground">Show a dated message to everyone or one plan type. Dismissals are stored per user.</p></div>
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-1.5 md:col-span-2"><Label htmlFor="announcement-message">Message</Label><textarea id="announcement-message" maxLength={1000} rows={3} className="w-full rounded-md border border-input bg-background p-2 text-sm" value={draft.message} onChange={(event) => setDraft({ ...draft, message: event.target.value })} /></div>
             <div className="space-y-1.5"><Label>Type</Label><Select value={draft.type} onValueChange={(value) => setDraft({ ...draft, type: value as AnnouncementType })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{ANNOUNCEMENT_TYPES.map((type) => <SelectItem key={type} value={type}>{ANNOUNCEMENT_TYPE_LABELS[type]}</SelectItem>)}</SelectContent></Select></div>

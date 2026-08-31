@@ -195,7 +195,7 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
 
       <Card>
         <CardContent className="space-y-3">
-          <h2 className="text-sm font-bold uppercase tracking-wide text-[var(--brand-700)]">
+          <h2 className="text-sm font-bold uppercase tracking-wide text-[var(--color-accent-ink)]">
             Provider activity
           </h2>
           {payments.length > 0 && (

@@ -68,7 +68,7 @@ export default async function ConfigurationCenterPage() {
               }`}
             >
               <div className="flex items-center justify-between gap-2">
-                <ConfigurationIcon icon={section.icon} className="size-5 text-[var(--brand-700)]" />
+                <ConfigurationIcon icon={section.icon} className="size-5 text-[var(--color-accent-ink)]" />
                 {status.badge && (
                   <span
                     className={`rounded-full px-2 py-[3px] text-[11px] font-bold uppercase tracking-wide ${TONE_PILL[status.tone]}`}

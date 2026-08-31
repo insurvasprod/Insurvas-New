@@ -6,6 +6,7 @@ import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/admin/empty-state";
 import {
   Dialog,
   DialogContent,
@@ -112,8 +113,11 @@ export function CouponsTable({ initialCoupons }: { initialCoupons: CouponRow[] }
           <TableBody>
             {initialCoupons.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
-                  No coupons yet.
+                <TableCell colSpan={6} className="p-0">
+                  <EmptyState
+                    title="No coupons yet"
+                    hint="A coupon applies at the payment provider, so the customer is actually charged less rather than being told they were. Create one to hand out a price break."
+                  />
                 </TableCell>
               </TableRow>
             ) : (

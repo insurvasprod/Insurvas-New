@@ -6,6 +6,7 @@ import { buildAgentMenu } from "@/lib/menu/definition";
 import { effectiveFeatures } from "@/lib/features/killSwitch";
 import { AgentSidebar } from "@/components/app/agent-sidebar";
 import { LogoutButton } from "@/components/app/logout-button";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { MaintenanceMessage } from "@/components/app/maintenance-message";
 import { AnnouncementStrip } from "@/components/app/announcement-strip";
 import { getMaintenanceStatus, getActiveAnnouncements } from "@/lib/system/service";
@@ -43,7 +44,8 @@ export default async function AgentShellLayout({ children }: { children: React.R
           {planDisplayName(entitlement.plan_code)} plan
         </p>
       )}
-      <div className="px-3">
+      <div className="space-y-2 px-3">
+        <ThemeToggle tone="onBrand" />
         <LogoutButton />
       </div>
     </div>

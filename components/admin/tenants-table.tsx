@@ -4,7 +4,6 @@ import { useCallback, useMemo, useState } from "react";
 import Link from "next/link";
 import { Search } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -24,6 +23,8 @@ import {
 import { CreateTenantDialog } from "./create-tenant-dialog";
 import { PaginationBar } from "./pagination-bar";
 import { tableHeaderRow, tableHeadCell, tableShell } from "./table-styles";
+import { NoMatches } from "@/components/admin/empty-state";
+import { StatusChip, accountTone } from "@/components/admin/status-chip";
 
 const PAGE_SIZE = 10;
 
@@ -49,12 +50,6 @@ const STATUS_LABELS: Record<TenantStatus, string> = {
   cancelled: "Cancelled",
 };
 
-const STATUS_BADGE_CLASS: Record<TenantStatus, string> = {
-  provisioning: "border-transparent bg-[var(--color-warning)]/10 text-[var(--color-warning)]",
-  active: "border-transparent bg-[var(--color-success)]/10 text-[var(--color-success)]",
-  suspended: "border-transparent bg-[var(--color-danger)]/10 text-[var(--color-danger)]",
-  cancelled: "border-transparent bg-muted text-muted-foreground",
-};
 
 export function TenantsTable({ initialTenants }: { initialTenants: TenantRow[] }) {
   const [tenants, setTenants] = useState(initialTenants);
@@ -133,8 +128,11 @@ export function TenantsTable({ initialTenants }: { initialTenants: TenantRow[] }
           <TableBody>
             {filtered.length === 0 && (
               <TableRow>
-                <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
-                  No tenants match these filters.
+                <TableCell colSpan={5} className="p-0">
+                  <NoMatches
+                    noun="tenants"
+                    onClear={() => { setSearch(""); setStatusFilter("all"); setPage(1); }}
+                  />
                 </TableCell>
               </TableRow>
             )}
@@ -155,9 +153,9 @@ export function TenantsTable({ initialTenants }: { initialTenants: TenantRow[] }
                   )}
                 </TableCell>
                 <TableCell>
-                  <Badge variant="outline" className={STATUS_BADGE_CLASS[tenant.status]}>
+                  <StatusChip tone={accountTone(tenant.status)} dot>
                     {STATUS_LABELS[tenant.status]}
-                  </Badge>
+                  </StatusChip>
                 </TableCell>
                 <TableCell className="text-muted-foreground">{tenant.plan_code ?? "No plan yet"}</TableCell>
                 <TableCell className="text-muted-foreground">

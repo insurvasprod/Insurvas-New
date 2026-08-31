@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 
-import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -21,13 +20,14 @@ import {
 } from "@/components/ui/table";
 import {
   SUBSCRIPTION_STATUSES,
-  SUBSCRIPTION_STATUS_BADGE_CLASS,
   SUBSCRIPTION_STATUS_LABELS,
   type SubscriptionStatus,
 } from "@/lib/subscriptions/access";
 import { BILLING_CYCLE_LABELS } from "@/lib/money";
 import type { SubscriptionRow } from "@/lib/subscriptions/queries";
 import { tableHeaderRow, tableHeadCell, tableShell } from "./table-styles";
+import { EmptyState, NoMatches } from "@/components/admin/empty-state";
+import { StatusChip, subscriptionTone } from "@/components/admin/status-chip";
 
 export function SubscriptionsTable({
   initialSubscriptions,
@@ -110,8 +110,18 @@ export function SubscriptionsTable({
           <TableBody>
             {subscriptions.length === 0 && (
               <TableRow>
-                <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
-                  No subscriptions match these filters.
+                <TableCell colSpan={6} className="p-0">
+                  {status === "all" && planId === "all" ? (
+                    <EmptyState
+                      title="No subscriptions yet"
+                      hint="A subscription is what puts a tenant on a plan and starts their billing period. Assign one from a tenant's page."
+                    />
+                  ) : (
+                    <NoMatches
+                      noun="subscriptions"
+                      onClear={() => { setStatus("all"); setPlanId("all"); }}
+                    />
+                  )}
                 </TableCell>
               </TableRow>
             )}
@@ -127,9 +137,9 @@ export function SubscriptionsTable({
                 </TableCell>
                 <TableCell className="text-muted-foreground">{BILLING_CYCLE_LABELS[sub.billing_cycle]}</TableCell>
                 <TableCell>
-                  <Badge variant="outline" className={SUBSCRIPTION_STATUS_BADGE_CLASS[sub.status]}>
+                  <StatusChip tone={subscriptionTone(sub.status)} dot>
                     {SUBSCRIPTION_STATUS_LABELS[sub.status]}
-                  </Badge>
+                  </StatusChip>
                 </TableCell>
                 <TableCell className="text-muted-foreground">
                   {sub.current_period_end ? new Date(sub.current_period_end).toLocaleDateString() : "—"}

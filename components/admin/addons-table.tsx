@@ -12,6 +12,7 @@ import {
 import { BILLING_CYCLE_LABELS, formatCentsAsCurrency } from "@/lib/money";
 import type { AddonRow } from "@/lib/addons/constants";
 import { tableHeaderRow, tableHeadCell, tableShell } from "./table-styles";
+import { EmptyState } from "@/components/admin/empty-state";
 
 export function AddonsTable({
   initialAddons,
@@ -36,8 +37,11 @@ export function AddonsTable({
         <TableBody>
           {initialAddons.length === 0 && (
             <TableRow>
-              <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">
-                No add-ons yet.
+              <TableCell colSpan={4} className="p-0">
+                <EmptyState
+                  title="No add-ons yet"
+                  hint="An add-on is something a tenant pays for on top of their plan — extra seats, an extra allowance. Create one and it becomes available to attach to a subscription."
+                />
               </TableCell>
             </TableRow>
           )}
