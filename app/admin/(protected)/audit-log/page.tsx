@@ -1,3 +1,4 @@
+import { AUDIT_LOG_PAGE_SIZE } from "@/lib/audit/constants";
 import { redirect } from "next/navigation";
 
 import { getCurrentAdmin } from "@/lib/adminAuth/getCurrentAdmin";
@@ -5,7 +6,7 @@ import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { AuditLogTable } from "@/components/admin/audit-log-table";
 import { AdminPageHeader } from "@/components/admin/page-header";
 
-const PAGE_SIZE = 20;
+
 
 export default async function AuditLogPage() {
   const admin = await getCurrentAdmin();
@@ -24,7 +25,7 @@ export default async function AuditLogPage() {
     query = query.eq("actor_id", admin.id);
   }
 
-  const { data: rows, count } = await query.range(0, PAGE_SIZE - 1);
+  const { data: rows, count } = await query.range(0, AUDIT_LOG_PAGE_SIZE - 1);
 
   const actorIds = [...new Set((rows ?? []).map((r) => r.actor_id).filter((id): id is string => Boolean(id)))];
   const { data: actorRows } = actorIds.length
@@ -51,7 +52,7 @@ export default async function AuditLogPage() {
       <AuditLogTable
         initialEntries={entries}
         initialTotal={count ?? 0}
-        pageSize={PAGE_SIZE}
+        pageSize={AUDIT_LOG_PAGE_SIZE}
         isSuperAdmin={admin.role === "super_admin"}
         allAdmins={allAdmins ?? []}
       />

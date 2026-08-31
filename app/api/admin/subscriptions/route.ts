@@ -7,6 +7,7 @@ import { assignSubscriptionSchema } from "@/lib/subscriptions/schemas";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { audit } from "@/lib/audit/log";
 import { rebuildEntitlement } from "@/lib/entitlements/rebuild";
+import { applyAutoOffer } from "@/lib/offers/service";
 import type { SubscriptionStatus } from "@/lib/subscriptions/access";
 
 export async function GET(request: NextRequest) {
@@ -63,6 +64,18 @@ export async function POST(request: NextRequest) {
 
   // Awaited before responding, so the agent's next page load already reflects it (SA-2.7).
   await rebuildEntitlement(tenant_id, "subscription.assigned");
+
+  const autoOfferId = await applyAutoOffer(subscriptionId as unknown as string);
+  if (autoOfferId) {
+    await audit({
+      actorId: auth.session.sub,
+      action: "offer.applied",
+      targetType: "subscription",
+      targetId: subscriptionId as unknown as string,
+      metadata: { offerId: autoOfferId, application: "auto" },
+      request,
+    });
+  }
 
   await audit({
     actorId: auth.session.sub,

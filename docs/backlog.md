@@ -26,6 +26,165 @@ password, directly-created users get an invite link.
 
 ## 🟠 Descoped by decision
 
+### 76. Nine of the eleven settings the ticket lists were not created  *(was #53 on the module-4 branch — renumbered on merge, where main had already used #53 for something else)*
+**From:** SA-4.1 · **Decided while building, 2026-08-30**
+
+SA-4.1 names eleven keys under *"Settings needed by the tasks above."* Two of them exist. The store
+holds four keys in total — the other two were added because they have real consumers that the
+ticket did not anticipate.
+
+**Created, and read by something today:**
+`users.invite_expiry_hours` · `platform.default_currency` ·
+`billing.refund_approval_threshold_cents` (added, from SA-3.8) ·
+`usage.warn_percent` (added, from SA-2.5)
+
+**Not created, and why:**
+
+- `billing.dunning_steps_days`, `billing.suspend_after_days`, `billing.cancel_after_days` — SA-3.5
+  was cancelled because Whop runs its own dunning on its own schedule. These three describe a
+  ladder this platform does not operate. Creating them would put three controls on a screen that
+  change nothing, and the next person would wire something to them to make them true.
+- `billing.default_trial_days` — `plan_prices.trial_days` already owns trial length, per plan,
+  which is finer-grained and already used. A global default would be a second answer to a question
+  that already has one.
+- `billing.invoice_due_days` — there is no due-date default to configure. `due_at` is nullable and
+  set per invoice by the admin raising it (SA-3.7); nothing computes one.
+- `billing.invoice_number_prefix` — the `INV` prefix is inside the SQL function
+  `allocate_invoice_number`, not in application code. It could be made configurable, but changing
+  a prefix partway through a sequence is exactly what SA-3.2's "sequential, no gaps" requirement
+  exists to prevent, so it should stay fixed unless somebody argues otherwise.
+- `users.soft_delete_days` — soft delete does not exist. Delete was descoped (#14 above).
+- `users.session_idle_hours` — no idle timeout is implemented anywhere. Session lifetime is a
+  fixed 12h TTL baked into the token at signing, which is a different thing (see #50).
+- `platform.maintenance_mode` — SA-4.12 owns maintenance mode and needs three states, not a
+  boolean. A boolean here would have to be migrated away the moment that ticket starts.
+
+The governing rule, applied throughout: **a setting nothing reads is worse than no setting.** It
+looks like a control, changes nothing, and invites someone to make it real later for the wrong
+reason. Each key above becomes one registry entry plus one call site on the day something actually
+reads it — the machinery is built and tested.
+
+**Fix:** none. Recorded so that the gap between the ticket's list and the store is a decision on
+the record rather than something that looks like an oversight.
+
+### 77. Payment credentials remain environment configuration, not database data  *(was #54 on the module-4 branch — renumbered on merge, where main had already used #54 for something else)*
+**From:** SA-4.2 · **Decided while building, 2026-08-30**
+
+The Whop API key, base URL, webhook secret, product ID and account ID remain in process
+environment variables. SA-4.2 deliberately does not add `credentials_enc`, a `mode` column, a
+custom encryption helper or a Postgres secret store. A master key for custom encryption would also
+live in the environment; moving the ciphertext into a service-role-readable table would widen the
+blast radius rather than create a secret manager. The Basic Idea document calls for a real secret
+manager, and a database row is not one. Swapping sandbox for production therefore remains a key
+and base URL change, not a code change.
+
+**Fix:** none. Keep credentials out of the settings store and database until a real secret-manager
+integration is selected.
+
+### 78. SA-4.2 original unchecked criteria not implemented after the Whop-only decision  *(was #55 on the module-4 branch — renumbered on merge, where main had already used #55 for something else)*
+**From:** SA-4.2 acceptance checklist · **Decision:** Whop-only scope retained on 2026-08-30
+
+The original ticket still contains seven checkbox criteria, but most describe the two-provider
+product that was removed. The complete disposition is recorded here so the unchecked boxes are not
+mistaken for unfinished Whop work:
+
+- **Both providers enabled and shown at checkout — NOT APPLICABLE.** Stripe/PayPal-style parallel
+  provider selection was removed. The product has one active provider: Whop.
+- **Disable a provider without breaking existing subscriptions — NOT APPLICABLE.** There is no
+  provider toggle or second provider to disable under the Whop-only decision.
+- **Secrets never returned in full — DONE.** The Whop status page and status API expose only a
+  masked API-key fingerprint and webhook-secret presence. The response was checked for the real
+  configured secrets and did not contain them.
+- **Switch `dummy` to `test` without code changes — SUPERSEDED / NOT IMPLEMENTED LITERALLY.** The
+  dummy/test mode model was removed. The Whop equivalent is sandbox/production derived from the
+  base URL and key; the derivation is implemented and tested, but an actual production credential
+  switch has not been performed in QA.
+- **Failure simulator creates a real `past_due` subscription — NOT APPLICABLE.** The simulator
+  was removed from the settings workflow; Whop sandbox test cards are the selected failure path.
+- **Only `super_admin` can view or edit — DONE.** The standalone page and status/test APIs use the
+  super-admin-only configuration permission. Tenant provider assignment remains the separate
+  `super_admin` + `billing_admin` permission.
+- **Key changes are audit-logged — NOT IMPLEMENTED UNDER ENV-ONLY CONFIGURATION.** There is no
+  in-app key editor, so the application cannot observe or audit an environment-variable change.
+  The connection-test attempt is audited instead. Implementing this criterion would require a
+  selected secret/configuration manager and an audited application-side change flow.
+
+The original `provider_settings.credentials_enc` / encrypted-at-rest database design is also not
+implemented. Credentials intentionally remain in environment variables; see #54. Reopening any
+of these NOT APPLICABLE or NOT IMPLEMENTED decisions requires an explicit product-scope change.
+
+### 79. SA-4.3 has a deliberate role-scope deviation and future section saves are pending  *(was #56 on the module-4 branch — renumbered on merge, where main had already used #56 for something else)*
+**From:** SA-4.3 acceptance checklist · **Decision:** option 1 selected by the user on 2026-08-30
+
+The Configuration Center is implemented as a shared route registry and shell. The role matrix is
+intentionally narrower than the raw ticket text: **Payments remains `super_admin`-only** because
+it exposes live provider credentials and can perform authenticated provider calls. `billing_admin`
+gets Offers & discounts when SA-4.4 is implemented, but does not get Payments. `platform_config`
+gets the non-payment, non-offer platform sections. `support_agent` gets no Configuration Center
+access and is denied server-side, even if a route is entered directly. The repeatable
+`npm run verify:configuration` check exercised all 45 role/route cases, including temporary active
+fixtures for `support_agent` and `platform_config`; those fixtures were removed after the run.
+
+The Advanced section currently saves each setting independently and was exercised through the
+browser. Payments reuses its existing independent connection-test workflow, and Offers now reuses
+the existing independent Coupons workflow. The remaining section
+routes are intentionally placeholders owned by SA-4.4 through SA-4.12, so their save behavior is
+**NOT TESTABLE YET** and the SA-4.3 criterion *"every section saves independently"* is not fully
+complete until those tickets provide their own forms and save actions. The recently changed strip
+reads the existing `audit_log`; operational payment connection tests are excluded because they are
+health activity, not configuration changes.
+
+**Fix:** implement and verify each section's own form in its owning ticket. Reopen the role matrix
+only if the product decision about payment credentials changes.
+
+### 80. The hardcoded-constant sweep is deliberately partial  *(was #50 on the module-4 branch — renumbered on merge, where main had already used #50 for something else)*
+**From:** SA-4.1 · **Decided while building, 2026-08-30**
+
+SA-4.1's first acceptance criterion is *"no dunning day, trial length or expiry window is hardcoded
+anywhere in SA-1 to SA-3."* Three constants moved into the store: the invitation link lifetime, the
+refund approval threshold, and the usage warning threshold. Several others were examined and
+deliberately left in code, so the criterion passes for what it names and does not pass as a blanket
+statement about every constant in the codebase.
+
+**Left in code as security parameters.** The admin and tenant session lifetimes, the pending-2FA
+window, and the webhook replay tolerance. A settings row that lengthens a session or widens a
+replay window is a privilege-escalation lever available to anyone who can edit settings. The
+session lifetime is also baked into the token when it is signed, so a settings row would look like
+a live control and change nothing for anyone already logged in — worse than no control at all.
+
+**Left in code as definitions rather than tunables.** The billing period lengths, which must agree
+with what the payment provider actually charges. A configurable value that disagrees with the
+provider mis-bills people silently.
+
+**Left in code as rendering details.** The users, login-activity and audit-log page sizes. They are
+imported by client components, so moving them would mean threading a server value through three
+tables for no operational benefit, and a page size that changed mid-session would break the
+pagination arithmetic already on the screen.
+
+**Fix:** none needed unless the product wants one of these tunable, in which case it is one registry
+entry plus a call site — the machinery is built.
+
+### 64. The admin plan preview deliberately ignores kill switches
+**From:** SA-4.10 · **Decided with the product owner, 2026-08-30**
+
+SA-2.3 built the plan editor's menu preview so that "the preview matches what the agent actually
+sees", by sharing the same `buildAgentMenu` function rather than by anyone remembering to update
+two lists. SA-4.10 breaks that equivalence on purpose.
+
+The agent's real menu is now built from *effective* features — what the plan grants, minus anything
+switched off platform-wide right now. The preview still shows what the plan grants.
+
+The reasoning: the preview answers "what does this plan include?", which is a question about the
+product being sold. A temporary outage should not make a plan look like it does not include
+something you are still charging for. An admin pricing a plan during an incident would otherwise
+see a smaller product than the one the customer is buying.
+
+The cost is that SA-2.3's "matches exactly" claim now carries a footnote, and someone comparing the
+two screens during an outage will see a difference.
+
+**Fix:** none wanted. If the preview should ever show outage state, it needs to say WHY an item is
+missing rather than silently omitting it — otherwise it just looks wrong.
+
 ### 14. Delete user — not built
 **From:** SA-1.4 · **Descoped by user on 2026-08-29:** *"we will only do inactive"*
 
@@ -123,11 +282,18 @@ session token can be minted locally from `ADMIN_SESSION_SECRET` and set as the
 Still unverified by clicking: the invite → set-password → login round trip, the email-change →
 confirm round trip (the old address must keep working until confirmed), a role change appearing on
 the tenant side without re-login, seat-limit enforcement at the limit, and the plan version editor.
+For SA-4.2 specifically, there were no active `support_agent` or `platform_config` accounts to use
+for a live 403 check, and the forced provider-error UI/console-error capture was not exercised;
+the success path, `billing_admin` 403, anonymous/expired/forged 401s, and the safe API payload were
+verified.
 
-**Verified in a browser so far:** the invoice list, detail and print screens (SA-3.3).
+**Verified in a browser so far:** the invoice list, detail and print screens (SA-3.3), and the
+SA-4.2 payment-status screen, including the successful connection-test confirmation. The protected
+status API's safe-field-only response was also verified through an authenticated HTTP check; the
+API cannot be opened as a standalone browser document because the in-app browser blocks raw JSON.
 
-### 9. No CI pipeline exists
-**From:** SA-0.2, SA-0.3, SA-2.1
+### 57. SA-4.4 live and browser verification completed
+**From:** SA-4.4 · **Verified in live project, 2026-08-30**
 
 Several tickets specify acceptance as *"an automated test that runs in CI."* The repository now
 has a substantial verification surface — 119 unit tests at the end of SA-3 plus dedicated scripts
@@ -143,10 +309,202 @@ verification scripts should run against a disposable/staging Supabase project, n
 because several intentionally create and clean up rows. Add tenant isolation there or as a
 scheduled integration job. This would have caught the server-only bundling bug that broke the
 first Vercel deploy.
+The `offers` migration was applied to the Insurvas-Saas Supabase project as
+`sa_4_4_offers`. The live verification script passes auto-apply, apply-time redemption caps,
+rejected-capacity preservation, three-invoice duration, end-date auto-apply cutoff, admin API
+visibility, offer editing, and offer-edit audit logging. Temporary verification tenants, coupons,
+offers, subscriptions, and audit rows are cleaned up by the script.
+
+`npm run verify:configuration` also passes all 45 checks on `http://localhost:3101`: super-admin
+access, support-agent 403s on every route, platform-config exclusion from payments/offers, and
+billing-admin access only to offers among the restricted sections.
+
+The Playwright browser fallback verified the signed-in page at
+`http://localhost:3101/admin/configuration/offers` on desktop (1440x1000) and mobile (390x844).
+It verified page identity, meaningful rendered content, no framework overlay, no console/page
+errors, the blank-name validation message, deactivate/reactivate success confirmations, and
+screenshots. Mobile overflow matched the existing admin shell and did not increase it. No unmet
+SA-4.4 verification criterion remains.
+
+### 58. SA-4.5 product catalog implemented and verified
+**From:** SA-4.5 · **Verified in live project, 2026-08-30**
+
+The `products` migration was applied to the Insurvas-Saas Supabase project as
+`sa_4_5_products`. It seeds Final Expense, Term Life, Whole Life, Indexed Universal Life,
+Medicare Advantage and Annuity. Product codes are stable references; the API exposes create,
+edit, archive and restore, and its DELETE operation is deliberately archive-only so future
+template, form, reporting and agent-setting references continue to resolve. `?picker=1` excludes
+archived products.
+
+The live `npm run verify:products` check passed adding a product without a deploy,
+platform-config editing/restoring, archive persistence, picker exclusion, audit logging, and
+403s for support agents and billing admins. The admin list retains archived products for restore.
+The six seed rows were verified directly in Supabase. No template or agent-setting reference
+tables exist yet; SA-4.6 should add the eventual foreign keys with delete restricted. Until then,
+the application has no hard-delete path and preserves the reference contract.
+
+The Playwright browser fallback verified
+`http://localhost:3101/admin/configuration/products` on desktop (1440x1000) and mobile (390x844):
+page identity, all seeded products, blank-form validation, create, archive, archived visibility,
+restore, no console/page errors, and no additional mobile overflow beyond the existing admin
+shell. `npm run verify:configuration` passed all 45 route/role checks, including Products access.
+
+Required checks passed: `npx tsc --noEmit`, `npm run lint`, `npm run build`, `npm test` (144),
+`npm run check:features`, `npm run verify:products`, and `npm run verify:configuration`.
+No SA-4.5 acceptance criterion remains unmet or unverified within the ticket's current scope.
+
+### 59. ✅ SA-4.6 agent-side template consumption completed
+**From:** SA-4.6 · **Belongs to:** SA-4.7 and the later agent lead-workspace ticket · **Resolved 2026-08-30**
+
+The platform template builder and its agent-side consumer are implemented and live-verified.
+Each tenant receives a pinned Term Life template version; the agent form, conditional fields,
+pipeline board, JSONB lead values, custom-field filtering/sorting, and CSV export all read that
+same immutable definition. Updating the assignment is explicit, so an existing agent stays on its
+version until choosing the available update.
+
+Acceptance status recorded for SA-4.6: PASS — create without deploy; PASS — schema plus JSONB;
+PASS — agent-side filter/sort/export; PASS — version isolation, including a pinned tenant
+assignment; PASS — one-action duplication; PASS — preview/runtime parity through the shared
+template definition and the real agent screen. The schema-plus-JSONB checkbox previously marked
+in the ticket is now backed by the migration, live SQL verification, API verification, and browser
+verification. This entry was moved from the outstanding backlog into the resolved section after
+the agent consumer was added.
+
+### 71. Dark mode is not implemented — and five components think it is
+**From:** UI verification, 2026-08-30 · **Corrects an earlier claim**
+
+Previously logged as "tokens exist, nobody has looked at it." Verified in a browser and that was
+wrong in a way worth recording: dark mode is not partially built, it is **not built**.
+
+Measured on `/admin/login` with the browser requesting dark:
+
+| | |
+|---|---|
+| `prefers-color-scheme: dark` | matches |
+| `<html>` class / `data-theme` | empty / null |
+| `body` background | `#f7f9fb` — the light token |
+| `ThemeProvider` mounted | nowhere |
+| dark palette in `globals.css` | absent — `:root` defines one light palette |
+
+The trap: `dark:` utilities survive in five stock shadcn primitives (`badge`, `button`,
+`dropdown-menu`, `input`, `select`) from the generator, and `next-themes` is imported by
+`components/ui/sonner.tsx` alone, with no provider above it. So the moment anyone mounts a
+`ThemeProvider`, those five components go dark and the other 28 screens stay light. It will look
+like a regression and it is pre-existing.
+
+**Decide before building:** either commit to a dark palette across all 33 screens, or strip the
+five `dark:` variants and the `useTheme` import so the codebase stops implying an option it does
+not offer. The second is an hour; the first is a design project.
+
+---
+
+### 72. The UI verification harness exists but this session could not run it
+**From:** browser verification, 2026-08-30 · **Needs an operator, not a fix**
+
+`scripts/mint-session.mjs` (`npm run session admin`) signs a session cookie with the same secret the
+app verifies against — the mechanism `verify-kill-switches-multi.mjs` already uses — so any admin or
+agent screen can be opened in a browser without typing a password. That was the blocker behind #8:
+33 screens, all behind a login.
+
+It is written and unused. The sandbox this session ran in refused to execute a script that mints an
+auth token, which is a reasonable thing for a sandbox to refuse. Someone with a normal shell can
+run it:
+
+```bash
+npm run session admin -- --js     # prints a document.cookie one-liner; paste into devtools
+npm run session admin -- --role billing_admin
+npm run session tenant
+```
+
+Until someone does, every row in #8 stays open and the "~12 of 33 screens verified" number stands.
+
+---
+
+### 73. `payment_providers` is empty, and that has a consequence
+**From:** reference data export, 2026-08-30 · **Corrected 2026-08-31**
+
+The original entry read this as a catalog of providers and wondered whether it was dead schema. It
+is not a catalog: it maps a **tenant** to its provider customer, and `lib/invoices/custom.ts` reads
+`provider_customer_id` from it to attach a pay-online link to an invoice.
+
+So the empty table has a real effect. Every invoice the new period billing run raises will come out
+with no pay-online link and the warning *"No provider customer is known for this tenant yet"* — it
+can still be settled by bank transfer, but the customer gets no button. Nothing populates this table
+today.
+
+**Fix:** write the row when a checkout completes, from the membership envelope Whop already sends.
+That is the same wiring [#47] needs, and worth doing at the same time.
+
+---
+
+### 74. The agent app had no design pass, and most of its menu 404'd
+**From:** agent app design pass, 2026-08-31 · **Largely closed**
+
+Twenty-four of the thirty agent menu items had no route. Next answered every one with its default
+404, so a customer on a plan granting Quoting or Statements saw a sidebar where most of it was
+broken — features they were paying for, promised in the navigation, leading nowhere.
+
+Closed by `app/app/(shell)/[section]/page.tsx` plus `components/app/coming-soon.tsx`. A static
+segment beats a dynamic one, so the six real screens are untouched and the catch-all only ever runs
+for the rest. It decides in this order: not in the menu → 404, which is correct; in the menu but not
+granted → the existing gate notice; granted but unbuilt → "on the way". Entitlement is checked
+*before* build status on purpose, so someone without the plan is told about their plan rather than
+about our roadmap.
+
+Also in the pass:
+
+- **`built: true` is now data in the menu**, not inferred, and `lib/menu/definition.test.mjs`
+  asserts the flag and the filesystem agree in both directions. Adding a screen and forgetting to
+  flip it fails in CI rather than in front of a customer — which is exactly how this happened.
+- **The sidebar works on a phone.** It was a fixed 240px column with no way to reach navigation
+  below that width, while LA-0.1 requires the app to work on one.
+- **Internal vocabulary is gone from customer screens:** raw feature keys (`book_of_business`) and
+  meter keys (`dials`) resolve to their labels, `plan_c (v3)` reads as "Plan C", and "this screen is
+  scaffolding for LA-0.1" no longer quotes a ticket number at a paying customer.
+- **Usage got bars**, banded by the same `usageState()` the admin monitor uses, so an agent and an
+  operator cannot look at the same tenant and disagree about whether it is in trouble. Each says
+  what happens at the limit — a hard cap that stops work is a different sentence from overage that
+  lands on a bill.
+- **`min-w-0` on `<main>`**, the same fix the admin shell needed in #52.
+
+**Not verified in a browser.** Every one of these screens sits behind a login and this session could
+not mint a session cookie (#72). Mockups of the implemented design are at
+`design/AgentApp.design.html`; they are drawn from the code, not photographed from it.
+
+---
+
+### 75. The entitlement blob should carry the plan's display name
+**From:** agent app design pass, 2026-08-31 · Minor
+
+`planDisplayName()` tidies `plan_c` into "Plan C" because that is all it can honestly do. The real
+name lives in `plans.name`, and the agent app is forbidden from reading that table — "it reads this
+one object and obeys it; it never queries a plan, a subscription or a price". Hardcoding a second
+set of names in the tenant plane would be a copy that silently disagrees with the admin screen the
+first time somebody renames a plan.
+
+**Fix:** add `plan_name` to `resolve_tenant_entitlement`'s output and to the `Entitlement` type. It
+is a change to the contract between the two planes, so it wants its own migration and a note in the
+Basic Idea doc's Appendix A rather than being smuggled in with a UI change.
 
 ---
 
 ## ⚪ Tech debt
+
+### 81. The settings cache only invalidates on the instance that wrote  *(was #51 on the module-4 branch — renumbered on merge, where main had already used #51 for something else)*
+**From:** SA-4.1 · Minor, bounded
+
+The read helper caches overrides in memory and clears that cache when a setting is saved. On a
+single server that is exact. On serverless every running instance holds its own copy, and only the
+one that handled the write clears it — so another instance keeps serving the old value until its
+own copy ages out.
+
+The staleness is bounded to thirty seconds by a TTL, which is why this is minor rather than a bug:
+nobody notices a thirty-second delay on a value that changes a few times a year. It is recorded
+because the failure mode is confusing rather than visible — two admins on two instances briefly
+disagreeing about a number, with nothing on screen to explain why.
+
+**Fix, if it ever matters:** a short-lived shared cache, or drop the in-memory layer and accept one
+indexed lookup per read.
 
 ### 11. `middleware.ts` uses a deprecated convention
 **From:** SA-0.3
@@ -205,15 +563,26 @@ Accepted for now: the overshoot is small and bounded, and SA-3 bills overage any
 ever needs a strict ceiling (a legal one, say), this needs to become a single transaction that
 locks the total row.
 
-### 24. Nothing *schedules* the period rollover
-**From:** SA-2.5, narrowed by SA-2.7 · **Belongs to:** SA-6.1
+### 24. Nothing *schedules* the billing run
+**From:** SA-2.5, narrowed by SA-2.7, widened by #44 on 2026-08-31 · **Belongs to:** SA-6.1
 
-SA-2.7 built `advance_billing_periods()` and `npm run advance:periods`, which rolls ended periods,
-applies queued downgrades, completes cancellations and resets meter allowances. Verified end to end.
+`npm run bill:periods` now does the whole rollover in the right order: bill the period that ended,
+then advance it. Verified end to end except for the part that needs the migration applied.
 
-What's still missing is a **scheduler**. Until SA-6.1 runs this on a cron, a queued downgrade only
-applies when a human runs the script — and per the doc, a job that silently never runs looks
-identical to a healthy one. SA-6.1 should schedule it *and* alert on missed runs.
+What is still missing is a **scheduler**, and the stakes went up. Before #44 an unrun job meant a
+queued downgrade applied late. Now it means invoices are never raised — add-ons go unbilled, overage
+is free, and a mid-period upgrade's difference sits in `pending_charges` forever. A job that
+silently never runs still looks identical to a healthy one.
+
+SA-6.1 should schedule it **and** alert on missed runs. `period_billing_runs.ran_at` is the natural
+signal: no row in the last N days for a subscription whose period has ended means the job is not
+running, and that query is cheap.
+
+Meanwhile `POST /api/admin/billing/run` lets a billing admin trigger it from the app, so the run is
+something a person can see and check rather than an SSH session away. That is not a substitute for
+a scheduler.
+
+---
 
 ### 26. Add-on CRUD is read-only in the UI
 **From:** SA-2.6 · Minor
@@ -224,6 +593,46 @@ to subscriptions **is** fully built.
 
 Adding a new add-on today means a migration. Worth a dialog (same shape as the plan editor) if the
 business starts iterating on them; not urgent while the catalog is four rows that rarely change.
+
+### 27. Add-ons and overage are still not charged
+**From:** SA-2.6 → **retargeted by SA-3.2 (2026-08-30)** · **Significant**
+
+SA-3.2 built the invoice, but only for what **Whop** charges — and Whop charges the plan price and
+nothing else. It knows nothing about our add-ons or metered overage, because those are our
+concepts, attached to our subscriptions, invisible to a Whop plan.
+
+The decision was to bill extras on a **separate Whop invoice** each period, using their
+`create-invoice` API (arbitrary `line_items`, its own number, a hosted `pay_online_url`, and their
+collection and dunning for free). **That is not built.**
+
+So today: a tenant with three add-ons and 400 SMS of overage is invoiced for their plan and nothing
+else, and the difference is simply not collected. `subscription_addons` keeps detached rows with
+`attached_at` / `detached_at`, so a past period can still be reconstructed exactly when this is
+built — read that history rather than only current attachments, or an add-on cancelled mid-period
+vanishes from the bill it belongs on.
+
+### 37. Already invoiced — this entry was stale
+**From:** SA-3.2 · **Checked and closed 2026-08-31**
+
+The entry said the two real sandbox payments produced no invoices. `npm run backfill:invoices`
+replays every stored payment envelope and reports what is missing; run against the live project it
+finds nothing to do:
+
+```
+= pay_HauFP0LxGqtuUm: already invoiced as INV-2026-08-0001 (mismatched)
+= pay_cqovMKvYNu6jZI: already invoiced as INV-2026-08-0002 (matched)
+x pay_xxxxxxxxxxxxxx: the event was never matched to a tenant
+```
+
+Both real payments have invoices, and the `plan_a` double-charge is recorded as **mismatched** —
+exactly the outcome this entry argued for. The third is a fixture with a placeholder id and no
+tenant; it is correctly skipped rather than invented.
+
+The script stays. It is a guard rather than a migration now: if a payment ever arrives while invoice
+generation is down, this finds it and replays it through the same line-building code the live
+receiver uses.
+
+---
 
 ### 38. An invoice can still be deleted
 **From:** SA-3.2 (2026-08-30) · Minor
@@ -236,35 +645,53 @@ built — `void`. DELETE is currently retained only so verification scripts can 
 themselves; the same tension as `usage_events`, resolved the other way. Before real customers,
 revoke it and give the test scripts a dedicated path.
 
-### 29. The database schema lives only in Supabase, not in the repo
-**From:** end-of-SA-2 push · **Significant**
+### 29. One step still owed: the baseline has never been replayed into an empty database
+**From:** end-of-SA-2 push · **Mostly closed 2026-08-30**
 
-Surfaced while preparing the SA-2 pull request: `git ls-files` shows no `.sql` anywhere. Every
-table, RLS policy, grant/REVOKE and all ~14 functions (`admin_save_plan_version`,
-`resolve_tenant_entitlement`, `refresh_tenant_entitlement`, `advance_billing_periods`,
-`record_usage`, …) were applied straight to project `iiimdgizjwnihpyrukbu` and exist nowhere else.
+The original of this entry said the schema existed nowhere but project `iiimdgizjwnihpyrukbu`. That
+is no longer true. `supabase/migrations/0000_baseline.sql` now carries **45 tables, 23 enums, 57
+indexes, 5 views, 47 functions, 61 foreign keys, 3 policies and the grant/revoke state of 50
+tables**, generated by `npm run db:dump`, and `0016_reference_data.sql` seeds the three catalogs the
+code asserts against. The `tenant_app` role is created by a migration for the first time.
 
-Three consequences, in order of how much they'd hurt:
+`supabase db pull` could not be used: the only credential this repo holds is `TENANT_DB_URL`, whose
+role is deliberately `NOBYPASSRLS` with no DDL rights, and the CLI wants an owner connection. The
+dump reads the catalog instead, which any role may do.
 
-1. **A fresh clone cannot run.** The TypeScript in this repo is a client of a schema it doesn't
-   contain. New machine, new environment, or a restore from a git backup all produce an app that
-   compiles and immediately fails at runtime.
-2. **No review of the security-critical half.** The REVOKEs that make `audit_log` and
-   `usage_events` append-only, and the `tenant_app` NOBYPASSRLS role that makes isolation real,
-   are the parts most worth a second pair of eyes — and they never appear in a diff.
-3. **No rollback.** There is no record of what a migration changed, so there's nothing to revert.
+All 17 files parse against a real PostgreSQL server (`npm run db:check`).
 
 Not a code fix — it's an export. Either `supabase db pull` into `supabase/migrations/`, or hand-write
 the DDL in order and verify by replaying it into a scratch project. This was already worth doing
 before SA-3; it is now overdue because the live-only schema also contains invoices, payments,
 coupons, credit notes and revenue metrics.
+**What is still owed:** parsing is not applying. Nobody has replayed `0000` → `0016` into an empty
+database with an owner connection and confirmed the result matches production. Until that happens
+the claim "a fresh clone can run" is inference, not evidence. The check is:
 
-### 32. The provider panel has never been opened in a browser
-**From:** SA-3.1 · Minor
+```bash
+# against a scratch project, with an owner connection
+psql "$SCRATCH_DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/0000_baseline.sql
+# ... then 0001 through 0016 in order, then:
+npm run verify:tenant-isolation
+npm run verify:entitlements
+```
 
-The tenant Payment provider panel, its API route and the call-logging decorator are verified at the
-database and unit level but never clicked. No longer blocked — see #8 for how to get a session —
-just not done.
+Both suites must pass against the **replayed** schema, not the original. This needs an owner
+credential that this repository does not have, so it is the operator's step, not a code change.
+
+### 32. The orphaned per-tenant provider panel is intentionally retained but dormant
+**From:** SA-3.1, resolved in SA-4.2 · **Decision:** keep dormant by user on 2026-08-30
+
+The Whop-only decision removed the need for a customer-level provider choice, the dummy failure
+simulator and multi-provider configuration. The existing tenant detail component and API route are
+still retained because they touch shared `payment_providers` runtime records used by provider
+resolution and future migration work. They are not part of the standalone platform status screen,
+and they were not deleted because removing them would also touch the tenant detail page and billing
+provider assignment behavior.
+
+**Fix:** none for SA-4.2. Revisit whether to hide or remove the dormant UI and route when SA-4.3
+defines the Configuration Center and the product makes an explicit decision about tenant-level
+provider records.
 
 ### 39. Two invoice filters exist in the API but not the UI
 **From:** SA-3.3 (2026-08-30) · Minor
@@ -295,33 +722,61 @@ had before they were exercised, and both turned out to have bugs.
 
 Worth spending $1 of sandbox money on a partial refund to close it.
 
-### 46. Credit balances are never applied automatically
-**From:** SA-3.8 (2026-08-30) · Minor
+### 46. Credit is applied automatically — resolved
+**From:** SA-3.8 · **Built 2026-08-31**
 
-A credit reaches `tenant_credits.balance_cents`, and `redeemCreditAsFreeDays()` converts it into
-free days on the Whop membership. **Nothing calls that automatically** — there is no control on the
-tenant page and no job. The balance is recorded and visible; turning it into value is a manual step
-that currently has no button.
+The ticket's criterion was "an unused credit balance is applied to the next invoice automatically
+and shown as its own line". It was unmet because on automatic billing there was no invoice of ours
+to apply it to.
 
-The ticket's criterion "an unused credit balance is applied to the next invoice automatically and
-shown as its own line" is therefore **unmet**. On automatic billing there is no invoice of ours to
-apply it to before Whop charges; free days are the workable equivalent and they need wiring up.
+#44 created one. The period billing run applies the balance as a `credit` line on the period invoice
+and deducts it — inside the same transaction that raises the invoice, because deducting afterwards
+means a crash in between gives the discount away twice.
 
 ### 44. Add-ons, overage, proration and waivers still do not reach an invoice
 **From:** SA-3.7 / SA-3.8 (2026-08-30) · **Significant** — consolidates former [#27] and [#41]
+Clamped to the bill, deliberately. Credit larger than the charges does not produce a negative
+invoice, and does not evaporate either: what could not be spent stays on the balance. When credit
+covers the charges completely, the run records that it happened and raises no invoice at all.
 
-SA-3.7 built the machinery both were waiting for: `create_custom_invoice` raises an arbitrary
-invoice from the shared number sequence, and `WhopProvider.createInvoice` sends it for online
-payment. **Nothing calls it for either purpose yet.**
+`redeemCreditAsFreeDays()` remains for the case where there is no invoice to discount, and still has
+no button. That is a convenience now rather than the only mechanism.
 
 What remains is a job that, at each period rollover, gathers a tenant's attached add-ons, their
 metered overage above the plan allowance, any pending proration from a mid-period upgrade, and any
 billing-admin waiver that must remove an overage line before issue. It then raises one custom
 invoice for the lot. The custom-invoice pieces exist; the period billing assembler and waiver
 model do not.
+---
 
-Until then: a tenant with add-ons is billed for their plan only, overage is free, and a mid-period
-upgrade charges nobody the difference.
+### 82. The period billing run exists — one step left  *(was #44 on the module-4 branch — renumbered on merge, where main had already used #44 for something else)*
+**From:** SA-3.7 · **Built 2026-08-31**
+
+The job now exists: `npm run bill:periods`. For each subscription whose period has ended it gathers
+attached add-ons, metered overage above the effective allowance, and any charge parked by a
+mid-period plan change, applies the tenant's credit balance, and raises one invoice for the lot —
+then advances the periods.
+
+Three decisions worth knowing:
+
+- **Bill, then roll, in one command.** Usage is keyed by `period_start`, so after
+  `advance_billing_periods()` runs, "this period's usage" means the new empty bucket. Billing after
+  the roll would charge everyone for zero overage forever and look healthy doing it. The two cannot
+  be scheduled apart because they are one script.
+- **Idempotent by primary key, not by a check.** `period_billing_runs (subscription_id,
+  period_start)` is written in the same transaction as the invoice. A check in application code
+  would race two concurrent runs; a primary key cannot.
+- **Overage is skipped for hard-capped or unpriced meters.** A hard cap means the usage was refused
+  at the door, so billing it would charge for something we blocked; an unpriced meter means an
+  operator has not priced it, and inventing a price to bill a customer is worse than billing
+  nothing.
+
+**Still owed:** `supabase/migrations/0017_period_billing.sql` has not been applied — no credential in
+this repository can run DDL. Until it is, `npm run verify:period-billing` stops with a clear message
+and the run has never executed against a real database. The arithmetic is covered by 19 unit tests
+and the migration parses against a real server; neither of those is the same as having run.
+
+---
 
 ### 42. Coupons are creatable but not yet attachable from a screen
 **From:** SA-3.6 (2026-08-30) · Minor
@@ -460,6 +915,50 @@ problem, not a style one.
 SA-5.3 backfill proved) into correctly-named files. Mechanical, and worth doing before anyone needs
 a second environment.
 
+### 41. Proration now has a caller — resolved
+**From:** SA-3.4 · **Built 2026-08-31**
+
+`prorate()` produced the ticket's worked example to the cent and nothing invoked it, so a mid-period
+change moved our side, left Whop billing the old plan, and charged nobody the difference.
+
+`lib/billing/planChange.ts` is the missing caller, wired into the change-plan route. On an immediate
+change it prorates against the real period length, writes **two** `pending_charges` rows — the old
+plan's unused days as a credit, the new plan's remaining days as a charge — and calls
+`WhopProvider.setCancelAtPeriodEnd()` so the old membership stops renewing at the old price. The
+difference is collected on the next invoice by the period billing run rather than raised as its own
+invoice today: one bill instead of two, and nothing is lost by waiting.
+
+Two rows rather than one on purpose. "$122.58 plan change" is something a customer can only accept
+or dispute; "$152.61 credited, $275.19 charged" is something they can check.
+
+A downgrade still raises nothing. The ticket is explicit that it is not refunded mid-period, and the
+route now records that as the reason rather than silently doing nothing.
+
+---
+
+### 60. ✅ SA-4.7 agent template selection and tenant-owned copies completed
+**From:** SA-4.7 · **Belongs to:** SA-4.7 · **Resolved:** 2026-08-30
+
+Nothing added to the backlog for SA-4.7. The live verification covered onboarding copy creation,
+subscription-filtered template discovery, tenant isolation, second-template preview and merge,
+idempotent re-application, and tenant-scoped RLS. The repository checks and signed-in browser
+screen verification also passed. Platform templates remain immutable inputs; agent edits are saved
+only to the tenant-owned copy.
+
+### 61. ✅ SA-4.8 agent-side DNC preflight is now wired
+**From:** SA-4.8 (2026-08-30) · **Belongs to:** SA-4.8 · **Resolved:** 2026-08-30
+
+The agent now has a protected `/app/dialer` screen and `/api/app/dial/preflight` endpoint. Every
+preflight checks for an enabled DNC vendor, calls vendors in priority order, falls back when a
+vendor is unreachable or returns an unusable response, and fails closed when no vendor can verify
+the number. Listed numbers return a clear blocked response. Each scrub attempt and fallback is
+recorded in `provider_calls` with only the masked last four digits; credentials and the full phone
+number are never retained in the provider log. The pure fallback and response-contract tests pass.
+
+The repository still has no PSTN/calling-provider adapter, so the endpoint returns “ready for your
+connected dialer” after a successful scrub rather than pretending to place a telephone call. A
+future telephony ticket must invoke this same preflight immediately before handing a number to its
+provider.
 
 ---
 
@@ -523,6 +1022,101 @@ a second environment.
   unverified users. It does — new users get `pending_verification` and `signupDestination` redirects
   them to `/app/verify-email`. My grep pattern missed the helper names and I drew a conclusion from
   an absence I had not established.
+- **#9 No CI pipeline** → `.github/workflows/ci.yml`. Two jobs: `verify` needs no secrets at all
+  (typecheck, lint, 159 unit tests, production build) and gates every push and pull request;
+  `database` runs all 20 suites via the new `npm run verify:all`, plus the cross-process kill-switch
+  check, and skips itself with a notice when the repository has no credentials configured. The
+  no-secret build was proven first — no module reads `process.env` at import time, so placeholders
+  exercise the same paths as real keys. This closes the "runs in CI" criterion on SA-1.4, SA-2.6
+  and SA-4.10.
+
+- **#65 Kill switches fail OPEN** → the decision stands and is recorded here because the entry was
+  removed when #63 was closed. If `feature_switches` cannot be read, every feature is treated as ON
+  and the error is logged loudly. Failing closed would turn one unreadable table into a total outage
+  for every tenant, triggered by exactly the partial failure a deploy produces; entitlements still
+  apply, so nobody gains anything unpaid-for. The reasoning also lives in `lib/features/killSwitch.ts`.
+  Revisit only if switches ever become a security boundary rather than an incident tool.
+- **#70 was a duplicate of #56** and has been removed. Both record the same deliberate deviation —
+  Payments staying `super_admin`-only against SA-4.3's stated matrix. #56 says it better and cites
+  the 45-case `verify:configuration` run. I grepped before adding it and missed #56 because it
+  phrases the decision differently.
+
+- **#52 Every admin screen scrolled sideways below ~870px** → fixed 2026-08-30, and the diagnosis in
+  that entry was wrong. It blamed the fixed sidebar and prescribed collapsing it. The real cause was
+  two lines: `<main>` is a flex item, so `min-width: auto` stopped it shrinking below its widest
+  child, and `tableShell` used `overflow-hidden` so a wide table had nowhere to scroll. A wide table
+  therefore pushed main, main pushed the page, and the sidebar slid off the left. Adding `min-w-0`
+  to main and switching the table container to `overflow-x-auto` fixed every admin screen at once:
+  measured at a 560px viewport, Users went from 652px of page overflow to 0 and Features from 304 to
+  0, with the table scrolling inside its own container instead.
+
+- **#68 Six sections kept the old table treatment** → closed 2026-08-30 after actually looking at
+  them. The premise was wrong: the entry assumed rows of Save buttons and thin empty states across
+  all six, and only one section had a per-row save at all. What the pass found instead was empty
+  states that stated a fact without naming the action — most sharply on Compliance sources, where a
+  red "dialing is blocked platform-wide" banner sat directly above a table reading "No compliance
+  vendors registered", never connecting the two. Those four now name the way out. Everything else on
+  those screens was already carrying its weight in the wider layout, so it was left alone.
+
+- **The connection probe counted its own success as a failure** → fixed during the Module 4 UI pass.
+  SA-4.2's test asks Whop for a payment id that cannot exist, and the expected 404 was logged as an
+  error, so every connection test made the payment health panel look worse. Surfaced within a minute
+  of the configuration hub starting to display that number. The probe now declares which statuses
+  mean success for it.
+
+### 62. ✅ SA-4.9 credit packs, defaults and usage monitor completed
+**From:** SA-4.9 · **Verified in live project, 2026-08-30**
+
+The `credit_packs`, `meter_pricing` and `credit_grants` tables were added in migrations
+`0012_credit_limits.sql` and `0013_credit_limits_plan_precedence.sql`, applied to the Insurvas
+Supabase project, with control-plane RLS and service-role-only access. The existing SA-2.5
+`usage_events` / `usage_totals` counters remain the only usage counters. Grants are additive
+current-period allowances, and a plan's own allowance wins over a platform default, including an
+explicit unlimited (`NULL`) value.
+
+The admin route and screen support independent pack create/edit/archive, per-meter sell price and
+defaults, live DNC vendor cost, manual grants with a mandatory reason, invoice-line creation through
+the existing custom-invoice path, and a server-side usage grid with 80%/100% alerts. All writes
+are server-gated to `super_admin` and `platform_config` and audit-logged; support agents and billing
+admins receive 403, and missing, expired and forged sessions receive 401.
+
+The focused `npm run verify:credits-limits` check passed: concurrent grants, immediate capacity and
+monitor updates, invoice-line creation, margin data, plan-default precedence, hostile and missing
+inputs, audit rows, and a 500-tenant × 6-meter response. Browser QA at
+`http://localhost:3000/admin/configuration/credits-limits` passed with visible focus, native
+mandatory-reason validation, successful rendering and no console errors. The pack action uses the
+existing issued custom-invoice workflow because this repository has no deferred recurring-invoice
+queue; it creates the tenant invoice line now rather than changing Whop's provider charge flow.
+
+Nothing added to the backlog for SA-4.9; all six acceptance criteria are covered by the live
+verification evidence above.
+
+### 66. ✅ SA-4.10 multi-process propagation verified
+**From:** SA-4.10 · **Belongs to:** SA-4.10 · **Resolved:** 2026-08-30
+
+The prior single-process check could not prove that one server's in-memory cache invalidation was
+not required. `npm run verify:switches:multi` now warms two independent production server processes,
+toggles through the first, and confirms that the second reads the database-backed change within the
+60-second requirement. It also confirms that restoration propagates within the same bound. The
+throwaway tenant and switch row are removed after the run; audit rows remain by design.
+
+- **SA-4.2 payment provider status surface** → implemented 2026-08-30. The protected standalone
+  Whop status page, safe status API, environment-only credential policy, explicit permission split,
+  centralized request logging, connection-test auditing, and actual error categories are in place.
+  Live authenticated browser verification remains tracked under [#8].
+
+- **Windows feature-check shutdown assertion** → resolved 2026-08-30. The feature-key checker now
+  sets `process.exitCode` and lets Node close normally, so the required command reports its valid
+  no-drift result with exit code 0.
+
+- **#49 The settings store had never written a row** → resolved 2026-08-30. The migration was
+  applied and the store was exercised end to end in a browser: saving moved `users.invite_expiry_hours`
+  72 → 96 and it survived a reload; the audit row carried `{from: 72, to: 96}`; changing
+  `billing.refund_approval_threshold_cents` to 10000 changed the Refunds & credits subtitle from
+  "$500.00" to "$100.00" on a **different page, in the same running process, with no restart** —
+  which proves cache invalidation and that the value reaches its consumer. `tenant_app` is refused
+  the table outright (`permission denied for table settings`), so RLS and the REVOKEs hold. Both
+  values were then restored to their defaults; the four audit rows are the record of the test.
 
 - **SA-3.9 revenue dashboard** → MRR/ARR/ARPC, churn, plan breakdown and the activation funnel, off
   a nightly `metrics_daily` snapshot that is re-runnable for any past date. Contracted MRR is shown
@@ -634,6 +1228,28 @@ a second environment.
   now passes a string key resolved on the client.
 - **Server-only code in the client bundle** → broke the first Vercel deploy. `tsc` cannot catch
   this class of bug; see [[verify-with-real-build-not-just-tsc]] in memory.
+
+### 67. ✅ SA-4.12 system maintenance and announcements completed
+**From:** SA-4.12 · **Belongs to:** SA-4.12 · **Resolved:** 2026-08-30
+
+The `maintenance`, `announcements` and `announcement_dismissals` tables were added in migration
+`0015_system_maintenance_announcements.sql` and applied to the live Supabase project. The System
+configuration route now provides independently saved maintenance and announcement controls with
+server-side role checks, audit rows, scheduled activation/clearance, tenant-facing banners,
+read-only write blocking, locked-mode routing, admin bypass, plan targeting and per-user
+dismissals. Onboarding password and email-confirmation writes also receive the same maintenance
+response, and dismissal failures are shown to the user.
+
+The focused `npm run verify:system` run passed all checks against the running application, including
+401/403 role handling, normal reads, clear 503 read-only writes, locked tenant login/read blocking,
+admin access while locked, future and active schedule behavior, announcement targeting, persistent
+dismissal, non-dismissible protection and audit logging. `npm run verify:configuration` also passed
+all 45 Configuration Center route and permission checks. Browser QA rendered
+`/admin/configuration/system` in the signed-in admin session with visible controls and no console
+errors.
+
+All five SA-4.12 acceptance criteria are PASS. Nothing was left unmet, deferred or unverified for
+this ticket, so nothing was added to the open backlog.
 
 ---
 

@@ -25,6 +25,7 @@ export const SIDEBAR_ICONS = [
   "catalog",
   "monitoring",
   "platform",
+  "configuration",
 ] as const;
 
 export type SidebarIconKey = (typeof SIDEBAR_ICONS)[number];

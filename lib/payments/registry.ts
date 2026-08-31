@@ -85,7 +85,14 @@ export async function getPaymentProviderForTenant(tenantId: string): Promise<Res
 
   const inner = buildProvider(code, { simulate: record?.simulate_outcome });
 
-  return { provider: withCallLogging(inner, { tenantId }), code, record };
+  // Whop logs itself, inside WhopClient.request (SA-4.2) — every call reaches provider_calls no
+  // matter which of the many call sites made it, including the Whop-specific methods that are not
+  // on the PaymentProvider interface. Wrapping it here as well would write two rows per call.
+  //
+  // The dummy providers have no HTTP client to log from, so they still need the decorator.
+  const provider = code === "whop" ? inner : withCallLogging(inner, { tenantId });
+
+  return { provider, code, record };
 }
 
 /**

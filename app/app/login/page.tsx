@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Building2 } from "lucide-react";
 
@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import Link from "next/link";
+import type { MaintenanceStatus } from "@/lib/system/constants";
 
 export default function TenantLoginPage() {
   const router = useRouter();
@@ -16,6 +17,14 @@ export default function TenantLoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [maintenance, setMaintenance] = useState<MaintenanceStatus | null>(null);
+
+  useEffect(() => {
+    fetch("/api/maintenance")
+      .then((response) => response.ok ? response.json() : null)
+      .then((status: MaintenanceStatus | null) => setMaintenance(status?.level === "locked" ? status : null))
+      .catch(() => undefined);
+  }, []);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -51,6 +60,12 @@ export default function TenantLoginPage() {
           <CardDescription>Sign in to your account</CardDescription>
         </CardHeader>
         <CardContent>
+          {maintenance && (
+            <div role="alert" className="mb-4 rounded-md border border-[var(--color-danger)]/40 bg-[var(--color-danger)]/10 p-3 text-sm">
+              <p className="font-semibold">Sign in is temporarily unavailable</p>
+              <p className="mt-1">{maintenance.message}</p>
+            </div>
+          )}
           <form className="space-y-4" onSubmit={handleSubmit}>
             <div className="space-y-1.5">
               <Label htmlFor="email">Email</Label>
@@ -75,7 +90,7 @@ export default function TenantLoginPage() {
               />
             </div>
             {error && <p className="text-sm text-[var(--color-danger)]">{error}</p>}
-            <Button type="submit" className="w-full" disabled={loading}>
+            <Button type="submit" className="w-full" disabled={loading || Boolean(maintenance)}>
               {loading ? "Signing in…" : "Sign in"}
             </Button>
           </form>

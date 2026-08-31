@@ -1,10 +1,11 @@
+import { AUDIT_LOG_PAGE_SIZE } from "@/lib/audit/constants";
 import { NextResponse, type NextRequest } from "next/server";
 
 import { requireAdminRole } from "@/lib/adminAuth/requireAdminRole";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { AUDIT_ACTIONS } from "@/lib/audit/actions";
 
-const PAGE_SIZE = 20;
+
 
 export async function GET(request: NextRequest) {
   const auth = await requireAdminRole();
@@ -40,7 +41,7 @@ export async function GET(request: NextRequest) {
   if (from) query = query.gte("ts", from);
   if (to) query = query.lte("ts", to);
 
-  const { data: rows, error, count } = await query.range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1);
+  const { data: rows, error, count } = await query.range((page - 1) * AUDIT_LOG_PAGE_SIZE, page * AUDIT_LOG_PAGE_SIZE - 1);
   if (error) {
     return NextResponse.json({ error: "Could not load audit log" }, { status: 500 });
   }
@@ -56,5 +57,5 @@ export async function GET(request: NextRequest) {
     actor: row.actor_id ? (actorById.get(row.actor_id) ?? null) : null,
   }));
 
-  return NextResponse.json({ entries, total: count ?? 0, page, pageSize: PAGE_SIZE });
+  return NextResponse.json({ entries, total: count ?? 0, page, pageSize: AUDIT_LOG_PAGE_SIZE });
 }

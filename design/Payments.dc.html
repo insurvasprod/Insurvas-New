@@ -1,0 +1,110 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+  <style>
+    body { margin: 0; font-family: 'Inter', ui-sans-serif, system-ui, sans-serif; background: #f7f9fb; color: #1a1b1c; }
+    a { color: #0070cc; text-decoration: none; } a:hover { color: #005ba8; }
+    .row { display: flex; align-items: baseline; justify-content: space-between; gap: 24px; padding: 11px 0; border-bottom: 1px solid #eef1f5; }
+    .k { font-size: 14px; color: #6b7280; }
+    .v { font-size: 14px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  </style>
+</helmet>
+
+<div style="display: flex; min-height: 900px;">
+  <aside style="width: 240px; flex-shrink: 0; background: linear-gradient(135deg,#005ba8 0%,#00407f 32%,#003162 72%,#001f3f 100%);"></aside>
+
+  <main style="flex: 1; padding: 28px 40px; min-width: 0;">
+
+    <div style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: #6b7280; margin-bottom: 16px;">
+      <a href="#">Configuration</a><span>/</span>
+      <div style="display: flex; align-items: center; gap: 6px; color: #1a1b1c; font-weight: 500;">
+        Payments
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+      </div>
+    </div>
+
+    <h1 style="margin: 0 0 6px; font-size: 24px; font-weight: 800; letter-spacing: -.02em;">Payments</h1>
+    <p style="margin: 0 0 24px; font-size: 14px; color: #6b7280; max-width: 68ch;">
+      Which payment account this platform is pointed at, and whether it is answering.
+    </p>
+
+    <div style="display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 20px; align-items: start;">
+
+      <div style="display: flex; flex-direction: column; gap: 20px;">
+
+        <!-- Mode stays the loudest thing on the page. Sandbox reads calm; production reads as a
+             warning, because it means real customer money. -->
+        <div style="border: 2px solid #0070cc; background: #eff7ff; border-radius: 12px; padding: 20px;">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0070cc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12h6"/><circle cx="12" cy="12" r="9"/></svg>
+            <span style="font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: #0070cc;">Mode</span>
+          </div>
+          <div style="font-size: 28px; font-weight: 800; letter-spacing: -.02em; color: #00407f; margin-top: 4px;">Sandbox</div>
+          <p style="margin: 4px 0 0; font-size: 14px; color: #005ba8;">Test money only. Cards are fake and nobody is charged.</p>
+        </div>
+
+        <div style="background: #fff; border: 1px solid #dfe4eb; border-radius: 12px; padding: 20px;">
+          <h2 style="margin: 0 0 8px; font-size: 12px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: #00407f;">Configuration</h2>
+          <div class="row"><span class="k">API base URL</span><span class="v">sandbox-api.whop.com/api/v1</span></div>
+          <div class="row"><span class="k">API key</span><span class="v">••••e29f</span></div>
+          <div class="row">
+            <span class="k">Webhook signing secret</span>
+            <span style="font-size: 14px; color: #12894f; font-weight: 500;">Present</span>
+          </div>
+          <div class="row"><span class="k">Whop product</span><span class="v">prod_ihMtkAh7tdAp</span></div>
+          <div class="row" style="border-bottom: none;"><span class="k">Whop account</span><span class="v">biz_Pj5jmt2eCk2N</span></div>
+          <p style="margin: 14px 0 0; font-size: 13px; color: #6b7280;">
+            Set as environment variables, not here. Changing one is a redeploy &mdash; deliberately, so a
+            payment credential never sits in a database row.
+          </p>
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 20px;">
+        <div style="background: #fff; border: 1px solid #dfe4eb; border-radius: 12px; padding: 20px;">
+          <h2 style="margin: 0 0 14px; font-size: 12px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: #00407f;">Health</h2>
+
+          <div style="display: flex; align-items: center; gap: 10px; padding: 12px; border-radius: 10px; background: rgba(18,137,79,.06); border: 1px solid rgba(18,137,79,.2); margin-bottom: 14px;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#12894f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+            <div style="font-size: 14px; font-weight: 500; color: #12894f;">Answering normally</div>
+          </div>
+
+          <div class="row"><span class="k">Last successful call</span><span style="font-size: 14px;">4 minutes ago</span></div>
+          <div class="row"><span class="k">Last failure</span><span style="font-size: 14px; color: #6b7280;">Never</span></div>
+          <div class="row"><span class="k">Failures, last 24h</span><span style="font-size: 14px; font-variant-numeric: tabular-nums;">0</span></div>
+          <div class="row" style="border-bottom: none;"><span class="k">Calls recorded</span><span style="font-size: 14px; font-variant-numeric: tabular-nums;">1,284</span></div>
+
+          <div style="display: flex; align-items: center; gap: 12px; margin-top: 16px; padding-top: 16px; border-top: 1px solid #eef1f5;">
+            <div style="height: 36px; padding: 0 16px; display: flex; align-items: center; gap: 8px; background: #0070cc; color: #fff; font-size: 14px; font-weight: 500; border-radius: 8px;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22v-5"/><path d="M9 8V2h6v6"/><path d="M18 8H6a2 2 0 0 0-2 2v5a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5a2 2 0 0 0-2-2z"/></svg>
+              Test connection
+            </div>
+            <span style="font-size: 13px; color: #6b7280;">Makes a real request and records it.</span>
+          </div>
+        </div>
+
+        <div style="background: #fff; border: 1px solid #dfe4eb; border-radius: 12px; padding: 20px;">
+          <div style="display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 10px;">
+            <h2 style="margin: 0; font-size: 12px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: #00407f;">Recent calls</h2>
+            <a href="#" style="font-size: 13px;">All calls →</a>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 8px; font-size: 13px;">
+            <div style="display: flex; justify-content: space-between; gap: 12px;"><span style="font-family: ui-monospace, Menlo, monospace;">POST /plans</span><span style="color: #12894f;">200 · 240ms</span></div>
+            <div style="display: flex; justify-content: space-between; gap: 12px;"><span style="font-family: ui-monospace, Menlo, monospace;">POST /checkout_configurations</span><span style="color: #12894f;">200 · 318ms</span></div>
+            <div style="display: flex; justify-content: space-between; gap: 12px;"><span style="font-family: ui-monospace, Menlo, monospace;">GET /payments/pmt_…</span><span style="color: #6b7280;">404 · 96ms</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+</x-dc>
+</body>
+</html>

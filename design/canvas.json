@@ -1,0 +1,14 @@
+{
+  "artboards": [
+    { "file": "Main.dc.html",          "x": 0,    "y": 0,    "w": 1440, "h": 900, "title": "Configuration hub" },
+    { "file": "CreditsLimits.dc.html", "x": 1560, "y": 0,    "w": 1440, "h": 900, "title": "Credits & limits" },
+    { "file": "Payments.dc.html",      "x": 0,    "y": 1020, "w": 1440, "h": 900, "title": "Payments" },
+    { "file": "KillSwitches.dc.html",  "x": 1560, "y": 1020, "w": 1440, "h": 900, "title": "Feature kill switches" }
+  ],
+  "annotations": [
+    { "id": "problem-audit", "x": 0, "y": -180, "w": 620, "text": "WHAT CHANGED\n\n1. The \"Recently changed\" strip — 10 audit cards, ~25% of the viewport — was on EVERY config screen. It is now one line at the bottom of the hub only.\n\n2. Sprint IDs (\"Owned by SA-4.9\", \"SA-4.2\" under every nav item) are gone. Internal project management is not product copy." },
+    { "id": "problem-layout", "x": 1560, "y": -180, "w": 620, "text": "3. The second vertical rail is gone. Sidebar + config nav ate 430px and left tables squeezed into a sliver. The section switcher is now a breadcrumb dropdown, so content gets the full width.\n\n4. Five stacked Save buttons became one save bar that appears only when something is dirty." },
+    { "id": "problem-state", "x": 0, "y": 1930, "w": 620, "text": "5. The hub had no state — every section looked identical. Cards now carry status, and the two that need attention say so at the top.\n\n6. Credits & limits opened with every price in a red error state. Only the row that is genuinely below cost is flagged now; red that is always on teaches people to ignore red." }
+  ],
+  "launch": { "view": "canvas" }
+}

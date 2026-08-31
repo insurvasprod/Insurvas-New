@@ -158,6 +158,200 @@ export type Database = {
         Update: { hits?: number };
         Relationships: [];
       };
+      compliance_vendors: {
+        Row: {
+          id: string;
+          name: string;
+          vendor_type: string;
+          endpoint: string;
+          credentials_enc: string | null;
+          is_enabled: boolean;
+          priority: number;
+          cost_per_lookup_cents: number;
+          last_success_at: string | null;
+          failure_count_24h: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          vendor_type: string;
+          endpoint: string;
+          credentials_enc?: string | null;
+          is_enabled?: boolean;
+          priority?: number;
+          cost_per_lookup_cents?: number;
+          last_success_at?: string | null;
+          failure_count_24h?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          name?: string;
+          vendor_type?: string;
+          endpoint?: string;
+          credentials_enc?: string | null;
+          is_enabled?: boolean;
+          priority?: number;
+          cost_per_lookup_cents?: number;
+          last_success_at?: string | null;
+          failure_count_24h?: number;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      credit_packs: {
+        Row: {
+          id: string;
+          name: string;
+          meter_key: string;
+          quantity: number;
+          price_cents: number;
+          is_active: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          meter_key: string;
+          quantity: number;
+          price_cents: number;
+          is_active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          name?: string;
+          meter_key?: string;
+          quantity?: number;
+          price_cents?: number;
+          is_active?: boolean;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      meter_pricing: {
+        Row: {
+          meter_key: string;
+          cost_cents: number;
+          sell_cents: number;
+          default_included: number | null;
+          updated_at: string;
+          updated_by: string | null;
+        };
+        Insert: {
+          meter_key: string;
+          cost_cents?: number;
+          sell_cents?: number;
+          default_included?: number | null;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Update: {
+          meter_key?: string;
+          cost_cents?: number;
+          sell_cents?: number;
+          default_included?: number | null;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Relationships: [];
+      };
+      credit_grants: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          meter_key: string;
+          quantity: number;
+          reason: string;
+          granted_by: string | null;
+          granted_at: string;
+        };
+        Insert: {
+          id?: string;
+          tenant_id: string;
+          meter_key: string;
+          quantity: number;
+          reason: string;
+          granted_by?: string | null;
+          granted_at?: string;
+        };
+        Update: never;
+        Relationships: [];
+      };
+      maintenance: {
+        Row: {
+          id: number;
+          level: string;
+          message: string;
+          scheduled_start: string | null;
+          scheduled_end: string | null;
+          updated_by: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          id?: number;
+          level: string;
+          message: string;
+          scheduled_start?: string | null;
+          scheduled_end?: string | null;
+          updated_by?: string | null;
+          updated_at?: string;
+        };
+        Update: {
+          level?: string;
+          message?: string;
+          scheduled_start?: string | null;
+          scheduled_end?: string | null;
+          updated_by?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      announcements: {
+        Row: {
+          id: string;
+          message: string;
+          type: string;
+          audience: string;
+          starts_at: string;
+          ends_at: string;
+          is_dismissible: boolean;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          message: string;
+          type: string;
+          audience?: string;
+          starts_at: string;
+          ends_at: string;
+          is_dismissible?: boolean;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          message?: string;
+          type?: string;
+          audience?: string;
+          starts_at?: string;
+          ends_at?: string;
+          is_dismissible?: boolean;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      announcement_dismissals: {
+        Row: { announcement_id: string; user_id: string; dismissed_at: string };
+        Insert: { announcement_id: string; user_id: string; dismissed_at?: string };
+        Update: { dismissed_at?: string };
+        Relationships: [];
+      };
       metrics_daily: {
         Row: {
           active_customers: number;
@@ -290,6 +484,61 @@ export type Database = {
           is_active?: boolean;
           redeemed_count?: number;
           whop_promo_code_id?: string | null;
+        };
+        Relationships: [];
+      };
+      offers: {
+        Row: {
+          auto_apply: boolean;
+          coupon_id: string;
+          created_at: string;
+          created_by: string | null;
+          eligible_cycles: Database["public"]["Enums"]["billing_cycle"][];
+          eligible_plan_ids: string[];
+          eligible_plan_types: Database["public"]["Enums"]["plan_type"][];
+          ends_at: string | null;
+          existing_customers_only: boolean;
+          id: string;
+          is_active: boolean;
+          max_redemptions: number | null;
+          name: string;
+          new_customers_only: boolean;
+          redeemed_count: number;
+          starts_at: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          auto_apply?: boolean;
+          coupon_id: string;
+          created_at?: string;
+          created_by?: string | null;
+          eligible_cycles?: Database["public"]["Enums"]["billing_cycle"][];
+          eligible_plan_ids?: string[];
+          eligible_plan_types?: Database["public"]["Enums"]["plan_type"][];
+          ends_at?: string | null;
+          existing_customers_only?: boolean;
+          id?: string;
+          is_active?: boolean;
+          max_redemptions?: number | null;
+          name: string;
+          new_customers_only?: boolean;
+          redeemed_count?: number;
+          starts_at?: string | null;
+          updated_at?: string;
+        };
+        Update: {
+          auto_apply?: boolean;
+          eligible_cycles?: Database["public"]["Enums"]["billing_cycle"][];
+          eligible_plan_ids?: string[];
+          eligible_plan_types?: Database["public"]["Enums"]["plan_type"][];
+          ends_at?: string | null;
+          existing_customers_only?: boolean;
+          is_active?: boolean;
+          max_redemptions?: number | null;
+          name?: string;
+          new_customers_only?: boolean;
+          starts_at?: string | null;
+          updated_at?: string;
         };
         Relationships: [];
       };
@@ -701,6 +950,36 @@ export type Database = {
         };
         Relationships: [];
       };
+      // HAND-ADDED by SA-4.10, not generated. feature_switches ships in
+      // supabase/migrations/0014_feature_switches.sql; regenerate this file once that migration has
+      // been applied and this block should come back identical.
+      feature_switches: {
+        Row: {
+          feature_key: string;
+          state: string;
+          beta_tenant_ids: string[];
+          off_message: string | null;
+          updated_by: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          feature_key: string;
+          state?: string;
+          beta_tenant_ids?: string[];
+          off_message?: string | null;
+          updated_by?: string | null;
+          updated_at?: string;
+        };
+        Update: {
+          feature_key?: string;
+          state?: string;
+          beta_tenant_ids?: string[];
+          off_message?: string | null;
+          updated_by?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       features: {
         Row: {
           created_at: string;
@@ -778,6 +1057,261 @@ export type Database = {
           plan_type?: Database["public"]["Enums"]["plan_type"];
           sort_order?: number;
           version?: number;
+        };
+        Relationships: [];
+      };
+      products: {
+        Row: {
+          category: string;
+          code: string;
+          created_at: string;
+          description: string | null;
+          id: string;
+          is_active: boolean;
+          name: string;
+          sort_order: number;
+          updated_at: string;
+        };
+        Insert: {
+          category: string;
+          code: string;
+          created_at?: string;
+          description?: string | null;
+          id?: string;
+          is_active?: boolean;
+          name: string;
+          sort_order?: number;
+          updated_at?: string;
+        };
+        Update: {
+          category?: string;
+          code?: string;
+          created_at?: string;
+          description?: string | null;
+          id?: string;
+          is_active?: boolean;
+          name?: string;
+          sort_order?: number;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      plan_product_access: {
+        Row: { plan_id: string; product_code: string; created_at: string };
+        Insert: { plan_id: string; product_code: string; created_at?: string };
+        Update: { plan_id?: string; product_code?: string; created_at?: string };
+        Relationships: [];
+      };
+      tenant_templates: {
+        Row: { id: string; tenant_id: string; template_id: string; template_version: number; product_code: string; name: string; description: string | null; applied_at: string; applied_by: string | null; created_at: string; updated_at: string };
+        Insert: { id?: string; tenant_id: string; template_id: string; template_version: number; product_code: string; name: string; description?: string | null; applied_at?: string; applied_by?: string | null; created_at?: string; updated_at?: string };
+        Update: { id?: string; tenant_id?: string; template_id?: string; template_version?: number; product_code?: string; name?: string; description?: string | null; applied_at?: string; applied_by?: string | null; created_at?: string; updated_at?: string };
+        Relationships: [];
+      };
+      tenant_template_fields: {
+        Row: { tenant_template_id: string; field_key: string; label: string; type: string; is_required: boolean; options: Json; sort_order: number };
+        Insert: { tenant_template_id: string; field_key: string; label: string; type: string; is_required?: boolean; options?: Json; sort_order?: number };
+        Update: { tenant_template_id?: string; field_key?: string; label?: string; type?: string; is_required?: boolean; options?: Json; sort_order?: number };
+        Relationships: [];
+      };
+      tenant_template_stages: {
+        Row: { tenant_template_id: string; stage_key: string; label: string; stage_type: string; color: string; sort_order: number };
+        Insert: { tenant_template_id: string; stage_key: string; label: string; stage_type: string; color: string; sort_order?: number };
+        Update: { tenant_template_id?: string; stage_key?: string; label?: string; stage_type?: string; color?: string; sort_order?: number };
+        Relationships: [];
+      };
+      tenant_template_forms: {
+        Row: { tenant_template_id: string; form_definition: Json };
+        Insert: { tenant_template_id: string; form_definition: Json };
+        Update: { tenant_template_id?: string; form_definition?: Json };
+        Relationships: [];
+      };
+      tenant_template_assignments: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          product_code: string;
+          template_id: string;
+          template_version: number;
+          assigned_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          tenant_id: string;
+          product_code: string;
+          template_id: string;
+          template_version: number;
+          assigned_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          tenant_id?: string;
+          product_code?: string;
+          template_id?: string;
+          template_version?: number;
+          assigned_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      agent_leads: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          tenant_template_id: string | null;
+          template_id: string;
+          template_version: number;
+          stage_key: string;
+          values: Json;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          tenant_id: string;
+          tenant_template_id?: string | null;
+          template_id: string;
+          template_version: number;
+          stage_key: string;
+          values?: Json;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          tenant_id?: string;
+          tenant_template_id?: string | null;
+          template_id?: string;
+          template_version?: number;
+          stage_key?: string;
+          values?: Json;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      templates: {
+        Row: {
+          id: string;
+          name: string;
+          product_code: string;
+          version: number;
+          description: string | null;
+          is_active: boolean;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          product_code: string;
+          version?: number;
+          description?: string | null;
+          is_active?: boolean;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          name?: string;
+          product_code?: string;
+          version?: number;
+          description?: string | null;
+          is_active?: boolean;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      template_fields: {
+        Row: {
+          template_id: string;
+          version: number;
+          field_key: string;
+          label: string;
+          type: string;
+          is_required: boolean;
+          options: Json;
+          sort_order: number;
+        };
+        Insert: {
+          template_id: string;
+          version: number;
+          field_key: string;
+          label: string;
+          type: string;
+          is_required?: boolean;
+          options?: Json;
+          sort_order?: number;
+        };
+        Update: {
+          template_id?: string;
+          version?: number;
+          field_key?: string;
+          label?: string;
+          type?: string;
+          is_required?: boolean;
+          options?: Json;
+          sort_order?: number;
+        };
+        Relationships: [];
+      };
+      template_stages: {
+        Row: {
+          template_id: string;
+          version: number;
+          stage_key: string;
+          label: string;
+          stage_type: string;
+          color: string;
+          sort_order: number;
+        };
+        Insert: {
+          template_id: string;
+          version: number;
+          stage_key: string;
+          label: string;
+          stage_type: string;
+          color: string;
+          sort_order?: number;
+        };
+        Update: {
+          template_id?: string;
+          version?: number;
+          stage_key?: string;
+          label?: string;
+          stage_type?: string;
+          color?: string;
+          sort_order?: number;
+        };
+        Relationships: [];
+      };
+      template_forms: {
+        Row: {
+          template_id: string;
+          version: number;
+          form_definition: Json;
+        };
+        Insert: {
+          template_id: string;
+          version: number;
+          form_definition: Json;
+        };
+        Update: {
+          template_id?: string;
+          version?: number;
+          form_definition?: Json;
         };
         Relationships: [];
       };
@@ -1065,6 +1599,107 @@ export type Database = {
           products_sold?: string[];
           recommended_setup_steps?: string[];
           tenant_id?: string;
+        };
+        Relationships: [];
+      };
+      // HAND-ADDED for the period billing run (backlog #41/#44/#46), not generated. Both tables
+      // ship in supabase/migrations/0017_period_billing.sql; regenerate this file once that
+      // migration has been applied and these blocks should come back identical.
+      pending_charges: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          subscription_id: string;
+          kind: string;
+          label: string;
+          quantity: number;
+          included_qty: number | null;
+          unit_cents: number;
+          amount_cents: number;
+          reason: string;
+          created_at: string;
+          created_by: string | null;
+          invoice_id: string | null;
+          billed_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          tenant_id: string;
+          subscription_id: string;
+          kind: string;
+          label: string;
+          quantity?: number;
+          included_qty?: number | null;
+          unit_cents?: number;
+          amount_cents: number;
+          reason: string;
+          created_at?: string;
+          created_by?: string | null;
+          invoice_id?: string | null;
+          billed_at?: string | null;
+        };
+        Update: {
+          invoice_id?: string | null;
+          billed_at?: string | null;
+        };
+        Relationships: [];
+      };
+      period_billing_runs: {
+        Row: {
+          subscription_id: string;
+          period_start: string;
+          period_end: string;
+          invoice_id: string | null;
+          total_cents: number;
+          line_count: number;
+          note: string | null;
+          ran_at: string;
+        };
+        Insert: {
+          subscription_id: string;
+          period_start: string;
+          period_end: string;
+          invoice_id?: string | null;
+          total_cents?: number;
+          line_count?: number;
+          note?: string | null;
+          ran_at?: string;
+        };
+        Update: {
+          invoice_id?: string | null;
+          note?: string | null;
+        };
+        Relationships: [];
+      };
+      // HAND-ADDED by SA-4.1, not generated. The `settings` table ships in
+      // supabase/migrations/0001_settings.sql; regenerate this file once that migration has been
+      // applied to the project and this block should come back identical.
+      settings: {
+        Row: {
+          key: string;
+          value: Json;
+          type: string;
+          label: string;
+          group: string;
+          updated_by: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          key: string;
+          value: Json;
+          type: string;
+          label: string;
+          group: string;
+          updated_by?: string | null;
+          updated_at?: string;
+        };
+        Update: {
+          key?: string;
+          value?: Json;
+          type?: string;
+          label?: string;
+          group?: string;
+          updated_by?: string | null;
           updated_at?: string;
         };
         Relationships: [];
@@ -1612,8 +2247,12 @@ export type Database = {
         Returns: number;
       };
       admin_apply_coupon: {
-        Args: { p_subscription_id: string; p_coupon_id: string; p_applied_by: string };
+        Args: { p_subscription_id: string; p_coupon_id: string; p_applied_by: string | null };
         Returns: string;
+      };
+      apply_auto_offer_to_subscription: {
+        Args: { p_subscription_id: string };
+        Returns: string | null;
       };
       consume_coupon_period: {
         Args: { p_subscription_id: string };
@@ -1682,6 +2321,47 @@ export type Database = {
           used: number;
         }[];
       };
+      // HAND-ADDED for the period billing run, not generated. Ships in
+      // supabase/migrations/0017_period_billing.sql.
+      bill_subscription_period: {
+        Args: {
+          p_subscription_id: string;
+          p_period_start: string;
+          p_period_end: string;
+          p_lines: Json;
+          p_pending_ids: string[];
+          p_reason: string;
+          p_credit_cents?: number;
+          p_due_at?: string | null;
+          p_created_by?: string | null;
+        };
+        Returns: {
+          invoice_id: string | null;
+          invoice_number: string | null;
+          total_cents: number;
+          line_count: number;
+          already_billed: boolean;
+        }[];
+      };
+      admin_usage_monitor: {
+        Args: { p_over_80?: boolean };
+        Returns: {
+          tenant_id: string;
+          tenant_name: string;
+          tenant_status: string;
+          meter_key: string;
+          meter_label: string;
+          unit: string;
+          used_qty: number;
+          included_qty: number | null;
+          grant_qty: number;
+          plan_included_qty: number | null;
+          hard_cap: boolean;
+          percent_used: number | null;
+          alert_level: string;
+          period_start: string | null;
+        }[];
+      };
       record_usage: {
         Args: {
           p_idempotency_key: string;
@@ -1730,6 +2410,32 @@ export type Database = {
           old_is_archived: boolean;
           old_name: string;
         }[];
+      };
+      admin_save_template: {
+        Args: {
+          p_template_id: string | null;
+          p_name: string;
+          p_product_code: string;
+          p_description: string;
+          p_is_active: boolean;
+          p_fields: Json;
+          p_stages: Json;
+          p_form_definition: Json;
+          p_created_by: string | null;
+        };
+        Returns: { template_id: string; version: number }[];
+      };
+      admin_duplicate_template: {
+        Args: { p_template_id: string; p_name: string; p_created_by?: string | null };
+        Returns: { template_id: string; version: number }[];
+      };
+      admin_apply_tenant_template: {
+        Args: { p_tenant_id: string; p_template_id: string; p_template_version: number; p_product_code: string; p_name: string; p_description: string | null; p_applied_by: string | null; p_fields: Json; p_stages: Json; p_form_definition: Json };
+        Returns: string;
+      };
+      admin_update_tenant_template: {
+        Args: { p_tenant_template_id: string; p_tenant_id: string; p_name: string; p_description: string | null; p_fields: Json; p_stages: Json; p_form_definition: Json };
+        Returns: string;
       };
       admin_login_activity_stats: {
         Args: never;

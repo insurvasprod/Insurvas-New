@@ -6,6 +6,7 @@ import { canManageSubscriptions } from "../subscriptions/permissions.ts";
 import { canViewInvoices } from "../invoices/permissions.ts";
 import { canManageCoupons } from "../coupons/permissions.ts";
 import { canManageFeatures } from "../features/permissions.ts";
+import { canAccessConfigurationCenter } from "../configuration/sections.ts";
 import { group, link, type SidebarNode } from "./types.ts";
 
 /**
@@ -28,6 +29,7 @@ export function buildAdminNav(role: AdminRole): SidebarNode[] {
   const invoices = canViewInvoices(role);
   const coupons = canManageCoupons(role);
   const features = canManageFeatures(role);
+  const configuration = canAccessConfigurationCenter(role);
   const isSuperAdmin = role === "super_admin";
 
   return [
@@ -61,6 +63,11 @@ export function buildAdminNav(role: AdminRole): SidebarNode[] {
     ]),
 
     ...group("platform", "Platform", "platform", [
+      // SA-4.3's hub. Sits here rather than at top level because it configures the platform
+      // itself, which is exactly what this group means.
+      configuration
+        ? link("/admin/configuration", "Configuration Center", "configuration")
+        : null,
       isSuperAdmin ? link("/admin/admins", "Admin users", "admins") : null,
       // Readable by every admin: an acceptance record is what a support agent needs in a dispute.
       link("/admin/legal", "Legal", "legal"),

@@ -310,6 +310,24 @@ export class WhopProvider implements PaymentProvider {
   }
 
   /**
+   * Stop a membership renewing without ending it today (SA-3.4, backlog #41).
+   *
+   * This is how a mid-period plan change is settled on the provider's side. Whop cannot change a
+   * membership's plan — `PATCH /memberships/{id}` has no plan field — so an upgrade is: let the old
+   * membership run to the end of the period it was paid for, stop it renewing, and start the new
+   * plan from there. The difference for the remainder of the current period is ours to collect,
+   * which is what proration and the pending charge are for.
+   *
+   * Passing `false` un-schedules it, which matters when an upgrade is reversed before the period
+   * ends — otherwise the customer's subscription would quietly lapse.
+   */
+  async setCancelAtPeriodEnd(membershipId: string, cancel: boolean): Promise<void> {
+    await this.client.request("POST", `/memberships/${encodeURIComponent(membershipId)}`, {
+      cancel_at_period_end: cancel,
+    });
+  }
+
+  /**
    * What the provider says is still refundable on a payment (SA-3.8).
    *
    * Asked before every refund rather than trusting our own invoice total: Whop knows what was

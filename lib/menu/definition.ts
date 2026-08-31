@@ -14,6 +14,19 @@ export type MenuItem = {
   label: string;
   /** Undefined = always visible, regardless of plan (e.g. Dashboard, Settings). */
   requiredFeature?: string;
+  /**
+   * Whether a real screen exists at /app/<id> yet.
+   *
+   * Six of these thirty are built. Before this flag existed the other twenty-four rendered as
+   * ordinary links straight into a 404 — a customer on a plan that grants them saw a full sidebar
+   * where most of it was broken, which reads as a broken product rather than an unfinished one.
+   *
+   * Declared here as data rather than inferred from the filesystem, so that building a screen is
+   * one edit in the same file that names it, and so the admin plan preview can say the same thing.
+   */
+  built?: boolean;
+  /** One line on the coming-soon page saying what the screen will do. */
+  blurb?: string;
 };
 
 export type MenuSection = {
@@ -26,13 +39,13 @@ export const AGENT_MENU: MenuSection[] = [
   {
     id: "home",
     label: "Home",
-    items: [{ id: "dashboard", label: "Dashboard" }],
+    items: [{ id: "dashboard", label: "Dashboard", built: true }],
   },
   {
     id: "book",
     label: "Book of Business",
     items: [
-      { id: "policies", label: "Policies", requiredFeature: "book_of_business" },
+      { id: "policies", label: "Policies", built: true, requiredFeature: "book_of_business" },
       { id: "statements", label: "Statements", requiredFeature: "statement_ingestion" },
       { id: "ledger", label: "Commission ledger", requiredFeature: "commission_ledger" },
       { id: "appointments", label: "Appointments", requiredFeature: "appointment_vault" },
@@ -43,8 +56,9 @@ export const AGENT_MENU: MenuSection[] = [
     id: "leads",
     label: "Leads",
     items: [
+      { id: "leads", label: "Lead workspace", built: true, requiredFeature: "book_of_business" },
       { id: "inbound", label: "Inbound transfers", requiredFeature: "inbound_transfers" },
-      { id: "dialer", label: "Dialer", requiredFeature: "outbound_dialing" },
+      { id: "dialer", label: "Dialer", built: true, requiredFeature: "outbound_dialing" },
       { id: "import", label: "List import", requiredFeature: "lead_import" },
       { id: "duplicates", label: "Duplicate check", requiredFeature: "duplicate_detection" },
     ],
@@ -64,7 +78,7 @@ export const AGENT_MENU: MenuSection[] = [
     id: "retention",
     label: "Retention",
     items: [
-      { id: "lapse-risk", label: "Lapse risk", requiredFeature: "chargeback_radar" },
+      { id: "lapse-risk", label: "Lapse risk", built: true, requiredFeature: "chargeback_radar" },
       { id: "payment-repair", label: "Payment repair", requiredFeature: "payment_repair" },
       { id: "winback", label: "Win-back", requiredFeature: "winback" },
     ],
@@ -106,7 +120,7 @@ export const AGENT_MENU: MenuSection[] = [
   {
     id: "settings",
     label: "Settings",
-    items: [{ id: "settings", label: "Settings" }],
+    items: [{ id: "settings", label: "Settings", built: true }],
   },
 ];
 
@@ -128,4 +142,44 @@ export function buildAgentMenu(grantedFeatureKeys: Iterable<string>): MenuSectio
 /** Every feature key referenced by a menu node — used by the catalog/menu drift check. */
 export function menuFeatureKeys(): string[] {
   return AGENT_MENU.flatMap((s) => s.items.map((i) => i.requiredFeature).filter((k): k is string => Boolean(k)));
+}
+
+/** Every menu item, flattened, with the section it belongs to. */
+export function allMenuItems(): (MenuItem & { sectionId: string; sectionLabel: string })[] {
+  return AGENT_MENU.flatMap((section) =>
+    section.items.map((item) => ({ ...item, sectionId: section.id, sectionLabel: section.label })),
+  );
+}
+
+export function menuItemById(id: string): (MenuItem & { sectionLabel: string }) | null {
+  return allMenuItems().find((item) => item.id === id) ?? null;
+}
+
+export function menuItemForFeature(featureKey: string): (MenuItem & { sectionLabel: string }) | null {
+  return allMenuItems().find((item) => item.requiredFeature === featureKey) ?? null;
+}
+
+/**
+ * A human name for a feature key.
+ *
+ * The entitlement blob carries keys and nothing else — deliberately, since it is a contract rather
+ * than a presentation layer. That left the agent's own dashboard listing `book_of_business` and
+ * `chargeback_radar` back at them, which is our internal vocabulary on a customer's screen.
+ *
+ * The menu is the right place to resolve it: it already pairs every feature key with the words we
+ * chose to describe it, and it is already shared with the admin plan preview, so the name a
+ * customer sees and the name an operator sees cannot drift apart.
+ */
+export function featureLabel(featureKey: string): string {
+  const item = menuItemForFeature(featureKey);
+  if (item) return item.label;
+  // A feature with no menu node is real — several are backend-only. Better a tidied key than a raw
+  // one, and better a raw one than pretending the feature does not exist.
+  return featureKey.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());
+}
+
+/** Feature keys the plan grants that lead to a screen a customer can actually open today. */
+export function grantedAndBuilt(grantedFeatureKeys: Iterable<string>): (MenuItem & { sectionLabel: string })[] {
+  const granted = new Set(grantedFeatureKeys);
+  return allMenuItems().filter((item) => item.built && (!item.requiredFeature || granted.has(item.requiredFeature)));
 }

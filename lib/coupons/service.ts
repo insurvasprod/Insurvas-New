@@ -99,7 +99,7 @@ export function applyFailureMessage(result: Exclude<ApplyResult, "ok">): string 
 export async function applyCoupon(
   subscriptionId: string,
   couponId: string,
-  appliedBy: string,
+  appliedBy: string | null,
 ): Promise<ApplyResult> {
   const supabase = getSupabaseServiceClient();
   const { data, error } = await supabase.rpc("admin_apply_coupon", {

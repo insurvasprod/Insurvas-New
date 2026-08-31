@@ -7,6 +7,7 @@ import { changePlanSchema, cancelSubscriptionSchema, pauseSubscriptionSchema } f
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { audit } from "@/lib/audit/log";
 import { rebuildEntitlement } from "@/lib/entitlements/rebuild";
+import { settleMidPeriodPlanChange } from "@/lib/billing/planChange";
 
 const actionSchema = z.object({ action: z.enum(["change_plan", "cancel", "pause", "resume"]) });
 
@@ -67,6 +68,19 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         await rebuildEntitlement(existing.tenant_id, "subscription.plan_changed");
       }
 
+      // Backlog #41: an immediate change mid-period has a price, and until now nobody paid it.
+      // The difference is parked as a pending charge and collected on the next invoice, and the
+      // old membership is stopped from renewing at the old price. A queued change needs none of
+      // this — it takes effect exactly at the boundary, where there is nothing to prorate.
+      const proration = result.applied_now
+        ? await settleMidPeriodPlanChange({
+            subscriptionId: id,
+            fromPlanId: existing.plan_id,
+            toPlanId: parsed.data.plan_id,
+            createdBy: auth.session.sub,
+          })
+        : null;
+
       await audit({
         actorId: auth.session.sub,
         action: "subscription.plan_changed",
@@ -77,11 +91,37 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           plan: { from: existing.plan_id, to: parsed.data.plan_id },
           appliedNow: result.applied_now,
           effectiveAt: result.effective_at,
+          // The money is part of the record. An upgrade that charged the customer $122.58 and an
+          // upgrade that charged nothing must be distinguishable afterwards without re-deriving it.
+          proration: proration
+            ? {
+                netCents: proration.netCents,
+                creditCents: proration.creditCents,
+                chargeCents: proration.chargeCents,
+                remainingDays: proration.remainingDays,
+                pendingChargeIds: proration.pendingChargeIds,
+                note: proration.note,
+                providerWarning: proration.providerWarning,
+              }
+            : null,
         },
         request,
       });
 
-      return NextResponse.json({ appliedNow: result.applied_now, effectiveAt: result.effective_at });
+      return NextResponse.json({
+        appliedNow: result.applied_now,
+        effectiveAt: result.effective_at,
+        proration: proration
+          ? {
+              netCents: proration.netCents,
+              creditCents: proration.creditCents,
+              chargeCents: proration.chargeCents,
+              remainingDays: proration.remainingDays,
+              note: proration.note,
+              warning: proration.providerWarning,
+            }
+          : null,
+      });
     }
 
     case "cancel": {

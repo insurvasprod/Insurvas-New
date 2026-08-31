@@ -35,7 +35,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   }
 
   const token = generateInviteToken();
-  const expiresAt = inviteExpiryFromNow();
+  const expiresAt = await inviteExpiryFromNow();
 
   // Only the newest reset link should work. Scoped to purpose so this can't clobber a pending
   // invite or email change.

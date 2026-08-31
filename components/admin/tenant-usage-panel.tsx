@@ -2,6 +2,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatQuantity, usagePercent, usageState } from "@/lib/metering/constants";
 import type { TenantUsageSummary } from "@/lib/metering/queries";
+import { meterWarnThreshold } from "@/lib/settings/queries";
 
 const BAR_COLOR: Record<ReturnType<typeof usageState>, string> = {
   unlimited: "bg-[var(--color-blue)]",
@@ -10,7 +11,10 @@ const BAR_COLOR: Record<ReturnType<typeof usageState>, string> = {
   over: "bg-[var(--color-danger)]",
 };
 
-export function TenantUsagePanel({ usage }: { usage: TenantUsageSummary }) {
+/** A Server Component, so it reads the warning threshold directly rather than taking a prop. */
+export async function TenantUsagePanel({ usage }: { usage: TenantUsageSummary }) {
+  const warnThreshold = await meterWarnThreshold();
+
   if (!usage.planId) {
     return (
       <Card>
@@ -42,7 +46,7 @@ export function TenantUsagePanel({ usage }: { usage: TenantUsageSummary }) {
 
         <div className="space-y-3">
           {usage.meters.map((row) => {
-            const state = usageState(row);
+            const state = usageState(row, warnThreshold);
             const pct = usagePercent(row.used_qty, row.included_qty);
 
             return (

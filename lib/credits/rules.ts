@@ -34,8 +34,15 @@ export const CREDIT_NOTE_TYPE_LABELS: Record<CreditNoteType, string> = {
   waiver: "Waiver — a charge removed before it is billed",
 };
 
-/** Refunds above this need a second admin. $500, per the ticket. */
-export const REFUND_APPROVAL_THRESHOLD_CENTS = 50_000;
+/**
+ * The coded default. $500, per the permission matrix.
+ *
+ * SA-4.1 moved the live value into `billing.refund_approval_threshold_cents`. This exists so a
+ * client component can render before the server value arrives and so the app is correct with the
+ * store unreachable — it is NOT the number to gate on. Resolve the setting server-side and pass
+ * it in.
+ */
+export const DEFAULT_REFUND_APPROVAL_THRESHOLD_CENTS = 50_000;
 
 /**
  * Only a REFUND is gated on amount.
@@ -43,9 +50,18 @@ export const REFUND_APPROVAL_THRESHOLD_CENTS = 50_000;
  * A credit or a waiver costs revenue but cannot move money out of the bank account, which is the
  * thing the threshold protects against. Gating them too would train people to route around the
  * approval queue by issuing credits instead.
+ *
+ * `thresholdCents` is required rather than defaulted on purpose. A default here would let a
+ * caller that forgot to resolve the setting silently gate on $500 while the screen next to it
+ * says something else — and this is the one control in the product where that divergence moves
+ * real money.
  */
-export function needsSecondApprover(type: CreditNoteType, amountCents: number): boolean {
-  return type === "refund" && amountCents > REFUND_APPROVAL_THRESHOLD_CENTS;
+export function needsSecondApprover(
+  type: CreditNoteType,
+  amountCents: number,
+  thresholdCents: number,
+): boolean {
+  return type === "refund" && amountCents > thresholdCents;
 }
 
 const CAN_REQUEST: readonly AdminRole[] = ["super_admin", "billing_admin"];

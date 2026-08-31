@@ -11,3 +11,19 @@ export const CAN_MANAGE_PAYMENT_PROVIDERS: readonly AdminRole[] = ["super_admin"
 export function canManagePaymentProviders(role: AdminRole): boolean {
   return CAN_MANAGE_PAYMENT_PROVIDERS.includes(role);
 }
+
+/**
+ * SA-4.2's provider configuration screen — `super_admin` ONLY, deliberately narrower than
+ * CAN_MANAGE_PAYMENT_PROVIDERS above.
+ *
+ * That constant governs ASSIGNING a tenant to an already-configured provider, which is a billing
+ * action a billing_admin should be able to take. This screen exposes which credentials are live,
+ * which account real money flows through, and a button that makes an authenticated call as the
+ * platform. Different question, different answer — do not collapse the two because they both have
+ * "payment provider" in the name.
+ */
+export const CAN_CONFIGURE_PROVIDER: readonly AdminRole[] = ["super_admin"];
+
+export function canConfigureProvider(role: AdminRole): boolean {
+  return CAN_CONFIGURE_PROVIDER.includes(role);
+}

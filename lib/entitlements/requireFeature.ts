@@ -4,6 +4,8 @@ import { NextResponse } from "next/server";
 import { requireTenant, type TenantContext } from "@/lib/tenantAuth/requireTenant";
 import { getEntitlement } from "./get";
 import { canWrite, hasFeature, type Entitlement } from "./types";
+import { featureKillState } from "@/lib/features/killSwitch";
+import { getMaintenanceStatus } from "@/lib/system/service";
 
 export type EntitledContext = {
   context: TenantContext;
@@ -30,7 +32,44 @@ export async function requireFeature(
   const auth = await requireTenant();
   if (auth instanceof NextResponse) return auth;
 
+  // Platform maintenance is checked before entitlement so locked mode cannot reveal whether a
+  // tenant has a plan. Admin routes do not use this tenant gate and therefore always bypass it.
+  const maintenance = await getMaintenanceStatus();
+  if (maintenance.level === "locked" || (options.write && maintenance.level === "read_only")) {
+    return NextResponse.json(
+      {
+        error:
+          maintenance.message ??
+          (maintenance.level === "locked"
+            ? "The platform is temporarily unavailable while maintenance is underway."
+            : "The platform is read-only while maintenance is underway."),
+        code: maintenance.level === "locked" ? "maintenance_locked" : "maintenance_read_only",
+        level: maintenance.level,
+      },
+      { status: 503 },
+    );
+  }
+
   const entitlement = await getEntitlement(auth.context.tenantId);
+
+  // KILL SWITCH FIRST, THEN ENTITLEMENT (SA-4.10).
+  //
+  // The order matters and is not interchangeable. A killed feature is off for everyone, including
+  // a tenant whose plan grants it — so telling them their plan doesn't include it would be a lie,
+  // and would send a paying customer to an upgrade page for something they already bought.
+  const kill = await featureKillState(featureKey, auth.context.tenantId);
+  if (kill.killed) {
+    return NextResponse.json(
+      {
+        // A distinct code from feature_not_entitled, so the agent app shows a maintenance notice
+        // rather than an upgrade prompt.
+        error: kill.notice ?? "This feature is temporarily unavailable.",
+        code: "feature_unavailable",
+        feature: featureKey,
+      },
+      { status: 503 },
+    );
+  }
 
   if (!hasFeature(entitlement, featureKey)) {
     // 403 with a machine-readable reason, so the agent app can show an upgrade prompt rather
@@ -67,6 +106,18 @@ export async function requireFeature(
 export async function requireWriteAccess(): Promise<EntitledContext | NextResponse> {
   const auth = await requireTenant();
   if (auth instanceof NextResponse) return auth;
+
+  const maintenance = await getMaintenanceStatus();
+  if (maintenance.level === "locked" || maintenance.level === "read_only") {
+    return NextResponse.json(
+      {
+        error: maintenance.message ?? "The platform is read-only while maintenance is underway.",
+        code: maintenance.level === "locked" ? "maintenance_locked" : "maintenance_read_only",
+        level: maintenance.level,
+      },
+      { status: 503 },
+    );
+  }
 
   const entitlement = await getEntitlement(auth.context.tenantId);
 

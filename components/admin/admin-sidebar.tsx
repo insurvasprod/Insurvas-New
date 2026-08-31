@@ -22,6 +22,7 @@ import {
   ScrollText,
   Settings,
   ShieldCheck,
+  SlidersHorizontal,
   Tag,
   ToggleRight,
   TrendingUp,
@@ -58,6 +59,7 @@ const ICONS: Record<SidebarIconKey, typeof LayoutDashboard> = {
   catalog: Package,
   monitoring: ClipboardList,
   platform: Settings,
+  configuration: SlidersHorizontal,
 };
 
 const COLLAPSED_KEY = "insurvas.admin.sidebar.collapsed";

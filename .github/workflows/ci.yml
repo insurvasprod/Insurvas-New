@@ -1,0 +1,161 @@
+# Backlog #9: until this existed, twenty-one verification suites proved the state of one laptop on
+# one afternoon. Three tickets (SA-1.4, SA-2.6, SA-4.10) word their acceptance as "a test that runs
+# in CI", so those criteria were unmet no matter how green the scripts were locally.
+#
+# Two jobs, split by what they need:
+#
+#   verify    no secrets at all. Typecheck, lint, unit tests and a production build. This is the
+#             gate — it runs on every push and every pull request, including from a fork.
+#   database  the twenty-one suites that talk to Postgres. They need real credentials, so they are
+#             skipped (not failed) when the repository has none configured. See the README section
+#             "Running the database suites in CI" for the secrets to set.
+#
+# The build proves more than it looks like it does. Half this codebase's danger is a `server-only`
+# module reaching a client component — tsc cannot see that, and `next build` is the only thing that
+# does. Keep the build step even when it feels redundant next to the typecheck.
+
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Typecheck, lint, tests, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    # Dummy values, deliberately. Nothing here reads a secret: no module reads process.env at import
+    # time, so a build with placeholders exercises the same code paths as a build with real keys.
+    # They exist because Next evaluates route modules during the build and a few would otherwise
+    # throw on an undefined URL. If a build ever needs a REAL value to pass, that is a bug worth
+    # fixing rather than a secret worth adding here.
+    env:
+      ADMIN_SESSION_SECRET: ci-placeholder-admin-secret-0000000000
+      TENANT_SESSION_SECRET: ci-placeholder-tenant-secret-000000000
+      NEXT_PUBLIC_SUPABASE_URL: https://ci-placeholder.supabase.co
+      SUPABASE_SERVICE_ROLE_KEY: ci-placeholder
+      TENANT_DB_URL: postgresql://ci:ci@127.0.0.1:5432/ci
+      COMPLIANCE_VENDOR_ENCRYPTION_KEY: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      APP_BASE_URL: http://localhost:3000
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+
+      # ci, never install. `npm install` on Windows rewrites package-lock.json and strips the
+      # optional @emnapi/* entries Linux needs, which breaks this job on the next run.
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+  database:
+    name: Database verification suites
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: verify
+
+    # A fork's pull request cannot read secrets, so this job would fail for a reason the contributor
+    # cannot fix. Skip it there; it still runs on every push to this repository.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      # Every verify script is declared as `node --env-file=.env.local`, so CI materialises one from
+      # secrets rather than each script learning a second way to find configuration.
+      - name: Write .env.local from secrets
+        id: env
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.CI_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.CI_SUPABASE_SERVICE_ROLE_KEY }}
+          TENANT_DB_URL: ${{ secrets.CI_TENANT_DB_URL }}
+          ADMIN_SESSION_SECRET: ${{ secrets.CI_ADMIN_SESSION_SECRET }}
+          TENANT_SESSION_SECRET: ${{ secrets.CI_TENANT_SESSION_SECRET }}
+          COMPLIANCE_VENDOR_ENCRYPTION_KEY: ${{ secrets.CI_COMPLIANCE_VENDOR_ENCRYPTION_KEY }}
+          WHOP_API_KEY: ${{ secrets.CI_WHOP_API_KEY }}
+          WHOP_API_BASE_URL: ${{ secrets.CI_WHOP_API_BASE_URL }}
+          WHOP_WEBHOOK_SECRET: ${{ secrets.CI_WHOP_WEBHOOK_SECRET }}
+          WHOP_PRODUCT_ID: ${{ secrets.CI_WHOP_PRODUCT_ID }}
+          WHOP_ACCOUNT_ID: ${{ secrets.CI_WHOP_ACCOUNT_ID }}
+        run: |
+          if [ -z "$TENANT_DB_URL" ] || [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Database suites skipped::CI_TENANT_DB_URL and CI_SUPABASE_SERVICE_ROLE_KEY are not set. See supabase/README.md."
+            exit 0
+          fi
+          echo "configured=true" >> "$GITHUB_OUTPUT"
+          {
+            echo "NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL"
+            echo "SUPABASE_SERVICE_ROLE_KEY=$SUPABASE_SERVICE_ROLE_KEY"
+            echo "TENANT_DB_URL=$TENANT_DB_URL"
+            echo "ADMIN_SESSION_SECRET=$ADMIN_SESSION_SECRET"
+            echo "TENANT_SESSION_SECRET=$TENANT_SESSION_SECRET"
+            echo "COMPLIANCE_VENDOR_ENCRYPTION_KEY=$COMPLIANCE_VENDOR_ENCRYPTION_KEY"
+            echo "WHOP_API_KEY=$WHOP_API_KEY"
+            echo "WHOP_API_BASE_URL=$WHOP_API_BASE_URL"
+            echo "WHOP_WEBHOOK_SECRET=$WHOP_WEBHOOK_SECRET"
+            echo "WHOP_PRODUCT_ID=$WHOP_PRODUCT_ID"
+            echo "WHOP_ACCOUNT_ID=$WHOP_ACCOUNT_ID"
+            echo "APP_BASE_URL=http://localhost:3000"
+            echo "NEXT_PUBLIC_APP_URL=http://localhost:3000"
+          } > .env.local
+
+      # Eighteen suites that need nothing but the database. Runs them all and reports every failure
+      # rather than stopping at the first, so one broken suite does not hide the state of the rest.
+      - name: Verification suites
+        if: steps.env.outputs.configured == 'true'
+        run: npm run verify:all
+
+      # verify:switches:multi is the odd one out: it proves a kill switch reaches a SECOND process
+      # within the 30s cache TTL, so it needs two servers rather than a database connection. It is
+      # the only suite that can prove the cache does not strand one instance on a stale answer.
+      - name: Cross-process kill switch propagation
+        if: steps.env.outputs.configured == 'true'
+        run: |
+          npm run build
+          npx next start -p 3200 & echo $! > /tmp/a.pid
+          npx next start -p 3201 & echo $! > /tmp/b.pid
+          # Poll rather than pull in a dependency just to wait for a port.
+          for port in 3200 3201; do
+            for i in $(seq 1 60); do
+              curl -sf -o /dev/null "http://127.0.0.1:$port/app/login" && break
+              [ "$i" = "60" ] && { echo "server on $port never came up"; exit 1; }
+              sleep 1
+            done
+          done
+          npm run verify:switches:multi
+        env:
+          KILL_SWITCH_APP_A: http://127.0.0.1:3200
+          KILL_SWITCH_APP_B: http://127.0.0.1:3201

@@ -27,7 +27,7 @@ type LogContext = { tenantId: string | null };
 /** A jsonb payload, using the database's own Json type so the insert type-checks. */
 type Json = { [key: string]: DbJson };
 
-async function writeCall(row: {
+export type ProviderCallRow = {
   tenantId: string | null;
   provider: string;
   method: string;
@@ -36,7 +36,24 @@ async function writeCall(row: {
   status: CallStatus;
   durationMs: number;
   idempotencyKey?: string;
-}): Promise<void> {
+};
+
+/**
+ * Records one provider call. Exported since SA-4.2 so `WhopClient` can log at the HTTP level.
+ *
+ * Wrapped in its own try as well as checking the insert's error: unit tests construct a
+ * `WhopClient` with a stub `fetch` and no Supabase environment at all, and a logging call that
+ * threw there would fail tests that have nothing to do with logging.
+ */
+export async function recordProviderCall(row: ProviderCallRow): Promise<void> {
+  try {
+    await writeCall(row);
+  } catch (error) {
+    console.error(`[provider_calls] could not record ${row.provider}.${row.method}`, error);
+  }
+}
+
+async function writeCall(row: ProviderCallRow): Promise<void> {
   const supabase = getSupabaseServiceClient();
   const { error } = await supabase.from("provider_calls").insert({
     tenant_id: row.tenantId,
