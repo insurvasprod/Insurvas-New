@@ -14,6 +14,7 @@ import { MaintenanceMessage } from "@/components/app/maintenance-message";
 import { AnnouncementStrip } from "@/components/app/announcement-strip";
 import { getMaintenanceStatus, getActiveAnnouncements } from "@/lib/system/service";
 import { planDisplayName } from "@/lib/plans/display";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 /**
  * Enforcement point 1 of 3: the MENU.

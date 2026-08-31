@@ -1,7 +1,4 @@
-import Link from "next/link";
-import { ArrowRight, Building2, ShieldCheck } from "lucide-react";
-
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { redirect } from "next/navigation";
 
 export default function Home() {
   redirect("/pricing");
