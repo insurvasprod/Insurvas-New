@@ -42,6 +42,40 @@ export type Database = {
         };
         Relationships: [];
       };
+      email_log: {
+        Row: {
+          dedupe_key: string | null;
+          failure_reason: string | null;
+          id: string;
+          provider: string;
+          provider_message_id: string | null;
+          status: Database["public"]["Enums"]["email_status"];
+          subject: string;
+          template_key: string;
+          tenant_id: string | null;
+          to_address: string;
+          ts: string;
+          user_id: string | null;
+        };
+        Insert: {
+          dedupe_key?: string | null;
+          failure_reason?: string | null;
+          id?: string;
+          provider?: string;
+          provider_message_id?: string | null;
+          status: Database["public"]["Enums"]["email_status"];
+          subject: string;
+          template_key: string;
+          tenant_id?: string | null;
+          to_address: string;
+          ts?: string;
+          user_id?: string | null;
+        };
+        // Append-only: UPDATE and DELETE are revoked at the database, so a call that would be
+        // refused at runtime fails to compile instead.
+        Update: never;
+        Relationships: [];
+      };
       legal_documents: {
         Row: {
           change_summary: string | null;
@@ -2158,6 +2192,10 @@ export type Database = {
         };
         Returns: { invoice_id: string; number: string; created: boolean; reconciliation: string }[];
       };
+      prune_email_log: {
+        Args: { p_days?: number };
+        Returns: number;
+      };
       publish_legal_document: {
         Args: {
           p_doc_type: Database["public"]["Enums"]["legal_doc_type"];
@@ -2487,6 +2525,7 @@ export type Database = {
     };
     Enums: {
       legal_doc_type: "tos" | "privacy" | "dpa";
+      email_status: "sent" | "failed" | "skipped";
       admin_role: "super_admin" | "support_agent" | "billing_admin" | "platform_config";
       audit_actor_type: "admin" | "system";
       billing_cycle: "monthly" | "quarterly" | "yearly";

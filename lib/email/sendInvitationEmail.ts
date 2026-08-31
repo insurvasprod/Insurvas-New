@@ -1,55 +1,82 @@
 import "server-only";
 
 /**
- * Transport seam for outbound email.
+ * The three account-lifecycle emails.
  *
- * There is deliberately no email provider wired up yet — SA-4.11 (Email configuration) owns
- * that decision, including templates and the vendor choice. Until then this logs the invite
- * and the admin UI shows a copyable link, so the flow is fully usable and testable without
- * front-running SA-4.11's design.
+ * These were `console.info` stubs until SA-4.11 chose a provider. They now go through the shared
+ * transport, which means the wording lives in templates.ts, the attempt is written to email_log
+ * either way, and an unconfigured mail server produces a `skipped` row rather than silence.
  *
- * When SA-4.11 lands, replace the body of this function; every caller stays unchanged.
+ * The return shape is unchanged, deliberately. Callers already branch on `delivered` to decide
+ * whether to show the admin a copyable link, and that behaviour is still exactly right — a link
+ * the admin can pass on by hand is the correct fallback when the mail server is down.
  */
+
+import { sendEmail } from "./transport";
+import {
+  emailChangeConfirmationEmail,
+  invitationEmail,
+  passwordResetEmail,
+} from "./templates";
+
 export async function sendInvitationEmail(params: {
   to: string;
   name: string;
   inviteUrl: string;
   expiresAt: Date;
+  userId?: string | null;
+  tenantId?: string | null;
 }): Promise<{ delivered: boolean }> {
-  console.info(
-    `[invitation] would email ${params.to} (${params.name}) — link valid until ${params.expiresAt.toISOString()}: ${params.inviteUrl}`,
-  );
-
-  // `delivered: false` is the honest answer while no transport exists — callers use it to tell
-  // the admin they must pass the link along themselves.
-  return { delivered: false };
+  const rendered = invitationEmail(params);
+  const result = await sendEmail({
+    to: params.to,
+    ...rendered,
+    templateKey: "user.invitation",
+    userId: params.userId,
+    tenantId: params.tenantId,
+  });
+  return { delivered: result.delivered };
 }
 
-/** Same seam, for SA-1.3's "send password reset link". */
+/** SA-1.3's "send password reset link". */
 export async function sendPasswordResetEmail(params: {
   to: string;
   name: string;
   resetUrl: string;
   expiresAt: Date;
+  userId?: string | null;
+  tenantId?: string | null;
 }): Promise<{ delivered: boolean }> {
-  console.info(
-    `[password-reset] would email ${params.to} (${params.name}) — link valid until ${params.expiresAt.toISOString()}: ${params.resetUrl}`,
-  );
-  return { delivered: false };
+  const rendered = passwordResetEmail(params);
+  const result = await sendEmail({
+    to: params.to,
+    ...rendered,
+    templateKey: "user.password_reset",
+    userId: params.userId,
+    tenantId: params.tenantId,
+  });
+  return { delivered: result.delivered };
 }
 
 /**
- * Same seam, for confirming a changed email address. Note this goes to the NEW address — that
- * is the whole point: it proves the person controls it before the change takes effect.
+ * Goes to the NEW address — that is the whole point: it proves the person controls it before the
+ * change takes effect.
  */
 export async function sendEmailChangeConfirmation(params: {
   to: string;
   name: string;
   confirmUrl: string;
   expiresAt: Date;
+  userId?: string | null;
+  tenantId?: string | null;
 }): Promise<{ delivered: boolean }> {
-  console.info(
-    `[email-change] would email ${params.to} (${params.name}) — link valid until ${params.expiresAt.toISOString()}: ${params.confirmUrl}`,
-  );
-  return { delivered: false };
+  const rendered = emailChangeConfirmationEmail(params);
+  const result = await sendEmail({
+    to: params.to,
+    ...rendered,
+    templateKey: "user.email_change_confirmation",
+    userId: params.userId,
+    tenantId: params.tenantId,
+  });
+  return { delivered: result.delivered };
 }

@@ -5,15 +5,16 @@
 // manual run — cannot send anything twice. Extending a trial changes trial_ends_at, which
 // deliberately re-arms the reminders for the NEW date.
 //
-// There is no email transport yet (SA-4.11): sendVerificationEmail's provider keys are unset, so
-// delivery reports false and the body is logged. Everything except the transport is real, and the
-// `delivered` column records which it was — so when keys arrive, nothing here changes.
+// SA-4.11 landed, so these now actually send through the shared SMTP transport. The `delivered`
+// column still records which it was: with no SMTP credentials configured the send is skipped and
+// the row says so, rather than the reminder silently never going out.
 //
 // Run with: npm run trials:remind   (add --dry to preview without recording)
 import { createClient } from "@supabase/supabase-js";
 
 import { dueReminders, reminderBody, REMINDER_LABELS } from "../lib/trials/reminders.ts";
 import { calendarDaysUntil } from "../lib/trials/banner.ts";
+import { sendTrialReminder } from "../lib/email/sendTrialReminder.ts";
 
 const dryRun = process.argv.includes("--dry");
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, {
@@ -79,9 +80,18 @@ for (const trial of trials) {
 
     if (dryRun) continue;
 
-    // No transport yet, so this is where SA-4.11 plugs in. Recorded either way, because the
-    // decision to send was made and must not be made twice.
-    const delivered = false;
+    // Recorded either way. The decision to send was made, and it must not be made twice — so a
+    // failed delivery is written down as a failed delivery rather than left to be retried
+    // forever. Chase a `delivered: false` row from the email log, which has the reason.
+    const delivery = await sendTrialReminder({
+      to: trial.owner_email,
+      subject: body.subject,
+      text: body.text,
+      tenantId: trial.tenant_id,
+      dedupeKey: `trial-${candidate.kind}-${trial.subscription_id}-${trial.trial_ends_at}`,
+    });
+    const delivered = delivery.delivered;
+    if (!delivered) console.log(`     not delivered: ${delivery.reason}`);
 
     const { error } = await supabase.from("trial_reminders").insert({
       subscription_id: trial.subscription_id,
