@@ -114,6 +114,41 @@ export class WhopProvider implements PaymentProvider {
    * payment and membership webhooks, so a RENEWAL — which carries no checkout session — still
    * tells us which of our plans it belongs to.
    */
+  /**
+   * Finds the membership Whop holds for this tenant on this plan, if there is one.
+   *
+   * This is the question the checkout return page must ask before it grants anything. Before it
+   * existed, the return handler trusted the local plan selection — so anyone signed in could type
+   * /app/checkout/return and be given a trial they had never paid for.
+   *
+   * Filtered by plan and status at the API so the tenant match runs over a small list, and matched
+   * on `metadata.tenant_id` because that is the attribution we set when the checkout was created
+   * and the only field that ties a Whop membership back to one of our tenants.
+   */
+  async findMembershipForTenant(
+    whopPlanId: string,
+    tenantId: string,
+  ): Promise<{ id: string; status: string } | null> {
+    // Only the states that mean "this person may use the product". A canceled or expired
+    // membership must not re-open a completed checkout.
+    for (const status of ["trialing", "active", "completed"] as const) {
+      const page = await this.client.request<{
+        data?: Array<{ id?: string; status?: string; metadata?: Record<string, unknown> | null }>;
+      }>(
+        "GET",
+        `/memberships?plan_id=${encodeURIComponent(whopPlanId)}&status=${status}&first=50`,
+      );
+
+      const match = (page.data ?? []).find(
+        (membership) => String(membership.metadata?.tenant_id ?? "") === tenantId,
+      );
+
+      if (match?.id) return { id: match.id, status: match.status ?? status };
+    }
+
+    return null;
+  }
+
   async createPlan(input: {
     productId: string;
     accountId?: string;

@@ -61,6 +61,31 @@ async function cleanup() {
   await supabase.from("webhook_events").delete().like("event_id", `msg_co_${stamp}%`);
 }
 
+/** Sends a signed membership.activated, the way Whop does. */
+async function sendMembershipActivated(id, tenantId, planId, membershipId) {
+  const envelope = {
+    id, type: "membership.activated", api_version: "v1", timestamp: new Date().toISOString(),
+    data: {
+      id: membershipId,
+      metadata: { tenant_id: tenantId },
+      plan: { id: "plan_x", metadata: { insurvas_plan_id: planId, insurvas_billing_cycle: "monthly" } },
+    },
+  };
+  const raw = JSON.stringify(envelope);
+  const ts = Math.floor(Date.now() / 1000);
+  const sig = createHmac("sha256", process.env.WHOP_WEBHOOK_SECRET).update(`${id}.${ts}.${raw}`).digest("base64");
+  return fetch(`${BASE}/api/webhooks/whop`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "webhook-id": id,
+      "webhook-timestamp": String(ts),
+      "webhook-signature": `v1,${sig}`,
+    },
+    body: raw,
+  });
+}
+
 const post = (path, cookie, body) =>
   fetch(`${BASE}${path}`, { method: "POST", headers: { "content-type": "application/json", cookie }, body: JSON.stringify(body ?? {}) });
 
@@ -91,10 +116,37 @@ try {
   check("returning reuses the same checkout rather than opening another",
         againBody.checkoutUrl === body.checkoutUrl, "a second session would strand the first");
 
-  console.log("\nCompleting it — the return path\n");
+  console.log("\nThe return path must not grant access on its own — bugs_sa.md #1 (P0)\n");
 
+  // Tenant A opened a checkout and never paid, so Whop has no membership for them. Landing on the
+  // return URL — which anybody signed in can type — must therefore grant nothing. Before the fix
+  // this handler trusted the local plan selection and issued a free trial to whoever asked.
   const returned = await fetch(`${BASE}/app/checkout/return`, { headers: { cookie: a.cookie }, redirect: "manual" });
-  check("the return page redirects into the product", [302, 307].includes(returned.status), String(returned.status));
+  check("the return page redirects rather than erroring", [302, 307].includes(returned.status), String(returned.status));
+
+  const { data: unpaid } = await supabase
+    .from("subscriptions").select("status").eq("tenant_id", a.tenantId).maybeSingle();
+  check(
+    "visiting the return URL without paying grants NOTHING",
+    unpaid === null,
+    "a subscription exists for a tenant Whop has no membership for — free access to the product",
+  );
+
+  const { data: noEnt } = await supabase
+    .from("tenant_entitlements").select("entitlement").eq("tenant_id", a.tenantId).maybeSingle();
+  check("and no full entitlement is built", noEnt?.entitlement?.access !== "full",
+        `access=${noEnt?.entitlement?.access}`);
+
+  const { data: stillWaiting } = await supabase
+    .from("tenants").select("onboarding_state").eq("id", a.tenantId).single();
+  check("the tenant stays in awaiting_payment", stillWaiting.onboarding_state === "awaiting_payment",
+        stillWaiting.onboarding_state);
+
+  console.log("\nOnce Whop confirms, the same tenant is completed\n");
+
+  // Whop's signed event is the authority. With it, everything the ticket promises must hold.
+  const idA = `msg_co_${stamp}_a`;
+  await sendMembershipActivated(idA, a.tenantId, a.planId, `mem_co_${stamp}_a`);
 
   const { data: sub } = await supabase
     .from("subscriptions").select("status, trial_ends_at, plan_id, billing_cycle").eq("tenant_id", a.tenantId).maybeSingle();
@@ -108,11 +160,8 @@ try {
 
   const { data: ent } = await supabase
     .from("tenant_entitlements").select("entitlement").eq("tenant_id", a.tenantId).maybeSingle();
-  check(
-    "the entitlement is built before the redirect completes",
-    ent?.entitlement?.access === "full",
-    `access=${ent?.entitlement?.access} — the ticket requires the product to work on landing`,
-  );
+  check("the entitlement is built", ent?.entitlement?.access === "full",
+        `access=${ent?.entitlement?.access} — the ticket requires the product to work on landing`);
   check("the menu has the plan's features", (ent?.entitlement?.features ?? []).length > 0,
         `${(ent?.entitlement?.features ?? []).length} features`);
 
@@ -122,34 +171,18 @@ try {
         tenantDone.status === "active" && tenantDone.onboarding_state === "completed",
         JSON.stringify(tenantDone));
 
-  console.log("\nIdempotency — the webhook arrives too\n");
+  console.log("\nIdempotency — the customer also lands on the return page\n");
 
   const beforeCount = (await supabase.from("subscriptions").select("id").eq("tenant_id", a.tenantId)).data.length;
   await fetch(`${BASE}/app/checkout/return`, { headers: { cookie: a.cookie }, redirect: "manual" });
   const afterCount = (await supabase.from("subscriptions").select("id").eq("tenant_id", a.tenantId)).data.length;
-  check("returning twice creates only one subscription", beforeCount === afterCount && afterCount === 1,
-        `${beforeCount} then ${afterCount}`);
+  check("returning after the webhook creates no second subscription",
+        beforeCount === afterCount && afterCount === 1, `${beforeCount} then ${afterCount}`);
 
   console.log("\nThe webhook path on its own — the customer who closes the tab\n");
 
   const b = await makeSignedUpTenant("B");
-  const id = `msg_co_${stamp}_b`;
-  const envelope = {
-    id, type: "membership.activated", api_version: "v1", timestamp: new Date().toISOString(),
-    data: {
-      id: `mem_co_${stamp}`,
-      metadata: { tenant_id: b.tenantId },
-      plan: { id: "plan_x", metadata: { insurvas_plan_id: b.planId, insurvas_billing_cycle: "monthly" } },
-    },
-  };
-  const raw = JSON.stringify(envelope);
-  const ts = Math.floor(Date.now() / 1000);
-  const sig = createHmac("sha256", process.env.WHOP_WEBHOOK_SECRET).update(`${id}.${ts}.${raw}`).digest("base64");
-  const hook = await fetch(`${BASE}/api/webhooks/whop`, {
-    method: "POST",
-    headers: { "content-type": "application/json", "webhook-id": id, "webhook-timestamp": String(ts), "webhook-signature": `v1,${sig}` },
-    body: raw,
-  });
+  const hook = await sendMembershipActivated(`msg_co_${stamp}_b`, b.tenantId, b.planId, `mem_co_${stamp}`);
   check("the webhook is accepted", hook.status === 200, String(hook.status));
 
   const { data: subB } = await supabase
