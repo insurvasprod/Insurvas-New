@@ -121,29 +121,62 @@ export class WhopProvider implements PaymentProvider {
    * existed, the return handler trusted the local plan selection — so anyone signed in could type
    * /app/checkout/return and be given a trial they had never paid for.
    *
-   * Filtered by plan and status at the API so the tenant match runs over a small list, and matched
-   * on `metadata.tenant_id` because that is the attribution we set when the checkout was created
-   * and the only field that ties a Whop membership back to one of our tenants.
+   * Everything below was learned by calling the sandbox, and each line is load-bearing:
+   *
+   *   `company_id` is REQUIRED. Without it every request is a 400 "not authorized". The first
+   *   version of this omitted it, so the call always threw — the checkout verification failed
+   *   closed for the wrong reason and never actually verified anything, while its test passed
+   *   because the outcome it asserted (no access granted) looked the same either way.
+   *
+   *   `plan_id` and `status` as query parameters are IGNORED by this API version. Asking for one
+   *   plan returns every membership on the account. So the plan and the status are matched HERE,
+   *   client-side, and must be: matching only the tenant would confirm a customer for a plan they
+   *   did not buy, and treating a `drafted` membership as a purchase would grant access to an
+   *   abandoned checkout.
+   *
+   *   The plan arrives NESTED as `plan.id`, not as a flat `plan_id`.
    */
   async findMembershipForTenant(
     whopPlanId: string,
     tenantId: string,
   ): Promise<{ id: string; status: string } | null> {
-    // Only the states that mean "this person may use the product". A canceled or expired
-    // membership must not re-open a completed checkout.
-    for (const status of ["trialing", "active", "completed"] as const) {
-      const page = await this.client.request<{
-        data?: Array<{ id?: string; status?: string; metadata?: Record<string, unknown> | null }>;
-      }>(
-        "GET",
-        `/memberships?plan_id=${encodeURIComponent(whopPlanId)}&status=${status}&first=50`,
+    const companyId = process.env.WHOP_ACCOUNT_ID;
+    if (!companyId) throw new Error("WHOP_ACCOUNT_ID is not set, so memberships cannot be listed");
+
+    // Only the states that mean "this person may use the product". `drafted` is an unfinished
+    // checkout and `canceled`/`expired` are over.
+    const GRANTS_ACCESS = new Set(["trialing", "active", "completed"]);
+
+    let cursor: string | null = null;
+
+    // Bounded: five pages of 100 is far more than one account should need to answer "does this
+    // tenant hold a membership", and an unbounded loop against a provider is how one slow request
+    // becomes a hung checkout page.
+    for (let page = 0; page < 5; page++) {
+      const query = new URLSearchParams({ company_id: companyId, first: "100" });
+      if (cursor) query.set("after", cursor);
+
+      const response = await this.client.request<{
+        data?: Array<{
+          id?: string;
+          status?: string;
+          plan?: { id?: string } | null;
+          metadata?: Record<string, unknown> | null;
+        }>;
+        page_info?: { has_next_page?: boolean; end_cursor?: string | null };
+      }>("GET", `/memberships?${query.toString()}`);
+
+      const match = (response.data ?? []).find(
+        (membership) =>
+          String(membership.metadata?.tenant_id ?? "") === tenantId &&
+          membership.plan?.id === whopPlanId &&
+          GRANTS_ACCESS.has(String(membership.status ?? "")),
       );
 
-      const match = (page.data ?? []).find(
-        (membership) => String(membership.metadata?.tenant_id ?? "") === tenantId,
-      );
+      if (match?.id) return { id: match.id, status: String(match.status) };
 
-      if (match?.id) return { id: match.id, status: match.status ?? status };
+      if (!response.page_info?.has_next_page || !response.page_info.end_cursor) break;
+      cursor = response.page_info.end_cursor;
     }
 
     return null;

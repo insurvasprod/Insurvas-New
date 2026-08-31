@@ -59,7 +59,8 @@
     "verify:addon-meters": "node --env-file=.env.local scripts/verify-addon-meters.mjs",
     "verify:transitions": "node --env-file=.env.local scripts/verify-subscription-transitions.mjs",
     "verify:settlement": "node --env-file=.env.local scripts/verify-manual-settlement.mjs",
-    "verify:webhook-invoicing": "node --env-file=.env.local scripts/verify-webhook-invoicing.mjs"
+    "verify:webhook-invoicing": "node --env-file=.env.local scripts/verify-webhook-invoicing.mjs",
+    "verify:membership-lookup": "node --env-file=.env.local scripts/verify-membership-lookup.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.99.0",
