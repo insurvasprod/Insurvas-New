@@ -29,9 +29,9 @@ import { group, link, type SidebarIconKey, type SidebarNode } from "./types.ts";
  * ask `canAccessConfigurationSection` rather than a permission of their own — one place decides,
  * and the page and the link can never disagree about it.
  *
- * Two are filed by who reaches for them rather than by what built them, while still carrying the
- * section registry's permission: Features under Catalog, where someone building a plan expects it,
- * and payment Setup under Billing.
+ * Several are filed by who reaches for them rather than by which ticket built them, while still
+ * carrying the section registry's permission: Features, Products and Templates under Catalog;
+ * payment Setup and Offers under Billing. Platform keeps what is genuinely platform plumbing.
  */
 export function buildAdminNav(role: AdminRole): SidebarNode[] {
   const tenants = canViewTenants(role);
@@ -66,6 +66,9 @@ export function buildAdminNav(role: AdminRole): SidebarNode[] {
       invoices ? link("/admin/invoices", "Invoices", "invoices") : null,
       invoices ? link("/admin/credit-notes", "Refunds & credits", "credit-notes") : null,
       coupons ? link("/admin/coupons", "Coupons", "coupons") : null,
+      // Beside Coupons on purpose: SA-4.4 is the campaign layer over the SA-3.6 coupon, so the
+      // two belong to one subject even though different permissions gate them.
+      section("offers", "/admin/offers", "Offers & discounts", "offers"),
       invoices ? link("/admin/revenue", "Revenue", "revenue") : null,
       // Payment provider, mode and keys. Filed with Billing because that is who reaches for it,
       // and named "Setup" because everything else in this group is a record while this is the
@@ -82,6 +85,11 @@ export function buildAdminNav(role: AdminRole): SidebarNode[] {
       // for day to day — the list you tick against when building a plan. It keeps the section
       // registry's permission rather than canManagePlans, so who may open it does not change.
       section("features", "/admin/features", "Features", "features"),
+      // What the platform sells insurance-wise, and the workspace each product starts an agent
+      // with. Catalog already means "the things we offer", so they belong here rather than with
+      // the platform plumbing.
+      section("products", "/admin/products", "Products", "products"),
+      section("templates", "/admin/templates", "Templates", "templates"),
     ]),
 
     ...group("monitoring", "Monitoring", "monitoring", [
@@ -90,9 +98,6 @@ export function buildAdminNav(role: AdminRole): SidebarNode[] {
     ]),
 
     ...group("platform", "Platform", "platform", [
-      section("offers", "/admin/offers", "Offers & discounts", "offers"),
-      section("products", "/admin/products", "Products", "products"),
-      section("templates", "/admin/templates", "Templates", "templates"),
       section("compliance-sources", "/admin/compliance-sources", "Compliance sources", "compliance"),
       section("credits-limits", "/admin/credits-limits", "Credits & limits", "limits"),
       section("email", "/admin/email", "Email", "email"),
