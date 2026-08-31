@@ -304,7 +304,11 @@ events, coupons, custom invoices and credit notes — but `.github/workflows/` s
 reports the remaining 25 unguarded features as TODO until the agent app exists. The flag that makes
 complete guard coverage mandatory still needs to be flipped when LA-0.1 ships those routes.
 
-**Fix:** add a PR workflow for `next build`, `eslint`, `npm test` and `check:features`. Database
+**Largely closed by PR #8**, which added `.github/workflows/ci.yml`. Confirm it runs `next build`,
+`eslint`, `npm test` and `check:features` on pull requests, and note that the database verification
+scripts still need a disposable project rather than production — several create and clean up rows.
+
+**Original fix:** add a PR workflow for `next build`, `eslint`, `npm test` and `check:features`. Database
 verification scripts should run against a disposable/staging Supabase project, not production,
 because several intentionally create and clean up rows. Add tenant isolation there or as a
 scheduled integration job. This would have caught the server-only bundling bug that broke the
@@ -991,6 +995,67 @@ class of problem that is only real when someone tries it.
 This supersedes the "9 migrations in the repo" half of [#56]: the baseline dump and
 `scripts/dump-schema.mjs` genuinely fixed the missing-schema problem, and replaced it with an
 ordering one.
+
+
+### 84. SA-4.8's two dialing criteria are structurally unproven, not just untested
+**From:** the PR #8 review · **Compliance-critical**
+
+Two acceptance criteria describe behaviour that no test exercises end to end:
+
+- *"Disabling the last enabled DNC vendor triggers a confirmation that names the consequence, then
+  blocks dialing platform-wide."* The blocking half is real and correct — `assertDncVendorAvailable`
+  refuses when the enabled `dnc_scrub` count is zero. The **confirmation that names the
+  consequence** is a UI affordance I could not find, and nothing asserts it.
+- *"With two vendors enabled, simulating a failure on the primary routes the call to the secondary
+  and logs the fallback."* `lib/compliance/fallback.test.mjs` proves the loop against an injected
+  callback, which is a fair unit test. Nothing drives two *registered* vendors through
+  `runWithComplianceFallback`, so the priority ordering read from the database and the
+  `provider_calls` fallback row are never proven together.
+
+The ticket is blunt about the stakes: a DNC-listed call costs $500–$1,500. The code is written to
+fail closed and, reading it, does. That is not the same as having watched it.
+
+**Fix:** add a `verify:compliance` case that registers two stub vendors against a local endpoint,
+fails the primary, and asserts both the secondary's answer and the fallback row. Add the
+confirmation dialog on disabling the last DNC vendor, quoting the cost.
+
+### 85. SA-4.8's "unreachable" case is only covered at scrub time, not by the status the UI reads
+**From:** the PR #8 review · **Minor, but the wording matters**
+
+The rule is *"if every vendor of type `dnc_scrub` is disabled **or unreachable**, outbound dialing
+is blocked"*. `getDncDialingStatus` — which feeds the Configuration Center status strip — counts
+only `is_enabled`. With one enabled vendor that is down, it reports dialing as available.
+
+Dialing itself is still safe: the scrub runs, every vendor fails, `runOrderedFallback` rethrows and
+the route returns 503 `blocked: true`. So the guarantee holds; only the *status display* is
+optimistic, which is the opposite of what an operator wants during an incident.
+
+**Fix:** fold the 24-hour health already computed in `health()` into the status, so a type whose
+every vendor is failing reads as at-risk rather than green.
+
+### 86. The credit pack margin indicator is unverified, and the cost it compares against is partly guessed
+**From:** the PR #8 review · SA-4.9
+
+*"The margin indicator turns red if sell price is at or below the vendor cost from SA-4.8"* has no
+assertion anywhere. `listMeterPricing` does source cost from the enabled DNC vendors — but only for
+`dnc_lookups`, via `Math.min(...vendorCosts)`; every other meter falls back to the manually
+configured `cost_cents`. That is a reasonable design given only DNC vendors carry a per-lookup
+cost, and it is not what the criterion says.
+
+**Fix:** assert the red state in the verification, and either extend vendor-sourced cost to the
+other compliance meters or write down that only `dnc_lookups` is vendor-priced.
+
+### 87. Module 4's own verification scripts were not re-run after the merge
+**From:** the module-4 merge · **Do before trusting the merged tree**
+
+`verify:switches`, `verify:switches:multi`, `verify:system`, `verify:period-billing`,
+`verify:credits-limits` and the rest of `verify:all` all passed on the `module-4` branch. None has
+been run against the merged tree, where the shell layouts, the audit action list and the generated
+database types all changed.
+
+`tsc`, `eslint`, 239 unit tests, a real `next build` and `check:features` do pass on the merge.
+
+**Fix:** run `npm run verify:all` against the merged tree before it is deployed anywhere.
 
 
 ---
