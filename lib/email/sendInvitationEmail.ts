@@ -12,12 +12,12 @@ import "server-only";
  * the admin can pass on by hand is the correct fallback when the mail server is down.
  */
 
-import { sendEmail } from "./transport";
+import { sendEmail } from "./transport.ts";
 import {
   emailChangeConfirmationEmail,
   invitationEmail,
   passwordResetEmail,
-} from "./templates";
+} from "./templates.ts";
 
 export async function sendInvitationEmail(params: {
   to: string;

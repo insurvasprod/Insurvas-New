@@ -1,7 +1,7 @@
 import "server-only";
 
-import { sendEmail, type EmailDelivery } from "./transport";
-import { emailVerificationEmail } from "./templates";
+import { sendEmail, type EmailDelivery } from "./transport.ts";
+import { emailVerificationEmail } from "./templates.ts";
 
 type VerificationEmailInput = {
   email: string;
