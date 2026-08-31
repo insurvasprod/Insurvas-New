@@ -17,7 +17,9 @@ export default async function PaymentsPage() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
-      <AdminPageHeader title="Payments" subtitle="Providers, modes, keys, and payment health." />
+      {/* "Setup" to match the sidebar. The subtitle carries what it is setup FOR, so the heading
+          does not have to. */}
+      <AdminPageHeader title="Setup" subtitle="Payment providers, modes, keys, and payment health." />
       <PaymentStatusPanel status={status} />
     </div>
   );
