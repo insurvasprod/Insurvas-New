@@ -52,7 +52,8 @@
     "db:dump-reference": "node --env-file=.env.local scripts/dump-reference-data.mjs",
     "db:check": "node --env-file=.env.local scripts/check-migrations.mjs --fast",
     "db:check:deep": "node --env-file=.env.local scripts/check-migrations.mjs",
-    "session": "node --env-file=.env.local scripts/mint-session.mjs"
+    "session": "node --env-file=.env.local scripts/mint-session.mjs",
+    "verify:user-tokens": "node --env-file=.env.local scripts/verify-user-token-redemption.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.99.0",
