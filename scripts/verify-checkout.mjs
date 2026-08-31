@@ -22,7 +22,7 @@ function check(label, condition, detail = "") {
 }
 
 const stamp = Date.now();
-const made = { tenants: [], users: [] };
+const made = { tenants: [], users: [], coupons: [] };
 
 async function makeSignedUpTenant(label) {
   const { data: user } = await supabase
@@ -58,6 +58,7 @@ async function cleanup() {
     await supabase.from("tenants").delete().eq("id", id);
   }
   for (const id of made.users) await supabase.from("users").delete().eq("id", id);
+  for (const id of made.coupons) await supabase.from("coupons").delete().eq("id", id);
   await supabase.from("webhook_events").delete().like("event_id", `msg_co_${stamp}%`);
 }
 
@@ -96,6 +97,33 @@ try {
 
   const bad = await post("/api/app/checkout/coupon", a.cookie, { code: "DEFINITELY-NOT-A-CODE" });
   check("an invalid coupon is rejected BEFORE checkout opens", bad.status === 409, String(bad.status));
+
+  // bugs_sa.md #2. Whop's hosted checkout configuration API has no promo-code field — only the
+  // embedded element accepts one — so a code can never be pre-applied on this flow. The endpoint
+  // must therefore say the buyer has to enter it, and must never claim it is already applied.
+  // A local row is enough: checkCoupon validates against our own table, and creating one through
+  // the admin path would mint a real promo code in the Whop sandbox for a throwaway test.
+  const { data: liveCoupon } = await supabase
+    .from("coupons")
+    .insert({
+      code: `VERIFY${stamp}`, discount_type: "percent", percent_off: 10,
+      duration: "once", is_active: true,
+    })
+    .select("id, code").single();
+  made.coupons.push(liveCoupon.id);
+
+  if (liveCoupon?.code) {
+    const applied = await post("/api/app/checkout/coupon", a.cookie, { code: liveCoupon.code });
+    const appliedBody = await applied.json();
+    check("a valid coupon is accepted", applied.status === 200, JSON.stringify(appliedBody).slice(0, 120));
+    check("the response says the buyer must enter the code, and does not claim it is applied",
+          appliedBody.mustEnterAtCheckout === true && /enter/i.test(appliedBody.instruction ?? ""),
+          JSON.stringify(appliedBody));
+    check("and it returns the exact code the buyer has to type",
+          appliedBody.code === liveCoupon.code, `${appliedBody.code} vs ${liveCoupon.code}`);
+  } else {
+    console.log("  --   no active coupon to check the #2 messaging against");
+  }
 
   const started = await post("/api/app/checkout/start", a.cookie);
   const body = await started.json();

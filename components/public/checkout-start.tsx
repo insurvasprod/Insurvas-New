@@ -32,7 +32,9 @@ export function CheckoutStart({ trialDays }: { trialDays: number }) {
     }
 
     setCouponOk(body.code);
-    toast.success(`${body.code} will be applied at checkout`);
+    // Not "will be applied": Whop's hosted checkout cannot be handed a promo code, so the buyer
+    // types it themselves. Saying otherwise promised a discount we could not deliver.
+    toast.success(body.instruction ?? `Enter ${body.code} on the payment page.`);
   }
 
   async function start() {
@@ -75,7 +77,15 @@ export function CheckoutStart({ trialDays }: { trialDays: number }) {
           </Button>
         </div>
         {couponOk && (
-          <p className="text-xs text-[var(--color-success)]">{couponOk} will be applied at checkout.</p>
+          /* The code is shown large and copyable because the buyer has to type it on Whop's page —
+             a hosted checkout configuration cannot be handed a promo code, so this is the only
+             thing standing between them and the discount they were promised. */
+          <div className="rounded-lg border border-[var(--color-success)]/40 bg-[var(--color-success)]/10 p-3 text-sm">
+            <p className="font-medium text-[var(--color-success)]">{couponOk} is valid.</p>
+            <p className="mt-1 text-[var(--color-text-muted)]">
+              Enter it on the payment page to get your discount — it is not applied automatically.
+            </p>
+          </div>
         )}
       </div>
 
