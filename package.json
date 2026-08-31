@@ -55,7 +55,9 @@
     "session": "node --env-file=.env.local scripts/mint-session.mjs",
     "verify:user-tokens": "node --env-file=.env.local scripts/verify-user-token-redemption.mjs",
     "email:test": "node --env-file=.env.local scripts/send-test-email.mjs",
-    "email:prune": "node --env-file=.env.local scripts/prune-email-log.mjs"
+    "email:prune": "node --env-file=.env.local scripts/prune-email-log.mjs",
+    "verify:addon-meters": "node --env-file=.env.local scripts/verify-addon-meters.mjs",
+    "verify:transitions": "node --env-file=.env.local scripts/verify-subscription-transitions.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.99.0",

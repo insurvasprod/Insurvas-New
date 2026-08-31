@@ -2285,6 +2285,14 @@ export type Database = {
         Args: { p_series: string; p_at: string };
         Returns: string;
       };
+      admin_set_subscription_pause_state: {
+        Args: { p_subscription_id: string; p_pause: boolean };
+        Returns: {
+          subscription_id: string;
+          status: Database["public"]["Enums"]["subscription_status"];
+          previous: Database["public"]["Enums"]["subscription_status"];
+        }[];
+      };
       purchase_credit_pack: {
         Args: {
           p_pack_id: string;

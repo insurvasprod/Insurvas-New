@@ -1,0 +1,13 @@
+-- bugs_sa.md M2-3 (P1) · Add-on meter credits were ignored by enforcement.
+--
+-- resolve_tenant_entitlement stacks plan and add-on meter credits correctly. check_meter_capacity
+-- — the function that actually decides whether an action is allowed — read only plan_meters. So a
+-- tenant on a plan with 1,000 dialer minutes who bought a 500-minute add-on was still blocked at
+-- 1,000: they paid for credits the enforcement path could not see.
+--
+-- The two now compute the same number. That is the point: an allowance a customer is shown and an
+-- allowance they are held to must not be produced by two different pieces of arithmetic.
+--
+-- Applied as migration fix_m2_3_check_meter_capacity_includes_addons; see that version in
+-- supabase_migrations.schema_migrations for the exact text that ran.
+-- The function body is identical to the applied migration; regenerate with npm run db:dump.
