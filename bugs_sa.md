@@ -6,7 +6,9 @@ Status: Module 5 is feature-built, but it is not ready for public production tra
 
 ## Release blockers
 
-### 1. P0 — Checkout return URL grants access without Whop confirmation
+### 1. ✅ FIXED 2026-08-30 — P0 — Checkout return URL grants access without Whop confirmation
+
+**Resolution.** The return handler now asks Whop whether a membership exists for this tenant before granting anything (`lib/checkout/verify.ts`), failing closed on an unmapped plan, a provider outage or a malformed answer. The webhook remains the second signed path. The verification previously ASSERTED the unsafe behaviour, so it passed while the hole was open; it now asserts the opposite and separately proves a genuine customer still completes.
 
 **Evidence**
 
@@ -25,7 +27,9 @@ The verification script currently visits the return URL directly and expects act
 - While waiting for a webhook, show a processing screen and poll a server endpoint.
 - Add a negative test proving direct navigation cannot activate a tenant.
 
-### 2. P1 — A validated coupon is not applied to Whop checkout
+### 2. ✅ FIXED 2026-08-30 — P1 — A validated coupon is not applied to Whop checkout
+
+**Resolution, and a correction to the original diagnosis.** The required fix said "pass the corresponding whop_promo_code_id using Whop's supported checkout field". No such field exists: `POST /checkout_configurations` accepts no promo code, and `promoCode` is available only on Whop's embedded checkout element. The false promise was removed instead — the endpoint returns `mustEnterAtCheckout` and the UI tells the buyer to type the code, which works because the promo is created at Whop with the same string. A guaranteed discount requires moving to embedded checkout; recorded as a decision, not done quietly.
 
 **Evidence**
 
@@ -57,7 +61,9 @@ The user, tenant, owner membership, signup selection, and verification token are
 - Move required legal acceptance into the `self_serve_signup` database transaction, or implement a safe compensating rollback.
 - Add a failure-path test proving that an acceptance failure creates no user, tenant, or owner membership.
 
-### 4. P1 — Trial reminder emails are never delivered and failed delivery is treated as sent
+### 4. ✅ FIXED 2026-08-30 — P1 — Trial reminder emails are never delivered and failed delivery is treated as sent
+
+**Resolution.** SA-4.11 part 1 wired the Google SMTP transport; the job now records the real delivery result and `email_log` carries the failure reason.
 
 **Evidence**
 
@@ -712,7 +718,9 @@ It is not release-ready yet. The largest risks sit at transaction boundaries rat
 
 ## Release-blocking findings
 
-### M1-1. P1 — Password invitation and reset links are not consumed atomically
+### M1-1. ✅ FIXED — P1 — Password invitation and reset links are not consumed atomically
+
+**Resolution.** `consume_user_password_token` locks the token before checking it; wired in `app/api/app/auth/set-password/route.ts`.
 
 **Fixed 2026-08-30.** `consume_user_password_token` now locks, re-validates, mutates, consumes,
 and accepts the membership in one transaction. A live two-request race produced exactly one
@@ -730,7 +738,9 @@ The route first reads a still-valid token, then updates `users.password_hash`, a
 - Make the update conditional on `accepted_at is null` and return one explicit consumed/invalid result.
 - Add concurrent redemption and forced-failure tests.
 
-### M1-2. P1 — Email-confirmation tokens have the same replay window
+### M1-2. ✅ FIXED — P1 — Email-confirmation tokens have the same replay window
+
+**Resolution.** `consume_user_email_change_token`, wired in `app/api/app/auth/confirm-email/route.ts`.
 
 **Fixed 2026-08-30.** `consume_user_email_change_token` now performs the unique-email update and
 token consumption in one locked transaction. A duplicate address rolls back without burning the
@@ -747,7 +757,9 @@ Availability is checked, the user's email is changed, and the token is burned in
 - Atomically lock and consume the email-change token while checking the unique address and updating the user.
 - Return a conflict without changing either the user or token when the address is no longer available.
 
-### M1-3. P1 — Edit User can commit changes and then return an error
+### M1-3. ⚠️ FIX EXISTS BUT IS NOT WIRED — P1 — Edit User can commit changes and then return an error
+
+**Status.** `admin_update_user_with_email_change` was added by migration `20260830161407` and has NO caller: `app/api/admin/users/[id]/route.ts` still calls the old `admin_update_user`. The fix is written; connecting it is a small change and the bug is still live until it is.
 
 **Evidence**
 
@@ -944,7 +956,9 @@ above.
 
 ## Release blockers
 
-### 11. P1 — Buying a credit pack bills the customer and grants no credits
+### 11. ✅ FIXED 2026-08-30 — P1 — Buying a credit pack bills the customer and grants no credits
+
+**Resolution.** `purchase_credit_pack` raises the invoice and writes the grant in one transaction, so the customer cannot be billed without receiving the credits. The verification now reads capacity before and after the purchase rather than only checking the invoice line.
 
 **Ticket:** SA-4.9 · *"Buying a credit pack adds a line to that tenant's next invoice"*
 
@@ -993,7 +1007,9 @@ the assertion is narrower than the sentence describing it.
 
 ## High
 
-### 12. P2 — A manual credit grant does not refresh the cached entitlement, so the agent's own balance stays stale
+### 12. ✅ FIXED 2026-08-30 — P2 — A manual credit grant does not refresh the cached entitlement
+
+**Resolution.** Both the grant route and the purchase path rebuild the entitlement, and the verification asserts the CACHED blob rather than `check_meter_capacity`.
 
 **Ticket:** SA-4.9 · *"Granting credits by hand increases the tenant's available balance
 **immediately** and appears on the usage monitor"*
