@@ -2285,6 +2285,25 @@ export type Database = {
         Args: { p_series: string; p_at: string };
         Returns: string;
       };
+      purchase_credit_pack: {
+        Args: {
+          p_pack_id: string;
+          p_tenant_id: string;
+          p_subscription_id: string | null;
+          p_quantity: number;
+          p_reason: string;
+          p_created_by: string | null;
+        };
+        Returns: {
+          invoice_id: string;
+          number: string;
+          total_cents: number;
+          grant_id: string;
+          granted_qty: number;
+          meter_key: string;
+          pack_name: string;
+        }[];
+      };
       create_custom_invoice: {
         Args: {
           p_tenant_id: string;

@@ -1,7 +1,7 @@
 import "server-only";
 
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
-import { createCustomInvoice } from "@/lib/invoices/custom";
+import { rebuildEntitlement } from "@/lib/entitlements/rebuild";
 import { CREDIT_METER_KEYS, type CreditMeterKey, type CreditPack, type CreditTenant, type MeterPricing, type UsageMonitorRow } from "./constants";
 
 type CreditPackInput = {
@@ -129,6 +129,15 @@ export async function updateMeterPricing(input: { meter_key: CreditMeterKey; cos
   if (error) throw new Error(error.message);
 }
 
+/**
+ * Sells a credit pack: raises the invoice AND grants the credits, atomically.
+ *
+ * One RPC rather than two calls from here, because the invoice and the grant have to be the same
+ * transaction. This previously raised the invoice and returned — it never wrote a credit_grants
+ * row, and nothing else did, so the customer was billed and their balance did not move
+ * (bugs_sa.md #11). Doing it as two sequential writes would leave the same bug in a narrower
+ * window; the database is the only place the two can be made inseparable.
+ */
 export async function purchaseCreditPack(input: {
   packId: string;
   tenantId: string;
@@ -137,32 +146,31 @@ export async function purchaseCreditPack(input: {
   reason: string;
   createdBy: string;
 }) {
-  const { data: pack, error } = await getSupabaseServiceClient()
-    .from("credit_packs")
-    .select("id, name, meter_key, quantity, price_cents, is_active")
-    .eq("id", input.packId)
-    .maybeSingle<Pick<CreditPack, "id" | "name" | "meter_key" | "quantity" | "price_cents" | "is_active">>();
-  if (error) throw new Error(error.message);
-  if (!pack || !pack.is_active) throw new Error("That credit pack is no longer active");
-  if (pack.price_cents <= 0) throw new Error("A free pack does not need an invoice");
-
-  const amountCents = pack.price_cents * input.quantity;
-  if (!Number.isSafeInteger(amountCents) || amountCents > 2_000_000_000) {
-    throw new Error("The requested pack quantity is too large for one invoice");
-  }
-  const result = await createCustomInvoice({
-    tenantId: input.tenantId,
-    subscriptionId: input.subscriptionId,
-    reason: input.reason,
-    dueAt: null,
-    createdBy: input.createdBy,
-    lines: [{
-      kind: "addon",
-      label: `${pack.name} (${pack.quantity.toLocaleString("en-US")} ${pack.meter_key.replaceAll("_", " ")})`,
-      quantity: input.quantity,
-      unit_cents: pack.price_cents,
-      amount_cents: amountCents,
-    }],
+  const { data, error } = await getSupabaseServiceClient().rpc("purchase_credit_pack", {
+    p_pack_id: input.packId,
+    p_tenant_id: input.tenantId,
+    p_subscription_id: input.subscriptionId,
+    p_quantity: input.quantity,
+    p_reason: input.reason,
+    p_created_by: input.createdBy,
   });
-  return { ...result, packName: pack.name, meterKey: pack.meter_key, packQuantity: pack.quantity * input.quantity };
+
+  if (error) throw new Error(error.message);
+
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) throw new Error("The purchase did not complete");
+
+  // The entitlement caches the allowance, so without this the agent's own usage panel keeps
+  // showing the pre-purchase number even though enforcement already honours the new credits.
+  await rebuildEntitlement(input.tenantId, "subscription.plan_changed");
+
+  return {
+    invoiceId: row.invoice_id,
+    number: row.number,
+    totalCents: row.total_cents,
+    grantId: row.grant_id,
+    packName: row.pack_name,
+    meterKey: row.meter_key,
+    packQuantity: row.granted_qty,
+  };
 }

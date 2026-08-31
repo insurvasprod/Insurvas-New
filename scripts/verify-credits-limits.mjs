@@ -105,6 +105,13 @@ async function main() {
     check("grant increases available capacity immediately", (afterCapacity.data?.[0]?.included ?? 0) >= (beforeCapacity.data?.[0]?.included ?? 0) + 20);
     const monitor = await (await request("/api/admin/credits-limits", {}, superCookie)).json();
     const monitorRow = monitor.monitor.find((row) => row.tenant_id === tenant.id && row.meter_key === "tcpa_checks");
+    // bugs_sa.md #12: enforcement saw the grant, the tenant's own screen did not.
+    const { data: entAfterGrant } = await supabase
+      .from("tenant_entitlements").select("entitlement").eq("tenant_id", tenant.id).maybeSingle();
+    check("the grant reaches the CACHED entitlement the agent's screen reads",
+          (entAfterGrant?.entitlement?.meters?.tcpa_checks?.included ?? 0) >= 20,
+          `cached included = ${entAfterGrant?.entitlement?.meters?.tcpa_checks?.included}`);
+
     check("grant appears in usage monitor", (monitorRow?.grant_qty ?? 0) >= 20);
     const auditRows = await supabase.from("audit_log").select("action, target_id").eq("action", "credit_grant.created").in("target_id", createdGrantIds);
     check("grant is audit-logged", (auditRows.data?.length ?? 0) === createdGrantIds.length);
@@ -114,6 +121,24 @@ async function main() {
     if (purchaseBody.invoiceId) createdInvoiceIds.push(purchaseBody.invoiceId);
     const { data: invoiceLine } = purchaseBody.invoiceId ? await supabase.from("invoice_lines").select("label, amount_cents").eq("invoice_id", purchaseBody.invoiceId).maybeSingle() : { data: null };
     check("buying a pack creates its invoice line", purchaseResponse.status === 201 && invoiceLine?.amount_cents === 1250);
+
+    // bugs_sa.md #11. The assertion above was the ONLY one covering a purchase, so the suite stayed
+    // green while customers were invoiced and given nothing. The criterion is about credits, not
+    // about an invoice line, and this is what says so.
+    const afterPurchase = await supabase.rpc("check_meter_capacity", { p_tenant_id: tenant.id, p_meter_key: "tcpa_checks", p_qty: 1 });
+    const includedAfterPurchase = afterPurchase.data?.[0]?.included ?? 0;
+    check(
+      "buying a pack actually grants the credits",
+      includedAfterPurchase >= (afterCapacity.data?.[0]?.included ?? 0) + 100,
+      `included went ${afterCapacity.data?.[0]?.included} -> ${includedAfterPurchase}; the pack is 100 tcpa_checks`,
+    );
+
+    const { data: purchaseGrant } = await supabase
+      .from("credit_grants").select("id, quantity, reason")
+      .eq("tenant_id", tenant.id).eq("meter_key", "tcpa_checks").order("granted_at", { ascending: false }).limit(1).maybeSingle();
+    if (purchaseGrant?.id) createdGrantIds.push(purchaseGrant.id);
+    check("the purchase is recorded as a grant, so it is auditable like any other",
+          purchaseGrant?.quantity === 100, JSON.stringify(purchaseGrant));
 
     const defaultBefore = await supabase.from("meter_pricing").select("default_included").eq("meter_key", "statement_pages").single();
     const defaultUpdate = await request("/api/admin/credits-limits/pricing", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ meter_key: "statement_pages", sell_cents: 100, default_included: 4321 }) }, superCookie);
