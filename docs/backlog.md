@@ -960,6 +960,39 @@ connected dialer” after a successful scrub rather than pretending to place a t
 future telephony ticket must invoke this same preflight immediately before handing a number to its
 provider.
 
+### 83. Two migration naming schemes now coexist, and a from-scratch rebuild breaks
+**From:** the module-4 merge · **Blocks a second environment, not production**
+
+`supabase/migrations/` holds 27 files in two incompatible schemes:
+
+- `0000_baseline.sql` … `0017_period_billing.sql` — the SA-4 line, where `0000_baseline.sql` is a
+  **generated dump of the live database** (`npm run db:dump`).
+- `20260830010000_sa_5_1_signup_enums.sql` … `20260830111500_*` — the timestamped SA-5 files.
+
+Two problems, both only visible when rebuilding from nothing:
+
+1. **Ordering is decided by string sort**, so every `00xx` file runs before every `2026…` file.
+   That is not the order they were written in, and nothing declares the real dependency.
+2. **The baseline already contains the SA-5 objects** — it was dumped from a database that had them
+   applied, so it creates `legal_doc_type`, `trial_reminder_kind`, `legal_documents`,
+   `legal_acceptances` and `trial_reminders`. The SA-5 migrations then try to create the same
+   objects again with unguarded `create type` / `create table`, which errors. The baseline's own
+   header says "objects created by the numbered migrations 0001+ are deliberately absent" — true of
+   the SA-4 files, not of the SA-5 ones it swallowed.
+
+The live database is fine: it has all of these applied already under their original names. This
+only bites a `supabase db reset`, a new staging project, or a disaster recovery.
+
+**Fix:** pick one scheme. The cheapest correct version is to regenerate the baseline *after* the
+merge and delete the SA-5 files it now subsumes, leaving `0000_baseline.sql` plus everything that
+came after it. Then verify with an actual reset against a throwaway project — this is precisely the
+class of problem that is only real when someone tries it.
+
+This supersedes the "9 migrations in the repo" half of [#56]: the baseline dump and
+`scripts/dump-schema.mjs` genuinely fixed the missing-schema problem, and replaced it with an
+ordering one.
+
+
 ---
 
 ## ✅ Resolved
