@@ -17,7 +17,9 @@ export default async function SystemPage() {
 
   return (
     <div className="space-y-6">
-      <AdminPageHeader title="System" subtitle="Maintenance mode and platform announcements." />
+      {/* "Maintenance" to match the sidebar — it is what the screen is for, where "System" said
+          nothing. The route stays /admin/system so existing links keep working. */}
+      <AdminPageHeader title="Maintenance" subtitle="Maintenance mode and platform announcements." />
       <SystemSettingsPanel initialMaintenance={maintenance} initialAnnouncements={announcements} />
     </div>
   );

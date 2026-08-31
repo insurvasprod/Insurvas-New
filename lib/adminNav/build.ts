@@ -31,7 +31,8 @@ import { group, link, type SidebarIconKey, type SidebarNode } from "./types.ts";
  *
  * Several are filed by who reaches for them rather than by which ticket built them, while still
  * carrying the section registry's permission: Features, Products and Templates under Catalog;
- * payment Setup and Offers under Billing. Platform keeps what is genuinely platform plumbing.
+ * payment Setup, Offers and Credits & limits under Billing. Platform keeps what is genuinely
+ * platform plumbing.
  */
 export function buildAdminNav(role: AdminRole): SidebarNode[] {
   const tenants = canViewTenants(role);
@@ -69,6 +70,9 @@ export function buildAdminNav(role: AdminRole): SidebarNode[] {
       // Beside Coupons on purpose: SA-4.4 is the campaign layer over the SA-3.6 coupon, so the
       // two belong to one subject even though different permissions gate them.
       section("offers", "/admin/offers", "Offers & discounts", "offers"),
+      // Credit packs are priced and sold, and the usage monitor is who is about to owe more —
+      // both billing questions, even though the meters behind them are platform config.
+      section("credits-limits", "/admin/credits-limits", "Credits & limits", "limits"),
       invoices ? link("/admin/revenue", "Revenue", "revenue") : null,
       // Payment provider, mode and keys. Filed with Billing because that is who reaches for it,
       // and named "Setup" because everything else in this group is a record while this is the
@@ -99,9 +103,8 @@ export function buildAdminNav(role: AdminRole): SidebarNode[] {
 
     ...group("platform", "Platform", "platform", [
       section("compliance-sources", "/admin/compliance-sources", "Compliance sources", "compliance"),
-      section("credits-limits", "/admin/credits-limits", "Credits & limits", "limits"),
       section("email", "/admin/email", "Email", "email"),
-      section("system", "/admin/system", "System", "system"),
+      section("system", "/admin/system", "Maintenance", "system"),
       section("advanced", "/admin/advanced", "Advanced", "advanced"),
       isSuperAdmin ? link("/admin/admins", "Admin users", "admins") : null,
       // Readable by every admin: an acceptance record is what a support agent needs in a dispute.
