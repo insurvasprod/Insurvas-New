@@ -1,11 +1,11 @@
 import type { AdminRole } from "@/lib/adminAuth/roles";
 
 /**
- * The Configuration Center is a route registry, not another settings store.
+ * The platform-configuration screens: who may open each, and what each is called.
  *
- * Adding a future section means adding one entry here. The dynamic route and the admin shell do
- * not change. `keywords` includes the setting labels that section owns, so the hub search can find
- * a setting before its section has its own implementation.
+ * This was the Configuration Center's route registry. The hub page is gone — every section is now
+ * its own route under /admin — but the registry is still the single place that decides which role
+ * may open which screen, so each page asks it rather than re-deriving the rule.
  */
 export const CONFIGURATION_SECTIONS = [
   {

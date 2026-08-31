@@ -15,7 +15,7 @@ async function fixture(label) {
   const { data: user } = await supabase.from("users").insert({ email: `${label.toLowerCase().replaceAll(" ", "-")}-${stamp}@insurvas.invalid`, name: label, status: "active" }).select("id").single();
   if (!tenant || !user) throw new Error("Could not create tenant fixture"); tenantIds.push(tenant.id); userIds.push(user.id);
   await supabase.from("tenant_users").insert({ tenant_id: tenant.id, user_id: user.id, role: "owner" });
-  const { data: plan } = await supabase.from("plans").select("id").eq("code", "plan_a").eq("version", 1).single(); if (!plan) throw new Error("Missing plan_a");
+  const { data: plan } = await supabase.from("plans").select("id").eq("code", "basic").eq("version", 1).single(); if (!plan) throw new Error("Missing the basic plan");
   const assigned = await supabase.rpc("admin_assign_subscription", { p_tenant_id: tenant.id, p_plan_id: plan.id, p_billing_cycle: "monthly", p_start: new Date().toISOString() }); if (assigned.error) throw new Error(assigned.error.message);
   await supabase.rpc("refresh_tenant_entitlement", { p_tenant_id: tenant.id }); return { tenantId: tenant.id, userId: user.id, cookie: await cookie(tenant.id, user.id), planId: plan.id };
 }

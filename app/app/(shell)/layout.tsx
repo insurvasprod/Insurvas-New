@@ -6,7 +6,10 @@ import { buildAgentMenu } from "@/lib/menu/definition";
 import { effectiveFeatures } from "@/lib/features/killSwitch";
 import { AgentSidebar } from "@/components/app/agent-sidebar";
 import { LogoutButton } from "@/components/app/logout-button";
-import { ThemeToggle } from "@/components/theme-toggle";
+import { resolveSignupContext, signupDestination } from "@/lib/signup/context";
+import { trialBanner } from "@/lib/trials/banner";
+import { outstandingDocuments } from "@/lib/legal/acceptance";
+import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { MaintenanceMessage } from "@/components/app/maintenance-message";
 import { AnnouncementStrip } from "@/components/app/announcement-strip";
 import { getMaintenanceStatus, getActiveAnnouncements } from "@/lib/system/service";
@@ -20,8 +23,22 @@ import { planDisplayName } from "@/lib/plans/display";
  * like it was built for the plan they bought.
  */
 export default async function AgentShellLayout({ children }: { children: React.ReactNode }) {
+  // Self-serve users must finish the gated signup states before the normal entitlement shell.
+  // Existing admin-created tenants use `not_started`, so they continue unchanged.
+  const signupContext = await resolveSignupContext();
+  if (signupContext) {
+    const destination = signupDestination(signupContext);
+    if (destination) redirect(destination);
+  }
+
   const context = await resolveTenantContext();
   if (!context) redirect("/app/login");
+
+  // SA-5.4: a material new version blocks the product until it is accepted. Placed after the
+  // session resolves and before the entitlement is read, so it cannot be skipped by deep-linking
+  // to any page inside the shell — every one of them renders through here.
+  const outstanding = await outstandingDocuments(context.userId);
+  if (outstanding.length > 0) redirect("/app/accept-terms");
 
   const entitlement = await getEntitlement(context.tenantId);
   const maintenance = await getMaintenanceStatus();
@@ -51,6 +68,20 @@ export default async function AgentShellLayout({ children }: { children: React.R
     </div>
   );
 
+  // SA-5.3: the in-app half of the day-13 reminder. Only queried for a tenant actually on trial,
+  // and trial_ends_at is deliberately not added to the entitlement contract — that object is the
+  // versioned agreement between the two planes, not a place for screen-level trivia.
+  let banner = null;
+  if (entitlement.status === "trialing") {
+    const { data: sub } = await getSupabaseServiceClient()
+      .from("subscriptions")
+      .select("trial_ends_at")
+      .eq("tenant_id", context.tenantId)
+      .eq("status", "trialing")
+      .maybeSingle();
+    banner = trialBanner(sub?.trial_ends_at ? new Date(sub.trial_ends_at) : null);
+  }
+
   return (
     <div className="flex min-h-screen flex-col md:flex-row">
       <AgentSidebar menu={menu} footer={footer} />
@@ -59,8 +90,21 @@ export default async function AgentShellLayout({ children }: { children: React.R
           defaults to min-width:auto, so <main> refuses to shrink below its widest child and one
           wide table drags the whole page sideways. */}
       <main className="min-w-0 flex-1 bg-[var(--color-page-bg)] p-4 sm:p-6 lg:p-8">
+        {/* Ordered by urgency: a platform-wide outage outranks a campaign announcement, which
+            outranks a trial ending, which outranks an account already known to be read-only. */}
         <MaintenanceMessage status={maintenance} />
         <AnnouncementStrip initialAnnouncements={announcements} />
+        {banner && (
+          <div
+            className={`mb-6 rounded-lg border p-4 text-sm ${
+              banner.tone === "urgent"
+                ? "border-[var(--color-warning)]/40 bg-[var(--color-warning)]/10"
+                : "border-border bg-muted/40"
+            }`}
+          >
+            {banner.message}
+          </div>
+        )}
         {entitlement.access === "read_only" && (
           <div
             role="status"

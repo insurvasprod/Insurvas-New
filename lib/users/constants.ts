@@ -1,14 +1,16 @@
-export const USER_STATUSES = ["active", "inactive", "suspended"] as const;
+export const USER_STATUSES = ["pending_verification", "active", "inactive", "suspended"] as const;
 
 export type UserStatus = (typeof USER_STATUSES)[number];
 
 export const USER_STATUS_LABELS: Record<UserStatus, string> = {
+  pending_verification: "Pending verification",
   active: "Active",
   inactive: "Inactive",
   suspended: "Suspended",
 };
 
 export const USER_STATUS_BADGE_CLASS: Record<UserStatus, string> = {
+  pending_verification: "border-transparent bg-[var(--color-warning)]/10 text-[var(--color-warning)]",
   active: "border-transparent bg-[var(--color-success)]/10 text-[var(--color-success)]",
   inactive: "border-transparent bg-muted text-muted-foreground",
   suspended: "border-transparent bg-[var(--color-danger)]/10 text-[var(--color-danger)]",

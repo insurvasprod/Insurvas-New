@@ -45,65 +45,54 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   const { data: invoice } = await supabase
     .from("invoices")
-    .select("id, number, status, tenant_id, total_cents")
+    .select("id, number, tenant_id, total_cents")
     .eq("id", id)
-    .maybeSingle<{ id: string; number: string; status: string; tenant_id: string; total_cents: number }>();
+    .maybeSingle<{ id: string; number: string; tenant_id: string; total_cents: number }>();
 
   if (!invoice) return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
-  if (invoice.status === "paid") {
-    return NextResponse.json({ error: "This invoice is already paid" }, { status: 409 });
-  }
-  if (invoice.status === "void") {
-    return NextResponse.json({ error: "A void invoice cannot be paid" }, { status: 409 });
-  }
 
-  const { error: insertError } = await supabase.from("payments").insert({
-    invoice_id: invoice.id,
-    tenant_id: invoice.tenant_id,
-    amount_cents: amountCents,
-    method: "manual_bank_transfer",
-    manual_reference: parsed.data.reference,
-    recorded_by: auth.session.sub,
-    paid_at: parsed.data.paid_at ?? new Date().toISOString(),
-    status: "succeeded",
+  // bugs_sa.md M3-4. This was five separate statements — payment insert, invoice update,
+  // subscription update, entitlement rebuild — with the update errors ignored. A partial failure
+  // left a recorded payment against an unpaid invoice, and the retry was then refused by the
+  // unique index on the bank reference: money recorded, invoice never settled, no way to fix it
+  // from the UI. It also activated EVERY subscription belonging to the tenant and accepted more
+  // than the outstanding balance.
+  const { data: result, error: settleError } = await supabase.rpc("admin_settle_invoice_manually", {
+    p_invoice_id: invoice.id,
+    p_amount_cents: amountCents,
+    p_reference: parsed.data.reference,
+    p_paid_at: parsed.data.paid_at ?? null,
+    p_recorded_by: auth.session.sub,
   });
 
-  // The unique index on (tenant_id, manual_reference) is what makes "recording the same payment
-  // twice is rejected" true, rather than relying on the admin noticing.
-  if (insertError?.code === "23505") {
-    return NextResponse.json(
-      { error: `A payment with reference "${parsed.data.reference}" is already recorded for this tenant` },
-      { status: 409 },
-    );
-  }
-  if (insertError) {
+  if (settleError) {
+    // The unique index on (tenant_id, manual_reference) is what makes "recording the same payment
+    // twice is rejected" true, rather than relying on the admin noticing.
+    if (settleError.code === "23505") {
+      return NextResponse.json(
+        { error: `A payment with reference "${parsed.data.reference}" is already recorded for this tenant` },
+        { status: 409 },
+      );
+    }
+    // Refusals the function raises deliberately — already paid, void, over the outstanding
+    // balance — are the caller's problem to fix, not a server fault.
+    if (settleError.code === "23514" || /already paid|void invoice|more than the|more than zero/.test(settleError.message)) {
+      return NextResponse.json({ error: settleError.message }, { status: 409 });
+    }
+    console.error("[invoices] manual settlement failed", invoice.id, settleError);
     return NextResponse.json({ error: "Could not record the payment" }, { status: 500 });
   }
 
-  // Everything received against this invoice, not just this payment — a second partial payment
-  // must be able to complete an invoice the first one left short.
-  const { data: payments } = await supabase
-    .from("payments")
-    .select("amount_cents")
-    .eq("invoice_id", invoice.id)
-    .eq("status", "succeeded");
+  const row = Array.isArray(result) ? result[0] : result;
+  if (!row) return NextResponse.json({ error: "Could not record the payment" }, { status: 500 });
 
-  const paidCents = (payments ?? []).reduce((sum, p) => sum + p.amount_cents, 0);
-  const settled = paidCents >= invoice.total_cents;
+  const settled = row.settled;
+  const paidCents = row.paid_cents;
 
-  if (settled) {
-    await supabase
-      .from("invoices")
-      .update({ status: "paid", paid_at: new Date().toISOString() })
-      .eq("id", invoice.id);
-
-    // The subscription follows the money, and the entitlement follows the subscription — the
-    // whole point of the ticket is that nobody has to remember to do this.
-    await supabase
-      .from("subscriptions")
-      .update({ status: "active" })
-      .eq("tenant_id", invoice.tenant_id);
-
+  // Outside the transaction on purpose: the entitlement is a cache, and failing the settlement
+  // because the cache could not be rebuilt would undo money that has genuinely been received.
+  // rebuildEntitlement logs loudly and tenant_entitlements.version makes staleness detectable.
+  if (row.subscription_activated) {
     await rebuildEntitlement(invoice.tenant_id, "subscription.plan_changed");
   }
 
@@ -120,6 +109,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       reference: parsed.data.reference,
       settled,
       paidToDateCents: paidCents,
+      subscriptionId: row.subscription_id,
+      subscriptionActivated: row.subscription_activated,
     },
     request,
   });

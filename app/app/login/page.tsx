@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import Link from "next/link";
 import type { MaintenanceStatus } from "@/lib/system/constants";
 
 export default function TenantLoginPage() {
@@ -44,7 +45,8 @@ export default function TenantLoginPage() {
       return;
     }
 
-    router.push("/app");
+    const body = await res.json().catch(() => null);
+    router.push(body?.redirectTo ?? "/app");
     router.refresh();
   }
 
@@ -93,8 +95,11 @@ export default function TenantLoginPage() {
               {loading ? "Signing in…" : "Sign in"}
             </Button>
           </form>
-          <p className="mt-5 text-center text-sm text-muted-foreground">
-            New to Insurvas? <Link className="font-medium text-[var(--color-blue)] hover:underline" href="/app/signup">Create a workspace</Link>
+          <p className="mt-5 text-center text-xs text-[var(--color-text-muted)]">
+            New to Insurvas?{" "}
+            <Link href="/pricing" className="font-bold text-[var(--brand-600)] hover:underline">
+              View plans and create an account
+            </Link>
           </p>
         </CardContent>
       </Card>

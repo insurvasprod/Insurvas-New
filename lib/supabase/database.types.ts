@@ -42,6 +42,156 @@ export type Database = {
         };
         Relationships: [];
       };
+      email_log: {
+        Row: {
+          dedupe_key: string | null;
+          failure_reason: string | null;
+          id: string;
+          provider: string;
+          provider_message_id: string | null;
+          status: Database["public"]["Enums"]["email_status"];
+          subject: string;
+          template_key: string;
+          tenant_id: string | null;
+          to_address: string;
+          ts: string;
+          user_id: string | null;
+        };
+        Insert: {
+          dedupe_key?: string | null;
+          failure_reason?: string | null;
+          id?: string;
+          provider?: string;
+          provider_message_id?: string | null;
+          status: Database["public"]["Enums"]["email_status"];
+          subject: string;
+          template_key: string;
+          tenant_id?: string | null;
+          to_address: string;
+          ts?: string;
+          user_id?: string | null;
+        };
+        // Append-only: UPDATE and DELETE are revoked at the database, so a call that would be
+        // refused at runtime fails to compile instead.
+        Update: never;
+        Relationships: [];
+      };
+      legal_documents: {
+        Row: {
+          change_summary: string | null;
+          content: string;
+          doc_type: Database["public"]["Enums"]["legal_doc_type"];
+          effective_date: string;
+          id: string;
+          is_draft: boolean;
+          published_at: string;
+          published_by: string | null;
+          requires_reacceptance: boolean;
+          title: string;
+          version: number;
+        };
+        Insert: {
+          change_summary?: string | null;
+          content: string;
+          doc_type: Database["public"]["Enums"]["legal_doc_type"];
+          effective_date: string;
+          id?: string;
+          is_draft?: boolean;
+          published_at?: string;
+          published_by?: string | null;
+          requires_reacceptance?: boolean;
+          title: string;
+          version: number;
+        };
+        // UPDATE and DELETE are revoked at the database. Typed as never so a call that would be
+        // refused at runtime fails to compile instead.
+        Update: never;
+        Relationships: [];
+      };
+      legal_acceptances: {
+        Row: {
+          accepted_at: string;
+          context: string;
+          doc_type: Database["public"]["Enums"]["legal_doc_type"];
+          document_id: string;
+          id: string;
+          ip: string | null;
+          user_agent: string | null;
+          user_id: string;
+          version: number;
+        };
+        Insert: {
+          accepted_at?: string;
+          context?: string;
+          doc_type: Database["public"]["Enums"]["legal_doc_type"];
+          document_id: string;
+          id?: string;
+          ip?: string | null;
+          user_agent?: string | null;
+          user_id: string;
+          version: number;
+        };
+        Update: never;
+        Relationships: [];
+      };
+      trial_reminders: {
+        Row: {
+          delivered: boolean;
+          due_at: string;
+          id: string;
+          kind: Database["public"]["Enums"]["trial_reminder_kind"];
+          sent_at: string;
+          subscription_id: string;
+          trial_ends_at: string;
+        };
+        Insert: {
+          delivered?: boolean;
+          due_at: string;
+          id?: string;
+          kind: Database["public"]["Enums"]["trial_reminder_kind"];
+          sent_at?: string;
+          subscription_id: string;
+          trial_ends_at: string;
+        };
+        Update: { delivered?: boolean };
+        Relationships: [];
+      };
+      checkout_sessions: {
+        Row: {
+          billing_cycle: Database["public"]["Enums"]["billing_cycle"];
+          checkout_url: string;
+          completed_at: string | null;
+          coupon_id: string | null;
+          created_at: string;
+          id: string;
+          plan_id: string;
+          provider: string;
+          provider_config_id: string;
+          status: string;
+          tenant_id: string;
+        };
+        Insert: {
+          billing_cycle: Database["public"]["Enums"]["billing_cycle"];
+          checkout_url: string;
+          completed_at?: string | null;
+          coupon_id?: string | null;
+          created_at?: string;
+          id?: string;
+          plan_id: string;
+          provider?: string;
+          provider_config_id: string;
+          status?: string;
+          tenant_id: string;
+        };
+        Update: { status?: string; completed_at?: string | null };
+        Relationships: [];
+      };
+      rate_limits: {
+        Row: { bucket_key: string; window_start: string; hits: number };
+        Insert: { bucket_key: string; window_start: string; hits?: number };
+        Update: { hits?: number };
+        Relationships: [];
+      };
       compliance_vendors: {
         Row: {
           id: string;
@@ -913,6 +1063,7 @@ export type Database = {
           id: string;
           is_archived: boolean;
           is_public: boolean;
+          is_default: boolean;
           name: string;
           plan_type: Database["public"]["Enums"]["plan_type"];
           sort_order: number;
@@ -925,6 +1076,7 @@ export type Database = {
           id?: string;
           is_archived?: boolean;
           is_public?: boolean;
+          is_default?: boolean;
           name: string;
           plan_type: Database["public"]["Enums"]["plan_type"];
           sort_order?: number;
@@ -937,6 +1089,7 @@ export type Database = {
           id?: string;
           is_archived?: boolean;
           is_public?: boolean;
+          is_default?: boolean;
           name?: string;
           plan_type?: Database["public"]["Enums"]["plan_type"];
           sort_order?: number;
@@ -1424,6 +1577,68 @@ export type Database = {
         };
         Relationships: [];
       };
+      signup_selections: {
+        Row: {
+          billing_cycle: Database["public"]["Enums"]["billing_cycle"];
+          plan_id: string;
+          selected_at: string;
+          tenant_id: string;
+        };
+        Insert: {
+          billing_cycle: Database["public"]["Enums"]["billing_cycle"];
+          plan_id: string;
+          selected_at?: string;
+          tenant_id: string;
+        };
+        Update: {
+          billing_cycle?: Database["public"]["Enums"]["billing_cycle"];
+          plan_id?: string;
+          selected_at?: string;
+          tenant_id?: string;
+        };
+        Relationships: [];
+      };
+      business_profiles: {
+        Row: {
+          business_name: string;
+          completed_at: string;
+          lead_source_other: string | null;
+          lead_sources: string[];
+          monthly_volume_range: string;
+          npn: string;
+          primary_state: string;
+          products_sold: string[];
+          recommended_setup_steps: string[];
+          tenant_id: string;
+          updated_at: string;
+        };
+        Insert: {
+          business_name: string;
+          completed_at?: string;
+          lead_source_other?: string | null;
+          lead_sources: string[];
+          monthly_volume_range: string;
+          npn: string;
+          primary_state: string;
+          products_sold: string[];
+          recommended_setup_steps?: string[];
+          tenant_id: string;
+          updated_at?: string;
+        };
+        Update: {
+          business_name?: string;
+          completed_at?: string;
+          lead_source_other?: string | null;
+          lead_sources?: string[];
+          monthly_volume_range?: string;
+          npn?: string;
+          primary_state?: string;
+          products_sold?: string[];
+          recommended_setup_steps?: string[];
+          tenant_id?: string;
+        };
+        Relationships: [];
+      };
       // HAND-ADDED for the period billing run (backlog #41/#44/#46), not generated. Both tables
       // ship in supabase/migrations/0017_period_billing.sql; regenerate this file once that
       // migration has been applied and these blocks should come back identical.
@@ -1772,6 +1987,54 @@ export type Database = {
       };
     };
     Views: {
+      current_legal_documents: {
+        Row: {
+          change_summary: string | null;
+          doc_type: Database["public"]["Enums"]["legal_doc_type"];
+          effective_date: string;
+          id: string;
+          is_draft: boolean;
+          published_at: string;
+          requires_reacceptance: boolean;
+          title: string;
+          version: number;
+        };
+        Relationships: [];
+      };
+      admin_legal_acceptance_stats: {
+        Row: {
+          accepted_count: number;
+          doc_type: Database["public"]["Enums"]["legal_doc_type"];
+          document_id: string;
+          eligible_users: number;
+          is_draft: boolean;
+          published_at: string;
+          requires_reacceptance: boolean;
+          title: string;
+          version: number;
+        };
+        Relationships: [];
+      };
+      admin_trials_in_flight: {
+        Row: {
+          billing_cycle: Database["public"]["Enums"]["billing_cycle"];
+          business_name: string | null;
+          days_elapsed: number;
+          days_remaining: number;
+          has_payment_method: boolean;
+          last_login_at: string | null;
+          owner_email: string | null;
+          owner_name: string | null;
+          plan_code: string;
+          plan_name: string;
+          started_at: string;
+          subscription_id: string;
+          tenant_id: string;
+          tenant_name: string;
+          trial_ends_at: string;
+        };
+        Relationships: [];
+      };
       admin_plan_list: {
         Row: {
           code: string | null;
@@ -1781,6 +2044,7 @@ export type Database = {
           id: string | null;
           is_archived: boolean | null;
           is_public: boolean | null;
+          is_default: boolean | null;
           name: string | null;
           plan_type: Database["public"]["Enums"]["plan_type"] | null;
           sort_order: number | null;
@@ -1812,9 +2076,45 @@ export type Database = {
       };
     };
     Functions: {
-      claim_rate_limit: {
-        Args: { p_key: string; p_max: number; p_window_seconds: number };
-        Returns: boolean;
+      self_serve_signup: {
+        Args: {
+          p_billing_cycle: Database["public"]["Enums"]["billing_cycle"];
+          p_email: string;
+          p_expires_at: string;
+          p_name: string;
+          p_password_hash: string;
+          p_phone: string;
+          p_plan_id: string;
+          p_token_hash: string;
+        };
+        Returns: { tenant_id: string; user_id: string; verification_id: string }[];
+      };
+      complete_signup_email_verification: {
+        Args: { p_token_hash: string };
+        Returns: { email: string; tenant_id: string; user_id: string }[];
+      };
+      refresh_signup_verification: {
+        Args: {
+          p_expires_at: string;
+          p_new_email: string;
+          p_token_hash: string;
+          p_user_id: string;
+        };
+        Returns: { email: string; verification_id: string }[];
+      };
+      save_signup_business_profile: {
+        Args: {
+          p_business_name: string;
+          p_lead_source_other: string;
+          p_lead_sources: string[];
+          p_monthly_volume_range: string;
+          p_npn: string;
+          p_primary_state: string;
+          p_products_sold: string[];
+          p_recommended_setup_steps: string[];
+          p_user_id: string;
+        };
+        Returns: { onboarding_state: string; tenant_id: string }[];
       };
       admin_create_user: {
         Args: {
@@ -1849,6 +2149,22 @@ export type Database = {
           old_role: Database["public"]["Enums"]["tenant_user_role"];
         }[];
       };
+      consume_user_email_change_token: {
+        Args: { p_token_hash: string };
+        Returns: {
+          accepted_at: string;
+          email: string;
+          user_id: string;
+        }[];
+      };
+      consume_user_password_token: {
+        Args: { p_password_hash: string; p_token_hash: string };
+        Returns: {
+          accepted_at: string;
+          purpose: Database["public"]["Enums"]["user_token_purpose"];
+          user_id: string;
+        }[];
+      };
       admin_create_plan_version: {
         Args: { p_plan_id: string };
         Returns: string;
@@ -1879,6 +2195,66 @@ export type Database = {
           p_lines: Json;
         };
         Returns: { invoice_id: string; number: string; created: boolean; reconciliation: string }[];
+      };
+      prune_email_log: {
+        Args: { p_days?: number };
+        Returns: number;
+      };
+      publish_legal_document: {
+        Args: {
+          p_doc_type: Database["public"]["Enums"]["legal_doc_type"];
+          p_title: string;
+          p_content: string;
+          p_effective_date: string;
+          p_change_summary: string | null;
+          p_requires_reacceptance: boolean;
+          p_published_by: string | null;
+        };
+        Returns: Database["public"]["Tables"]["legal_documents"]["Row"];
+      };
+      clear_reacceptance_requirement: {
+        Args: { p_document_id: string };
+        Returns: Database["public"]["Tables"]["legal_documents"]["Row"];
+      };
+      record_legal_acceptance: {
+        Args: {
+          p_user_id: string;
+          p_document_id: string;
+          p_ip: string | null;
+          p_user_agent: string | null;
+          p_context: string;
+        };
+        Returns: Database["public"]["Tables"]["legal_acceptances"]["Row"];
+      };
+      outstanding_legal_documents: {
+        Args: { p_user_id: string };
+        Returns: Database["public"]["Views"]["current_legal_documents"]["Row"][];
+      };
+      extend_trial: {
+        Args: { p_subscription_id: string; p_days: number };
+        Returns: { trial_ends_at: string; current_period_end: string }[];
+      };
+      create_subscription_from_checkout: {
+        Args: {
+          p_tenant_id: string;
+          p_plan_id: string;
+          p_billing_cycle: Database["public"]["Enums"]["billing_cycle"];
+          p_whop_membership_id: string | null;
+          p_trial_days: number;
+        };
+        Returns: {
+          subscription_id: string;
+          created: boolean;
+          status: Database["public"]["Enums"]["subscription_status"];
+        }[];
+      };
+      claim_rate_limit: {
+        Args: { p_key: string; p_max: number; p_window_seconds: number };
+        Returns: boolean;
+      };
+      prune_rate_limits: {
+        Args: Record<string, never>;
+        Returns: number;
       };
       compute_metrics_for_date: {
         Args: { p_date: string };
@@ -1912,6 +2288,50 @@ export type Database = {
       allocate_document_number: {
         Args: { p_series: string; p_at: string };
         Returns: string;
+      };
+      admin_settle_invoice_manually: {
+        Args: {
+          p_invoice_id: string;
+          p_amount_cents: number;
+          p_reference: string;
+          p_paid_at: string | null;
+          p_recorded_by: string | null;
+        };
+        Returns: {
+          payment_id: string;
+          invoice_status: Database["public"]["Enums"]["invoice_status"];
+          paid_cents: number;
+          settled: boolean;
+          subscription_id: string | null;
+          subscription_activated: boolean;
+        }[];
+      };
+      admin_set_subscription_pause_state: {
+        Args: { p_subscription_id: string; p_pause: boolean };
+        Returns: {
+          subscription_id: string;
+          status: Database["public"]["Enums"]["subscription_status"];
+          previous: Database["public"]["Enums"]["subscription_status"];
+        }[];
+      };
+      purchase_credit_pack: {
+        Args: {
+          p_pack_id: string;
+          p_tenant_id: string;
+          p_subscription_id: string | null;
+          p_quantity: number;
+          p_reason: string;
+          p_created_by: string | null;
+        };
+        Returns: {
+          invoice_id: string;
+          number: string;
+          total_cents: number;
+          grant_id: string;
+          granted_qty: number;
+          meter_key: string;
+          pack_name: string;
+        }[];
       };
       create_custom_invoice: {
         Args: {
@@ -2167,12 +2587,15 @@ export type Database = {
       };
     };
     Enums: {
+      legal_doc_type: "tos" | "privacy" | "dpa";
+      email_status: "sent" | "failed" | "skipped";
       admin_role: "super_admin" | "support_agent" | "billing_admin" | "platform_config";
       audit_actor_type: "admin" | "system";
       billing_cycle: "monthly" | "quarterly" | "yearly";
       invoice_status: "draft" | "issued" | "paid" | "overdue" | "void" | "uncollectible";
       invoice_line_kind: "plan" | "addon" | "overage" | "discount" | "setup_fee" | "credit";
       billing_mode: "automatic" | "manual";
+      trial_reminder_kind: "four_days_left" | "final_day";
       credit_note_type: "refund" | "credit" | "waiver";
       credit_note_status: "pending_approval" | "approved" | "processing" | "succeeded" | "failed" | "rejected";
       credit_reason: "duplicate_charge" | "service_issue" | "goodwill" | "billing_error" | "cancellation" | "other";
@@ -2193,8 +2616,8 @@ export type Database = {
         | "cancelled";
       tenant_status: "provisioning" | "active" | "suspended" | "cancelled";
       tenant_user_role: "owner" | "producer" | "assistant" | "bookkeeper";
-      user_status: "active" | "inactive" | "suspended" | "deleted";
-      user_token_purpose: "invite" | "password_reset" | "email_change";
+      user_status: "pending_verification" | "active" | "inactive" | "suspended" | "deleted";
+      user_token_purpose: "invite" | "password_reset" | "email_change" | "email_verification";
     };
     CompositeTypes: {
       [_ in never]: never;

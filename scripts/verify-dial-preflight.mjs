@@ -24,8 +24,8 @@ async function api(path, requestCookie, options = {}) {
 }
 
 async function main() {
-  const { data: plan, error: planError } = await supabase.from("plans").select("id").eq("code", "plan_c").eq("version", 1).single();
-  if (planError || !plan) throw new Error(`Missing plan_c fixture: ${planError?.message ?? "not found"}`);
+  const { data: plan, error: planError } = await supabase.from("plans").select("id").eq("code", "advance").eq("version", 1).single();
+  if (planError || !plan) throw new Error(`Missing the advance plan fixture: ${planError?.message ?? "not found"}`);
   const tenant = await supabase.from("tenants").insert({ name: `SA48 dialer ${stamp}`, status: "active" }).select("id").single();
   if (tenant.error) throw new Error(tenant.error.message);
   tenantId = tenant.data.id;

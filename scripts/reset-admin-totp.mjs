@@ -1,13 +1,19 @@
-// Regenerates the TOTP secret for one admin — for when the original QR/manual
-// key from seeding or account creation was lost before enrollment finished.
-// Run with: npm run reset:totp -- someone@insurvas.com
+// Shows or regenerates the TOTP secret for one admin.
+//
+//   npm run reset:totp -- someone@insurvas.com --show   read the CURRENT key, changes nothing
+//   npm run reset:totp -- someone@insurvas.com          generate a NEW key, old codes stop working
+//
+// --show exists because reading your own key should not require destroying it: without it, the
+// only way to see the manual entry code was to reset it and re-enrol every device.
 import { createClient } from "@supabase/supabase-js";
 import * as OTPAuth from "otpauth";
 import QRCode from "qrcode";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const email = (process.argv[2] ?? process.env.SEED_SUPER_ADMIN_EMAIL)?.toLowerCase();
+const args = process.argv.slice(2);
+const showOnly = args.includes("--show");
+const email = (args.find((a) => !a.startsWith("--")) ?? process.env.SEED_SUPER_ADMIN_EMAIL)?.toLowerCase();
 
 if (!url || !serviceKey) {
   console.error("Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY in .env.local");
@@ -20,22 +26,42 @@ if (!email) {
 
 const supabase = createClient(url, serviceKey, { auth: { persistSession: false } });
 
-const totpSecret = new OTPAuth.Secret({ size: 20 }).base32;
+let totpSecret;
 
-const { data: updated, error } = await supabase
-  .from("admin_users")
-  .update({ totp_secret: totpSecret })
-  .eq("email", email)
-  .select("email")
-  .maybeSingle();
+if (showOnly) {
+  const { data: existing, error } = await supabase
+    .from("admin_users")
+    .select("email, totp_secret")
+    .eq("email", email)
+    .maybeSingle();
 
-if (error) {
-  console.error("Could not reset TOTP secret:", error.message);
-  process.exit(1);
-}
-if (!updated) {
-  console.error(`No admin_users row found for ${email}`);
-  process.exit(1);
+  if (error) {
+    console.error("Could not read the TOTP secret:", error.message);
+    process.exit(1);
+  }
+  if (!existing) {
+    console.error(`No admin_users row found for ${email}`);
+    process.exit(1);
+  }
+  totpSecret = existing.totp_secret;
+} else {
+  totpSecret = new OTPAuth.Secret({ size: 20 }).base32;
+
+  const { data: updated, error } = await supabase
+    .from("admin_users")
+    .update({ totp_secret: totpSecret })
+    .eq("email", email)
+    .select("email")
+    .maybeSingle();
+
+  if (error) {
+    console.error("Could not reset TOTP secret:", error.message);
+    process.exit(1);
+  }
+  if (!updated) {
+    console.error(`No admin_users row found for ${email}`);
+    process.exit(1);
+  }
 }
 
 const totp = new OTPAuth.TOTP({

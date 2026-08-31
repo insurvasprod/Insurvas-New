@@ -26,7 +26,7 @@ password, directly-created users get an invite link.
 
 ## 🟠 Descoped by decision
 
-### 53. Nine of the eleven settings the ticket lists were not created
+### 76. Nine of the eleven settings the ticket lists were not created  *(was #53 on the module-4 branch — renumbered on merge, where main had already used #53 for something else)*
 **From:** SA-4.1 · **Decided while building, 2026-08-30**
 
 SA-4.1 names eleven keys under *"Settings needed by the tasks above."* Two of them exist. The store
@@ -67,7 +67,7 @@ reads it — the machinery is built and tested.
 **Fix:** none. Recorded so that the gap between the ticket's list and the store is a decision on
 the record rather than something that looks like an oversight.
 
-### 54. Payment credentials remain environment configuration, not database data
+### 77. Payment credentials remain environment configuration, not database data  *(was #54 on the module-4 branch — renumbered on merge, where main had already used #54 for something else)*
 **From:** SA-4.2 · **Decided while building, 2026-08-30**
 
 The Whop API key, base URL, webhook secret, product ID and account ID remain in process
@@ -81,7 +81,7 @@ and base URL change, not a code change.
 **Fix:** none. Keep credentials out of the settings store and database until a real secret-manager
 integration is selected.
 
-### 55. SA-4.2 original unchecked criteria not implemented after the Whop-only decision
+### 78. SA-4.2 original unchecked criteria not implemented after the Whop-only decision  *(was #55 on the module-4 branch — renumbered on merge, where main had already used #55 for something else)*
 **From:** SA-4.2 acceptance checklist · **Decision:** Whop-only scope retained on 2026-08-30
 
 The original ticket still contains seven checkbox criteria, but most describe the two-provider
@@ -113,7 +113,7 @@ The original `provider_settings.credentials_enc` / encrypted-at-rest database de
 implemented. Credentials intentionally remain in environment variables; see #54. Reopening any
 of these NOT APPLICABLE or NOT IMPLEMENTED decisions requires an explicit product-scope change.
 
-### 56. SA-4.3 has a deliberate role-scope deviation and future section saves are pending
+### 79. SA-4.3 has a deliberate role-scope deviation and future section saves are pending  *(was #56 on the module-4 branch — renumbered on merge, where main had already used #56 for something else)*
 **From:** SA-4.3 acceptance checklist · **Decision:** option 1 selected by the user on 2026-08-30
 
 The Configuration Center is implemented as a shared route registry and shell. The role matrix is
@@ -137,7 +137,7 @@ health activity, not configuration changes.
 **Fix:** implement and verify each section's own form in its owning ticket. Reopen the role matrix
 only if the product decision about payment credentials changes.
 
-### 50. The hardcoded-constant sweep is deliberately partial
+### 80. The hardcoded-constant sweep is deliberately partial  *(was #50 on the module-4 branch — renumbered on merge, where main had already used #50 for something else)*
 **From:** SA-4.1 · **Decided while building, 2026-08-30**
 
 SA-4.1's first acceptance criterion is *"no dunning day, trial length or expiry window is hardcoded
@@ -224,6 +224,11 @@ expiry, hashed tokens, resend, revocation. Only the transport is missing.
 
 **Fix:** replace that one function body when SA-4.11 picks a provider. No caller changes.
 
+SA-5.3 added a second caller with the same shape: `scripts/send-trial-reminders.mjs` composes the
+real reminder — the customer's own plan, price and end date — decides delivery, and records a row
+with `delivered: false`. Everything except the transport is real, and the column says which it was,
+so the day keys arrive nothing about the job changes.
+
 ### 6. Users list still reads the wrong plan source — STILL OPEN
 **From:** SA-1.1 · ⚠️ **Now definitely wrong, not just empty. Worth doing next.**
 
@@ -237,17 +242,6 @@ Users list shows "No plan yet". Two notions of the same fact, and the screen rea
 Fix: repoint `admin_user_list.plan_code` at the subscription's plan, then drop `tenants.plan_code`
 rather than leaving a decoy column that will mislead the next person.
 
-### 21. "Only monthly at checkout" can't be verified yet
-**From:** SA-2.4 · **Belongs to:** SA-5.2
-
-SA-2.4's criterion is *"a plan with only `price_monthly` set offers only monthly at checkout."*
-There is no checkout — that's SA-5.2.
-
-The **data half is done and tested**: a null cycle price means that cycle isn't offered, and
-`availableBillingCycles()` is the single helper that answers the question, with unit tests
-(including that **zero is a price but null is an absence** — a free plan must still be buyable).
-SA-5.2 should call that helper rather than re-deriving the rule.
-
 ### 20. Removing an archived feature from a plan needs a detour
 **From:** SA-2.3 · Minor
 
@@ -257,22 +251,6 @@ The picker shows it ticked and locked.
 
 Consequence: to genuinely remove one, an admin must un-archive the feature, untick it, then
 re-archive. Rare enough to be acceptable; worth a dedicated "revoke" action if it ever bites.
-
-### 16. Archive-doesn't-break-existing-plans — now verified at the data layer
-**From:** SA-2.1 → **mostly closed in SA-2.3** · Remaining part belongs to SA-2.8
-
-SA-2.1's criterion: *"archiving a feature does not break plans that already reference it — it
-stays enforced for existing subscribers and disappears from the picker."*
-
-Both halves now hold at the data layer, tested in SQL: archiving keeps the row, removes it from
-the picker, and **`admin_set_plan_features` re-adds any archived grant the plan already had**, so
-saving the picker can't silently revoke it. Verified: archive a granted feature, save without it,
-it survives.
-
-Still outstanding: "enforced" ultimately means the agent app honours it, which needs SA-2.8's
-entitlement engine. The grant is correct in the database; nothing reads it yet.
-
----
 
 ## 🔵 Unverified
 
@@ -317,6 +295,24 @@ API cannot be opened as a standalone browser document because the in-app browser
 ### 57. SA-4.4 live and browser verification completed
 **From:** SA-4.4 · **Verified in live project, 2026-08-30**
 
+Several tickets specify acceptance as *"an automated test that runs in CI."* The repository now
+has a substantial verification surface — 169 unit tests currently, plus dedicated scripts
+for tenant isolation, feature keys, entitlements, payments, webhooks, invoices, subscription
+events, coupons, custom invoices and credit notes — but `.github/workflows/` still does not exist.
+
+`npm run check:features` is no longer dormant: it hard-fails references to unknown feature keys and
+reports the remaining 25 unguarded features as TODO until the agent app exists. The flag that makes
+complete guard coverage mandatory still needs to be flipped when LA-0.1 ships those routes.
+
+**Largely closed by PR #8**, which added `.github/workflows/ci.yml`. Confirm it runs `next build`,
+`eslint`, `npm test` and `check:features` on pull requests, and note that the database verification
+scripts still need a disposable project rather than production — several create and clean up rows.
+
+**Original fix:** add a PR workflow for `next build`, `eslint`, `npm test` and `check:features`. Database
+verification scripts should run against a disposable/staging Supabase project, not production,
+because several intentionally create and clean up rows. Add tenant isolation there or as a
+scheduled integration job. This would have caught the server-only bundling bug that broke the
+first Vercel deploy.
 The `offers` migration was applied to the Insurvas-Saas Supabase project as
 `sa_4_4_offers`. The live verification script passes auto-apply, apply-time redemption caps,
 rejected-capacity preservation, three-invoice duration, end-date auto-apply cutoff, admin API
@@ -534,7 +530,7 @@ and density are not.
 
 ## ⚪ Tech debt
 
-### 51. The settings cache only invalidates on the instance that wrote
+### 81. The settings cache only invalidates on the instance that wrote  *(was #51 on the module-4 branch — renumbered on merge, where main had already used #51 for something else)*
 **From:** SA-4.1 · Minor, bounded
 
 The read helper caches overrides in memory and clears that cache when a setting is saved. On a
@@ -704,6 +700,10 @@ dump reads the catalog instead, which any role may do.
 
 All 17 files parse against a real PostgreSQL server (`npm run db:check`).
 
+Not a code fix — it's an export. Either `supabase db pull` into `supabase/migrations/`, or hand-write
+the DDL in order and verify by replaying it into a scratch project. This was already worth doing
+before SA-3; it is now overdue because the live-only schema also contains invoices, payments,
+coupons, credit notes and revenue metrics.
 **What is still owed:** parsing is not applying. Nobody has replayed `0000` → `0016` into an empty
 database with an owner connection and confirmed the result matches production. Until that happens
 the claim "a fresh clone can run" is inference, not evidence. The check is:
@@ -741,22 +741,6 @@ overdue-only and mismatched-only; **tenant and date range are supported by `GET 
 but have no control**. Both are a couple of inputs once there are enough invoices for filtering to
 matter — with two rows it would be furniture.
 
-### 47. A provider checkout creates no subscription on our side
-**From:** SA-3.9 (2026-08-30) · **Significant — found by the dashboard**
-
-Your tenant has paid twice through Whop checkout and has **no subscription row**. `subscriptions`
-is empty; `membership.activated` arrived twice and did nothing, because `applyProviderEvent`
-updates an existing subscription and never creates one.
-
-Consequences, all visible on the revenue screen: contracted MRR is $0 while $447 has been
-collected, active customers is 0, there is no plan breakdown, and the entitlement engine has
-nothing to resolve — so a paying customer would get no features.
-
-An admin assigning a plan by hand is the only path that currently produces a subscription. Either
-`membership.activated` should create one from the plan metadata Whop returns (which carries
-`insurvas_plan_id` and the cycle, so everything needed is already on the event), or self-serve
-checkout should be closed off until it does.
-
 ### 48. The 2-second / 500-tenant target is unverified
 **From:** SA-3.9 · Unverified
 
@@ -789,6 +773,8 @@ to apply it to.
 and deducts it — inside the same transaction that raises the invoice, because deducting afterwards
 means a crash in between gives the discount away twice.
 
+### 44. Add-ons, overage, proration and waivers still do not reach an invoice
+**From:** SA-3.7 / SA-3.8 (2026-08-30) · **Significant** — consolidates former [#27] and [#41]
 Clamped to the bill, deliberately. Credit larger than the charges does not produce a negative
 invoice, and does not evaporate either: what could not be spent stays on the balance. When credit
 covers the charges completely, the run records that it happened and raises no invoice at all.
@@ -796,9 +782,14 @@ covers the charges completely, the run records that it happened and raises no in
 `redeemCreditAsFreeDays()` remains for the case where there is no invoice to discount, and still has
 no button. That is a convenience now rather than the only mechanism.
 
+What remains is a job that, at each period rollover, gathers a tenant's attached add-ons, their
+metered overage above the plan allowance, any pending proration from a mid-period upgrade, and any
+billing-admin waiver that must remove an overage line before issue. It then raises one custom
+invoice for the lot. The custom-invoice pieces exist; the period billing assembler and waiver
+model do not.
 ---
 
-### 44. The period billing run exists — one step left
+### 82. The period billing run exists — one step left  *(was #44 on the module-4 branch — renumbered on merge, where main had already used #44 for something else)*
 **From:** SA-3.7 · **Built 2026-08-31**
 
 The job now exists: `npm run bill:periods`. For each subscription whose period has ended it gathers
@@ -851,6 +842,124 @@ reconciliation would correctly flag as `mismatched`.
 
 Coupons applied **at checkout** are the verified path.
 
+### 49. A failed provider refund alerts nobody
+**From:** SA-3.8 acceptance criteria · **Significant**
+
+`executeCreditNote()` correctly leaves a refused refund in `failed`, stores `failure_reason`, logs
+to the server console and returns the failure to the admin who clicked. It does **not** alert a
+billing admin after that request ends. A failure during an automated retry or webhook path can sit
+unseen until someone opens Credit Notes.
+
+**Fix:** emit an operational alert through the notification/email seam and record delivery. This
+depends naturally on SA-4.11 (email configuration) or the job/alert infrastructure in SA-6.1.
+
+### 50. Public-schema RPC functions still grant EXECUTE to PUBLIC
+**From:** live Supabase audit after SA-3 · **Security hardening**
+
+The inspected `admin_*`, billing, metering, entitlement and metrics functions are `SECURITY
+INVOKER`, which is safer than definer functions, but their ACL includes `=X/postgres`: every role
+inheriting PUBLIC — including `anon` and `authenticated` — may invoke them. RLS currently blocks
+the underlying tables for those roles, so this audit did not prove an immediate data escape.
+However, these functions are exposed as callable RPC surface and a future permissive policy could
+turn a harmless grant into a privilege escalation.
+
+**Fix:** revoke EXECUTE from PUBLIC, `anon` and `authenticated` for control-plane functions; grant
+only `service_role` (and a narrowly scoped tenant role only where genuinely required). Add a test
+that anonymous RPC calls are denied.
+
+### 51. The revenue dashboard is partial and has financial-correctness defects
+**From:** SA-3.9 acceptance criteria · **Significant**
+
+The page deliberately labels expansion and contraction as **not measured**. It also has a fixed
+31-day revenue window and 90-day funnel window, no date/plan controls, no churn-by-plan calculation,
+and no trial-to-paid conversion rate. Two funnel steps — completed profile and completed setup —
+remain uninstrumented.
+
+The Module 3 audit also found that historical snapshot rebuilds use the subscription's **current**
+status/plan, and the page compares all collected cash with only new MRR. Those are correctness
+bugs rather than missing polish: cancellation can rewrite history, while ordinary renewals create
+a false “gap.” See M3-7, M3-8 and M3-12 in `bugs_sa.md`.
+
+**Fix:** record plan-change MRR deltas and real funnel events, extend `metrics_daily` for per-plan
+churn and trial conversion, and add date/plan filters. Performance against 500 tenants remains [#48].
+
+### 52. Setup-step completion is recorded nowhere, so trial conversion can't be correlated with it
+**From:** SA-5.3 · **Significant**
+
+SA-5.3 asks for a setup-progress column on the trials screen and for conversion correlated with
+setup completion. `business_profiles.recommended_setup_steps` stores the *list* of steps; nothing
+anywhere records which of them a tenant has **finished**, so a progress figure would read the same
+for every trial — a confident number with nothing behind it.
+
+The screen shows a measured engagement signal instead (owner's `last_login_at`), labelled as
+exactly that on both the table and the stats block. The conversion cut is engaged vs never-signed-in
+rather than setup-complete vs not.
+
+**Fix:** record step completion (a `tenant_setup_steps` table, or completion timestamps on the
+profile), then swap the two cuts. The screen's shape does not need to change — only what feeds it.
+
+### 53. The provider leg of extend/cancel has never executed against a real membership
+**From:** SA-5.3 · **Unverified, same class as [#45]**
+
+`extendTrial` calls `addFreeDays` and `cancelTrial` calls `pauseMembership` when the subscription
+carries a `whop_membership_id`. Both methods are individually verified against the sandbox (SA-3.2,
+SA-3.4), but never on a **trialing** membership, and `verify:trials` deliberately builds trials with
+no membership id so no sandbox state is mutated — pausing a real membership is not reversible from
+a test, and the only trialing memberships in the sandbox are the ones SA-5.2 created.
+
+The failure handling is the part that matters and is exercised by inspection only: an extension
+refuses rather than half-applying, because moving our date while the provider still charges on the
+old one tells the customer one thing and bills another.
+
+**Fix:** run one manual sandbox extension on a trialing membership and record the response, the way
+SA-3.2's decisions were settled. Cheap, and it closes the last unproven path in SA-5.3.
+
+
+### 54. The seeded Terms and Privacy Policy are drafts, not legal copy
+**From:** SA-5.4 · **Blocks launch, not development**
+
+`content/legal/*-v1.md` were written so the acceptance machinery could be built and tested against
+real prose instead of filler. They have not been reviewed by a lawyer, and two sections say so
+explicitly ("governing law: to be determined", "contact: to be completed"). They are stored with
+`is_draft = true`, and that flag is surfaced on the public page, the signup checkbox, the
+re-acceptance screen and the admin list — nothing pretends they are reviewed.
+
+**Fix:** publish v2 of each from `/admin/legal` with counsel's copy. No code changes; the machinery
+already handles the version bump and the re-acceptance it triggers.
+
+### 55. `verify:legal` permanently advances the DPA version sequence
+**From:** SA-5.4 · **Accepted, not a defect**
+
+The script publishes real document versions and cannot delete them, because `legal_documents` is
+append-only and nothing — not even `service_role` — may DELETE from it. Adding a teardown function
+would destroy the exact guarantee under test, so it does not exist.
+
+Every version the script publishes therefore goes into the `dpa` type, which nothing else uses and
+which signup does not require, leaving Terms and Privacy Policy untouched at v1. Each run clears
+the re-acceptance requirement on what it published, so no real user is ever blocked by a
+verification artefact, and the run prints how many it left behind.
+
+**Consequence:** a real Data Processing Agreement will not start at v1. Acceptable; the alternative
+was a delete path into an evidence table.
+
+### 56. Most of the schema is still not in `supabase/migrations/`
+**From:** SA-5.4, superseding part of [#29] · **Significant**
+
+The database has 40 applied migrations. The repository has 9. SA-5.3's was applied and never
+written down at all until SA-5.4 backfilled it from
+`supabase_migrations.schema_migrations` — which is the failure mode [#29] describes, happening
+again in this session.
+
+Present in the repo: SA-5.1 (×3), SA-5.2, SA-5.3 (backfilled), SA-5.4 (×2), rate limits.
+Missing: everything from SA-0.1 through SA-3.9 — 31 migrations covering the entire core schema.
+
+A fresh database cannot be built from this repository. That is a restore problem and an onboarding
+problem, not a style one.
+
+**Fix:** dump the remaining 31 from `schema_migrations` (the statements are stored verbatim, as the
+SA-5.3 backfill proved) into correctly-named files. Mechanical, and worth doing before anyone needs
+a second environment.
+
 ### 41. Proration now has a caller — resolved
 **From:** SA-3.4 · **Built 2026-08-31**
 
@@ -896,12 +1005,353 @@ connected dialer” after a successful scrub rather than pretending to place a t
 future telephony ticket must invoke this same preflight immediately before handing a number to its
 provider.
 
+### 83. Two migration naming schemes now coexist, and a from-scratch rebuild breaks
+**From:** the module-4 merge · **Blocks a second environment, not production**
+
+`supabase/migrations/` holds 27 files in two incompatible schemes:
+
+- `0000_baseline.sql` … `0017_period_billing.sql` — the SA-4 line, where `0000_baseline.sql` is a
+  **generated dump of the live database** (`npm run db:dump`).
+- `20260830010000_sa_5_1_signup_enums.sql` … `20260830111500_*` — the timestamped SA-5 files.
+
+Two problems, both only visible when rebuilding from nothing:
+
+1. **Ordering is decided by string sort**, so every `00xx` file runs before every `2026…` file.
+   That is not the order they were written in, and nothing declares the real dependency.
+2. **The baseline already contains the SA-5 objects** — it was dumped from a database that had them
+   applied, so it creates `legal_doc_type`, `trial_reminder_kind`, `legal_documents`,
+   `legal_acceptances` and `trial_reminders`. The SA-5 migrations then try to create the same
+   objects again with unguarded `create type` / `create table`, which errors. The baseline's own
+   header says "objects created by the numbered migrations 0001+ are deliberately absent" — true of
+   the SA-4 files, not of the SA-5 ones it swallowed.
+
+The live database is fine: it has all of these applied already under their original names. This
+only bites a `supabase db reset`, a new staging project, or a disaster recovery.
+
+**Fix:** pick one scheme. The cheapest correct version is to regenerate the baseline *after* the
+merge and delete the SA-5 files it now subsumes, leaving `0000_baseline.sql` plus everything that
+came after it. Then verify with an actual reset against a throwaway project — this is precisely the
+class of problem that is only real when someone tries it.
+
+This supersedes the "9 migrations in the repo" half of [#56]: the baseline dump and
+`scripts/dump-schema.mjs` genuinely fixed the missing-schema problem, and replaced it with an
+ordering one.
+
+
+### 84. SA-4.8's two dialing criteria are structurally unproven, not just untested
+**From:** the PR #8 review · **Compliance-critical**
+
+Two acceptance criteria describe behaviour that no test exercises end to end:
+
+- *"Disabling the last enabled DNC vendor triggers a confirmation that names the consequence, then
+  blocks dialing platform-wide."* The blocking half is real and correct — `assertDncVendorAvailable`
+  refuses when the enabled `dnc_scrub` count is zero. The **confirmation that names the
+  consequence** is a UI affordance I could not find, and nothing asserts it.
+- *"With two vendors enabled, simulating a failure on the primary routes the call to the secondary
+  and logs the fallback."* `lib/compliance/fallback.test.mjs` proves the loop against an injected
+  callback, which is a fair unit test. Nothing drives two *registered* vendors through
+  `runWithComplianceFallback`, so the priority ordering read from the database and the
+  `provider_calls` fallback row are never proven together.
+
+The ticket is blunt about the stakes: a DNC-listed call costs $500–$1,500. The code is written to
+fail closed and, reading it, does. That is not the same as having watched it.
+
+**Fix:** add a `verify:compliance` case that registers two stub vendors against a local endpoint,
+fails the primary, and asserts both the secondary's answer and the fallback row. Add the
+confirmation dialog on disabling the last DNC vendor, quoting the cost.
+
+### 85. SA-4.8's "unreachable" case is only covered at scrub time, not by the status the UI reads
+**From:** the PR #8 review · **Minor, but the wording matters**
+
+The rule is *"if every vendor of type `dnc_scrub` is disabled **or unreachable**, outbound dialing
+is blocked"*. `getDncDialingStatus` — which feeds the Configuration Center status strip — counts
+only `is_enabled`. With one enabled vendor that is down, it reports dialing as available.
+
+Dialing itself is still safe: the scrub runs, every vendor fails, `runOrderedFallback` rethrows and
+the route returns 503 `blocked: true`. So the guarantee holds; only the *status display* is
+optimistic, which is the opposite of what an operator wants during an incident.
+
+**Fix:** fold the 24-hour health already computed in `health()` into the status, so a type whose
+every vendor is failing reads as at-risk rather than green.
+
+### 86. The credit pack margin indicator is unverified, and the cost it compares against is partly guessed
+**From:** the PR #8 review · SA-4.9
+
+*"The margin indicator turns red if sell price is at or below the vendor cost from SA-4.8"* has no
+assertion anywhere. `listMeterPricing` does source cost from the enabled DNC vendors — but only for
+`dnc_lookups`, via `Math.min(...vendorCosts)`; every other meter falls back to the manually
+configured `cost_cents`. That is a reasonable design given only DNC vendors carry a per-lookup
+cost, and it is not what the criterion says.
+
+**Fix:** assert the red state in the verification, and either extend vendor-sourced cost to the
+other compliance meters or write down that only `dnc_lookups` is vendor-priced.
+
+### 87. Module 4's own verification scripts were not re-run after the merge
+**From:** the module-4 merge · **Do before trusting the merged tree**
+
+`verify:switches`, `verify:switches:multi`, `verify:system`, `verify:period-billing`,
+`verify:credits-limits` and the rest of `verify:all` all passed on the `module-4` branch. None has
+been run against the merged tree, where the shell layouts, the audit action list and the generated
+database types all changed.
+
+`tsc`, `eslint`, 239 unit tests, a real `next build` and `check:features` do pass on the merge.
+
+**Fix:** run `npm run verify:all` against the merged tree before it is deployed anywhere.
+### 88. Webhook completion is not durable  *(was #57 in the parked pre-merge review — renumbered on merge, where #57 was already taken)*
+**From:** Module 3 audit · **Release blocker**
+
+`markProcessed` and `markFailed` ignore Supabase update errors. The route can acknowledge Whop even
+though the event still looks unfinished locally. A real `payment.succeeded` can also be marked
+processed when invoice generation returns null. See M3-1 and M3-2 in `bugs_sa.md`.
+
+### 89. Invoice creation and coupon consumption are not atomic  *(was #58 in the parked pre-merge review — renumbered on merge, where #58 was already taken)*
+**From:** Module 3 audit · **Financial correctness**
+
+The invoice commits before `consume_coupon_period`. If consumption fails, retry finds the existing
+invoice and never consumes the period. Move both effects into one idempotent transaction. See M3-3.
+
+### 90. Manual payment settlement is non-atomic and permits overpayment  *(was #59 in the parked pre-merge review — renumbered on merge, where #59 was already taken)*
+**From:** Module 3 audit · **Financial correctness; live data affected**
+
+Settlement inserts the payment, updates the invoice, activates subscriptions, rebuilds entitlement,
+and audits in separate operations. It activates by tenant rather than the invoice's subscription.
+The live database already has one $99 invoice with $198 in successful payments. See M3-4.
+
+### 91. Coupon plan and billing-cycle restrictions are not enforced by the admin RPC  *(was #60 in the parked pre-merge review — renumbered on merge, where #60 was already taken)*
+**From:** Module 3 audit · **Financial correctness**
+
+`admin_apply_coupon` ignores `restricted_to_plan_ids` and `billing_cycle`. Current rows are clean,
+but the database permits an incompatible coupon assignment. See M3-5.
+
+### 92. Refund and credit execution needs recoverable reconciliation states  *(was #61 in the parked pre-merge review — renumbered on merge, where #61 was already taken)*
+**From:** Module 3 audit · **Financial correctness**
+
+Whop can succeed while the following local update fails; local credit adjustment errors can also be
+reported as success. Add checked writes, idempotent retries, and a provider-success/local-reconcile
+state. See M3-6.
+
+### 93. Provider-call logging covers only part of Whop  *(was #62 in the parked pre-merge review — renumbered on merge, where #62 was already taken)*
+**From:** SA-3.1 audit · **Observability**
+
+Whop-specific plan, promo, invoice, refundability, membership, and free-day methods bypass the
+logging decorator. Live `provider_calls` contains only three connection-test lookups. See M3-9.
+
+### 63. Cross-tenant billing relationships are not enforced
+**From:** Module 3 audit · **Data integrity**
+
+Custom invoices can pair one tenant with another tenant's subscription, and credit notes can pair a
+tenant with another tenant's invoice. No live mismatch exists, but both RPCs permit one. See M3-10.
+
+### 94. Credit-to-free-days conversion uses the monthly price for every cycle  *(was #64 in the parked pre-merge review — renumbered on merge, where #64 was already taken)*
+**From:** SA-3.8 audit · **Latent billing defect**
+
+The not-yet-wired redemption function ignores the subscription billing cycle. Correct this before
+automatic credit consumption is enabled. See M3-11.
+
+### 65. Plan versioning drops limits, meters and available add-ons
+**From:** Module 2 audit · **Release blocker**
+
+`admin_create_plan_version` copies features and prices only. A new live-plan version loses seat and
+carrier limits, all meter allowances, and plan add-on availability. See M2-1 in `bugs_sa.md`.
+
+### 95. Entitlement refresh failures are acknowledged as successful changes  *(was #66 in the parked pre-merge review — renumbered on merge, where #66 was already taken)*
+**From:** SA-2.7 / SA-2.8 audit · **Access-control correctness**
+
+`rebuildEntitlement` catches and logs failures, so a downgrade, suspension, cancellation, feature
+removal or add-on removal can return success while stale access remains cached. See M2-2.
+
+### 96. Add-on meter credits do not reach enforcement or usage display  *(was #67 in the parked pre-merge review — renumbered on merge, where #67 was already taken)*
+**From:** SA-2.6 audit · **Entitlement correctness**
+
+The resolver stacks add-on credits, but `check_meter_capacity` and the usage screen read plan meters
+only. The displayed entitlement and enforced allowance can disagree. See M2-3.
+
+### 68. Add-on detach is not bound to the route subscription
+**From:** SA-2.6 audit · **Cross-tenant/data-integrity risk**
+
+An attachment ID from subscription B can be sent through subscription A's URL. B is modified while
+A is audited and refreshed, leaving B's cached entitlement stale. See M2-4.
+
+### 69. Subscription transition rules are enforced only by the UI
+**From:** SA-2.7 audit · **Access-control correctness**
+
+A crafted `resume` can activate a cancelled or suspended subscription; cancel/pause/change-plan
+also accept invalid source states. Move the state machine into a locked RPC. See M2-5.
+
+### 70. Archived plans are still assignable by API
+**From:** SA-2.2 / SA-2.7 audit · **Product-control bypass**
+
+The picker hides archived plans, but assignment and change-plan RPCs do not reject them. See M2-6.
+
+### 97. New individual plans are not seeded with their mandatory one-seat limit  *(was #71 in the parked pre-merge review — renumbered on merge, where #71 was already taken)*
+**From:** SA-2.2 / SA-2.5 audit · **Plan configuration defect**
+
+Plan creation inserts no `plan_limits` or `plan_meters`, and no editor writes those tables. A new
+individual plan is unlimited until Supabase is edited manually. See M2-7.
+
+### 98. Entitlement verification does not pin the intended plan contents  *(was #72 in the parked pre-merge review — renumbered on merge, where #72 was already taken)*
+**From:** SA-2.8 audit · **Test gap**
+
+`verify-entitlements` reads its expected list from `plan_features`, so an incorrectly configured
+plan still passes. Pin reviewed arrays for Plan A/B/C and assert all three exist. See M2-10.
+
+### 99. Edit User and token replacement can partially commit  *(was #74 in the parked pre-merge review — renumbered on merge, where #74 was already taken)*
+**From:** SA-1.3 audit · **Transactional correctness**
+
+Name/phone/role can commit before a duplicate-email conflict is returned. Replacement links delete
+the old token before the new token commits; Resend Invite can also delete other token purposes.
+Make these operations atomic and check every result. See M1-3/M1-8.
+
+### 100. Lifecycle changes block sessions but do not revoke them  *(was #75 in the parked pre-merge review — renumbered on merge, where #75 was already taken)*
+**From:** SA-1.4 audit · **Authentication correctness**
+
+The live status check blocks the old cookie while a user is inactive/suspended, but the same 12-hour
+cookie works again after reactivation. Add a per-user session version or revocation timestamp and
+advance it on every state change. See M1-4.
+
+### 101. User reactivation bypasses seat limits and lifecycle transition rules  *(was #76 in the parked pre-merge review — renumbered on merge, where #76 was already taken)*
+**From:** SA-1.4 / SA-2.5 audit · **Licensing and state-machine correctness**
+
+Activation is a direct update with no seat check, and all four lifecycle endpoints accept source
+states that their buttons hide. Put the seat check and allowed transition graph in one locked RPC.
+See M1-5/M1-7.
+
+### 102. The database does not guarantee that every tenant keeps an owner  *(was #77 in the parked pre-merge review — renumbered on merge, where #77 was already taken)*
+**From:** SA-1.2 / SA-1.3 audit · **Authorization invariant**
+
+A new tenant can be created with its only user as `producer`; concurrent demotions lock different
+membership rows and can both pass the owner count. Force the first member to owner and serialize
+role changes with a tenant-scoped lock. See M1-6.
+
+### 103. Module 1 links still fall back to the request Host  *(was #78 in the parked pre-merge review — renumbered on merge, where #78 was already taken)*
+**From:** SA-1.2 / SA-1.3 audit · **Security hardening**
+
+Invitation, reset, and email-change routes still use `request.nextUrl.origin` when the canonical URL
+is missing. Reuse SA-5.1's strict configured-origin helper and fail before mutating tokens. See M1-9.
+
+### 104. Login activity can silently stop recording  *(was #79 in the parked pre-merge review — renumbered on merge, where #79 was already taken)*
+**From:** SA-1.5 audit · **Observability**
+
+Supabase write errors are returned, not thrown, but login-event and last-login writes ignore the
+returned errors. Keep authentication available while surfacing and retrying telemetry failures.
+See M1-10.
+
+
+### 105. Tenant users have no self-service account recovery — deferred to LA-0
+**From:** the SA-4.11 email audit · **Deferred by decision on 2026-08-30**
+
+Every account-recovery path for a tenant user runs through an admin. The emails themselves work
+and are wired to Google SMTP; what is missing is any way for the user to start one.
+
+**Password reset.** `/app/login` links only to `/pricing` — there is no "Forgot password?". The
+reset email, the hashed-token machinery and the `/app/set-password` landing page all exist, and the
+only trigger is `POST /api/admin/users/[id]/send-reset`. So an agent locked out at 7am phones
+Insurvas, and somebody opens the admin panel for them. Every time.
+
+What is left to build is small: a public route that accepts an email address, issues the token and
+sends the existing email, plus the link on the login page. **It must answer identically whether or
+not the address exists** — otherwise the form becomes a way to enumerate which of your customers'
+emails are registered. `/api/app/auth/login` already does this correctly with a dummy-hash compare;
+reuse the shape.
+
+**Email address change.** Same split: the confirmation email goes to the new address and proves
+control before the change takes effect, but only `PATCH /api/admin/users/[id]` can start it.
+
+**Security notifications.** Nothing tells a user their password or email address was changed. That
+notification is how account takeover gets noticed, and the trigger points already exist in
+`app/api/app/auth/set-password` and `app/api/app/auth/confirm-email`. Cheap, and worth doing
+alongside the reset.
+
+Deliberately NOT on this list: magic links, OTP, reauthentication prompts, and MFA for tenant users.
+No ticket asks for them, and MFA for agents is a product decision rather than a gap — `totp_secret`
+exists on `admin_users` only, by design.
+
+
+### 106. A live invoice is overpaid by 9,900 cents, and the fix does not correct it
+**From:** fixing bugs_sa.md M3-4 · **Needs a decision, not code**
+
+`admin_settle_invoice_manually` now refuses overpayment, so this cannot happen again. It does not
+repair what already happened: `INV-2026-08-0001` has a total of 9,900 cents and 19,800 cents of
+successful payments recorded against it. A customer paid twice for one invoice.
+
+Deliberately not corrected automatically. The options are a refund, a credit note against a future
+invoice, or voiding the duplicate payment record — and which is right depends on whether the money
+actually left their account twice, which the payment provider knows and we do not. Guessing would
+either keep money that is not ours or reverse a charge that was legitimate.
+
+**Fix:** confirm with the provider what was actually collected, then use the existing credit-note
+path (SA-3.8) or a refund. Both are already built and audit-logged.
+
+
 ---
 
 ## ✅ Resolved
 
 *Terse log — details live in git history.*
 
+- **#73 / M1-1 / M1-2 atomic user-token redemption** → fixed with two service-role-only,
+  security-invoker RPCs stored in a repository migration. Password/reset redemption now locks the
+  token and commits password, token consumption, and invite membership acceptance together.
+  Email change now commits the unique address and token consumption together; a duplicate rolls
+  everything back and leaves the token usable. `verify:user-tokens` exercised real concurrent
+  requests: **11/11 passed**, and cleanup was confirmed at zero leftover rows.
+
+- **SA-5.4 terms & privacy acceptance** -> verified 45/45 against the running app. Acceptance stores
+  a **document id and version**, never a boolean: recording "accepted the terms" and resolving the
+  version at read time would silently re-date every historical acceptance the moment a new version
+  was published. `legal_acceptances` is append-only by privilege — UPDATE and DELETE are revoked
+  from every role including `service_role` — and the script proves it by trying to back-date a
+  record and being refused. Published documents are equally immutable; the sole permitted mutation
+  is `clear_reacceptance_requirement`, which can only REMOVE an interruption, so a mistaken publish
+  cannot lock out every paying customer with no recovery. Two bugs found by the script, not by
+  reading: `select max(...) ... for update` is illegal in Postgres so the publish concurrency guard
+  never worked (replaced with an advisory lock), and grepping dev-server HTML for a UI string
+  matches Turbopack's **inlined component source** rather than the rendered page — which had made
+  one assertion vacuously pass. Seeded text is drafts, flagged as such everywhere [#54].
+
+- **SA-5.3 trial management** -> verified 32/32 against the running app. Reminders are defined as
+  offsets from the trial's **end**, not its start, which is what makes "extending a trial pushes
+  the charge date and every reminder with it" true by construction rather than by remembering to
+  move them. Idempotent on `(subscription, kind, trial_ends_at)`, so an extension deliberately
+  re-arms them for the new date. Converting early raises a `charge_automatically` invoice and does
+  **not** flip the status — the payment webhook does, so there is one path from money to state.
+  Two criteria are met by an honest substitute rather than in full: [#52] and [#53].
+  The day-13 in-app banner shares `REMINDER_OFFSET_DAYS` with the emails, so the banner turning
+  urgent and the final-day email going out are the same moment by definition and cannot drift.
+  Verified in a browser: an extension driven through the dialog moved the row to 12/21, re-sorted
+  it, and softened its own risk badge — the screen reacting to the new end date, not a cached one.
+
+- **#47 A provider checkout created no subscription** -> SA-5.2. `create_subscription_from_checkout`
+  is called from BOTH the return handler and `membership.activated`, idempotent on the tenant,
+  because either can arrive first and either can be the only one that arrives. Verified both paths
+  separately and together: returning twice creates one subscription, and a customer who closes the
+  tab still gets one.
+- **#21 "Only monthly at checkout" could not be verified** -> SA-5.2 calls `availableBillingCycles()`
+  on the raw price row rather than re-deriving the rule, so a cycle with no price cannot be sold.
+- **SA-5.2 hosted checkout** -> verified 17/17 against a real Whop sandbox checkout. The trial lives
+  on the mapped Whop plan, not the checkout configuration: Whop only accepts `trial_period_days` on
+  a plan, and a checkout takes either `plan_id` OR an inline plan, so putting it on the checkout
+  would have meant abandoning the (plan version, cycle) mapping that makes grandfathering work.
+
+- **SA-5.1 review (2026-08-30).** Host-header injection in verification links: `buildVerificationUrl`
+  fell back to `request.nextUrl.origin` when `NEXT_PUBLIC_APP_URL` was unset — and it was unset. An
+  attacker could sign up with a victim's address and a forged `Host`, and the victim would receive a
+  genuine email from our domain whose link handed the token over. The fallback is gone; missing
+  configuration now throws.
+- **Public endpoints had no rate limiting.** Signup created a user, a tenant and an email per call,
+  and `change_email` would send verification mail to an ARBITRARY address. Now database-backed
+  (serverless instances share no memory), claimed in a single statement so concurrent requests
+  cannot both take the last slot. Verified 7/7, including ten concurrent claims letting exactly
+  three through.
+- **The self-serve signup flow could not complete.** `save_signup_business_profile` raised 42702 —
+  its `RETURNS TABLE(tenant_id …)` OUT parameter collided with `on conflict (tenant_id)` — so the
+  business-profile step threw at runtime. Fixed with `#variable_conflict use_column`; the sibling
+  fix in `20260830010200` could not be reused because an ON CONFLICT target must name the column
+  bare. Codex's own `verify:signup` script now passes; it was failing before.
+- **A review finding of mine that was wrong:** I reported that the app shell did not gate
+  unverified users. It does — new users get `pending_verification` and `signupDestination` redirects
+  them to `/app/verify-email`. My grep pattern missed the helper names and I drew a conclusion from
+  an absence I had not established.
 - **#9 No CI pipeline** → `.github/workflows/ci.yml`. Two jobs: `verify` needs no secrets at all
   (typecheck, lint, 159 unit tests, production build) and gates every push and pull request;
   `database` runs all 20 suites via the new `npm run verify:all`, plus the cross-process kill-switch
@@ -1000,7 +1450,8 @@ throwaway tenant and switch row are removed after the run; audit rows remain by 
 
 - **SA-3.9 revenue dashboard** → MRR/ARR/ARPC, churn, plan breakdown and the activation funnel, off
   a nightly `metrics_daily` snapshot that is re-runnable for any past date. Contracted MRR is shown
-  beside collected, and the gap is called out — which immediately surfaced [#47]. Two funnel steps
+  beside collected. The later Module 3 audit found that the gap calculation and historical rebuild
+  are not financially reliable; that work is reopened in [#51], M3-7 and M3-8. Two funnel steps
   render as *not instrumented* rather than zero, and are excluded from the biggest-drop-off
   sentence so it cannot name a step nobody measures.
 - **Payments were only recorded when a subscription already existed** → fixed in SA-3.9. The
@@ -1045,9 +1496,11 @@ throwaway tenant and switch row are removed after the run; audit rows remain by 
 - **SA-3.2 invoice generation** → built and verified. Numbering is gap-free via a counter row
   updated in the invoice's own transaction, **not** a Postgres SEQUENCE — `nextval` does not roll
   back, so a failed invoice would burn its number permanently. Generation is idempotent on
-  `(provider, provider_payment_id)`, which is what makes Whop's at-least-once delivery safe.
-  Verified end to end by replaying a real stored Whop payload: `INV-2026-08-0001`, ours 24900 =
-  provider 24900, matched.
+  `(provider, provider_payment_id)`, which is what makes Whop's at-least-once delivery safe. Real
+  stored Whop payloads verified both the matched and mismatched reconciliation paths.
+- **#37 The two pre-invoice sandbox payments had no invoices** → closed by replay/backfill. The
+  $198 Plan A double-charge is retained as a mismatched financial record ($99 expected), and the
+  $249 Plan B payment reconciles. Provider payment idempotency prevents replay duplicates.
 
 - **SA-3.1 proven end to end (2026-08-30).** A second sandbox payment on `plan_b` — whose Whop plan
   was created entirely by the corrected code rather than patched by hand — charged **$249.00 for a
@@ -1097,8 +1550,9 @@ throwaway tenant and switch row are removed after the run; audit rows remain by 
   planes, not just tenant users as the ticket specified. SA-6.2 inherits the signal.
 - **#2 Invited users read as "Active"** → SA-1.4, settled as a deliberate no-change: status is the
   admin lifecycle, invite acceptance is a separate axis with its own badge.
-- **#16 Archiving a feature could break a plan** → SA-2.3. `admin_set_plan_features` re-adds
-  archived grants the plan already had, so saving the picker can't silently revoke them.
+- **#16 Archiving a feature could break a plan** → fully closed by SA-2.3 + SA-2.8.
+  `admin_set_plan_features` preserves archived grants, and the shared entitlement/menu path now
+  continues enforcing those grants for existing subscribers.
 - **#18 Plan pricing not built** → SA-2.4.
 - **Audit log pagination** → fixed in the CRM-styling pass; was hard-capped at 100 rows.
 - **Sidebar icon crash** → Lucide components were being passed as props from a Server Component;

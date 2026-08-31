@@ -173,12 +173,21 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         reason = parsed.data.reason;
       }
 
-      const { error } = await supabase
-        .from("subscriptions")
-        .update({ status: pausing ? "paused" : "active" })
-        .eq("id", id);
+      // bugs_sa.md M2-5. This was a bare status write, so `resume` acted as a universal
+      // "make it active" and one crafted request restored full access to a cancelled
+      // subscription. The transition graph now lives in the database, locked, and refuses
+      // anything the UI would not have offered.
+      const { error } = await supabase.rpc("admin_set_subscription_pause_state", {
+        p_subscription_id: id,
+        p_pause: pausing,
+      });
 
       if (error) {
+        // check_violation is the guard refusing an invalid transition — a 409 with the reason,
+        // not a 500, because nothing went wrong on our side.
+        if (error.code === "23514" || /cannot be paused|can be resumed/.test(error.message)) {
+          return NextResponse.json({ error: error.message }, { status: 409 });
+        }
         return NextResponse.json({ error: `Could not ${pausing ? "pause" : "resume"} the subscription` }, { status: 500 });
       }
 

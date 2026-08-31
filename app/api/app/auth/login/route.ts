@@ -6,6 +6,7 @@ import { verifyPassword } from "@/lib/password";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { signTenantSessionToken, tenantSessionCookieOptions, TENANT_SESSION_COOKIE } from "@/lib/tenantAuth/session";
 import { recordLoginEvent, type LoginFailureReason } from "@/lib/loginEvents/record";
+import { signupDestination } from "@/lib/signup/context";
 import { getMaintenanceStatus } from "@/lib/system/service";
 
 // Same anti-enumeration shape as admin login: identical response whether or not the email
@@ -79,7 +80,7 @@ export async function POST(request: NextRequest) {
 
   // 'inactive' stays deliberately generic — it means the person has left, and there is nothing
   // useful for them to act on.
-  if (user.status !== "active") {
+  if (user.status !== "active" && user.status !== "pending_verification") {
     return fail("inactive", user.id, NextResponse.json(GENERIC_ERROR, { status: 401 }));
   }
 
@@ -93,13 +94,26 @@ export async function POST(request: NextRequest) {
     return fail("no_membership", user.id, NextResponse.json(GENERIC_ERROR, { status: 401 }));
   }
 
+  const { data: tenant } = await supabase
+    .from("tenants")
+    .select("onboarding_state")
+    .eq("id", membership.tenant_id)
+    .maybeSingle<{ onboarding_state: string }>();
+
+  if (!tenant) {
+    return fail("no_membership", user.id, NextResponse.json(GENERIC_ERROR, { status: 401 }));
+  }
+
   // Only a successful login moves last_login_at — failures must never touch it (SA-1.5).
   await supabase.from("users").update({ last_login_at: new Date().toISOString() }).eq("id", user.id);
   await recordLoginEvent({ request, email, success: true, userId: user.id, actorType: "user" });
 
   // Role is intentionally not baked into the token — it's resolved per request (SA-1.3).
   const sessionToken = await signTenantSessionToken(user.id, membership.tenant_id);
-  const response = NextResponse.json({ ok: true });
+  const response = NextResponse.json({
+    ok: true,
+    redirectTo: signupDestination({ userStatus: user.status, onboardingState: tenant.onboarding_state }) ?? "/app",
+  });
   response.cookies.set(TENANT_SESSION_COOKIE, sessionToken, tenantSessionCookieOptions);
   return response;
 }

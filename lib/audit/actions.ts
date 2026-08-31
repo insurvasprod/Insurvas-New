@@ -67,6 +67,12 @@ export const AUDIT_ACTIONS = [
   "announcement.deleted",
   "credit_note.requested",
   "credit_note.approved",
+  "trial.extended",
+  "trial.converted_early",
+  "trial.cancelled",
+  "trial.reminder_sent",
+  "legal_document.published",
+  "legal_document.reacceptance_cleared",
   // The period billing run raises invoices without a human choosing each amount, so the run itself
   // is the auditable act — who triggered it, what it billed, and what failed.
   "billing.period_run",
@@ -140,5 +146,11 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   "tenant.billing_mode_changed": "Billing mode changed",
   "credit_note.requested": "Credit note raised",
   "credit_note.approved": "Credit note approved",
+  "trial.extended": "Trial extended",
+  "trial.converted_early": "Trial converted early",
+  "trial.cancelled": "Trial cancelled",
+  "trial.reminder_sent": "Trial reminder sent",
+  "legal_document.published": "Legal document published",
+  "legal_document.reacceptance_cleared": "Re-acceptance requirement cleared",
   "billing.period_run": "Period billing run",
 };

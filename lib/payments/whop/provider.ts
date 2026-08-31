@@ -50,7 +50,10 @@ export class WhopProvider implements PaymentProvider {
       plan_id: input.providerPlanId,
       // Comes back to us on the webhook, which is how the payment is attributed to a tenant.
       metadata: { tenant_id: input.tenantId, ...input.metadata },
-      ...(input.returnUrl ? { redirect_url: input.returnUrl } : {}),
+      // Whop refuses anything that is not https, so a local http:// return URL is dropped rather
+      // than sent — otherwise every checkout in development fails with a 400 that looks like a
+      // code bug. The return handler is still reachable directly for local testing.
+      ...(input.returnUrl?.startsWith("https://") ? { redirect_url: input.returnUrl } : {}),
     };
 
     const response = await this.client.request<Record<string, unknown>>(
@@ -111,12 +114,89 @@ export class WhopProvider implements PaymentProvider {
    * payment and membership webhooks, so a RENEWAL — which carries no checkout session — still
    * tells us which of our plans it belongs to.
    */
+  /**
+   * Finds the membership Whop holds for this tenant on this plan, if there is one.
+   *
+   * This is the question the checkout return page must ask before it grants anything. Before it
+   * existed, the return handler trusted the local plan selection — so anyone signed in could type
+   * /app/checkout/return and be given a trial they had never paid for.
+   *
+   * Everything below was learned by calling the sandbox, and each line is load-bearing:
+   *
+   *   `company_id` is REQUIRED. Without it every request is a 400 "not authorized". The first
+   *   version of this omitted it, so the call always threw — the checkout verification failed
+   *   closed for the wrong reason and never actually verified anything, while its test passed
+   *   because the outcome it asserted (no access granted) looked the same either way.
+   *
+   *   `plan_id` and `status` as query parameters are IGNORED by this API version. Asking for one
+   *   plan returns every membership on the account. So the plan and the status are matched HERE,
+   *   client-side, and must be: matching only the tenant would confirm a customer for a plan they
+   *   did not buy, and treating a `drafted` membership as a purchase would grant access to an
+   *   abandoned checkout.
+   *
+   *   The plan arrives NESTED as `plan.id`, not as a flat `plan_id`.
+   */
+  async findMembershipForTenant(
+    whopPlanId: string,
+    tenantId: string,
+  ): Promise<{ id: string; status: string } | null> {
+    const companyId = process.env.WHOP_ACCOUNT_ID;
+    if (!companyId) throw new Error("WHOP_ACCOUNT_ID is not set, so memberships cannot be listed");
+
+    // Only the states that mean "this person may use the product". `drafted` is an unfinished
+    // checkout and `canceled`/`expired` are over.
+    const GRANTS_ACCESS = new Set(["trialing", "active", "completed"]);
+
+    let cursor: string | null = null;
+
+    // Bounded: five pages of 100 is far more than one account should need to answer "does this
+    // tenant hold a membership", and an unbounded loop against a provider is how one slow request
+    // becomes a hung checkout page.
+    for (let page = 0; page < 5; page++) {
+      const query = new URLSearchParams({ company_id: companyId, first: "100" });
+      if (cursor) query.set("after", cursor);
+
+      const response = await this.client.request<{
+        data?: Array<{
+          id?: string;
+          status?: string;
+          plan?: { id?: string } | null;
+          metadata?: Record<string, unknown> | null;
+        }>;
+        page_info?: { has_next_page?: boolean; end_cursor?: string | null };
+      }>("GET", `/memberships?${query.toString()}`);
+
+      const match = (response.data ?? []).find(
+        (membership) =>
+          String(membership.metadata?.tenant_id ?? "") === tenantId &&
+          membership.plan?.id === whopPlanId &&
+          GRANTS_ACCESS.has(String(membership.status ?? "")),
+      );
+
+      if (match?.id) return { id: match.id, status: String(match.status) };
+
+      if (!response.page_info?.has_next_page || !response.page_info.end_cursor) break;
+      cursor = response.page_info.end_cursor;
+    }
+
+    return null;
+  }
+
   async createPlan(input: {
     productId: string;
     accountId?: string;
     priceCents: number;
     /** Our plan_prices.setup_fee_cents. Charged once, on top of the first period. */
     setupFeeCents?: number;
+    /**
+     * Free days before the first charge (SA-5.2). Lives on the PLAN, not the checkout: Whop only
+     * accepts trial_period_days on a plan, and a checkout configuration takes either `plan_id` OR
+     * an inline plan — so putting the trial on the checkout would mean abandoning the
+     * (plan version, cycle) mapping that makes grandfathering work.
+     *
+     * Whop enforces one trial per user per plan, so a returning customer does not get a second.
+     */
+    trialDays?: number;
     billingCycle: string;
     ourPlanId: string;
     planCode: string;
@@ -139,6 +219,7 @@ export class WhopProvider implements PaymentProvider {
         currency: "usd",
         plan_type: "renewal",
         billing_period: billingPeriod,
+        ...(input.trialDays && input.trialDays > 0 ? { trial_period_days: input.trialDays } : {}),
         metadata: {
           insurvas_plan_id: input.ourPlanId,
           insurvas_plan_code: input.planCode,
@@ -236,10 +317,17 @@ export class WhopProvider implements PaymentProvider {
     amountCents: number;
     description: string;
     dueAt?: string | null;
+    /**
+     * `send_invoice` emails the customer a pay page; `charge_automatically` charges the card
+     * already on file. Sending is the default because a custom invoice is usually a negotiated
+     * amount the customer has not authorised — but converting a trial early IS authorised, and
+     * asking them to re-enter a card they already gave us would be absurd.
+     */
+    collectionMethod?: "send_invoice" | "charge_automatically";
   }): Promise<{ invoiceId: string; payOnlineUrl: string | null }> {
     const body: Record<string, unknown> = {
       company_id: input.companyId,
-      collection_method: "send_invoice",
+      collection_method: input.collectionMethod ?? "send_invoice",
       member_id: input.memberId,
       // A one-off invoice is a plan with no recurrence: a price and nothing to renew.
       plan: {

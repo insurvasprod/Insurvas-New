@@ -78,19 +78,23 @@ export async function POST(request: NextRequest) {
   const supabase = getSupabaseServiceClient();
   const passwordHash = await hashPassword(password);
 
-  const { error: userError } = await supabase
-    .from("users")
-    .update({ password_hash: passwordHash })
-    .eq("id", invitation.user_id);
+  const { error: consumeError } = await supabase.rpc("consume_user_password_token", {
+    p_token_hash: hashInviteToken(token),
+    p_password_hash: passwordHash,
+  });
 
-  if (userError) {
+  // The RPC locks and re-validates the token, changes the password, burns the token, and accepts
+  // the membership in one transaction. `findValidInvitation` above is only an early UX check;
+  // it is deliberately not trusted as the concurrency boundary.
+  if (consumeError) {
+    if (
+      consumeError.message?.includes("PASSWORD_TOKEN_INVALID_OR_EXPIRED") ||
+      consumeError.message?.includes("PASSWORD_TOKEN_ALREADY_USED")
+    ) {
+      return NextResponse.json(INVALID, { status: 400 });
+    }
     return NextResponse.json({ error: "Could not set password" }, { status: 500 });
   }
-
-  const acceptedAt = new Date().toISOString();
-  // Burn the invitation so the same link can't be replayed.
-  await supabase.from("user_invitations").update({ accepted_at: acceptedAt }).eq("id", invitation.id);
-  await supabase.from("tenant_users").update({ accepted_at: acceptedAt }).eq("user_id", invitation.user_id);
 
   return NextResponse.json({ ok: true });
 }

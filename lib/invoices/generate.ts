@@ -39,26 +39,55 @@ function readString(source: Record<string, unknown> | undefined, key: string): s
 }
 
 /**
- * Returns null when the event cannot be turned into an invoice — an unresolved tenant, or a
- * payment for a plan that is not ours. That is a normal outcome for dashboard test events, so it
- * is not an error.
+ * The reason a payment produced no invoice.
+ *
+ * bugs_sa.md M3-2: this used to be a bare `null`, and the webhook treated every one of them as a
+ * normal outcome — acknowledged the event, marked it processed, returned 200. That is right for a
+ * dashboard test event and wrong for a real one, and the two were indistinguishable. Money could
+ * be collected and never appear in the local ledger, with nothing recorded to say so.
+ *
+ * `unattributed` means we could not tell WHOSE payment it is, which is exactly the shape of Whop's
+ * own test event: placeholder ids, no metadata. Everything else means we know a real tenant paid
+ * and could not write down what for — which must never be quietly acknowledged.
  */
+export type NoInvoiceReason =
+  | "unattributed"
+  | "missing_payment_id"
+  | "plan_not_ours"
+  | "plan_not_found"
+  | "no_price_for_cycle";
+
+export type InvoiceOutcome =
+  | { ok: true; invoice: InvoiceCreation }
+  | { ok: false; reason: NoInvoiceReason; detail: string };
+
+/** True when the reason means "not our payment", rather than "our payment we could not record". */
+export function isBenignNoInvoice(reason: NoInvoiceReason): boolean {
+  return reason === "unattributed";
+}
+
 export async function createInvoiceFromPayment(
   envelope: WhopEnvelope,
   tenantId: string | null,
-): Promise<InvoiceCreation | null> {
-  if (!tenantId) return null;
+): Promise<InvoiceOutcome> {
+  if (!tenantId) return { ok: false, reason: "unattributed", detail: "no tenant resolved from the event" };
 
   const data = (envelope.data ?? {}) as Record<string, unknown>;
   const paymentId = readString(data, "id");
-  if (!paymentId) return null;
+  if (!paymentId) return { ok: false, reason: "missing_payment_id", detail: "the event carried no payment id" };
 
   const planNode = data.plan as Record<string, unknown> | undefined;
   const planMetadata = planNode?.metadata as Record<string, unknown> | undefined;
   const ourPlanId = readString(planMetadata, "insurvas_plan_id");
   const billingCycle = readString(planMetadata, "insurvas_billing_cycle");
 
-  if (!ourPlanId || !billingCycle || !PRICE_COLUMN[billingCycle]) return null;
+  if (!ourPlanId || !billingCycle || !PRICE_COLUMN[billingCycle]) {
+    return {
+      ok: false,
+      reason: "plan_not_ours",
+      detail: `plan metadata missing or unrecognised (plan=${ourPlanId ?? "-"}, cycle=${billingCycle ?? "-"})`,
+    };
+  }
 
   const supabase = getSupabaseServiceClient();
 
@@ -68,7 +97,7 @@ export async function createInvoiceFromPayment(
     .eq("id", ourPlanId)
     .maybeSingle<{ id: string; name: string; version: number }>();
 
-  if (!plan) return null;
+  if (!plan) return { ok: false, reason: "plan_not_found", detail: `plan ${ourPlanId} is not in our catalog` };
 
   const { data: prices } = await supabase
     .from("plan_prices")
@@ -77,7 +106,9 @@ export async function createInvoiceFromPayment(
     .maybeSingle<Record<string, number | null>>();
 
   const priceCents = prices?.[PRICE_COLUMN[billingCycle]] ?? null;
-  if (priceCents === null) return null;
+  if (priceCents === null) {
+    return { ok: false, reason: "no_price_for_cycle", detail: `plan ${ourPlanId} has no ${billingCycle} price` };
+  }
 
   // The subscription supplies the period. Deriving one from paid_at plus a cycle length would
   // invent a period that disagrees with the subscription's own, which is worse than having none.
@@ -141,7 +172,10 @@ export async function createInvoiceFromPayment(
   if (error) throw new Error(`Could not create invoice for ${paymentId}: ${error.message}`);
 
   const row = Array.isArray(result) ? result[0] : result;
-  if (!row) return null;
+  // The RPC returned nothing for a payment we HAVE attributed to a tenant. Never benign.
+  if (!row) {
+    return { ok: false, reason: "plan_not_found", detail: `create_invoice_for_payment returned no row for ${paymentId}` };
+  }
 
   if (row.reconciliation === "mismatched") {
     // Loud on purpose. This means we billed a different amount to the one the customer was
@@ -164,13 +198,16 @@ export async function createInvoiceFromPayment(
   }
 
   return {
-    invoiceId: row.invoice_id,
-    number: row.number,
-    created: row.created,
-    // The RPC returns plain text; narrow it rather than asserting, so an unexpected value from a
-    // future migration surfaces here instead of flowing on as a lie.
-    reconciliation: (RECONCILIATION_STATES as readonly string[]).includes(row.reconciliation)
-      ? (row.reconciliation as ReconciliationState)
-      : "pending",
+    ok: true,
+    invoice: {
+      invoiceId: row.invoice_id,
+      number: row.number,
+      created: row.created,
+      // The RPC returns plain text; narrow it rather than asserting, so an unexpected value from a
+      // future migration surfaces here instead of flowing on as a lie.
+      reconciliation: (RECONCILIATION_STATES as readonly string[]).includes(row.reconciliation)
+        ? (row.reconciliation as ReconciliationState)
+        : "pending",
+    },
   };
 }
