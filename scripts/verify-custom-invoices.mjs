@@ -36,7 +36,7 @@ const cookie = `insurvas_admin_session=${token}`;
 const { data: tenant } = await supabase
   .from("tenants").insert({ name: `Custom invoice ${stamp}`, status: "active" }).select("id").single();
 const tenantId = tenant.id;
-const { data: plan } = await supabase.from("plans").select("id").eq("code", "plan_a").eq("version", 1).single();
+const { data: plan } = await supabase.from("plans").select("id").eq("code", "basic").eq("version", 1).single();
 await supabase.rpc("admin_assign_subscription", {
   p_tenant_id: tenantId, p_plan_id: plan.id, p_billing_cycle: "monthly", p_start: new Date().toISOString(),
 });

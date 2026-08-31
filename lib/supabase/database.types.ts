@@ -1063,6 +1063,7 @@ export type Database = {
           id: string;
           is_archived: boolean;
           is_public: boolean;
+          is_default: boolean;
           name: string;
           plan_type: Database["public"]["Enums"]["plan_type"];
           sort_order: number;
@@ -1075,6 +1076,7 @@ export type Database = {
           id?: string;
           is_archived?: boolean;
           is_public?: boolean;
+          is_default?: boolean;
           name: string;
           plan_type: Database["public"]["Enums"]["plan_type"];
           sort_order?: number;
@@ -1087,6 +1089,7 @@ export type Database = {
           id?: string;
           is_archived?: boolean;
           is_public?: boolean;
+          is_default?: boolean;
           name?: string;
           plan_type?: Database["public"]["Enums"]["plan_type"];
           sort_order?: number;
@@ -2041,6 +2044,7 @@ export type Database = {
           id: string | null;
           is_archived: boolean | null;
           is_public: boolean | null;
+          is_default: boolean | null;
           name: string | null;
           plan_type: Database["public"]["Enums"]["plan_type"] | null;
           sort_order: number | null;

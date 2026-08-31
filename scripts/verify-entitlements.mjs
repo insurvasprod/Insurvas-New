@@ -47,7 +47,7 @@ try {
     .from("plans")
     .select("id, code, version")
     .eq("version", 1)
-    .in("code", ["plan_a", "plan_b", "plan_c"])
+    .in("code", ["basic", "pro", "advance"])
     .order("code");
 
   console.log("Exact feature list per seeded plan\n");

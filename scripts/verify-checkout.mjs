@@ -36,7 +36,7 @@ async function makeSignedUpTenant(label) {
   await supabase.from("tenant_users").insert({ tenant_id: tenant.id, user_id: user.id, role: "owner" });
 
   const { data: plan } = await supabase
-    .from("plans").select("id").eq("code", "plan_a").eq("version", 1).single();
+    .from("plans").select("id").eq("code", "basic").eq("version", 1).single();
   await supabase.from("signup_selections").insert({ tenant_id: tenant.id, plan_id: plan.id, billing_cycle: "monthly" });
 
   const token = await new SignJWT({ tenantId: tenant.id })

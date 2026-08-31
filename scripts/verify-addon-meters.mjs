@@ -16,7 +16,7 @@ const stamp = Date.now();
 let fail = 0;
 const check = (l, c, d = "") => { console.log(c ? `  ok   ${l}` : `  FAIL ${l}${d ? " — " + d : ""}`); if (!c) fail++; };
 
-const { data: plan } = await s.from("plans").select("id").eq("code","plan_a").order("version",{ascending:false}).limit(1).single();
+const { data: plan } = await s.from("plans").select("id").eq("code","basic").order("version",{ascending:false}).limit(1).single();
 const { data: t } = await s.from("tenants").insert({ name: `M2-3 ${stamp}`, status: "active" }).select("id").single();
 const { data: sub } = await s.from("subscriptions").insert({
   tenant_id: t.id, plan_id: plan.id, status: "active", billing_cycle: "monthly",

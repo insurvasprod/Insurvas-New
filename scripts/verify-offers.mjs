@@ -48,7 +48,7 @@ async function makeSubscription(label) {
   const { data: plan, error: planError } = await supabase
     .from("plans")
     .select("id")
-    .eq("code", "plan_b")
+    .eq("code", "pro")
     .eq("version", 1)
     .single();
   if (planError) throw new Error(`Could not find verification plan: ${planError.message}`);

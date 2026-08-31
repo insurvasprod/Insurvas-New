@@ -122,7 +122,7 @@ try {
     email: `legal_${suffix}_${stamp}@insurvas.test`,
     password: "correct horse battery staple",
     phone: "5551234567",
-    planCode: "plan_a",
+    planCode: "basic",
     billingCycle: "monthly",
   });
 

@@ -29,7 +29,7 @@ const { data: tenant } = await supabase
 const tenantId = tenant.id;
 
 const { data: plan } = await supabase
-  .from("plans").select("id").eq("code", "plan_a").eq("version", 1).single();
+  .from("plans").select("id").eq("code", "basic").eq("version", 1).single();
 
 async function cleanup() {
   await supabase.from("payments").delete().eq("tenant_id", tenantId);

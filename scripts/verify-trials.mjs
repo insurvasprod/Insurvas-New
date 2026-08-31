@@ -50,7 +50,7 @@ const adminCookie = await sign(superAdmin.id, "super_admin");
 const supportCookie = await sign(supportAdmin.id, "support_agent");
 
 const { data: plan } = await supabase
-  .from("plans").select("id").eq("code", "plan_a").order("version", { ascending: false }).limit(1).single();
+  .from("plans").select("id").eq("code", "basic").order("version", { ascending: false }).limit(1).single();
 
 /** A trialing tenant with an owner, optionally one who has signed in. */
 async function makeTrial(label, { daysLeft, hasLoggedIn }) {

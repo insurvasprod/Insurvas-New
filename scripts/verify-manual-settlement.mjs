@@ -23,7 +23,7 @@ const cookie = `insurvas_admin_session=${await new SignJWT({ role: "super_admin"
   .setProtectedHeader({ alg: "HS256" }).setSubject(admin.id).setIssuedAt().setExpirationTime("10m")
   .sign(new TextEncoder().encode(process.env.ADMIN_SESSION_SECRET))}`;
 
-const { data: plan } = await supabase.from("plans").select("id").eq("code", "plan_a").order("version", { ascending: false }).limit(1).single();
+const { data: plan } = await supabase.from("plans").select("id").eq("code", "basic").order("version", { ascending: false }).limit(1).single();
 
 async function tenantWithTwoSubscriptions() {
   const { data: t } = await supabase.from("tenants").insert({ name: `M3-4 ${stamp}`, status: "active" }).select("id").single();

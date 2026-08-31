@@ -6,7 +6,7 @@ import type { PlanListRow, PlanVersionRow } from "./constants";
 export type { PlanListRow, PlanVersionRow };
 
 const LIST_COLUMNS =
-  "id, code, version, name, plan_type, description, is_public, is_archived, sort_order, created_at, version_count, subscriber_count, ever_subscribed_count";
+  "id, code, version, name, plan_type, description, is_public, is_archived, is_default, sort_order, created_at, version_count, subscriber_count, ever_subscribed_count";
 
 /**
  * One row per plan code (its latest version).
