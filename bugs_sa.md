@@ -212,7 +212,9 @@ The original dummy-provider language in the older tickets was treated as superse
 - Make attempt increments atomic in SQL.
 - Add a failure-injection test proving a failed `processed_at` write returns a retryable response.
 
-### M3-2. P1 — A successful Whop payment can be acknowledged without an invoice
+### M3-2. ✅ FIXED 2026-08-30 — P1 — A successful Whop payment can be acknowledged without an invoice
+
+**Resolution.** `createInvoiceFromPayment` returns an explicit reason instead of a bare null. `unattributed` — no tenant resolvable — is the shape of Whop's dashboard test event and stays benign; every other reason means a real tenant paid and we could not record what for, and now throws, leaving `processed_at` null and the reason in `process_error` so Whop retries. Covered by `npm run verify:webhook-invoicing`.
 
 **Evidence**
 
@@ -241,7 +243,9 @@ The invoice RPC commits first. Coupon-period consumption runs afterward and its 
 - Make the idempotency key cover both effects.
 - Add a test that fails coupon consumption once and proves retry reaches one correct final state.
 
-### M3-4. P1 — Manual payment settlement is non-atomic and activates unrelated subscriptions
+### M3-4. ✅ FIXED 2026-08-30 — P1 — Manual payment settlement is non-atomic and activates unrelated subscriptions
+
+**Resolution.** One locked function, one transaction (`admin_settle_invoice_manually`). Overpayment is refused naming the outstanding balance; only the invoice's OWN subscription is activated, and only from `past_due` or `suspended`. Covered by `npm run verify:settlement`. **Note the historical data this reported is not corrected by the fix:** INV-2026-08-0001 still carries 19,800 cents against a 9,900 cent total. That overpayment needs a deliberate decision — refund or credit — see [#106].
 
 **Evidence**
 
@@ -492,7 +496,9 @@ This is also a security issue: a downgrade, suspension, cancellation, or add-on 
 - Otherwise return a reconciliation-required response and enqueue a durable retry instead of silently succeeding.
 - Alert when cache version/computed time lags the source subscription state.
 
-### M2-3. P1 — Add-on meter credits are ignored by enforcement and the usage screen
+### M2-3. ⚠️ PARTLY FIXED 2026-08-30 — P1 — Add-on meter credits are ignored by enforcement and the usage screen
+
+**Resolution.** `check_meter_capacity` now merges add-on credits exactly as `resolve_tenant_entitlement` does, so enforcement and the entitlement produce the same number; `npm run verify:addon-meters` asserts that equality directly. **The usage SCREEN half is not done** — `lib/metering/queries.ts` still builds rows from plan meters only, so add-on credits remain invisible there.
 
 **Evidence**
 
@@ -523,7 +529,9 @@ The route loads subscription A from the URL but passes only the attachment ID to
 - Return the affected tenant from the transaction and rebuild that tenant only.
 - Add a two-tenant negative test.
 
-### M2-5. P1 — Crafted subscription actions can revive cancelled or suspended access
+### M2-5. ⚠️ PARTLY FIXED 2026-08-30 — P1 — Crafted subscription actions can revive cancelled or suspended access
+
+**Resolution.** The pause/resume transition graph now lives in a locked database function and refuses everything the UI would not offer; `resume` is no longer a universal "make it active". Covered by `npm run verify:transitions`. **Not done:** the plan-change and non-immediate-cancel paths still do not reject a cancelled subscription — `subscription_is_operable()` was added for them but is not yet called.
 
 **Evidence**
 

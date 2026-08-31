@@ -1231,6 +1231,22 @@ No ticket asks for them, and MFA for agents is a product decision rather than a 
 exists on `admin_users` only, by design.
 
 
+### 106. A live invoice is overpaid by 9,900 cents, and the fix does not correct it
+**From:** fixing bugs_sa.md M3-4 · **Needs a decision, not code**
+
+`admin_settle_invoice_manually` now refuses overpayment, so this cannot happen again. It does not
+repair what already happened: `INV-2026-08-0001` has a total of 9,900 cents and 19,800 cents of
+successful payments recorded against it. A customer paid twice for one invoice.
+
+Deliberately not corrected automatically. The options are a refund, a credit note against a future
+invoice, or voiding the duplicate payment record — and which is right depends on whether the money
+actually left their account twice, which the payment provider knows and we do not. Guessing would
+either keep money that is not ours or reverse a charge that was legitimate.
+
+**Fix:** confirm with the provider what was actually collected, then use the existing credit-note
+path (SA-3.8) or a refund. Both are already built and audit-logged.
+
+
 ---
 
 ## ✅ Resolved
