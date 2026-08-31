@@ -92,30 +92,30 @@ insert into public.meter_pricing (meter_key, cost_cents, sell_cents, default_inc
 
 -- Version 1 of each. A price change creates version 2 and existing subscribers stay where they
 -- are, which is what makes grandfathering real.
-insert into public.plans (code, version, name, plan_type, description, is_public, sort_order) values
-  ('ledger',   1, 'Ledger',   'individual',
-   'For the agent who wants his commission money reconciled. No CRM.', true, 1),
-  ('basic',    1, 'Basic',    'individual',
-   'The full-time solo producer. Leads, dialer, selling and compliance.', true, 2),
-  ('advanced', 1, 'Advanced', 'individual',
-   'For a book big enough that chargebacks decide the year.', true, 3);
+insert into public.plans (code, version, name, plan_type, description, is_public, is_default, sort_order) values
+  ('basic',   1, 'Basic',   'individual',
+   'Your book of business and your commission money, reconciled. No CRM.', true, false, 1),
+  ('pro',     1, 'Pro',     'individual',
+   'The full-time solo producer: leads, dialer, selling and compliance.', true, true,  2),
+  ('advance', 1, 'Advance', 'individual',
+   'For a book big enough that chargebacks decide the year.', true, false, 3);
 
 -- Yearly is ten months for twelve, matching the admin doc's own example (a $449 plan priced at
 -- $4,490 a year). Quarterly is deliberately null — a cycle with no price cannot be sold.
 insert into public.plan_prices (plan_id, price_monthly_cents, price_quarterly_cents, price_yearly_cents, setup_fee_cents, trial_days, currency)
 select p.id, v.monthly, null, v.yearly, 0, 14, 'USD'
 from public.plans p
-join (values ('ledger', 9900, 99000), ('basic', 24900, 249000), ('advanced', 44900, 449000))
+join (values ('basic', 9900, 99000), ('pro', 24900, 249000), ('advance', 44900, 449000))
   as v(code, monthly, yearly) on v.code = p.code;
 
 insert into public.plan_limits (plan_id, max_seats, max_carriers)
 select p.id, 1, v.carriers
 from public.plans p
-join (values ('ledger', 10), ('basic', 10), ('advanced', null::integer)) as v(code, carriers)
+join (values ('basic', 10), ('pro', 10), ('advance', null::integer)) as v(code, carriers)
   on v.code = p.code;
 
--- Features nest exactly as the agent doc's §6.5 menus do: Basic is Ledger plus
--- acquisition/sell/compliance, Advanced is Basic plus retention/insight/partners/accounting.
+-- Features nest exactly as the agent doc's §6.5 menus do: Pro is Basic plus
+-- acquisition/sell/compliance, Advance is Pro plus retention/insight/partners/accounting.
 --
 -- partner_portal is deliberately in NO plan. The doc assigns it to the Partner Portal add-on.
 insert into public.plan_features (plan_id, feature_key)
@@ -126,7 +126,7 @@ cross join lateral (
     'book_of_business','statement_ingestion','commission_ledger','appointment_vault','discrepancy_report'
   ]) as feature_key
 ) f
-where p.code in ('ledger', 'basic', 'advanced');
+where p.code in ('basic', 'pro', 'advance');
 
 insert into public.plan_features (plan_id, feature_key)
 select p.id, f.feature_key
@@ -138,7 +138,7 @@ cross join lateral (
     'consent_locker','tcpa_checker'
   ]) as feature_key
 ) f
-where p.code in ('basic', 'advanced');
+where p.code in ('pro', 'advance');
 
 insert into public.plan_features (plan_id, feature_key)
 select p.id, f.feature_key
@@ -152,36 +152,36 @@ cross join lateral (
     'litigation_packet'
   ]) as feature_key
 ) f
-where p.code = 'advanced';
+where p.code = 'advance';
 
--- Ledger gets zero of everything it cannot use — it has no dialer, SMS, e-sign or compliance
--- feature, so an allowance for those would be theatre. It gets MORE statement pages than Basic
--- because reconciliation is the entire plan. Advanced gets unlimited statement pages (null), as
+-- Basic gets zero of everything it cannot use — it has no dialer, SMS, e-sign or compliance
+-- feature, so an allowance for those would be theatre. It gets MORE statement pages than Pro
+-- because reconciliation is the entire plan. Advance gets unlimited statement pages (null), as
 -- the doc's plan JSON specifies.
 insert into public.plan_meters (plan_id, meter_key, included_qty, hard_cap)
 select p.id, v.meter_key, v.qty, v.hard_cap
 from public.plans p
 join (values
-  ('ledger',   'dialer_minutes',     0,               true),
-  ('ledger',   'dnc_lookups',        0,               true),
-  ('ledger',   'tcpa_checks',        0,               true),
-  ('ledger',   'sms_segments',       0,               true),
-  ('ledger',   'esign_envelopes',    0,               true),
-  ('ledger',   'statement_pages',    1000,            false),
+  ('basic',   'dialer_minutes',     0,               true),
+  ('basic',   'dnc_lookups',        0,               true),
+  ('basic',   'tcpa_checks',        0,               true),
+  ('basic',   'sms_segments',       0,               true),
+  ('basic',   'esign_envelopes',    0,               true),
+  ('basic',   'statement_pages',    1000,            false),
 
-  ('basic',    'dialer_minutes',     1000,            true),
-  ('basic',    'dnc_lookups',        2000,            true),
-  ('basic',    'tcpa_checks',        2000,            true),
-  ('basic',    'sms_segments',       500,             true),
-  ('basic',    'esign_envelopes',    25,              true),
-  ('basic',    'statement_pages',    500,             false),
+  ('pro',     'dialer_minutes',     1000,            true),
+  ('pro',     'dnc_lookups',        2000,            true),
+  ('pro',     'tcpa_checks',        2000,            true),
+  ('pro',     'sms_segments',       500,             true),
+  ('pro',     'esign_envelopes',    25,              true),
+  ('pro',     'statement_pages',    500,             false),
 
-  ('advanced', 'dialer_minutes',     3000,            true),
-  ('advanced', 'dnc_lookups',        6000,            true),
-  ('advanced', 'tcpa_checks',        6000,            true),
-  ('advanced', 'sms_segments',       2000,            true),
-  ('advanced', 'esign_envelopes',    100,             true),
-  ('advanced', 'statement_pages',    null::integer,   false)
+  ('advance', 'dialer_minutes',     3000,            true),
+  ('advance', 'dnc_lookups',        6000,            true),
+  ('advance', 'tcpa_checks',        6000,            true),
+  ('advance', 'sms_segments',       2000,            true),
+  ('advance', 'esign_envelopes',    100,             true),
+  ('advance', 'statement_pages',    null::integer,   false)
 ) as v(code, meter_key, qty, hard_cap) on v.code = p.code;
 
 -- Only Partner Portal: the one add-on in the doc whose features already exist in the menu. The
@@ -200,7 +200,7 @@ where a.code = 'partner_portal';
 
 insert into public.plan_available_addons (plan_id, addon_id)
 select p.id, a.id from public.plans p, public.addons a
-where p.code = 'advanced' and a.code = 'partner_portal';
+where p.code = 'advance' and a.code = 'partner_portal';
 
 -- Credit top-up packs, priced from the sell rates above. These now genuinely grant credits —
 -- before bugs_sa.md #11 was fixed, buying one billed the customer and moved nothing.

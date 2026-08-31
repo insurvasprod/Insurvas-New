@@ -34,7 +34,7 @@ async function makeSubscription(label) {
     .from("tenants").insert({ name: `Coupon ${label} ${stamp}`, status: "active" }).select("id").single();
   tenantIds.push(tenant.id);
   const { data: plan } = await supabase
-    .from("plans").select("id").eq("code", "plan_b").eq("version", 1).single();
+    .from("plans").select("id").eq("code", "pro").eq("version", 1).single();
   await supabase.rpc("admin_assign_subscription", {
     p_tenant_id: tenant.id, p_plan_id: plan.id, p_billing_cycle: "monthly", p_start: new Date().toISOString(),
   });
