@@ -1201,6 +1201,36 @@ returned errors. Keep authentication available while surfacing and retrying tele
 See M1-10.
 
 
+### 105. Tenant users have no self-service account recovery — deferred to LA-0
+**From:** the SA-4.11 email audit · **Deferred by decision on 2026-08-30**
+
+Every account-recovery path for a tenant user runs through an admin. The emails themselves work
+and are wired to Google SMTP; what is missing is any way for the user to start one.
+
+**Password reset.** `/app/login` links only to `/pricing` — there is no "Forgot password?". The
+reset email, the hashed-token machinery and the `/app/set-password` landing page all exist, and the
+only trigger is `POST /api/admin/users/[id]/send-reset`. So an agent locked out at 7am phones
+Insurvas, and somebody opens the admin panel for them. Every time.
+
+What is left to build is small: a public route that accepts an email address, issues the token and
+sends the existing email, plus the link on the login page. **It must answer identically whether or
+not the address exists** — otherwise the form becomes a way to enumerate which of your customers'
+emails are registered. `/api/app/auth/login` already does this correctly with a dummy-hash compare;
+reuse the shape.
+
+**Email address change.** Same split: the confirmation email goes to the new address and proves
+control before the change takes effect, but only `PATCH /api/admin/users/[id]` can start it.
+
+**Security notifications.** Nothing tells a user their password or email address was changed. That
+notification is how account takeover gets noticed, and the trigger points already exist in
+`app/api/app/auth/set-password` and `app/api/app/auth/confirm-email`. Cheap, and worth doing
+alongside the reset.
+
+Deliberately NOT on this list: magic links, OTP, reauthentication prompts, and MFA for tenant users.
+No ticket asks for them, and MFA for agents is a product decision rather than a gap — `totp_secret`
+exists on `admin_users` only, by design.
+
+
 ---
 
 ## ✅ Resolved
