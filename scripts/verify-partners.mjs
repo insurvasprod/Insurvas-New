@@ -82,7 +82,7 @@ async function main() {
     const offboardWithoutConfirmation = await api(`/api/app/partners/${partnerId}`, owner, { method: "PATCH", ...json({ action: "transition", next_status: "offboarded", reason: "Close partner relationship" }) });
     check("offboarding requires typed confirmation", offboardWithoutConfirmation.status === 400, `status ${offboardWithoutConfirmation.status}, body ${JSON.stringify(await offboardWithoutConfirmation.clone().json().catch(() => null))}`);
 
-    const partnerUser = await db.from("partner_users").insert({ partner_id: partnerId, user_id: portalUserId, status: "active" });
+    const partnerUser = await db.from("partner_users").insert({ tenant_id: tenantId, partner_id: partnerId, user_id: portalUserId, role: "partner_user", status: "active" });
     if (partnerUser.error) throw new Error(partnerUser.error.message);
     const leadTemplate = await db.from("templates").select("id").eq("product_code", "term_life").eq("is_active", true).limit(1).maybeSingle();
     if (leadTemplate.data) {

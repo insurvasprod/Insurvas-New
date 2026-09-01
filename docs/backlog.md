@@ -1263,6 +1263,33 @@ edit, term history, pause/resume and typed offboard, capture the finished screen
 console at desktop and phone widths. Cost of leaving it: a browser-only rendering or interaction
 defect could remain unseen even though the server and automated checks pass.
 
+### 113. ✅ LA-1.2 partner users and isolated portal access completed
+**From:** LA-1.2 · **Belongs to:** LA-1.2 · **Resolved:** 2026-09-01
+
+Partner users now have separate login and password-invite flows, partner-admin user management,
+database-resolved role and membership checks, next-request deactivation, atomic offboarding
+revocation, audit rows, partner/tenant isolation and a responsive portal shell. The migration set
+`20260902110000_la_1_2_partner_users_portal_access` plus its numbered ambiguity fixes was applied
+to live Supabase. The focused live verifier passed session forgery/expiry, cross-partner and
+cross-role access, same-token concurrency, agent-route separation, deactivation, reactivation,
+offboarding, audit and protected configuration-route checks. Browser QA rendered the authenticated
+partner portal with visible controls and no overflow; the temporary QA account was removed.
+
+All LA-1.2 acceptance criteria are PASS for the routes and operations that exist in this ticket.
+
+### 114. 🟡 LA-1.2 lead submission content remains owned by the later intake ticket
+**From:** LA-1.2 · **Belongs to:** LA-1.6 · **Gap recorded:** 2026-09-01
+
+The portal deliberately contains the access frame and a clear lead-submission placeholder, but it
+does not implement the actual submit-lead workflow, pipeline screens or partner chat. The ticket's
+out-of-scope rule excludes module content, and the existing backlog already assigns submission
+enforcement/content to LA-1.6 and LA-1.7. Leaving this here means partner credentials and isolation
+are complete, while a partner cannot yet submit a real lead until that later module ships.
+
+**Fix:** LA-1.6 must add the partner submission API and screen, call the shared current-partner
+authorization check, enforce active partner status, and add end-to-end submission tests without
+granting access to agent configuration or commission data.
+
 - **#79 Configuration Center route verifier** → resolved 2026-09-01. The verifier now exercises the
   shipped top-level admin routes after the Configuration Center hub was removed. Allowed roles
   return 200; denied roles return the app's server-side 307 denial redirect or 403. All 41 route

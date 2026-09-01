@@ -1476,22 +1476,36 @@ export type Database = {
       };
       partner_users: {
         Row: {
+          id: string;
+          tenant_id: string;
           partner_id: string;
           user_id: string;
+          role: Database["public"]["Enums"]["partner_user_role"];
           status: Database["public"]["Enums"]["partner_user_status"];
           invited_at: string;
           revoked_at: string | null;
+          accepted_at: string | null;
+          deactivated_at: string | null;
         };
         Insert: {
+          id?: string;
+          tenant_id: string;
           partner_id: string;
           user_id: string;
+          role?: Database["public"]["Enums"]["partner_user_role"];
           status?: Database["public"]["Enums"]["partner_user_status"];
           invited_at?: string;
           revoked_at?: string | null;
+          accepted_at?: string | null;
+          deactivated_at?: string | null;
         };
         Update: {
+          tenant_id?: string;
           status?: Database["public"]["Enums"]["partner_user_status"];
           revoked_at?: string | null;
+          role?: Database["public"]["Enums"]["partner_user_role"];
+          accepted_at?: string | null;
+          deactivated_at?: string | null;
         };
         Relationships: [];
       };
@@ -2256,6 +2270,7 @@ export type Database = {
           purpose: Database["public"]["Enums"]["user_token_purpose"];
           token_hash: string;
           user_id: string;
+          partner_id: string | null;
         };
         Insert: {
           accepted_at?: string | null;
@@ -2267,6 +2282,7 @@ export type Database = {
           purpose?: Database["public"]["Enums"]["user_token_purpose"];
           token_hash: string;
           user_id: string;
+          partner_id?: string | null;
         };
         Update: {
           accepted_at?: string | null;
@@ -2278,6 +2294,7 @@ export type Database = {
           purpose?: Database["public"]["Enums"]["user_token_purpose"];
           token_hash?: string;
           user_id?: string;
+          partner_id?: string | null;
         };
         Relationships: [];
       };
@@ -2483,6 +2500,22 @@ export type Database = {
           purpose: Database["public"]["Enums"]["user_token_purpose"];
           user_id: string;
         }[];
+      };
+      consume_partner_password_token: {
+        Args: { p_password_hash: string; p_token_hash: string };
+        Returns: { accepted_at: string; partner_id: string; user_id: string }[];
+      };
+      partner_invite_user: {
+        Args: { p_email: string; p_expires_at: string; p_name: string; p_partner_id: string; p_role: Database["public"]["Enums"]["partner_user_role"]; p_tenant_id: string; p_token_hash: string };
+        Returns: { accepted_at: string | null; email: string; invited_at: string; name: string; partner_id: string; role: Database["public"]["Enums"]["partner_user_role"]; tenant_id: string; user_id: string }[];
+      };
+      partner_resend_invite: {
+        Args: { p_expires_at: string; p_partner_id: string; p_tenant_id: string; p_token_hash: string; p_user_id: string };
+        Returns: { email: string; name: string; user_id: string }[];
+      };
+      partner_set_user_status: {
+        Args: { p_partner_id: string; p_status: Database["public"]["Enums"]["partner_user_status"]; p_tenant_id: string; p_user_id: string };
+        Returns: { new_status: Database["public"]["Enums"]["partner_user_status"]; old_status: Database["public"]["Enums"]["partner_user_status"] }[];
       };
       admin_create_plan_version: {
         Args: { p_plan_id: string };
@@ -3062,6 +3095,7 @@ export type Database = {
       partner_status: "draft" | "active" | "paused" | "offboarded";
       partner_payout_model: "per_transfer" | "per_lead" | "per_sale" | "per_issued_policy" | "revenue_share";
       partner_user_status: "active" | "revoked";
+      partner_user_role: "partner_admin" | "partner_user";
     };
     CompositeTypes: {
       [_ in never]: never;

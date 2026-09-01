@@ -68,7 +68,8 @@
     "verify:appointment-vault": "node --env-file=.env.local --experimental-strip-types scripts/verify-appointment-vault.mjs",
     "verify:contacts": "node --env-file=.env.local --experimental-strip-types scripts/verify-contacts.mjs",
     "verify:la0-rls": "node --env-file=.env.local scripts/verify-la0-rls.mjs",
-    "verify:partners": "node --env-file=.env.local scripts/verify-partners.mjs"
+    "verify:partners": "node --env-file=.env.local scripts/verify-partners.mjs",
+    "verify:partner-users": "node --env-file=.env.local scripts/verify-partner-users.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.99.0",

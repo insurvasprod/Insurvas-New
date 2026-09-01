@@ -39,6 +39,7 @@ const SUITES = [
   ["period billing", "verify-period-billing.mjs"],
   ["LA-0 RLS", "verify-la0-rls.mjs"],
   ["LA-1.1 partners", "verify-partners.mjs"],
+  ["LA-1.2 partner users", "verify-partner-users.mjs"],
 ];
 
 // verify-payment-provider.mjs imports TypeScript directly, so it needs the type-stripping flag the
