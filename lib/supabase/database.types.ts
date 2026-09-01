@@ -1285,6 +1285,24 @@ export type Database = {
           },
         ];
       };
+      pipelines: {
+        Row: { id: string; tenant_id: string; name: string; partner_type: Database["public"]["Enums"]["partner_type"]; is_default: boolean; created_at: string; updated_at: string };
+        Insert: { id?: string; tenant_id: string; name: string; partner_type: Database["public"]["Enums"]["partner_type"]; is_default?: boolean; created_at?: string; updated_at?: string };
+        Update: { id?: string; tenant_id?: string; name?: string; partner_type?: Database["public"]["Enums"]["partner_type"]; is_default?: boolean; updated_at?: string };
+        Relationships: [];
+      };
+      pipeline_stages: {
+        Row: { id: string; pipeline_id: string; name: string; position: number; stage_type: string; color: string; is_archived: boolean; created_at: string; updated_at: string };
+        Insert: { id?: string; pipeline_id: string; name: string; position: number; stage_type: string; color: string; is_archived?: boolean; created_at?: string; updated_at?: string };
+        Update: { id?: string; pipeline_id?: string; name?: string; position?: number; stage_type?: string; color?: string; is_archived?: boolean; updated_at?: string };
+        Relationships: [];
+      };
+      stage_dispositions: {
+        Row: { id: string; tenant_id: string; stage_id: string; disposition_key: string; created_at: string; updated_at: string };
+        Insert: { id?: string; tenant_id: string; stage_id: string; disposition_key: string; created_at?: string; updated_at?: string };
+        Update: { stage_id?: string; disposition_key?: string; updated_at?: string };
+        Relationships: [];
+      };
       plans: {
         Row: {
           code: string;
@@ -1483,7 +1501,8 @@ export type Database = {
           template_id: string;
           template_version: number;
           product_line: string;
-          stage_key: string;
+          pipeline_id: string;
+          stage_id: string;
           values: Json;
           created_by: string | null;
           created_at: string;
@@ -1511,7 +1530,8 @@ export type Database = {
           template_id: string;
           template_version: number;
           product_line: string;
-          stage_key: string;
+          pipeline_id: string;
+          stage_id: string;
           values?: Json;
           created_by?: string | null;
           created_at?: string;
@@ -1539,7 +1559,8 @@ export type Database = {
           template_id?: string;
           template_version?: number;
           product_line?: string;
-          stage_key?: string;
+          pipeline_id?: string;
+          stage_id?: string;
           values?: Json;
           created_by?: string | null;
           created_at?: string;
@@ -1558,15 +1579,15 @@ export type Database = {
         Relationships: [];
       };
       lead_queue: {
-        Row: { id: string; tenant_id: string; lead_id: string; partner_id: string | null; affiliate_link_id: string | null; affiliate_campaign: string | null; product_line: string; stage_key: string; status: string; claimed_by: string | null; claimed_at: string | null; created_at: string; updated_at: string };
-        Insert: { id?: string; tenant_id: string; lead_id: string; partner_id?: string | null; affiliate_link_id?: string | null; affiliate_campaign?: string | null; product_line: string; stage_key: string; status?: string; claimed_by?: string | null; claimed_at?: string | null; created_at?: string; updated_at?: string };
-        Update: { status?: string; claimed_by?: string | null; claimed_at?: string | null; updated_at?: string };
+        Row: { id: string; tenant_id: string; lead_id: string; partner_id: string | null; affiliate_link_id: string | null; affiliate_campaign: string | null; product_line: string; pipeline_id: string; stage_id: string; status: string; claimed_by: string | null; claimed_at: string | null; created_at: string; updated_at: string };
+        Insert: { id?: string; tenant_id: string; lead_id: string; partner_id?: string | null; affiliate_link_id?: string | null; affiliate_campaign?: string | null; product_line: string; pipeline_id: string; stage_id: string; status?: string; claimed_by?: string | null; claimed_at?: string | null; created_at?: string; updated_at?: string };
+        Update: { pipeline_id?: string; stage_id?: string; status?: string; claimed_by?: string | null; claimed_at?: string | null; updated_at?: string };
         Relationships: [];
       };
       deal_flow: {
-        Row: { id: string; tenant_id: string; lead_id: string; partner_id: string | null; affiliate_link_id: string | null; affiliate_campaign: string | null; submission_id: string | null; product_line: string; stage_key: string; insured_name: string | null; phone: string | null; initial_quote: string | null; tracking_id: string | null; local_date: string; created_at: string; updated_at: string };
-        Insert: { id?: string; tenant_id: string; lead_id: string; partner_id?: string | null; affiliate_link_id?: string | null; affiliate_campaign?: string | null; submission_id?: string | null; product_line: string; stage_key: string; insured_name?: string | null; phone?: string | null; initial_quote?: string | null; tracking_id?: string | null; local_date: string; created_at?: string; updated_at?: string };
-        Update: { stage_key?: string; insured_name?: string | null; phone?: string | null; initial_quote?: string | null; tracking_id?: string | null; updated_at?: string };
+        Row: { id: string; tenant_id: string; lead_id: string; partner_id: string | null; affiliate_link_id: string | null; affiliate_campaign: string | null; submission_id: string | null; product_line: string; pipeline_id: string; stage_id: string; insured_name: string | null; phone: string | null; initial_quote: string | null; tracking_id: string | null; local_date: string; created_at: string; updated_at: string };
+        Insert: { id?: string; tenant_id: string; lead_id: string; partner_id?: string | null; affiliate_link_id?: string | null; affiliate_campaign?: string | null; submission_id?: string | null; product_line: string; pipeline_id: string; stage_id: string; insured_name?: string | null; phone?: string | null; initial_quote?: string | null; tracking_id?: string | null; local_date: string; created_at?: string; updated_at?: string };
+        Update: { pipeline_id?: string; stage_id?: string; insured_name?: string | null; phone?: string | null; initial_quote?: string | null; tracking_id?: string | null; updated_at?: string };
         Relationships: [];
       };
       affiliate_links: {
@@ -2588,6 +2609,22 @@ export type Database = {
       };
     };
     Functions: {
+      archive_pipeline_stage: {
+        Args: { p_stage_id: string; p_tenant_id: string };
+        Returns: { id: string; pipeline_id: string; name: string; position: number; stage_type: string; color: string; is_archived: boolean; created_at: string; updated_at: string };
+      };
+      reorder_pipeline_stages: {
+        Args: { p_pipeline_id: string; p_stage_ids: string[]; p_tenant_id: string };
+        Returns: { id: string; pipeline_id: string; name: string; position: number; stage_type: string; color: string; is_archived: boolean; created_at: string; updated_at: string }[];
+      };
+      set_stage_disposition: {
+        Args: { p_disposition_key: string; p_stage_id: string; p_tenant_id: string };
+        Returns: { id: string; tenant_id: string; stage_id: string; disposition_key: string; created_at: string; updated_at: string };
+      };
+      move_lead_to_disposition: {
+        Args: { p_disposition_key: string; p_lead_id: string; p_tenant_id: string };
+        Returns: { lead_id: string; pipeline_id: string; stage_id: string }[];
+      };
       self_serve_signup: {
         Args: {
           p_billing_cycle: Database["public"]["Enums"]["billing_cycle"];

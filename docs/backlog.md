@@ -1400,6 +1400,26 @@ required typecheck/lint/build/test/feature checks, deep migration verification, 
 QA at desktop and phone widths passed. Disposable QA tenants and compliance vendors were removed.
 Nothing remains unmet, deferred or unverified for LA-1.8, so nothing was added to the open backlog.
 
+### 123. ✅ LA-1.9 pipeline and stage configuration completed
+**From:** LA-1.9 · **Belongs to:** LA-1.9 · **Resolved:** 2026-09-01
+
+Tenant-scoped pipelines, ordered stages, tenant-scoped disposition mappings, default seeding,
+atomic reorder, safe archiving, canonical lead stage foreign keys, server-side owner guards,
+audit logging and the responsive settings controls are implemented. The live migrations
+`20260902190000_la_1_9_pipelines`, `20260902200000_la_1_9_pipeline_atomic_ops`,
+`20260902210000_la_1_9_revoke_rpc_execute` and `20260902220000_la_1_9_pipeline_fk_indexes` are
+applied to `Insurvas-Saas`.
+
+The focused live verifier passed forged and expired session rejection, role enforcement, tenant
+isolation, hostile input, default seeding, create/update paths, atomic and concurrent reorder,
+in-use archiving, tenant-scoped mappings, disposition movement, cross-tenant mutation rejection
+and audit evidence. Live SQL confirms the three operational tables store only non-null
+`pipeline_id`/`stage_id` values, and the pipeline RPCs are executable only by `service_role`.
+The authenticated owner settings screen was checked in a fresh browser tab at desktop and phone
+widths with no fresh console errors; stage selection, editors, mapping controls and mobile card
+layout rendered correctly. The required repository checks and the complete LA-1 verifier passed.
+Nothing remains unmet, deferred or unverified for LA-1.9, so nothing was added to the open backlog.
+
 
 - **#79 Configuration Center route verifier** → resolved 2026-09-01. The verifier now exercises the
   shipped top-level admin routes after the Configuration Center hub was removed. Allowed roles

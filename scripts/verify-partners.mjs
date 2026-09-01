@@ -86,7 +86,9 @@ async function main() {
     if (partnerUser.error) throw new Error(partnerUser.error.message);
     const leadTemplate = await db.from("templates").select("id").eq("product_code", "term_life").eq("is_active", true).limit(1).maybeSingle();
     if (leadTemplate.data) {
-      const lead = await db.from("agent_leads").insert({ tenant_id: tenantId, template_id: leadTemplate.data.id, template_version: 1, product_line: "term_life", stage_key: "new", values: { source: "LA-1.1 verification" }, created_by: ownerId, partner_id: partnerId });
+      const pipeline = await db.from("pipelines").select("id").eq("tenant_id", tenantId).eq("partner_type", "marketing").eq("is_default", true).single();
+      const stage = pipeline.data ? await db.from("pipeline_stages").select("id").eq("pipeline_id", pipeline.data.id).eq("name", "Form Lead").single() : { data: null };
+      const lead = await db.from("agent_leads").insert({ tenant_id: tenantId, template_id: leadTemplate.data.id, template_version: 1, product_line: "term_life", pipeline_id: pipeline.data?.id, stage_id: stage.data?.id, values: { source: "LA-1.1 verification" }, created_by: ownerId, partner_id: partnerId });
       if (lead.error) throw new Error(lead.error.message);
     }
     const offboarded = await api(`/api/app/partners/${partnerId}`, owner, { method: "PATCH", ...json({ action: "transition", next_status: "offboarded", reason: "Relationship ended after review", confirmation: "OFFBOARD" }) });

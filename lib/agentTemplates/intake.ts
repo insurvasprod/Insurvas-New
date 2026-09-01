@@ -7,7 +7,8 @@ import { getSupabaseServiceClient } from "@/lib/supabase/service";
 type IntakeLead = {
   id: string;
   product_line: string;
-  stage_key: string;
+  pipeline_id: string;
+  stage_id: string;
   values: Json;
 };
 
@@ -45,7 +46,8 @@ export async function writePartnerIntakeArtifacts(input: IntakeActor): Promise<v
     lead_id: input.lead.id,
     partner_id: input.partnerId,
     product_line: input.lead.product_line,
-    stage_key: input.lead.stage_key,
+    pipeline_id: input.lead.pipeline_id,
+    stage_id: input.lead.stage_id,
     ...attribution,
   });
   if (queue.error && queue.error.code !== "23505") failures.push({ step: "work_item", error: queue.error.message });
@@ -56,7 +58,8 @@ export async function writePartnerIntakeArtifacts(input: IntakeActor): Promise<v
     partner_id: input.partnerId,
     submission_id: input.submissionId,
     product_line: input.lead.product_line,
-    stage_key: input.lead.stage_key,
+    pipeline_id: input.lead.pipeline_id,
+    stage_id: input.lead.stage_id,
     insured_name: name,
     phone,
     initial_quote: quote,

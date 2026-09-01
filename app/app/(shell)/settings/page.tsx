@@ -6,6 +6,7 @@ import { TeamSettings } from "@/components/app/team-settings";
 import { getTeamSnapshot } from "@/lib/tenantTeam/service";
 import { CarrierLibrarySettings } from "@/components/app/carrier-library-settings";
 import { AppointmentVaultSettings } from "@/components/app/appointment-vault-settings";
+import { PipelineSettings } from "@/components/app/pipeline-settings";
 
 export default async function SettingsPage() {
   const guard = await guardPage("book_of_business");
@@ -14,5 +15,5 @@ export default async function SettingsPage() {
     return <RoleGateNotice featureLabel="Settings" detail="Settings and team access are managed by the account owner." />;
   }
   const team = await getTeamSnapshot(guard.context.tenantId, guard.entitlement);
-  return <div className="mx-auto max-w-6xl space-y-6"><CarrierLibrarySettings /><AppointmentVaultSettings /><TemplateSettings /><TeamSettings initial={team} /></div>;
+  return <div className="mx-auto max-w-6xl space-y-6"><CarrierLibrarySettings /><AppointmentVaultSettings /><PipelineSettings /><TemplateSettings /><TeamSettings initial={team} /></div>;
 }
