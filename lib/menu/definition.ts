@@ -56,7 +56,7 @@ export const AGENT_MENU: MenuSection[] = [
     label: "Leads",
     items: [
       item("Leads", { key: "leads.workspace", label: "Lead workspace", path: "/app/leads", icon: "contact-round", built: true, required_feature: "book_of_business", required_roles: ["owner", "producer", "assistant"] }),
-      item("Leads", { key: "leads.inbound", label: "Inbound transfers", path: "/app/inbound", icon: "phone-incoming", required_feature: "inbound_transfers", required_roles: ["owner", "producer"] }),
+      item("Leads", { key: "leads.inbound", label: "Inbound transfers", path: "/app/inbound", icon: "phone-incoming", built: true, required_feature: "inbound_transfers", required_roles: ["owner", "producer"] }),
       item("Leads", { key: "leads.dialer", label: "Dialer", path: "/app/dialer", icon: "phone-outgoing", built: true, required_feature: "outbound_dialing", required_roles: ["owner", "producer"] }),
       item("Leads", { key: "leads.import", label: "List import", path: "/app/import", icon: "list-plus", required_feature: "lead_import", required_roles: ["owner", "producer", "assistant"] }),
       item("Leads", { key: "leads.duplicates", label: "Duplicate check", path: "/app/duplicates", icon: "copy-check", built: true, required_feature: "duplicate_detection", required_roles: ["owner", "producer", "assistant"] }),

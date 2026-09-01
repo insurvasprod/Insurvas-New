@@ -78,6 +78,7 @@
     "verify:affiliate": "node --env-file=.env.local scripts/verify-affiliate-links.mjs",
     "verify:pipelines": "node --env-file=.env.local scripts/verify-pipelines.mjs",
     "verify:screening": "node --env-file=.env.local scripts/verify-screening.mjs",
+    "verify:transfer-inbox": "node --env-file=.env.local scripts/verify-transfer-inbox.mjs",
     "verify:la1": "node --env-file=.env.local scripts/verify-partners.mjs && node --env-file=.env.local scripts/verify-partner-users.mjs && node --env-file=.env.local scripts/verify-partner-products.mjs && node --env-file=.env.local scripts/verify-dynamic-forms.mjs && node --env-file=.env.local scripts/verify-partner-submission.mjs && node --env-file=.env.local scripts/verify-intake-pipeline.mjs && node --env-file=.env.local scripts/verify-affiliate-links.mjs && node --env-file=.env.local scripts/verify-pipelines.mjs"
   },
   "dependencies": {

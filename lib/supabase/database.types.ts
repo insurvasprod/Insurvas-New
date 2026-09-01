@@ -1579,9 +1579,27 @@ export type Database = {
         Relationships: [];
       };
       lead_queue: {
-        Row: { id: string; tenant_id: string; lead_id: string; partner_id: string | null; affiliate_link_id: string | null; affiliate_campaign: string | null; product_line: string; pipeline_id: string; stage_id: string; status: string; claimed_by: string | null; claimed_at: string | null; created_at: string; updated_at: string };
-        Insert: { id?: string; tenant_id: string; lead_id: string; partner_id?: string | null; affiliate_link_id?: string | null; affiliate_campaign?: string | null; product_line: string; pipeline_id: string; stage_id: string; status?: string; claimed_by?: string | null; claimed_at?: string | null; created_at?: string; updated_at?: string };
-        Update: { pipeline_id?: string; stage_id?: string; status?: string; claimed_by?: string | null; claimed_at?: string | null; updated_at?: string };
+        Row: { id: string; tenant_id: string; lead_id: string; partner_id: string | null; affiliate_link_id: string | null; affiliate_campaign: string | null; product_line: string; pipeline_id: string; stage_id: string; status: string; claimed_by: string | null; owner_user_id: string | null; owner_role: string | null; claimed_at: string | null; submission_id: string | null; queued_at: string; disposition: string | null; disposition_at: string | null; disposition_by: string | null; created_at: string; updated_at: string };
+        Insert: { id?: string; tenant_id: string; lead_id: string; partner_id?: string | null; affiliate_link_id?: string | null; affiliate_campaign?: string | null; product_line: string; pipeline_id: string; stage_id: string; status?: string; claimed_by?: string | null; owner_user_id?: string | null; owner_role?: string | null; claimed_at?: string | null; submission_id?: string | null; queued_at?: string; disposition?: string | null; disposition_at?: string | null; disposition_by?: string | null; created_at?: string; updated_at?: string };
+        Update: { pipeline_id?: string; stage_id?: string; status?: string; claimed_by?: string | null; owner_user_id?: string | null; owner_role?: string | null; claimed_at?: string | null; submission_id?: string | null; queued_at?: string; disposition?: string | null; disposition_at?: string | null; disposition_by?: string | null; updated_at?: string };
+        Relationships: [];
+      };
+      verification_sessions: {
+        Row: { id: string; tenant_id: string; work_item_id: string; lead_id: string; user_id: string; agent_role: string; status: string; started_at: string; ended_at: string | null; created_at: string; updated_at: string };
+        Insert: { id?: string; tenant_id: string; work_item_id: string; lead_id: string; user_id: string; agent_role: string; status?: string; started_at?: string; ended_at?: string | null; created_at?: string; updated_at?: string };
+        Update: { status?: string; ended_at?: string | null; updated_at?: string };
+        Relationships: [];
+      };
+      active_calls: {
+        Row: { id: string; tenant_id: string; work_item_id: string; lead_id: string; submission_id: string | null; user_id: string; agent_role: string; started_at: string; ended_at: string | null; created_at: string; updated_at: string };
+        Insert: { id?: string; tenant_id: string; work_item_id: string; lead_id: string; submission_id?: string | null; user_id: string; agent_role: string; started_at?: string; ended_at?: string | null; created_at?: string; updated_at?: string };
+        Update: { ended_at?: string | null; updated_at?: string };
+        Relationships: [];
+      };
+      partner_messages: {
+        Row: { id: string; tenant_id: string; partner_id: string; work_item_id: string; message: string; created_by: string | null; created_at: string };
+        Insert: { id?: string; tenant_id: string; partner_id: string; work_item_id: string; message: string; created_by?: string | null; created_at?: string };
+        Update: { message?: string };
         Relationships: [];
       };
       deal_flow: {
@@ -3161,6 +3179,14 @@ export type Database = {
       find_partner_lead_duplicates: {
         Args: { p_tenant_id: string; p_phone_digits: string | null; p_full_name: string | null; p_ssn_digits: string | null };
         Returns: { lead_id: string; matched_on: string[] }[];
+      };
+      claim_transfer_lead: {
+        Args: { p_tenant_id: string; p_work_item_id: string; p_user_id: string; p_owner_role: string };
+        Returns: Json;
+      };
+      list_transfer_inbox: {
+        Args: { p_tenant_id: string; p_status?: string; p_partner_id?: string | null; p_product_line?: string | null; p_state?: string | null; p_screening_outcome?: string | null; p_claimed_by?: string | null };
+        Returns: { id: string; lead_id: string; partner_id: string | null; partner_name: string | null; product_line: string; status: string; owner_user_id: string | null; owner_name: string | null; claimed_at: string | null; queued_at: string; wait_seconds: number; customer: string; age: string; state: string; screening_outcome: string; screening_warning: string | null; duplicate_warning: boolean }[];
       };
       reconcile_partner_intake: {
         Args: never;

@@ -1420,6 +1420,26 @@ widths with no fresh console errors; stage selection, editors, mapping controls 
 layout rendered correctly. The required repository checks and the complete LA-1 verifier passed.
 Nothing remains unmet, deferred or unverified for LA-1.9, so nothing was added to the open backlog.
 
+### 124. ✅ LA-1.10 transfer leads inbox and atomic claim completed
+**From:** LA-1.10 · **Belongs to:** LA-1.10 · **Resolved:** 2026-09-01
+
+The transfer inbox uses the existing LA-1.7 `lead_queue` as its single work-item source, with
+oldest-first filtering, partner/product/state/screening/claim-owner filters, screening and duplicate
+badges, and one-second refresh for claim visibility. A service-role-only, row-locked claim RPC makes
+simultaneous claims single-winner: the loser receives a clear 409 and cannot retry or steal the row.
+The claim flow creates or reuses a verification session, closes stale active calls before opening a
+fresh one, tolerates a racing active-call unique violation, and keeps best-effort partner chat
+failure outside the claim result. Canonical ownership and the legacy `claimed_by` field stay synced.
+
+The live migration set through `20260902234000_la_1_10_inbox_filter_order.sql` is applied to
+`Insurvas-Saas`; RLS, tenant policies, grants, claim/list RPC privileges and foreign-key indexes
+were checked live. `npm run verify:transfer-inbox` passed oldest-first/500-row performance (730 ms),
+all server filters, simultaneous claims, cross-tenant isolation, assistant-role denial, forged and
+expired sessions, hostile input, stale-call recovery, failed-chat resilience and audit evidence.
+Authenticated browser QA rendered the real inbox at desktop and phone widths with clean console
+logs, working filters, visible claim controls and no horizontal overflow. Nothing was left unmet,
+deferred or unverified for LA-1.10, so nothing was added to the open backlog.
+
 
 - **#79 Configuration Center route verifier** → resolved 2026-09-01. The verifier now exercises the
   shipped top-level admin routes after the Configuration Center hub was removed. Allowed roles

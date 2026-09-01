@@ -38,6 +38,8 @@ export const AGENT_API_POLICIES: AgentApiPolicy[] = [
   { sourceFile: "app/api/app/dial/preflight/route.ts", featureKey: "outbound_dialing" },
   { sourceFile: "app/api/app/ledger/route.ts", featureKey: "commission_ledger", allowedRoles: ["owner", "producer", "bookkeeper"] },
   { sourceFile: "app/api/app/inbound/transfer/route.ts", featureKey: "inbound_transfers" },
+  { sourceFile: "app/api/app/inbound/route.ts", featureKey: "inbound_transfers", allowedRoles: ["owner", "producer"] },
+  { sourceFile: "app/api/app/inbound/claim/route.ts", featureKey: "inbound_transfers", allowedRoles: ["owner", "producer"] },
   { sourceFile: "app/api/app/leads/[id]/route.ts", featureKey: "book_of_business" },
   { sourceFile: "app/api/app/leads/[id]/disposition/route.ts", featureKey: "book_of_business", allowedRoles: ["owner", "producer"] },
   { sourceFile: "app/api/app/leads/export/route.ts", featureKey: "book_of_business" },
