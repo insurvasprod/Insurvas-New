@@ -1295,6 +1295,38 @@ export type Database = {
         };
         Relationships: [];
       };
+      tenant_products: {
+        Row: {
+          tenant_id: string;
+          product_code: string;
+          is_enabled: boolean;
+          sort_order: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          tenant_id: string;
+          product_code: string;
+          is_enabled?: boolean;
+          sort_order?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          tenant_id?: string;
+          product_code?: string;
+          is_enabled?: boolean;
+          sort_order?: number;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      partner_products: {
+        Row: { partner_id: string; product_code: string; approved_at: string; approved_by: string | null };
+        Insert: { partner_id: string; product_code: string; approved_at?: string; approved_by?: string | null };
+        Update: { approved_at?: string; approved_by?: string | null };
+        Relationships: [];
+      };
       plan_product_access: {
         Row: { plan_id: string; product_code: string; created_at: string };
         Insert: { plan_id: string; product_code: string; created_at?: string };
@@ -1366,6 +1398,7 @@ export type Database = {
           tenant_template_id: string | null;
           template_id: string;
           template_version: number;
+          product_line: string;
           stage_key: string;
           values: Json;
           created_by: string | null;
@@ -1379,6 +1412,7 @@ export type Database = {
           tenant_template_id?: string | null;
           template_id: string;
           template_version: number;
+          product_line: string;
           stage_key: string;
           values?: Json;
           created_by?: string | null;
@@ -1392,6 +1426,7 @@ export type Database = {
           tenant_template_id?: string | null;
           template_id?: string;
           template_version?: number;
+          product_line?: string;
           stage_key?: string;
           values?: Json;
           created_by?: string | null;
@@ -3057,6 +3092,14 @@ export type Database = {
           p_confirmation?: string | null;
         };
         Returns: Database["public"]["Tables"]["partners"]["Row"];
+      };
+      set_tenant_product: {
+        Args: { p_is_enabled: boolean; p_product_code: string; p_sort_order?: number | null; p_tenant_id: string };
+        Returns: Database["public"]["Tables"]["tenant_products"]["Row"];
+      };
+      set_partner_product_approval: {
+        Args: { p_approved: boolean; p_approved_by: string; p_partner_id: string; p_product_code: string; p_tenant_id: string };
+        Returns: boolean;
       };
     };
     Enums: {

@@ -1290,6 +1290,49 @@ are complete, while a partner cannot yet submit a real lead until that later mod
 authorization check, enforce active partner status, and add end-to-end submission tests without
 granting access to agent configuration or commission data.
 
+### 115. 🟡 LA-1.3 real submission and downstream product-line assertions await LA-1.7
+**From:** LA-1.3 · **Belongs to:** LA-1.7 · **Gap recorded:** 2026-09-01
+
+LA-1.3 now owns the tenant product switches, per-partner approval rows, the reusable server-side
+`assertPartnerProductApproved` check, the no-store partner picker endpoint, and the non-null
+`agent_leads.product_line` field. The live LA-1.3 verifier proves disabled products disappear from
+the picker immediately, existing approval history is retained, cross-tenant configuration is
+blocked, and a catalog product can be added without a deployment.
+
+The repository still has no real partner lead-submission endpoint, `lead_queue`, work-item, or
+deal-flow tables. Therefore the acceptance checks that require an unapproved submission to be
+rejected before any write, that open an existing lead after its product is disabled, and that
+assert `product_line` on the lead, queue item, and deal-flow row together, cannot be driven end to
+end in this ticket. The capability check is implemented so
+the later intake route has one server-side gate to call, but that route must call it before its
+fatal lead insert and must propagate the selected product line to every downstream row.
+
+The existing agent template consumer also still defaults to the current Term Life template. That
+is unchanged legacy behavior, not a plan-specific branch in the new configuration surface, but
+the later multi-product intake work must choose the selected product's tenant template before it
+opens or writes a lead.
+
+**Fix:** LA-1.6/LA-1.7 must implement the selected-product submission pipeline around the shared
+capability check, add idempotent/concurrent submission tests, choose the selected product's
+tenant template, and assert the product line on the lead, queue item, and deal-flow row. Cost of
+leaving this open: configuration and picker behavior are safe, but the real submission path does
+not yet exist to prove the final authorization boundary.
+
+### 116. 🔵 LA-1.3 authenticated browser acceptance needs an agent session
+**From:** LA-1.3 · **Belongs to:** LA-1.3 · **Gap recorded:** 2026-09-01
+
+The automated live verifier, typecheck, lint, build and full verification suite pass, but the
+browser session available during this run had no authenticated agent tab and redirected the
+configuration screen to `/app/login`. No credentials or session cookies were inspected or
+entered, so the finished Products and Approved products controls, visible save confirmation,
+keyboard focus, responsive layout and browser console cannot be claimed visually verified.
+
+**Fix:** sign in an owner agent with `publisher_records` in the local browser, open
+`/app/publishers`, exercise a product enable/disable and a partner approval, check the partner
+picker at desktop and phone widths, and capture the finished screen with console output. Cost of
+leaving this open: a browser-only rendering or interaction defect could remain unseen even though
+the server-side contract is green.
+
 - **#79 Configuration Center route verifier** → resolved 2026-09-01. The verifier now exercises the
   shipped top-level admin routes after the Configuration Center hub was removed. Allowed roles
   return 200; denied roles return the app's server-side 307 denial redirect or 403. All 41 route

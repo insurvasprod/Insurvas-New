@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import type { PartnerRole } from "@/lib/partnerAuth/roles";
 
 type PartnerUser = { id: string; name: string; email: string; role: PartnerRole; status: "active" | "revoked"; accepted_at: string | null; has_password: boolean };
+type ApprovedProduct = { code: string; name: string; category: string };
 
 export function PartnerPortalWorkspace({ role }: { role: PartnerRole }) {
   const [users, setUsers] = useState<PartnerUser[]>([]);
@@ -18,6 +19,7 @@ export function PartnerPortalWorkspace({ role }: { role: PartnerRole }) {
   const [error, setError] = useState<string | null>(null);
   const [inviteFieldError, setInviteFieldError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [approvedProducts, setApprovedProducts] = useState<ApprovedProduct[]>([]);
 
   async function loadUsers() {
     const response = await fetch("/api/partner/users");
@@ -27,11 +29,12 @@ export function PartnerPortalWorkspace({ role }: { role: PartnerRole }) {
   }
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/partner/users")
-      .then(async (response) => ({ response, body: await response.json().catch(() => null) }))
-      .then(({ response, body }) => {
+    Promise.all([fetch("/api/partner/users"), fetch("/api/partner/products", { cache: "no-store" })])
+      .then(async ([userResponse, productResponse]) => ({ userResponse, userBody: await userResponse.json().catch(() => null), productResponse, productBody: await productResponse.json().catch(() => null) }))
+      .then(({ userResponse, userBody, productResponse, productBody }) => {
         if (cancelled) return;
-        if (response.ok) setUsers(body?.users ?? []); else setError(body?.error ?? "Could not load users");
+        if (userResponse.ok) setUsers(userBody?.users ?? []); else setError(userBody?.error ?? "Could not load users");
+        if (productResponse.ok) setApprovedProducts(productBody?.products ?? []); else setError(productBody?.error ?? "Could not load approved products");
         setLoading(false);
       })
       .catch(() => { if (!cancelled) { setError("Could not load users"); setLoading(false); } });
@@ -62,6 +65,7 @@ export function PartnerPortalWorkspace({ role }: { role: PartnerRole }) {
       <div><p className="text-sm font-semibold uppercase tracking-wide text-[var(--color-blue)]">Partner workspace</p><h1 className="mt-1 text-2xl font-semibold tracking-tight">Lead partnership</h1><p className="mt-1 text-sm text-muted-foreground">Submit and manage partner activity from this portal.</p></div>
       {(message || error) && <div role="status" className={`rounded-lg border p-3 text-sm ${error ? "border-[var(--color-danger)]/40 text-[var(--color-danger)]" : "border-[var(--color-success)]/40 text-[var(--color-success)]"}`}>{error ?? message}</div>}
       <Card><CardHeader><CardTitle>Lead submissions</CardTitle><CardDescription>The lead submission workspace will appear here. Your partner access is isolated from Insurvas configuration and commission data.</CardDescription></CardHeader><CardContent><div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">Submission tools are being connected to this partner portal.</div></CardContent></Card>
+      <Card><CardHeader><CardTitle>Approved products</CardTitle><CardDescription>Your product picker will only offer products currently enabled by the agent and approved for this partner.</CardDescription></CardHeader><CardContent>{approvedProducts.length > 0 ? <label className="block max-w-md space-y-1.5"><Label htmlFor="partner-product-picker">Product</Label><select id="partner-product-picker" className="flex h-9 w-full rounded-md border bg-transparent px-3 text-sm" defaultValue=""><option value="" disabled>Choose a product when submitting a lead…</option>{approvedProducts.map((product) => <option key={product.code} value={product.code}>{product.name}</option>)}</select></label> : <p className="text-sm text-muted-foreground">No products are approved for this partner yet.</p>}</CardContent></Card>
       <Card>
         <CardHeader><CardTitle>Partner users</CardTitle><CardDescription>{role === "partner_admin" ? "Invite and deactivate people in your partner account." : "People with access to this partner account."}</CardDescription></CardHeader>
         <CardContent className="space-y-6">

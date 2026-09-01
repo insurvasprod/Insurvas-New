@@ -7,5 +7,5 @@ export default async function PublishersPage() {
   const guard = await guardPage("publisher_records");
   if (!guard.entitled) return <FeatureGateNotice guard={guard} featureLabel="Partners" description="Manage publishers, marketing companies and affiliates without losing their history." />;
   if (guard.role !== "owner" && guard.role !== "bookkeeper") return <RoleGateNotice featureLabel="Partners" detail="Partner records are managed by the account owner or bookkeeper." />;
-  return <PartnersWorkspace readOnly={guard.entitlement.access === "read_only"} />;
+  return <PartnersWorkspace readOnly={guard.entitlement.access === "read_only"} canManageProductConfig={guard.role === "owner"} />;
 }
