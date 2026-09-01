@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { requireFeature } from "@/lib/entitlements/requireFeature";
+import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import { DNC_BLOCK_MESSAGE } from "@/lib/compliance/constants";
 import { performDncDialPreflight } from "@/lib/compliance/service";
 import { normalizeDialPhone } from "@/lib/compliance/scrub";
@@ -12,7 +12,7 @@ import { normalizeDialPhone } from "@/lib/compliance/scrub";
  * or the same server service before handing the number to its provider.
  */
 export async function POST(request: NextRequest) {
-  const auth = await requireFeature("outbound_dialing", { write: true });
+  const auth = await requireFeatureRole("outbound_dialing", ["owner", "producer"], { write: true });
   if (auth instanceof NextResponse) return auth;
 
   const body = await request.json().catch(() => null) as { phone?: unknown } | null;

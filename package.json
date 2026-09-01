@@ -12,7 +12,7 @@
     "seed:super-admin": "node --env-file=.env.local scripts/seed-super-admin.mjs",
     "reset:totp": "node --env-file=.env.local scripts/reset-admin-totp.mjs",
     "verify:tenant-isolation": "node --env-file=.env.local scripts/verify-tenant-isolation.mjs",
-    "check:features": "node --env-file=.env.local scripts/check-feature-keys.mjs",
+    "check:features": "node --experimental-strip-types --env-file=.env.local scripts/check-feature-keys.mjs",
     "verify:configuration": "node --env-file=.env.local scripts/verify-configuration-center.mjs",
     "verify:offers": "node --env-file=.env.local scripts/verify-offers.mjs",
     "verify:products": "node --env-file=.env.local scripts/verify-products.mjs",
@@ -24,6 +24,7 @@
     "rebuild:usage": "node --env-file=.env.local scripts/rebuild-usage-totals.mjs",
     "advance:periods": "node --env-file=.env.local scripts/advance-billing-periods.mjs",
     "verify:entitlements": "node --env-file=.env.local scripts/verify-entitlements.mjs",
+    "verify:agent-shell": "node --env-file=.env.local scripts/verify-agent-shell.mjs",
     "verify:payments": "node --experimental-strip-types --env-file=.env.local scripts/verify-payment-provider.mjs",
     "verify:webhook": "node --env-file=.env.local scripts/verify-whop-webhook.mjs",
     "verify:invoices": "node --env-file=.env.local scripts/verify-invoices.mjs",
@@ -38,6 +39,7 @@
     "verify:ratelimit": "node --env-file=.env.local scripts/verify-rate-limits.mjs",
     "verify:checkout": "node --env-file=.env.local scripts/verify-checkout.mjs",
     "trials:remind": "node --env-file=.env.local scripts/send-trial-reminders.mjs",
+    "appointments:warn": "node --env-file=.env.local scripts/send-appointment-expiry-warnings.mjs",
     "verify:trials": "node --env-file=.env.local scripts/verify-trials.mjs",
     "legal:seed": "node --env-file=.env.local scripts/seed-legal-documents.mjs",
     "verify:legal": "node --env-file=.env.local scripts/verify-legal.mjs",
@@ -60,7 +62,11 @@
     "verify:transitions": "node --env-file=.env.local scripts/verify-subscription-transitions.mjs",
     "verify:settlement": "node --env-file=.env.local scripts/verify-manual-settlement.mjs",
     "verify:webhook-invoicing": "node --env-file=.env.local scripts/verify-webhook-invoicing.mjs",
-    "verify:membership-lookup": "node --env-file=.env.local scripts/verify-membership-lookup.mjs"
+    "verify:membership-lookup": "node --env-file=.env.local scripts/verify-membership-lookup.mjs",
+    "verify:tenant-roles": "node --env-file=.env.local scripts/verify-tenant-roles.mjs",
+    "verify:carrier-library": "node --env-file=.env.local scripts/verify-carrier-library.mjs",
+    "verify:appointment-vault": "node --env-file=.env.local --experimental-strip-types scripts/verify-appointment-vault.mjs",
+    "verify:contacts": "node --env-file=.env.local --experimental-strip-types scripts/verify-contacts.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.99.0",

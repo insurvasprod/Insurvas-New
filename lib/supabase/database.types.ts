@@ -6,6 +6,168 @@ export type Database = {
   };
   public: {
     Tables: {
+      advance_rules: {
+        Row: {
+          advance_months: number;
+          advance_pct_bp: number;
+          carrier_id: string;
+          clawback_months: number;
+          clawback_type: string;
+          created_at: string;
+          effective_from: string;
+          id: string;
+          product_code: string;
+          tenant_id: string;
+        };
+        Insert: {
+          advance_months: number;
+          advance_pct_bp: number;
+          carrier_id: string;
+          clawback_months: number;
+          clawback_type: string;
+          created_at?: string;
+          effective_from: string;
+          id?: string;
+          product_code: string;
+          tenant_id: string;
+        };
+        Update: {
+          advance_months?: number;
+          advance_pct_bp?: number;
+          carrier_id?: string;
+          clawback_months?: number;
+          clawback_type?: string;
+          created_at?: string;
+          effective_from?: string;
+          id?: string;
+          product_code?: string;
+          tenant_id?: string;
+        };
+        Relationships: [];
+      };
+      appointments: {
+        Row: { id: string; tenant_id: string; carrier_id: string; state: string; status: string; effective_from: string; terminated_at: string | null; created_at: string; updated_at: string };
+        Insert: { id?: string; tenant_id: string; carrier_id: string; state: string; status?: string; effective_from: string; terminated_at?: string | null; created_at?: string; updated_at?: string };
+        Update: { id?: string; tenant_id?: string; carrier_id?: string; state?: string; status?: string; effective_from?: string; terminated_at?: string | null; created_at?: string; updated_at?: string };
+        Relationships: [];
+      };
+      ce_records: {
+        Row: { id: string; tenant_id: string; state: string; credits_required: number; credits_completed: number; deadline: string; created_at: string; updated_at: string };
+        Insert: { id?: string; tenant_id: string; state: string; credits_required: number; credits_completed: number; deadline: string; created_at?: string; updated_at?: string };
+        Update: { id?: string; tenant_id?: string; state?: string; credits_required?: number; credits_completed?: number; deadline?: string; created_at?: string; updated_at?: string };
+        Relationships: [];
+      };
+      carriers: {
+        Row: {
+          code: string;
+          created_at: string;
+          id: string;
+          is_active: boolean;
+          name: string;
+          sort_order: number;
+          updated_at: string;
+        };
+        Insert: {
+          code: string;
+          created_at?: string;
+          id?: string;
+          is_active?: boolean;
+          name: string;
+          sort_order?: number;
+          updated_at?: string;
+        };
+        Update: {
+          code?: string;
+          created_at?: string;
+          id?: string;
+          is_active?: boolean;
+          name?: string;
+          sort_order?: number;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      eo_policies: {
+        Row: { id: string; tenant_id: string; carrier: string; policy_number: string; expires_at: string; coverage_amount_cents: number; created_at: string; updated_at: string };
+        Insert: { id?: string; tenant_id: string; carrier: string; policy_number: string; expires_at: string; coverage_amount_cents: number; created_at?: string; updated_at?: string };
+        Update: { id?: string; tenant_id?: string; carrier?: string; policy_number?: string; expires_at?: string; coverage_amount_cents?: number; created_at?: string; updated_at?: string };
+        Relationships: [];
+      };
+      licenses: {
+        Row: { id: string; tenant_id: string; state: string; license_number: string; expires_at: string; created_at: string; updated_at: string };
+        Insert: { id?: string; tenant_id: string; state: string; license_number: string; expires_at: string; created_at?: string; updated_at?: string };
+        Update: { id?: string; tenant_id?: string; state?: string; license_number?: string; expires_at?: string; created_at?: string; updated_at?: string };
+        Relationships: [];
+      };
+      commission_schedules: {
+        Row: {
+          carrier_id: string;
+          contract_level_bp: number;
+          created_at: string;
+          effective_from: string;
+          id: string;
+          policy_year: number;
+          product_code: string;
+          rate_bp: number;
+          tenant_id: string;
+        };
+        Insert: {
+          carrier_id: string;
+          contract_level_bp: number;
+          created_at?: string;
+          effective_from: string;
+          id?: string;
+          policy_year: number;
+          product_code: string;
+          rate_bp: number;
+          tenant_id: string;
+        };
+        Update: {
+          carrier_id?: string;
+          contract_level_bp?: number;
+          created_at?: string;
+          effective_from?: string;
+          id?: string;
+          policy_year?: number;
+          product_code?: string;
+          rate_bp?: number;
+          tenant_id?: string;
+        };
+        Relationships: [];
+      };
+      tenant_carriers: {
+        Row: {
+          carrier_id: string;
+          contract_level_bp: number;
+          created_at: string;
+          effective_from: string;
+          id: string;
+          is_active: boolean;
+          tenant_id: string;
+          writing_number: string;
+        };
+        Insert: {
+          carrier_id: string;
+          contract_level_bp: number;
+          created_at?: string;
+          effective_from: string;
+          id?: string;
+          is_active?: boolean;
+          tenant_id: string;
+          writing_number: string;
+        };
+        Update: {
+          carrier_id?: string;
+          contract_level_bp?: number;
+          created_at?: string;
+          effective_from?: string;
+          id?: string;
+          is_active?: boolean;
+          tenant_id?: string;
+          writing_number?: string;
+        };
+        Relationships: [];
+      };
       admin_users: {
         Row: {
           created_at: string;
@@ -1235,6 +1397,42 @@ export type Database = {
         };
         Relationships: [];
       };
+      households: {
+        Row: { id: string; tenant_id: string; address_hash: string | null; address_line1: string | null; city: string | null; state: string | null; postal_code: string | null; address_search: string | null; created_at: string; updated_at: string };
+        Insert: { id?: string; tenant_id: string; address_hash?: string | null; address_line1?: string | null; city?: string | null; state?: string | null; postal_code?: string | null; address_search?: string | null; created_at?: string; updated_at?: string };
+        Update: { id?: string; tenant_id?: string; address_hash?: string | null; address_line1?: string | null; city?: string | null; state?: string | null; postal_code?: string | null; address_search?: string | null; created_at?: string; updated_at?: string };
+        Relationships: [];
+      };
+      contacts: {
+        Row: { id: string; tenant_id: string; household_id: string | null; first_name: string; last_name: string; dob: string | null; primary_phone: string | null; state: string | null; name_search: string; custom_fields: Json; merged_into_id: string | null; created_at: string; updated_at: string };
+        Insert: { id?: string; tenant_id: string; household_id?: string | null; first_name: string; last_name: string; dob?: string | null; primary_phone?: string | null; state?: string | null; name_search: string; custom_fields?: Json; merged_into_id?: string | null; created_at?: string; updated_at?: string };
+        Update: { id?: string; tenant_id?: string; household_id?: string | null; first_name?: string; last_name?: string; dob?: string | null; primary_phone?: string | null; state?: string | null; name_search?: string; custom_fields?: Json; merged_into_id?: string | null; created_at?: string; updated_at?: string };
+        Relationships: [];
+      };
+      contact_phones: {
+        Row: { id: string; tenant_id: string; contact_id: string; phone: string; type: string; is_primary: boolean; created_at: string };
+        Insert: { id?: string; tenant_id: string; contact_id: string; phone: string; type?: string; is_primary?: boolean; created_at?: string };
+        Update: { id?: string; tenant_id?: string; contact_id?: string; phone?: string; type?: string; is_primary?: boolean; created_at?: string };
+        Relationships: [];
+      };
+      contact_emails: {
+        Row: { id: string; tenant_id: string; contact_id: string; email: string; is_primary: boolean; created_at: string };
+        Insert: { id?: string; tenant_id: string; contact_id: string; email: string; is_primary?: boolean; created_at?: string };
+        Update: { id?: string; tenant_id?: string; contact_id?: string; email?: string; is_primary?: boolean; created_at?: string };
+        Relationships: [];
+      };
+      field_schema: {
+        Row: { id: string; tenant_id: string; entity: string; field_key: string; label: string; type: string; options: Json; is_required: boolean; sort_order: number; created_at: string; updated_at: string };
+        Insert: { id?: string; tenant_id: string; entity: string; field_key: string; label: string; type: string; options?: Json; is_required?: boolean; sort_order?: number; created_at?: string; updated_at?: string };
+        Update: { id?: string; tenant_id?: string; entity?: string; field_key?: string; label?: string; type?: string; options?: Json; is_required?: boolean; sort_order?: number; created_at?: string; updated_at?: string };
+        Relationships: [];
+      };
+      merge_log: {
+        Row: { id: string; tenant_id: string; kept_id: string; merged_id: string; field_choices: Json; kept_snapshot: Json; merged_snapshot: Json; kept_phones: Json; merged_phones: Json; kept_emails: Json; merged_emails: Json; merged_by: string | null; merged_at: string; reversed_at: string | null };
+        Insert: { id?: string; tenant_id: string; kept_id: string; merged_id: string; field_choices?: Json; kept_snapshot: Json; merged_snapshot: Json; kept_phones?: Json; merged_phones?: Json; kept_emails?: Json; merged_emails?: Json; merged_by?: string | null; merged_at?: string; reversed_at?: string | null };
+        Update: { id?: string; tenant_id?: string; kept_id?: string; merged_id?: string; field_choices?: Json; kept_snapshot?: Json; merged_snapshot?: Json; kept_phones?: Json; merged_phones?: Json; kept_emails?: Json; merged_emails?: Json; merged_by?: string | null; reversed_at?: string | null };
+        Relationships: [];
+      };
       templates: {
         Row: {
           id: string;
@@ -2149,6 +2347,29 @@ export type Database = {
           old_role: Database["public"]["Enums"]["tenant_user_role"];
         }[];
       };
+      tenant_invite_user: {
+        Args: {
+          p_created_by: string;
+          p_email: string;
+          p_expires_at: string;
+          p_name: string;
+          p_role: Database["public"]["Enums"]["tenant_user_role"];
+          p_tenant_id: string;
+          p_token_hash: string;
+        };
+        Returns: { tenant_id: string; user_id: string }[];
+      };
+      tenant_update_member_role: {
+        Args: {
+          p_role: Database["public"]["Enums"]["tenant_user_role"];
+          p_tenant_id: string;
+          p_user_id: string;
+        };
+        Returns: {
+          new_role: Database["public"]["Enums"]["tenant_user_role"];
+          old_role: Database["public"]["Enums"]["tenant_user_role"];
+        }[];
+      };
       consume_user_email_change_token: {
         Args: { p_token_hash: string };
         Returns: {
@@ -2585,12 +2806,83 @@ export type Database = {
           subscription_id: string;
         }[];
       };
+      save_tenant_carrier: {
+        Args: {
+          p_carrier_id: string;
+          p_contract_level_bp: number;
+          p_effective_from: string;
+          p_tenant_id: string;
+          p_writing_number: string;
+        };
+        Returns: Database["public"]["Tables"]["tenant_carriers"]["Row"];
+      };
+      save_commission_schedule: {
+        Args: {
+          p_carrier_id: string;
+          p_contract_level_bp: number;
+          p_effective_from: string;
+          p_policy_year: number;
+          p_product_code: string;
+          p_rate_bp: number;
+          p_tenant_id: string;
+        };
+        Returns: Database["public"]["Tables"]["commission_schedules"]["Row"];
+      };
+      save_advance_rule: {
+        Args: {
+          p_advance_months: number;
+          p_advance_pct_bp: number;
+          p_carrier_id: string;
+          p_clawback_months: number;
+          p_clawback_type: string;
+          p_effective_from: string;
+          p_product_code: string;
+          p_tenant_id: string;
+        };
+        Returns: Database["public"]["Tables"]["advance_rules"]["Row"];
+      };
+      save_appointments: {
+        Args: { p_tenant_id: string; p_rows: Json };
+        Returns: Database["public"]["Tables"]["appointments"]["Row"][];
+      };
+      save_license: {
+        Args: { p_tenant_id: string; p_state: string; p_license_number: string; p_expires_at: string };
+        Returns: Database["public"]["Tables"]["licenses"]["Row"];
+      };
+      save_eo_policy: {
+        Args: { p_tenant_id: string; p_carrier: string; p_policy_number: string; p_expires_at: string; p_coverage_amount_cents: number };
+        Returns: Database["public"]["Tables"]["eo_policies"]["Row"];
+      };
+      save_ce_record: {
+        Args: { p_tenant_id: string; p_state: string; p_credits_required: number; p_credits_completed: number; p_deadline: string };
+        Returns: Database["public"]["Tables"]["ce_records"]["Row"];
+      };
+      find_contact_duplicates: {
+        Args: { p_tenant_id: string; p_name_search: string; p_dob?: string | null; p_phone?: string | null; p_address_search?: string | null; p_address_hash?: string | null; p_limit?: number };
+        Returns: { contact_id: string; household_id: string | null; first_name: string; last_name: string; dob: string | null; primary_phone: string | null; state: string | null; custom_fields: Json; address_line1: string | null; city: string | null; postal_code: string | null; score: number; confidence: string; matched_on: string[] }[];
+      };
+      save_contact: {
+        Args: { p_tenant_id: string; p_first_name: string; p_last_name: string; p_dob: string | null; p_primary_phone: string | null; p_state: string | null; p_name_search: string; p_custom_fields: Json; p_address_hash: string | null; p_address_search: string | null; p_address_line1: string | null; p_city: string | null; p_postal_code: string | null; p_phones?: Json; p_emails?: Json };
+        Returns: string;
+      };
+      save_field_schema: {
+        Args: { p_tenant_id: string; p_entity: string; p_field_key: string; p_label: string; p_type: string; p_options: Json; p_is_required: boolean; p_sort_order: number };
+        Returns: Database["public"]["Tables"]["field_schema"]["Row"];
+      };
+      merge_contacts: {
+        Args: { p_tenant_id: string; p_kept_id: string; p_merged_id: string; p_field_choices: Json; p_merged_by: string };
+        Returns: string;
+      };
+      undo_contact_merge: {
+        Args: { p_tenant_id: string; p_merge_id: string };
+        Returns: string;
+      };
     };
     Enums: {
       legal_doc_type: "tos" | "privacy" | "dpa";
       email_status: "sent" | "failed" | "skipped";
       admin_role: "super_admin" | "support_agent" | "billing_admin" | "platform_config";
-      audit_actor_type: "admin" | "system";
+      audit_actor_type: "admin" | "tenant" | "system";
       billing_cycle: "monthly" | "quarterly" | "yearly";
       invoice_status: "draft" | "issued" | "paid" | "overdue" | "void" | "uncollectible";
       invoice_line_kind: "plan" | "addon" | "overage" | "discount" | "setup_fee" | "credit";
