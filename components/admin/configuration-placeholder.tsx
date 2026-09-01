@@ -7,7 +7,7 @@ export function ConfigurationPlaceholder({ section }: { section: ConfigurationSe
   return (
     <Card>
       <CardContent className="space-y-4">
-        <div className="flex items-center gap-2 text-[var(--brand-700)]">
+        <div className="flex items-center gap-2 text-[var(--color-accent-ink)]">
           <Clock3 className="size-5" />
           <p className="font-semibold">Section reserved for {section.owner}</p>
         </div>

@@ -1,6 +1,14 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 @import "tailwindcss";
 
+/*
+ * Tailwind v4 has no `dark:` variant until one is declared. ThemeProvider puts `class="dark"` on
+ * <html>, including when it resolves the OS preference itself, so a single class drives both the
+ * explicit choice and the system default — and the CSS below can never disagree with the class,
+ * which is the usual bug when a media query and a toggle are wired separately.
+ */
+@custom-variant dark (&:is(.dark *));
+
 @theme inline {
   --color-background: var(--color-page-bg);
   --color-foreground: var(--color-text-dark);
@@ -9,7 +17,7 @@
   --color-popover: var(--color-card-bg);
   --color-popover-foreground: var(--color-text-dark);
   --color-primary: var(--color-blue);
-  --color-primary-foreground: #ffffff;
+  --color-primary-foreground: var(--color-on-primary);
   --color-secondary: var(--brand-100);
   --color-secondary-foreground: var(--color-text-dark);
   --color-muted: var(--color-row-bg);
@@ -17,9 +25,9 @@
   --color-accent: var(--brand-100);
   --color-accent-foreground: var(--color-text-dark);
   --color-destructive: var(--color-danger);
-  --color-destructive-foreground: #ffffff;
+  --color-destructive-foreground: var(--color-on-danger);
   --color-border: var(--color-border);
-  --color-input: var(--color-border);
+  --color-input: var(--color-control-border);
   --color-ring: var(--color-blue);
   --radius-sm: 0.3rem;
   --radius-md: 0.5rem;
@@ -60,6 +68,89 @@
   --color-danger:  #d92d20;
   --color-success: #12894f;
   --color-warning: #b54708;
+
+  /* What goes ON a filled accent or danger surface. White works on both of these; it does NOT work
+     on their dark-theme counterparts, which is the whole reason these are variables. */
+  --color-on-primary: #ffffff;
+  --color-on-danger:  #ffffff;
+
+  /* Accent INK — the navy used for a section heading or a link sitting on a card.
+     Distinct from --brand-700, which is a SURFACE (the sidebar, the table header row) and has to
+     stay dark in both themes. Thirty-two places were using the surface colour as a text colour,
+     which is correct on a white card and invisible on a dark one. */
+  --color-accent-ink: #00407f;
+
+  /* A form control's edge is not decoration — it is the thing that says "type here", so WCAG 1.4.11
+     asks for 3:1 against its surface. --color-border measured 1.28:1 on a white card, which is a
+     divider's job and not a control's. Splitting them lets table rules stay soft while inputs,
+     selects and outline buttons become findable. Both themes were equally wrong; both are fixed. */
+  --color-control-border: #8b96a5;
+}
+
+/*
+ * Dark.
+ *
+ * Every Tailwind semantic colour in the @theme block above resolves through one of these
+ * variables, so redefining them here carries the entire app — `bg-card`, `text-muted-foreground`,
+ * `border-border` and the rest follow without a single component being touched. That is why this
+ * block is short and why it is the only place a dark colour is allowed to be defined.
+ *
+ * Not an inversion. A few decisions worth keeping:
+ *
+ *   The ground is a desaturated navy, not neutral grey. It is the brand hue at very low lightness,
+ *   so the sidebar stops looking like a foreign object sitting on the page.
+ *
+ *   Surfaces get LIGHTER as they come forward (page → card → row), which is how depth reads on a
+ *   dark ground. Copying the light theme's arrangement, where the card is brighter than the page
+ *   by a hair, produces cards you cannot see.
+ *
+ *   The accent blue is lifted from #0070cc to #4da3f0. The original passes on white and fails on a
+ *   dark ground; a link nobody can read is worse than a link in the wrong blue.
+ *
+ *   Semantic colours are lifted for the same reason and kept distinguishable from each other for
+ *   the ~4% of men with red-green deficiency, who otherwise get danger and success as one colour.
+ */
+.dark {
+  --brand-50:  #0b1520;
+  --brand-100: #12233a;
+  --brand-200: #1b3557;
+  --brand-300: #244a78;
+  --brand-400: #2f6199;
+  --brand-500: #4da3f0;
+  --brand-600: #74b9f5;
+  --brand-700: #0e2740;
+  --brand-800: #0a2036;
+  --brand-900: #06131f;
+
+  --color-page-bg:    #0d141b;
+  --color-card-bg:    #151d26;
+  --color-row-bg:     #1b2531;
+
+  --color-blue:       #4da3f0;
+  --color-blue-hover: #74b9f5;
+  --color-blue-light: #1b3557;
+  --color-blue-faint: #12233a;
+
+  --color-text-dark:  #e6ebf0;
+  --color-text-mid:   #b3bdc7;
+  --color-text-muted: #8c97a3;
+
+  --color-border:       #27323f;
+  --color-border-light: #1e2833;
+
+  --color-danger:  #f2837a;
+  --color-success: #4cb98a;
+  --color-warning: #d99a4e;
+
+  /* Dark ink on the lifted accent. White on #4da3f0 measures 2.69:1 and fails AA outright — the
+     Sign in button was unreadable before this line existed. Near-black takes it past 8:1. */
+  --color-on-primary: #08131f;
+  --color-on-danger:  #2a0b08;
+
+  --color-control-border: #5c6b7d;
+
+  /* Lifted well clear of the dark card. The surface --brand-700 stays #0e2740 above. */
+  --color-accent-ink: #7fb2e0;
 }
 
 body {
@@ -67,6 +158,12 @@ body {
   color: var(--color-text-dark);
   font-family: var(--font-sans);
 }
+
+/* Tells the browser to render its own furniture — scrollbars, form controls, the flash before
+   first paint — in the matching theme. Without it a dark page keeps light scrollbars and blinks
+   white on load, which reads as a rendering fault rather than a choice. */
+html { color-scheme: light; }
+html.dark { color-scheme: dark; }
 
 /* SA-3.3 · Printable invoice.
    The print route lives inside the admin layout, so the sidebar has to be taken off the paper

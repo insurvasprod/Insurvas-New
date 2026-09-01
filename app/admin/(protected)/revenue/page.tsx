@@ -88,7 +88,7 @@ export default async function RevenuePage() {
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardContent className="space-y-3">
-            <h2 className="text-sm font-bold uppercase tracking-wide text-[var(--brand-700)]">MRR movement</h2>
+            <h2 className="text-sm font-bold uppercase tracking-wide text-[var(--color-accent-ink)]">MRR movement</h2>
             <dl className="space-y-1.5 text-sm">
               {[
                 ["Month-over-month", `${mrrChange >= 0 ? "+" : ""}${formatCentsAsCurrency(mrrChange)}`],
@@ -119,7 +119,7 @@ export default async function RevenuePage() {
 
         <Card>
           <CardContent className="space-y-3">
-            <h2 className="text-sm font-bold uppercase tracking-wide text-[var(--brand-700)]">
+            <h2 className="text-sm font-bold uppercase tracking-wide text-[var(--color-accent-ink)]">
               Customers &amp; churn
             </h2>
             <dl className="space-y-1.5 text-sm">
@@ -177,7 +177,7 @@ export default async function RevenuePage() {
 
       <Card>
         <CardContent className="space-y-3">
-          <h2 className="text-sm font-bold uppercase tracking-wide text-[var(--brand-700)]">
+          <h2 className="text-sm font-bold uppercase tracking-wide text-[var(--color-accent-ink)]">
             Activation funnel · last 90 days
           </h2>
 

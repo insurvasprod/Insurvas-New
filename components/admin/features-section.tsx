@@ -52,7 +52,7 @@ export function FeaturesSection({
               onClick={() => setTab(t.id)}
               className={`-mb-px flex items-center gap-2 border-b-2 px-3.5 py-2.5 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-blue)] ${
                 active
-                  ? "border-[var(--color-blue)] font-semibold text-[var(--brand-700)]"
+                  ? "border-[var(--color-blue)] font-semibold text-[var(--color-accent-ink)]"
                   : "border-transparent text-muted-foreground hover:text-foreground"
               }`}
             >

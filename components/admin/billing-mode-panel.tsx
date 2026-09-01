@@ -36,7 +36,7 @@ export function BillingModePanel({ tenantId, mode }: { tenantId: string; mode: "
     <Card>
       <CardContent className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-sm font-bold uppercase tracking-wide text-[var(--brand-700)]">Billing mode</h2>
+          <h2 className="text-sm font-bold uppercase tracking-wide text-[var(--color-accent-ink)]">Billing mode</h2>
           <Badge
             variant="outline"
             className={

@@ -2570,6 +2570,21 @@ export type Database = {
           user_id: string;
         }[];
       };
+      self_serve_signup_with_subscription: {
+        Args: {
+          p_billing_cycle: Database["public"]["Enums"]["billing_cycle"];
+          p_owner_email: string;
+          p_owner_name: string;
+          p_owner_password_hash: string;
+          p_plan_id: string;
+          p_tenant_name: string;
+        };
+        Returns: {
+          tenant_id: string;
+          user_id: string;
+          subscription_id: string;
+        }[];
+      };
     };
     Enums: {
       legal_doc_type: "tos" | "privacy" | "dpa";

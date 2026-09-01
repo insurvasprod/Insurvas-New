@@ -4,12 +4,13 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/admin/empty-state";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatCentsAsCurrency } from "@/lib/money";
 import { CREDIT_REASON_LABELS, type CreditReason } from "@/lib/credits/rules";
 import { tableHeaderRow, tableHeadCell, tableShell } from "./table-styles";
+import { StatusChip, type StatusTone } from "@/components/admin/status-chip";
 
 export type CreditNoteRow = {
   id: string;
@@ -25,14 +26,16 @@ export type CreditNoteRow = {
   invoices: { number: string } | null;
 };
 
-const STATUS_STYLE: Record<string, string> = {
-  pending_approval: "border-transparent bg-[var(--color-warning)]/10 text-[var(--color-warning)]",
-  approved: "border-transparent bg-[var(--brand-700)]/10 text-[var(--brand-700)]",
-  processing: "border-transparent bg-muted text-muted-foreground",
-  succeeded: "border-transparent bg-[var(--color-success)]/10 text-[var(--color-success)]",
-  failed: "border-transparent bg-destructive/10 text-destructive",
-  rejected: "border-transparent bg-muted text-muted-foreground",
+/** Money that failed is danger; money still waiting on a human is warning. */
+const CREDIT_NOTE_TONE: Record<string, StatusTone> = {
+  pending_approval: "warning",
+  approved: "info",
+  processing: "neutral",
+  succeeded: "good",
+  failed: "danger",
+  rejected: "neutral",
 };
+
 
 export function CreditNotesTable({
   notes,
@@ -76,8 +79,11 @@ export function CreditNotesTable({
         <TableBody>
           {notes.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={7} className="py-8 text-center text-sm text-muted-foreground">
-                No refunds or credits yet.
+              <TableCell colSpan={7} className="p-0">
+                <EmptyState
+                  title="No refunds or credits yet"
+                  hint="Raised from an invoice when money needs to go back or be written off. Every one needs a reason, and anything above the approval threshold needs a second approver."
+                />
               </TableCell>
             </TableRow>
           ) : (
@@ -98,9 +104,9 @@ export function CreditNotesTable({
                     )}
                   </TableCell>
                   <TableCell>
-                    <Badge variant="outline" className={STATUS_STYLE[note.status] ?? ""}>
+                    <StatusChip tone={CREDIT_NOTE_TONE[note.status] ?? "neutral"} dot>
                       {note.status.replace("_", " ")}
-                    </Badge>
+                    </StatusChip>
                   </TableCell>
                   <TableCell className="text-right">
                     {pending &&

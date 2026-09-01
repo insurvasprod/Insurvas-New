@@ -7,6 +7,7 @@ import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/admin/empty-state";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -169,8 +170,11 @@ export function PlansTable({
           <TableBody>
             {visible.length === 0 && (
               <TableRow>
-                <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
-                  No plans yet.
+                <TableCell colSpan={7} className="p-0">
+                  <EmptyState
+                    title="No plans yet"
+                    hint="A plan is what a tenant subscribes to: the features it grants, the meters it allows and the price on each cycle. Nothing can be sold until one exists."
+                  />
                 </TableCell>
               </TableRow>
             )}

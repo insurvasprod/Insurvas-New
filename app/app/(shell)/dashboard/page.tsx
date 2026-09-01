@@ -56,7 +56,7 @@ export default async function AgentDashboardPage() {
       {meterRows.length > 0 && (
         <Card>
           <CardContent className="space-y-4">
-            <h2 className="text-sm font-bold uppercase tracking-wide text-[var(--brand-700)]">
+            <h2 className="text-sm font-bold uppercase tracking-wide text-[var(--color-accent-ink)]">
               This period
             </h2>
             <div className="space-y-4">
@@ -82,7 +82,7 @@ export default async function AgentDashboardPage() {
       {openNow.length > 0 && (
         <Card>
           <CardContent className="space-y-3">
-            <h2 className="text-sm font-bold uppercase tracking-wide text-[var(--brand-700)]">
+            <h2 className="text-sm font-bold uppercase tracking-wide text-[var(--color-accent-ink)]">
               Where to go
             </h2>
             <ul className="grid gap-1.5 sm:grid-cols-2">
@@ -111,7 +111,7 @@ export default async function AgentDashboardPage() {
       {onTheWay.length > 0 && (
         <Card>
           <CardContent className="space-y-3">
-            <h2 className="text-sm font-bold uppercase tracking-wide text-[var(--brand-700)]">
+            <h2 className="text-sm font-bold uppercase tracking-wide text-[var(--color-accent-ink)]">
               Included in your plan, on the way
             </h2>
             <p className="text-sm text-muted-foreground">

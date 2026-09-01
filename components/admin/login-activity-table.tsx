@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/table";
 import { loginFailureLabel, type LoginEventRow } from "@/lib/loginEvents/constants";
 import { tableHeaderRow, tableHeadCell, tableShell } from "./table-styles";
+import { EmptyState } from "@/components/admin/empty-state";
 
 export function LoginActivityTable({
   events,
@@ -35,11 +36,11 @@ export function LoginActivityTable({
         <TableBody>
           {events.length === 0 && (
             <TableRow>
-              <TableCell
-                colSpan={showActor ? 5 : 4}
-                className="h-24 text-center text-muted-foreground"
-              >
-                No login attempts recorded yet.
+              <TableCell colSpan={showActor ? 5 : 4} className="p-0">
+                <EmptyState
+                  title="No login attempts recorded yet"
+                  hint="Every sign-in and failed attempt lands here, so this fills up on its own. An empty list this early is normal."
+                />
               </TableCell>
             </TableRow>
           )}

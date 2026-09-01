@@ -164,7 +164,7 @@ export function PlanVersionEditor({
           <Card>
             <CardContent className="space-y-3">
               <div>
-                <h2 className="text-sm font-bold uppercase tracking-wide text-[var(--brand-700)]">Pricing</h2>
+                <h2 className="text-sm font-bold uppercase tracking-wide text-[var(--color-accent-ink)]">Pricing</h2>
                 <p className="text-xs text-muted-foreground">
                   Leave a cycle blank to not offer it. USD only. Stored as whole cents.
                 </p>
@@ -250,7 +250,7 @@ export function PlanVersionEditor({
               <Card key={group.module.key}>
                 <CardContent className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <h2 className="text-sm font-bold uppercase tracking-wide text-[var(--brand-700)]">
+                    <h2 className="text-sm font-bold uppercase tracking-wide text-[var(--color-accent-ink)]">
                       {group.module.label}
                     </h2>
                     {selectable.length > 0 && (
@@ -305,7 +305,7 @@ export function PlanVersionEditor({
           <Card>
             <CardContent className="space-y-3">
               <div>
-                <h2 className="text-sm font-bold uppercase tracking-wide text-[var(--brand-700)]">
+                <h2 className="text-sm font-bold uppercase tracking-wide text-[var(--color-accent-ink)]">
                   Agent will see
                 </h2>
                 <p className="text-xs text-muted-foreground">

@@ -161,7 +161,7 @@ export function FeatureSwitchesPanel({
       {Object.entries(byModule).map(([moduleKey, group]) => (
         <Card key={moduleKey}>
           <CardContent className="space-y-1">
-            <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-[var(--brand-700)]">
+            <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-[var(--color-accent-ink)]">
               {group.moduleLabel}
             </h2>
 

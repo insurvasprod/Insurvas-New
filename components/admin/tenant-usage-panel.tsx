@@ -19,7 +19,7 @@ export async function TenantUsagePanel({ usage }: { usage: TenantUsageSummary })
     return (
       <Card>
         <CardContent>
-          <h2 className="text-sm font-bold uppercase tracking-wide text-[var(--brand-700)]">Usage</h2>
+          <h2 className="text-sm font-bold uppercase tracking-wide text-[var(--color-accent-ink)]">Usage</h2>
           <p className="mt-2 text-sm text-muted-foreground">
             No subscription, so nothing is metered. Allowances start once a plan is assigned.
           </p>
@@ -32,7 +32,7 @@ export async function TenantUsagePanel({ usage }: { usage: TenantUsageSummary })
     <Card>
       <CardContent className="space-y-4">
         <div>
-          <h2 className="text-sm font-bold uppercase tracking-wide text-[var(--brand-700)]">Usage</h2>
+          <h2 className="text-sm font-bold uppercase tracking-wide text-[var(--color-accent-ink)]">Usage</h2>
           <p className="text-xs text-muted-foreground">
             Current billing period
             {usage.periodStart && ` — since ${new Date(usage.periodStart).toLocaleDateString()}`}. Resets on the

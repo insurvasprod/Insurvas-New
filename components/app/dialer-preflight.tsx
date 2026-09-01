@@ -43,10 +43,10 @@ export function DialerPreflight() {
         <p className="mt-1 text-sm text-muted-foreground">Check every number immediately before calling.</p>
       </div>
 
-      <Card className="border-amber-300 bg-amber-50/70">
-        <CardContent className="flex flex-wrap items-start justify-between gap-3 p-6 text-sm text-amber-950">
+      <Card className="border-[var(--color-warning)]/40 bg-[var(--color-warning)]/10">
+        <CardContent className="flex flex-wrap items-start justify-between gap-3 p-6 text-sm text-foreground">
           <div><p className="font-semibold">DNC compliance is mandatory</p><p className="mt-1 max-w-xl">If no enabled DNC scrub vendor can respond, dialing is blocked platform-wide. Calling without a check can expose the platform to $500-$1,500 penalties per call.</p></div>
-          <Badge variant="outline" className="border-amber-400 bg-white/60 text-amber-900">Fail closed</Badge>
+          <Badge variant="outline" className="border-[var(--color-warning)]/60 bg-card/60 text-[var(--color-warning)]">Fail closed</Badge>
         </CardContent>
       </Card>
 
@@ -55,7 +55,7 @@ export function DialerPreflight() {
         <CardContent className="space-y-4">
           <div className="space-y-2"><Label htmlFor="dial-phone">Phone number</Label><Input id="dial-phone" type="tel" inputMode="tel" autoComplete="tel" placeholder="(555) 123-4567" value={phone} onChange={(event) => { setPhone(event.target.value); setFieldError(""); setResult(null); }} aria-invalid={Boolean(fieldError)} />{fieldError && <p className="text-sm text-destructive" role="alert">{fieldError}</p>}</div>
           <Button type="button" onClick={() => void checkBeforeDialing()} disabled={checking || !phone.trim()}>{checking ? "Checking…" : "Check before dialing"}</Button>
-          {result && <div role="status" className={`rounded-md border p-4 text-sm ${result.tone === "success" ? "border-green-300 bg-green-50 text-green-900" : "border-red-300 bg-red-50 text-red-900"}`}><p className="font-semibold">{result.tone === "success" ? "Number cleared" : "Dialing blocked"}</p><p className="mt-1">{result.message}</p></div>}
+          {result && <div role="status" className={`rounded-md border p-4 text-sm ${result.tone === "success" ? "border-[var(--color-success)]/40 bg-[var(--color-success)]/10 text-[var(--color-success)]" : "border-[var(--color-danger)]/40 bg-[var(--color-danger)]/10 text-[var(--color-danger)]"}`}><p className="font-semibold">{result.tone === "success" ? "Number cleared" : "Dialing blocked"}</p><p className="mt-1">{result.message}</p></div>}
         </CardContent>
       </Card>
     </div>

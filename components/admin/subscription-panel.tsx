@@ -95,7 +95,7 @@ export function SubscriptionPanel({
       <>
         <Card>
           <CardContent className="space-y-3">
-            <h2 className="text-sm font-bold uppercase tracking-wide text-[var(--brand-700)]">Subscription</h2>
+            <h2 className="text-sm font-bold uppercase tracking-wide text-[var(--color-accent-ink)]">Subscription</h2>
             <p className="text-sm text-muted-foreground">
               Nothing sold to this tenant yet — no plan, no allowances, no seat limit.
             </p>
@@ -131,7 +131,7 @@ export function SubscriptionPanel({
       <Card>
         <CardContent className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-sm font-bold uppercase tracking-wide text-[var(--brand-700)]">Subscription</h2>
+            <h2 className="text-sm font-bold uppercase tracking-wide text-[var(--color-accent-ink)]">Subscription</h2>
             <Badge variant="outline" className={SUBSCRIPTION_STATUS_BADGE_CLASS[status]}>
               {SUBSCRIPTION_STATUS_LABELS[status]}
             </Badge>

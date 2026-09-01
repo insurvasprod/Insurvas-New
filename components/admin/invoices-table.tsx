@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { AlertTriangle } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -17,15 +16,9 @@ import { formatCentsAsCurrency } from "@/lib/money";
 import { INVOICE_STATUSES, INVOICE_STATUS_LABELS, type InvoiceStatus } from "@/lib/invoices/constants";
 import type { InvoiceListRow } from "@/lib/invoices/queries";
 import { tableHeaderRow, tableHeadCell, tableShell } from "./table-styles";
+import { EmptyState, NoMatches } from "@/components/admin/empty-state";
+import { StatusChip, invoiceTone } from "@/components/admin/status-chip";
 
-const STATUS_BADGE: Record<InvoiceStatus, string> = {
-  draft: "border-transparent bg-muted text-muted-foreground",
-  issued: "border-transparent bg-[var(--brand-700)]/10 text-[var(--brand-700)]",
-  paid: "border-transparent bg-[var(--color-success)]/10 text-[var(--color-success)]",
-  overdue: "border-transparent bg-[var(--color-warning)]/10 text-[var(--color-warning)]",
-  void: "border-transparent bg-muted text-muted-foreground line-through",
-  uncollectible: "border-transparent bg-destructive/10 text-destructive",
-};
 
 function daysOverdue(dueAt: string | null, status: InvoiceStatus): number | null {
   if (!dueAt || status === "paid" || status === "void") return null;
@@ -111,8 +104,21 @@ export function InvoicesTable({ initialInvoices }: { initialInvoices: InvoiceLis
           <TableBody>
             {invoices.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="py-8 text-center text-sm text-muted-foreground">
-                  No invoices match these filters.
+                <TableCell colSpan={7} className="p-0">
+                  {/* An empty list and a filtered-out list look identical and mean the opposite.
+                      Telling someone to raise their first invoice when they have two hundred and a
+                      status filter set is worse than saying nothing. */}
+                  {status === "all" && lens === "all" ? (
+                    <EmptyState
+                      title="No invoices yet"
+                      hint="An invoice is created automatically when a payment is collected, and by hand for anything else. Nothing has been billed on this platform so far."
+                    />
+                  ) : (
+                    <NoMatches
+                      noun="invoices"
+                      onClear={() => { setStatus("all"); setLens("all"); }}
+                    />
+                  )}
                 </TableCell>
               </TableRow>
             ) : (
@@ -144,9 +150,13 @@ export function InvoicesTable({ initialInvoices }: { initialInvoices: InvoiceLis
                       )}
                     </TableCell>
                     <TableCell>
-                      <Badge variant="outline" className={STATUS_BADGE[invoice.status]}>
-                        {INVOICE_STATUS_LABELS[invoice.status]}
-                      </Badge>
+                      {/* A voided invoice keeps its strike-through: it is closed correctly rather
+                          than unpaid, and the line says so faster than the word does. */}
+                      <StatusChip tone={invoiceTone(invoice.status)} dot>
+                        <span className={invoice.status === "void" ? "line-through" : undefined}>
+                          {INVOICE_STATUS_LABELS[invoice.status]}
+                        </span>
+                      </StatusChip>
                     </TableCell>
                     <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
                       {invoice.issued_at ? new Date(invoice.issued_at).toLocaleDateString() : "—"}

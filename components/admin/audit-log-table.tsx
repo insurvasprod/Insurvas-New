@@ -28,6 +28,7 @@ import {
 import { AUDIT_ACTIONS, AUDIT_ACTION_LABELS, type AuditAction } from "@/lib/audit/actions";
 import { PaginationBar } from "./pagination-bar";
 import { tableHeaderRow, tableHeadCell, tableShell } from "./table-styles";
+import { NoMatches } from "@/components/admin/empty-state";
 
 type Actor = { id: string; name: string; email: string };
 
@@ -164,8 +165,11 @@ export function AuditLogTable({
           <TableBody>
             {entries.length === 0 && (
               <TableRow>
-                <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
-                  No matching audit entries.
+                <TableCell colSpan={5} className="p-0">
+                  <NoMatches
+                    noun="audit entries"
+                    onClear={() => { setAction("all"); setActorId("all"); setFrom(""); setTo(""); setPage(1); }}
+                  />
                 </TableCell>
               </TableRow>
             )}

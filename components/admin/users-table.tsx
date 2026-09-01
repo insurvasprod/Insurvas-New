@@ -42,7 +42,6 @@ import { TENANT_ROLE_LABELS, type TenantRole } from "@/lib/tenantAuth/roles";
 import {
   USERS_PAGE_SIZE,
   USER_STATUSES,
-  USER_STATUS_BADGE_CLASS,
   USER_STATUS_LABELS,
   type UserSortColumn,
 } from "@/lib/users/constants";
@@ -55,6 +54,7 @@ import { CreateUserDialog, type TenantOption } from "./create-user-dialog";
 import { InviteLinkPanel } from "./invite-link-panel";
 import { EditUserDialog } from "./edit-user-dialog";
 import { SuspendUserDialog } from "./suspend-user-dialog";
+import { StatusChip, accountTone } from "@/components/admin/status-chip";
 
 const COLUMNS: { key: UserSortColumn; label: string }[] = [
   { key: "name", label: "Name" },
@@ -390,14 +390,14 @@ export function UsersTable({
                   </TableCell>
                   <TableCell className="text-muted-foreground">{user.plan_code ?? "No plan yet"}</TableCell>
                   <TableCell>
-                    <Badge
-                      variant="outline"
-                      className={USER_STATUS_BADGE_CLASS[user.status]}
+                    <StatusChip
+                      tone={accountTone(user.status)}
+                      dot
                       // Hovering a suspended user shows why, without a trip to the audit log.
                       title={user.suspension_reason ?? undefined}
                     >
                       {USER_STATUS_LABELS[user.status]}
-                    </Badge>
+                    </StatusChip>
                   </TableCell>
                   <TableCell
                     className="text-muted-foreground"

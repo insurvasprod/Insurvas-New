@@ -374,31 +374,43 @@ in the ticket is now backed by the migration, live SQL verification, API verific
 verification. This entry was moved from the outstanding backlog into the resolved section after
 the agent consumer was added.
 
-### 71. Dark mode is not implemented — and five components think it is
-**From:** UI verification, 2026-08-30 · **Corrects an earlier claim**
+### 71. Dark mode is built — resolved
+**From:** UI verification 2026-08-30 · **Built 2026-08-31**
 
-Previously logged as "tokens exist, nobody has looked at it." Verified in a browser and that was
-wrong in a way worth recording: dark mode is not partially built, it is **not built**.
+The earlier entry said dark mode was not partially built but absent: no `ThemeProvider` mounted,
+`:root` carrying one light palette, and `dark:` utilities stranded in five shadcn primitives.
 
-Measured on `/admin/login` with the browser requesting dark:
+It exists now, and the `@theme inline` block is why it was tractable: every Tailwind semantic colour
+already resolved through a `--color-*` variable, so redefining those under `.dark` carried the whole
+app without a component being touched. The five stranded primitives turned out to be a non-issue —
+their `dark:` variants are all token-based (`bg-input/30`, `bg-destructive/60`), so they were
+correct-but-dormant rather than the landmine that entry predicted.
 
-| | |
-|---|---|
-| `prefers-color-scheme: dark` | matches |
-| `<html>` class / `data-theme` | empty / null |
-| `body` background | `#f7f9fb` — the light token |
-| `ThemeProvider` mounted | nowhere |
-| dark palette in `globals.css` | absent — `:root` defines one light palette |
+**Three real defects, all found by measuring rather than looking:**
 
-The trap: `dark:` utilities survive in five stock shadcn primitives (`badge`, `button`,
-`dropdown-menu`, `input`, `select`) from the generator, and `next-themes` is imported by
-`components/ui/sonner.tsx` alone, with no provider above it. So the moment anyone mounts a
-`ThemeProvider`, those five components go dark and the other 28 screens stay light. It will look
-like a regression and it is pre-existing.
+| | before | after |
+|---|---|---|
+| `text-[var(--brand-700)]` on a dark card | **1.12:1** | 7.56:1 |
+| Primary button label | **2.69:1** | 6.96:1 |
+| Input border vs card | **1.31:1** dark, 1.28:1 light | 3.12 / 3.00 |
 
-**Decide before building:** either commit to a dark palette across all 33 screens, or strip the
-five `dark:` variants and the `useTheme` import so the codebase stops implying an option it does
-not offer. The second is an hour; the first is a design project.
+The first was the big one: `--brand-700` is a SURFACE colour (the sidebar, the table header row) and
+32 places across 21 files were using it as a TEXT colour on light cards. Correct on white,
+invisible on anything else. Split into `--color-accent-ink`, which flips, while `--brand-700` stays
+navy for the six places that genuinely paint a surface with it.
+
+The second and third are WCAG failures that also existed in the light theme — the input border
+measured 1.28:1 there, well under the 3:1 that 1.4.11 asks of a control's edge. Both themes fixed;
+`--color-control-border` is now separate from `--color-border` so table rules stay soft while inputs
+become findable.
+
+Also: the accent lifts to `#4da3f0` in dark, filled surfaces take dark ink through
+`--color-on-primary`, and the seventeen Tailwind palette colours used as chrome (`bg-amber-50/70`,
+`text-green-900`) now go through the semantic tokens. The one deliberate hold-out is the TOTP QR
+code, which keeps a white quiet zone in both themes or it stops scanning.
+
+**Verified on `/admin/login` only** — the one screen reachable without a session. Everything else is
+behind a login (#72).
 
 ---
 
@@ -489,6 +501,30 @@ first time somebody renames a plan.
 **Fix:** add `plan_name` to `resolve_tenant_entitlement`'s output and to the `Entitlement` type. It
 is a change to the contract between the two planes, so it wants its own migration and a note in the
 Basic Idea doc's Appendix A rather than being smuggled in with a UI change.
+
+---
+
+### 76. The fourteen remaining admin screens — pass done, unseen
+**From:** admin design pass, 2026-08-31
+
+The board called these "None — nobody has looked at them with design intent". Auditing them first
+found they were in better shape than that implied: `AdminPageHeader` is used by every page but one,
+and 17 of 18 tables share `table-styles.ts`. The inconsistency was one level down.
+
+- **Status chips were hand-rolled six times.** Five separate `*_STATUS_BADGE_CLASS` maps, drifting
+  in exactly the way copies do — some carried `text-[10px]`, some tinted with `--color-blue-faint`
+  and some with a `/10` alpha of the same hue. Replaced by one `StatusChip` with a `tone` API, so a
+  table says what a state MEANS and the component decides how that looks. Each chip also carries a
+  dot, so the state survives for anyone who cannot separate the hues.
+- **Empty states that stated a fact and stopped.** "No coupons yet." is true and a dead end. The six
+  bare ones now say what the thing is for. `hint` is a required prop on the new `EmptyState` so the
+  next one cannot skip it.
+- **Filtered-empty and genuinely-empty were the same message,** which is worst on Invoices and
+  Subscriptions: those check the *fetched* list, so a fresh platform with zero invoices was told
+  "No invoices match these filters". They now distinguish, and the filter case offers to clear.
+
+**Not seen in a browser** — same blocker as #72. Structure, contrast and build are verified; layout
+and density are not.
 
 ---
 
