@@ -1406,6 +1406,7 @@ export type Database = {
         Row: {
           id: string;
           partner_id: string | null;
+          submission_id: string | null;
           tenant_id: string;
           tenant_template_id: string | null;
           definition_version: number;
@@ -1421,6 +1422,7 @@ export type Database = {
         Insert: {
           id?: string;
           partner_id?: string | null;
+          submission_id?: string | null;
           tenant_id: string;
           tenant_template_id?: string | null;
           definition_version?: number;
@@ -1436,6 +1438,7 @@ export type Database = {
         Update: {
           id?: string;
           partner_id?: string | null;
+          submission_id?: string | null;
           tenant_id?: string;
           tenant_template_id?: string | null;
           definition_version?: number;
@@ -1448,6 +1451,36 @@ export type Database = {
           created_at?: string;
           updated_at?: string;
         };
+        Relationships: [];
+      };
+      lead_queue: {
+        Row: { id: string; tenant_id: string; lead_id: string; partner_id: string | null; product_line: string; stage_key: string; status: string; claimed_by: string | null; claimed_at: string | null; created_at: string; updated_at: string };
+        Insert: { id?: string; tenant_id: string; lead_id: string; partner_id?: string | null; product_line: string; stage_key: string; status?: string; claimed_by?: string | null; claimed_at?: string | null; created_at?: string; updated_at?: string };
+        Update: { status?: string; claimed_by?: string | null; claimed_at?: string | null; updated_at?: string };
+        Relationships: [];
+      };
+      deal_flow: {
+        Row: { id: string; tenant_id: string; lead_id: string; partner_id: string | null; submission_id: string | null; product_line: string; stage_key: string; insured_name: string | null; phone: string | null; initial_quote: string | null; tracking_id: string | null; local_date: string; created_at: string; updated_at: string };
+        Insert: { id?: string; tenant_id: string; lead_id: string; partner_id?: string | null; submission_id?: string | null; product_line: string; stage_key: string; insured_name?: string | null; phone?: string | null; initial_quote?: string | null; tracking_id?: string | null; local_date: string; created_at?: string; updated_at?: string };
+        Update: { stage_key?: string; insured_name?: string | null; phone?: string | null; initial_quote?: string | null; tracking_id?: string | null; updated_at?: string };
+        Relationships: [];
+      };
+      intake_failures: {
+        Row: { id: string; tenant_id: string; lead_id: string; step: string; error_message: string; metadata: Json; created_at: string; resolved_at: string | null };
+        Insert: { id?: string; tenant_id: string; lead_id: string; step: string; error_message: string; metadata?: Json; created_at?: string; resolved_at?: string | null };
+        Update: { resolved_at?: string | null };
+        Relationships: [];
+      };
+      intake_alerts: {
+        Row: { id: string; tenant_id: string; intake_failure_id: string; alert_type: string; status: string; created_at: string; acknowledged_at: string | null };
+        Insert: { id?: string; tenant_id: string; intake_failure_id: string; alert_type?: string; status?: string; created_at?: string; acknowledged_at?: string | null };
+        Update: { status?: string; acknowledged_at?: string | null };
+        Relationships: [];
+      };
+      lead_notifications: {
+        Row: { id: string; tenant_id: string; lead_id: string; channel: string; event_type: string; payload: Json; status: string; created_at: string; sent_at: string | null };
+        Insert: { id?: string; tenant_id: string; lead_id: string; channel?: string; event_type?: string; payload?: Json; status?: string; created_at?: string; sent_at?: string | null };
+        Update: { status?: string; sent_at?: string | null };
         Relationships: [];
       };
       partners: {

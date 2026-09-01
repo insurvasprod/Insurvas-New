@@ -1242,21 +1242,20 @@ server-side API guards and the responsive Partners screen are implemented. The l
 partner verifier passes the authorization, lifecycle, audit, RLS, history, idempotency and
 concurrency checks. The Partners menu entry now points at the built screen.
 
-Two acceptance checks remain dependent on later work and are recorded below: the current inbound
-submission endpoint is still a placeholder owned by LA-1.6/LA-1.7, and current SA-2.8 plan-limit
-payloads do not yet populate `max_partners`, which belongs to LA-1.19. Offboarding revokes the
-partner membership rows; LA-1.2 must enforce those rows when partner portal authentication is
-implemented.
+The partner portal submission path is now implemented by the LA-1.7 intake follow-up below. Two
+later-ticket items remain recorded: the separate inbound-transfer webhook is still a placeholder,
+and current SA-2.8 plan-limit payloads do not yet populate the exact per-partner limits owned by
+LA-1.19.
 
 ### 111. 🟡 LA-1.1 submission enforcement and production partner limits await later tickets
 **From:** LA-1.1 · **Belongs to:** LA-1.6 / LA-1.7 / LA-1.19 · **Gap recorded:** 2026-09-01
 
-LA-1.1 now stores the partner lifecycle atomically and the API accepts `max_partners` from the
-cached entitlement when that field exists. However, the repository's current inbound transfer
-route returns `501 Not Implemented`, so there is no real submission operation to drive through a
-paused partner yet. The live SA-2.8 entitlement refresh also currently emits `max_seats` but not
-`max_partners`; the LA-1.1 verifier uses a synthetic cached entitlement to prove the enforcement
-path without querying plans.
+LA-1.1 stores the partner lifecycle atomically and the partner portal submission API now enforces
+active status and product approval before its fatal lead insert. The separate inbound transfer
+webhook still returns `501 Not Implemented`, so that provider-facing path remains owned by LA-1.6/
+LA-1.7. The live SA-2.8 entitlement refresh also currently emits `max_seats` but not the exact
+per-type limits required by LA-1.19; the LA-1.1 verifier uses a synthetic cached entitlement to
+prove the current enforcement path without querying plans.
 
 **Fix:** LA-1.6/LA-1.7 must call the shared partner acceptance check before creating any inbound
 or outbound submission and add the end-to-end paused-partner rejection test. LA-1.19 must add
@@ -1294,21 +1293,17 @@ partner portal with visible controls and no overflow; the temporary QA account w
 
 All LA-1.2 acceptance criteria are PASS for the routes and operations that exist in this ticket.
 
-### 114. 🟡 LA-1.2 lead submission content remains owned by the later intake ticket
-**From:** LA-1.2 · **Belongs to:** LA-1.6 · **Gap recorded:** 2026-09-01
+### 114. ✅ LA-1.2 partner submission surface resolved by the intake implementation
+**From:** LA-1.2 · **Belongs to:** LA-1.6 / LA-1.7 · **Resolved:** 2026-09-01
 
-The portal deliberately contains the access frame and a clear lead-submission placeholder, but it
-does not implement the actual submit-lead workflow, pipeline screens or partner chat. The ticket's
-out-of-scope rule excludes module content, and the existing backlog already assigns submission
-enforcement/content to LA-1.6 and LA-1.7. Leaving this here means partner credentials and isolation
-are complete, while a partner cannot yet submit a real lead until that later module ships.
+The partner portal now renders the configured product form, resumes drafts, validates values on the
+server, and submits through the current partner session. Paused partners can still open the portal
+and read their existing context, but cannot save a new draft or submit a new lead. The live
+LA-1.4 verifier exercised the form, draft, submit, audit and isolation paths. The remaining
+provider-facing inbound transfer webhook is a separate later integration and remains in #111.
 
-**Fix:** LA-1.6 must add the partner submission API and screen, call the shared current-partner
-authorization check, enforce active partner status, and add end-to-end submission tests without
-granting access to agent configuration or commission data.
-
-### 115. 🟡 LA-1.3 real submission and downstream product-line assertions await LA-1.7
-**From:** LA-1.3 · **Belongs to:** LA-1.7 · **Gap recorded:** 2026-09-01
+### 115. ✅ LA-1.3 product-line submission assertions resolved by the intake pipeline
+**From:** LA-1.3 · **Belongs to:** LA-1.7 · **Resolved:** 2026-09-01
 
 LA-1.3 now owns the tenant product switches, per-partner approval rows, the reusable server-side
 `assertPartnerProductApproved` check, the no-store partner picker endpoint, and the non-null
@@ -1316,24 +1311,14 @@ LA-1.3 now owns the tenant product switches, per-partner approval rows, the reus
 the picker immediately, existing approval history is retained, cross-tenant configuration is
 blocked, and a catalog product can be added without a deployment.
 
-The repository still has no real partner lead-submission endpoint, `lead_queue`, work-item, or
-deal-flow tables. Therefore the acceptance checks that require an unapproved submission to be
-rejected before any write, that open an existing lead after its product is disabled, and that
-assert `product_line` on the lead, queue item, and deal-flow row together, cannot be driven end to
-end in this ticket. The capability check is implemented so
-the later intake route has one server-side gate to call, but that route must call it before its
-fatal lead insert and must propagate the selected product line to every downstream row.
+The LA-1.7 intake follow-up now adds the tenant-scoped queue, deal-flow, notification, failure and
+alert records. The live verifier proves an unapproved product is rejected before a lead write, the
+selected product line matches across lead/queue/deal-flow, duplicate submissions create one lead,
+and the notification is queued. A disabled product keeps its approval history and existing lead
+data intact; it only disappears from the current picker.
 
-The existing agent template consumer also still defaults to the current Term Life template. That
-is unchanged legacy behavior, not a plan-specific branch in the new configuration surface, but
-the later multi-product intake work must choose the selected product's tenant template before it
-opens or writes a lead.
-
-**Fix:** LA-1.6/LA-1.7 must implement the selected-product submission pipeline around the shared
-capability check, add idempotent/concurrent submission tests, choose the selected product's
-tenant template, and assert the product line on the lead, queue item, and deal-flow row. Cost of
-leaving this open: configuration and picker behavior are safe, but the real submission path does
-not yet exist to prove the final authorization boundary.
+The selected product's tenant template is resolved before the lead insert, and the retry key makes
+the write idempotent under repeated or concurrent requests.
 
 ### 116. 🔵 LA-1.3 authenticated browser acceptance needs an agent session
 **From:** LA-1.3 · **Belongs to:** LA-1.3 · **Gap recorded:** 2026-09-01

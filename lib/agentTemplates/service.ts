@@ -180,11 +180,17 @@ export async function deleteFormDraft(tenantId: string, userId: string, productC
   const { error } = await request; if (error) throw new Error(`Could not clear form draft: ${error.message}`);
 }
 
-export async function createPartnerLead(tenantId: string, partnerId: string, userId: string, template: Awaited<ReturnType<typeof getTenantTemplateForProduct>>, values: unknown) {
+export async function createPartnerLead(tenantId: string, partnerId: string, userId: string, template: Awaited<ReturnType<typeof getTenantTemplateForProduct>>, values: unknown, submissionId: string) {
   const normalized = normalizeFormValues(template.template.fields, template.template.form_definition, values); if (normalized.error) throw new Error(normalized.error);
   const stage = template.template.stages[0]?.stage_key; if (!stage) throw new Error("No starting pipeline stage is configured");
-  const { data, error } = await getSupabaseServiceClient().from("agent_leads").insert({ tenant_id: tenantId, tenant_template_id: template.tenant_template_id, template_id: template.assignment.template_id, template_version: template.assignment.template_version, definition_version: template.assignment.definition_version, product_line: template.template.product_code, partner_id: partnerId, stage_key: stage, values: normalized.values as Json, created_by: userId }).select("id, product_line, partner_id, stage_key, values, created_at, updated_at").single();
-  if (error || !data) throw new Error(error?.message ?? "Could not submit lead"); return data;
+  const { data, error } = await getSupabaseServiceClient().from("agent_leads").insert({ tenant_id: tenantId, tenant_template_id: template.tenant_template_id, template_id: template.assignment.template_id, template_version: template.assignment.template_version, definition_version: template.assignment.definition_version, product_line: template.template.product_code, partner_id: partnerId, submission_id: submissionId, stage_key: stage, values: normalized.values as Json, created_by: userId }).select("id, product_line, partner_id, submission_id, stage_key, values, created_at, updated_at").single();
+  if (!error && data) return { lead: data, replayed: false };
+  if (error?.code === "23505") {
+    const existing = await getSupabaseServiceClient().from("agent_leads").select("id, product_line, partner_id, submission_id, stage_key, values, created_at, updated_at").eq("tenant_id", tenantId).eq("partner_id", partnerId).eq("submission_id", submissionId).maybeSingle();
+    if (existing.error || !existing.data) throw new Error(existing.error?.message ?? "Could not resolve duplicate submission");
+    return { lead: existing.data, replayed: true };
+  }
+  throw new Error(error?.message ?? "Could not submit lead");
 }
 export function csvForLeads(fields: TemplateField[], stages: TemplateStage[], leads: Array<{ stage_key: string; values: Record<string, unknown> }>) { const escape = (value: unknown) => { const text = Array.isArray(value) ? value.join(", ") : value === null || value === undefined ? "" : String(value); const safe = /^[=+\-@]/.test(text) ? `'${text}` : text; return `"${safe.replaceAll('"', '""')}"`; }; return [["stage", ...fields.map((field) => field.label)].map(escape).join(","), ...leads.map((lead) => [stages.find((stage) => stage.stage_key === lead.stage_key)?.label ?? lead.stage_key, ...fields.map((field) => lead.values[field.field_key])].map(escape).join(","))].join("\r\n") + "\r\n"; }
 

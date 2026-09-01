@@ -12,6 +12,8 @@ export type PartnerContext = {
   partnerId: string;
   role: PartnerRole;
   partnerName: string;
+  partnerTimezone: string;
+  partnerStatus: "draft" | "active" | "paused" | "offboarded";
 };
 
 export async function getPartnerSession(): Promise<PartnerSessionPayload | null> {
@@ -29,14 +31,14 @@ export async function resolvePartnerContext(): Promise<PartnerContext | null> {
   const [{ data: membership }, { data: user }, { data: partner }] = await Promise.all([
     supabase.from("partner_users").select("tenant_id, partner_id, role, status, accepted_at").eq("tenant_id", session.tenantId).eq("partner_id", session.partnerId).eq("user_id", session.sub).maybeSingle<{ tenant_id: string; partner_id: string; role: string; status: string; accepted_at: string | null }>(),
     supabase.from("users").select("status").eq("id", session.sub).maybeSingle<{ status: string }>(),
-    supabase.from("partners").select("name, status").eq("id", session.partnerId).eq("tenant_id", session.tenantId).maybeSingle<{ name: string; status: string }>(),
+    supabase.from("partners").select("name, status, timezone").eq("id", session.partnerId).eq("tenant_id", session.tenantId).maybeSingle<{ name: string; status: PartnerContext["partnerStatus"]; timezone: string }>(),
   ]);
 
   if (!membership || membership.status !== "active" || !membership.accepted_at || !isPartnerRole(membership.role)) return null;
   if (!user || user.status !== "active") return null;
   if (!partner || partner.status === "offboarded") return null;
 
-  return { userId: session.sub, tenantId: session.tenantId, partnerId: session.partnerId, role: membership.role, partnerName: partner.name };
+  return { userId: session.sub, tenantId: session.tenantId, partnerId: session.partnerId, role: membership.role, partnerName: partner.name, partnerTimezone: partner.timezone, partnerStatus: partner.status };
 }
 
 export async function requirePartner(allowedRoles?: readonly PartnerRole[]): Promise<{ context: PartnerContext } | NextResponse> {
