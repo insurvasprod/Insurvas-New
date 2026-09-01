@@ -1,10 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { audit } from "@/lib/audit/log";
-import { createPartnerLead, deleteFormDraft, getTenantTemplateForProduct } from "@/lib/agentTemplates/service";
+import { createPartnerLead, deleteFormDraft, getTenantTemplateForProduct, validateValues } from "@/lib/agentTemplates/service";
 import { requirePartner } from "@/lib/partnerAuth/requirePartner";
 import { assertPartnerProductApproved } from "@/lib/partnerProducts/service";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
+import { screenPartnerPhone } from "@/lib/compliance/screening";
 
 export async function POST(request: NextRequest) {
   const auth = await requirePartner(); if (auth instanceof NextResponse) return auth;
@@ -15,7 +16,19 @@ export async function POST(request: NextRequest) {
   try {
     await assertPartnerProductApproved(auth.context.tenantId, auth.context.partnerId, body.product_code);
     const template = await getTenantTemplateForProduct(auth.context.tenantId, body.product_code);
-    const result = await createPartnerLead(auth.context.tenantId, auth.context.partnerId, auth.context.userId, template, body.values, body.submission_id);
+    const values = body.values && typeof body.values === "object" && !Array.isArray(body.values) ? body.values as Record<string, unknown> : {};
+    const phoneField = template.template.fields.find((field) => field.type === "phone" && (field.field_key === "phone" || field.field_key === "phone_number"))
+      ?? template.template.fields.find((field) => field.type === "phone");
+    const validationError = validateValues(template.template.fields, body.values, template.template.form_definition);
+    const phoneValidationError = Boolean(phoneField && validationError?.startsWith(phoneField.label));
+    if (validationError && !phoneValidationError) return NextResponse.json({ error: validationError }, { status: 400 });
+    const screening = await screenPartnerPhone({ tenantId: auth.context.tenantId, partnerId: auth.context.partnerId, userId: auth.context.userId, phone: phoneField ? values[phoneField.field_key] : undefined });
+    if (!screening.allowed) {
+      const status = screening.outcome === "unavailable" ? 503 : 422;
+      return NextResponse.json({ error: screening.message, code: screening.outcome === "tcpa_litigator" ? "tcpa_litigator" : screening.outcome, blocked: true, phone: screening.phoneDigits ? `••••${screening.phoneDigits.slice(-4)}` : null }, { status });
+    }
+    if (validationError) return NextResponse.json({ error: validationError }, { status: 400 });
+    const result = await createPartnerLead(auth.context.tenantId, auth.context.partnerId, auth.context.userId, template, body.values, body.submission_id, screening);
     const lead = result.lead;
     if (!result.replayed) {
       const values = (lead.values ?? {}) as Record<string, unknown>;

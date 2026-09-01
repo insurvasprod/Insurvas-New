@@ -1225,9 +1225,50 @@ entry to resolved. Cost of leaving it open: CSV ingestion remains unverified unt
 exists; it does not block the current dynamic-form submission path.
 
 
+### 118. 🔵 LA-1.5 live screening schema is not applied in the connected Supabase project
+**From:** LA-1.5 · **Belongs to:** LA-1.5 · **Gap recorded:** 2026-09-01
+
+The migration `20260902160000_la_1_5_screening_service.sql` is committed and passes the repository's
+fast and deep parse/ordering checks, but the connected Supabase project still has no
+`screening_results`, `screening_audit` or `screening_cache_locks` tables and no screening columns on
+`agent_leads`. The workspace connects as `tenant_app`, which has no DDL privilege, and no Supabase
+project is linked here, so the migration cannot be applied from this session. The real `/app/leads`
+screen rendered the existing schema error, and the focused verifier correctly reports NOT TESTABLE
+YET. The fail-closed application path therefore cannot be claimed live until the schema exists.
+
+**Fix:** an owner connection must apply the committed migration to the intended Supabase project,
+refresh the PostgREST schema cache if required, configure one HTTPS `litigator_scrub` vendor and one
+HTTPS `dnc_scrub` vendor, then run `npm run verify:screening`. Cost of leaving it open: partner lead
+submission remains unavailable because the application must refuse to treat unscreened numbers as safe.
+
+### 119. 🔵 LA-1.5 authenticated screening acceptance is not yet verified
+**From:** LA-1.5 · **Belongs to:** LA-1.5 · **Gap recorded:** 2026-09-01
+
+The typed parser, fail-closed decision path, audit/cache persistence, fallback logging, meter
+reservation and agent warning rendering are covered by code review and unit/type/build checks. The
+live acceptance scenarios have not run because the required live schema is missing: TCPA blocking,
+DNC warning submission, same-number cache reuse, primary-vendor fallback, replayability and
+concurrent checks all remain unverified against the running application. A browser pass also cannot
+reach the lead workspace; it currently shows `column agent_leads.screening_outcome does not exist`.
+
+**Fix:** after #118, run the disposable-fixture verifier and authenticated browser QA with the
+partner form and agent lead workspace. Capture the successful DNC warning and TCPA-block screens,
+confirm no browser console errors, and move this entry to resolved only when those checks pass. Cost
+of leaving it open: the feature may be correct in source but is not yet proven in the deployed
+tenant/session path.
+
 ## ✅ Resolved
 
 *Terse log — details live in git history.*
+
+### 109. ✅ Migration deep semantic verification no longer times out or misreports screening policies
+**From:** repository verification audit · **Belongs to:** repository verification · **Resolved:** 2026-09-01
+
+The deep migration checker now treats policy creation and removal as dependent DDL after the
+tenant-only verification role is denied table-creation rights. The LA-1.5 migration completes the
+focused deep check with 38 statements checked, 0 missing-object errors and 0 syntax/order errors.
+The checker change is committed in `scripts/check-migrations.mjs`; this resolves the earlier #109
+false failure without weakening real migration error detection.
 
 ### 110. ✅ LA-1.1 partner records and lifecycle implemented
 **From:** LA-1.1 · **Belongs to:** LA-1.1 · **Resolved:** 2026-09-01

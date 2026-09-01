@@ -224,7 +224,7 @@ let blockedDependencies = 0;
  * independently tested with this connection and are not migration defects. Keep real DML and
  * function-body errors visible so a typo is never hidden behind the permission check.
  */
-const DEPENDENT_DDL = /^(?:alter\s+table|comment\s+on|create\s+(?:index|trigger)|drop\s+(?:index|trigger)|grant\s+|revoke\s+)/i;
+const DEPENDENT_DDL = /^(?:alter\s+table|comment\s+on|create\s+(?:index|trigger|policy)|drop\s+(?:index|trigger|policy)|grant\s+|revoke\s+)/i;
 const EXPECTED_DEPENDENT_CODES = new Set(["42P01", "42704", "42883"]);
 
 function stripLeadingComments(statement) {

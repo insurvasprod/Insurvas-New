@@ -397,6 +397,74 @@ export type Database = {
         };
         Relationships: [];
       };
+      screening_results: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          phone_digits: string;
+          outcome: string;
+          vendor: string;
+          raw_response: Json;
+          warnings: Json;
+          version: number;
+          checked_at: string;
+          expires_at: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          tenant_id: string;
+          phone_digits: string;
+          outcome: string;
+          vendor: string;
+          raw_response: Json;
+          warnings?: Json;
+          version: number;
+          checked_at?: string;
+          expires_at: string;
+          created_at?: string;
+        };
+        Update: Record<string, never>;
+        Relationships: [];
+      };
+      screening_audit: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          partner_id: string | null;
+          user_id: string | null;
+          phone_digits: string | null;
+          outcome: string;
+          vendor: string | null;
+          raw_response: Json;
+          result_id: string | null;
+          cached: boolean;
+          version: number;
+          ts: string;
+        };
+        Insert: {
+          id?: string;
+          tenant_id: string;
+          partner_id?: string | null;
+          user_id?: string | null;
+          phone_digits?: string | null;
+          outcome: string;
+          vendor?: string | null;
+          raw_response: Json;
+          result_id?: string | null;
+          cached?: boolean;
+          version: number;
+          ts?: string;
+        };
+        Update: Record<string, never>;
+        Relationships: [];
+      };
+      screening_cache_locks: {
+        Row: { tenant_id: string; phone_digits: string; version: number; claim_token: string | null; claimed_until: string | null; updated_at: string };
+        Insert: { tenant_id: string; phone_digits: string; version: number; claim_token?: string | null; claimed_until?: string | null; updated_at?: string };
+        Update: { claim_token?: string | null; claimed_until?: string | null; updated_at?: string };
+        Relationships: [];
+      };
       credit_packs: {
         Row: {
           id: string;
@@ -1418,6 +1486,11 @@ export type Database = {
           created_by: string | null;
           created_at: string;
           updated_at: string;
+          screening_result_id: string | null;
+          screening_version: number | null;
+          screening_outcome: string | null;
+          screening_warning: string | null;
+          screening_checked_at: string | null;
         };
         Insert: {
           id?: string;
@@ -1434,6 +1507,11 @@ export type Database = {
           created_by?: string | null;
           created_at?: string;
           updated_at?: string;
+          screening_result_id?: string | null;
+          screening_version?: number | null;
+          screening_outcome?: string | null;
+          screening_warning?: string | null;
+          screening_checked_at?: string | null;
         };
         Update: {
           id?: string;
@@ -1450,6 +1528,11 @@ export type Database = {
           created_by?: string | null;
           created_at?: string;
           updated_at?: string;
+          screening_result_id?: string | null;
+          screening_version?: number | null;
+          screening_outcome?: string | null;
+          screening_warning?: string | null;
+          screening_checked_at?: string | null;
         };
         Relationships: [];
       };
@@ -2914,6 +2997,33 @@ export type Database = {
           p_tenant_id: string;
         };
         Returns: { billing_period_start: string; new_total: number; recorded: boolean }[];
+      };
+      has_existing_lead_phone: {
+        Args: { p_phone_digits: string; p_tenant_id: string };
+        Returns: boolean;
+      };
+      claim_screening_cache: {
+        Args: { p_claim_seconds?: number; p_phone_digits: string; p_tenant_id: string; p_version: number };
+        Returns: { state: string; result_id: string | null; claim_token: string | null }[];
+      };
+      complete_screening_cache: {
+        Args: {
+          p_checked_at: string;
+          p_claim_token: string;
+          p_expires_at: string;
+          p_outcome: string;
+          p_phone_digits: string;
+          p_raw_response: Json;
+          p_tenant_id: string;
+          p_vendor: string;
+          p_version: number;
+          p_warnings: Json;
+        };
+        Returns: string;
+      };
+      release_screening_cache: {
+        Args: { p_claim_token: string; p_phone_digits: string; p_tenant_id: string; p_version: number };
+        Returns: boolean;
       };
       rebuild_usage_totals: { Args: never; Returns: number };
       tenant_current_period_start: { Args: { p_tenant_id: string }; Returns: string };

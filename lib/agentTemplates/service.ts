@@ -3,6 +3,7 @@ import "server-only";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import type { Json } from "@/lib/supabase/database.types";
 import { getEntitlement } from "@/lib/entitlements/get";
+import type { ScreeningDecision } from "@/lib/compliance/screening";
 import { fetchTemplateVersion } from "@/lib/templates/queries";
 import { DEFAULT_TEMPLATE_FORM, TEMPLATE_KEY_PATTERN, TEMPLATE_FIELD_TYPES, TEMPLATE_STAGE_TYPES, type TemplateField, type TemplateFormDefinition, type TemplateRow, type TemplateStage, type TemplateValidation } from "@/lib/templates/constants";
 
@@ -126,7 +127,7 @@ export async function updateTenantTemplateCopy(tenantId: string, id: string, inp
 
 export async function listAgentLeads(tenantId: string, template: AgentTemplate, search: string, filterField: string, filterValue: string, sortField: string, direction: "asc" | "desc") {
   const allowedFields = new Set(template.template.fields.map((field) => field.field_key)); const safeFilterField = allowedFields.has(filterField) ? filterField : ""; const safeSortField = allowedFields.has(sortField) ? sortField : "";
-  const { data, error } = await getSupabaseServiceClient().from("agent_leads").select("id, product_line, stage_key, values, created_at, updated_at").eq("tenant_id", tenantId).eq("tenant_template_id", template.tenant_template_id).order("created_at", { ascending: false }); if (error) throw new Error(`Could not load leads: ${error.message}`);
+  const { data, error } = await getSupabaseServiceClient().from("agent_leads").select("id, product_line, stage_key, values, screening_outcome, screening_warning, screening_checked_at, created_at, updated_at").eq("tenant_id", tenantId).eq("tenant_template_id", template.tenant_template_id).order("created_at", { ascending: false }); if (error) throw new Error(`Could not load leads: ${error.message}`);
   const normalizedSearch = search.toLocaleLowerCase(); const normalizedFilter = filterValue.toLocaleLowerCase(); const leads = (data ?? []).map((lead) => ({ ...lead, values: (lead.values ?? {}) as Record<string, unknown> })).filter((lead) => !normalizedSearch || Object.values(lead.values).some((value) => String(value ?? "").toLocaleLowerCase().includes(normalizedSearch))).filter((lead) => !safeFilterField || !normalizedFilter || String(lead.values[safeFilterField] ?? "").toLocaleLowerCase().includes(normalizedFilter)); if (safeSortField) leads.sort((a, b) => String(a.values[safeSortField] ?? "").localeCompare(String(b.values[safeSortField] ?? ""), undefined, { numeric: true }) * (direction === "desc" ? -1 : 1)); return leads;
 }
 
@@ -180,13 +181,13 @@ export async function deleteFormDraft(tenantId: string, userId: string, productC
   const { error } = await request; if (error) throw new Error(`Could not clear form draft: ${error.message}`);
 }
 
-export async function createPartnerLead(tenantId: string, partnerId: string, userId: string, template: Awaited<ReturnType<typeof getTenantTemplateForProduct>>, values: unknown, submissionId: string) {
+export async function createPartnerLead(tenantId: string, partnerId: string, userId: string, template: Awaited<ReturnType<typeof getTenantTemplateForProduct>>, values: unknown, submissionId: string, screening: Pick<ScreeningDecision, "resultId" | "version" | "outcome" | "warning" | "checkedAt">) {
   const normalized = normalizeFormValues(template.template.fields, template.template.form_definition, values); if (normalized.error) throw new Error(normalized.error);
   const stage = template.template.stages[0]?.stage_key; if (!stage) throw new Error("No starting pipeline stage is configured");
-  const { data, error } = await getSupabaseServiceClient().from("agent_leads").insert({ tenant_id: tenantId, tenant_template_id: template.tenant_template_id, template_id: template.assignment.template_id, template_version: template.assignment.template_version, definition_version: template.assignment.definition_version, product_line: template.template.product_code, partner_id: partnerId, submission_id: submissionId, stage_key: stage, values: normalized.values as Json, created_by: userId }).select("id, product_line, partner_id, submission_id, stage_key, values, created_at, updated_at").single();
+  const { data, error } = await getSupabaseServiceClient().from("agent_leads").insert({ tenant_id: tenantId, tenant_template_id: template.tenant_template_id, template_id: template.assignment.template_id, template_version: template.assignment.template_version, definition_version: template.assignment.definition_version, product_line: template.template.product_code, partner_id: partnerId, submission_id: submissionId, stage_key: stage, values: normalized.values as Json, created_by: userId, screening_result_id: screening.resultId, screening_version: screening.version, screening_outcome: screening.outcome, screening_warning: screening.warning?.message ?? null, screening_checked_at: screening.checkedAt }).select("id, product_line, partner_id, submission_id, stage_key, values, screening_outcome, screening_warning, screening_checked_at, created_at, updated_at").single();
   if (!error && data) return { lead: data, replayed: false };
   if (error?.code === "23505") {
-    const existing = await getSupabaseServiceClient().from("agent_leads").select("id, product_line, partner_id, submission_id, stage_key, values, created_at, updated_at").eq("tenant_id", tenantId).eq("partner_id", partnerId).eq("submission_id", submissionId).maybeSingle();
+    const existing = await getSupabaseServiceClient().from("agent_leads").select("id, product_line, partner_id, submission_id, stage_key, values, screening_outcome, screening_warning, screening_checked_at, created_at, updated_at").eq("tenant_id", tenantId).eq("partner_id", partnerId).eq("submission_id", submissionId).maybeSingle();
     if (existing.error || !existing.data) throw new Error(existing.error?.message ?? "Could not resolve duplicate submission");
     return { lead: existing.data, replayed: true };
   }
