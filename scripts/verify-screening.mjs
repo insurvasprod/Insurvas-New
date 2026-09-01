@@ -112,6 +112,7 @@ async function main() {
     const expired = partnerCookie(await token(partnerSecret, partnerUserId, { tenantId, partnerId }, "-1s"));
     const forged = partnerCookie(await token(`${partnerSecret}-wrong`, partnerUserId, { tenantId, partnerId }));
     check("missing, expired and forged partner sessions are rejected", (await api("/api/partner/me", "")).status === 401 && (await api("/api/partner/me", expired)).status === 401 && (await api("/api/partner/me", forged)).status === 401);
+    check("agent and partner sessions cannot cross authentication planes", (await api("/api/partner/me", owner)).status === 401 && (await api("/api/app/me", portal)).status === 401);
     const formResponse = await api("/api/partner/forms/term_life", portal); const formBody = await formResponse.json(); const form = formBody?.template?.template; check("the form contains a required phone field", formResponse.status === 200 && form?.fields?.some((field) => field.field_key === "phone" && field.type === "phone" && field.is_required));
     if (!form) throw new Error(`Could not load the disposable partner form (HTTP ${formResponse.status})`);
     const template = form;
