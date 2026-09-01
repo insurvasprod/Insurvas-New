@@ -36,6 +36,8 @@ export const AGENT_API_POLICIES: AgentApiPolicy[] = [
   { sourceFile: "app/api/app/contacts/merge/route.ts", featureKey: "duplicate_detection", allowedRoles: ["owner", "producer", "assistant"] },
   { sourceFile: "app/api/app/contacts/merge/undo/route.ts", featureKey: "duplicate_detection", allowedRoles: ["owner", "producer", "assistant"] },
   { sourceFile: "app/api/app/dial/preflight/route.ts", featureKey: "outbound_dialing" },
+  { sourceFile: "app/api/app/deal-flow/route.ts", featureKey: "daily_deal_flow", allowedRoles: ["owner", "producer"] },
+  { sourceFile: "app/api/app/deal-flow/[id]/route.ts", featureKey: "daily_deal_flow", allowedRoles: ["owner", "producer"] },
   { sourceFile: "app/api/app/ledger/route.ts", featureKey: "commission_ledger", allowedRoles: ["owner", "producer", "bookkeeper"] },
   { sourceFile: "app/api/app/inbound/transfer/route.ts", featureKey: "inbound_transfers" },
   { sourceFile: "app/api/app/inbound/route.ts", featureKey: "inbound_transfers", allowedRoles: ["owner", "producer"] },

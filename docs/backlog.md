@@ -1876,6 +1876,21 @@ the focused live verifier, deep migration check, TypeScript, lint, production bu
 feature-policy check, and authenticated desktop/mobile browser QA passed. Nothing remains unmet,
 deferred, or unverified for LA-1.12, so nothing was added to the open backlog.
 
+### 127. ✅ LA-1.13 daily deal flow completed
+**From:** LA-1.13 · **Belongs to:** LA-1.13 · **Resolved:** 2026-09-02
+
+The tenant-scoped daily deal-flow screen is implemented as one data-driven grid with date,
+partner, product, agent and status filters, partner totals, manual outside-system entry, inline
+disposition editing, local-date preservation, complete CSV export, and integer-cent money fields.
+The API resolves tenant and role from the session, blocks missing or unentitled access, writes
+audit rows for creation and edits, rejects cross-tenant and hostile input, and fetches large
+filtered result sets in ordered chunks so the 10,000-row grid remains complete and under two
+seconds. The numbered migration is applied to the connected Supabase project and the live
+schema/index/trigger checks passed. The focused live verifier, deep migration check, TypeScript,
+lint, production build, 282-test suite, feature-policy check, and authenticated desktop/mobile
+browser QA passed. Nothing remains unmet, deferred, or unverified for LA-1.13, so nothing was
+added to the open backlog.
+
 ---
 
 ## Related

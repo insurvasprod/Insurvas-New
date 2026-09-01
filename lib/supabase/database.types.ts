@@ -1618,9 +1618,9 @@ export type Database = {
         Relationships: [];
       };
       deal_flow: {
-        Row: { id: string; tenant_id: string; lead_id: string; partner_id: string | null; affiliate_link_id: string | null; affiliate_campaign: string | null; submission_id: string | null; product_line: string; pipeline_id: string; stage_id: string; insured_name: string | null; phone: string | null; initial_quote: string | null; tracking_id: string | null; local_date: string; status: string; call_result: string | null; notes: string | null; disposition_at: string | null; disposition_by: string | null; created_at: string; updated_at: string };
-        Insert: { id?: string; tenant_id: string; lead_id: string; partner_id?: string | null; affiliate_link_id?: string | null; affiliate_campaign?: string | null; submission_id?: string | null; product_line: string; pipeline_id: string; stage_id: string; insured_name?: string | null; phone?: string | null; initial_quote?: string | null; tracking_id?: string | null; local_date: string; status?: string; call_result?: string | null; notes?: string | null; disposition_at?: string | null; disposition_by?: string | null; created_at?: string; updated_at?: string };
-        Update: { pipeline_id?: string; stage_id?: string; insured_name?: string | null; phone?: string | null; initial_quote?: string | null; tracking_id?: string | null; local_date?: string; status?: string; call_result?: string | null; notes?: string | null; disposition_at?: string | null; disposition_by?: string | null; updated_at?: string };
+        Row: { id: string; tenant_id: string; lead_id: string; partner_id: string | null; affiliate_link_id: string | null; affiliate_campaign: string | null; submission_id: string | null; product_line: string; pipeline_id: string; stage_id: string; insured_name: string | null; phone: string | null; initial_quote: string | null; tracking_id: string | null; local_date: string; status: string; call_result: string | null; notes: string | null; disposition_at: string | null; disposition_by: string | null; carrier: string | null; product_type: string | null; monthly_premium_cents: number | null; face_amount_cents: number | null; draft_date: string | null; worked_by: string | null; manual_entry: boolean; created_at: string; updated_at: string };
+        Insert: { id?: string; tenant_id: string; lead_id: string; partner_id?: string | null; affiliate_link_id?: string | null; affiliate_campaign?: string | null; submission_id?: string | null; product_line: string; pipeline_id: string; stage_id: string; insured_name?: string | null; phone?: string | null; initial_quote?: string | null; tracking_id?: string | null; local_date: string; status?: string; call_result?: string | null; notes?: string | null; disposition_at?: string | null; disposition_by?: string | null; carrier?: string | null; product_type?: string | null; monthly_premium_cents?: number | null; face_amount_cents?: number | null; draft_date?: string | null; worked_by?: string | null; manual_entry?: boolean; created_at?: string; updated_at?: string };
+        Update: { pipeline_id?: string; stage_id?: string; insured_name?: string | null; phone?: string | null; initial_quote?: string | null; tracking_id?: string | null; local_date?: string; status?: string; call_result?: string | null; notes?: string | null; carrier?: string | null; product_type?: string | null; monthly_premium_cents?: number | null; face_amount_cents?: number | null; draft_date?: string | null; worked_by?: string | null; manual_entry?: boolean; disposition_at?: string | null; disposition_by?: string | null; updated_at?: string };
         Relationships: [];
       };
       dispositions: {
@@ -3435,6 +3435,20 @@ export type Database = {
       set_partner_product_approval: {
         Args: { p_approved: boolean; p_approved_by: string; p_partner_id: string; p_product_code: string; p_tenant_id: string };
         Returns: boolean;
+      };
+      list_deal_flow_report: {
+        Args: {
+          p_agent_id?: string | null;
+          p_from_date?: string | null;
+          p_page?: number;
+          p_page_size?: number;
+          p_partner_id?: string | null;
+          p_product_line?: string | null;
+          p_status?: string | null;
+          p_tenant_id: string;
+          p_to_date?: string | null;
+        };
+        Returns: Json;
       };
     };
     Enums: {
