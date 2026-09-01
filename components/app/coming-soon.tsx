@@ -30,7 +30,7 @@ export function ComingSoon({
   available: (MenuItem & { sectionLabel: string })[];
 }) {
   // Prefer somewhere in the same section — closest to what they were trying to do.
-  const nearby = available.filter((i) => i.id !== item.id).slice(0, 3);
+  const nearby = available.filter((i) => i.key !== item.key).slice(0, 3);
 
   return (
     <div className="mx-auto max-w-2xl">
@@ -61,9 +61,9 @@ export function ComingSoon({
               <p className="text-sm font-medium">In the meantime</p>
               <ul className="space-y-1">
                 {nearby.map((other) => (
-                  <li key={other.id}>
+                  <li key={other.key}>
                     <Link
-                      href={`/app/${other.id}`}
+                      href={other.path}
                       className="group inline-flex items-center gap-1.5 text-sm text-[var(--color-blue)] transition-colors hover:text-[var(--color-blue-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-blue)]"
                     >
                       {other.label}

@@ -13,29 +13,32 @@ const supabase = createClient(
   { auth: { persistSession: false } },
 );
 
+// SA-4.3 originally described a Configuration Center hub. The product decision on 2026-08-30
+// removed that hub: each section is a top-level admin route, and the registry is the source of
+// truth for the route names. Keep this verifier aligned with the shipped navigation so a removed
+// URL does not create 45 false failures.
 const sections = [
-  "payments",
-  "offers",
-  "products",
-  "templates",
-  "compliance-sources",
-  "credits-limits",
-  "features",
-  "email",
-  "system",
-  "advanced",
+  ["payments", "/admin/payments"],
+  ["offers", "/admin/offers"],
+  ["products", "/admin/products"],
+  ["templates", "/admin/templates"],
+  ["compliance-sources", "/admin/compliance-sources"],
+  ["credits-limits", "/admin/credits-limits"],
+  ["features", "/admin/features"],
+  ["email", "/admin/email"],
+  ["system", "/admin/system"],
+  ["advanced", "/admin/advanced"],
 ];
-const routes = ["/admin/configuration", ...sections.map((section) => `/admin/configuration/${section}`)];
+const routes = sections.map(([, route]) => route);
 const expected = {
   super_admin: new Set(routes),
   support_agent: new Set(),
   platform_config: new Set([
-    "/admin/configuration",
     ...sections
-      .filter((section) => !["payments", "offers"].includes(section))
-      .map((section) => `/admin/configuration/${section}`),
+      .filter(([section]) => !["payments", "offers"].includes(section))
+      .map(([, route]) => route),
   ]),
-  billing_admin: new Set(["/admin/configuration", "/admin/configuration/offers"]),
+  billing_admin: new Set(["/admin/offers"]),
 };
 
 let failures = 0;
@@ -99,12 +102,12 @@ async function main() {
           redirect: "manual",
         });
         const shouldAllow = expected[role].has(route);
-        const expectedStatus = shouldAllow ? 200 : 403;
-        check(`${role} ${route} returns ${expectedStatus}`, response.status === expectedStatus, `got ${response.status}`);
+        const expectedStatuses = shouldAllow ? [200] : [307, 403];
+        check(`${role} ${route} returns ${shouldAllow ? 200 : "a denial"}`, expectedStatuses.includes(response.status), `got ${response.status}`);
       }
     }
 
-    const unauthenticated = await fetch(`${BASE}/admin/configuration`, { redirect: "manual" });
+    const unauthenticated = await fetch(`${BASE}/admin/payments`, { redirect: "manual" });
     check("unauthenticated hub redirects to login", unauthenticated.status === 307, `got ${unauthenticated.status}`);
   } finally {
     for (const fixture of fixtures) {

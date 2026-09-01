@@ -93,7 +93,11 @@ async function main() {
     check("pricing update works", pricingResponse.status === 200);
     const pricingRead = await (await request("/api/admin/credits-limits", {}, superCookie)).json();
     const tcpa = pricingRead.pricing.find((row) => row.meter_key === "tcpa_checks");
-    check("margin data exposes cost and sell price", tcpa?.cost_cents === 0 && tcpa?.sell_cents === 100);
+    check(
+      "margin data exposes configured cost and sell price",
+      typeof tcpa?.cost_cents === "number" && tcpa.cost_cents === pricingBefore.data.cost_cents && tcpa.sell_cents === 100,
+      `cost ${tcpa?.cost_cents}, sell ${tcpa?.sell_cents}`,
+    );
     await supabase.from("meter_pricing").update({ sell_cents: pricingBefore.data.sell_cents, default_included: pricingBefore.data.default_included }).eq("meter_key", "tcpa_checks");
 
     const beforeCapacity = await supabase.rpc("check_meter_capacity", { p_tenant_id: tenant.id, p_meter_key: "tcpa_checks", p_qty: 1 });

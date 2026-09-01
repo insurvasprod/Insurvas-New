@@ -159,6 +159,12 @@ body {
   font-family: var(--font-sans);
 }
 
+/* Wide data grids scroll inside their own frame; they must never widen the app shell itself. */
+html,
+body {
+  overflow-x: hidden;
+}
+
 /* Tells the browser to render its own furniture — scrollbars, form controls, the flash before
    first paint — in the matching theme. Without it a dark page keeps light scrollbars and blinks
    white on load, which reads as a rendering fault rather than a choice. */

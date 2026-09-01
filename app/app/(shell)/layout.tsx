@@ -7,11 +7,10 @@ import { effectiveFeatures } from "@/lib/features/killSwitch";
 import { AgentSidebar } from "@/components/app/agent-sidebar";
 import { LogoutButton } from "@/components/app/logout-button";
 import { resolveSignupContext, signupDestination } from "@/lib/signup/context";
-import { trialBanner } from "@/lib/trials/banner";
 import { outstandingDocuments } from "@/lib/legal/acceptance";
-import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { MaintenanceMessage } from "@/components/app/maintenance-message";
 import { AnnouncementStrip } from "@/components/app/announcement-strip";
+import { SubscriptionStateBanner } from "@/components/app/subscription-state-banner";
 import { getMaintenanceStatus, getActiveAnnouncements } from "@/lib/system/service";
 import { planDisplayName } from "@/lib/plans/display";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -51,7 +50,7 @@ export default async function AgentShellLayout({ children }: { children: React.R
   // function pure and shared with the admin plan preview, which deliberately shows plan grants
   // rather than the current outage state.
   const available = await effectiveFeatures(entitlement.features, context.tenantId);
-  const menu = buildAgentMenu(available);
+  const menu = buildAgentMenu(available, context.role);
 
   const footer = (
     <div className="space-y-3">
@@ -69,20 +68,6 @@ export default async function AgentShellLayout({ children }: { children: React.R
     </div>
   );
 
-  // SA-5.3: the in-app half of the day-13 reminder. Only queried for a tenant actually on trial,
-  // and trial_ends_at is deliberately not added to the entitlement contract — that object is the
-  // versioned agreement between the two planes, not a place for screen-level trivia.
-  let banner = null;
-  if (entitlement.status === "trialing") {
-    const { data: sub } = await getSupabaseServiceClient()
-      .from("subscriptions")
-      .select("trial_ends_at")
-      .eq("tenant_id", context.tenantId)
-      .eq("status", "trialing")
-      .maybeSingle();
-    banner = trialBanner(sub?.trial_ends_at ? new Date(sub.trial_ends_at) : null);
-  }
-
   return (
     <div className="flex min-h-screen flex-col md:flex-row">
       <AgentSidebar menu={menu} footer={footer} />
@@ -90,34 +75,12 @@ export default async function AgentShellLayout({ children }: { children: React.R
       {/* min-w-0 is load-bearing, for the same reason it is on the admin shell: a flex item
           defaults to min-width:auto, so <main> refuses to shrink below its widest child and one
           wide table drags the whole page sideways. */}
-      <main className="min-w-0 flex-1 bg-[var(--color-page-bg)] p-4 sm:p-6 lg:p-8">
+      <main className="min-w-0 flex-1 overflow-x-hidden bg-[var(--color-page-bg)] p-4 sm:p-6 lg:p-8">
         {/* Ordered by urgency: a platform-wide outage outranks a campaign announcement, which
             outranks a trial ending, which outranks an account already known to be read-only. */}
         <MaintenanceMessage status={maintenance} />
         <AnnouncementStrip initialAnnouncements={announcements} />
-        {banner && (
-          <div
-            className={`mb-6 rounded-lg border p-4 text-sm ${
-              banner.tone === "urgent"
-                ? "border-[var(--color-warning)]/40 bg-[var(--color-warning)]/10"
-                : "border-border bg-muted/40"
-            }`}
-          >
-            {banner.message}
-          </div>
-        )}
-        {entitlement.access === "read_only" && (
-          <div
-            role="status"
-            className="mb-6 rounded-lg border border-[var(--color-warning)]/30 bg-[var(--color-warning)]/10 p-4 text-sm"
-          >
-            <span className="font-medium">
-              Your account is {entitlement.status === "paused" ? "paused" : "suspended"}.
-            </span>{" "}
-            You can still view your book of business — anything that creates or sends is disabled.
-            Contact your administrator.
-          </div>
-        )}
+        <SubscriptionStateBanner status={entitlement.status} />
         {children}
       </main>
     </div>

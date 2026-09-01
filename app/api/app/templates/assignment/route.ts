@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 
-import { requireFeature } from "@/lib/entitlements/requireFeature";
+import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import { updateAgentTemplate } from "@/lib/agentTemplates/service";
 
 export async function POST() {
-  const auth = await requireFeature("book_of_business", { write: true });
+  const auth = await requireFeatureRole("book_of_business", ["owner"], { write: true });
   if (auth instanceof NextResponse) return auth;
   try {
     const template = await updateAgentTemplate(auth.context.tenantId, auth.context.userId);

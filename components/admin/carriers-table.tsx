@@ -1,0 +1,20 @@
+"use client";
+
+import { useCallback, useState } from "react";
+import { MoreHorizontal } from "lucide-react";
+import { toast } from "sonner";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { tableHeaderRow, tableHeadCell, tableShell } from "./table-styles";
+import type { CarrierRow } from "@/lib/carriers/constants";
+import { CarrierDialog } from "./carrier-dialog";
+
+export function CarriersTable({ initialCarriers }: { initialCarriers: CarrierRow[] }) {
+  const [carriers, setCarriers] = useState(initialCarriers); const [showArchived, setShowArchived] = useState(false); const [creating, setCreating] = useState(false); const [editing, setEditing] = useState<CarrierRow | null>(null); const [pending, setPending] = useState<string | null>(null);
+  const refresh = useCallback(async () => { const response = await fetch("/api/admin/carriers"); if (response.ok) setCarriers((await response.json()).carriers); }, []);
+  async function archive(carrier: CarrierRow) { setPending(carrier.id); const response = await fetch(`/api/admin/carriers/${carrier.id}`, { method: "DELETE" }); setPending(null); if (!response.ok) { toast.error("Could not archive carrier"); return; } toast.success(`${carrier.name} archived`); refresh(); }
+  const visible = showArchived ? carriers : carriers.filter((row) => row.is_active);
+  return <div className="space-y-4"><div className="flex flex-wrap items-center gap-3"><p className="text-sm text-muted-foreground">{carriers.filter((row) => row.is_active).length} active · {carriers.filter((row) => !row.is_active).length} archived</p><Button variant="outline" size="sm" onClick={() => setShowArchived((value) => !value)}>{showArchived ? "Hide archived" : "Show archived"}</Button><div className="ml-auto"><Button size="sm" onClick={() => setCreating(true)}>New carrier</Button></div></div><div className={tableShell}><Table><TableHeader><TableRow className={tableHeaderRow}><TableHead className={tableHeadCell}>Carrier</TableHead><TableHead className={tableHeadCell}>Code</TableHead><TableHead className={tableHeadCell}>Order</TableHead><TableHead className={`${tableHeadCell} w-10`} /></TableRow></TableHeader><TableBody>{visible.length === 0 && <TableRow><TableCell colSpan={4} className="h-20 text-center text-sm text-muted-foreground">No carriers yet. Add the platform library before agents configure appointments.</TableCell></TableRow>}{visible.map((carrier) => <TableRow key={carrier.id} className={!carrier.is_active ? "opacity-55" : undefined}><TableCell className="font-medium">{carrier.name} {!carrier.is_active && <Badge variant="outline">Archived</Badge>}</TableCell><TableCell><code className="rounded bg-muted px-1.5 py-0.5 text-xs">{carrier.code}</code></TableCell><TableCell>{carrier.sort_order}</TableCell><TableCell><DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" size="icon-sm" disabled={pending === carrier.id}><MoreHorizontal /><span className="sr-only">Actions</span></Button></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuItem onSelect={() => setEditing(carrier)}>Edit</DropdownMenuItem>{carrier.is_active ? <DropdownMenuItem variant="destructive" onSelect={() => archive(carrier)}>Archive</DropdownMenuItem> : <DropdownMenuItem onSelect={async () => { setPending(carrier.id); await fetch(`/api/admin/carriers/${carrier.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ is_active: true }) }); setPending(null); refresh(); }}>Restore</DropdownMenuItem>}</DropdownMenuContent></DropdownMenu></TableCell></TableRow>)}</TableBody></Table></div><CarrierDialog open={creating} onClose={() => setCreating(false)} onSaved={refresh} /><CarrierDialog key={editing?.id ?? "none"} open={Boolean(editing)} carrier={editing} onClose={() => setEditing(null)} onSaved={refresh} /></div>;
+}

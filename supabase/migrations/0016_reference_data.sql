@@ -52,7 +52,7 @@ insert into public.features (id, feature_key, label, module, description, sort_o
   ('390ab027-3f94-41d9-84ac-fa2ef7b92806', 'tcpa_checker', 'TCPA / DNC checker', 'compliance', null, 1, false),
   ('719f2ce9-4b40-4b52-a8ba-7e9f66548cc7', 'consent_locker', 'Consent certificate storage', 'compliance', null, 2, false),
   ('89d09b54-3ff0-4afb-994b-1e9e0441b459', 'litigation_packet', 'Litigation packet export', 'compliance', null, 3, false)
-on conflict (key) do update set
+on conflict (feature_key) do update set
   id = excluded.id,
   feature_key = excluded.feature_key,
   label = excluded.label,
@@ -70,7 +70,7 @@ insert into public.meters (meter_key, unit, label, default_hard_cap, sort_order)
   ('sms_segments', 'segment', 'SMS segments', true, 4),
   ('statement_pages', 'page', 'Statement pages', false, 5),
   ('esign_envelopes', 'envelope', 'E-sign envelopes', true, 6)
-on conflict (key) do update set
+on conflict (meter_key) do update set
   meter_key = excluded.meter_key,
   unit = excluded.unit,
   label = excluded.label,

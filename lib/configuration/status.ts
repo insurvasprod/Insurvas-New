@@ -10,6 +10,7 @@ import "server-only";
 import { getProviderStatus } from "@/lib/payments/status";
 import { fetchOffers } from "@/lib/offers/queries";
 import { fetchProducts } from "@/lib/products/queries";
+import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { fetchTemplates } from "@/lib/templates/queries";
 import { listComplianceVendors, getDncDialingStatus } from "@/lib/compliance/service";
 import { listMeterPricing, listUsageMonitor } from "@/lib/creditsLimits/service";
@@ -48,7 +49,7 @@ function plural(n: number, one: string, many = `${one}s`): string {
 }
 
 export async function getConfigurationOverview(): Promise<ConfigurationOverview> {
-  const [payments, offers, products, templates, compliance, credits, features, settings] = await Promise.all([
+  const [payments, offers, products, carriers, templates, compliance, credits, features, settings] = await Promise.all([
     safe(async () => {
       const status = await getProviderStatus();
       if (status.mode === "unknown") {
@@ -76,6 +77,12 @@ export async function getConfigurationOverview(): Promise<ConfigurationOverview>
     safe(async () => {
       const all = await fetchProducts({ includeArchived: false });
       return { tone: "neutral", badge: null, detail: plural(all.length, "product") + " available." };
+    }),
+
+    safe(async () => {
+      const { data, error } = await getSupabaseServiceClient().from("carriers").select("id").eq("is_active", true);
+      if (error) throw error;
+      return { tone: data.length === 0 ? "attention" : "neutral", badge: null, detail: plural(data.length, "carrier") + " available." };
     }),
 
     safe(async () => {
@@ -141,6 +148,7 @@ export async function getConfigurationOverview(): Promise<ConfigurationOverview>
     payments,
     offers,
     products,
+    carriers,
     templates,
     "compliance-sources": compliance,
     "credits-limits": credits,

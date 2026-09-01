@@ -1,0 +1,1 @@
+export type CommissionScheduleRow = { id: string; tenant_id: string; carrier_id: string; product_code: string; contract_level_bp: number; policy_year: number; rate_bp: number; effective_from: string; created_at: string };

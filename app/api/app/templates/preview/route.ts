@@ -1,9 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { requireFeature } from "@/lib/entitlements/requireFeature";
+import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import { previewTemplateApplication } from "@/lib/agentTemplates/service";
 
 export async function POST(request: NextRequest) {
-  const auth = await requireFeature("book_of_business");
+  const auth = await requireFeatureRole("book_of_business", ["owner"]);
   if (auth instanceof NextResponse) return auth;
   const body = await request.json().catch(() => null) as { template_id?: string; template_version?: number } | null;
   const version = typeof body?.template_version === "number" ? body.template_version : 0;

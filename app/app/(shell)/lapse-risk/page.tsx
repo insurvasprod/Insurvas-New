@@ -1,6 +1,7 @@
 import { guardPage } from "@/lib/entitlements/guardPage";
 import { Card, CardContent } from "@/components/ui/card";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
+import { RoleGateNotice } from "@/components/app/role-gate-notice";
 
 /**
  * Gated on `chargeback_radar`, which only plan_c grants — so this is the page that demonstrates
@@ -18,6 +19,10 @@ export default async function LapseRiskPage() {
         description="Predictive scoring that flags policies likely to lapse before they do."
       />
     );
+  }
+
+  if (!["owner", "producer"].includes(guard.role)) {
+    return <RoleGateNotice featureLabel="Lapse risk" detail="Only owners and producers can view retention risk and commission exposure." />;
   }
 
   return (

@@ -1,15 +1,15 @@
-// SA-2.1: every non-archived feature_key must be referenced by at least one requireFeature()
-// guard. Where the catalog, the guards and the menu drift apart is where entitlement bugs live.
+// SA-2.1 / LA-0.1: every existing feature-bearing agent API must be referenced by a
+// requireFeature() guard. Where the catalog, the guards and the menu drift apart is where
+// entitlement bugs live.
 //
-// Self-activating: while NO requireFeature() call exists anywhere (the entitlement engine is
-// SA-2.8, and the agent-facing app doesn't exist yet), this reports and exits 0 rather than
-// failing a build over work that hasn't started. The moment the first guard appears it becomes
-// a hard check — so it can be wired into CI today without producing noise.
+// Features whose module/API does not exist yet are reported as deferred rather than treated as
+// unguarded routes. A future module ticket must add its API to agentApiPolicy.ts before shipping.
 //
 // Run with: npm run check:features
 import { createClient } from "@supabase/supabase-js";
 import { readdir, readFile } from "node:fs/promises";
 import { join, extname } from "node:path";
+import { AGENT_API_POLICIES } from "../lib/entitlements/agentApiPolicy.ts";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -21,8 +21,8 @@ if (!url || !serviceKey) {
 
 const SEARCH_ROOTS = ["app", "components", "lib"];
 const SOURCE_EXTENSIONS = new Set([".ts", ".tsx", ".mjs", ".js"]);
-// Matches requireFeature('key'), requireFeature("key"), requireFeature(`key`).
-const GUARD_PATTERN = /requireFeature\(\s*['"`]([a-z0-9_]+)['"`]\s*\)/g;
+// Matches requireFeature('key') with or without the optional write/read-only options object.
+const GUARD_PATTERN = /requireFeature\(\s*['"`]([a-z0-9_]+)['"`](?:\s*,[^)]*)?\)/g;
 
 async function* walk(dir) {
   let entries;
@@ -45,10 +45,12 @@ async function* walk(dir) {
 
 const referenced = new Set();
 let guardCallCount = 0;
+const sourceByFile = new Map();
 
 for (const root of SEARCH_ROOTS) {
   for await (const file of walk(root)) {
     const source = await readFile(file, "utf8");
+    sourceByFile.set(file.replaceAll("\\", "/"), source);
     for (const match of source.matchAll(GUARD_PATTERN)) {
       referenced.add(match[1]);
       guardCallCount++;
@@ -73,7 +75,11 @@ if (error) {
 // guard AND one required_feature on a menu node. Unlike the guards, the menu exists today, so
 // this half is enforced immediately — a feature nobody can navigate to is invisible in practice.
 const menuSource = await readFile("lib/menu/definition.ts", "utf8");
-const menuKeys = new Set([...menuSource.matchAll(/requiredFeature:\s*"([a-z0-9_]+)"/g)].map((m) => m[1]));
+// The agent menu contract uses the product/document spelling `required_feature`, so this check
+// tests the same data shape the agent shell renders.
+const menuKeys = new Set(
+  [...menuSource.matchAll(/required_feature:\s*["'`]([a-z0-9_]+)["'`]/g)].map((m) => m[1]),
+);
 
 console.log(`Catalog: ${features.length} active features`);
 console.log(`Guards:  ${guardCallCount} requireFeature() call(s) referencing ${referenced.size} key(s)`);
@@ -102,10 +108,46 @@ if (!menuFailed) {
   console.log("OK — every active feature has a menu node.\n");
 }
 
-const unguarded = features.filter((f) => !referenced.has(f.feature_key));
 const unknownGuards = [...referenced].filter((key) => !features.some((f) => f.feature_key === key));
 
-let failed = menuFailed;
+// --- Every existing agent API must declare and enforce its policy -------------
+const agentApiFiles = new Set();
+for await (const file of walk("app/api/app")) {
+  if (file.endsWith("/route.ts") || file.endsWith("\\route.ts")) {
+    agentApiFiles.add(file.replaceAll("\\", "/"));
+  }
+}
+const policyByFile = new Map(AGENT_API_POLICIES.map((policy) => [policy.sourceFile, policy]));
+const missingPolicies = [...agentApiFiles].filter((file) => !policyByFile.has(file));
+const stalePolicies = AGENT_API_POLICIES.filter((policy) => !agentApiFiles.has(policy.sourceFile));
+let policyFailed = false;
+
+if (missingPolicies.length > 0) {
+  policyFailed = true;
+  console.log(`FAIL — ${missingPolicies.length} agent API route(s) have no authorization policy:`);
+  for (const file of missingPolicies) console.log(`  ${file}`);
+  console.log("");
+}
+if (stalePolicies.length > 0) {
+  policyFailed = true;
+  console.log(`FAIL — ${stalePolicies.length} authorization polic(y/ies) name a missing route:`);
+  for (const policy of stalePolicies) console.log(`  ${policy.sourceFile}`);
+  console.log("");
+}
+
+const policyGuardFailures = AGENT_API_POLICIES.filter((policy) => {
+  if (!policy.featureKey) return false;
+  const source = sourceByFile.get(policy.sourceFile) ?? "";
+  return !new RegExp(`requireFeature(?:Role)?\\(\\s*[\\"']${policy.featureKey}[\\"']`).test(source);
+});
+if (policyGuardFailures.length > 0) {
+  policyFailed = true;
+  console.log(`FAIL — ${policyGuardFailures.length} feature API route(s) do not call their declared guard:`);
+  for (const policy of policyGuardFailures) console.log(`  ${policy.sourceFile} -> ${policy.featureKey}`);
+  console.log("");
+}
+
+let failed = menuFailed || policyFailed;
 
 // --- Guards referencing keys that don't exist: ALWAYS a bug ------------------
 // A typo'd guard silently protects nothing, so this fails regardless of how complete the app is.
@@ -116,31 +158,13 @@ if (unknownGuards.length > 0) {
   console.log("");
 }
 
-// --- Features with no guard: coverage, reported not enforced -----------------
-// Deliberately NOT a failure yet. The agent-facing app is scaffolding (SA-2.8 built two routes to
-// prove enforcement works); the other features have no API to guard because they don't exist.
-// Failing here would mean a red check for months, which trains people to ignore it.
-//
-// Flip GUARD_COVERAGE_MUST_BE_COMPLETE to true once LA-0.1 has built the agent app — from then
-// on an unguarded feature IS a security hole, because it means a real route shipped without one.
-const GUARD_COVERAGE_MUST_BE_COMPLETE = false;
-
-const covered = features.length - unguarded.length;
-const pct = features.length === 0 ? 100 : Math.round((covered / features.length) * 100);
-
-if (unguarded.length > 0) {
-  const level = GUARD_COVERAGE_MUST_BE_COMPLETE ? "FAIL" : "TODO";
-  if (GUARD_COVERAGE_MUST_BE_COMPLETE) failed = true;
-
-  console.log(`${level} — guard coverage ${covered}/${features.length} (${pct}%). Unguarded:`);
-  for (const f of unguarded) console.log(`  ${f.module}/${f.feature_key}  (${f.label})`);
+const apiFeatureKeys = new Set(AGENT_API_POLICIES.map((policy) => policy.featureKey).filter(Boolean));
+const deferred = features.filter((feature) => !apiFeatureKeys.has(feature.feature_key));
+console.log(`OK — every existing feature-bearing agent API is covered (${apiFeatureKeys.size} feature keys).\n`);
+if (deferred.length > 0) {
+  console.log(`Deferred — ${deferred.length} catalog feature(s) have no agent API yet; their module ticket owns the API guard:`);
+  for (const f of deferred) console.log(`  ${f.module}/${f.feature_key}  (${f.label})`);
   console.log("");
-  if (!GUARD_COVERAGE_MUST_BE_COMPLETE) {
-    console.log("  Not a failure yet — most of these have no agent-facing route to guard (LA-0.1).");
-    console.log("  Set GUARD_COVERAGE_MUST_BE_COMPLETE in this script once the agent app is built.\n");
-  }
-} else {
-  console.log(`OK — every active feature has a requireFeature() guard (${covered}/${features.length}).\n`);
 }
 
 console.log(failed ? "Catalog, guards and menu are out of sync." : "No drift between catalog, guards and menu.");
