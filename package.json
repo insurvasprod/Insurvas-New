@@ -66,7 +66,8 @@
     "verify:tenant-roles": "node --env-file=.env.local scripts/verify-tenant-roles.mjs",
     "verify:carrier-library": "node --env-file=.env.local scripts/verify-carrier-library.mjs",
     "verify:appointment-vault": "node --env-file=.env.local --experimental-strip-types scripts/verify-appointment-vault.mjs",
-    "verify:contacts": "node --env-file=.env.local --experimental-strip-types scripts/verify-contacts.mjs"
+    "verify:contacts": "node --env-file=.env.local --experimental-strip-types scripts/verify-contacts.mjs",
+    "verify:la0-rls": "node --env-file=.env.local scripts/verify-la0-rls.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.99.0",

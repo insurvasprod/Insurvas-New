@@ -86,7 +86,7 @@ try {
   // A plan with a metered allowance, so overage has something to exceed.
   const { data: plan, error: planError } = await sb
     .from("plans")
-    .insert({ name: `Period billing verify ${stamp}`, code: `pbv_${stamp}`, version: 1, is_active: true })
+    .insert({ name: `Period billing verify ${stamp}`, code: `pbv_${stamp}`, version: 1, plan_type: "individual", is_archived: false })
     .select("id")
     .single();
   if (planError) throw new Error(`plan: ${planError.message}`);

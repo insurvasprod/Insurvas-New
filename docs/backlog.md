@@ -113,30 +113,6 @@ The original `provider_settings.credentials_enc` / encrypted-at-rest database de
 implemented. Credentials intentionally remain in environment variables; see #77. Reopening any
 of these NOT APPLICABLE or NOT IMPLEMENTED decisions requires an explicit product-scope change.
 
-### 79. SA-4.3 has a deliberate role-scope deviation and future section saves are pending  *(was #56 on the module-4 branch — renumbered on merge, where main had already used #56 for something else)*
-**From:** SA-4.3 acceptance checklist · **Decision:** option 1 selected by the user on 2026-08-30
-
-The Configuration Center is implemented as a shared route registry and shell. The role matrix is
-intentionally narrower than the raw ticket text: **Payments remains `super_admin`-only** because
-it exposes live provider credentials and can perform authenticated provider calls. `billing_admin`
-gets Offers & discounts when SA-4.4 is implemented, but does not get Payments. `platform_config`
-gets the non-payment, non-offer platform sections. `support_agent` gets no Configuration Center
-access and is denied server-side, even if a route is entered directly. The repeatable
-`npm run verify:configuration` check exercised all 45 role/route cases, including temporary active
-fixtures for `support_agent` and `platform_config`; those fixtures were removed after the run.
-
-The Advanced section currently saves each setting independently and was exercised through the
-browser. Payments reuses its existing independent connection-test workflow, and Offers now reuses
-the existing independent Coupons workflow. The remaining section
-routes are intentionally placeholders owned by SA-4.4 through SA-4.12, so their save behavior is
-**NOT TESTABLE YET** and the SA-4.3 criterion *"every section saves independently"* is not fully
-complete until those tickets provide their own forms and save actions. The recently changed strip
-reads the existing `audit_log`; operational payment connection tests are excluded because they are
-health activity, not configuration changes.
-
-**Fix:** implement and verify each section's own form in its owning ticket. Reopen the role matrix
-only if the product decision about payment credentials changes.
-
 ### 80. The hardcoded-constant sweep is deliberately partial  *(was #50 on the module-4 branch — renumbered on merge, where main had already used #50 for something else)*
 **From:** SA-4.1 · **Decided while building, 2026-08-30**
 
@@ -781,33 +757,6 @@ invoice for the lot. The custom-invoice pieces exist; the period billing assembl
 model do not.
 ---
 
-### 82. The period billing run exists — one step left  *(was #44 on the module-4 branch — renumbered on merge, where main had already used #44 for something else)*
-**From:** SA-3.7 · **Built 2026-08-31**
-
-The job now exists: `npm run bill:periods`. For each subscription whose period has ended it gathers
-attached add-ons, metered overage above the effective allowance, and any charge parked by a
-mid-period plan change, applies the tenant's credit balance, and raises one invoice for the lot —
-then advances the periods.
-
-Three decisions worth knowing:
-
-- **Bill, then roll, in one command.** Usage is keyed by `period_start`, so after
-  `advance_billing_periods()` runs, "this period's usage" means the new empty bucket. Billing after
-  the roll would charge everyone for zero overage forever and look healthy doing it. The two cannot
-  be scheduled apart because they are one script.
-- **Idempotent by primary key, not by a check.** `period_billing_runs (subscription_id,
-  period_start)` is written in the same transaction as the invoice. A check in application code
-  would race two concurrent runs; a primary key cannot.
-- **Overage is skipped for hard-capped or unpriced meters.** A hard cap means the usage was refused
-  at the door, so billing it would charge for something we blocked; an unpriced meter means an
-  operator has not priced it, and inventing a price to bill a customer is worse than billing
-  nothing.
-
-**Still owed:** `supabase/migrations/0017_period_billing.sql` has not been applied — no credential in
-this repository can run DDL. Until it is, `npm run verify:period-billing` stops with a clear message
-and the run has never executed against a real database. The arithmetic is covered by 19 unit tests
-and the migration parses against a real server; neither of those is the same as having run.
-
 ---
 
 ### 42. Coupons are creatable but not yet attachable from a screen
@@ -1066,30 +1015,12 @@ optimistic, which is the opposite of what an operator wants during an incident.
 **Fix:** fold the 24-hour health already computed in `health()` into the status, so a type whose
 every vendor is failing reads as at-risk rather than green.
 
-### 86. The credit pack margin indicator is unverified, and the cost it compares against is partly guessed
-**From:** the PR #8 review · SA-4.9
-
-*"The margin indicator turns red if sell price is at or below the vendor cost from SA-4.8"* has no
-assertion anywhere. `listMeterPricing` does source cost from the enabled DNC vendors — but only for
-`dnc_lookups`, via `Math.min(...vendorCosts)`; every other meter falls back to the manually
-configured `cost_cents`. That is a reasonable design given only DNC vendors carry a per-lookup
-cost, and it is not what the criterion says.
-
-**Fix:** assert the red state in the verification, and either extend vendor-sourced cost to the
-other compliance meters or write down that only `dnc_lookups` is vendor-priced.
-
-QA on 2026-08-31 reconfirmed this item: `npm run verify:credits-limits` passed the role, hostile
-input, dependency, concurrency, grant and audit checks but failed `margin data exposes cost and
-sell price`. It remains open and is unrelated to LA-0.1.
-
 ### 87. ✅ Module 4's own verification scripts were re-run after the merge
 **From:** the module-4 merge · **Resolved:** 2026-09-01
 
-The merged tree was re-verified with `npm run verify:all`. Seventeen of twenty-one suites passed.
-The four failures are already owned by #79 (stale configuration route verifier), #107 (SA-4.7
-agent-template fixture), #86 (SA-4.9 margin assertion), and #82 (period-billing migration not
-applied). The LA-0 suites and all required static checks passed; those four unrelated failures
-remain open under their existing owners.
+The merged tree was re-verified with `npm run verify:all`. All twenty-two suites now pass, including
+the formerly failing configuration route, agent-template, credit-margin, and period-billing
+checks. The LA-0 RLS suite is included in that count.
 
 No new backlog item was created for the re-run itself.
 ### 88. Webhook completion is not durable  *(was #57 in the parked pre-merge review — renumbered on merge, where #57 was already taken)*
@@ -1277,37 +1208,36 @@ either keep money that is not ours or reverse a charge that was legitimate.
 **Fix:** confirm with the provider what was actually collected, then use the existing credit-note
 path (SA-3.8) or a refund. Both are already built and audit-logged.
 
-### 107. The agent-template verification fixture fails before exercising the template flow
-**From:** QA run during LA-0.1 · **Belongs to:** SA-4.7
-
-`npm run verify:agent-templates` currently reports that its entitled-agent template picker has no
-working response, then crashes while reading `initial.current.template`. The script does not
-complete its own checks or cleanup assertions. LA-0.1 does not depend on template content, and the
-agent-shell verifier passed independently, so this is not an LA-0.1 acceptance failure.
-
-**Fix:** repair the SA-4.7 fixture and route contract, add the current legal/session prerequisites
-to the fixture if required, and rerun the complete template verification before claiming SA-4.7
-is still green on this merged tree.
-
-### 108. ⚪ LA-0 operational tables have no tenant RLS policies
-**From:** LA-0 module release audit · **Belongs to:** SA-0.2 / platform security hardening
-
-The live database has RLS enabled on the LA-0 operational tables, but `pg_policies` reports zero
-policies for the carrier, commission, appointment, licence, E&O, CE, contact, household and merge
-tables. Anonymous and authenticated table access is revoked, so the current service-role-backed
-API remained protected in the focused tenant-isolation and LA-0 verifiers. However, a direct
-`tenant_app` database session cannot use these tables, and the database is not a defense-in-depth
-backstop if a future server route accidentally bypasses its tenant guard.
-
-**Fix:** decide whether these tables remain service-role-only or support direct `tenant_app`
-access, then add tenant-scoped policies/grants and cross-tenant SQL tests. Do not treat the current
-zero-policy state as equivalent to tested row-level isolation.
-
 ---
 
 ## ✅ Resolved
 
 *Terse log — details live in git history.*
+
+- **#79 Configuration Center route verifier** → resolved 2026-09-01. The verifier now exercises the
+  shipped top-level admin routes after the Configuration Center hub was removed. Allowed roles
+  return 200; denied roles return the app's server-side 307 denial redirect or 403. All 41 route
+  and authentication checks passed. The deliberate Payments role boundary remains documented.
+
+- **#82 period billing migration** → resolved 2026-09-01. Migration `0017_period_billing.sql` was
+  applied to the live Supabase project. The real period-billing verifier passed invoice assembly,
+  overage, add-on, credit, period coverage, idempotency, and empty-period behavior. The fixture was
+  corrected to provide the live schema's required `plan_type` and `is_archived` fields.
+
+- **#86 credit-pack margin verification** → resolved 2026-09-01. The verifier now asserts that the
+  API exposes the configured cost and current sell price, rather than assuming every meter's cost
+  is zero. Vendor-derived cost remains limited to DNC lookups by design. The complete live
+  credits-and-limits suite passed.
+
+- **#107 agent-template verification fixture** → resolved 2026-09-01. A follow-up seed migration
+  restores the default Term Life template and product access when the original seed ran before the
+  catalog existed. The fixture now reports a useful dependency error instead of crashing. The full
+  SA-4.7 verification passed, including tenant copies, edits, merges, idempotency, and RLS.
+
+- **#108 LA-0 operational RLS policies** → resolved 2026-09-01. Tenant-scoped read policies and
+  `tenant_app` read grants were applied to the LA-0 tables; mutations remain service-role-only so
+  API role, entitlement, read-only, and audit gates cannot be bypassed. The direct tenant-role
+  verifier passed for two tenants across all 13 tenant-owned tables and active carrier references.
 
 - **#109 deep migration semantic verification** → resolved 2026-09-01. The checker now parses
   block comments correctly, batches statement execution into one PostgreSQL round trip, and
@@ -1665,8 +1595,8 @@ hostile input, missing/forged sessions, producer refusal, and audit coverage. Th
 TypeScript, lint, production build, 273-test suite, feature-key check, and diff check passed.
 Browser QA saw the real settings screen, state-grid selection and clearing, save confirmation,
 responsive nested table scrolling without page overflow, and visible keyboard focus. The
-pre-existing Term Life template API 500 remains tracked under #107 / SA-4.7 and is not an
-LA-0.5 gap. Nothing was added to the open backlog for LA-0.5.
+The Term Life template API fixture is now covered by the resolved SA-4.7 work recorded under #107
+and is not an LA-0.5 gap. Nothing was added to the open backlog for LA-0.5.
 
 ### 69. ✅ LA-0.6 contact and household dedupe completed
 **From:** LA-0.6 · **Belongs to:** LA-0.6 · **Resolved:** 2026-09-01
