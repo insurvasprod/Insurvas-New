@@ -43,6 +43,8 @@ export const AGENT_API_POLICIES: AgentApiPolicy[] = [
   { sourceFile: "app/api/app/leads/route.ts", featureKey: "book_of_business" },
   { sourceFile: "app/api/app/legal/accept/route.ts", featureKey: null },
   { sourceFile: "app/api/app/me/route.ts", featureKey: null },
+  { sourceFile: "app/api/app/partners/route.ts", featureKey: "publisher_records", allowedRoles: ["owner", "bookkeeper"] },
+  { sourceFile: "app/api/app/partners/[id]/route.ts", featureKey: "publisher_records", allowedRoles: ["owner", "bookkeeper"] },
   { sourceFile: "app/api/app/onboarding/business-profile/route.ts", featureKey: null },
   { sourceFile: "app/api/app/onboarding/status/route.ts", featureKey: null },
   { sourceFile: "app/api/app/onboarding/verification/route.ts", featureKey: null },

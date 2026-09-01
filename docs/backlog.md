@@ -1214,6 +1214,55 @@ path (SA-3.8) or a refund. Both are already built and audit-logged.
 
 *Terse log — details live in git history.*
 
+### 110. ✅ LA-1.1 partner records and lifecycle implemented
+**From:** LA-1.1 · **Belongs to:** LA-1.1 · **Resolved:** 2026-09-01
+
+Tenant-scoped partner records, effective-dated commercial terms, partner memberships, lifecycle
+transitions, non-destructive history retention, cached-entitlement partner limits, audit rows,
+server-side API guards and the responsive Partners screen are implemented. The live migrations
+`20260902100000_la_1_1_partner_records_lifecycle` and
+`20260902101500_la_1_1_partner_limit_and_offboard_fix` were applied, and the focused live
+partner verifier passes the authorization, lifecycle, audit, RLS, history, idempotency and
+concurrency checks. The Partners menu entry now points at the built screen.
+
+Two acceptance checks remain dependent on later work and are recorded below: the current inbound
+submission endpoint is still a placeholder owned by LA-1.6/LA-1.7, and current SA-2.8 plan-limit
+payloads do not yet populate `max_partners`, which belongs to LA-1.19. Offboarding revokes the
+partner membership rows; LA-1.2 must enforce those rows when partner portal authentication is
+implemented.
+
+### 111. 🟡 LA-1.1 submission enforcement and production partner limits await later tickets
+**From:** LA-1.1 · **Belongs to:** LA-1.6 / LA-1.7 / LA-1.19 · **Gap recorded:** 2026-09-01
+
+LA-1.1 now stores the partner lifecycle atomically and the API accepts `max_partners` from the
+cached entitlement when that field exists. However, the repository's current inbound transfer
+route returns `501 Not Implemented`, so there is no real submission operation to drive through a
+paused partner yet. The live SA-2.8 entitlement refresh also currently emits `max_seats` but not
+`max_partners`; the LA-1.1 verifier uses a synthetic cached entitlement to prove the enforcement
+path without querying plans.
+
+**Fix:** LA-1.6/LA-1.7 must call the shared partner acceptance check before creating any inbound
+or outbound submission and add the end-to-end paused-partner rejection test. LA-1.19 must add
+and seed `max_partners` in the plan-limit and entitlement pipeline, then add a real-plan limit
+test. Until then, the partner API is safe for existing operations but those future submission
+and production-limit paths cannot be claimed complete. Cost of leaving it: a future intake
+route could forget the shared status check, and a plan could appear unlimited until LA-1.19 is
+delivered.
+
+### 112. 🔵 LA-1.1 browser acceptance pass needs an authenticated agent session
+**From:** LA-1.1 · **Belongs to:** LA-1.1 · **Gap recorded:** 2026-09-01
+
+The real browser QA pass could not reach `/app/publishers` because the available browser sessions
+redirected to `/app/login`. No credentials were entered or session state inspected. The page has
+passed typecheck, production build, live API verification and route generation, but the rendered
+screen, control behavior, responsive layout and browser console cannot be claimed visually verified
+until an authenticated agent session with `publisher_records` is available.
+
+**Fix:** sign in an agent entitled to `publisher_records`, reload `/app/publishers`, exercise create,
+edit, term history, pause/resume and typed offboard, capture the finished screen, and check the
+console at desktop and phone widths. Cost of leaving it: a browser-only rendering or interaction
+defect could remain unseen even though the server and automated checks pass.
+
 - **#79 Configuration Center route verifier** → resolved 2026-09-01. The verifier now exercises the
   shipped top-level admin routes after the Configuration Center hub was removed. Allowed roles
   return 200; denied roles return the app's server-side 307 denial redirect or 403. All 41 route

@@ -94,7 +94,7 @@ export const AGENT_MENU: MenuSection[] = [
     id: "partners",
     label: "Partners",
     items: [
-      item("Partners", { key: "partners.publishers", label: "Publishers", path: "/app/publishers", icon: "users", required_feature: "publisher_records", required_roles: ["owner", "bookkeeper"] }),
+      item("Partners", { key: "partners.publishers", label: "Publishers", path: "/app/publishers", icon: "users", required_feature: "publisher_records", required_roles: ["owner", "bookkeeper"], built: true }),
       item("Partners", { key: "partners.payouts", label: "Payout runs", path: "/app/payouts", icon: "wallet-cards", required_feature: "payout_runs", required_roles: ["owner", "bookkeeper"] }),
       item("Partners", { key: "partners.partner-portal", label: "Partner portal", path: "/app/partner-portal", icon: "external-link", required_feature: "partner_portal", required_roles: ["owner", "bookkeeper"] }),
     ],

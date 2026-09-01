@@ -1361,6 +1361,7 @@ export type Database = {
       agent_leads: {
         Row: {
           id: string;
+          partner_id: string | null;
           tenant_id: string;
           tenant_template_id: string | null;
           template_id: string;
@@ -1373,6 +1374,7 @@ export type Database = {
         };
         Insert: {
           id?: string;
+          partner_id?: string | null;
           tenant_id: string;
           tenant_template_id?: string | null;
           template_id: string;
@@ -1385,6 +1387,7 @@ export type Database = {
         };
         Update: {
           id?: string;
+          partner_id?: string | null;
           tenant_id?: string;
           tenant_template_id?: string | null;
           template_id?: string;
@@ -1394,6 +1397,101 @@ export type Database = {
           created_by?: string | null;
           created_at?: string;
           updated_at?: string;
+        };
+        Relationships: [];
+      };
+      partners: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          name: string;
+          partner_type: Database["public"]["Enums"]["partner_type"];
+          status: Database["public"]["Enums"]["partner_status"];
+          country: string;
+          contact_name: string | null;
+          contact_email: string | null;
+          timezone: string;
+          notes: string | null;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+          paused_at: string | null;
+          offboarded_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          tenant_id: string;
+          name: string;
+          partner_type: Database["public"]["Enums"]["partner_type"];
+          status?: Database["public"]["Enums"]["partner_status"];
+          country?: string;
+          contact_name?: string | null;
+          contact_email?: string | null;
+          timezone?: string;
+          notes?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+          paused_at?: string | null;
+          offboarded_at?: string | null;
+        };
+        Update: {
+          name?: string;
+          partner_type?: Database["public"]["Enums"]["partner_type"];
+          status?: Database["public"]["Enums"]["partner_status"];
+          country?: string;
+          contact_name?: string | null;
+          contact_email?: string | null;
+          timezone?: string;
+          notes?: string | null;
+          updated_at?: string;
+          paused_at?: string | null;
+          offboarded_at?: string | null;
+        };
+        Relationships: [];
+      };
+      partner_terms: {
+        Row: {
+          id: string;
+          partner_id: string;
+          payout_model: Database["public"]["Enums"]["partner_payout_model"];
+          rate_cents: number | null;
+          rate_pct_bp: number | null;
+          effective_from: string;
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          partner_id: string;
+          payout_model: Database["public"]["Enums"]["partner_payout_model"];
+          rate_cents?: number | null;
+          rate_pct_bp?: number | null;
+          effective_from: string;
+          created_by?: string | null;
+          created_at?: string;
+        };
+        Update: Record<string, never>;
+        Relationships: [];
+      };
+      partner_users: {
+        Row: {
+          partner_id: string;
+          user_id: string;
+          status: Database["public"]["Enums"]["partner_user_status"];
+          invited_at: string;
+          revoked_at: string | null;
+        };
+        Insert: {
+          partner_id: string;
+          user_id: string;
+          status?: Database["public"]["Enums"]["partner_user_status"];
+          invited_at?: string;
+          revoked_at?: string | null;
+        };
+        Update: {
+          status?: Database["public"]["Enums"]["partner_user_status"];
+          revoked_at?: string | null;
         };
         Relationships: [];
       };
@@ -2877,6 +2975,56 @@ export type Database = {
         Args: { p_tenant_id: string; p_merge_id: string };
         Returns: string;
       };
+      create_partner: {
+        Args: {
+          p_tenant_id: string;
+          p_name: string;
+          p_partner_type: Database["public"]["Enums"]["partner_type"];
+          p_country: string;
+          p_contact_name: string;
+          p_contact_email: string;
+          p_timezone: string;
+          p_notes: string;
+          p_created_by: string;
+          p_max_partners?: number | null;
+        };
+        Returns: Database["public"]["Tables"]["partners"]["Row"];
+      };
+      update_partner: {
+        Args: {
+          p_tenant_id: string;
+          p_partner_id: string;
+          p_name: string;
+          p_partner_type: Database["public"]["Enums"]["partner_type"];
+          p_country: string;
+          p_contact_name: string;
+          p_contact_email: string;
+          p_timezone: string;
+          p_notes: string;
+        };
+        Returns: Database["public"]["Tables"]["partners"]["Row"];
+      };
+      add_partner_term: {
+        Args: {
+          p_tenant_id: string;
+          p_partner_id: string;
+          p_payout_model: Database["public"]["Enums"]["partner_payout_model"];
+          p_rate_cents: number | null;
+          p_rate_pct_bp: number | null;
+          p_effective_from: string;
+          p_created_by: string;
+        };
+        Returns: Database["public"]["Tables"]["partner_terms"]["Row"];
+      };
+      transition_partner: {
+        Args: {
+          p_tenant_id: string;
+          p_partner_id: string;
+          p_next_status: Database["public"]["Enums"]["partner_status"];
+          p_confirmation?: string | null;
+        };
+        Returns: Database["public"]["Tables"]["partners"]["Row"];
+      };
     };
     Enums: {
       legal_doc_type: "tos" | "privacy" | "dpa";
@@ -2910,6 +3058,10 @@ export type Database = {
       tenant_user_role: "owner" | "producer" | "assistant" | "bookkeeper";
       user_status: "pending_verification" | "active" | "inactive" | "suspended" | "deleted";
       user_token_purpose: "invite" | "password_reset" | "email_change" | "email_verification";
+      partner_type: "publisher" | "marketing" | "affiliate";
+      partner_status: "draft" | "active" | "paused" | "offboarded";
+      partner_payout_model: "per_transfer" | "per_lead" | "per_sale" | "per_issued_policy" | "revenue_share";
+      partner_user_status: "active" | "revoked";
     };
     CompositeTypes: {
       [_ in never]: never;

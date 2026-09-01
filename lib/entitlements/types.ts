@@ -25,7 +25,8 @@ export type Entitlement = {
   computed_at: string;
   features: string[];
   meters: Record<string, EntitlementMeter>;
-  limits: { max_seats: number | null };
+  /** LA-1.19 may populate max_partners; null/absent means no configured cap yet. */
+  limits: { max_seats: number | null; max_partners?: number | null };
   period_start?: string;
 };
 
