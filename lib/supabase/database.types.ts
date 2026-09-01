@@ -3113,6 +3113,10 @@ export type Database = {
         Args: { p_tenant_id: string; p_phone_digits: string | null; p_full_name: string | null; p_ssn_digits: string | null };
         Returns: { lead_id: string; matched_on: string[] }[];
       };
+      reconcile_partner_intake: {
+        Args: never;
+        Returns: { lead_id: string; tenant_id: string; submission_id: string | null; missing_steps: string[] }[];
+      };
       admin_login_activity_stats: {
         Args: never;
         Returns: {

@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
     if (validationError) return NextResponse.json({ error: validationError }, { status: 400 });
     const result = await createPartnerLead(auth.context.tenantId, auth.context.partnerId, auth.context.userId, template, body.values, body.submission_id, screening, { screeningWarningAcknowledged: body.screening_warning_acknowledged === true, duplicateOverrideJustification: typeof body.duplicate_override_justification === "string" ? body.duplicate_override_justification : null });
     const lead = result.lead;
-    if (!result.replayed) {
+    {
       const values = (lead.values ?? {}) as Record<string, unknown>;
       const textValue = (keys: string[]) => keys.map((key) => values[key]).find((value) => typeof value === "string" && value.trim()) as string | undefined;
       const name = textValue(["full_name"]) ?? ([textValue(["first_name"]), textValue(["last_name"])].filter(Boolean).join(" ") || null);
@@ -44,15 +44,13 @@ export async function POST(request: NextRequest) {
       const failures: Array<{ step: "work_item" | "deal_flow" | "notification"; error: string }> = [];
       const queue = await supabase.from("lead_queue").insert({ tenant_id: auth.context.tenantId, lead_id: lead.id, partner_id: auth.context.partnerId, product_line: lead.product_line, stage_key: lead.stage_key });
       if (queue.error && queue.error.code !== "23505") failures.push({ step: "work_item", error: queue.error.message });
-      const deal = await supabase.from("deal_flow").insert({ tenant_id: auth.context.tenantId, lead_id: lead.id, partner_id: auth.context.partnerId, submission_id: body.submission_id, product_line: lead.product_line, stage_key: lead.stage_key, insured_name: name, phone, initial_quote: quote, tracking_id: trackingId, local_date: localDate });
+      const deal = await supabase.from("deal_flow").upsert({ tenant_id: auth.context.tenantId, lead_id: lead.id, partner_id: auth.context.partnerId, submission_id: body.submission_id, product_line: lead.product_line, stage_key: lead.stage_key, insured_name: name, phone, initial_quote: quote, tracking_id: trackingId, local_date: localDate }, { onConflict: "lead_id" });
       if (deal.error && deal.error.code !== "23505") failures.push({ step: "deal_flow", error: deal.error.message });
       const notification = await supabase.from("lead_notifications").insert({ tenant_id: auth.context.tenantId, lead_id: lead.id, channel: "internal", event_type: "lead_available", payload: { productCode: lead.product_line, partnerId: auth.context.partnerId, submissionId: body.submission_id } });
       if (notification.error && notification.error.code !== "23505") failures.push({ step: "notification", error: notification.error.message });
       for (const failure of failures) {
-        const recorded = await supabase.from("intake_failures").insert({ tenant_id: auth.context.tenantId, lead_id: lead.id, step: failure.step, error_message: failure.error, metadata: { submissionId: body.submission_id, productCode: lead.product_line } }).select("id").single();
-        if (recorded.error || !recorded.data) { console.error("intake failure record failed", failure, recorded.error); continue; }
-        const alert = await supabase.from("intake_alerts").insert({ tenant_id: auth.context.tenantId, intake_failure_id: recorded.data.id });
-        if (alert.error) console.error("intake alert record failed", failure, alert.error);
+        const recorded = await supabase.from("intake_failures").insert({ tenant_id: auth.context.tenantId, lead_id: lead.id, step: failure.step, error_message: failure.error.slice(0, 2000), metadata: { submissionId: body.submission_id, productCode: lead.product_line } }).select("id").single();
+        if (recorded.error || !recorded.data) await audit({ actorType: "tenant", actorId: auth.context.userId, action: "tenant.intake_failure_recording_failed", targetType: "agent_lead", targetId: lead.id, reason: failure.error.slice(0, 1000), metadata: { step: failure.step, submissionId: body.submission_id }, request });
       }
     }
     await deleteFormDraft(auth.context.tenantId, auth.context.userId, body.product_code, auth.context.partnerId);

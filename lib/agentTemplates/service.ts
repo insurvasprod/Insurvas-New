@@ -238,29 +238,38 @@ export async function createPartnerLead(
   const loadExisting = () => supabase.from("agent_leads").select(selected).eq("tenant_id", tenantId).eq("partner_id", partnerId).eq("submission_id", submissionId).maybeSingle();
   const existing = await loadExisting();
   if (existing.error) throw new Error(`Could not check submission status: ${existing.error.message}`);
-  if (existing.data) return { lead: existing.data, replayed: true as const };
   if (screening.warning?.code === "dnc" && !options.screeningWarningAcknowledged) throw new Error("dnc_acknowledgement_required");
   const duplicates = await findPartnerLeadDuplicates(tenantId, normalized.values, template.template.fields);
   const justification = options.duplicateOverrideJustification?.trim() || null;
-  if (duplicates.length && (!justification || justification.length < 10 || justification.length > 1000)) {
+  const externalDuplicates = duplicates.filter((duplicate) => duplicate.leadId !== existing.data?.id);
+  if (externalDuplicates.length && (!justification || justification.length < 10 || justification.length > 1000)) {
     // A replay can arrive just after the first request has passed its initial lookup. Give the
     // unique submission key a bounded chance to resolve before presenting a duplicate challenge.
-    for (const delay of [25, 50, 100]) {
-      await new Promise((resolve) => setTimeout(resolve, delay));
-      const racing = await loadExisting();
-      if (racing.error) throw new Error(`Could not check submission status: ${racing.error.message}`);
-      if (racing.data) return { lead: racing.data, replayed: true as const };
+    if (!existing.data) {
+      for (const delay of [25, 50, 100]) {
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        const racing = await loadExisting();
+        if (racing.error) throw new Error(`Could not check submission status: ${racing.error.message}`);
+        if (racing.data) return { lead: racing.data, replayed: true as const };
+      }
     }
-    throw new PartnerDuplicateError(duplicates);
+    throw new PartnerDuplicateError(externalDuplicates);
   }
   const stage = template.template.stages[0]?.stage_key; if (!stage) throw new Error("No starting pipeline stage is configured");
   const warningAcknowledged = screening.warning?.code === "dnc" && Boolean(options.screeningWarningAcknowledged);
+  const metadata = { values: normalized.values as Json, screening_result_id: screening.resultId, screening_version: screening.version, screening_outcome: screening.outcome, screening_warning: screening.warning?.message ?? null, screening_warning_acknowledged: warningAcknowledged, screening_warning_acknowledged_at: warningAcknowledged ? new Date().toISOString() : null, duplicate_override_justification: justification, duplicate_override_by: justification ? userId : null, duplicate_override_at: justification ? new Date().toISOString() : null, screening_checked_at: screening.checkedAt };
+  const updateExisting = async (leadId: string) => {
+    const updated = await supabase.from("agent_leads").update(metadata).eq("id", leadId).eq("tenant_id", tenantId).eq("partner_id", partnerId).eq("submission_id", submissionId).select(selected).single();
+    if (updated.error || !updated.data) throw new Error(updated.error?.message ?? "Could not update the existing submission");
+    return updated.data;
+  };
+  if (existing.data) return { lead: await updateExisting(existing.data.id), replayed: true as const };
   const { data, error } = await supabase.from("agent_leads").insert({ tenant_id: tenantId, tenant_template_id: template.tenant_template_id, template_id: template.assignment.template_id, template_version: template.assignment.template_version, definition_version: template.assignment.definition_version, product_line: template.template.product_code, partner_id: partnerId, submission_id: submissionId, stage_key: stage, values: normalized.values as Json, created_by: userId, screening_result_id: screening.resultId, screening_version: screening.version, screening_outcome: screening.outcome, screening_warning: screening.warning?.message ?? null, screening_warning_acknowledged: warningAcknowledged, screening_warning_acknowledged_at: warningAcknowledged ? new Date().toISOString() : null, duplicate_override_justification: justification, duplicate_override_by: justification ? userId : null, duplicate_override_at: justification ? new Date().toISOString() : null, screening_checked_at: screening.checkedAt }).select(selected).single();
   if (!error && data) return { lead: data, replayed: false };
   if (error?.code === "23505") {
     const existing = await supabase.from("agent_leads").select(selected).eq("tenant_id", tenantId).eq("partner_id", partnerId).eq("submission_id", submissionId).maybeSingle();
     if (existing.error || !existing.data) throw new Error(existing.error?.message ?? "Could not resolve duplicate submission");
-    return { lead: existing.data, replayed: true };
+    return { lead: await updateExisting(existing.data.id), replayed: true };
   }
   throw new Error(error?.message ?? "Could not submit lead");
 }

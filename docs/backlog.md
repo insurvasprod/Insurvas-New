@@ -1367,6 +1367,22 @@ duplicate detection and override, idempotent double submit, concurrent submit, a
 definition-version checks. Authenticated browser QA rendered the real screen at desktop and phone
 widths with no console errors or horizontal overflow. No new LA-1.6 backlog item remains.
 
+### 121. ✅ LA-1.7 intake write pipeline completed
+**From:** LA-1.7 · **Belongs to:** LA-1.7 · **Resolved:** 2026-09-01
+
+The partner intake path now performs the capability check and lead insert before best-effort work-item,
+deal-flow and notification writes. Re-submitting a draft updates the existing lead and repairs missing
+downstream artifacts instead of creating duplicates. Every recorded downstream failure receives one
+durable open alert through the database trigger, and the service-role reconciliation function reports
+partner leads that have neither a work item nor a recorded failure.
+
+Migration `20260902170000_la_1_7_intake_reconciliation.sql` was applied to the live `Insurvas-Saas`
+project. The focused live verifier and the complete LA-1 verifier passed product-line consistency,
+partner-local deal-flow date, replay idempotency, missing-work-item reconciliation, durable failure
+alerts, repair without a second lead, and audit evidence. Authenticated browser QA rendered the real
+partner intake form at desktop and phone widths with no console errors or horizontal overflow, and
+verified inline validation and sign-out. No new LA-1.7 backlog item remains.
+
 
 - **#79 Configuration Center route verifier** → resolved 2026-09-01. The verifier now exercises the
   shipped top-level admin routes after the Configuration Center hub was removed. Allowed roles
