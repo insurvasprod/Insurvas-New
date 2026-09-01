@@ -1,4 +1,5 @@
 // LA-1.4 live acceptance check. Fixtures are disposable and removed in finally.
+import { createServer } from "node:http";
 import { randomUUID } from "node:crypto";
 import { SignJWT } from "jose";
 import { createClient } from "@supabase/supabase-js";
@@ -8,6 +9,7 @@ const BASE = process.env.APP_BASE_URL ?? "http://localhost:3000";
 const db = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
 const stamp = Date.now(); const tenantId = randomUUID(); const ownerId = randomUUID(); const partnerId = randomUUID(); const partnerUserId = randomUUID();
 let copyId = null; let failures = 0;
+const vendorIds = [];
 const check = (label, ok, detail = "") => { if (ok) console.log(`  ok   ${label}`); else { console.log(`  FAIL ${label}${detail ? ` — ${detail}` : ""}`); failures++; } };
 const json = (body) => ({ headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
 async function token(userId, payload, secret) { return new SignJWT(payload).setProtectedHeader({ alg: "HS256" }).setSubject(userId).setIssuedAt().setExpirationTime("10m").sign(new TextEncoder().encode(secret)); }
@@ -38,6 +40,11 @@ async function cleanup() {
   await db.from("tenant_users").delete().eq("tenant_id", tenantId);
   await db.from("users").delete().in("id", [ownerId, partnerUserId]);
   await db.from("tenants").delete().eq("id", tenantId);
+  if (vendorIds.length) await db.from("compliance_vendors").delete().in("id", vendorIds);
+}
+function startVendorSimulator() {
+  const server = createServer((request, response) => { request.on("end", () => { response.setHeader("content-type", "application/json"); response.statusCode = 200; response.end(JSON.stringify((request.url ?? "").includes("dnc") ? { listed: false } : { hit: false })); }); request.resume(); });
+  return new Promise((resolve) => server.listen(0, "127.0.0.1", () => resolve({ server, port: server.address().port })));
 }
 function valuesFor(template) {
   const output = {};
@@ -50,12 +57,17 @@ function valuesFor(template) {
 }
 async function main() {
   await cleanup();
+  const simulator = await startVendorSimulator();
+  const serverBase = `http://127.0.0.1:${simulator.port}`;
   const tenants = await db.from("tenants").insert({ id: tenantId, name: `LA-1.4 QA ${stamp}`, status: "active", onboarding_state: "completed" }); if (tenants.error) throw new Error(tenants.error.message);
   const users = await db.from("users").insert([{ id: ownerId, email: `la14-owner-${stamp}@invalid.test`, name: "LA-1.4 owner", password_hash: "verification-only", status: "active" }, { id: partnerUserId, email: `la14-partner-${stamp}@invalid.test`, name: "LA-1.4 partner", password_hash: "verification-only", status: "active" }]); if (users.error) throw new Error(users.error.message);
   const member = await db.from("tenant_users").insert({ tenant_id: tenantId, user_id: ownerId, role: "owner" }); if (member.error) throw new Error(member.error.message);
-  const plan = await db.from("plans").select("id").eq("code", "basic").eq("version", 1).single(); if (plan.error) throw new Error(plan.error.message);
+  // Partner submission now performs LA-1.5 screening, so this verifier needs a plan with both
+  // screening meters available; the form assertions themselves are plan-agnostic.
+  const plan = await db.from("plans").select("id").eq("code", "advance").eq("version", 1).single(); if (plan.error) throw new Error(plan.error.message);
   const sub = await db.rpc("admin_assign_subscription", { p_tenant_id: tenantId, p_plan_id: plan.data.id, p_billing_cycle: "monthly", p_start: new Date().toISOString() }); if (sub.error) throw new Error(sub.error.message);
   await db.rpc("refresh_tenant_entitlement", { p_tenant_id: tenantId });
+  const vendors = await db.from("compliance_vendors").insert([{ name: `LA14 litigator ${stamp}`, vendor_type: "litigator_scrub", endpoint: `${serverBase}/litigator`, is_enabled: true, priority: 1, cost_per_lookup_cents: 1 }, { name: `LA14 dnc ${stamp}`, vendor_type: "dnc_scrub", endpoint: `${serverBase}/dnc`, is_enabled: true, priority: 1, cost_per_lookup_cents: 1 }]).select("id"); if (vendors.error) throw new Error(vendors.error.message); vendorIds.push(...(vendors.data ?? []).map((row) => row.id));
   const partner = await db.from("partners").insert({ id: partnerId, tenant_id: tenantId, name: `QA partner ${stamp}`, partner_type: "publisher", status: "active" }); if (partner.error) throw new Error(partner.error.message);
   const partnerMember = await db.from("partner_users").insert({ id: randomUUID(), tenant_id: tenantId, partner_id: partnerId, user_id: partnerUserId, role: "partner_user", status: "active", accepted_at: new Date().toISOString() }); if (partnerMember.error) throw new Error(partnerMember.error.message);
   await db.from("tenant_products").upsert({ tenant_id: tenantId, product_code: "term_life", is_enabled: true });
@@ -92,7 +104,7 @@ async function main() {
     const hostile = await api("/api/partner/leads", portal, { method: "POST", ...json({ product_code: "term_life", submission_id: crypto.randomUUID(), values: { contact_preference: "Email", email_address: "<script>alert(1)</script>" } }) }); check("hostile free-text and invalid email input is rejected", hostile.status === 400);
     const auditRows = await db.from("audit_log").select("action").eq("actor_id", partnerUserId).in("action", ["tenant.form_draft_saved", "tenant.partner_lead_submitted"]); check("draft and partner submission writes are audited", new Set((auditRows.data ?? []).map((row) => row.action)).size === 2, `actions ${(auditRows.data ?? []).map((row) => row.action).join(", ")}`);
     if (process.env.TENANT_DB_URL) { const pool = new pg.Pool({ connectionString: process.env.TENANT_DB_URL, ssl: { rejectUnauthorized: false } }); const connection = await pool.connect(); try { await connection.query("begin"); await connection.query("select set_config('app.tenant_id', $1, true)", [tenantId]); const rows = await connection.query("select tenant_id from form_drafts"); check("form draft RLS is tenant-scoped", rows.rows.every((row) => row.tenant_id === tenantId)); await connection.query("rollback"); } finally { connection.release(); await pool.end(); } }
-  } finally { await cleanup(); }
+  } finally { await new Promise((resolve) => simulator.server.close(resolve)); await cleanup(); }
   console.log(failures ? `\n${failures} check(s) FAILED.` : "\nAll LA-1.4 dynamic form checks passed."); return failures ? 1 : 0;
 }
 process.exitCode = await main().catch(async (error) => { console.error(error); await cleanup(); return 1; });

@@ -4,6 +4,7 @@ import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import type { Json } from "@/lib/supabase/database.types";
 import { getEntitlement } from "@/lib/entitlements/get";
 import type { ScreeningDecision } from "@/lib/compliance/screening";
+import { getUsPhone10Digits } from "@/lib/compliance/scrub";
 import { fetchTemplateVersion } from "@/lib/templates/queries";
 import { DEFAULT_TEMPLATE_FORM, TEMPLATE_KEY_PATTERN, TEMPLATE_FIELD_TYPES, TEMPLATE_STAGE_TYPES, type TemplateField, type TemplateFormDefinition, type TemplateRow, type TemplateStage, type TemplateValidation } from "@/lib/templates/constants";
 
@@ -39,7 +40,7 @@ function templateRow(copy: TenantCopy, productName: string): TemplateRow & { def
   return { id: copy.id, name: copy.name, product_code: copy.product_code, product_name: productName, version: copy.template_version, definition_version: copy.definition_version, description: copy.description, is_active: true, created_by: copy.tenant_id, created_at: copy.created_at, updated_at: copy.updated_at, fields: copy.fields, stages: copy.stages, form_definition: copy.form_definition };
 }
 
-async function loadCopy(tenantId: string, productCode?: string, id?: string): Promise<TenantCopy | null> {
+async function loadCopy(tenantId: string, productCode?: string, id?: string, definitionVersion?: number): Promise<TenantCopy | null> {
   const supabase = getSupabaseServiceClient();
   let request = supabase.from("tenant_templates").select("id, tenant_id, template_id, template_version, definition_version, product_code, name, description, created_at, updated_at").eq("tenant_id", tenantId);
   if (id) request = request.eq("id", id); if (productCode) request = request.eq("product_code", productCode);
@@ -50,9 +51,9 @@ async function loadCopy(tenantId: string, productCode?: string, id?: string): Pr
     supabase.from("tenant_template_forms").select("tenant_template_id, form_definition").eq("tenant_template_id", data.id).maybeSingle(),
   ]);
   if (fields.error || stages.error || form.error) throw new Error(`Could not load tenant template details: ${fields.error?.message ?? stages.error?.message ?? form.error?.message}`);
-  const revision = await supabase.from("tenant_template_revisions").select("revision, name, description, fields, stages, form_definition").eq("tenant_template_id", data.id).eq("revision", data.definition_version ?? 1).maybeSingle();
+  const revision = await supabase.from("tenant_template_revisions").select("revision, name, description, fields, stages, form_definition").eq("tenant_template_id", data.id).eq("revision", definitionVersion ?? data.definition_version ?? 1).maybeSingle();
   if (revision.error) throw new Error(`Could not load tenant template revision: ${revision.error.message}`);
-  return { ...data, definition_version: data.definition_version ?? 1, created_at: data.created_at ?? new Date(0).toISOString(), updated_at: data.updated_at ?? new Date(0).toISOString(), fields: revision.data ? asFields(revision.data.fields) : asFields(fields.data), stages: revision.data ? asStages(revision.data.stages) : asStages(stages.data), form_definition: revision.data ? asForm(revision.data.form_definition) : asForm(form.data?.form_definition) };
+  return { ...data, definition_version: definitionVersion ?? data.definition_version ?? 1, created_at: data.created_at ?? new Date(0).toISOString(), updated_at: data.updated_at ?? new Date(0).toISOString(), fields: revision.data ? asFields(revision.data.fields) : asFields(fields.data), stages: revision.data ? asStages(revision.data.stages) : asStages(stages.data), form_definition: revision.data ? asForm(revision.data.form_definition) : asForm(form.data?.form_definition) };
 }
 
 async function productName(code: string) { const { data } = await getSupabaseServiceClient().from("products").select("name").eq("code", code).maybeSingle(); return data?.name ?? code; }
@@ -80,6 +81,13 @@ export async function getAgentTemplate(tenantId: string, userId: string): Promis
 /** Partner intake must never create a tenant template as a side effect of a GET. */
 export async function getTenantTemplateForProduct(tenantId: string, productCode: string) {
   const copy = await loadCopy(tenantId, productCode);
+  if (!copy) throw new Error("No configured form is available for this product");
+  return { tenant_template_id: copy.id, assignment: { id: copy.id, template_id: copy.template_id, template_version: copy.template_version, definition_version: copy.definition_version, product_code: copy.product_code }, template: templateRow(copy, await productName(copy.product_code)) };
+}
+
+export async function getTenantTemplateForProductVersion(tenantId: string, productCode: string, definitionVersion: number) {
+  if (!Number.isInteger(definitionVersion) || definitionVersion < 1) throw new Error("Invalid form definition version");
+  const copy = await loadCopy(tenantId, productCode, undefined, definitionVersion);
   if (!copy) throw new Error("No configured form is available for this product");
   return { tenant_template_id: copy.id, assignment: { id: copy.id, template_id: copy.template_id, template_version: copy.template_version, definition_version: copy.definition_version, product_code: copy.product_code }, template: templateRow(copy, await productName(copy.product_code)) };
 }
@@ -181,13 +189,76 @@ export async function deleteFormDraft(tenantId: string, userId: string, productC
   const { error } = await request; if (error) throw new Error(`Could not clear form draft: ${error.message}`);
 }
 
-export async function createPartnerLead(tenantId: string, partnerId: string, userId: string, template: Awaited<ReturnType<typeof getTenantTemplateForProduct>>, values: unknown, submissionId: string, screening: Pick<ScreeningDecision, "resultId" | "version" | "outcome" | "warning" | "checkedAt">) {
+export type PartnerLeadDuplicate = { leadId: string; matchedOn: string[] };
+
+export class PartnerDuplicateError extends Error {
+  constructor(public readonly matches: PartnerLeadDuplicate[]) {
+    super("This person matches an existing lead. Confirm the details or provide a justification to continue.");
+    this.name = "PartnerDuplicateError";
+  }
+}
+
+function textValue(values: Record<string, unknown>, keys: string[]) {
+  return keys.map((key) => values[key]).find((value) => typeof value === "string" && value.trim()) as string | undefined;
+}
+
+function fullNameForDuplicate(values: Record<string, unknown>) {
+  return textValue(values, ["full_name", "name"]) ?? ([textValue(values, ["first_name"]), textValue(values, ["last_name"])].filter(Boolean).join(" ") || null);
+}
+
+export async function findPartnerLeadDuplicates(tenantId: string, values: Record<string, unknown>, fields: TemplateField[]): Promise<PartnerLeadDuplicate[]> {
+  const phoneField = fields.find((field) => field.type === "phone" && ["phone", "phone_number"].includes(field.field_key)) ?? fields.find((field) => field.type === "phone");
+  const ssnField = fields.find((field) => field.type === "ssn" && ["ssn", "ssn_number"].includes(field.field_key)) ?? fields.find((field) => field.type === "ssn");
+  let phoneDigits: string | null = null;
+  if (phoneField && values[phoneField.field_key] !== undefined && values[phoneField.field_key] !== null && values[phoneField.field_key] !== "") {
+    try { phoneDigits = getUsPhone10Digits(values[phoneField.field_key]); } catch { phoneDigits = null; }
+  }
+  const ssnValue = ssnField ? values[ssnField.field_key] : null;
+  const ssn = typeof ssnValue === "string" ? ssnValue.replace(/\D/g, "") : null;
+  const name = fullNameForDuplicate(values);
+  if (!phoneDigits && !ssn) return [];
+  const { data, error } = await getSupabaseServiceClient().rpc("find_partner_lead_duplicates", { p_tenant_id: tenantId, p_phone_digits: phoneDigits, p_full_name: name, p_ssn_digits: ssn });
+  if (error) throw new Error(`Could not check existing leads: ${error.message}`);
+  return ((data ?? []) as unknown as Array<{ lead_id: string; matched_on: unknown }>).map((row) => ({ leadId: row.lead_id, matchedOn: Array.isArray(row.matched_on) ? row.matched_on.filter((value): value is string => typeof value === "string") : [] }));
+}
+
+export async function createPartnerLead(
+  tenantId: string,
+  partnerId: string,
+  userId: string,
+  template: Awaited<ReturnType<typeof getTenantTemplateForProduct>>,
+  values: unknown,
+  submissionId: string,
+  screening: Pick<ScreeningDecision, "resultId" | "version" | "outcome" | "warning" | "checkedAt">,
+  options: { screeningWarningAcknowledged?: boolean; duplicateOverrideJustification?: string | null } = {},
+) {
   const normalized = normalizeFormValues(template.template.fields, template.template.form_definition, values); if (normalized.error) throw new Error(normalized.error);
+  const supabase = getSupabaseServiceClient();
+  const selected = "id, product_line, partner_id, submission_id, stage_key, values, screening_outcome, screening_warning, screening_warning_acknowledged, screening_warning_acknowledged_at, duplicate_override_justification, duplicate_override_by, duplicate_override_at, screening_checked_at, created_at, updated_at";
+  const loadExisting = () => supabase.from("agent_leads").select(selected).eq("tenant_id", tenantId).eq("partner_id", partnerId).eq("submission_id", submissionId).maybeSingle();
+  const existing = await loadExisting();
+  if (existing.error) throw new Error(`Could not check submission status: ${existing.error.message}`);
+  if (existing.data) return { lead: existing.data, replayed: true as const };
+  if (screening.warning?.code === "dnc" && !options.screeningWarningAcknowledged) throw new Error("dnc_acknowledgement_required");
+  const duplicates = await findPartnerLeadDuplicates(tenantId, normalized.values, template.template.fields);
+  const justification = options.duplicateOverrideJustification?.trim() || null;
+  if (duplicates.length && (!justification || justification.length < 10 || justification.length > 1000)) {
+    // A replay can arrive just after the first request has passed its initial lookup. Give the
+    // unique submission key a bounded chance to resolve before presenting a duplicate challenge.
+    for (const delay of [25, 50, 100]) {
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      const racing = await loadExisting();
+      if (racing.error) throw new Error(`Could not check submission status: ${racing.error.message}`);
+      if (racing.data) return { lead: racing.data, replayed: true as const };
+    }
+    throw new PartnerDuplicateError(duplicates);
+  }
   const stage = template.template.stages[0]?.stage_key; if (!stage) throw new Error("No starting pipeline stage is configured");
-  const { data, error } = await getSupabaseServiceClient().from("agent_leads").insert({ tenant_id: tenantId, tenant_template_id: template.tenant_template_id, template_id: template.assignment.template_id, template_version: template.assignment.template_version, definition_version: template.assignment.definition_version, product_line: template.template.product_code, partner_id: partnerId, submission_id: submissionId, stage_key: stage, values: normalized.values as Json, created_by: userId, screening_result_id: screening.resultId, screening_version: screening.version, screening_outcome: screening.outcome, screening_warning: screening.warning?.message ?? null, screening_checked_at: screening.checkedAt }).select("id, product_line, partner_id, submission_id, stage_key, values, screening_outcome, screening_warning, screening_checked_at, created_at, updated_at").single();
+  const warningAcknowledged = screening.warning?.code === "dnc" && Boolean(options.screeningWarningAcknowledged);
+  const { data, error } = await supabase.from("agent_leads").insert({ tenant_id: tenantId, tenant_template_id: template.tenant_template_id, template_id: template.assignment.template_id, template_version: template.assignment.template_version, definition_version: template.assignment.definition_version, product_line: template.template.product_code, partner_id: partnerId, submission_id: submissionId, stage_key: stage, values: normalized.values as Json, created_by: userId, screening_result_id: screening.resultId, screening_version: screening.version, screening_outcome: screening.outcome, screening_warning: screening.warning?.message ?? null, screening_warning_acknowledged: warningAcknowledged, screening_warning_acknowledged_at: warningAcknowledged ? new Date().toISOString() : null, duplicate_override_justification: justification, duplicate_override_by: justification ? userId : null, duplicate_override_at: justification ? new Date().toISOString() : null, screening_checked_at: screening.checkedAt }).select(selected).single();
   if (!error && data) return { lead: data, replayed: false };
   if (error?.code === "23505") {
-    const existing = await getSupabaseServiceClient().from("agent_leads").select("id, product_line, partner_id, submission_id, stage_key, values, screening_outcome, screening_warning, screening_checked_at, created_at, updated_at").eq("tenant_id", tenantId).eq("partner_id", partnerId).eq("submission_id", submissionId).maybeSingle();
+    const existing = await supabase.from("agent_leads").select(selected).eq("tenant_id", tenantId).eq("partner_id", partnerId).eq("submission_id", submissionId).maybeSingle();
     if (existing.error || !existing.data) throw new Error(existing.error?.message ?? "Could not resolve duplicate submission");
     return { lead: existing.data, replayed: true };
   }

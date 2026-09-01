@@ -1355,6 +1355,18 @@ and each save showed a visible notification. The responsive partner portal and p
 were also checked with the same isolated tenant/partner session; the live verifier covers the
 cross-tenant and forged-session paths.
 
+### 120. ✅ LA-1.6 partner submission form completed
+**From:** LA-1.6 · **Belongs to:** LA-1.6 · **Resolved:** 2026-09-01
+
+The partner submission screen now uses the immutable tenant form definition, gates the form behind
+phone-first TCPA/DNC screening, resumes drafts, autosaves on a 30-second interval and page exit,
+validates required fields, records DNC acknowledgement, and requires a stored justification for
+duplicate overrides. The live migration `20260902161000_la_1_6_submission_guards` was applied to
+`Insurvas-Saas`. The focused verifier passed TCPA blocking, DNC warning and acknowledgement,
+duplicate detection and override, idempotent double submit, concurrent submit, audit, and draft
+definition-version checks. Authenticated browser QA rendered the real screen at desktop and phone
+widths with no console errors or horizontal overflow. No new LA-1.6 backlog item remains.
+
 
 - **#79 Configuration Center route verifier** → resolved 2026-09-01. The verifier now exercises the
   shipped top-level admin routes after the Configuration Center hub was removed. Allowed roles

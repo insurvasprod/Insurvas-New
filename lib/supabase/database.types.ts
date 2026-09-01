@@ -1491,6 +1491,11 @@ export type Database = {
           screening_outcome: string | null;
           screening_warning: string | null;
           screening_checked_at: string | null;
+          screening_warning_acknowledged: boolean;
+          screening_warning_acknowledged_at: string | null;
+          duplicate_override_justification: string | null;
+          duplicate_override_by: string | null;
+          duplicate_override_at: string | null;
         };
         Insert: {
           id?: string;
@@ -1512,6 +1517,11 @@ export type Database = {
           screening_outcome?: string | null;
           screening_warning?: string | null;
           screening_checked_at?: string | null;
+          screening_warning_acknowledged?: boolean;
+          screening_warning_acknowledged_at?: string | null;
+          duplicate_override_justification?: string | null;
+          duplicate_override_by?: string | null;
+          duplicate_override_at?: string | null;
         };
         Update: {
           id?: string;
@@ -1533,6 +1543,11 @@ export type Database = {
           screening_outcome?: string | null;
           screening_warning?: string | null;
           screening_checked_at?: string | null;
+          screening_warning_acknowledged?: boolean;
+          screening_warning_acknowledged_at?: string | null;
+          duplicate_override_justification?: string | null;
+          duplicate_override_by?: string | null;
+          duplicate_override_at?: string | null;
         };
         Relationships: [];
       };
@@ -3093,6 +3108,10 @@ export type Database = {
       save_form_draft: {
         Args: { p_tenant_id: string; p_partner_id: string | null; p_user_id: string; p_product_code: string; p_tenant_template_id: string; p_definition_version: number; p_payload: Json };
         Returns: string;
+      };
+      find_partner_lead_duplicates: {
+        Args: { p_tenant_id: string; p_phone_digits: string | null; p_full_name: string | null; p_ssn_digits: string | null };
+        Returns: { lead_id: string; matched_on: string[] }[];
       };
       admin_login_activity_stats: {
         Args: never;
