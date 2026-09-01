@@ -44,6 +44,7 @@ const SUITES = [
   ["LA-1.4 dynamic forms and intake", "verify-dynamic-forms.mjs"],
   ["LA-1.6 partner submission", "verify-partner-submission.mjs"],
   ["LA-1.7 intake pipeline", "verify-intake-pipeline.mjs"],
+  ["LA-1.8 affiliate links", "verify-affiliate-links.mjs"],
   ["LA-1.5 TCPA/DNC screening", "verify-screening.mjs"],
 ];
 

@@ -6,7 +6,7 @@ import type { AuditAction } from "./actions";
 import { getClientIp, getUserAgent } from "@/lib/request/clientInfo";
 
 type AuditParams = {
-  actorId: string;
+  actorId: string | null;
   actorType?: "admin" | "tenant" | "system";
   action: AuditAction;
   targetType?: string;

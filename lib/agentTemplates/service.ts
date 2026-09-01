@@ -225,16 +225,16 @@ export async function findPartnerLeadDuplicates(tenantId: string, values: Record
 export async function createPartnerLead(
   tenantId: string,
   partnerId: string,
-  userId: string,
+  userId: string | null,
   template: Awaited<ReturnType<typeof getTenantTemplateForProduct>>,
   values: unknown,
   submissionId: string,
   screening: Pick<ScreeningDecision, "resultId" | "version" | "outcome" | "warning" | "checkedAt">,
-  options: { screeningWarningAcknowledged?: boolean; duplicateOverrideJustification?: string | null } = {},
+  options: { screeningWarningAcknowledged?: boolean; duplicateOverrideJustification?: string | null; affiliateLinkId?: string | null; affiliateCampaign?: string | null } = {},
 ) {
   const normalized = normalizeFormValues(template.template.fields, template.template.form_definition, values); if (normalized.error) throw new Error(normalized.error);
   const supabase = getSupabaseServiceClient();
-  const selected = "id, product_line, partner_id, submission_id, stage_key, values, screening_outcome, screening_warning, screening_warning_acknowledged, screening_warning_acknowledged_at, duplicate_override_justification, duplicate_override_by, duplicate_override_at, screening_checked_at, created_at, updated_at";
+  const selected = "id, product_line, partner_id, submission_id, stage_key, values, affiliate_link_id, affiliate_campaign, screening_outcome, screening_warning, screening_warning_acknowledged, screening_warning_acknowledged_at, duplicate_override_justification, duplicate_override_by, duplicate_override_at, screening_checked_at, created_at, updated_at";
   const loadExisting = () => supabase.from("agent_leads").select(selected).eq("tenant_id", tenantId).eq("partner_id", partnerId).eq("submission_id", submissionId).maybeSingle();
   const existing = await loadExisting();
   if (existing.error) throw new Error(`Could not check submission status: ${existing.error.message}`);
@@ -257,14 +257,14 @@ export async function createPartnerLead(
   }
   const stage = template.template.stages[0]?.stage_key; if (!stage) throw new Error("No starting pipeline stage is configured");
   const warningAcknowledged = screening.warning?.code === "dnc" && Boolean(options.screeningWarningAcknowledged);
-  const metadata = { values: normalized.values as Json, screening_result_id: screening.resultId, screening_version: screening.version, screening_outcome: screening.outcome, screening_warning: screening.warning?.message ?? null, screening_warning_acknowledged: warningAcknowledged, screening_warning_acknowledged_at: warningAcknowledged ? new Date().toISOString() : null, duplicate_override_justification: justification, duplicate_override_by: justification ? userId : null, duplicate_override_at: justification ? new Date().toISOString() : null, screening_checked_at: screening.checkedAt };
+  const metadata = { values: normalized.values as Json, screening_result_id: screening.resultId, screening_version: screening.version, screening_outcome: screening.outcome, screening_warning: screening.warning?.message ?? null, screening_warning_acknowledged: warningAcknowledged, screening_warning_acknowledged_at: warningAcknowledged ? new Date().toISOString() : null, duplicate_override_justification: justification, duplicate_override_by: justification ? userId : null, duplicate_override_at: justification ? new Date().toISOString() : null, screening_checked_at: screening.checkedAt, ...(options.affiliateLinkId ? { affiliate_link_id: options.affiliateLinkId, affiliate_campaign: options.affiliateCampaign ?? null } : {}) };
   const updateExisting = async (leadId: string) => {
     const updated = await supabase.from("agent_leads").update(metadata).eq("id", leadId).eq("tenant_id", tenantId).eq("partner_id", partnerId).eq("submission_id", submissionId).select(selected).single();
     if (updated.error || !updated.data) throw new Error(updated.error?.message ?? "Could not update the existing submission");
     return updated.data;
   };
   if (existing.data) return { lead: await updateExisting(existing.data.id), replayed: true as const };
-  const { data, error } = await supabase.from("agent_leads").insert({ tenant_id: tenantId, tenant_template_id: template.tenant_template_id, template_id: template.assignment.template_id, template_version: template.assignment.template_version, definition_version: template.assignment.definition_version, product_line: template.template.product_code, partner_id: partnerId, submission_id: submissionId, stage_key: stage, values: normalized.values as Json, created_by: userId, screening_result_id: screening.resultId, screening_version: screening.version, screening_outcome: screening.outcome, screening_warning: screening.warning?.message ?? null, screening_warning_acknowledged: warningAcknowledged, screening_warning_acknowledged_at: warningAcknowledged ? new Date().toISOString() : null, duplicate_override_justification: justification, duplicate_override_by: justification ? userId : null, duplicate_override_at: justification ? new Date().toISOString() : null, screening_checked_at: screening.checkedAt }).select(selected).single();
+  const { data, error } = await supabase.from("agent_leads").insert({ tenant_id: tenantId, tenant_template_id: template.tenant_template_id, template_id: template.assignment.template_id, template_version: template.assignment.template_version, definition_version: template.assignment.definition_version, product_line: template.template.product_code, partner_id: partnerId, submission_id: submissionId, stage_key: stage, values: normalized.values as Json, created_by: userId, screening_result_id: screening.resultId, screening_version: screening.version, screening_outcome: screening.outcome, screening_warning: screening.warning?.message ?? null, screening_warning_acknowledged: warningAcknowledged, screening_warning_acknowledged_at: warningAcknowledged ? new Date().toISOString() : null, duplicate_override_justification: justification, duplicate_override_by: justification ? userId : null, duplicate_override_at: justification ? new Date().toISOString() : null, screening_checked_at: screening.checkedAt, ...(options.affiliateLinkId ? { affiliate_link_id: options.affiliateLinkId, affiliate_campaign: options.affiliateCampaign ?? null } : {}) }).select(selected).single();
   if (!error && data) return { lead: data, replayed: false };
   if (error?.code === "23505") {
     const existing = await supabase.from("agent_leads").select(selected).eq("tenant_id", tenantId).eq("partner_id", partnerId).eq("submission_id", submissionId).maybeSingle();

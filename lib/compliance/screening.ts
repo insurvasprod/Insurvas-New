@@ -156,7 +156,7 @@ function warningFor(outcome: ScreeningOutcome, internalDq: boolean): ScreeningWa
 async function writeAudit(params: {
   tenantId: string;
   partnerId: string;
-  userId: string;
+  userId: string | null;
   phoneDigits: string | null;
   outcome: ScreeningOutcome;
   vendor: string | null;
@@ -179,7 +179,7 @@ async function writeAudit(params: {
   if (error) throw new Error(`Could not write screening audit: ${error.message}`);
 }
 
-async function cachedDecision(row: ScreeningResultRow, input: { tenantId: string; partnerId: string; userId: string }): Promise<ScreeningDecision> {
+async function cachedDecision(row: ScreeningResultRow, input: { tenantId: string; partnerId: string; userId: string | null }): Promise<ScreeningDecision> {
   const outcome = row.outcome as ScreeningOutcome;
   const warning = warningFor(outcome, outcome === "internal_dq");
   await writeAudit({ ...input, phoneDigits: row.phone_digits, outcome, vendor: row.vendor, rawResponse: row.raw_response, resultId: row.id, cached: true });
@@ -211,7 +211,7 @@ async function waitForClaim(tenantId: string, phoneDigits: string) {
 export async function screenPartnerPhone(input: {
   tenantId: string;
   partnerId: string;
-  userId: string;
+  userId: string | null;
   phone: unknown;
   fetcher?: typeof fetch;
 }): Promise<ScreeningDecision> {

@@ -1475,6 +1475,8 @@ export type Database = {
           id: string;
           partner_id: string | null;
           submission_id: string | null;
+          affiliate_link_id: string | null;
+          affiliate_campaign: string | null;
           tenant_id: string;
           tenant_template_id: string | null;
           definition_version: number;
@@ -1501,6 +1503,8 @@ export type Database = {
           id?: string;
           partner_id?: string | null;
           submission_id?: string | null;
+          affiliate_link_id?: string | null;
+          affiliate_campaign?: string | null;
           tenant_id: string;
           tenant_template_id?: string | null;
           definition_version?: number;
@@ -1527,6 +1531,8 @@ export type Database = {
           id?: string;
           partner_id?: string | null;
           submission_id?: string | null;
+          affiliate_link_id?: string | null;
+          affiliate_campaign?: string | null;
           tenant_id?: string;
           tenant_template_id?: string | null;
           definition_version?: number;
@@ -1552,15 +1558,21 @@ export type Database = {
         Relationships: [];
       };
       lead_queue: {
-        Row: { id: string; tenant_id: string; lead_id: string; partner_id: string | null; product_line: string; stage_key: string; status: string; claimed_by: string | null; claimed_at: string | null; created_at: string; updated_at: string };
-        Insert: { id?: string; tenant_id: string; lead_id: string; partner_id?: string | null; product_line: string; stage_key: string; status?: string; claimed_by?: string | null; claimed_at?: string | null; created_at?: string; updated_at?: string };
+        Row: { id: string; tenant_id: string; lead_id: string; partner_id: string | null; affiliate_link_id: string | null; affiliate_campaign: string | null; product_line: string; stage_key: string; status: string; claimed_by: string | null; claimed_at: string | null; created_at: string; updated_at: string };
+        Insert: { id?: string; tenant_id: string; lead_id: string; partner_id?: string | null; affiliate_link_id?: string | null; affiliate_campaign?: string | null; product_line: string; stage_key: string; status?: string; claimed_by?: string | null; claimed_at?: string | null; created_at?: string; updated_at?: string };
         Update: { status?: string; claimed_by?: string | null; claimed_at?: string | null; updated_at?: string };
         Relationships: [];
       };
       deal_flow: {
-        Row: { id: string; tenant_id: string; lead_id: string; partner_id: string | null; submission_id: string | null; product_line: string; stage_key: string; insured_name: string | null; phone: string | null; initial_quote: string | null; tracking_id: string | null; local_date: string; created_at: string; updated_at: string };
-        Insert: { id?: string; tenant_id: string; lead_id: string; partner_id?: string | null; submission_id?: string | null; product_line: string; stage_key: string; insured_name?: string | null; phone?: string | null; initial_quote?: string | null; tracking_id?: string | null; local_date: string; created_at?: string; updated_at?: string };
+        Row: { id: string; tenant_id: string; lead_id: string; partner_id: string | null; affiliate_link_id: string | null; affiliate_campaign: string | null; submission_id: string | null; product_line: string; stage_key: string; insured_name: string | null; phone: string | null; initial_quote: string | null; tracking_id: string | null; local_date: string; created_at: string; updated_at: string };
+        Insert: { id?: string; tenant_id: string; lead_id: string; partner_id?: string | null; affiliate_link_id?: string | null; affiliate_campaign?: string | null; submission_id?: string | null; product_line: string; stage_key: string; insured_name?: string | null; phone?: string | null; initial_quote?: string | null; tracking_id?: string | null; local_date: string; created_at?: string; updated_at?: string };
         Update: { stage_key?: string; insured_name?: string | null; phone?: string | null; initial_quote?: string | null; tracking_id?: string | null; updated_at?: string };
+        Relationships: [];
+      };
+      affiliate_links: {
+        Row: { id: string; tenant_id: string; partner_id: string; slug: string; campaign: string | null; is_active: boolean; click_count: number; created_at: string; updated_at: string };
+        Insert: { id?: string; tenant_id: string; partner_id: string; slug: string; campaign?: string | null; is_active?: boolean; click_count?: number; created_at?: string; updated_at?: string };
+        Update: { slug?: string; campaign?: string | null; is_active?: boolean; click_count?: number; updated_at?: string };
         Relationships: [];
       };
       intake_failures: {
@@ -3116,6 +3128,10 @@ export type Database = {
       reconcile_partner_intake: {
         Args: never;
         Returns: { lead_id: string; tenant_id: string; submission_id: string | null; missing_steps: string[] }[];
+      };
+      record_affiliate_link_click: {
+        Args: { p_slug: string };
+        Returns: { id: string; tenant_id: string; partner_id: string; slug: string; campaign: string | null; click_count: number; partner_name: string; partner_status: string; partner_timezone: string }[];
       };
       admin_login_activity_stats: {
         Args: never;

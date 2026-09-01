@@ -49,6 +49,8 @@ export const AGENT_API_POLICIES: AgentApiPolicy[] = [
   { sourceFile: "app/api/app/partners/[id]/users/route.ts", featureKey: "publisher_records", allowedRoles: ["owner", "bookkeeper"] },
   { sourceFile: "app/api/app/partners/[id]/users/[userId]/route.ts", featureKey: "publisher_records", allowedRoles: ["owner", "bookkeeper"] },
   { sourceFile: "app/api/app/partners/[id]/users/[userId]/resend-invite/route.ts", featureKey: "publisher_records", allowedRoles: ["owner", "bookkeeper"] },
+  { sourceFile: "app/api/app/partners/[id]/affiliate-links/route.ts", featureKey: "publisher_records", allowedRoles: ["owner", "bookkeeper"] },
+  { sourceFile: "app/api/app/partners/[id]/affiliate-links/[linkId]/route.ts", featureKey: "publisher_records", allowedRoles: ["owner", "bookkeeper"] },
   { sourceFile: "app/api/app/products/route.ts", featureKey: "publisher_records", allowedRoles: ["owner"] },
   { sourceFile: "app/api/app/products/[code]/route.ts", featureKey: "publisher_records", allowedRoles: ["owner"] },
   { sourceFile: "app/api/app/partners/[id]/products/route.ts", featureKey: "publisher_records", allowedRoles: ["owner"] },

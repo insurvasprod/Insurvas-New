@@ -1383,6 +1383,23 @@ alerts, repair without a second lead, and audit evidence. Authenticated browser 
 partner intake form at desktop and phone widths with no console errors or horizontal overflow, and
 verified inline validation and sign-out. No new LA-1.7 backlog item remains.
 
+### 122. ✅ LA-1.8 affiliate tracked links and lightweight intake completed
+**From:** LA-1.8 · **Belongs to:** LA-1.8 · **Resolved:** 2026-09-01
+
+Affiliate links now have tenant-scoped storage, optional campaign attribution, atomic click counting,
+active/paused lifecycle behavior, and owner/bookkeeper management APIs. The public short intake form
+collects name, phone, state, product interest and consent, runs the existing LA-1.5 TCPA/DNC screening,
+and writes through the same LA-1.7 lead, unclaimed queue, deal-flow, notification and audit pipeline.
+Attribution is retained on the lead and downstream records; no affiliate-specific copy of the intake
+pipeline was created.
+
+Migration `20260902180000_la_1_8_affiliate_links.sql` was applied to the live `Insurvas-Saas` project.
+The focused live verifier passed active-link resolution and click counting, immutable attribution,
+TCPA blocking, paused-link messaging and management listing. LA-1 regression verification, the
+required typecheck/lint/build/test/feature checks, deep migration verification, and fresh-tab browser
+QA at desktop and phone widths passed. Disposable QA tenants and compliance vendors were removed.
+Nothing remains unmet, deferred or unverified for LA-1.8, so nothing was added to the open backlog.
+
 
 - **#79 Configuration Center route verifier** → resolved 2026-09-01. The verifier now exercises the
   shipped top-level admin routes after the Configuration Center hub was removed. Allowed roles

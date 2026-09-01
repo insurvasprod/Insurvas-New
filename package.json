@@ -75,8 +75,9 @@
     "verify:partner-submission": "node --env-file=.env.local scripts/verify-partner-submission.mjs",
     "reconcile:intake": "node --env-file=.env.local scripts/reconcile-intake.mjs",
     "verify:intake": "node --env-file=.env.local scripts/verify-intake-pipeline.mjs",
+    "verify:affiliate": "node --env-file=.env.local scripts/verify-affiliate-links.mjs",
     "verify:screening": "node --env-file=.env.local scripts/verify-screening.mjs",
-    "verify:la1": "node --env-file=.env.local scripts/verify-partners.mjs && node --env-file=.env.local scripts/verify-partner-users.mjs && node --env-file=.env.local scripts/verify-partner-products.mjs && node --env-file=.env.local scripts/verify-dynamic-forms.mjs && node --env-file=.env.local scripts/verify-partner-submission.mjs && node --env-file=.env.local scripts/verify-intake-pipeline.mjs"
+    "verify:la1": "node --env-file=.env.local scripts/verify-partners.mjs && node --env-file=.env.local scripts/verify-partner-users.mjs && node --env-file=.env.local scripts/verify-partner-products.mjs && node --env-file=.env.local scripts/verify-dynamic-forms.mjs && node --env-file=.env.local scripts/verify-partner-submission.mjs && node --env-file=.env.local scripts/verify-intake-pipeline.mjs && node --env-file=.env.local scripts/verify-affiliate-links.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.99.0",
