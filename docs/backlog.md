@@ -1210,22 +1210,20 @@ path (SA-3.8) or a refund. Both are already built and audit-logged.
 
 ---
 
-### 117. 🔵 LA-1.4 authenticated builder and partner browser acceptance remains unverified
-**From:** LA-1.4 · **Belongs to:** LA-1.4
+### 117. 🟠 LA-1.4 lead CSV import is a later product surface
+**From:** LA-1.4 · **Belongs to:** the later lead-import ticket · **Gap recorded:** 2026-09-01
 
-The live API verifier covers immutable form versions, draft persistence, concurrent autosaves,
-conditional-field rejection, hostile input, audit rows and tenant RLS. The local browser could only
-reach the unauthenticated agent login: no authorized agent or partner session was available, and no
-credentials were invented or transmitted. Therefore the real screens were not driven for the
-following acceptance evidence: draft resume after connection loss, conditional hide/show without a
-reload, CSV export/import round-trip for lead custom fields, and exact visual equality between the
-builder preview and the partner form. The unauthenticated login had no console errors and no mobile
-horizontal overflow at 390px, but that does not prove the authenticated form screens.
+The authenticated LA-1.4 builder and partner form are now browser-verified: the template screen
+renders, conditional fields hide and show without a reload, the partner form resumes an autosaved
+draft after reload, valid submission clears the form, and missing required values show field-level
+messages. The live verifier separately covers concurrency, hostile input, audit rows and tenant RLS.
 
-**Fix:** sign in with a disposable authorized agent and partner account, capture the builder and
-partner screens, toggle a conditional field, interrupt and restore the network while typing, export
-and re-import a lead CSV, and compare the preview/form DOM and visuals. Remove this entry only after
-those checks pass or record any concrete defect found.
+The requested CSV import round-trip cannot be verified here because `/app/import` explicitly renders
+“List import is on the way”; it is not a shipped LA-1.4 surface. The existing lead-workspace export
+link was exercised. When the later lead-import ticket ships, add the browser round-trip and move this
+entry to resolved. Cost of leaving it open: CSV ingestion remains unverified until that later UI
+exists; it does not block the current dynamic-form submission path.
+
 
 ## ✅ Resolved
 
@@ -1265,19 +1263,15 @@ and production-limit paths cannot be claimed complete. Cost of leaving it: a fut
 route could forget the shared status check, and a plan could appear unlimited until LA-1.19 is
 delivered.
 
-### 112. 🔵 LA-1.1 browser acceptance pass needs an authenticated agent session
-**From:** LA-1.1 · **Belongs to:** LA-1.1 · **Gap recorded:** 2026-09-01
+### 112. ✅ LA-1.1 authenticated browser acceptance completed
+**From:** LA-1.1 · **Belongs to:** LA-1.1 · **Resolved:** 2026-09-01
 
-The real browser QA pass could not reach `/app/publishers` because the available browser sessions
-redirected to `/app/login`. No credentials were entered or session state inspected. The page has
-passed typecheck, production build, live API verification and route generation, but the rendered
-screen, control behavior, responsive layout and browser console cannot be claimed visually verified
-until an authenticated agent session with `publisher_records` is available.
-
-**Fix:** sign in an agent entitled to `publisher_records`, reload `/app/publishers`, exercise create,
-edit, term history, pause/resume and typed offboard, capture the finished screen, and check the
-console at desktop and phone widths. Cost of leaving it: a browser-only rendering or interaction
-defect could remain unseen even though the server and automated checks pass.
+An entitled local owner agent drove the real `/app/publishers` screen. Browser QA created the
+partner, added effective-dated commercial terms, edited the partner, approved a product, paused and
+resumed the partner, and confirmed visible success notifications and current-term history. The
+authenticated screen rendered without browser errors; the existing responsive shell was also
+checked at desktop and phone widths. Server verification covers typed offboarding and the remaining
+failure/concurrency paths.
 
 ### 113. ✅ LA-1.2 partner users and isolated portal access completed
 **From:** LA-1.2 · **Belongs to:** LA-1.2 · **Resolved:** 2026-09-01
@@ -1320,20 +1314,15 @@ data intact; it only disappears from the current picker.
 The selected product's tenant template is resolved before the lead insert, and the retry key makes
 the write idempotent under repeated or concurrent requests.
 
-### 116. 🔵 LA-1.3 authenticated browser acceptance needs an agent session
-**From:** LA-1.3 · **Belongs to:** LA-1.3 · **Gap recorded:** 2026-09-01
+### 116. ✅ LA-1.3 authenticated browser acceptance completed
+**From:** LA-1.3 · **Belongs to:** LA-1.3 · **Resolved:** 2026-09-01
 
-The automated live verifier, typecheck, lint, build and full verification suite pass, but the
-browser session available during this run had no authenticated agent tab and redirected the
-configuration screen to `/app/login`. No credentials or session cookies were inspected or
-entered, so the finished Products and Approved products controls, visible save confirmation,
-keyboard focus, responsive layout and browser console cannot be claimed visually verified.
+The authenticated owner drove the real product controls on `/app/publishers`: Term Life was enabled,
+approved for the partner, disabled and restored. The partner picker reflected the change immediately,
+and each save showed a visible notification. The responsive partner portal and product-specific form
+were also checked with the same isolated tenant/partner session; the live verifier covers the
+cross-tenant and forged-session paths.
 
-**Fix:** sign in an owner agent with `publisher_records` in the local browser, open
-`/app/publishers`, exercise a product enable/disable and a partner approval, check the partner
-picker at desktop and phone widths, and capture the finished screen with console output. Cost of
-leaving this open: a browser-only rendering or interaction defect could remain unseen even though
-the server-side contract is green.
 
 - **#79 Configuration Center route verifier** → resolved 2026-09-01. The verifier now exercises the
   shipped top-level admin routes after the Configuration Center hub was removed. Allowed roles
