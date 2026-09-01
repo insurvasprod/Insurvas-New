@@ -1865,6 +1865,17 @@ RPC privilege checks, complete acceptance verifier, mandatory repository checks,
 desktop/mobile browser QA all passed. Nothing remains unmet, deferred or unverified for LA-1.11,
 so nothing was added to the open backlog.
 
+### 126. ✅ LA-1.12 disposition vocabulary and configurable wizard completed
+**From:** LA-1.12 · **Belongs to:** LA-1.12 · **Resolved:** 2026-09-02
+
+The tenant-scoped disposition vocabulary, stage-specific graph wizard, editable walk history,
+transactional completion reconciliation, tenant DNC suppression, and owner configuration screen
+are implemented. The two new agent API routes are included in the authorization inventory, and
+the wizard contains no hardcoded navigation graph. The live migration is applied and verified;
+the focused live verifier, deep migration check, TypeScript, lint, production build, unit tests,
+feature-policy check, and authenticated desktop/mobile browser QA passed. Nothing remains unmet,
+deferred, or unverified for LA-1.12, so nothing was added to the open backlog.
+
 ---
 
 ## Related

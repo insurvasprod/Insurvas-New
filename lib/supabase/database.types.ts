@@ -1517,6 +1517,7 @@ export type Database = {
           duplicate_override_justification: string | null;
           duplicate_override_by: string | null;
           duplicate_override_at: string | null;
+          callback_subtype: string | null;
         };
         Insert: {
           id?: string;
@@ -1546,6 +1547,7 @@ export type Database = {
           duplicate_override_justification?: string | null;
           duplicate_override_by?: string | null;
           duplicate_override_at?: string | null;
+          callback_subtype?: string | null;
         };
         Update: {
           id?: string;
@@ -1575,6 +1577,7 @@ export type Database = {
           duplicate_override_justification?: string | null;
           duplicate_override_by?: string | null;
           duplicate_override_at?: string | null;
+          callback_subtype?: string | null;
         };
         Relationships: [];
       };
@@ -1615,9 +1618,51 @@ export type Database = {
         Relationships: [];
       };
       deal_flow: {
-        Row: { id: string; tenant_id: string; lead_id: string; partner_id: string | null; affiliate_link_id: string | null; affiliate_campaign: string | null; submission_id: string | null; product_line: string; pipeline_id: string; stage_id: string; insured_name: string | null; phone: string | null; initial_quote: string | null; tracking_id: string | null; local_date: string; created_at: string; updated_at: string };
-        Insert: { id?: string; tenant_id: string; lead_id: string; partner_id?: string | null; affiliate_link_id?: string | null; affiliate_campaign?: string | null; submission_id?: string | null; product_line: string; pipeline_id: string; stage_id: string; insured_name?: string | null; phone?: string | null; initial_quote?: string | null; tracking_id?: string | null; local_date: string; created_at?: string; updated_at?: string };
-        Update: { pipeline_id?: string; stage_id?: string; insured_name?: string | null; phone?: string | null; initial_quote?: string | null; tracking_id?: string | null; updated_at?: string };
+        Row: { id: string; tenant_id: string; lead_id: string; partner_id: string | null; affiliate_link_id: string | null; affiliate_campaign: string | null; submission_id: string | null; product_line: string; pipeline_id: string; stage_id: string; insured_name: string | null; phone: string | null; initial_quote: string | null; tracking_id: string | null; local_date: string; status: string; call_result: string | null; notes: string | null; disposition_at: string | null; disposition_by: string | null; created_at: string; updated_at: string };
+        Insert: { id?: string; tenant_id: string; lead_id: string; partner_id?: string | null; affiliate_link_id?: string | null; affiliate_campaign?: string | null; submission_id?: string | null; product_line: string; pipeline_id: string; stage_id: string; insured_name?: string | null; phone?: string | null; initial_quote?: string | null; tracking_id?: string | null; local_date: string; status?: string; call_result?: string | null; notes?: string | null; disposition_at?: string | null; disposition_by?: string | null; created_at?: string; updated_at?: string };
+        Update: { pipeline_id?: string; stage_id?: string; insured_name?: string | null; phone?: string | null; initial_quote?: string | null; tracking_id?: string | null; local_date?: string; status?: string; call_result?: string | null; notes?: string | null; disposition_at?: string | null; disposition_by?: string | null; updated_at?: string };
+        Relationships: [];
+      };
+      dispositions: {
+        Row: { id: string; tenant_id: string; disposition_key: string; label: string; counts_as_work_completed: boolean; closes_as: string; is_active: boolean; sort_order: number; created_at: string; updated_at: string };
+        Insert: { id?: string; tenant_id: string; disposition_key: string; label: string; counts_as_work_completed?: boolean; closes_as?: string; is_active?: boolean; sort_order?: number; created_at?: string; updated_at?: string };
+        Update: { label?: string; counts_as_work_completed?: boolean; closes_as?: string; is_active?: boolean; sort_order?: number; updated_at?: string };
+        Relationships: [];
+      };
+      disposition_flows: {
+        Row: { id: string; tenant_id: string; stage_id: string; name: string; is_active: boolean; root_node_id: string | null; created_at: string; updated_at: string };
+        Insert: { id?: string; tenant_id: string; stage_id: string; name: string; is_active?: boolean; root_node_id?: string | null; created_at?: string; updated_at?: string };
+        Update: { name?: string; is_active?: boolean; root_node_id?: string | null; updated_at?: string };
+        Relationships: [];
+      };
+      disposition_nodes: {
+        Row: { id: string; flow_id: string; node_key: string; label: string; prompt: string; node_type: string; field_key: string | null; note_template: string | null; next_node_id: string | null; sort_order: number; created_at: string; updated_at: string };
+        Insert: { id?: string; flow_id: string; node_key: string; label: string; prompt: string; node_type: string; field_key?: string | null; note_template?: string | null; next_node_id?: string | null; sort_order?: number; created_at?: string; updated_at?: string };
+        Update: { label?: string; prompt?: string; node_type?: string; note_template?: string | null; next_node_id?: string | null; updated_at?: string };
+        Relationships: [];
+      };
+      disposition_options: {
+        Row: { id: string; node_id: string; option_key: string; label: string; next_node_id: string | null; disposition_key: string | null; note_template: string | null; sort_order: number; created_at: string; updated_at: string };
+        Insert: { id?: string; node_id: string; option_key: string; label: string; next_node_id?: string | null; disposition_key?: string | null; note_template?: string | null; sort_order?: number; created_at?: string; updated_at?: string };
+        Update: { label?: string; next_node_id?: string | null; disposition_key?: string | null; note_template?: string | null; updated_at?: string };
+        Relationships: [];
+      };
+      disposition_walks: {
+        Row: { id: string; tenant_id: string; work_item_id: string; lead_id: string; flow_id: string; user_id: string; status: string; current_node_id: string | null; final_disposition_key: string | null; composed_note: string | null; started_at: string; completed_at: string | null; created_at: string; updated_at: string };
+        Insert: { id?: string; tenant_id: string; work_item_id: string; lead_id: string; flow_id: string; user_id: string; status?: string; current_node_id?: string | null; final_disposition_key?: string | null; composed_note?: string | null; started_at?: string; completed_at?: string | null; created_at?: string; updated_at?: string };
+        Update: { user_id?: string; status?: string; current_node_id?: string | null; final_disposition_key?: string | null; composed_note?: string | null; completed_at?: string | null; updated_at?: string };
+        Relationships: [];
+      };
+      disposition_walk_steps: {
+        Row: { id: string; walk_id: string; sequence: number; node_id: string; answer: Json; option_key: string | null; note_fragment: string; created_at: string; updated_at: string };
+        Insert: { id?: string; walk_id: string; sequence: number; node_id: string; answer?: Json; option_key?: string | null; note_fragment?: string; created_at?: string; updated_at?: string };
+        Update: { answer?: Json; option_key?: string | null; note_fragment?: string; updated_at?: string };
+        Relationships: [];
+      };
+      tenant_do_not_call: {
+        Row: { id: string; tenant_id: string; phone_digits: string; lead_id: string | null; added_by: string | null; reason: string; is_active: boolean; created_at: string; updated_at: string };
+        Insert: { id?: string; tenant_id: string; phone_digits: string; lead_id?: string | null; added_by?: string | null; reason?: string; is_active?: boolean; created_at?: string; updated_at?: string };
+        Update: { reason?: string; is_active?: boolean; updated_at?: string };
         Relationships: [];
       };
       affiliate_links: {
@@ -3119,6 +3164,10 @@ export type Database = {
         Args: { p_claim_token: string; p_phone_digits: string; p_tenant_id: string; p_version: number };
         Returns: boolean;
       };
+      is_tenant_phone_suppressed: { Args: { p_phone_digits: string; p_tenant_id: string }; Returns: boolean };
+      start_disposition_walk: { Args: { p_tenant_id: string; p_work_item_id: string; p_user_id: string }; Returns: Json };
+      record_disposition_answer: { Args: { p_answer: Json | null; p_node_id: string; p_option_key?: string | null; p_sequence: number; p_tenant_id: string; p_user_id: string; p_walk_id: string; p_work_item_id: string }; Returns: Json };
+      complete_disposition: { Args: { p_callback_subtype?: string | null; p_disposition_key: string; p_tenant_id: string; p_user_id: string; p_walk_id: string; p_work_item_id: string }; Returns: Json };
       rebuild_usage_totals: { Args: never; Returns: number };
       tenant_current_period_start: { Args: { p_tenant_id: string }; Returns: string };
       tenant_current_plan: { Args: { p_tenant_id: string }; Returns: string | null };

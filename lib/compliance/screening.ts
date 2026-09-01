@@ -224,6 +224,16 @@ export async function screenPartnerPhone(input: {
     return { allowed: false, phoneDigits: null, outcome: "invalid_phone", warning: null, resultId: null, version: SCREENING_RESULT_VERSION, checkedAt: null, cached: false, message };
   }
 
+  // The tenant's own suppression list is checked before the shared screening cache. A number
+  // that was added after a previous vendor result must warn on the very next intake.
+  const { data: tenantSuppressed, error: tenantSuppressionError } = await getSupabaseServiceClient().rpc("is_tenant_phone_suppressed", { p_tenant_id: input.tenantId, p_phone_digits: phoneDigits });
+  if (tenantSuppressionError) throw new Error(`Could not check tenant do-not-call list: ${tenantSuppressionError.message}`);
+  if (tenantSuppressed) {
+    const message = "This number is on your do-not-call list. Confirm before submitting.";
+    await writeAudit({ ...input, phoneDigits, outcome: "dnc", vendor: "tenant_suppression", rawResponse: { source: "tenant_do_not_call" }, resultId: null, cached: false });
+    return { allowed: true, phoneDigits, outcome: "dnc", warning: { code: "dnc", message }, resultId: null, version: SCREENING_RESULT_VERSION, checkedAt: new Date().toISOString(), cached: false, message };
+  }
+
   const claim = await waitForClaim(input.tenantId, phoneDigits);
   if (claim?.state === "cached" && claim.result_id) {
     const { data, error } = await getSupabaseServiceClient().from("screening_results").select("id, phone_digits, outcome, vendor, raw_response, warnings, version, checked_at, expires_at").eq("id", claim.result_id).single<ScreeningResultRow>();
