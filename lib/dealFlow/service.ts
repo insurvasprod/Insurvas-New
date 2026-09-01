@@ -1,6 +1,6 @@
 import "server-only";
 
-import { getAgentTemplateForProduct } from "@/lib/agentTemplates/service";
+import { getTenantTemplateForProduct } from "@/lib/agentTemplates/service";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { resolveRuntimeStage, partnerTypeForLead } from "@/lib/pipelines/service";
 import type { DealFlowFilterOptions, DealFlowRow, DealFlowStatus, DealFlowSummary } from "./types";
@@ -122,7 +122,9 @@ export async function createManualDeal(tenantId: string, userId: string, input: 
     if (partner.error || !partner.data) throw new Error("Choose a partner from this tenant");
   }
   const localDate = date(input.local_date, "Deal date");
-  const template = await getAgentTemplateForProduct(tenantId, userId, productLine);
+  // Deal flow consumes the tenant's already-provisioned template copy. It must not reach back
+  // into plans, subscriptions or prices as a side effect of a reporting write.
+  const template = await getTenantTemplateForProduct(tenantId, productLine);
   const pipeline = await resolveRuntimeStage(tenantId, "new", await partnerTypeForLead(tenantId, partnerId));
   const db = getSupabaseServiceClient();
   const lead = await db.from("agent_leads").insert({ tenant_id: tenantId, tenant_template_id: template.tenant_template_id, template_id: template.assignment.template_id, template_version: template.assignment.template_version, definition_version: template.assignment.definition_version, product_line: productLine, pipeline_id: pipeline.pipelineId, stage_id: pipeline.stage.id, partner_id: partnerId, values: { full_name: name, phone }, created_by: userId }).select("id").single();
