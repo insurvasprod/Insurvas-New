@@ -1585,9 +1585,21 @@ export type Database = {
         Relationships: [];
       };
       verification_sessions: {
-        Row: { id: string; tenant_id: string; work_item_id: string; lead_id: string; user_id: string; agent_role: string; status: string; started_at: string; ended_at: string | null; created_at: string; updated_at: string };
-        Insert: { id?: string; tenant_id: string; work_item_id: string; lead_id: string; user_id: string; agent_role: string; status?: string; started_at?: string; ended_at?: string | null; created_at?: string; updated_at?: string };
-        Update: { status?: string; ended_at?: string | null; updated_at?: string };
+        Row: { id: string; tenant_id: string; work_item_id: string; lead_id: string; user_id: string; agent_role: string; status: string; started_at: string; ended_at: string | null; progress_percentage: number; completed_at: string | null; last_actor_id: string | null; created_at: string; updated_at: string };
+        Insert: { id?: string; tenant_id: string; work_item_id: string; lead_id: string; user_id: string; agent_role: string; status?: string; started_at?: string; ended_at?: string | null; progress_percentage?: number; completed_at?: string | null; last_actor_id?: string | null; created_at?: string; updated_at?: string };
+        Update: { status?: string; ended_at?: string | null; progress_percentage?: number; completed_at?: string | null; last_actor_id?: string | null; updated_at?: string };
+        Relationships: [];
+      };
+      verification_fields: {
+        Row: { session_id: string; field_key: string; state: string; is_required: boolean; is_visible: boolean; old_value: Json | null; new_value: Json | null; confirmed_at: string | null; actor_id: string | null };
+        Insert: { session_id: string; field_key: string; state?: string; is_required?: boolean; is_visible?: boolean; old_value?: Json | null; new_value?: Json | null; confirmed_at?: string | null; actor_id?: string | null };
+        Update: { state?: string; is_required?: boolean; is_visible?: boolean; old_value?: Json | null; new_value?: Json | null; confirmed_at?: string | null; actor_id?: string | null };
+        Relationships: [];
+      };
+      verification_field_changes: {
+        Row: { id: string; tenant_id: string; session_id: string; lead_id: string; field_key: string; old_value: Json | null; new_value: Json | null; actor_id: string | null; created_at: string };
+        Insert: { id?: string; tenant_id: string; session_id: string; lead_id: string; field_key: string; old_value?: Json | null; new_value?: Json | null; actor_id?: string | null; created_at?: string };
+        Update: Record<string, never>;
         Relationships: [];
       };
       active_calls: {
@@ -3182,6 +3194,10 @@ export type Database = {
       };
       claim_transfer_lead: {
         Args: { p_tenant_id: string; p_work_item_id: string; p_user_id: string; p_owner_role: string };
+        Returns: Json;
+      };
+      update_verification_field: {
+        Args: { p_tenant_id: string; p_session_id: string; p_work_item_id: string; p_user_id: string; p_field_key: string; p_state: string; p_new_value: Json; p_required_keys: string[]; p_visible_keys: string[]; p_ip?: string | null; p_user_agent?: string | null };
         Returns: Json;
       };
       list_transfer_inbox: {

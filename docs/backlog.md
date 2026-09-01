@@ -1853,6 +1853,18 @@ toggle, and no browser console errors. Screenshot evidence is at
 All LA-0.6 acceptance criteria are PASS. Nothing was left unmet, deferred or unverified for this
 ticket, so nothing was added to the open backlog for LA-0.6.
 
+### 125. ✅ LA-1.11 verification panel and progress completed
+**From:** LA-1.11 · **Belongs to:** LA-1.11 · **Resolved:** 2026-09-02
+
+The agent verification panel is driven by the versioned partner form definition, counts only
+visible required fields, records corrections with old and new values, preserves progress across a
+dropped call and claimant handoff, and blocks concurrent verification. The server route resolves
+tenant and role from the session, enforces the inbound entitlement, writes audit history, and
+rejects forged, expired, unauthorized, duplicate, and hostile requests. The live migration and
+RPC privilege checks, complete acceptance verifier, mandatory repository checks, and authenticated
+desktop/mobile browser QA all passed. Nothing remains unmet, deferred or unverified for LA-1.11,
+so nothing was added to the open backlog.
+
 ---
 
 ## Related

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -26,6 +27,7 @@ export function TransferInbox({ readOnly }: { readOnly: boolean }) {
   const [screeningOutcome, setScreeningOutcome] = useState("");
   const [claimedBy, setClaimedBy] = useState("");
   const [claiming, setClaiming] = useState<string | null>(null);
+  const router = useRouter();
 
   const load = useCallback(async () => {
     const params = new URLSearchParams({ status });
@@ -53,7 +55,7 @@ export function TransferInbox({ readOnly }: { readOnly: boolean }) {
     if (response.status === 409) { toast.error(body?.error ?? "This transfer was already claimed"); void load(); return; }
     if (!response.ok) { toast.error(body?.error ?? "Could not claim this transfer"); return; }
     toast.success(body?.chatPosted === false ? "Transfer claimed; partner update could not be posted" : "Transfer claimed and call opened");
-    void load();
+    router.push(`/app/inbound/${id}/verification`);
   }
 
   if (error) return <Card><CardContent className="space-y-3 p-6"><p className="text-sm text-destructive">{error}</p><Button variant="outline" onClick={() => void load()}>Try again</Button></CardContent></Card>;
@@ -74,7 +76,7 @@ export function TransferInbox({ readOnly }: { readOnly: boolean }) {
       {data.items.length === 0 ? <p className="p-6 text-sm text-muted-foreground">No transfers match these filters.</p> : <div className="divide-y">{data.items.map((item) => <div key={item.id} className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1.6fr)_repeat(4,minmax(90px,1fr))_auto] lg:items-center">
         <div className="min-w-0"><p className="truncate font-semibold">{item.customer}</p><p className="mt-1 truncate text-xs text-muted-foreground">{item.partnerName} · {item.productLine} · {item.age === "—" ? "Age unknown" : `${item.age} years`} · {item.state}</p><div className="mt-2 flex flex-wrap gap-1.5"><Badge variant={item.screeningOutcome === "blocked" ? "destructive" : item.screeningOutcome === "warning" ? "outline" : "secondary"}>{item.screeningOutcome}</Badge>{item.duplicateWarning && <Badge variant="outline">Possible duplicate</Badge>}{item.screeningWarning && <span className="text-xs text-amber-700">{item.screeningWarning}</span>}</div></div>
         <div><p className="text-xs text-muted-foreground">Wait</p><p className="text-sm font-medium">{waitLabel(item.waitSeconds)}</p></div><div><p className="text-xs text-muted-foreground">Status</p><p className="text-sm font-medium capitalize">{item.status}</p></div><div><p className="text-xs text-muted-foreground">Claimed by</p><p className="truncate text-sm font-medium">{item.ownerName ?? "Nobody"}</p></div><div><p className="text-xs text-muted-foreground">Received</p><p className="text-sm">{new Date(item.queuedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</p></div>
-        {item.status === "unclaimed" ? <Button disabled={readOnly || claiming === item.id} onClick={() => void claim(item.id)}>{claiming === item.id ? "Connecting…" : readOnly ? "Read-only" : "Claim"}</Button> : <span className="text-xs text-muted-foreground">In progress</span>}
+        {item.status === "unclaimed" ? <Button disabled={readOnly || claiming === item.id} onClick={() => void claim(item.id)}>{claiming === item.id ? "Connecting…" : readOnly ? "Read-only" : "Claim"}</Button> : <a className="text-sm font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" href={`/app/inbound/${item.id}/verification`}>Verify</a>}
       </div>)}</div>}
     </CardContent></Card>
   </div>;

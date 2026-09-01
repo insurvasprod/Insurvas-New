@@ -183,6 +183,16 @@ function normalizeFormValues(fields: TemplateField[], form: TemplateFormDefiniti
 
 export function validateValues(fields: TemplateField[], values: unknown, form?: TemplateFormDefinition | null) { return normalizeFormValues(fields, form ?? null, values).error; }
 
+/** Validate one panel correction with the same rules used by partner intake and lead editing. */
+export function validateSingleTemplateValue(field: TemplateField, value: unknown, required = field.is_required) {
+  const result = normalizeFormValues(
+    [{ ...field, is_required: required }],
+    { sections: [{ section_key: "verification", label: "Verification", fields: [{ field_key: field.field_key, is_required: required, show_when: null }], sort_order: 0 }] },
+    { [field.field_key]: value },
+  );
+  return result.error;
+}
+
 export async function loadFormDraft(tenantId: string, userId: string, productCode: string, partnerId?: string | null) {
   let request = getSupabaseServiceClient().from("form_drafts").select("id, tenant_id, partner_id, user_id, product_code, tenant_template_id, definition_version, payload, created_at, updated_at").eq("tenant_id", tenantId).eq("user_id", userId).eq("product_code", productCode);
   request = partnerId ? request.eq("partner_id", partnerId) : request.is("partner_id", null);
