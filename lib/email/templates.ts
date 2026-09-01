@@ -15,6 +15,7 @@ export const EMAIL_TEMPLATE_KEYS = [
   "user.email_verification",
   "user.email_change_confirmation",
   "subscription.trial_ending",
+  "agent.expiry_warning",
 ] as const;
 
 export type EmailTemplateKey = (typeof EMAIL_TEMPLATE_KEYS)[number];
@@ -148,5 +149,22 @@ export function emailChangeConfirmationEmail(facts: {
       `Hi ${facts.name},\n\nThis address was given as the new sign-in email for an Insurvas account. ` +
       `Confirm it here:\n${facts.confirmUrl}\n\n` +
       `${expiry} Until you confirm, the old address keeps working and nothing changes.\n`,
+  };
+}
+
+export function appointmentExpiryWarningEmail(facts: {
+  name: string;
+  label: string;
+  days: number;
+  expiresAt: string;
+  settingsUrl: string;
+}): RenderedEmail {
+  return {
+    subject: `${facts.label} expires in ${facts.days} days`,
+    html: layout(
+      `${escapeHtml(facts.label)} needs attention`,
+      `<p>Hi ${escapeHtml(facts.name)},</p><p>Your ${escapeHtml(facts.label)} expires in ${facts.days} days, on ${escapeHtml(facts.expiresAt)}. Renew it before that date so you can keep writing business where you are appointed.</p>${button(facts.settingsUrl, "Review your appointment vault")}`,
+    ),
+    text: `Hi ${facts.name},\n\nYour ${facts.label} expires in ${facts.days} days, on ${facts.expiresAt}. Renew it before that date so you can keep writing business where you are appointed.\n\nReview your appointment vault: ${facts.settingsUrl}\n`,
   };
 }

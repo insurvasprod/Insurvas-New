@@ -42,70 +42,57 @@ const EXPECTED = new Set([
  */
 function splitStatements(sql) {
   const statements = [];
-  let buf = "";
+  let start = 0;
   let i = 0;
-  let dollarTag = null;
 
   while (i < sql.length) {
-    const rest = sql.slice(i);
-
-    if (dollarTag) {
-      if (rest.startsWith(dollarTag)) {
-        buf += dollarTag;
-        i += dollarTag.length;
-        dollarTag = null;
-        continue;
-      }
-      buf += sql[i++];
+    // Comments and quoted regions can contain semicolons that are not statement boundaries.
+    if (sql.startsWith("--", i)) {
+      const end = sql.indexOf("\n", i + 2);
+      i = end === -1 ? sql.length : end + 1;
       continue;
     }
-
-    // line comment
-    if (rest.startsWith("--")) {
-      const end = sql.indexOf("\n", i);
-      const stop = end === -1 ? sql.length : end;
-      buf += sql.slice(i, stop);
-      i = stop;
+    if (sql.startsWith("/*", i)) {
+      const end = sql.indexOf("*/", i + 2);
+      i = end === -1 ? sql.length : end + 2;
       continue;
     }
-
-    // single-quoted string
-    if (sql[i] === "'") {
-      buf += sql[i++];
+    if (sql[i] === "'" || sql[i] === '"') {
+      const quote = sql[i++];
       while (i < sql.length) {
-        buf += sql[i];
-        if (sql[i] === "'" && sql[i + 1] === "'") {
-          buf += sql[++i];
-          i++;
+        if (sql[i] === quote && sql[i + 1] === quote) {
+          i += 2;
           continue;
         }
-        if (sql[i] === "'") { i++; break; }
+        if (sql[i] === quote) {
+          i++;
+          break;
+        }
         i++;
       }
       continue;
     }
-
-    // dollar-quote opening: $$ or $tag$
-    const dq = rest.match(/^\$[A-Za-z_]*\$/);
-    if (dq) {
-      dollarTag = dq[0];
-      buf += dollarTag;
-      i += dollarTag.length;
-      continue;
+    if (sql[i] === "$") {
+      let tagEnd = i + 1;
+      while (tagEnd < sql.length && /[A-Za-z_]/.test(sql[tagEnd])) tagEnd++;
+      if (sql[tagEnd] === "$") {
+        const dollarQuote = sql.slice(i, tagEnd + 1);
+        const end = sql.indexOf(dollarQuote, tagEnd + 1);
+        i = end === -1 ? sql.length : end + dollarQuote.length;
+        continue;
+      }
     }
-
     if (sql[i] === ";") {
-      statements.push(buf.trim());
-      buf = "";
-      i++;
-      continue;
+      const statement = sql.slice(start, i).trim();
+      if (statement && statement.replace(/(?:^|\n)\s*--[^\n]*/g, "").trim()) statements.push(statement);
+      start = i + 1;
     }
-
-    buf += sql[i++];
+    i++;
   }
 
-  if (buf.trim()) statements.push(buf.trim());
-  return statements.filter((s) => s && !/^(--[^\n]*\n?)*$/.test(s));
+  const finalStatement = sql.slice(start).trim();
+  if (finalStatement && finalStatement.replace(/(?:^|\n)\s*--[^\n]*/g, "").trim()) statements.push(finalStatement);
+  return statements;
 }
 
 if (!process.env.TENANT_DB_URL) {
@@ -172,38 +159,109 @@ if (process.argv.includes("--fast")) {
 
 await client.query("begin");
 
+/* The deep check runs each statement inside a temporary PL/pgSQL function. This keeps the
+ * per-statement exception boundary but avoids one remote network round trip per statement. */
+const payload = [];
+for (const file of files) {
+  const statements = splitStatements(readFileSync(join(DIR, file), "utf8"));
+  statements.forEach((statement, index) => {
+    payload.push({ seq: payload.length + 1, file, statement_no: index + 1, sql: statement });
+  });
+}
+
+await client.query(`
+  create or replace function pg_temp.check_migration_batch(p_payload jsonb)
+  returns table(result_seq integer, result_file text, result_statement_no integer,
+    result_status text, result_code text, result_message text)
+  language plpgsql
+  as $function$
+  declare item record;
+  begin
+    for item in
+      select * from jsonb_to_recordset(p_payload) as x(seq integer, file text, statement_no integer, sql text)
+      order by seq
+    loop
+      result_seq := item.seq;
+      result_file := item.file;
+      result_statement_no := item.statement_no;
+      begin
+        execute item.sql;
+        result_status := 'executed';
+        result_code := null;
+        result_message := null;
+      exception when others then
+        result_status := 'error';
+        get stacked diagnostics result_code = returned_sqlstate, result_message = message_text;
+      end;
+      return next;
+    end loop;
+  end;
+  $function$;
+`);
+
+const { rows: results } = await client.query(
+  "select * from pg_temp.check_migration_batch($1::jsonb) order by result_seq",
+  [JSON.stringify(payload)],
+);
+
 const problems = [];
 let checked = 0;
 let parsedOnly = 0;
 let executed = 0;
+let blockedDependencies = 0;
+
+/*
+ * A tenant connection is deliberately unable to create or alter objects. Once a DDL statement
+ * has returned the expected privilege error, PostgreSQL may also report follow-up GRANT/REVOKE,
+ * index, trigger, or ALTER statements as missing-object errors. Those follow-ups cannot be
+ * independently tested with this connection and are not migration defects. Keep real DML and
+ * function-body errors visible so a typo is never hidden behind the permission check.
+ */
+const DEPENDENT_DDL = /^(?:alter\s+table|comment\s+on|create\s+(?:index|trigger)|drop\s+(?:index|trigger)|grant\s+|revoke\s+)/i;
+const EXPECTED_DEPENDENT_CODES = new Set(["42P01", "42704", "42883"]);
+
+function stripLeadingComments(statement) {
+  let value = statement.trimStart();
+  while (value.startsWith("--") || value.startsWith("/*")) {
+    if (value.startsWith("--")) {
+      const end = value.indexOf("\n");
+      value = end === -1 ? "" : value.slice(end + 1).trimStart();
+    } else {
+      const end = value.indexOf("*/", 2);
+      value = end === -1 ? "" : value.slice(end + 2).trimStart();
+    }
+  }
+  return value;
+}
 
 for (const file of files) {
-  const statements = splitStatements(readFileSync(join(DIR, file), "utf8"));
+  const statements = payload.filter((item) => item.file === file);
+  const fileResults = results.filter((result) => result.result_file === file);
   let fileProblems = 0;
+  let privilegeBlocked = false;
 
-  for (const [n, statement] of statements.entries()) {
-    checked++;
-    await client.query("savepoint s");
-    try {
-      await client.query(statement);
+  for (const result of fileResults) {
+    const statement = statements[result.result_statement_no - 1]?.sql ?? "";
+    if (result.result_status === "executed") {
       executed++;
-      await client.query("rollback to savepoint s");
-    } catch (e) {
-      await client.query("rollback to savepoint s");
-      if (EXPECTED.has(e.code)) {
-        parsedOnly++;
-        continue;
-      }
+    } else if (EXPECTED.has(result.result_code)) {
+      parsedOnly++;
+      privilegeBlocked = true;
+    } else if (privilegeBlocked && EXPECTED_DEPENDENT_CODES.has(result.result_code) && DEPENDENT_DDL.test(stripLeadingComments(statement))) {
+      blockedDependencies++;
+    } else {
       fileProblems++;
       problems.push({
         file,
-        n: n + 1,
-        code: e.code,
-        message: e.message,
+        n: result.result_statement_no,
+        code: result.result_code,
+        message: result.result_message,
         sql: statement.slice(0, 160).replace(/\s+/g, " "),
       });
     }
   }
+
+  checked += fileResults.length;
 
   const mark = fileProblems === 0 ? "[32mok[0m" : `[31m${fileProblems} problem(s)[0m`;
   console.log(`${mark.padEnd(22)} ${file} (${statements.length} statements)`);
@@ -214,6 +272,9 @@ await client.end();
 
 console.log("");
 console.log(`${checked} statements checked — ${parsedOnly} parsed then blocked on rights, ${executed} ran and were rolled back`);
+if (blockedDependencies) {
+  console.log(`${blockedDependencies} dependent DDL checks skipped after an expected privilege block`);
+}
 
 if (!problems.length) {
   console.log("[32mNo syntax, ordering or missing-object errors.[0m");

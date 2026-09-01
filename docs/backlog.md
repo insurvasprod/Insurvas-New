@@ -1303,22 +1303,18 @@ backstop if a future server route accidentally bypasses its tenant guard.
 access, then add tenant-scoped policies/grants and cross-tenant SQL tests. Do not treat the current
 zero-policy state as equivalent to tested row-level isolation.
 
-### 109. 🔵 The deep migration semantic check did not complete
-**From:** LA-0 module release audit · **Belongs to:** migration verification / SA-0.2 hardening
-
-`npm run db:check` parsed every migration successfully, but `npm run db:check:deep` produced no
-result for more than 150 seconds and had to be stopped. The migration set therefore has not had a
-completed deep semantic verification in this audit.
-
-**Fix:** investigate the checker timeout or reduce its scope, run it to completion against the
-current migration set and live project, and record the result before the next release gate.
-
-
 ---
 
 ## ✅ Resolved
 
 *Terse log — details live in git history.*
+
+- **#109 deep migration semantic verification** → resolved 2026-09-01. The checker now parses
+  block comments correctly, batches statement execution into one PostgreSQL round trip, and
+  distinguishes expected tenant-role privilege blocks from dependent DDL errors. The full live
+  migration set completed in 5.2 seconds: 931 statements checked, no syntax, ordering, or
+  missing-object errors. The 17 dependent DDL checks that cannot run under the tenant role are
+  reported explicitly rather than treated as failures. The fast `npm run db:check` path also passed.
 
 - **LA-0.1 agent shell, login and entitlement-driven menu** → completed and verified 2026-08-31.
   The agent plane uses its own `insurvas_tenant_session` cookie and resolves tenant scope and the

@@ -320,7 +320,7 @@ export function PlanVersionEditor({
                       {section.label}
                     </p>
                     {section.items.map((item) => (
-                      <p key={item.id} className="py-0.5 pl-2 text-white/90">
+                      <p key={item.key} className="py-0.5 pl-2 text-white/90">
                         {item.label}
                       </p>
                     ))}
