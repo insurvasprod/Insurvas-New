@@ -14,16 +14,18 @@ type Lead = { id: string; stage_key: string; values: Record<string, unknown>; cr
 type PageData = { template: { assignment: { template_version: number }; template: TemplateRow; latest: { version: number; name: string } | null }; leads: Lead[]; readOnly: boolean };
 
 function visible(field: TemplateFormField, values: Record<string, unknown>) {
-  if (!field.show_when) return true;
-  const value = values[field.show_when.field_key];
-  return Array.isArray(value) ? value.includes(field.show_when.equals) : String(value ?? "") === field.show_when.equals;
+  const condition = field.show_when ?? field.conditional_on;
+  if (!condition) return true;
+  const value = values[condition.field_key];
+  return Array.isArray(value) ? value.includes(condition.equals) : String(value ?? "") === condition.equals;
 }
 
 function FieldInput({ field, value, onChange }: { field: TemplateField; value: unknown; onChange: (value: unknown) => void }) {
   if (field.type === "boolean") return <select aria-label={field.label} className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm" value={value === undefined ? "" : String(value)} onChange={(event) => onChange(event.target.value === "" ? undefined : event.target.value === "true")}><option value="">Choose…</option><option value="true">Yes</option><option value="false">No</option></select>;
   if (field.type === "single_select") return <select aria-label={field.label} className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm" value={String(value ?? "")} onChange={(event) => onChange(event.target.value || undefined)}><option value="">Choose…</option>{field.options.map((option) => <option key={option} value={option}>{option}</option>)}</select>;
   if (field.type === "multi_select") return <div className="flex flex-wrap gap-2">{field.options.map((option) => { const selected = Array.isArray(value) && value.includes(option); return <label key={option} className="flex items-center gap-1 text-xs"><input type="checkbox" checked={selected} onChange={(event) => onChange([...(Array.isArray(value) ? value : []).filter((item) => item !== option), ...(event.target.checked ? [option] : [])])} />{option}</label>; })}</div>;
-  const inputType = field.type === "number" || field.type === "currency" ? "number" : field.type === "date" ? "date" : field.type === "phone" ? "tel" : "text";
+  if (field.type === "long_text") return <textarea aria-label={field.label} className="min-h-24 w-full rounded-md border bg-transparent px-3 py-2 text-sm" value={String(value ?? "")} onChange={(event) => onChange(event.target.value || undefined)} />;
+  const inputType = field.type === "number" || field.type === "currency" ? "number" : field.type === "date" ? "date" : field.type === "phone" ? "tel" : field.type === "email" ? "email" : "text";
   return <Input aria-label={field.label} type={inputType} step={field.type === "currency" ? 1 : field.type === "number" ? "any" : undefined} value={value === undefined ? "" : String(value)} onChange={(event) => { const raw = event.target.value; onChange(raw === "" ? undefined : ["number", "currency"].includes(field.type) ? Number(raw) : raw); }} />;
 }
 
@@ -31,7 +33,11 @@ function LeadForm({ template, readOnly, onCreated }: { template: TemplateRow; re
   const [values, setValues] = useState<Record<string, unknown>>({});
   const [stage, setStage] = useState(template.stages[0]?.stage_key ?? "");
   const [saving, setSaving] = useState(false);
+  const [draftStatus, setDraftStatus] = useState("Draft autosaves every 30 seconds");
   const fields = useMemo(() => new Map(template.fields.map((field) => [field.field_key, field])), [template.fields]);
+  useEffect(() => { let cancelled = false; void fetch("/api/app/leads/draft", { cache: "no-store" }).then(async (response) => ({ response, body: await response.json().catch(() => null) })).then(({ response, body }) => { if (!cancelled || !response.ok) { if (response.ok && body?.draft?.payload) { setValues(body.draft.payload); setDraftStatus("Draft resumed"); } } }).catch(() => undefined); return () => { cancelled = true; }; }, [template.definition_version]);
+  useEffect(() => { const timer = window.setInterval(() => { setDraftStatus("Saving draft…"); void fetch("/api/app/leads/draft", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ payload: values }) }).then((response) => { if (response.ok) setDraftStatus("Draft saved"); }).catch(() => setDraftStatus("Draft could not be saved; your typed data is still here")); }, 30000); return () => window.clearInterval(timer); }, [values]);
+  function updateValue(fieldKey: string, value: unknown) { setValues((current) => { const next = { ...current, [fieldKey]: value }; for (const section of template.form_definition.sections) for (const formField of section.fields) { const condition = formField.show_when ?? formField.conditional_on; if (condition && !visible(formField, next)) delete next[formField.field_key]; } return next; }); }
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     setSaving(true);
@@ -43,8 +49,8 @@ function LeadForm({ template, readOnly, onCreated }: { template: TemplateRow; re
     toast.success("Lead added to your template pipeline");
     onCreated();
   }
-  return <Card><CardHeader><CardTitle className="text-base">New {template.product_name} lead</CardTitle><p className="text-sm text-muted-foreground">Template version {template.version}. Currency values are stored as integer cents.</p></CardHeader><CardContent><form onSubmit={submit} className="space-y-5">
-    {template.form_definition.sections.map((section) => <fieldset key={section.section_key} className="space-y-3 rounded-md border p-3"><legend className="px-1 text-sm font-semibold">{section.label}</legend>{section.fields.map((formField) => { const field = fields.get(formField.field_key); if (!field || !visible(formField, values)) return null; return <div key={formField.field_key} className="space-y-1.5"><Label>{field.label}{formField.is_required && <span className="text-destructive"> *</span>}</Label><FieldInput field={field} value={values[field.field_key]} onChange={(value) => setValues((current) => ({ ...current, [field.field_key]: value }))} /></div>; })}</fieldset>)}
+  return <Card><CardHeader><CardTitle className="text-base">New {template.product_name} lead</CardTitle><p className="text-sm text-muted-foreground">Form version {template.definition_version}. Currency values are stored as integer cents. {draftStatus}</p></CardHeader><CardContent><form onSubmit={submit} className="space-y-5">
+    {template.form_definition.sections.map((section) => <fieldset key={section.section_key} className="space-y-3 rounded-md border p-3"><legend className="px-1 text-sm font-semibold">{section.label}</legend>{section.fields.map((formField) => { const field = fields.get(formField.field_key); if (!field || !visible(formField, values)) return null; return <div key={formField.field_key} className="space-y-1.5"><Label>{field.label}{(formField.is_required || field.is_required) && <span className="text-destructive"> *</span>}</Label>{field.help_text && <p className="text-xs text-muted-foreground">{field.help_text}</p>}<FieldInput field={field} value={values[field.field_key]} onChange={(value) => updateValue(field.field_key, value)} /></div>; })}</fieldset>)}
     <div className="space-y-1.5"><Label htmlFor="lead-stage">Starting stage</Label><select id="lead-stage" className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm" value={stage} onChange={(event) => setStage(event.target.value)}>{template.stages.map((item) => <option key={item.stage_key} value={item.stage_key}>{item.label}</option>)}</select></div>
     <Button type="submit" disabled={readOnly || saving}>{readOnly ? "Read-only account" : saving ? "Adding…" : "Add lead"}</Button>
   </form></CardContent></Card>;

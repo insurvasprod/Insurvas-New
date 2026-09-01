@@ -159,6 +159,13 @@ if (process.argv.includes("--fast")) {
 
 await client.query("begin");
 
+// Some tenant-scoped policies cast app.tenant_id to uuid. A connection without a
+// value can expose an empty-string cast error before the migration statement gets
+// to its intended privilege/semantic check. Use a valid, non-existent sentinel so
+// the verifier remains isolated and can distinguish migration errors from context
+// setup errors.
+await client.query("select set_config('app.tenant_id', $1, true)", ["00000000-0000-0000-0000-000000000000"]);
+
 /* The deep check runs each statement inside a temporary PL/pgSQL function. This keeps the
  * per-statement exception boundary but avoids one remote network round trip per statement. */
 const payload = [];

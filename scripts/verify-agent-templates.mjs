@@ -33,7 +33,7 @@ async function main() {
   const copyId = initial.current?.tenant_template_id;
   if (!copyId || !initial.current?.template) throw new Error("The entitled-agent fixture could not obtain a working template copy");
   const copyRows = await supabase.from("tenant_templates").select("id, template_id, template_version, tenant_id").eq("id", copyId).maybeSingle();
-  check("copy records source provenance without linking mutable child rows", copyRows.data?.tenant_id === first.tenantId && copyRows.data?.template_version === 1);
+  check("copy records source provenance without linking mutable child rows", copyRows.data?.tenant_id === first.tenantId && copyRows.data?.template_version === initial.current.template.version);
   const secondInitialResponse = await api("/api/app/templates", second.cookie); const secondInitial = await secondInitialResponse.json();
   check("a second tenant receives its own copy", secondInitialResponse.status === 200 && secondInitial.current?.tenant_template_id !== copyId);
 

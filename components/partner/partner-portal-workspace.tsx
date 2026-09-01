@@ -1,14 +1,39 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type { PartnerRole } from "@/lib/partnerAuth/roles";
+import type { TemplateField, TemplateFormField, TemplateRow } from "@/lib/templates/constants";
 
 type PartnerUser = { id: string; name: string; email: string; role: PartnerRole; status: "active" | "revoked"; accepted_at: string | null; has_password: boolean };
 type ApprovedProduct = { code: string; name: string; category: string };
+
+function fieldVisible(field: TemplateFormField, values: Record<string, unknown>) { const condition = field.show_when ?? field.conditional_on; if (!condition) return true; const value = values[condition.field_key]; return Array.isArray(value) ? value.includes(condition.equals) : String(value ?? "") === condition.equals; }
+function PartnerField({ field, value, onChange }: { field: TemplateField; value: unknown; onChange: (value: unknown) => void }) {
+  if (field.type === "boolean") return <select aria-label={field.label} className="flex h-9 w-full rounded-md border bg-transparent px-3 text-sm" value={value === undefined ? "" : String(value)} onChange={(event) => onChange(event.target.value === "" ? undefined : event.target.value === "true")}><option value="">Choose…</option><option value="true">Yes</option><option value="false">No</option></select>;
+  if (field.type === "single_select") return <select aria-label={field.label} className="flex h-9 w-full rounded-md border bg-transparent px-3 text-sm" value={String(value ?? "")} onChange={(event) => onChange(event.target.value || undefined)}><option value="">Choose…</option>{field.options.map((option) => <option key={option} value={option}>{option}</option>)}</select>;
+  if (field.type === "multi_select") return <div className="flex flex-wrap gap-3 rounded-md border p-2">{field.options.map((option) => <label className="flex items-center gap-1 text-sm" key={option}><input type="checkbox" checked={Array.isArray(value) && value.includes(option)} onChange={(event) => onChange([...(Array.isArray(value) ? value : []).filter((item) => item !== option), ...(event.target.checked ? [option] : [])])} />{option}</label>)}</div>;
+  if (field.type === "long_text") return <textarea aria-label={field.label} className="min-h-24 w-full rounded-md border bg-transparent px-3 py-2 text-sm" value={String(value ?? "")} onChange={(event) => onChange(event.target.value || undefined)} />;
+  const inputType = field.type === "number" || field.type === "currency" ? "number" : field.type === "date" ? "date" : field.type === "phone" ? "tel" : field.type === "email" ? "email" : "text";
+  return <Input aria-label={field.label} type={inputType} inputMode={field.type === "ssn" ? "numeric" : undefined} step={field.type === "currency" ? 1 : field.type === "number" ? "any" : undefined} value={value === undefined ? "" : String(value)} onChange={(event) => { const raw = event.target.value; onChange(raw === "" ? undefined : ["number", "currency"].includes(field.type) ? Number(raw) : raw); }} />;
+}
+
+function PartnerLeadForm({ productCode }: { productCode: string }) {
+  const [template, setTemplate] = useState<{ template: TemplateRow; tenant_template_id: string; assignment: { definition_version: number } } | null>(null);
+  const [values, setValues] = useState<Record<string, unknown>>({}); const [status, setStatus] = useState("Loading form…"); const [saving, setSaving] = useState(false);
+  // Product selection replaces the external form and draft state.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { let cancelled = false; setTemplate(null); setValues({}); setStatus("Loading form…"); Promise.all([fetch(`/api/partner/forms/${encodeURIComponent(productCode)}`, { cache: "no-store" }), fetch(`/api/partner/forms/${encodeURIComponent(productCode)}/draft`, { cache: "no-store" })]).then(async ([formResponse, draftResponse]) => ({ form: await formResponse.json().catch(() => null), draft: await draftResponse.json().catch(() => null), formResponse, draftResponse })).then(({ form, draft, formResponse, draftResponse }) => { if (cancelled) return; if (!formResponse.ok) { setStatus(form?.error ?? "This product form is unavailable"); return; } setTemplate(form.template); setValues(draftResponse.ok && draft?.draft?.payload ? draft.draft.payload : {}); setStatus(draftResponse.ok && draft?.draft ? "Draft resumed" : "Draft starts automatically while you type"); }).catch(() => { if (!cancelled) setStatus("Could not load this form"); }); return () => { cancelled = true; }; }, [productCode]);
+  useEffect(() => { if (!template) return; const timer = window.setInterval(() => { setSaving(true); void fetch(`/api/partner/forms/${encodeURIComponent(productCode)}/draft`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ payload: values }) }).then((response) => { if (response.ok) setStatus("Draft saved"); }).finally(() => setSaving(false)); }, 30000); return () => window.clearInterval(timer); }, [productCode, template, values]);
+  async function submit(event: FormEvent) { event.preventDefault(); setSaving(true); const response = await fetch("/api/partner/leads", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ product_code: productCode, values }) }); const body = await response.json().catch(() => null); setSaving(false); if (!response.ok) { toast.error(body?.error ?? "Could not submit lead"); return; } setValues({}); setStatus("Submitted"); toast.success("Lead submitted to the agent"); }
+  if (!template) return <p className="text-sm text-muted-foreground">{status}</p>;
+  const fields = new Map(template.template.fields.map((field) => [field.field_key, field]));
+  return <form className="space-y-5" onSubmit={submit}><div className="flex items-center justify-between gap-3"><div><p className="font-medium">{template.template.name}</p><p className="text-xs text-muted-foreground">Form version {template.assignment.definition_version} · {status}</p></div>{saving && <span className="text-xs text-muted-foreground">Saving…</span>}</div>{template.template.form_definition.sections.map((section) => <fieldset className="space-y-3 rounded-md border p-3" key={section.section_key}><legend className="px-1 text-sm font-semibold">{section.label}</legend>{section.fields.map((formField) => { const field = fields.get(formField.field_key); if (!field || !fieldVisible(formField, values)) return null; return <div className="space-y-1.5" key={formField.field_key}><Label>{field.label}{(field.is_required || formField.is_required) && <span className="text-destructive"> *</span>}</Label>{field.help_text && <p className="text-xs text-muted-foreground">{field.help_text}</p>}<PartnerField field={field} value={values[field.field_key]} onChange={(value) => setValues((current) => ({ ...current, [field.field_key]: value }))} /></div>; })}</fieldset>)}<Button type="submit" disabled={saving}>Submit lead</Button></form>;
+}
 
 export function PartnerPortalWorkspace({ role }: { role: PartnerRole }) {
   const [users, setUsers] = useState<PartnerUser[]>([]);
@@ -20,6 +45,7 @@ export function PartnerPortalWorkspace({ role }: { role: PartnerRole }) {
   const [inviteFieldError, setInviteFieldError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [approvedProducts, setApprovedProducts] = useState<ApprovedProduct[]>([]);
+  const [selectedProduct, setSelectedProduct] = useState("");
 
   async function loadUsers() {
     const response = await fetch("/api/partner/users");
@@ -34,7 +60,7 @@ export function PartnerPortalWorkspace({ role }: { role: PartnerRole }) {
       .then(({ userResponse, userBody, productResponse, productBody }) => {
         if (cancelled) return;
         if (userResponse.ok) setUsers(userBody?.users ?? []); else setError(userBody?.error ?? "Could not load users");
-        if (productResponse.ok) setApprovedProducts(productBody?.products ?? []); else setError(productBody?.error ?? "Could not load approved products");
+        if (productResponse.ok) { setApprovedProducts(productBody?.products ?? []); setSelectedProduct(productBody?.products?.[0]?.code ?? ""); } else setError(productBody?.error ?? "Could not load approved products");
         setLoading(false);
       })
       .catch(() => { if (!cancelled) { setError("Could not load users"); setLoading(false); } });
@@ -64,8 +90,7 @@ export function PartnerPortalWorkspace({ role }: { role: PartnerRole }) {
     <div className="mx-auto w-full max-w-6xl space-y-6">
       <div><p className="text-sm font-semibold uppercase tracking-wide text-[var(--color-blue)]">Partner workspace</p><h1 className="mt-1 text-2xl font-semibold tracking-tight">Lead partnership</h1><p className="mt-1 text-sm text-muted-foreground">Submit and manage partner activity from this portal.</p></div>
       {(message || error) && <div role="status" className={`rounded-lg border p-3 text-sm ${error ? "border-[var(--color-danger)]/40 text-[var(--color-danger)]" : "border-[var(--color-success)]/40 text-[var(--color-success)]"}`}>{error ?? message}</div>}
-      <Card><CardHeader><CardTitle>Lead submissions</CardTitle><CardDescription>The lead submission workspace will appear here. Your partner access is isolated from Insurvas configuration and commission data.</CardDescription></CardHeader><CardContent><div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">Submission tools are being connected to this partner portal.</div></CardContent></Card>
-      <Card><CardHeader><CardTitle>Approved products</CardTitle><CardDescription>Your product picker will only offer products currently enabled by the agent and approved for this partner.</CardDescription></CardHeader><CardContent>{approvedProducts.length > 0 ? <label className="block max-w-md space-y-1.5"><Label htmlFor="partner-product-picker">Product</Label><select id="partner-product-picker" className="flex h-9 w-full rounded-md border bg-transparent px-3 text-sm" defaultValue=""><option value="" disabled>Choose a product when submitting a lead…</option>{approvedProducts.map((product) => <option key={product.code} value={product.code}>{product.name}</option>)}</select></label> : <p className="text-sm text-muted-foreground">No products are approved for this partner yet.</p>}</CardContent></Card>
+      <Card><CardHeader><CardTitle>Lead submissions</CardTitle><CardDescription>The form is configured by the agent. Switching products clears the other product&apos;s answers.</CardDescription></CardHeader><CardContent className="space-y-5">{approvedProducts.length > 0 ? <><label className="block max-w-md space-y-1.5"><Label htmlFor="partner-product-picker">Product</Label><select id="partner-product-picker" className="flex h-9 w-full rounded-md border bg-transparent px-3 text-sm" value={selectedProduct} onChange={(event) => setSelectedProduct(event.target.value)}>{approvedProducts.map((product) => <option key={product.code} value={product.code}>{product.name}</option>)}</select></label>{selectedProduct && <PartnerLeadForm productCode={selectedProduct} />}</> : <p className="text-sm text-muted-foreground">No products are approved for this partner yet.</p>}</CardContent></Card>
       <Card>
         <CardHeader><CardTitle>Partner users</CardTitle><CardDescription>{role === "partner_admin" ? "Invite and deactivate people in your partner account." : "People with access to this partner account."}</CardDescription></CardHeader>
         <CardContent className="space-y-6">

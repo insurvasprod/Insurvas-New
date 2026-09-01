@@ -1210,6 +1210,23 @@ path (SA-3.8) or a refund. Both are already built and audit-logged.
 
 ---
 
+### 117. 🔵 LA-1.4 authenticated builder and partner browser acceptance remains unverified
+**From:** LA-1.4 · **Belongs to:** LA-1.4
+
+The live API verifier covers immutable form versions, draft persistence, concurrent autosaves,
+conditional-field rejection, hostile input, audit rows and tenant RLS. The local browser could only
+reach the unauthenticated agent login: no authorized agent or partner session was available, and no
+credentials were invented or transmitted. Therefore the real screens were not driven for the
+following acceptance evidence: draft resume after connection loss, conditional hide/show without a
+reload, CSV export/import round-trip for lead custom fields, and exact visual equality between the
+builder preview and the partner form. The unauthenticated login had no console errors and no mobile
+horizontal overflow at 390px, but that does not prove the authenticated form screens.
+
+**Fix:** sign in with a disposable authorized agent and partner account, capture the builder and
+partner screens, toggle a conditional field, interrupt and restore the network while typing, export
+and re-import a lead CSV, and compare the preview/form DOM and visuals. Remove this entry only after
+those checks pass or record any concrete defect found.
+
 ## ✅ Resolved
 
 *Terse log — details live in git history.*

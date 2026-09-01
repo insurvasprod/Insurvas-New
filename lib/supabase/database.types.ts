@@ -1334,15 +1334,15 @@ export type Database = {
         Relationships: [];
       };
       tenant_templates: {
-        Row: { id: string; tenant_id: string; template_id: string; template_version: number; product_code: string; name: string; description: string | null; applied_at: string; applied_by: string | null; created_at: string; updated_at: string };
-        Insert: { id?: string; tenant_id: string; template_id: string; template_version: number; product_code: string; name: string; description?: string | null; applied_at?: string; applied_by?: string | null; created_at?: string; updated_at?: string };
-        Update: { id?: string; tenant_id?: string; template_id?: string; template_version?: number; product_code?: string; name?: string; description?: string | null; applied_at?: string; applied_by?: string | null; created_at?: string; updated_at?: string };
+        Row: { id: string; tenant_id: string; template_id: string; template_version: number; definition_version: number; product_code: string; name: string; description: string | null; applied_at: string; applied_by: string | null; created_at: string; updated_at: string };
+        Insert: { id?: string; tenant_id: string; template_id: string; template_version: number; definition_version?: number; product_code: string; name: string; description?: string | null; applied_at?: string; applied_by?: string | null; created_at?: string; updated_at?: string };
+        Update: { id?: string; tenant_id?: string; template_id?: string; template_version?: number; definition_version?: number; product_code?: string; name?: string; description?: string | null; applied_at?: string; applied_by?: string | null; created_at?: string; updated_at?: string };
         Relationships: [];
       };
       tenant_template_fields: {
-        Row: { tenant_template_id: string; field_key: string; label: string; type: string; is_required: boolean; options: Json; sort_order: number };
-        Insert: { tenant_template_id: string; field_key: string; label: string; type: string; is_required?: boolean; options?: Json; sort_order?: number };
-        Update: { tenant_template_id?: string; field_key?: string; label?: string; type?: string; is_required?: boolean; options?: Json; sort_order?: number };
+        Row: { tenant_template_id: string; field_key: string; label: string; type: string; is_required: boolean; options: Json; sort_order: number; help_text: string | null; validation: Json };
+        Insert: { tenant_template_id: string; field_key: string; label: string; type: string; is_required?: boolean; options?: Json; sort_order?: number; help_text?: string | null; validation?: Json };
+        Update: { tenant_template_id?: string; field_key?: string; label?: string; type?: string; is_required?: boolean; options?: Json; sort_order?: number; help_text?: string | null; validation?: Json };
         Relationships: [];
       };
       tenant_template_stages: {
@@ -1355,6 +1355,18 @@ export type Database = {
         Row: { tenant_template_id: string; form_definition: Json };
         Insert: { tenant_template_id: string; form_definition: Json };
         Update: { tenant_template_id?: string; form_definition?: Json };
+        Relationships: [];
+      };
+      tenant_template_revisions: {
+        Row: { tenant_template_id: string; revision: number; name: string; description: string | null; fields: Json; stages: Json; form_definition: Json; created_by: string | null; created_at: string };
+        Insert: { tenant_template_id: string; revision: number; name: string; description?: string | null; fields: Json; stages: Json; form_definition: Json; created_by?: string | null; created_at?: string };
+        Update: { name?: string; description?: string | null; fields?: Json; stages?: Json; form_definition?: Json; created_by?: string | null };
+        Relationships: [];
+      };
+      form_drafts: {
+        Row: { id: string; tenant_id: string; partner_id: string | null; user_id: string; product_code: string; tenant_template_id: string; definition_version: number; payload: Json; created_at: string; updated_at: string; owner_key: string };
+        Insert: { id?: string; tenant_id: string; partner_id?: string | null; user_id: string; product_code: string; tenant_template_id: string; definition_version: number; payload?: Json; created_at?: string; updated_at?: string; owner_key?: string };
+        Update: { partner_id?: string | null; user_id?: string; product_code?: string; tenant_template_id?: string; definition_version?: number; payload?: Json; updated_at?: string };
         Relationships: [];
       };
       tenant_template_assignments: {
@@ -1396,6 +1408,7 @@ export type Database = {
           partner_id: string | null;
           tenant_id: string;
           tenant_template_id: string | null;
+          definition_version: number;
           template_id: string;
           template_version: number;
           product_line: string;
@@ -1410,6 +1423,7 @@ export type Database = {
           partner_id?: string | null;
           tenant_id: string;
           tenant_template_id?: string | null;
+          definition_version?: number;
           template_id: string;
           template_version: number;
           product_line: string;
@@ -1424,6 +1438,7 @@ export type Database = {
           partner_id?: string | null;
           tenant_id?: string;
           tenant_template_id?: string | null;
+          definition_version?: number;
           template_id?: string;
           template_version?: number;
           product_line?: string;
@@ -1626,6 +1641,8 @@ export type Database = {
           is_required: boolean;
           options: Json;
           sort_order: number;
+          help_text: string | null;
+          validation: Json;
         };
         Insert: {
           template_id: string;
@@ -1636,6 +1653,8 @@ export type Database = {
           is_required?: boolean;
           options?: Json;
           sort_order?: number;
+          help_text?: string | null;
+          validation?: Json;
         };
         Update: {
           template_id?: string;
@@ -1646,6 +1665,8 @@ export type Database = {
           is_required?: boolean;
           options?: Json;
           sort_order?: number;
+          help_text?: string | null;
+          validation?: Json;
         };
         Relationships: [];
       };
@@ -2924,6 +2945,10 @@ export type Database = {
       };
       admin_update_tenant_template: {
         Args: { p_tenant_template_id: string; p_tenant_id: string; p_name: string; p_description: string | null; p_fields: Json; p_stages: Json; p_form_definition: Json };
+        Returns: string;
+      };
+      save_form_draft: {
+        Args: { p_tenant_id: string; p_partner_id: string | null; p_user_id: string; p_product_code: string; p_tenant_template_id: string; p_definition_version: number; p_payload: Json };
         Returns: string;
       };
       admin_login_activity_stats: {

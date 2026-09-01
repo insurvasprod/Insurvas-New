@@ -70,7 +70,8 @@
     "verify:la0-rls": "node --env-file=.env.local scripts/verify-la0-rls.mjs",
     "verify:partners": "node --env-file=.env.local scripts/verify-partners.mjs",
     "verify:partner-users": "node --env-file=.env.local scripts/verify-partner-users.mjs",
-    "verify:partner-products": "node --env-file=.env.local scripts/verify-partner-products.mjs"
+    "verify:partner-products": "node --env-file=.env.local scripts/verify-partner-products.mjs",
+    "verify:dynamic-forms": "node --env-file=.env.local scripts/verify-dynamic-forms.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.99.0",

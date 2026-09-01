@@ -40,6 +40,7 @@ export const AGENT_API_POLICIES: AgentApiPolicy[] = [
   { sourceFile: "app/api/app/inbound/transfer/route.ts", featureKey: "inbound_transfers" },
   { sourceFile: "app/api/app/leads/[id]/route.ts", featureKey: "book_of_business" },
   { sourceFile: "app/api/app/leads/export/route.ts", featureKey: "book_of_business" },
+  { sourceFile: "app/api/app/leads/draft/route.ts", featureKey: "book_of_business" },
   { sourceFile: "app/api/app/leads/route.ts", featureKey: "book_of_business" },
   { sourceFile: "app/api/app/legal/accept/route.ts", featureKey: null },
   { sourceFile: "app/api/app/me/route.ts", featureKey: null },
