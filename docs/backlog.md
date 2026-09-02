@@ -1976,6 +1976,33 @@ verifier, deep migration check, TypeScript, lint, production build, full 283-tes
 check, and authenticated desktop/mobile browser QA all passed. Nothing was left unmet, deferred,
 or unverified for LA-1.17, so nothing was added to the open backlog.
 
+### 134. 🔵 LA-1.18 partner-quality migration is not applied to the linked Supabase project
+**From:** LA-1.18 · **Belongs to:** LA-1.18
+
+The numbered migration `20260903150000_la_1_18_partner_quality.sql` is committed in the repository,
+but the linked project is currently reachable only through the `tenant_app` database role, which has
+no DDL privilege. Supabase CLI is also not linked because no Supabase access token is configured.
+Consequently the `partner_quality_report` and `partner_quality_leads` RPCs do not exist in the live
+project, the focused verifier cannot pass the five acceptance checks, and `npm run check:features`
+correctly reports that the new menu key is not yet in the live catalog.
+
+**Fix:** run `supabase link --project-ref iiimdgizjwnihpyrukbu` with an owner-capable Supabase access
+token, then run `supabase db push --include-all`. Re-run `npm run verify:partner-quality`,
+`npm run db:check:deep`, and `npm run check:features`; do not close this entry from local build
+evidence alone.
+
+### 135. 🔵 LA-1.18 authenticated browser QA is pending the live migration
+**From:** LA-1.18 · **Belongs to:** LA-1.18
+
+The new page and route compile and are present at `/app/partner-quality`, but an authenticated
+browser acceptance run cannot be completed while the live entitlement catalog and report RPCs are
+missing. Desktop/mobile layout, sorting, date validation, cost disclaimer, zero-partner rendering,
+and the exact drill-down dialog still need to be driven in the real browser after entry 134 is fixed.
+
+**Fix:** after applying the migration, sign in with an entitled owner or producer, capture the
+finished desktop and phone views, inspect browser console logs, and verify every interactive control
+against `npm run verify:partner-quality`.
+
 ---
 
 ## Related

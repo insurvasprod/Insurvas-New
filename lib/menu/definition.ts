@@ -89,6 +89,7 @@ export const AGENT_MENU: MenuSection[] = [
     items: [
       item("Insight", { key: "insight.true-cpa", label: "True CPA", path: "/app/true-cpa", icon: "chart-no-axes-combined", required_feature: "true_cpa", required_roles: ["owner", "producer", "bookkeeper"] }),
       item("Insight", { key: "insight.persistency", label: "Persistency", path: "/app/persistency", icon: "trending-up", required_feature: "cohort_persistency", required_roles: ["owner", "producer", "bookkeeper"] }),
+      item("Insight", { key: "insight.partner-quality", label: "Partner quality", path: "/app/partner-quality", icon: "chart-no-axes-combined", required_feature: "partner_quality", required_roles: ["owner", "producer", "bookkeeper"], built: true }),
     ],
   },
   {

@@ -3550,6 +3550,18 @@ export type Database = {
         };
         Returns: Json;
       };
+      partner_quality_evidence: {
+        Args: { p_from_date: string; p_tenant_id: string; p_to_date: string };
+        Returns: { lead_id: string; partner_id: string; lead_date: string; full_name: string; phone: string | null; screening_outcome: string | null; screening_result_outcome: string | null; claimed: boolean; worked: boolean; submitted: boolean; duplicate: boolean; disposition: string | null }[];
+      };
+      partner_quality_report: {
+        Args: { p_from_date?: string | null; p_tenant_id: string; p_to_date?: string | null };
+        Returns: Json;
+      };
+      partner_quality_leads: {
+        Args: { p_disposition?: string | null; p_from_date: string; p_metric: string; p_page?: number; p_page_size?: number; p_partner_id: string; p_tenant_id: string; p_to_date: string };
+        Returns: Json;
+      };
     };
     Enums: {
       legal_doc_type: "tos" | "privacy" | "dpa";
