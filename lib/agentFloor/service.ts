@@ -2,9 +2,9 @@ import "server-only";
 
 import { audit } from "@/lib/audit/log";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
-import { agentFloorWaitThresholds } from "@/lib/settings/queries";
 import { postAgentReadyCards } from "@/lib/partnerChat/service";
 import { listDueCallbacks } from "@/lib/callbacks/service";
+import { getQueueSlaSettings } from "@/lib/queueSla/service";
 
 export type AgentAvailability = "ready" | "on_break" | "off";
 
@@ -115,13 +115,14 @@ export async function getAgentFloor(tenantId: string, currentUserId: string, cur
     ? []
     : (await import("@/lib/bufferHandoff/service").then(({ listPendingBufferHandoffs }) => listPendingBufferHandoffs(tenantId, currentUserId)));
 
+  const slaSettings = await getQueueSlaSettings(tenantId);
   return {
     waiting: inbox.items.filter((item) => item.status === "unclaimed").map(toLead),
     onCalls,
     available: members.filter((member) => member.availability !== "on_call"),
     members,
     pendingHandoffs,
-    waitThresholds: await agentFloorWaitThresholds(),
+    waitThresholds: { amberSeconds: slaSettings.warn_after_seconds, redSeconds: slaSettings.escalate_after_seconds },
     realtimeTopic: `agent-floor:${tenantId}`,
     callbacks: await listDueCallbacks(tenantId),
     generatedAt: new Date().toISOString(),

@@ -17,6 +17,7 @@ export const EMAIL_TEMPLATE_KEYS = [
   "subscription.trial_ending",
   "agent.expiry_warning",
   "callback.reminder",
+  "lead.sla_escalation",
 ] as const;
 
 export type EmailTemplateKey = (typeof EMAIL_TEMPLATE_KEYS)[number];
@@ -175,5 +176,13 @@ export function callbackReminderEmail(facts: { name: string; customerName: strin
     subject: `Callback reminder: ${facts.customerName}`,
     html: layout("Callback reminder", `<p>Hi ${escapeHtml(facts.name)},</p><p>You have a callback with <strong>${escapeHtml(facts.customerName)}</strong> at <strong>${escapeHtml(facts.customerTime)}</strong> (${escapeHtml(facts.customerTimezone)}).</p>${facts.note ? `<p>Note: ${escapeHtml(facts.note)}</p>` : ""}${button(facts.callbacksUrl, "Open callback calendar")}`),
     text: `Hi ${facts.name},\n\nYou have a callback with ${facts.customerName} at ${facts.customerTime} (${facts.customerTimezone}).${facts.note ? `\nNote: ${facts.note}` : ""}\n\nOpen callback calendar: ${facts.callbacksUrl}\n`,
+  };
+}
+
+export function slaEscalationEmail(facts: { name: string; customerName: string; partnerName: string; leadUrl: string }): RenderedEmail {
+  return {
+    subject: `Unclaimed lead needs attention: ${facts.customerName}`,
+    html: layout("Unclaimed lead needs attention", `<p>Hi ${escapeHtml(facts.name)},</p><p><strong>${escapeHtml(facts.customerName)}</strong> from ${escapeHtml(facts.partnerName)} has passed the response threshold and is still unclaimed.</p>${button(facts.leadUrl, "Open lead")}`),
+    text: `Hi ${facts.name},\n\n${facts.customerName} from ${facts.partnerName} has passed the response threshold and is still unclaimed.\n\nOpen lead: ${facts.leadUrl}\n`,
   };
 }

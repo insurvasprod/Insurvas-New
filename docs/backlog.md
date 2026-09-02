@@ -2059,6 +2059,27 @@ The live callback verifier and protected route checks pass, but the required aut
 
 **Fix:** sign in as an entitled owner, producer, or assistant in the local agent app, open `/app/callbacks` and a real disposition flow, exercise schedule, reschedule, cancel, and complete at desktop and phone widths, inspect console errors and keyboard focus, and capture the finished authenticated callback screen. Cost of leaving it open: server and database behavior is verified, but the required end-user presentation and interaction evidence remains unverified.
 
+### 141. 🔵 LA-1.23 SLA migration is not applied to the connected Supabase project
+**From:** LA-1.23 · **Belongs to:** LA-1.23
+
+The repository contains `20260903000000_la_1_23_unclaimed_sla.sql`, but the connected project does not yet expose `tenant_queue_sla_settings` or `lead_sla_events`. The focused verifier stopped at this prerequisite, so the four-rung exactly-once behavior, claim cancellation, claim-safe expiry, expired-lead read/reopen flow, runtime threshold changes, daily digest and scheduler failure reporting cannot be marked live-passed. The Supabase CLI is not installed/authenticated in this workspace and the available database role cannot apply DDL.
+
+**Fix:** apply the numbered migration to project `iiimdgizjwnihpyrukbu` with an owner-capable Supabase migration path, then run `npm run verify:unclaimed-sla`, `npm run db:check:deep`, the protected API failure-path checks, and the full required verification commands. Do not close this item from local build evidence alone.
+
+### 142. 🔵 LA-1.23 authenticated SLA settings and expired-lead browser QA is pending
+**From:** LA-1.23 · **Belongs to:** LA-1.23
+
+The real in-app browser had no usable authorized agent tab; the available binding referred to a stale/unknown tab. Therefore the owner settings form, validation message, save confirmation, expired-lead read screen, Reopen in queue control, desktop/mobile layout, visible focus, and clean console were not driven. The server route and production build are not substitutes for this required front-end evidence.
+
+**Fix:** after applying the migration, open a working local app tab, sign in as an entitled agent owner, exercise `/app/settings` and a real expired lead at desktop and phone widths, inspect the console and keyboard focus, and capture the finished screen. Remove this item only after that authenticated run is clean.
+
+### 143. 🟡 LA-1.23 failure alerts still depend on SA-6.1
+**From:** LA-1.23 · **Belongs to:** SA-6.1
+
+The scheduler returns a failure report and HTTP 503 when an outbox side effect fails, and it retains the error for retry. A platform alert delivery mechanism owned by SA-6.1 is not present in the current repository, so the acceptance requirement that job failures alert through that system is not testable as an external alert in LA-1.23.
+
+**Fix:** SA-6.1 should consume the scheduler failure signal and deliver the platform alert. Then add a live failure-injection check proving one alert is emitted without duplicating the SLA event.
+
 ---
 
 ## Related
