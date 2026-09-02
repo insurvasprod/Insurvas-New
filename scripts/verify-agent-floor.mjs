@@ -81,6 +81,7 @@ async function main() {
     const expiredResponse = await api("/api/app/agent-floor", expired); check("expired session fails closed", expiredResponse.status === 401);
     const crossTenant = await api("/api/app/agent-floor", other); const crossBody = await crossTenant.json(); check("another tenant cannot see this floor", crossTenant.status === 200 && crossBody.waiting?.length === 0);
     const hostile = await api("/api/app/agent-floor", owner, { method: "POST", ...json({ action: "nudge", work_item_id: queueId, message: "x".repeat(241) }) }); check("hostile oversized free text is rejected", hostile.status === 400);
+    const missingTransfer = await api("/api/app/agent-floor", owner, { method: "POST", ...json({ action: "nudge", work_item_id: randomUUID(), message: "Please pick up this transfer." }) }); check("missing transfer dependency fails closed", missingTransfer.status === 409);
 
     const key = randomUUID();
     const [nudgeA, nudgeB] = await Promise.all([api("/api/app/agent-floor", owner, { method: "POST", ...json({ action: "nudge", work_item_id: queueId, idempotency_key: key, message: "Please take this call." }) }), api("/api/app/agent-floor", owner, { method: "POST", ...json({ action: "nudge", work_item_id: queueId, idempotency_key: key, message: "Please take this call." }) })]);
