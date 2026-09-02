@@ -27,7 +27,7 @@ export async function fetchPlanLimits(planId: string): Promise<PlanLimits | null
   const supabase = getSupabaseServiceClient();
   const { data } = await supabase
     .from("plan_limits")
-    .select("max_seats, max_carriers")
+    .select("max_seats, max_carriers, max_publishers, max_marketing_partners, max_affiliates, max_buffer_seats, max_partner_users")
     .eq("plan_id", planId)
     .maybeSingle<PlanLimits>();
   return data ?? null;

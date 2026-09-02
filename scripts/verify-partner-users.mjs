@@ -65,7 +65,7 @@ async function main() {
   if (users.error) throw new Error(users.error.message);
   const membership = await db.from("tenant_users").insert({ tenant_id: tenantId, user_id: ownerId, role: "owner" });
   if (membership.error) throw new Error(membership.error.message);
-  const entitlement = await db.from("tenant_entitlements").insert({ tenant_id: tenantId, entitlement: { tenant_id: tenantId, plan_code: "qa", plan_version: 1, status: "active", access: "full", computed_at: new Date().toISOString(), features: ["publisher_records"], meters: {}, limits: { max_partners: 10 } } });
+  const entitlement = await db.from("tenant_entitlements").insert({ tenant_id: tenantId, entitlement: { tenant_id: tenantId, plan_code: "qa", plan_version: 1, status: "active", access: "full", computed_at: new Date().toISOString(), features: ["publisher_records"], meters: {}, limits: { max_publishers: 10, max_marketing_partners: 10, max_affiliates: 10, max_buffer_seats: null, max_partner_users: 10 } } });
   if (entitlement.error) throw new Error(entitlement.error.message);
   const partners = await db.from("partners").insert([
     { id: partnerId, tenant_id: tenantId, name: "QA Partner A", partner_type: "publisher", status: "active", country: "US", timezone: "America/Phoenix", created_by: ownerId },

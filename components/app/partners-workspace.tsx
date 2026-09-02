@@ -11,9 +11,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AffiliateLinksPanel } from "@/components/app/affiliate-links-panel";
 import { PARTNER_PAYOUT_MODEL_LABELS, PARTNER_PAYOUT_MODELS, PARTNER_STATUS_LABELS, PARTNER_TYPE_LABELS, PARTNER_TYPES, type PartnerPayoutModel, type PartnerStatus, type PartnerType } from "@/lib/partners/constants";
+import { capacityLabel, PARTNER_LIMIT_KEYS } from "@/lib/partners/limits";
 
 type Term = { id: string; partner_id: string; payout_model: PartnerPayoutModel; rate_cents: number | null; rate_pct_bp: number | null; effective_from: string; created_at: string };
 type Partner = { id: string; name: string; partner_type: PartnerType; status: PartnerStatus; country: string; contact_name: string | null; contact_email: string | null; timezone: string; notes: string | null; terms: Term[]; active_term: Term | null; lead_volume_this_month: number; last_submission: string | null; active_user_count: number };
+type CapacityLimits = { max_publishers: number | null; max_marketing_partners: number | null; max_affiliates: number | null; max_buffer_seats: number | null; max_partner_users: number | null };
+type CapacityUsage = { publishers: number; marketing: number; affiliates: number; partnerUsers: number };
 type Product = { code: string; name: string; category: string; is_enabled: boolean; sort_order: number };
 type PartnerProduct = Product & { approved: boolean };
 type PartnerDraft = { name: string; partner_type: PartnerType; country: string; contact_name: string; contact_email: string; timezone: string; notes: string };
@@ -35,6 +38,8 @@ export function PartnersWorkspace({ readOnly, canManageProductConfig = false }: 
   const [termDate, setTermDate] = useState(today);
   const [products, setProducts] = useState<Product[]>([]);
   const [partnerProducts, setPartnerProducts] = useState<Record<string, PartnerProduct[]>>({});
+  const [limits, setLimits] = useState<CapacityLimits>({ max_publishers: null, max_marketing_partners: null, max_affiliates: null, max_buffer_seats: null, max_partner_users: null });
+  const [usage, setUsage] = useState<CapacityUsage>({ publishers: 0, marketing: 0, affiliates: 0, partnerUsers: 0 });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -47,6 +52,8 @@ export function PartnersWorkspace({ readOnly, canManageProductConfig = false }: 
     if (!response.ok) { toast.error(body?.error ?? "Could not load partners"); return; }
     const loadedPartners = body.partners ?? [];
     setPartners(loadedPartners);
+    setLimits({ max_publishers: body.limits?.max_publishers ?? null, max_marketing_partners: body.limits?.max_marketing_partners ?? null, max_affiliates: body.limits?.max_affiliates ?? null, max_buffer_seats: body.limits?.max_buffer_seats ?? null, max_partner_users: body.limits?.max_partner_users ?? null });
+    setUsage(body.usage ?? { publishers: 0, marketing: 0, affiliates: 0, partnerUsers: 0 });
     if (canManageProductConfig && productResponse) {
       const productBody = await productResponse.json().catch(() => null);
       if (productResponse.ok) setProducts(productBody.products ?? []);
@@ -105,12 +112,19 @@ export function PartnersWorkspace({ readOnly, canManageProductConfig = false }: 
 
   if (loading) return <Card><CardContent className="py-8 text-sm text-muted-foreground">Loading partner records…</CardContent></Card>;
 
+  const selectedLimitKey = PARTNER_LIMIT_KEYS[draft.partner_type];
+  const selectedUsage = usage[draft.partner_type === "publisher" ? "publishers" : draft.partner_type === "marketing" ? "marketing" : "affiliates"];
+  const selectedLimit = limits[selectedLimitKey];
+  const createAtLimit = !editing && selectedLimit != null && selectedUsage >= selectedLimit;
+
   return <div className="mx-auto max-w-7xl space-y-6">
     {readOnly && <div className="rounded-lg border border-[var(--color-warning)]/30 bg-[var(--color-warning)]/10 px-4 py-3 text-sm text-foreground">Your account is read-only. You can review partner records, but changes are unavailable until billing is restored.</div>}
     <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
       <div><p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Partners</p><h1 className="text-2xl font-extrabold tracking-tight">Partner records</h1><p className="mt-1 max-w-2xl text-sm text-muted-foreground">One record for every publisher, marketing company and affiliate. Pause intake without losing the history behind it.</p></div>
       <span className="text-sm text-muted-foreground">{partners.length} record{partners.length === 1 ? "" : "s"}</span>
     </div>
+
+    <Card><CardHeader><CardTitle>Plan capacity</CardTitle><p className="text-sm text-muted-foreground">Only active records consume a slot. Pausing a partner frees it immediately.</p></CardHeader><CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><p className="rounded-md border p-3 text-sm">{capacityLabel(usage.publishers, limits.max_publishers, "publishers")}</p><p className="rounded-md border p-3 text-sm">{capacityLabel(usage.marketing, limits.max_marketing_partners, "marketing partners")}</p><p className="rounded-md border p-3 text-sm">{capacityLabel(usage.affiliates, limits.max_affiliates, "affiliates")}</p><p className="rounded-md border p-3 text-sm">{capacityLabel(usage.partnerUsers, limits.max_partner_users, "partner users")}</p></CardContent></Card>
 
     {canManageProductConfig && <Card><CardHeader><CardTitle>Products Ray sells</CardTitle><p className="text-sm text-muted-foreground">Enable products here first, then approve the subset each partner may submit. Changes take effect on the next product-picker request.</p></CardHeader><CardContent className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{products.map((product) => <label key={product.code} className="flex items-start gap-3 rounded-lg border p-3"><input type="checkbox" className="mt-1 size-4" checked={product.is_enabled} disabled={readOnly || busy !== null} onChange={() => void toggleTenantProduct(product)} /><span><span className="block text-sm font-medium">{product.name}</span><span className="block text-xs text-muted-foreground">{product.category} · {product.code}</span></span></label>)}</CardContent></Card>}
 
@@ -122,7 +136,7 @@ export function PartnersWorkspace({ readOnly, canManageProductConfig = false }: 
       <div className="space-y-1.5"><Label htmlFor="partner-email">Contact email</Label><Input id="partner-email" type="email" value={draft.contact_email} onChange={(event) => setDraft({ ...draft, contact_email: event.target.value })} placeholder="ops@example.com" /></div>
       <div className="space-y-1.5"><Label htmlFor="partner-timezone">Timezone</Label><Input id="partner-timezone" value={draft.timezone} onChange={(event) => setDraft({ ...draft, timezone: event.target.value })} placeholder="America/Phoenix" required maxLength={100} /></div>
       <div className="space-y-1.5 md:col-span-2 xl:col-span-4"><Label htmlFor="partner-notes">Notes</Label><textarea id="partner-notes" className="min-h-20 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring" value={draft.notes} onChange={(event) => setDraft({ ...draft, notes: event.target.value })} maxLength={5000} /></div>
-      <div className="flex gap-2 md:col-span-2 xl:col-span-4"><Button type="submit" disabled={busy !== null}>{busy ? "Saving…" : editing ? "Save partner" : "Create partner"}</Button>{editing && <Button type="button" variant="outline" onClick={() => { setEditing(null); setDraft(emptyDraft); }}>Cancel</Button>}</div>
+      {createAtLimit && <p className="text-sm text-destructive md:col-span-2 xl:col-span-4" role="alert">Your plan has reached <code>{selectedLimitKey}</code> ({selectedUsage} of {selectedLimit}). Upgrade to add another partner.</p>}<div className="flex gap-2 md:col-span-2 xl:col-span-4"><Button type="submit" disabled={busy !== null || createAtLimit}>{busy ? "Saving…" : editing ? "Save partner" : "Create partner"}</Button>{editing && <Button type="button" variant="outline" onClick={() => { setEditing(null); setDraft(emptyDraft); }}>Cancel</Button>}</div>
     </form></CardContent></Card>}
 
     {partners.length === 0 ? <Card><CardContent className="py-10 text-center"><p className="font-medium">No partner records yet</p><p className="mt-1 text-sm text-muted-foreground">Add the publishers, marketing companies and affiliates that supply your leads.</p></CardContent></Card> : <div className="grid gap-4 xl:grid-cols-2">{partners.map((partner) => <Card key={partner.id} className={partner.status === "offboarded" ? "opacity-75" : undefined}><CardHeader className="flex flex-row items-start justify-between gap-3"><div><CardTitle className="text-lg">{partner.name}</CardTitle><p className="mt-1 text-sm text-muted-foreground">{PARTNER_TYPE_LABELS[partner.partner_type]} · {partner.country} · {partner.timezone}</p></div><Badge variant={partner.status === "active" ? "default" : partner.status === "offboarded" ? "outline" : "secondary"}>{PARTNER_STATUS_LABELS[partner.status]}</Badge></CardHeader><CardContent className="space-y-4">

@@ -2003,6 +2003,19 @@ and the exact drill-down dialog still need to be driven in the real browser afte
 finished desktop and phone views, inspect browser console logs, and verify every interactive control
 against `npm run verify:partner-quality`.
 
+### 136. 🔵 LA-1.19 authenticated browser QA is pending an authorized agent session
+**From:** LA-1.19 · **Belongs to:** LA-1.19
+
+The live API and database checks for subscription limits pass, but the required real-browser
+acceptance could not be completed because the available in-app tabs were stale connection-error
+pages and no authorized agent session was present. The implementation still needs a signed-in
+agent owner to open the partner and team screens, confirm capacity usage text, disabled create or
+invite controls, specific upgrade messaging, visible focus, responsive layout, and a clean console.
+
+**Fix:** open a working local app tab, sign in as an entitled agent owner, drive `/app/publishers`
+and `/app/settings` at desktop and phone widths, capture the finished screens, and close this
+entry only after the browser console and interactive controls are clean.
+
 ---
 
 ## Related

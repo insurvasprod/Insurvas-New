@@ -2,6 +2,7 @@ import "server-only";
 
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import type { PartnerRole } from "@/lib/partnerAuth/roles";
+import type { Entitlement } from "@/lib/entitlements/types";
 
 export type PartnerUser = {
   id: string;
@@ -56,8 +57,9 @@ export async function invitePartnerUser(params: {
   role: PartnerRole;
   tokenHash: string;
   expiresAt: string;
+  maxPartnerUsers?: Entitlement["limits"]["max_partner_users"];
 }): Promise<{ user_id: string; tenant_id: string; partner_id: string; name: string; email: string; role: PartnerRole; invited_at: string }> {
-  const { data, error } = await getSupabaseServiceClient().rpc("partner_invite_user", {
+  const { data, error } = await getSupabaseServiceClient().rpc("partner_invite_user_with_limit", {
     p_tenant_id: params.tenantId,
     p_partner_id: params.partnerId,
     p_name: params.name,
@@ -65,6 +67,7 @@ export async function invitePartnerUser(params: {
     p_role: params.role,
     p_token_hash: params.tokenHash,
     p_expires_at: params.expiresAt,
+    p_max_partner_users: params.maxPartnerUsers ?? null,
   });
   const result = one(data as unknown as { user_id: string; tenant_id: string; partner_id: string; name: string; email: string; role: PartnerRole; invited_at: string }[] | { user_id: string; tenant_id: string; partner_id: string; name: string; email: string; role: PartnerRole; invited_at: string } | null);
   if (error || !result) throw new Error(error?.message ?? "Could not invite partner user");
@@ -84,12 +87,13 @@ export async function resendPartnerInvite(params: { tenantId: string; partnerId:
   return result;
 }
 
-export async function setPartnerUserStatus(params: { tenantId: string; partnerId: string; userId: string; status: "active" | "revoked" }): Promise<{ old_status: "active" | "revoked"; new_status: "active" | "revoked" }> {
-  const { data, error } = await getSupabaseServiceClient().rpc("partner_set_user_status", {
+export async function setPartnerUserStatus(params: { tenantId: string; partnerId: string; userId: string; status: "active" | "revoked"; maxPartnerUsers?: number | null }): Promise<{ old_status: "active" | "revoked"; new_status: "active" | "revoked" }> {
+  const { data, error } = await getSupabaseServiceClient().rpc("partner_set_user_status_with_limit", {
     p_tenant_id: params.tenantId,
     p_partner_id: params.partnerId,
     p_user_id: params.userId,
     p_status: params.status,
+    p_max_partner_users: params.maxPartnerUsers ?? null,
   });
   const result = one(data as unknown as { old_status: "active" | "revoked"; new_status: "active" | "revoked" }[] | { old_status: "active" | "revoked"; new_status: "active" | "revoked" } | null);
   if (error || !result) throw new Error(error?.message ?? "Could not change partner user status");

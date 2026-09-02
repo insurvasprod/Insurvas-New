@@ -38,6 +38,7 @@ export default async function PlanVersionEditPage({ params }: { params: Promise<
         groups={data.groups}
         initialGranted={data.grantedKeys}
         initialPrices={data.prices}
+        initialLimits={data.limits}
         subscriberCount={data.subscriberCount}
       />
     </div>

@@ -34,7 +34,8 @@ export async function POST(request: NextRequest) {
   const token = generateInviteToken();
   const expiresAt = await inviteExpiryFromNow();
   const supabase = getSupabaseServiceClient();
-  const { data, error } = await supabase.rpc("tenant_invite_user", {
+  const entitlement = await getEntitlement(auth.context.tenantId);
+  const { data, error } = await supabase.rpc("tenant_invite_user_with_limit", {
     p_name: name,
     p_email: email,
     p_role: role,
@@ -42,9 +43,12 @@ export async function POST(request: NextRequest) {
     p_token_hash: hashInviteToken(token),
     p_expires_at: expiresAt.toISOString(),
     p_created_by: auth.context.userId,
+    p_max_buffer_seats: entitlement.limits.max_buffer_seats,
   });
 
   if (error) {
+    const limit = error.message?.match(/max_buffer_seats:(\d+):(\d+)/);
+    if (limit) return NextResponse.json({ error: `Your plan has reached max_buffer_seats (${limit[1]} of ${limit[2]}). Upgrade to invite another buffer agent.`, code: "limit_reached", limitKey: "max_buffer_seats", usage: Number(limit[1]), limit: Number(limit[2]), upgrade: true }, { status: 403 });
     if (error.code === "23505") return NextResponse.json({ error: "This email is already registered" }, { status: 409 });
     return NextResponse.json({ error: "Could not invite this teammate" }, { status: 500 });
   }

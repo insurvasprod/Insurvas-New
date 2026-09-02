@@ -1,6 +1,7 @@
 import "server-only";
 
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
+import type { Entitlement } from "@/lib/entitlements/types";
 import type { PartnerPayoutModel, PartnerStatus, PartnerType } from "./constants";
 
 export type PartnerRow = {
@@ -74,21 +75,33 @@ export async function listPartners(tenantId: string): Promise<PartnerRow[]> {
   });
 }
 
-export async function createPartner(tenantId: string, userId: string, input: PartnerInput, maxPartners: number | null | undefined) {
+export async function createPartner(tenantId: string, userId: string, input: PartnerInput, limits: Entitlement["limits"]) {
   const { data, error } = await getSupabaseServiceClient().rpc("create_partner", {
     p_tenant_id: tenantId, p_name: input.name, p_partner_type: input.partner_type, p_country: input.country,
     p_contact_name: input.contact_name ?? "", p_contact_email: input.contact_email ?? "", p_timezone: input.timezone,
-    p_notes: input.notes ?? "", p_created_by: userId, p_max_partners: maxPartners ?? null,
+    p_notes: input.notes ?? "", p_created_by: userId, p_max_partners: limits.max_partners ?? null,
   }).single();
   if (error || !data) throw new Error(error?.message ?? "Could not create partner");
   return data as unknown as PartnerRow;
 }
 
-export async function updatePartner(tenantId: string, partnerId: string, input: PartnerInput) {
-  const { data, error } = await getSupabaseServiceClient().rpc("update_partner", {
+export async function createPartnerWithLimits(tenantId: string, userId: string, input: PartnerInput, limits: Entitlement["limits"]) {
+  const { data, error } = await getSupabaseServiceClient().rpc("create_partner_with_limits", {
+    p_tenant_id: tenantId, p_name: input.name, p_partner_type: input.partner_type, p_country: input.country,
+    p_contact_name: input.contact_name ?? "", p_contact_email: input.contact_email ?? "", p_timezone: input.timezone,
+    p_notes: input.notes ?? "", p_created_by: userId, p_max_publishers: limits.max_publishers,
+    p_max_marketing_partners: limits.max_marketing_partners, p_max_affiliates: limits.max_affiliates,
+  }).single();
+  if (error || !data) throw new Error(error?.message ?? "Could not create partner");
+  return data as unknown as PartnerRow;
+}
+
+export async function updatePartner(tenantId: string, partnerId: string, input: PartnerInput, limits: Entitlement["limits"]) {
+  const { data, error } = await getSupabaseServiceClient().rpc("update_partner_with_limits", {
     p_tenant_id: tenantId, p_partner_id: partnerId, p_name: input.name, p_partner_type: input.partner_type,
     p_country: input.country, p_contact_name: input.contact_name ?? "", p_contact_email: input.contact_email ?? "",
     p_timezone: input.timezone, p_notes: input.notes ?? "",
+    p_max_publishers: limits.max_publishers, p_max_marketing_partners: limits.max_marketing_partners, p_max_affiliates: limits.max_affiliates,
   }).single();
   if (error || !data) throw new Error(error?.message ?? "Could not update partner");
   return data as unknown as PartnerRow;
@@ -104,9 +117,10 @@ export async function addPartnerTerm(tenantId: string, partnerId: string, userId
   return data as unknown as PartnerTermRow;
 }
 
-export async function transitionPartner(tenantId: string, partnerId: string, nextStatus: PartnerStatus, confirmation?: string) {
-  const { data, error } = await getSupabaseServiceClient().rpc("transition_partner", {
+export async function transitionPartner(tenantId: string, partnerId: string, nextStatus: PartnerStatus, confirmation: string | undefined, limits: Entitlement["limits"]) {
+  const { data, error } = await getSupabaseServiceClient().rpc("transition_partner_with_limits", {
     p_tenant_id: tenantId, p_partner_id: partnerId, p_next_status: nextStatus, p_confirmation: confirmation ?? null,
+    p_max_publishers: limits.max_publishers, p_max_marketing_partners: limits.max_marketing_partners, p_max_affiliates: limits.max_affiliates, p_max_partner_users: limits.max_partner_users,
   }).single();
   if (error || !data) throw new Error(error?.message ?? "Could not change partner status");
   return data as unknown as PartnerRow;

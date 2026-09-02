@@ -41,7 +41,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const token = generateInviteToken();
   const expiresAt = await inviteExpiryFromNow();
   try {
-    const result = await invitePartnerUser({ tenantId: auth.context.tenantId, partnerId, ...parsed.data, tokenHash: hashInviteToken(token), expiresAt: expiresAt.toISOString() });
+    const result = await invitePartnerUser({ tenantId: auth.context.tenantId, partnerId, ...parsed.data, tokenHash: hashInviteToken(token), expiresAt: expiresAt.toISOString(), maxPartnerUsers: auth.entitlement.limits.max_partner_users });
     const origin = process.env.NEXT_PUBLIC_PARTNER_APP_URL || process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
     const inviteUrl = buildPartnerInviteUrl(token, origin);
     const { delivered } = await sendInvitationEmail({ to: result.email, name: result.name, inviteUrl, expiresAt, userId: result.user_id, tenantId: result.tenant_id });
@@ -51,6 +51,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const message = error instanceof Error ? error.message : "Could not invite partner user";
     if (message.includes("partner_user_email_exists") || message.includes("duplicate key")) return NextResponse.json({ error: "This email is already registered" }, { status: 409 });
     if (message.includes("partner_not_found")) return NextResponse.json({ error: "Partner not found" }, { status: 404 });
+    const limit = message.match(/max_partner_users:(\d+):(\d+)/);
+    if (limit) return NextResponse.json({ error: `Your plan has reached max_partner_users (${limit[1]} of ${limit[2]}). Upgrade to invite another partner user.`, code: "limit_reached", limitKey: "max_partner_users", usage: Number(limit[1]), limit: Number(limit[2]), upgrade: true }, { status: 403 });
     return NextResponse.json({ error: "Could not invite partner user" }, { status: 500 });
   }
 }

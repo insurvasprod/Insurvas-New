@@ -5,6 +5,7 @@ import { updateTeamRoleSchema } from "@/lib/tenantTeam/schemas";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { audit } from "@/lib/audit/log";
 import { z } from "zod";
+import { getEntitlement } from "@/lib/entitlements/get";
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ userId: string }> }) {
   const auth = await requireTenant(["owner"]);
@@ -19,13 +20,17 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Choose a valid role" }, { status: 400 });
   }
 
-  const { data, error } = await getSupabaseServiceClient().rpc("tenant_update_member_role", {
+  const entitlement = await getEntitlement(auth.context.tenantId);
+  const { data, error } = await getSupabaseServiceClient().rpc("tenant_update_member_role_with_limit", {
     p_tenant_id: auth.context.tenantId,
     p_user_id: userId,
     p_role: parsed.data.role,
+    p_max_buffer_seats: entitlement.limits.max_buffer_seats,
   });
 
   if (error) {
+    const limit = error.message?.match(/max_buffer_seats:(\d+):(\d+)/);
+    if (limit) return NextResponse.json({ error: `Your plan has reached max_buffer_seats (${limit[1]} of ${limit[2]}). Upgrade to add another buffer agent.`, code: "limit_reached", limitKey: "max_buffer_seats", usage: Number(limit[1]), limit: Number(limit[2]), upgrade: true }, { status: 403 });
     if (error.message?.includes("last_owner")) {
       return NextResponse.json({ error: "This is the tenant's only owner. Promote another owner before changing this role.", code: "last_owner" }, { status: 409 });
     }

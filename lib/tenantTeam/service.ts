@@ -17,6 +17,7 @@ export type TeamMember = {
 export type TeamSnapshot = {
   members: TeamMember[];
   seats: { used: number; max: number | null; byRole: Record<TenantRole, number> };
+  bufferSeats: { used: number; max: number | null };
 };
 
 export async function getTeamSnapshot(tenantId: string, entitlement: Entitlement): Promise<TeamSnapshot> {
@@ -45,5 +46,6 @@ export async function getTeamSnapshot(tenantId: string, entitlement: Entitlement
     return [{ id: user.id, name: user.name, email: user.email, status: user.status, role, invitedAt: membership.invited_at, acceptedAt: membership.accepted_at }];
   });
 
-  return { members, seats: { used: members.length, max: entitlement.limits.max_seats, byRole } };
+  const activeBufferSeats = members.filter((member) => member.role === "assistant" && (member.status === "active" || member.status === "suspended")).length;
+  return { members, seats: { used: members.length, max: entitlement.limits.max_seats, byRole }, bufferSeats: { used: activeBufferSeats, max: entitlement.limits.max_buffer_seats } };
 }

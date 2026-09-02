@@ -2132,9 +2132,9 @@ export type Database = {
         Relationships: [];
       };
       plan_limits: {
-        Row: { max_carriers: number | null; max_seats: number | null; plan_id: string };
-        Insert: { max_carriers?: number | null; max_seats?: number | null; plan_id: string };
-        Update: { max_carriers?: number | null; max_seats?: number | null; plan_id?: string };
+        Row: { max_affiliates: number | null; max_buffer_seats: number | null; max_carriers: number | null; max_marketing_partners: number | null; max_partner_users: number | null; max_publishers: number | null; max_seats: number | null; plan_id: string };
+        Insert: { max_affiliates?: number | null; max_buffer_seats?: number | null; max_carriers?: number | null; max_marketing_partners?: number | null; max_partner_users?: number | null; max_publishers?: number | null; max_seats?: number | null; plan_id: string };
+        Update: { max_affiliates?: number | null; max_buffer_seats?: number | null; max_carriers?: number | null; max_marketing_partners?: number | null; max_partner_users?: number | null; max_publishers?: number | null; max_seats?: number | null; plan_id?: string };
         Relationships: [];
       };
       usage_events: {
@@ -2821,6 +2821,10 @@ export type Database = {
         };
         Returns: { tenant_id: string; user_id: string }[];
       };
+      tenant_invite_user_with_limit: {
+        Args: { p_created_by: string; p_email: string; p_expires_at: string; p_max_buffer_seats?: number | null; p_name: string; p_role: Database["public"]["Enums"]["tenant_user_role"]; p_tenant_id: string; p_token_hash: string };
+        Returns: { tenant_id: string; user_id: string }[];
+      };
       tenant_update_member_role: {
         Args: {
           p_role: Database["public"]["Enums"]["tenant_user_role"];
@@ -2831,6 +2835,10 @@ export type Database = {
           new_role: Database["public"]["Enums"]["tenant_user_role"];
           old_role: Database["public"]["Enums"]["tenant_user_role"];
         }[];
+      };
+      tenant_update_member_role_with_limit: {
+        Args: { p_max_buffer_seats?: number | null; p_role: Database["public"]["Enums"]["tenant_user_role"]; p_tenant_id: string; p_user_id: string };
+        Returns: { new_role: Database["public"]["Enums"]["tenant_user_role"]; old_role: Database["public"]["Enums"]["tenant_user_role"] }[];
       };
       consume_user_email_change_token: {
         Args: { p_token_hash: string };
@@ -2856,12 +2864,20 @@ export type Database = {
         Args: { p_email: string; p_expires_at: string; p_name: string; p_partner_id: string; p_role: Database["public"]["Enums"]["partner_user_role"]; p_tenant_id: string; p_token_hash: string };
         Returns: { accepted_at: string | null; email: string; invited_at: string; name: string; partner_id: string; role: Database["public"]["Enums"]["partner_user_role"]; tenant_id: string; user_id: string }[];
       };
+      partner_invite_user_with_limit: {
+        Args: { p_email: string; p_expires_at: string; p_max_partner_users?: number | null; p_name: string; p_partner_id: string; p_role: Database["public"]["Enums"]["partner_user_role"]; p_tenant_id: string; p_token_hash: string };
+        Returns: { accepted_at: string | null; email: string; invited_at: string; name: string; partner_id: string; role: Database["public"]["Enums"]["partner_user_role"]; tenant_id: string; user_id: string }[];
+      };
       partner_resend_invite: {
         Args: { p_expires_at: string; p_partner_id: string; p_tenant_id: string; p_token_hash: string; p_user_id: string };
         Returns: { email: string; name: string; user_id: string }[];
       };
       partner_set_user_status: {
         Args: { p_partner_id: string; p_status: Database["public"]["Enums"]["partner_user_status"]; p_tenant_id: string; p_user_id: string };
+        Returns: { new_status: Database["public"]["Enums"]["partner_user_status"]; old_status: Database["public"]["Enums"]["partner_user_status"] }[];
+      };
+      partner_set_user_status_with_limit: {
+        Args: { p_max_partner_users?: number | null; p_partner_id: string; p_status: Database["public"]["Enums"]["partner_user_status"]; p_tenant_id: string; p_user_id: string };
         Returns: { new_status: Database["public"]["Enums"]["partner_user_status"]; old_status: Database["public"]["Enums"]["partner_user_status"] }[];
       };
       admin_create_plan_version: {
@@ -3224,6 +3240,10 @@ export type Database = {
           target_version: number;
         }[];
       };
+      admin_save_plan_limits: {
+        Args: { p_max_affiliates?: number | null; p_max_buffer_seats?: number | null; p_max_marketing_partners?: number | null; p_max_partner_users?: number | null; p_max_publishers?: number | null; p_plan_id: string };
+        Returns: Database["public"]["Tables"]["plan_limits"]["Row"];
+      };
       admin_update_plan: {
         Args: {
           p_code: string;
@@ -3445,6 +3465,10 @@ export type Database = {
         };
         Returns: Database["public"]["Tables"]["partners"]["Row"];
       };
+      create_partner_with_limits: {
+        Args: { p_contact_email: string; p_contact_name: string; p_country: string; p_created_by: string; p_max_affiliates?: number | null; p_max_marketing_partners?: number | null; p_max_publishers?: number | null; p_name: string; p_notes: string; p_partner_type: Database["public"]["Enums"]["partner_type"]; p_tenant_id: string; p_timezone: string };
+        Returns: Database["public"]["Tables"]["partners"]["Row"];
+      };
       update_partner: {
         Args: {
           p_tenant_id: string;
@@ -3457,6 +3481,10 @@ export type Database = {
           p_timezone: string;
           p_notes: string;
         };
+        Returns: Database["public"]["Tables"]["partners"]["Row"];
+      };
+      update_partner_with_limits: {
+        Args: { p_contact_email: string; p_contact_name: string; p_country: string; p_max_affiliates?: number | null; p_max_marketing_partners?: number | null; p_max_publishers?: number | null; p_name: string; p_notes: string; p_partner_id: string; p_partner_type: Database["public"]["Enums"]["partner_type"]; p_tenant_id: string; p_timezone: string };
         Returns: Database["public"]["Tables"]["partners"]["Row"];
       };
       add_partner_term: {
@@ -3478,6 +3506,10 @@ export type Database = {
           p_next_status: Database["public"]["Enums"]["partner_status"];
           p_confirmation?: string | null;
         };
+        Returns: Database["public"]["Tables"]["partners"]["Row"];
+      };
+      transition_partner_with_limits: {
+        Args: { p_confirmation?: string | null; p_max_affiliates?: number | null; p_max_marketing_partners?: number | null; p_max_partner_users?: number | null; p_max_publishers?: number | null; p_next_status: Database["public"]["Enums"]["partner_status"]; p_partner_id: string; p_tenant_id: string };
         Returns: Database["public"]["Tables"]["partners"]["Row"];
       };
       set_tenant_product: {

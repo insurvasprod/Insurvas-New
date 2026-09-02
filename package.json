@@ -69,6 +69,7 @@
     "verify:contacts": "node --env-file=.env.local --experimental-strip-types scripts/verify-contacts.mjs",
     "verify:la0-rls": "node --env-file=.env.local scripts/verify-la0-rls.mjs",
     "verify:partners": "node --env-file=.env.local scripts/verify-partners.mjs",
+    "verify:subscription-limits": "node --env-file=.env.local scripts/verify-subscription-limits.mjs",
     "verify:partner-users": "node --env-file=.env.local scripts/verify-partner-users.mjs",
     "verify:partner-products": "node --env-file=.env.local scripts/verify-partner-products.mjs",
     "verify:dynamic-forms": "node --env-file=.env.local scripts/verify-dynamic-forms.mjs",

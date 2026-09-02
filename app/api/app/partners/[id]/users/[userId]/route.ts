@@ -17,13 +17,15 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Choose a valid action" }, { status: 400 });
   const status = parsed.data.action === "deactivate" ? "revoked" : "active";
   try {
-    await setPartnerUserStatus({ tenantId: auth.context.tenantId, partnerId, userId, status });
+    await setPartnerUserStatus({ tenantId: auth.context.tenantId, partnerId, userId, status, maxPartnerUsers: auth.entitlement.limits.max_partner_users });
     await audit({ actorType: "tenant", actorId: auth.context.userId, action: status === "revoked" ? "tenant.partner_user_deactivated" : "tenant.partner_user_reactivated", targetType: "partner_user", targetId: userId, metadata: { partnerId, actorPlane: "agent" }, request });
     return NextResponse.json({ ok: true, status });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Could not change partner user status";
     if (message.includes("not_found") || message.includes("offboarded")) return NextResponse.json({ error: "Partner user not found" }, { status: 404 });
     if (message.includes("already_in_state")) return NextResponse.json({ error: "Partner user is already in that state" }, { status: 409 });
+    const limit = message.match(/max_partner_users:(\d+):(\d+)/);
+    if (limit) return NextResponse.json({ error: `Your plan has reached max_partner_users (${limit[1]} of ${limit[2]}). Upgrade to reactivate this partner user.`, code: "limit_reached", limitKey: "max_partner_users", usage: Number(limit[1]), limit: Number(limit[2]), upgrade: true }, { status: 403 });
     return NextResponse.json({ error: "Could not change partner user status" }, { status: 500 });
   }
 }
