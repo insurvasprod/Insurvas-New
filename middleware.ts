@@ -42,6 +42,8 @@ export async function middleware(request: NextRequest) {
   }
 
   if (pathname.startsWith("/app")) {
+    const partnerToken = request.cookies.get(PARTNER_SESSION_COOKIE)?.value;
+    if (partnerToken && await verifyPartnerSessionToken(partnerToken)) return redirectTo(request, "/partner");
     const token = request.cookies.get(TENANT_SESSION_COOKIE)?.value;
     const session = token ? await verifyTenantSessionToken(token) : null;
 

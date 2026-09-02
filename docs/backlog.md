@@ -2016,6 +2016,32 @@ invite controls, specific upgrade messaging, visible focus, responsive layout, a
 and `/app/settings` at desktop and phone widths, capture the finished screens, and close this
 entry only after the browser console and interactive controls are clean.
 
+### 137. 🟡 LA-1.20 Notes tab waits for the LA-1.21 notes implementation
+**From:** LA-1.20 · **Belongs to:** LA-1.21
+
+The unified lead workspace includes a Notes tab, but LA-1.21 is still planned and the live database
+does not yet have `lead_notes`. The tab therefore explains that internal notes are not available
+yet instead of pretending that notes were saved. The rest of the workspace is wired to the existing
+lead, verification, partner-message, and audit data.
+
+**Fix:** LA-1.21 must add the tenant-scoped notes model and API, author/timestamp and edit history,
+partner visibility controls, mentions and search, then replace the placeholder tab and add the
+timeline note events. Cost of leaving it open: agents can inspect a lead in one place but still
+cannot record or review the internal notes promised by the combined experience.
+
+### 138. 🔵 LA-1.20 authenticated lead-workspace browser QA is pending an authorized agent session
+**From:** LA-1.20 · **Belongs to:** LA-1.20
+
+The fresh in-app browser tab rendered `/app/login` with no console errors, but no authorized agent
+session was available to open a real lead. Consequently the detail header, tabs, action controls,
+correction display, timeline, responsive layout, and finished-screen screenshot were not driven by
+browser interaction. The live API verifier covers those paths server-side, but it is not a substitute
+for the required authenticated browser acceptance.
+
+**Fix:** sign in as an entitled local agent owner, open a real lead from `/app/leads`, exercise the
+tabs and available actions at desktop and phone widths, inspect the console and focus states, and
+capture the finished workspace screenshot. Remove this entry only after that browser run is clean.
+
 ---
 
 ## Related

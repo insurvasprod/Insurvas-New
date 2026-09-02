@@ -61,7 +61,7 @@ function LeadCard({ item, now, thresholds, readOnly, onClaim, onNudge, saving }:
       <div className="flex flex-wrap gap-2">
         <Button size="sm" disabled={readOnly || saving === item.id} onClick={() => onClaim(item.id)}>{saving === item.id ? <Loader2 className="size-4 animate-spin" /> : <Phone className="size-4" />}Claim</Button>
         <Button size="sm" variant="outline" disabled={readOnly || saving === `nudge:${item.id}`} onClick={() => onNudge(item.id)}>{saving === `nudge:${item.id}` ? <Loader2 className="size-4 animate-spin" /> : <Bell className="size-4" />}Nudge team</Button>
-        <Button size="sm" variant="ghost" asChild><Link href={`/app/inbound/${item.id}/verification`}>Open lead</Link></Button>
+        <Button size="sm" variant="ghost" asChild><Link href={`/app/leads/${item.leadId}`}>Open lead</Link></Button>
       </div>
     </CardContent>
   </Card>;
