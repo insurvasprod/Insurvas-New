@@ -90,7 +90,9 @@
     "verify:partner-pipeline": "node --env-file=.env.local scripts/verify-partner-lead-pipeline.mjs",
     "verify:partner-quality": "node --env-file=.env.local scripts/verify-partner-quality.mjs",
     "verify:deal-flow": "node --env-file=.env.local scripts/verify-deal-flow.mjs",
-    "verify:la1": "node --env-file=.env.local scripts/verify-partners.mjs && node --env-file=.env.local scripts/verify-partner-users.mjs && node --env-file=.env.local scripts/verify-partner-products.mjs && node --env-file=.env.local scripts/verify-dynamic-forms.mjs && node --env-file=.env.local scripts/verify-partner-submission.mjs && node --env-file=.env.local scripts/verify-intake-pipeline.mjs && node --env-file=.env.local scripts/verify-affiliate-links.mjs && node --env-file=.env.local scripts/verify-pipelines.mjs"
+    "verify:la1": "node --env-file=.env.local scripts/verify-partners.mjs && node --env-file=.env.local scripts/verify-partner-users.mjs && node --env-file=.env.local scripts/verify-partner-products.mjs && node --env-file=.env.local scripts/verify-dynamic-forms.mjs && node --env-file=.env.local scripts/verify-partner-submission.mjs && node --env-file=.env.local scripts/verify-intake-pipeline.mjs && node --env-file=.env.local scripts/verify-affiliate-links.mjs && node --env-file=.env.local scripts/verify-pipelines.mjs",
+    "callbacks:remind": "node --env-file=.env.local scripts/send-callback-reminders.mjs",
+    "verify:callbacks": "node --env-file=.env.local scripts/verify-callbacks.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.99.0",

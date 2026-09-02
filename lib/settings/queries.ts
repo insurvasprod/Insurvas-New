@@ -179,3 +179,7 @@ export async function agentFloorWaitThresholds(): Promise<{ amberSeconds: number
     redSeconds: Math.max(red, amber + 1),
   };
 }
+
+export function callbackReminderLeadMinutes(): Promise<number> {
+  return getSetting<number>("callbacks.reminder_lead_minutes");
+}

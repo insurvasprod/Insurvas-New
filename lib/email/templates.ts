@@ -16,6 +16,7 @@ export const EMAIL_TEMPLATE_KEYS = [
   "user.email_change_confirmation",
   "subscription.trial_ending",
   "agent.expiry_warning",
+  "callback.reminder",
 ] as const;
 
 export type EmailTemplateKey = (typeof EMAIL_TEMPLATE_KEYS)[number];
@@ -166,5 +167,13 @@ export function appointmentExpiryWarningEmail(facts: {
       `<p>Hi ${escapeHtml(facts.name)},</p><p>Your ${escapeHtml(facts.label)} expires in ${facts.days} days, on ${escapeHtml(facts.expiresAt)}. Renew it before that date so you can keep writing business where you are appointed.</p>${button(facts.settingsUrl, "Review your appointment vault")}`,
     ),
     text: `Hi ${facts.name},\n\nYour ${facts.label} expires in ${facts.days} days, on ${facts.expiresAt}. Renew it before that date so you can keep writing business where you are appointed.\n\nReview your appointment vault: ${facts.settingsUrl}\n`,
+  };
+}
+
+export function callbackReminderEmail(facts: { name: string; customerName: string; customerTime: string; customerTimezone: string; note: string | null; callbacksUrl: string }): RenderedEmail {
+  return {
+    subject: `Callback reminder: ${facts.customerName}`,
+    html: layout("Callback reminder", `<p>Hi ${escapeHtml(facts.name)},</p><p>You have a callback with <strong>${escapeHtml(facts.customerName)}</strong> at <strong>${escapeHtml(facts.customerTime)}</strong> (${escapeHtml(facts.customerTimezone)}).</p>${facts.note ? `<p>Note: ${escapeHtml(facts.note)}</p>` : ""}${button(facts.callbacksUrl, "Open callback calendar")}`),
+    text: `Hi ${facts.name},\n\nYou have a callback with ${facts.customerName} at ${facts.customerTime} (${facts.customerTimezone}).${facts.note ? `\nNote: ${facts.note}` : ""}\n\nOpen callback calendar: ${facts.callbacksUrl}\n`,
   };
 }

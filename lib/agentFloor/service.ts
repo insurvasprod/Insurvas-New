@@ -4,6 +4,7 @@ import { audit } from "@/lib/audit/log";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { agentFloorWaitThresholds } from "@/lib/settings/queries";
 import { postAgentReadyCards } from "@/lib/partnerChat/service";
+import { listDueCallbacks } from "@/lib/callbacks/service";
 
 export type AgentAvailability = "ready" | "on_break" | "off";
 
@@ -122,6 +123,7 @@ export async function getAgentFloor(tenantId: string, currentUserId: string, cur
     pendingHandoffs,
     waitThresholds: await agentFloorWaitThresholds(),
     realtimeTopic: `agent-floor:${tenantId}`,
+    callbacks: await listDueCallbacks(tenantId),
     generatedAt: new Date().toISOString(),
   };
 }

@@ -9,6 +9,9 @@ import { getDashboardOnboardingState } from "@/lib/dashboard/service";
 import { DashboardTile } from "@/components/app/dashboard-tile";
 import { SetupChecklist } from "@/components/app/setup-checklist";
 import { Card, CardContent } from "@/components/ui/card";
+import { listDueCallbacks } from "@/lib/callbacks/service";
+import { hasFeature } from "@/lib/entitlements/types";
+import Link from "next/link";
 
 /**
  * The dashboard is a frame for registered module tiles. It does not know how to render a carrier,
@@ -25,6 +28,7 @@ export default async function AgentDashboardPage() {
   const available = await effectiveFeatures(entitlement.features, context.tenantId);
   const tiles = visibleDashboardTiles(available, context.role);
   const checklist = setupChecklistForState(onboardingState);
+  const callbacks = hasFeature(entitlement, "callback_calendar") && ["owner", "producer", "assistant"].includes(context.role) ? await listDueCallbacks(context.tenantId) : [];
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
@@ -34,6 +38,8 @@ export default async function AgentDashboardPage() {
       </div>
 
       {context.role === "owner" && <SetupChecklist checklist={checklist} />}
+
+      {hasFeature(entitlement, "callback_calendar") && <Card><CardContent className="space-y-3 p-5"><div className="flex items-center justify-between gap-3"><div><h2 className="font-semibold">Callbacks due today</h2><p className="text-sm text-muted-foreground">{callbacks.length} due or overdue follow-up{callbacks.length === 1 ? "" : "s"}.</p></div><Link href="/app/callbacks" className="text-sm font-semibold underline">Open calendar</Link></div>{callbacks.length > 0 && <div className="grid gap-2 sm:grid-cols-2">{callbacks.slice(0, 4).map((callback) => <div key={callback.id} className="rounded-md border p-3"><p className="font-medium">{callback.customerName}</p><p className="text-xs text-muted-foreground">{callback.isOverdue ? "Overdue" : "Due today"} · {callback.customerTime} ({callback.customerTimezone})</p></div>)}</div>}</CardContent></Card>}
 
       {tiles.length > 0 ? (
         <section aria-labelledby="dashboard-tiles-heading" className="space-y-3">

@@ -7,8 +7,6 @@ Each entry says *why* it was deferred and *where it belongs*, so nothing here is
 
 Legend: 🔴 needs a decision · 🟡 blocked on a later ticket · 🔵 unverified · ⚪ tech debt · ✅ resolved
 
----
-
 ## 🔴 Needs a decision
 
 ### 1. Create Tenant asks the admin to type the owner's password
@@ -2053,6 +2051,13 @@ exercise add/edit/delete, internal/shared visibility, teammate mention, and cros
 desktop and phone widths, inspect console errors and focus states, and capture the finished screen.
 Cost of leaving it open: server enforcement is verified, but the required end-user presentation and
 interaction evidence is not.
+
+### 140. 🔵 LA-1.22 authenticated callback browser QA is pending an authorized agent session
+**From:** LA-1.22 · **Belongs to:** LA-1.22
+
+The live callback verifier and protected route checks pass, but the required authenticated browser acceptance cannot be completed in this run because no authorized agent session is available. The browser can verify the protected redirect/login screen, but cannot drive the callback picker, customer and agent timezone display, calendar actions, dashboard and Agent Floor cards, focus states, responsive layout, or capture the finished authenticated callback screen.
+
+**Fix:** sign in as an entitled owner, producer, or assistant in the local agent app, open `/app/callbacks` and a real disposition flow, exercise schedule, reschedule, cancel, and complete at desktop and phone widths, inspect console errors and keyboard focus, and capture the finished authenticated callback screen. Cost of leaving it open: server and database behavior is verified, but the required end-user presentation and interaction evidence remains unverified.
 
 ---
 

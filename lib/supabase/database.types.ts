@@ -1623,6 +1623,18 @@ export type Database = {
         Update: { message?: string };
         Relationships: [];
       };
+      callbacks: {
+        Row: { id: string; tenant_id: string; lead_id: string; work_item_id: string; scheduled_at_utc: string; customer_timezone: string; assigned_to: string; note: string | null; status: string; reminder_sent_at: string | null; completed_at: string | null; created_by: string; created_at: string; updated_at: string; idempotency_key: string | null };
+        Insert: { id?: string; tenant_id: string; lead_id: string; work_item_id: string; scheduled_at_utc: string; customer_timezone: string; assigned_to: string; note?: string | null; status?: string; reminder_sent_at?: string | null; completed_at?: string | null; created_by: string; created_at?: string; updated_at?: string; idempotency_key?: string | null };
+        Update: { scheduled_at_utc?: string; customer_timezone?: string; assigned_to?: string; note?: string | null; status?: string; reminder_sent_at?: string | null; completed_at?: string | null; updated_at?: string };
+        Relationships: [];
+      };
+      callback_history: {
+        Row: { id: string; tenant_id: string; callback_id: string; lead_id: string; actor_user_id: string; action: string; old_scheduled_at_utc: string | null; new_scheduled_at_utc: string | null; old_status: string | null; new_status: string | null; note: string | null; created_at: string };
+        Insert: { id?: string; tenant_id: string; callback_id: string; lead_id: string; actor_user_id: string; action: string; old_scheduled_at_utc?: string | null; new_scheduled_at_utc?: string | null; old_status?: string | null; new_status?: string | null; note?: string | null; created_at?: string };
+        Update: Record<string, never>;
+        Relationships: [];
+      };
       partner_messages: {
         Row: { id: string; tenant_id: string; partner_id: string; channel_id: string; work_item_id: string | null; message: string; message_kind: string; card_type: string | null; card_payload: Json; event_key: string | null; created_by: string | null; created_at: string };
         Insert: { id?: string; tenant_id: string; partner_id: string; channel_id: string; work_item_id?: string | null; message: string; message_kind?: string; card_type?: string | null; card_payload?: Json; event_key?: string | null; created_by?: string | null; created_at?: string };
@@ -3617,6 +3629,26 @@ export type Database = {
       partner_quality_leads: {
         Args: { p_disposition?: string | null; p_from_date: string; p_metric: string; p_page?: number; p_page_size?: number; p_partner_id: string; p_tenant_id: string; p_to_date: string };
         Returns: Json;
+      };
+      complete_disposition_with_callback: {
+        Args: { p_assigned_to?: string | null; p_callback_local: string; p_callback_note?: string | null; p_customer_timezone: string; p_idempotency_key?: string | null; p_tenant_id: string; p_user_id: string; p_walk_id: string; p_work_item_id: string };
+        Returns: Json;
+      };
+      reschedule_callback: {
+        Args: { p_actor: string; p_callback_id: string; p_callback_local: string; p_tenant_id: string };
+        Returns: Json;
+      };
+      cancel_callback: {
+        Args: { p_actor: string; p_callback_id: string; p_tenant_id: string };
+        Returns: Json;
+      };
+      complete_callback: {
+        Args: { p_actor: string; p_callback_id: string; p_tenant_id: string };
+        Returns: Json;
+      };
+      claim_callback_reminders: {
+        Args: { p_limit?: number; p_now: string; p_until: string };
+        Returns: { id: string; tenant_id: string; lead_id: string; work_item_id: string; scheduled_at_utc: string; customer_timezone: string; assigned_to: string; note: string | null; status: string; reminder_sent_at: string | null; completed_at: string | null; created_by: string; created_at: string; updated_at: string; idempotency_key: string | null }[];
       };
     };
     Enums: {

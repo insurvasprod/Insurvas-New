@@ -78,4 +78,7 @@ export type DispositionWizard = {
   dispositions: Disposition[];
   lead: { id: string; values: Record<string, unknown> };
   workItem: { id: string; productLine: string };
+  customerTimezone: string;
+  customerName: string;
+  assignees: Array<{ id: string; name: string; role: string }>;
 };

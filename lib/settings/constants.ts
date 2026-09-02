@@ -93,6 +93,17 @@ export const SETTING_DEFS = [
     unit: "seconds",
   },
   {
+    key: "callbacks.reminder_lead_minutes",
+    type: "number",
+    group: "Callbacks",
+    label: "Callback reminder lead time",
+    help: "How many minutes before a callback the agent receives an in-app and email reminder.",
+    default: 30,
+    min: 5,
+    max: 1440,
+    unit: "minutes",
+  },
+  {
     key: "platform.default_currency",
     type: "select",
     group: "Platform",

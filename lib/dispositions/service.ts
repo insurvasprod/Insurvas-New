@@ -4,6 +4,7 @@ import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import type { Json } from "@/lib/supabase/database.types";
 import type { Disposition, DispositionFlow, DispositionNode, DispositionNodeType, DispositionOption, DispositionWizard } from "./types";
 import { DISPOSITION_KEY_PATTERN, DISPOSITION_NODE_TYPES } from "./types";
+import { customerName, customerTimezone } from "@/lib/callbacks/timezone";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const SAFE_TEXT = /^[^\u0000-\u001f\u007f<>]+$/;
@@ -31,6 +32,11 @@ function apiError(error: { message?: string } | null | undefined, fallback: stri
     DISPOSITION_NOT_FOUND: ["disposition_not_found", "Choose a valid call outcome."],
     DO_NOT_CALL_PHONE_REQUIRED: ["phone_required", "Do not call requires a valid phone number on the lead."],
     CALLBACK_SUBTYPE_INVALID: ["invalid_input", "The callback detail is too long."],
+    CALLBACK_DATE_REQUIRED: ["callback_date_required", "Choose a callback date and time before ending the call."],
+    CALLBACK_TIMEZONE_INVALID: ["invalid_input", "The customer's timezone could not be determined."],
+    CALLBACK_DATE_PAST: ["invalid_input", "Choose a callback time in the future."],
+    CALLBACK_NOTE_INVALID: ["invalid_input", "Callback notes must be between 1 and 1,000 characters."],
+    CALLBACK_ASSIGNEE_INVALID: ["invalid_input", "Choose an active teammate in this tenant."],
   };
   const [code, friendly] = known[message] ?? ["disposition_unavailable", fallback];
   return new DispositionError(code, friendly);
@@ -160,9 +166,19 @@ export async function getDispositionWizard(tenantId: string, userId: string, wor
   for (const option of (options.data ?? []) as DispositionOption[]) optionMap.set(option.node_id, [...(optionMap.get(option.node_id) ?? []), option]);
   const mappedNodes = (nodes.data ?? []).map((node) => ({ ...node, options: optionMap.get(node.id) ?? [] })) as DispositionNode[];
   const stage = await supabase.from("pipeline_stages").select("name").eq("id", (flow.data as { stage_id: string }).stage_id).maybeSingle();
+  const assigneeRows = await supabase.from("tenant_users").select("user_id, role, users!inner(id, name, status)").eq("tenant_id", tenantId).in("role", ["owner", "producer", "assistant"]).not("accepted_at", "is", null);
   const mappedFlow = { ...flow.data, stage_name: stage.data?.name ?? "Unknown stage", nodes: mappedNodes } as DispositionFlow;
   const stepNodeLabels = new Map(mappedNodes.map((node) => [node.id, node.label]));
-  return { walk: walk.data as DispositionWizard["walk"], flow: mappedFlow, currentNode: mappedNodes.find((node) => node.id === (walk.data as { current_node_id: string | null }).current_node_id) ?? null, steps: (steps.data ?? []).map((step) => ({ ...step, node_label: stepNodeLabels.get(step.node_id) ?? "Question" })), dispositions: dispositions.data as Disposition[], lead: { id: lead.data.id, values: (lead.data.values && typeof lead.data.values === "object" && !Array.isArray(lead.data.values) ? lead.data.values : {}) as Record<string, unknown> }, workItem: { id: queue.data.id, productLine: queue.data.product_line } };
+  const values = (lead.data.values && typeof lead.data.values === "object" && !Array.isArray(lead.data.values) ? lead.data.values : {}) as Record<string, unknown>;
+  const assignees = (assigneeRows.data ?? []).filter((row) => {
+    const user = row.users as unknown as { id: string; name: string; status: string };
+    return user?.status === "active";
+  }).map((row) => {
+    const user = row.users as unknown as { id: string; name: string; status: string };
+    return { id: user.id, name: user.name, role: row.role };
+  });
+  if (assigneeRows.error) throw new DispositionError("disposition_unavailable", `Could not load callback assignees: ${assigneeRows.error.message}`);
+  return { walk: walk.data as DispositionWizard["walk"], flow: mappedFlow, currentNode: mappedNodes.find((node) => node.id === (walk.data as { current_node_id: string | null }).current_node_id) ?? null, steps: (steps.data ?? []).map((step) => ({ ...step, node_label: stepNodeLabels.get(step.node_id) ?? "Question" })), dispositions: dispositions.data as Disposition[], lead: { id: lead.data.id, values }, workItem: { id: queue.data.id, productLine: queue.data.product_line }, customerTimezone: customerTimezone(values), customerName: customerName(values), assignees };
 }
 
 export async function answerDisposition(tenantId: string, userId: string, input: { work_item_id: unknown; walk_id: unknown; node_id: unknown; sequence: unknown; answer?: unknown; option_key?: unknown }) {
@@ -173,9 +189,23 @@ export async function answerDisposition(tenantId: string, userId: string, input:
   return result.data;
 }
 
-export async function completeDisposition(tenantId: string, userId: string, input: { work_item_id: unknown; walk_id: unknown; disposition_key: unknown; callback_subtype?: unknown }) {
+export async function completeDisposition(tenantId: string, userId: string, input: { work_item_id: unknown; walk_id: unknown; disposition_key: unknown; callback_subtype?: unknown; callback_local?: unknown; callback_assigned_to?: unknown; callback_idempotency_key?: unknown }) {
   const subtype = input.callback_subtype == null || input.callback_subtype === "" ? null : text(input.callback_subtype, "Callback detail", 120);
-  const result = await getSupabaseServiceClient().rpc("complete_disposition", { p_tenant_id: tenantId, p_work_item_id: uuid(input.work_item_id, "work item"), p_user_id: userId, p_walk_id: uuid(input.walk_id, "walk"), p_disposition_key: key(input.disposition_key, "Disposition key"), p_callback_subtype: subtype });
+  const dispositionKey = key(input.disposition_key, "Disposition key");
+  const supabase = getSupabaseServiceClient();
+  const result = await (dispositionKey === "callback_scheduled"
+    ? await (async () => {
+      if (typeof input.callback_local !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(input.callback_local)) throw new DispositionError("callback_date_required", "Choose a callback date and time before ending the call.");
+      const local = input.callback_local;
+      const assigned = input.callback_assigned_to == null || input.callback_assigned_to === "" ? null : uuid(input.callback_assigned_to, "callback assignee");
+      const callbackKey = input.callback_idempotency_key == null ? crypto.randomUUID() : text(input.callback_idempotency_key, "request key", 120);
+      const queue = await supabase.from("lead_queue").select("lead_id").eq("tenant_id", tenantId).eq("id", uuid(input.work_item_id, "work item")).single();
+      if (queue.error || !queue.data) throw new DispositionError("work_item_not_found", "That transfer was not found.");
+      const lead = await supabase.from("agent_leads").select("values").eq("tenant_id", tenantId).eq("id", queue.data.lead_id).single();
+      if (lead.error || !lead.data) throw new DispositionError("lead_not_found", "That lead was not found.");
+      return supabase.rpc("complete_disposition_with_callback", { p_tenant_id: tenantId, p_work_item_id: uuid(input.work_item_id, "work item"), p_user_id: userId, p_walk_id: uuid(input.walk_id, "walk"), p_callback_local: local, p_customer_timezone: customerTimezone((lead.data.values ?? {}) as Record<string, unknown>), p_assigned_to: assigned, p_callback_note: subtype, p_idempotency_key: callbackKey });
+    })()
+    : supabase.rpc("complete_disposition", { p_tenant_id: tenantId, p_work_item_id: uuid(input.work_item_id, "work item"), p_user_id: userId, p_walk_id: uuid(input.walk_id, "walk"), p_disposition_key: dispositionKey, p_callback_subtype: subtype }));
   if (result.error) throw apiError(result.error, "Could not record the call outcome.");
   return result.data;
 }

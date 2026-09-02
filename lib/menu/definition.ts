@@ -70,7 +70,7 @@ export const AGENT_MENU: MenuSection[] = [
       item("Sell", { key: "sell.quoting", label: "Quoting", path: "/app/quoting", icon: "calculator", required_feature: "quoting", required_roles: ["owner", "producer"] }),
       item("Sell", { key: "sell.applications", label: "Applications", path: "/app/applications", icon: "file-check", required_feature: "applications", required_roles: ["owner", "producer"] }),
       item("Sell", { key: "sell.draft-dates", label: "Draft dates", path: "/app/draft-dates", icon: "calendar-clock", required_feature: "draft_date_optimizer", required_roles: ["owner", "producer"] }),
-      item("Sell", { key: "sell.callbacks", label: "Callbacks", path: "/app/callbacks", icon: "calendar-check", required_feature: "callback_calendar", required_roles: ["owner", "producer", "assistant"] }),
+      item("Sell", { key: "sell.callbacks", label: "Callbacks", path: "/app/callbacks", icon: "calendar-check", required_feature: "callback_calendar", required_roles: ["owner", "producer", "assistant"], built: true }),
       item("Sell", { key: "sell.deal-flow", label: "Daily deal flow", path: "/app/deal-flow", icon: "clipboard-list", required_feature: "daily_deal_flow", required_roles: ["owner", "producer"], built: true }),
     ],
   },

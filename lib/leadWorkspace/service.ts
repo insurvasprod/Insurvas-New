@@ -16,6 +16,7 @@ type VerificationField = { session_id: string; field_key: string; state: string;
 type FieldChange = { id: string; field_key: string; old_value: unknown; new_value: unknown; actor_id: string | null; created_at: string };
 type AuditRow = { id: string; ts: string; actor_type: string; actor_id: string | null; action: string; target_type: string; target_id: string; reason: string | null; metadata: unknown };
 type MessageRow = { id: string; message: string; message_kind: string; created_by: string | null; created_at: string };
+type CallbackHistoryRow = { id: string; callback_id: string; actor_user_id: string; action: string; old_scheduled_at_utc: string | null; new_scheduled_at_utc: string | null; created_at: string };
 
 function record(value: unknown): Record<string, unknown> { return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {}; }
 function display(value: unknown) { return Array.isArray(value) ? value.join(", ") : value === null || value === undefined || value === "" ? "Not provided" : String(value); }
@@ -33,7 +34,7 @@ export async function getLeadWorkspace(tenantId: string, userId: string, role: T
   const queueResult = await db.from("lead_queue").select("id, lead_id, partner_id, status, claimed_by, owner_user_id, owner_role, claimed_at, queued_at, disposition, disposition_at, disposition_by, pipeline_id, stage_id, updated_at").eq("tenant_id", tenantId).eq("lead_id", leadId).order("queued_at", { ascending: false }).limit(1).maybeSingle<QueueRow>();
   if (queueResult.error) throw new Error(`Could not load lead work item: ${queueResult.error.message}`);
   const queue = queueResult.data;
-  const [templateResult, stageResult, stagesResult, partnerResult, usersResult, verificationResult, changesResult, auditResult, messagesResult, dispositionsResult] = await Promise.all([
+  const [templateResult, stageResult, stagesResult, partnerResult, usersResult, verificationResult, changesResult, auditResult, messagesResult, dispositionsResult, callbackHistoryResult] = await Promise.all([
     getTenantTemplateForProductVersion(tenantId, lead.product_line, lead.definition_version),
     db.from("pipeline_stages").select("id, pipeline_id, name, stage_type, color, position, is_archived").eq("id", lead.stage_id).maybeSingle(),
     db.from("pipeline_stages").select("id, pipeline_id, name, stage_type, color, position, is_archived").eq("pipeline_id", lead.pipeline_id).eq("is_archived", false).order("position"),
@@ -44,11 +45,12 @@ export async function getLeadWorkspace(tenantId: string, userId: string, role: T
     db.from("audit_log").select("id, ts, actor_type, actor_id, action, target_type, target_id, reason, metadata").in("target_id", [leadId, ...(queue ? [queue.id] : [])]).order("ts", { ascending: true }).returns<AuditRow[]>(),
     queue ? db.from("partner_messages").select("id, message, message_kind, created_by, created_at").eq("tenant_id", tenantId).eq("work_item_id", queue.id).order("created_at", { ascending: true }).returns<MessageRow[]>() : Promise.resolve({ data: [], error: null }),
     queue?.disposition ? db.from("dispositions").select("disposition_key, label").eq("tenant_id", tenantId).eq("disposition_key", queue.disposition).maybeSingle() : Promise.resolve({ data: null, error: null }),
+    db.from("callback_history").select("id, callback_id, actor_user_id, action, old_scheduled_at_utc, new_scheduled_at_utc, created_at").eq("tenant_id", tenantId).eq("lead_id", leadId).order("created_at", { ascending: true }).returns<CallbackHistoryRow[]>(),
   ]);
-  const failure = [stageResult, stagesResult, partnerResult, usersResult, verificationResult, changesResult, auditResult, messagesResult, dispositionsResult].find((result) => result.error);
+  const failure = [stageResult, stagesResult, partnerResult, usersResult, verificationResult, changesResult, auditResult, messagesResult, dispositionsResult, callbackHistoryResult].find((result) => result.error);
   if (failure?.error) throw new Error(`Could not load lead workspace: ${failure.error.message}`);
   const actorIds = new Set<string>();
-  for (const id of [lead.created_by, queue?.claimed_by, queue?.owner_user_id, queue?.disposition_by, verificationResult.data?.user_id, verificationResult.data?.last_actor_id, ...(changesResult.data ?? []).map((change) => change.actor_id), ...(auditResult.data ?? []).map((event) => event.actor_id), ...(messagesResult.data ?? []).map((message) => message.created_by)]) if (id) actorIds.add(id);
+  for (const id of [lead.created_by, queue?.claimed_by, queue?.owner_user_id, queue?.disposition_by, verificationResult.data?.user_id, verificationResult.data?.last_actor_id, ...(changesResult.data ?? []).map((change) => change.actor_id), ...(auditResult.data ?? []).map((event) => event.actor_id), ...(messagesResult.data ?? []).map((message) => message.created_by), ...(callbackHistoryResult.data ?? []).map((event) => event.actor_user_id)]) if (id) actorIds.add(id);
   const actors = actorIds.size ? await db.from("users").select("id, name").in("id", [...actorIds]) : { data: [], error: null };
   if (actors.error) throw new Error(`Could not load lead actors: ${actors.error.message}`);
   const actorNames = new Map((actors.data ?? []).map((actor) => [actor.id, actor.name]));
@@ -63,6 +65,7 @@ export async function getLeadWorkspace(tenantId: string, userId: string, role: T
   for (const change of changesResult.data ?? []) addEvent(`correction:${change.id}`, change.created_at, "verification correction", change.actor_id, `${change.field_key}: ${display(change.old_value)} → ${display(change.new_value)}`);
   for (const note of notes) addEvent(`note:${note.id}`, note.deletedAt ?? note.editedAt ?? note.createdAt, note.deletedAt ? "lead note deleted" : note.editedAt ? "lead note edited" : "lead note added", note.author.id, note.deletedAt ? "Note deleted (tombstone retained)" : `${note.visibility === "shared" ? "Shared" : "Internal"} note: ${note.body}`);
   for (const message of messagesResult.data ?? []) addEvent(`message:${message.id}`, message.created_at, message.message_kind === "system_card" ? "partner channel update" : "note/message", message.created_by, message.message);
+  for (const event of callbackHistoryResult.data ?? []) addEvent(`callback:${event.id}`, event.created_at, `callback ${event.action}`, event.actor_user_id, event.new_scheduled_at_utc ? `Scheduled at ${event.new_scheduled_at_utc}` : null);
   events.sort((a, b) => a.at.localeCompare(b.at));
   const licensedAgents = role === "assistant" && queue ? await listLicensedAgents(tenantId, userId) : [];
   const pendingHandoff = (role === "owner" || role === "producer") && queue ? (await listPendingBufferHandoffs(tenantId, userId)).find((handoff) => handoff.workItemId === queue.id) ?? null : null;
