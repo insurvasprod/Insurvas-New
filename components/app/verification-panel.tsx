@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Check, CircleAlert, Loader2, Save } from "lucide-react";
+import { ArrowLeft, Bell, Check, CircleAlert, Loader2, Save } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -43,6 +43,7 @@ export function VerificationPanel({ workItemId, readOnly, canHandoff }: { workIt
   const [handoffTarget, setHandoffTarget] = useState("");
   const [handoffSaving, setHandoffSaving] = useState(false);
   const [handoffError, setHandoffError] = useState("");
+  const [nudgeSaving, setNudgeSaving] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -85,11 +86,20 @@ export function VerificationPanel({ workItemId, readOnly, canHandoff }: { workIt
     setHandoffContext(null);
   }
 
+  async function nudgeTeam() {
+    setNudgeSaving(true);
+    const response = await fetch("/api/app/agent-floor", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "nudge", work_item_id: workItemId, idempotency_key: crypto.randomUUID() }) });
+    const body = await response.json().catch(() => null);
+    setNudgeSaving(false);
+    if (!response.ok) { setError(body?.error ?? "Could not nudge the team."); return; }
+    toast.success(body.nudge?.alreadySent ? "That nudge was already sent" : "Team nudged");
+  }
+
   if (loading) return <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin" />Loading verification…</div>;
   if (error || !panel) return <Card><CardContent className="space-y-3 p-6"><p className="text-sm text-destructive">{error || "Verification is unavailable"}</p><Button variant="outline" onClick={() => void load()}>Try again</Button></CardContent></Card>;
   const requiredDone = panel.session.progress_percentage === 100;
   return <div className="mx-auto max-w-5xl space-y-5">
-    <div className="flex flex-wrap items-start justify-between gap-3"><div><Link href="/app/inbound" className="inline-flex items-center gap-1 text-sm text-muted-foreground underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"><ArrowLeft className="size-4" />Back to transfers</Link><h1 className="mt-3 text-2xl font-extrabold tracking-tight">Verify application</h1><p className="mt-1 text-sm text-muted-foreground">{panel.template.product_name} · Confirm each field with the customer. Corrections are saved with an audit history.</p></div>{readOnly && <Badge variant="outline">Read-only account</Badge>}</div>
+    <div className="flex flex-wrap items-start justify-between gap-3"><div><Link href="/app/inbound" className="inline-flex items-center gap-1 text-sm text-muted-foreground underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"><ArrowLeft className="size-4" />Back to transfers</Link><h1 className="mt-3 text-2xl font-extrabold tracking-tight">Verify application</h1><p className="mt-1 text-sm text-muted-foreground">{panel.template.product_name} · Confirm each field with the customer. Corrections are saved with an audit history.</p></div><div className="flex flex-wrap items-center gap-2">{!readOnly && <Button size="sm" variant="outline" disabled={nudgeSaving} onClick={() => void nudgeTeam()}>{nudgeSaving ? <Loader2 className="size-4 animate-spin" /> : <Bell className="size-4" />}Nudge team</Button>}{readOnly && <Badge variant="outline">Read-only account</Badge>}</div></div>
     {readOnly && <div role="status" className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm">Your account is read-only. You can review this application, but field changes are disabled.</div>}
     {canHandoff && handoffContext && <Card><CardContent className="space-y-3 p-5"><div><p className="font-semibold">Hand off to a licensed agent</p><p className="mt-1 text-sm text-muted-foreground">Your verification progress travels with the call. The receiving agent sees it before accepting.</p></div><div className="flex flex-wrap items-end gap-3"><div className="min-w-56 flex-1 space-y-1"><Label htmlFor="handoff-agent">Licensed agent</Label><select id="handoff-agent" className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50" value={handoffTarget} disabled={readOnly || handoffSaving} onChange={(event) => setHandoffTarget(event.target.value)}><option value="">Choose an agent…</option>{handoffContext.licensedAgents.map((agent) => <option key={agent.id} value={agent.id}>{agent.name} ({agent.role})</option>)}</select></div><Button disabled={readOnly || handoffSaving || !handoffTarget} onClick={() => void offerHandoff()}>{handoffSaving ? "Offering…" : "Offer handoff"}</Button></div>{handoffError && <p role="alert" className="text-sm text-destructive">{handoffError}</p>}</CardContent></Card>}
     {canHandoff && handoffError && !handoffContext && <Card><CardContent className="p-5"><p role="alert" className="text-sm text-destructive">{handoffError}</p></CardContent></Card>}

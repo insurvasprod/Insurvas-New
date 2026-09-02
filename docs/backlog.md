@@ -1912,6 +1912,25 @@ membership, buffer performance scorecards and buffer-seat billing remain explici
 for this ticket and belong to later product work. Nothing was added to the open backlog for
 LA-1.14.
 
+### 129. ✅ LA-1.15 Agent Floor completed
+**From:** LA-1.15 · **Belongs to:** LA-1.15 · **Resolved:** 2026-09-02
+
+The Agent Floor is implemented as one tenant-scoped live view of waiting transfers, open calls,
+and team availability. It uses `queued_at` and `started_at` for refresh-safe timers, treats an open
+`active_calls` row as the only evidence of a live call, and refreshes from a tenant-scoped Realtime
+signal rather than polling. Claim, handoff, accept, nudge, verification, and disposition actions
+remain available through the existing lead flow; the floor adds the team nudge action at the lead
+itself as well. The API derives tenant and role from the session, enforces the inbound entitlement,
+audits writes, rejects hostile input, and makes duplicate nudges idempotent under concurrency.
+
+The live migration, RLS policies, Realtime triggers, focused security/concurrency verifier, deep
+migration check, TypeScript, lint, production build, 282-test suite, feature-policy check, and
+authenticated desktop/mobile browser QA all passed. Browser QA saw the live subscription and an
+availability change with no console errors; stale `last_seen_at` is also re-evaluated client-side
+so a closed laptop becomes offline within one minute even when no further event is emitted.
+Nothing was left unmet, deferred, or unverified for LA-1.15, so nothing was added to the open
+backlog beyond this resolved record.
+
 ---
 
 ## Related

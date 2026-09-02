@@ -1611,6 +1611,18 @@ export type Database = {
         Update: { ended_at?: string | null; updated_at?: string };
         Relationships: [];
       };
+      agent_presence: {
+        Row: { tenant_id: string; user_id: string; status: string; last_seen_at: string; updated_at: string };
+        Insert: { tenant_id: string; user_id: string; status?: string; last_seen_at?: string; updated_at?: string };
+        Update: { status?: string; last_seen_at?: string; updated_at?: string };
+        Relationships: [];
+      };
+      agent_floor_nudges: {
+        Row: { id: string; tenant_id: string; work_item_id: string; target_user_id: string | null; created_by: string; idempotency_key: string; message: string; created_at: string };
+        Insert: { id?: string; tenant_id: string; work_item_id: string; target_user_id?: string | null; created_by: string; idempotency_key: string; message?: string; created_at?: string };
+        Update: { message?: string };
+        Relationships: [];
+      };
       partner_messages: {
         Row: { id: string; tenant_id: string; partner_id: string; work_item_id: string; message: string; event_key: string | null; created_by: string | null; created_at: string };
         Insert: { id?: string; tenant_id: string; partner_id: string; work_item_id: string; message: string; event_key?: string | null; created_by?: string | null; created_at?: string };
