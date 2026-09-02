@@ -9,6 +9,7 @@ const stamp = Date.now();
 const tenantId = randomUUID();
 const otherTenantId = randomUUID();
 const ownerId = randomUUID();
+const bookkeeperId = randomUUID();
 const otherOwnerId = randomUUID();
 const partnerId = randomUUID();
 let leadId = null;
@@ -63,12 +64,12 @@ async function cleanup() {
     await db.from("verification_field_changes").delete().eq("lead_id", leadId);
     await db.from("agent_leads").delete().eq("id", leadId);
   }
-  await db.from("audit_log").delete().in("actor_id", [ownerId, otherOwnerId]);
+  await db.from("audit_log").delete().in("actor_id", [ownerId, bookkeeperId, otherOwnerId]);
   if (templateCopyId) await db.from("tenant_templates").delete().eq("id", templateCopyId);
   await db.from("tenant_entitlements").delete().in("tenant_id", [tenantId, otherTenantId]);
   await db.from("tenant_users").delete().in("tenant_id", [tenantId, otherTenantId]);
   await db.from("partners").delete().eq("id", partnerId);
-  await db.from("users").delete().in("id", [ownerId, otherOwnerId]);
+  await db.from("users").delete().in("id", [ownerId, bookkeeperId, otherOwnerId]);
   await db.from("tenants").delete().in("id", [tenantId, otherTenantId]);
 }
 async function main() {
@@ -81,11 +82,13 @@ async function main() {
   if (tenants.error) throw new Error(tenants.error.message);
   const users = await db.from("users").insert([
     { id: ownerId, email: `la120-owner-${stamp}@invalid.test`, name: "LA-1.20 owner", password_hash: "workspace-only", status: "active" },
+    { id: bookkeeperId, email: `la120-bookkeeper-${stamp}@invalid.test`, name: "LA-1.20 bookkeeper", password_hash: "workspace-only", status: "active" },
     { id: otherOwnerId, email: `la120-other-${stamp}@invalid.test`, name: "LA-1.20 other tenant", password_hash: "workspace-only", status: "active" },
   ]);
   if (users.error) throw new Error(users.error.message);
   const memberships = await db.from("tenant_users").insert([
     { tenant_id: tenantId, user_id: ownerId, role: "owner" },
+    { tenant_id: tenantId, user_id: bookkeeperId, role: "bookkeeper" },
     { tenant_id: otherTenantId, user_id: otherOwnerId, role: "owner" },
   ]);
   if (memberships.error) throw new Error(memberships.error.message);
@@ -95,6 +98,7 @@ async function main() {
   ]);
   if (entitlements.error) throw new Error(entitlements.error.message);
   const ownerCookie = await agentCookie(ownerId);
+  const bookkeeperCookie = await agentCookie(bookkeeperId);
   const otherCookie = await agentCookie(otherOwnerId, otherTenantId);
   try {
     const templatesResponse = await api("/api/app/templates", ownerCookie);
@@ -120,6 +124,10 @@ async function main() {
     const detailBefore = await api(`/api/app/leads/${leadId}`, ownerCookie);
     const detailBeforeBody = await detailBefore.json();
     check("owner can open the unified workspace", detailBefore.status === 200 && detailBeforeBody.lead?.id === leadId && detailBeforeBody.template?.form_definition && detailBeforeBody.queue?.id === workItemId, `status ${detailBefore.status}`);
+    const wrongRole = await api(`/api/app/leads/${leadId}`, bookkeeperCookie);
+    const concurrentReads = await Promise.all([api(`/api/app/leads/${leadId}`, ownerCookie), api(`/api/app/leads/${leadId}`, ownerCookie)]);
+    check("bookkeeper role is denied on the workspace API", wrongRole.status === 403);
+    check("two simultaneous workspace reads remain isolated and successful", concurrentReads.every((response) => response.status === 200));
     check("submitted form is rendered from the stored generic template", detailBefore.status === 200 && detailBeforeBody.template.fields.some((field) => field.field_key === prepared.correctionKey));
     check("initial timeline includes submission", detailBefore.status === 200 && detailBeforeBody.timeline.some((event) => event.label === "Lead Submitted" && event.immutable === true));
 
@@ -134,8 +142,8 @@ async function main() {
     check("timeline contains immutable verification correction", detailAfterCorrection.status === 200 && correctedBody.timeline.some((event) => event.label === "Verification Correction" && event.immutable === true));
 
     const nextStageId = stages.data[1]?.id ?? stages.data[0].id;
-    const stageUpdate = await api(`/api/app/leads/${leadId}`, ownerCookie, { method: "PATCH", ...json({ values: correctedBody.lead.values, stage_id: nextStageId }) });
-    check("workspace can change stage through the existing action", stageUpdate.status === 200);
+    const stageUpdates = await Promise.all([api(`/api/app/leads/${leadId}`, ownerCookie, { method: "PATCH", ...json({ values: correctedBody.lead.values, stage_id: nextStageId }) }), api(`/api/app/leads/${leadId}`, ownerCookie, { method: "PATCH", ...json({ values: correctedBody.lead.values, stage_id: nextStageId }) })]);
+    check("workspace can change stage through the existing action", stageUpdates.every((response) => response.status === 200));
     const detailAfterStage = await api(`/api/app/leads/${leadId}`, ownerCookie);
     const stagedBody = await detailAfterStage.json();
     check("stage change is reflected and appears in timeline", detailAfterStage.status === 200 && stagedBody.lead.stage_id === nextStageId && stagedBody.timeline.some((event) => event.label === "Lead Stage Changed" && event.immutable === true));
