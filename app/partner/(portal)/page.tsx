@@ -5,5 +5,5 @@ import { PartnerPortalWorkspace } from "@/components/partner/partner-portal-work
 export default async function PartnerPortalPage() {
   const context = await resolvePartnerContext();
   if (!context) redirect("/partner/login");
-  return <PartnerPortalWorkspace role={context.role} />;
+  return <PartnerPortalWorkspace role={context.role} partnerStatus={context.partnerStatus} />;
 }

@@ -3502,6 +3502,54 @@ export type Database = {
         };
         Returns: Json;
       };
+      partner_lead_pipeline_rows: {
+        Args: {
+          p_closer_id?: string | null;
+          p_date_from?: string | null;
+          p_date_to?: string | null;
+          p_outcome?: string | null;
+          p_partner_id: string;
+          p_product?: string | null;
+          p_stage_id?: string | null;
+          p_tenant_id: string;
+        };
+        Returns: {
+          id: string;
+          work_item_id: string;
+          customer: string;
+          values: Json;
+          submitted_at: string;
+          updated_at: string;
+          product: string;
+          stage_id: string;
+          stage_name: string;
+          stage_type: string;
+          stage_color: string;
+          stage_position: number;
+          stage_archived: boolean;
+          pipeline_id: string;
+          pipeline_name: string;
+          disposition: string | null;
+          outcome: string | null;
+          outcome_note: string | null;
+          submitted_by_id: string | null;
+          submitted_by_name: string;
+          status: string;
+        }[];
+      };
+      partner_lead_pipeline_payload: {
+        Args: {
+          p_closer_id?: string | null;
+          p_date_from?: string | null;
+          p_date_to?: string | null;
+          p_outcome?: string | null;
+          p_partner_id: string;
+          p_product?: string | null;
+          p_stage_id?: string | null;
+          p_tenant_id: string;
+        };
+        Returns: Json;
+      };
     };
     Enums: {
       legal_doc_type: "tos" | "privacy" | "dpa";

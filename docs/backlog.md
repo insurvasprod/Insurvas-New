@@ -1958,6 +1958,24 @@ The migration stores attachment metadata with tenant scope and size/type constra
 no upload, download, signed-URL, virus-scan or browser control yet. Add the storage lifecycle and
 failure handling before advertising attachments as available in partner chat.
 
+### 133. ✅ LA-1.17 partner lead pipeline completed
+**From:** LA-1.17 · **Belongs to:** LA-1.17 · **Resolved:** 2026-09-02
+
+The partner lead pipeline is implemented with one server-filtered read model, board and table
+views, filters, counters, lead detail and timeline, masked form values, and a safe CSV export.
+The API derives tenant and partner scope from the partner session, rejects foreign partner
+parameters, permits paused partners to read history, and rejects forged, expired, or offboarded
+access. The read RPCs are restricted to the service role, and the pipeline change trigger emits
+an opaque partner-scoped realtime signal while the UI refreshes its durable read model.
+
+The performance verifier initially found a cold 5,000-row request above two seconds because the
+request rebuilt a date formatter once per lead. Reusing one formatter per request fixed the
+measured path; the focused verifier then passed the under-two-second requirement. The live
+migrations, schema privilege checks, focused partner pipeline verifier, partner chat dependency
+verifier, deep migration check, TypeScript, lint, production build, full 283-test suite, feature
+check, and authenticated desktop/mobile browser QA all passed. Nothing was left unmet, deferred,
+or unverified for LA-1.17, so nothing was added to the open backlog.
+
 ---
 
 ## Related
