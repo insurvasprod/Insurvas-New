@@ -45,6 +45,8 @@ async function main() {
     check("hostile input is rejected", (await api("/api/app/partners", owner, { method: "POST", ...json(partner("<script>alert(1)</script>")) })).status === 400);
     const created = await api("/api/app/partners", owner, { method: "POST", ...json(partner("Publisher one")) }); const createdBody = await created.json(); partnerId = createdBody.partner?.id;
     check("first publisher is created", created.status === 201 && Boolean(partnerId));
+    const repeated = await api("/api/app/partners", owner, { method: "POST", ...json(partner("Publisher one")) });
+    check("repeating the same create request cannot consume another capacity slot", repeated.status === 403);
     const activated = await api(`/api/app/partners/${partnerId}`, owner, { method: "PATCH", ...json({ action: "transition", next_status: "active", reason: "capacity test" }) });
     check("activating a partner consumes its type capacity", activated.status === 200);
     const over = await api("/api/app/partners", owner, { method: "POST", ...json(partner("Publisher two")) }); const overBody = await over.json();
