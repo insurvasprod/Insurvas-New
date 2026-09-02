@@ -150,6 +150,8 @@ async function main() {
 
     const isolated = await api(`/api/app/leads/${leadId}`, otherCookie);
     check("another tenant cannot open the lead workspace", isolated.status === 404);
+    const missingLead = await api(`/api/app/leads/${randomUUID()}`, ownerCookie);
+    check("a valid session gets a controlled not-found for a missing lead", missingLead.status === 404);
     const expired = await api(`/api/app/leads/${leadId}`, await agentCookie(ownerId, tenantId, true));
     const forged = await api(`/api/app/leads/${leadId}`, await agentCookie(ownerId, tenantId, false, `${process.env.TENANT_SESSION_SECRET}-forged`));
     check("expired and forged agent sessions fail closed", expired.status === 401 && forged.status === 401);
