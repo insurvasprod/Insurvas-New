@@ -8,6 +8,7 @@ export const TENANT_PERMISSIONS = [
   "team.manage",
   "settings.manage",
   "leads.manage",
+  "inbound.buffer",
   "calendar.manage",
   "dialer.use",
   "sales.use",
@@ -34,7 +35,7 @@ const ROLE_PERMISSIONS: Record<TenantRole, readonly TenantPermission[]> = {
     "commission.view.own",
     "recordings.listen",
   ],
-  assistant: ["leads.manage", "calendar.manage"],
+  assistant: ["leads.manage", "calendar.manage", "inbound.buffer"],
   bookkeeper: [
     "policies.view",
     "commission.view.all",

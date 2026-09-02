@@ -10,14 +10,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 
 type Item = { id: string; customer: string; age: string; state: string; productLine: string; partnerName: string; status: string; ownerName: string | null; waitSeconds: number; screeningOutcome: string; screeningWarning: string | null; duplicateWarning: boolean; queuedAt: string };
-type Data = { items: Item[]; partners: Array<{ id: string; name: string }>; products: string[]; states: string[]; claimedUsers: Array<{ id: string; name: string }>; readOnly: boolean };
+type Handoff = { id: string; workItemId: string; bufferName: string; productLine: string; customer: string; progressPercentage: number; expiresAt: string };
+type Data = { items: Item[]; partners: Array<{ id: string; name: string }>; products: string[]; states: string[]; claimedUsers: Array<{ id: string; name: string }>; handoffs: Handoff[] };
 
 function waitLabel(seconds: number) {
   if (seconds < 60) return `${seconds}s waiting`;
   return `${Math.floor(seconds / 60)}m waiting`;
 }
 
-export function TransferInbox({ readOnly }: { readOnly: boolean }) {
+export function TransferInbox({ readOnly, role }: { readOnly: boolean; role: string }) {
   const [data, setData] = useState<Data | null>(null);
   const [error, setError] = useState("");
   const [status, setStatus] = useState("unclaimed");
@@ -58,12 +59,21 @@ export function TransferInbox({ readOnly }: { readOnly: boolean }) {
     router.push(`/app/inbound/${id}/verification`);
   }
 
+  async function accept(handoffId: string, workItemId: string) {
+    const response = await fetch("/api/app/inbound/handoff", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "accept", handoff_id: handoffId }) });
+    const body = await response.json().catch(() => null);
+    if (!response.ok) { toast.error(body?.error ?? "This handoff is no longer available"); void load(); return; }
+    toast.success("Handoff accepted; verification is ready to resume");
+    router.push(`/app/inbound/${workItemId}/verification`);
+  }
+
   if (error) return <Card><CardContent className="space-y-3 p-6"><p className="text-sm text-destructive">{error}</p><Button variant="outline" onClick={() => void load()}>Try again</Button></CardContent></Card>;
   if (!data) return <p className="text-sm text-muted-foreground">Loading transfer inbox…</p>;
 
   return <div className="mx-auto max-w-7xl space-y-6">
     <div><h1 className="text-2xl font-extrabold tracking-tight">Inbound transfers</h1><p className="mt-1 text-sm font-medium text-muted-foreground">Oldest first. Claiming a transfer connects you to one customer and removes it from other agents’ inboxes within a second.</p></div>
     {readOnly && <div role="status" className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm">Your account is read-only. You can review transfers, but claiming a new call is disabled.</div>}
+    {role !== "assistant" && data.handoffs.length > 0 && <Card><CardHeader className="border-b pb-4"><CardTitle className="text-base">Handoffs waiting for you</CardTitle></CardHeader><CardContent className="divide-y p-0">{data.handoffs.map((handoff) => <div key={handoff.id} className="flex flex-wrap items-center justify-between gap-4 p-4"><div><p className="font-semibold">{handoff.customer}</p><p className="text-sm text-muted-foreground">From {handoff.bufferName} · {handoff.productLine} · verification {handoff.progressPercentage}% complete</p><p className="text-xs text-muted-foreground">Offer expires {new Date(handoff.expiresAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</p></div><Button disabled={readOnly} onClick={() => void accept(handoff.id, handoff.workItemId)}>{readOnly ? "Read-only" : "Accept handoff"}</Button></div>)}</CardContent></Card>}
     <Card><CardContent className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-6">
       <div className="space-y-1"><Label htmlFor="inbox-status">Show</Label><select id="inbox-status" className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm" value={status} onChange={(event) => setStatus(event.target.value)}><option value="unclaimed">Unclaimed first</option><option value="claimed">Claimed</option><option value="all">All transfers</option></select></div>
       <div className="space-y-1"><Label htmlFor="inbox-partner">Partner</Label><select id="inbox-partner" className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm" value={partnerId} onChange={(event) => setPartnerId(event.target.value)}><option value="">All partners</option>{data.partners.map((partner) => <option key={partner.id} value={partner.id}>{partner.name}</option>)}</select></div>

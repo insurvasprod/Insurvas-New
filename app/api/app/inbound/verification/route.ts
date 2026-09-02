@@ -21,7 +21,7 @@ function errorResponse(error: unknown) {
 }
 
 export async function GET(request: Request) {
-  const auth = await requireFeatureRole("inbound_transfers", ["owner", "producer"]);
+  const auth = await requireFeatureRole("inbound_transfers", ["owner", "producer", "assistant"]);
   if (auth instanceof NextResponse) return auth;
   const workItemId = new URL(request.url).searchParams.get("work_item_id");
   const parsed = workItemSchema.safeParse(workItemId);
@@ -32,7 +32,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const auth = await requireFeatureRole("inbound_transfers", ["owner", "producer"], { write: true });
+  const auth = await requireFeatureRole("inbound_transfers", ["owner", "producer", "assistant"], { write: true });
   if (auth instanceof NextResponse) return auth;
   const body = await request.json().catch(() => null);
   const parsed = bodySchema.safeParse(body);

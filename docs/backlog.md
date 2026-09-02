@@ -1891,6 +1891,27 @@ lint, production build, 282-test suite, feature-policy check, and authenticated 
 browser QA passed. Nothing remains unmet, deferred, or unverified for LA-1.13, so nothing was
 added to the open backlog.
 
+### 128. ✅ LA-1.14 buffer agent flow completed
+**From:** LA-1.14 · **Belongs to:** LA-1.14 · **Resolved:** 2026-09-02
+
+The assistant buffer flow is implemented using the existing LA-0.2 assistant role. A buffer
+assistant can claim and verify an inbound transfer, offer it to a named active owner or
+producer, and the receiving licensed agent can see the verification progress before accepting.
+Acceptance atomically moves the queue ownership, active call and verification session together;
+an expired offer returns the transfer to the buffer without losing the call. Partner-channel
+claim cards are exactly-once and retries are idempotent. Disposition and commission access remain
+server-denied for assistants, and every mutation has tenant scope and audit evidence.
+
+The numbered migrations were applied to the connected Supabase project and the deep migration
+check passed. The focused live verifier passed all five acceptance areas plus role, tenant,
+hostile-input, forged/expired-session, duplicate-request, concurrency, timeout and audit checks.
+The dependent transfer-inbox and verification verifiers passed, as did TypeScript, lint, the
+production build, the 282-test suite, the feature-policy check, and authenticated desktop/mobile
+browser QA with no console errors. Manager assignment/ETA/ready routing, multi-LA buffer
+membership, buffer performance scorecards and buffer-seat billing remain explicitly out of scope
+for this ticket and belong to later product work. Nothing was added to the open backlog for
+LA-1.14.
+
 ---
 
 ## Related

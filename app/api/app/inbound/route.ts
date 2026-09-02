@@ -16,12 +16,12 @@ const filtersSchema = z.object({
 });
 
 export async function GET(request: Request) {
-  const auth = await requireFeatureRole("inbound_transfers", ["owner", "producer"]);
+  const auth = await requireFeatureRole("inbound_transfers", ["owner", "producer", "assistant"]);
   if (auth instanceof NextResponse) return auth;
   const parsed = filtersSchema.safeParse(Object.fromEntries(new URL(request.url).searchParams));
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Choose valid inbox filters" }, { status: 400 });
   try {
-    const data = await getTransferInbox(auth.context.tenantId, { status: parsed.data.status, partnerId: parsed.data.partner_id, productLine: parsed.data.product_line, state: parsed.data.state, screeningOutcome: parsed.data.screening_outcome, claimedBy: parsed.data.claimed_by }, auth.context.userId);
+    const data = await getTransferInbox(auth.context.tenantId, { status: parsed.data.status, partnerId: parsed.data.partner_id, productLine: parsed.data.product_line, state: parsed.data.state, screeningOutcome: parsed.data.screening_outcome, claimedBy: parsed.data.claimed_by }, auth.context.userId, auth.context.role);
     return NextResponse.json({ ...data, currentUserId: auth.context.userId, readOnly: auth.entitlement.status === "suspended" || auth.entitlement.status === "paused", fetchedAt: new Date().toISOString() });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Could not load transfer inbox" }, { status: 500 });

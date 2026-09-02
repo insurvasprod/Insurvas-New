@@ -1612,8 +1612,8 @@ export type Database = {
         Relationships: [];
       };
       partner_messages: {
-        Row: { id: string; tenant_id: string; partner_id: string; work_item_id: string; message: string; created_by: string | null; created_at: string };
-        Insert: { id?: string; tenant_id: string; partner_id: string; work_item_id: string; message: string; created_by?: string | null; created_at?: string };
+        Row: { id: string; tenant_id: string; partner_id: string; work_item_id: string; message: string; event_key: string | null; created_by: string | null; created_at: string };
+        Insert: { id?: string; tenant_id: string; partner_id: string; work_item_id: string; message: string; event_key?: string | null; created_by?: string | null; created_at?: string };
         Update: { message?: string };
         Relationships: [];
       };
@@ -3252,6 +3252,22 @@ export type Database = {
       list_transfer_inbox: {
         Args: { p_tenant_id: string; p_status?: string; p_partner_id?: string | null; p_product_line?: string | null; p_state?: string | null; p_screening_outcome?: string | null; p_claimed_by?: string | null };
         Returns: { id: string; lead_id: string; partner_id: string | null; partner_name: string | null; product_line: string; status: string; owner_user_id: string | null; owner_name: string | null; claimed_at: string | null; queued_at: string; wait_seconds: number; customer: string; age: string; state: string; screening_outcome: string; screening_warning: string | null; duplicate_warning: boolean }[];
+      };
+      expire_buffer_handoffs: {
+        Args: { p_tenant_id: string };
+        Returns: number;
+      };
+      offer_buffer_handoff: {
+        Args: { p_tenant_id: string; p_work_item_id: string; p_buffer_user_id: string; p_target_user_id: string; p_timeout_seconds?: number; p_ip?: string | null; p_user_agent?: string | null };
+        Returns: Json;
+      };
+      list_buffer_handoffs: {
+        Args: { p_tenant_id: string; p_licensed_agent_id: string };
+        Returns: { id: string; work_item_id: string; buffer_user_id: string; buffer_name: string; product_line: string; customer: string; progress_percentage: number; verification_session_id: string; offered_at: string; expires_at: string }[];
+      };
+      accept_buffer_handoff: {
+        Args: { p_tenant_id: string; p_handoff_id: string; p_licensed_agent_id: string; p_ip?: string | null; p_user_agent?: string | null };
+        Returns: Json;
       };
       reconcile_partner_intake: {
         Args: never;

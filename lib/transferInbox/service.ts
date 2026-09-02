@@ -11,7 +11,20 @@ export type InboxFilters = {
   claimedBy?: string;
 };
 
-export async function getTransferInbox(tenantId: string, filters: InboxFilters, currentUserId: string) {
+export type PendingHandoff = {
+  id: string;
+  workItemId: string;
+  bufferUserId: string;
+  bufferName: string;
+  productLine: string;
+  customer: string;
+  progressPercentage: number;
+  verificationSessionId: string;
+  offeredAt: string;
+  expiresAt: string;
+};
+
+export async function getTransferInbox(tenantId: string, filters: InboxFilters, currentUserId: string, role?: string) {
   const supabase = getSupabaseServiceClient();
   const { data: rows, error } = await supabase.rpc("list_transfer_inbox", {
     p_tenant_id: tenantId,
@@ -43,6 +56,10 @@ export async function getTransferInbox(tenantId: string, filters: InboxFilters, 
     duplicateWarning: row.duplicate_warning,
   }));
   const partners = [...new Map(items.filter((item) => item.partnerId).map((item) => [item.partnerId!, item.partnerName])).entries()].map(([id, name]) => ({ id, name }));
+  const pending = role === "owner" || role === "producer"
+    ? await supabase.rpc("list_buffer_handoffs", { p_tenant_id: tenantId, p_licensed_agent_id: currentUserId })
+    : { data: [], error: null };
+  if (pending.error) throw new Error(`Could not load handoff offers: ${pending.error.message}`);
 
   return {
     items,
@@ -50,19 +67,24 @@ export async function getTransferInbox(tenantId: string, filters: InboxFilters, 
     products: [...new Set(items.map((row) => row.productLine))].sort(),
     states: [...new Set(items.map((item) => item.state).filter((state) => state !== "—"))].sort(),
     claimedUsers: [...new Map(items.filter((item) => item.ownerUserId).map((item) => [item.ownerUserId!, item.ownerName ?? "Another agent"]))].map(([id, name]) => ({ id, name })),
+    handoffs: (pending.data ?? []).map((handoff) => ({ id: handoff.id, workItemId: handoff.work_item_id, bufferUserId: handoff.buffer_user_id, bufferName: handoff.buffer_name, productLine: handoff.product_line, customer: handoff.customer, progressPercentage: handoff.progress_percentage, verificationSessionId: handoff.verification_session_id, offeredAt: handoff.offered_at, expiresAt: handoff.expires_at })) as PendingHandoff[],
   };
 }
 
-export async function postPartnerClaimMessage(tenantId: string, workItemId: string, userId: string, customer: string) {
+export async function postPartnerClaimMessage(tenantId: string, workItemId: string, userId: string, customer: string, options: { eventKey?: string; message?: string } = {}) {
   const supabase = getSupabaseServiceClient();
   const { data: queue, error: queueError } = await supabase.from("lead_queue").select("partner_id").eq("id", workItemId).eq("tenant_id", tenantId).single();
   if (queueError || !queue?.partner_id) throw new Error("Partner channel is not available for this transfer");
-  const { error } = await supabase.from("partner_messages").insert({
+  const message = {
     tenant_id: tenantId,
     partner_id: queue.partner_id,
     work_item_id: workItemId,
-    message: `${customer} is connected to the agent`,
+    message: options.message ?? `${customer} is connected to the agent`,
+    event_key: options.eventKey ?? null,
     created_by: userId,
-  });
+  };
+  const result = await supabase.from("partner_messages").insert(message);
+  const { error } = result;
+  if (options.eventKey && error?.code === "23505") return;
   if (error) throw new Error(`Could not post partner claim message: ${error.message}`);
 }

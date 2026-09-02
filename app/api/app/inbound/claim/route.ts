@@ -9,7 +9,7 @@ import { getTransferInbox, postPartnerClaimMessage } from "@/lib/transferInbox/s
 const bodySchema = z.object({ work_item_id: z.string().uuid() }).strict();
 
 export async function POST(request: Request) {
-  const auth = await requireFeatureRole("inbound_transfers", ["owner", "producer"], { write: true });
+  const auth = await requireFeatureRole("inbound_transfers", ["owner", "producer", "assistant"], { write: true });
   if (auth instanceof NextResponse) return auth;
   const body = await request.json().catch(() => null);
   const parsed = bodySchema.safeParse(body);
@@ -37,11 +37,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Could not claim this transfer" }, { status: 500 });
   }
 
-  const inbox = await getTransferInbox(auth.context.tenantId, { status: "all" }, auth.context.userId);
+  const inbox = await getTransferInbox(auth.context.tenantId, { status: "all" }, auth.context.userId, auth.context.role);
   const item = inbox.items.find((candidate) => candidate.id === parsed.data.work_item_id);
   let chatPosted = true;
   try {
-    await postPartnerClaimMessage(auth.context.tenantId, parsed.data.work_item_id, auth.context.userId, item?.customer ?? "Customer");
+    const isBuffer = auth.context.role === "assistant";
+    await postPartnerClaimMessage(auth.context.tenantId, parsed.data.work_item_id, auth.context.userId, item?.customer ?? "Customer", isBuffer
+      ? { eventKey: `buffer-claim:${parsed.data.work_item_id}`, message: `${item?.customer ?? "Customer"} is connected to the buffer agent` }
+      : undefined);
   } catch (chatError) {
     chatPosted = false;
     console.error("Partner claim message failed after claim", chatError);

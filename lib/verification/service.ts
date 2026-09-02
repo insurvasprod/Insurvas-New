@@ -22,7 +22,7 @@ async function loadContext(tenantId: string, userId: string, workItemId: string)
   const queue = await supabase.from("lead_queue").select("id, tenant_id, lead_id, status, owner_user_id, product_line").eq("id", workItemId).eq("tenant_id", tenantId).maybeSingle<Queue>();
   if (queue.error) throw new VerificationError("verification_unavailable", queue.error.message);
   if (!queue.data) throw new VerificationError("work_item_not_found", "That transfer could not be found.");
-  if (queue.data.status !== "claimed" || queue.data.owner_user_id !== userId) throw new VerificationError("verification_owner_required", "Claim this transfer before opening verification.");
+  if (!["claimed", "buffer_active", "la_active"].includes(queue.data.status) || queue.data.owner_user_id !== userId) throw new VerificationError("verification_owner_required", "Claim this transfer before opening verification.");
 
   const session = await supabase.from("verification_sessions").select("id, tenant_id, work_item_id, lead_id, user_id, agent_role, status, started_at, completed_at, progress_percentage, last_actor_id").eq("tenant_id", tenantId).eq("work_item_id", workItemId).is("ended_at", null).maybeSingle<Session>();
   if (session.error) throw new VerificationError("verification_unavailable", session.error.message);
