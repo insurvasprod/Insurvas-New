@@ -2,6 +2,7 @@ import "server-only";
 
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { parsePartnerMessage, type PartnerCardType, type PartnerMessage } from "./cards";
+import { notifyTenantAgents } from "@/lib/agentAlerts/service";
 
 type CardInput = { tenantId: string; partnerId: string; leadId?: string | null; workItemId?: string | null; userId?: string | null; eventKey: string; cardType: PartnerCardType; message?: string };
 
@@ -62,7 +63,7 @@ export async function postPartnerSystemCard(input: CardInput) {
   return { alreadyPosted: false, id: data?.id ?? null };
 }
 
-export async function postPartnerText(input: { tenantId: string; partnerId: string; userId: string; message: string; mentions?: string[] }) {
+export async function postPartnerText(input: { tenantId: string; partnerId: string; userId: string; message: string; mentions?: string[]; notifyAgents?: boolean }) {
   const message = input.message.trim();
   if (message.length < 1 || message.length > 2000) throw new Error("Message must be between 1 and 2,000 characters");
   const supabase = getSupabaseServiceClient();
@@ -78,6 +79,9 @@ export async function postPartnerText(input: { tenantId: string; partnerId: stri
       const result = await supabase.from("partner_message_mentions").insert(allowed.map((mentionedUserId) => ({ tenant_id: input.tenantId, message_id: data.id, mentioned_user_id: mentionedUserId })));
       if (result.error && result.error.code !== "23505") throw new Error(`Could not save mentions: ${result.error.message}`);
     }
+  }
+  if (input.notifyAgents) {
+    void notifyTenantAgents({ tenantId: input.tenantId, roles: ["owner", "producer", "assistant", "bookkeeper"], kind: "partner_message", title: "New partner message", body: message, link: "/app/partner-chat", sourceKey: `partner-message:${data.id}`, excludeUserId: input.userId }).catch((alertError) => console.error("Agent partner-message alert failed", alertError));
   }
   return parsePartnerMessage(data);
 }

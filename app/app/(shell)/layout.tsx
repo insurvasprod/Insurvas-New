@@ -14,6 +14,7 @@ import { SubscriptionStateBanner } from "@/components/app/subscription-state-ban
 import { getMaintenanceStatus, getActiveAnnouncements } from "@/lib/system/service";
 import { planDisplayName } from "@/lib/plans/display";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { AgentAlertCenter } from "@/components/app/agent-alert-center";
 
 /**
  * Enforcement point 1 of 3: the MENU.
@@ -81,6 +82,7 @@ export default async function AgentShellLayout({ children }: { children: React.R
         <MaintenanceMessage status={maintenance} />
         <AnnouncementStrip initialAnnouncements={announcements} />
         <SubscriptionStateBanner status={entitlement.status} />
+        <AgentAlertCenter />
         {children}
       </main>
     </div>

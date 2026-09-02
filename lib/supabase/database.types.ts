@@ -1764,6 +1764,12 @@ export type Database = {
         Update: { read_at?: string | null };
         Relationships: [];
       };
+      agent_notification_settings: {
+        Row: { tenant_id: string; user_id: string; enabled_events: Json; do_not_disturb: boolean; sound_muted: boolean; sound_volume: number; updated_at: string };
+        Insert: { tenant_id: string; user_id: string; enabled_events?: Json; do_not_disturb?: boolean; sound_muted?: boolean; sound_volume?: number; updated_at?: string };
+        Update: { enabled_events?: Json; do_not_disturb?: boolean; sound_muted?: boolean; sound_volume?: number; updated_at?: string };
+        Relationships: [];
+      };
       lead_note_mentions: {
         Row: { id: string; tenant_id: string; note_id: string; mentioned_user_id: string; created_at: string };
         Insert: { id?: string; tenant_id: string; note_id: string; mentioned_user_id: string; created_at?: string };

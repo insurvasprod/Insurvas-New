@@ -63,6 +63,9 @@ export const AGENT_API_POLICIES: AgentApiPolicy[] = [
   { sourceFile: "app/api/app/queue-sla-settings/route.ts", featureKey: "book_of_business", allowedRoles: ["owner"] },
   { sourceFile: "app/api/app/legal/accept/route.ts", featureKey: null },
   { sourceFile: "app/api/app/me/route.ts", featureKey: null },
+  // Alert preferences are a cross-cutting agent setting, not a paid module. The route still
+  // resolves tenant and current membership server-side via requireTenant().
+  { sourceFile: "app/api/app/notifications/route.ts", featureKey: null },
   { sourceFile: "app/api/app/partners/route.ts", featureKey: "publisher_records", allowedRoles: ["owner", "bookkeeper"] },
   { sourceFile: "app/api/app/partners/[id]/route.ts", featureKey: "publisher_records", allowedRoles: ["owner", "bookkeeper"] },
   { sourceFile: "app/api/app/partners/[id]/users/route.ts", featureKey: "publisher_records", allowedRoles: ["owner", "bookkeeper"] },

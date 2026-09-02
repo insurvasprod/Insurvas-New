@@ -25,6 +25,7 @@
     "advance:periods": "node --env-file=.env.local scripts/advance-billing-periods.mjs",
     "verify:entitlements": "node --env-file=.env.local scripts/verify-entitlements.mjs",
     "verify:agent-shell": "node --env-file=.env.local scripts/verify-agent-shell.mjs",
+    "verify:agent-alerts": "node --env-file=.env.local scripts/verify-agent-alerts.mjs",
     "verify:payments": "node --experimental-strip-types --env-file=.env.local scripts/verify-payment-provider.mjs",
     "verify:webhook": "node --env-file=.env.local scripts/verify-whop-webhook.mjs",
     "verify:invoices": "node --env-file=.env.local scripts/verify-invoices.mjs",

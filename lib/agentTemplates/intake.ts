@@ -5,6 +5,7 @@ import type { Json } from "@/lib/supabase/database.types";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { postPartnerSystemCard } from "@/lib/partnerChat/service";
 import { runExistingCustomerPreflight } from "@/lib/existingCustomerPreflight/service";
+import { notifyTenantAgents } from "@/lib/agentAlerts/service";
 
 type IntakeLead = {
   id: string;
@@ -89,6 +90,18 @@ export async function writePartnerIntakeArtifacts(input: IntakeActor): Promise<v
     payload: { productCode: input.lead.product_line, partnerId: input.partnerId, submissionId: input.submissionId, affiliateLinkId: input.affiliateLinkId ?? null, campaign: input.affiliateCampaign ?? null },
   });
   if (notification.error && notification.error.code !== "23505") failures.push({ step: "notification", error: notification.error.message });
+
+  // The durable per-user alert is a side effect of intake. Dedupe is in the notification table,
+  // so a retried submission cannot make a single lead ring repeatedly.
+  void notifyTenantAgents({
+    tenantId: input.tenantId,
+    roles: ["owner", "producer"],
+    kind: "new_unclaimed_lead",
+    title: "New lead available",
+    body: `${name || "A new lead"} is waiting to be claimed${phone ? ` · ${phone}` : ""}.`,
+    link: `/app/leads/${input.lead.id}`,
+    sourceKey: `new-lead:${input.lead.id}`,
+  }).catch((error) => console.error("Agent new-lead alert failed", error));
 
   // Chat is a notification side effect. The lead/queue write remains successful when chat
   // is unavailable, while this event key prevents a retry from announcing the lead twice.

@@ -3,6 +3,7 @@ import "server-only";
 import { getClientIp } from "@/lib/request/clientInfo";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { postPartnerSystemCard } from "@/lib/partnerChat/service";
+import { notifyAgentUser } from "@/lib/agentAlerts/service";
 
 export type LicensedAgent = { id: string; name: string; role: "owner" | "producer" };
 
@@ -63,6 +64,11 @@ export async function offerBufferHandoff(params: { tenantId: string; workItemId:
     p_user_agent: params.request.headers.get("user-agent"),
   });
   if (error) throw mapError(error.message);
+  const handoff = data as { handoff_id?: string };
+  void (async () => {
+    const queue = await getSupabaseServiceClient().from("lead_queue").select("lead_id").eq("tenant_id", params.tenantId).eq("id", params.workItemId).maybeSingle();
+    await notifyAgentUser({ tenantId: params.tenantId, userId: params.targetUserId, kind: "handoff_offered", title: "A lead was handed off to you", body: "A buffer agent is waiting for you to accept this transfer.", link: queue.data?.lead_id ? `/app/leads/${queue.data.lead_id}` : "/app/leads", sourceKey: `handoff-offered:${handoff.handoff_id ?? params.workItemId}` });
+  })().catch((alertError) => console.error("Agent handoff alert failed", alertError));
   return data;
 }
 

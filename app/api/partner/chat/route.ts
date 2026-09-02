@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
   const parsed = messageSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Write a valid message" }, { status: 400 });
   try {
-    const message = await postPartnerText({ tenantId: auth.context.tenantId, partnerId: auth.context.partnerId, userId: auth.context.userId, ...parsed.data });
+    const message = await postPartnerText({ tenantId: auth.context.tenantId, partnerId: auth.context.partnerId, userId: auth.context.userId, notifyAgents: true, ...parsed.data });
     await audit({ actorType: "tenant", actorId: auth.context.userId, action: "tenant.partner_chat_message_sent", targetType: "partner_channel", targetId: auth.context.partnerId, metadata: { mentions: parsed.data.mentions?.length ?? 0, actorPlane: "partner" }, request });
     return NextResponse.json({ message }, { status: 201 });
   } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Could not send message" }, { status: 400 }); }

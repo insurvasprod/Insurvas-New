@@ -2094,6 +2094,13 @@ The local agent app was reachable during this run, but the available browser tab
 
 **Fix:** sign in as an entitled local agent owner, producer, or assistant, open a real lead, verify the pre-flight result and policy-matching disclaimer on the inbox, Agent Floor, and lead workspace surfaces, exercise manual re-check, repeat at desktop and phone widths, inspect console errors and keyboard focus, and capture the finished authenticated screen. Remove this entry only after that browser run is clean.
 
+### 146. 🔵 LA-1.25 authenticated alert-center browser QA is pending an authorized agent session
+**From:** LA-1.25 · **Belongs to:** LA-1.25
+
+The live settings/API verifier, migration inspection, typecheck, lint, build, unit tests, and protected unauthenticated redirect were run. The available in-app tabs still had no authorized agent session: the fresh tab resolved to `/partner/login`, so the finished authenticated alert center could not be opened. Browser notification permission, denied-permission fallback, notification click-through, DND indicator, sound controls, per-event persistence in the real UI, console cleanliness, keyboard focus, and desktop/mobile screenshots therefore remain unverified.
+
+**Fix:** sign in as an entitled local agent owner, producer, assistant, or bookkeeper, open any `/app` page, exercise the Alert settings panel and each toggle, grant and deny browser permission in separate runs, create a test alert in a background tab, click it to open the lead, test DND, mute, volume, and a ten-lead burst at desktop and phone widths, inspect console errors and keyboard focus, and capture the finished screen. Remove this entry only after that authenticated run is clean.
+
 ---
 
 ## Related
