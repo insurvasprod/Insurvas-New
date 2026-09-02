@@ -1624,9 +1624,33 @@ export type Database = {
         Relationships: [];
       };
       partner_messages: {
-        Row: { id: string; tenant_id: string; partner_id: string; work_item_id: string; message: string; event_key: string | null; created_by: string | null; created_at: string };
-        Insert: { id?: string; tenant_id: string; partner_id: string; work_item_id: string; message: string; event_key?: string | null; created_by?: string | null; created_at?: string };
+        Row: { id: string; tenant_id: string; partner_id: string; channel_id: string; work_item_id: string | null; message: string; message_kind: string; card_type: string | null; card_payload: Json; event_key: string | null; created_by: string | null; created_at: string };
+        Insert: { id?: string; tenant_id: string; partner_id: string; channel_id: string; work_item_id?: string | null; message: string; message_kind?: string; card_type?: string | null; card_payload?: Json; event_key?: string | null; created_by?: string | null; created_at?: string };
         Update: { message?: string };
+        Relationships: [];
+      };
+      partner_channels: {
+        Row: { id: string; tenant_id: string; partner_id: string; channel_type: string; name: string; status: string; created_by: string | null; created_at: string; archived_at: string | null };
+        Insert: { id?: string; tenant_id: string; partner_id: string; channel_type?: string; name?: string; status?: string; created_by?: string | null; created_at?: string; archived_at?: string | null };
+        Update: { name?: string; status?: string; archived_at?: string | null };
+        Relationships: [];
+      };
+      partner_message_reads: {
+        Row: { channel_id: string; tenant_id: string; user_id: string; read_at: string };
+        Insert: { channel_id: string; tenant_id: string; user_id: string; read_at?: string };
+        Update: { read_at?: string };
+        Relationships: [];
+      };
+      partner_message_mentions: {
+        Row: { id: string; tenant_id: string; message_id: string; mentioned_user_id: string; created_at: string };
+        Insert: { id?: string; tenant_id: string; message_id: string; mentioned_user_id: string; created_at?: string };
+        Update: Record<string, never>;
+        Relationships: [];
+      };
+      partner_message_attachments: {
+        Row: { id: string; tenant_id: string; message_id: string; file_name: string; storage_path: string; content_type: string; size_bytes: number; created_by: string | null; created_at: string };
+        Insert: { id?: string; tenant_id: string; message_id: string; file_name: string; storage_path: string; content_type: string; size_bytes: number; created_by?: string | null; created_at?: string };
+        Update: Record<string, never>;
         Relationships: [];
       };
       deal_flow: {

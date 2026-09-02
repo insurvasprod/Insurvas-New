@@ -3,6 +3,7 @@ import "server-only";
 import { audit } from "@/lib/audit/log";
 import type { Json } from "@/lib/supabase/database.types";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
+import { postPartnerSystemCard } from "@/lib/partnerChat/service";
 
 type IntakeLead = {
   id: string;
@@ -77,6 +78,10 @@ export async function writePartnerIntakeArtifacts(input: IntakeActor): Promise<v
     payload: { productCode: input.lead.product_line, partnerId: input.partnerId, submissionId: input.submissionId, affiliateLinkId: input.affiliateLinkId ?? null, campaign: input.affiliateCampaign ?? null },
   });
   if (notification.error && notification.error.code !== "23505") failures.push({ step: "notification", error: notification.error.message });
+
+  // Chat is a notification side effect. The lead/queue write remains successful when chat
+  // is unavailable, while this event key prevents a retry from announcing the lead twice.
+  void postPartnerSystemCard({ tenantId: input.tenantId, partnerId: input.partnerId, leadId: input.lead.id, workItemId: null, eventKey: `new-lead:${input.lead.id}`, cardType: "new_lead", userId: input.userId }).catch((error) => console.error("Partner new-lead card failed", error));
 
   for (const failure of failures) {
     const recorded = await supabase.from("intake_failures").insert({

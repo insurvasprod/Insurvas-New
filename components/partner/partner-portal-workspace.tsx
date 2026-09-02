@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { PartnerChatPanel } from "@/components/partner/partner-chat-panel";
 import type { PartnerRole } from "@/lib/partnerAuth/roles";
 import type { TemplateField, TemplateFormField, TemplateRow } from "@/lib/templates/constants";
 
@@ -210,6 +211,7 @@ export function PartnerPortalWorkspace({ role }: { role: PartnerRole }) {
           {loading ? <p className="text-sm text-muted-foreground">Loading users…</p> : users.length === 0 ? <p className="text-sm text-muted-foreground">No users yet.</p> : <div className="divide-y rounded-lg border">{users.map((user) => <div key={user.id} className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="font-medium">{user.name}</p><p className="text-sm text-muted-foreground">{user.email} · {user.role === "partner_admin" ? "Partner admin" : "Partner user"}</p></div><div className="flex items-center gap-3"><span className={`text-xs font-semibold ${user.status === "active" ? "text-[var(--color-success)]" : "text-muted-foreground"}`}>{user.status === "active" ? "Active" : "Deactivated"}</span>{role === "partner_admin" && <Button variant="outline" size="sm" onClick={() => void changeStatus(user)}>{user.status === "active" ? "Deactivate" : "Reactivate"}</Button>}</div></div>)}</div>}
         </CardContent>
       </Card>
+      <PartnerChatPanel />
     </div>
   );
 }

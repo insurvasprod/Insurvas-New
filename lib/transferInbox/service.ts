@@ -1,6 +1,7 @@
 import "server-only";
 
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
+import { postPartnerSystemCard } from "@/lib/partnerChat/service";
 
 export type InboxFilters = {
   status: "unclaimed" | "claimed" | "all";
@@ -75,16 +76,5 @@ export async function postPartnerClaimMessage(tenantId: string, workItemId: stri
   const supabase = getSupabaseServiceClient();
   const { data: queue, error: queueError } = await supabase.from("lead_queue").select("partner_id").eq("id", workItemId).eq("tenant_id", tenantId).single();
   if (queueError || !queue?.partner_id) throw new Error("Partner channel is not available for this transfer");
-  const message = {
-    tenant_id: tenantId,
-    partner_id: queue.partner_id,
-    work_item_id: workItemId,
-    message: options.message ?? `${customer} is connected to the agent`,
-    event_key: options.eventKey ?? null,
-    created_by: userId,
-  };
-  const result = await supabase.from("partner_messages").insert(message);
-  const { error } = result;
-  if (options.eventKey && error?.code === "23505") return;
-  if (error) throw new Error(`Could not post partner claim message: ${error.message}`);
+  return postPartnerSystemCard({ tenantId, partnerId: queue.partner_id, workItemId, userId, eventKey: options.eventKey ?? `claim:${workItemId}`, cardType: options.eventKey?.startsWith("buffer-claim:") ? "transferred" : "connected", message: options.message ?? `${customer} is connected to the agent` });
 }

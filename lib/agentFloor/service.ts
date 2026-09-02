@@ -3,6 +3,7 @@ import "server-only";
 import { audit } from "@/lib/audit/log";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { agentFloorWaitThresholds } from "@/lib/settings/queries";
+import { postAgentReadyCards } from "@/lib/partnerChat/service";
 
 export type AgentAvailability = "ready" | "on_break" | "off";
 
@@ -130,10 +131,11 @@ export async function updateAgentPresence(params: { tenantId: string; userId: st
   const { data, error } = await supabase
     .from("agent_presence")
     .upsert({ tenant_id: params.tenantId, user_id: params.userId, status: params.status, last_seen_at: new Date().toISOString() }, { onConflict: "tenant_id,user_id" })
-    .select("user_id, status, last_seen_at")
+    .select("user_id, status, last_seen_at, updated_at")
     .single();
   if (error) throw new Error(`Could not update availability: ${error.message}`);
   await audit({ actorType: "tenant", actorId: params.userId, action: "tenant.agent_presence_updated", targetType: "agent_presence", targetId: `${params.tenantId}:${params.userId}`, metadata: { status: params.status }, request: params.request });
+  if (params.status === "ready") void postAgentReadyCards(params.tenantId, params.userId, `agent-ready:${params.userId}:${data.updated_at}`).catch((error) => console.error("Partner ready cards failed", error));
   return data;
 }
 

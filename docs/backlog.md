@@ -1933,6 +1933,31 @@ so a closed laptop becomes offline within one minute even when no further event 
 Nothing was left unmet, deferred, or unverified for LA-1.15, so nothing was added to the open
 backlog beyond this resolved record.
 
+### 130. 🟡 LA-1.16 nobody-claimed escalation is not wired to a worker
+**From:** LA-1.16 · **Belongs to:** LA-1.23
+
+The partner card vocabulary includes `nobody_claimed`, but LA-1.16 has no scheduled or queue
+worker that observes the unclaimed threshold and emits the Ray-only card. The chat data model is
+ready for the event; the missing owner is the later unclaimed-SLA/escalation work. Leaving this
+unwired means a partner can wait past the threshold without the promised internal escalation.
+Add an idempotent threshold worker, route the card only to the tenant owner/producer view, and
+cover retry, clock-skew and concurrent-worker cases.
+
+### 131. ⚪ LA-1.16 agent-created channels and direct messages are not implemented
+**From:** LA-1.16 · **Belongs to:** LA-1.16 follow-up
+
+The delivered chat provides one automatically-created partner channel and two-way messages in
+that channel. It does not yet let Ray create additional channels or start a direct message. Add a
+participant model, server-side membership checks, channel creation and archive APIs, and UI entry
+points before treating that part of the ticket's stated in-scope behavior as complete.
+
+### 132. ⚪ LA-1.16 attachments are metadata-only
+**From:** LA-1.16 · **Belongs to:** LA-1.16 follow-up
+
+The migration stores attachment metadata with tenant scope and size/type constraints, but there is
+no upload, download, signed-URL, virus-scan or browser control yet. Add the storage lifecycle and
+failure handling before advertising attachments as available in partner chat.
+
 ---
 
 ## Related

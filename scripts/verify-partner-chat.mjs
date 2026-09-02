@@ -1,0 +1,58 @@
+// LA-1.16 failure-path and live contract checks. Uses disposable tenants and real app routes.
+import { randomUUID } from "node:crypto";
+import { SignJWT } from "jose";
+import { createClient } from "@supabase/supabase-js";
+
+const BASE = process.env.APP_BASE_URL ?? "http://localhost:3000";
+const db = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
+const stamp = Date.now();
+const tenantId = randomUUID(); const otherTenantId = randomUUID(); const partnerId = randomUUID(); const otherPartnerId = randomUUID();
+const ownerId = randomUUID(); const partnerUserId = randomUUID(); const otherPartnerUserId = randomUUID(); const leadId = randomUUID(); const queueId = randomUUID();
+let failures = 0;
+const check = (label, ok, detail = "") => { if (ok) console.log(`  ok   ${label}`); else { console.log(`  FAIL ${label}${detail ? ` — ${detail}` : ""}`); failures += 1; } };
+const json = (value) => ({ headers: { "content-type": "application/json" }, body: JSON.stringify(value) });
+async function tenantCookie(userId, currentTenant = tenantId, expired = false) { return `insurvas_tenant_session=${await new SignJWT({ tenantId: currentTenant }).setProtectedHeader({ alg: "HS256" }).setSubject(userId).setIssuedAt().setExpirationTime(expired ? Math.floor(Date.now() / 1000) - 1 : "10m").sign(new TextEncoder().encode(process.env.TENANT_SESSION_SECRET))}`; }
+async function partnerCookie(userId, currentPartner = partnerId, currentTenant = tenantId, expired = false) { return `insurvas_partner_session=${await new SignJWT({ tenantId: currentTenant, partnerId: currentPartner }).setProtectedHeader({ alg: "HS256" }).setSubject(userId).setIssuedAt().setExpirationTime(expired ? Math.floor(Date.now() / 1000) - 1 : "10m").sign(new TextEncoder().encode(process.env.PARTNER_SESSION_SECRET || `insurvas-partner:${process.env.TENANT_SESSION_SECRET}`))}`; }
+async function api(path, cookie, options = {}) { return fetch(`${BASE}${path}`, { ...options, headers: { cookie, ...(options.headers ?? {}) }, redirect: "manual" }); }
+async function body(response) { return response.json().catch(() => ({})); }
+async function cleanup() {
+  for (const id of [tenantId, otherTenantId]) {
+    await db.from("partner_message_mentions").delete().eq("tenant_id", id); await db.from("partner_message_attachments").delete().eq("tenant_id", id); await db.from("partner_message_reads").delete().eq("tenant_id", id); await db.from("partner_messages").delete().eq("tenant_id", id); await db.from("partner_channels").delete().eq("tenant_id", id); await db.from("active_calls").delete().eq("tenant_id", id); await db.from("verification_sessions").delete().eq("tenant_id", id); await db.from("lead_queue").delete().eq("tenant_id", id); await db.from("agent_leads").delete().eq("tenant_id", id); await db.from("tenant_entitlements").delete().eq("tenant_id", id); await db.from("tenant_users").delete().eq("tenant_id", id); await db.from("partners").delete().eq("tenant_id", id); await db.from("audit_log").delete().in("actor_id", [ownerId, partnerUserId, otherPartnerUserId]); await db.from("users").delete().in("id", [ownerId, partnerUserId, otherPartnerUserId]); await db.from("tenants").delete().eq("id", id);
+  }
+}
+async function main() {
+  if (!process.env.TENANT_SESSION_SECRET) throw new Error("TENANT_SESSION_SECRET is required");
+  await cleanup();
+  const tenants = await db.from("tenants").insert([{ id: tenantId, name: `LA-1.16 chat QA ${stamp}`, status: "active", onboarding_state: "completed" }, { id: otherTenantId, name: `LA-1.16 other ${stamp}`, status: "active", onboarding_state: "completed" }]); if (tenants.error) throw new Error(tenants.error.message);
+  const users = await db.from("users").insert([{ id: ownerId, email: `la116-owner-${stamp}@invalid.test`, name: "Chat Owner", password_hash: "verification-only", status: "active" }, { id: partnerUserId, email: `la116-user-${stamp}@invalid.test`, name: "Partner Closer", password_hash: "verification-only", status: "active" }, { id: otherPartnerUserId, email: `la116-other-${stamp}@invalid.test`, name: "Other Closer", password_hash: "verification-only", status: "active" }]); if (users.error) throw new Error(users.error.message);
+  const members = await db.from("tenant_users").insert({ tenant_id: tenantId, user_id: ownerId, role: "owner" }); if (members.error) throw new Error(members.error.message);
+  const entitlement = await db.from("tenant_entitlements").insert({ tenant_id: tenantId, entitlement: { tenant_id: tenantId, plan_code: "qa", plan_version: 1, status: "active", access: "full", computed_at: new Date().toISOString(), features: ["inbound_transfers"], meters: {}, limits: {} } }); if (entitlement.error) throw new Error(entitlement.error.message);
+  const partners = await db.from("partners").insert([{ id: partnerId, tenant_id: tenantId, name: "Chat Partner A", partner_type: "publisher", status: "active", country: "US", timezone: "America/Phoenix" }, { id: otherPartnerId, tenant_id: tenantId, name: "Chat Partner B", partner_type: "publisher", status: "active", country: "US", timezone: "America/Phoenix" }]); if (partners.error) throw new Error(partners.error.message);
+  const memberships = await db.from("partner_users").insert([{ tenant_id: tenantId, partner_id: partnerId, user_id: partnerUserId, role: "partner_user", status: "active", accepted_at: new Date().toISOString() }, { tenant_id: tenantId, partner_id: otherPartnerId, user_id: otherPartnerUserId, role: "partner_user", status: "active", accepted_at: new Date().toISOString() }]); if (memberships.error) throw new Error(memberships.error.message);
+  try {
+    const channels = await db.from("partner_channels").select("id, partner_id, status").eq("tenant_id", tenantId); check("one channel is created automatically for each partner", channels.data?.length === 2 && channels.data.every((row) => row.status === "active"));
+    const template = await db.from("tenant_templates").select("id, template_id, template_version, definition_version, product_code").limit(1).maybeSingle();
+    const pipeline = await db.from("pipelines").select("id").eq("tenant_id", tenantId).eq("partner_type", "publisher").eq("is_default", true).single();
+    const stage = pipeline.data ? await db.from("pipeline_stages").select("id").eq("pipeline_id", pipeline.data.id).eq("is_archived", false).order("position").limit(1).single() : { data: null, error: new Error("pipeline missing") };
+    if (template.error || pipeline.error || stage.error) throw new Error("chat verifier dependencies are missing");
+    const lead = await db.from("agent_leads").insert({ id: leadId, tenant_id: tenantId, tenant_template_id: template.data.id, template_id: template.data.template_id, template_version: template.data.template_version, definition_version: template.data.definition_version, product_line: template.data.product_code, pipeline_id: pipeline.data.id, stage_id: stage.data.id, values: { full_name: "Server resolved customer", phone: "6025550101" }, created_by: ownerId }).select("id").single(); if (lead.error) throw new Error(lead.error.message);
+    const queue = await db.from("lead_queue").insert({ id: queueId, tenant_id: tenantId, lead_id: leadId, partner_id: partnerId, product_line: template.data.product_code, pipeline_id: pipeline.data.id, stage_id: stage.data.id, status: "unclaimed" }).select("id").single(); if (queue.error) throw new Error(queue.error.message);
+    const partnerSession = await partnerCookie(partnerUserId); const otherChannel = await api(`/api/partner/chat?partner_id=${otherPartnerId}`, partnerSession); check("partner cannot read another partner channel", otherChannel.status === 403);
+    const ownChat = await api("/api/partner/chat", partnerSession); const ownBody = await body(ownChat); check("partner can read only own channel", ownChat.status === 200 && ownBody.channel?.partner_id === partnerId && ownBody.channel?.id);
+    const hostile = await api("/api/partner/chat", partnerSession, { method: "POST", ...json({ message: "<script>alert(1)</script>".repeat(100) }) }); check("oversized hostile message is rejected", hostile.status === 400);
+    const sent = await api("/api/partner/chat", partnerSession, { method: "POST", ...json({ message: "Please confirm the transfer status." }) }); const sentBody = await body(sent); check("partner can send a text message with visible response", sent.status === 201 && sentBody.message?.message === "Please confirm the transfer status.");
+    const messageRow = await db.from("partner_messages").select("channel_id, message_kind, card_type").eq("id", sentBody.message?.id).single(); check("user message is durable in the partner channel", messageRow.data?.channel_id && messageRow.data.message_kind === "text" && messageRow.data.card_type === null);
+    const read = await api("/api/partner/chat", partnerSession, { method: "PATCH" }); check("read state can be recorded", read.status === 200);
+    const forged = await api("/api/partner/chat", "insurvas_partner_session=forged"); const expired = await api("/api/partner/chat", await partnerCookie(partnerUserId, partnerId, tenantId, true)); check("forged and expired partner sessions fail closed", forged.status === 401 && expired.status === 401);
+    const ownerSession = await tenantCookie(ownerId); const missing = await api("/api/app/partner-chat", ownerSession); check("agent can list partner channels server-side", missing.status === 200);
+    const claim = await api("/api/app/inbound/claim", ownerSession, { method: "POST", ...json({ work_item_id: queueId }) }); check("claim transition posts a typed connected card", claim.status === 200);
+    const claimCards = await db.from("partner_messages").select("id, message_kind, card_type, event_key, card_payload").eq("event_key", `claim:${queueId}`); check("the owning claim service emits exactly one server-resolved card", claimCards.data?.length === 1 && claimCards.data[0].message_kind === "system_card" && claimCards.data[0].card_type === "connected" && claimCards.data[0].card_payload?.customer === "Server resolved customer");
+    const archived = await db.from("partners").update({ status: "offboarded", offboarded_at: new Date().toISOString() }).eq("id", partnerId).select("id").single(); if (archived.error) throw new Error(archived.error.message);
+    const archivedChannel = await db.from("partner_channels").select("status, archived_at").eq("partner_id", partnerId).single(); check("offboarding archives the channel and retains history", archivedChannel.data?.status === "archived" && archivedChannel.data.archived_at);
+    const archivedMessage = await db.from("partner_messages").select("id").eq("partner_id", partnerId); check("archived channel history remains readable to the data owner", archivedMessage.data?.some((row) => row.id === sentBody.message?.id));
+    // Prove unknown card data is safe for the reader: parser falls back to the stored text.
+    const fallback = await db.from("partner_messages").insert({ tenant_id: tenantId, partner_id: otherPartnerId, channel_id: channels.data.find((row) => row.partner_id === otherPartnerId).id, message: "A future card", message_kind: "text", card_type: null, card_payload: {}, event_key: `future:${randomUUID()}` }).select("message_kind, card_type").single(); check("unrecognised/future card content is stored as readable text", fallback.data?.message_kind === "text" && fallback.data.card_type === null);
+  } finally { await cleanup(); }
+  console.log(failures ? `\n${failures} LA-1.16 chat check(s) FAILED.` : "\nAll LA-1.16 partner chat checks passed."); return failures ? 1 : 0;
+}
+process.exitCode = await main().catch(async (error) => { console.error(error); await cleanup(); return 1; });

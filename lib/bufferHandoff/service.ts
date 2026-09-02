@@ -2,6 +2,7 @@ import "server-only";
 
 import { getClientIp } from "@/lib/request/clientInfo";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
+import { postPartnerSystemCard } from "@/lib/partnerChat/service";
 
 export type LicensedAgent = { id: string; name: string; role: "owner" | "producer" };
 
@@ -74,5 +75,10 @@ export async function acceptBufferHandoff(params: { tenantId: string; handoffId:
     p_user_agent: params.request.headers.get("user-agent"),
   });
   if (error) throw mapError(error.message);
+  const result = data as { handoff_id?: string; work_item_id?: string };
+  if (result.work_item_id) {
+    const queue = await getSupabaseServiceClient().from("lead_queue").select("partner_id").eq("tenant_id", params.tenantId).eq("id", result.work_item_id).maybeSingle();
+    if (queue.data?.partner_id) void postPartnerSystemCard({ tenantId: params.tenantId, partnerId: queue.data.partner_id, workItemId: result.work_item_id, userId: params.licensedAgentId, eventKey: `handoff-accepted:${result.handoff_id ?? params.handoffId}`, cardType: "transferred" }).catch((cardError) => console.error("Partner handoff card failed", cardError));
+  }
   return data;
 }

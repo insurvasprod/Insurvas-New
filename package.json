@@ -83,6 +83,7 @@
     "verify:dispositions": "node --env-file=.env.local scripts/verify-dispositions.mjs",
     "verify:buffer-handoff": "node --env-file=.env.local scripts/verify-buffer-handoff.mjs",
     "verify:agent-floor": "node --env-file=.env.local scripts/verify-agent-floor.mjs",
+    "verify:partner-chat": "node --env-file=.env.local scripts/verify-partner-chat.mjs",
     "verify:deal-flow": "node --env-file=.env.local scripts/verify-deal-flow.mjs",
     "verify:la1": "node --env-file=.env.local scripts/verify-partners.mjs && node --env-file=.env.local scripts/verify-partner-users.mjs && node --env-file=.env.local scripts/verify-partner-products.mjs && node --env-file=.env.local scripts/verify-dynamic-forms.mjs && node --env-file=.env.local scripts/verify-partner-submission.mjs && node --env-file=.env.local scripts/verify-intake-pipeline.mjs && node --env-file=.env.local scripts/verify-affiliate-links.mjs && node --env-file=.env.local scripts/verify-pipelines.mjs"
   },

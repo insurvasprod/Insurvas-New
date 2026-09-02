@@ -46,6 +46,7 @@ export const AGENT_API_POLICIES: AgentApiPolicy[] = [
   { sourceFile: "app/api/app/inbound/handoff/route.ts", featureKey: "inbound_transfers", allowedRoles: ["owner", "producer", "assistant"] },
   { sourceFile: "app/api/app/inbound/disposition/route.ts", featureKey: "inbound_transfers", allowedRoles: ["owner", "producer"] },
   { sourceFile: "app/api/app/agent-floor/route.ts", featureKey: "inbound_transfers", allowedRoles: ["owner", "producer", "assistant"] },
+  { sourceFile: "app/api/app/partner-chat/route.ts", featureKey: "inbound_transfers", allowedRoles: ["owner", "producer"] },
   { sourceFile: "app/api/app/dispositions/config/route.ts", featureKey: "book_of_business", allowedRoles: ["owner"] },
   { sourceFile: "app/api/app/leads/[id]/route.ts", featureKey: "book_of_business" },
   { sourceFile: "app/api/app/leads/[id]/disposition/route.ts", featureKey: "book_of_business", allowedRoles: ["owner", "producer"] },
