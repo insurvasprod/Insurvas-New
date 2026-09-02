@@ -2080,6 +2080,13 @@ The scheduler returns a failure report and HTTP 503 when an outbox side effect f
 
 **Fix:** SA-6.1 should consume the scheduler failure signal and deliver the platform alert. Then add a live failure-injection check proving one alert is emitted without duplicating the SLA event.
 
+### 144. 🟡 LA-1.23 escalation browser surface depends on LA-1.25
+**From:** LA-1.23 · **Belongs to:** LA-1.25
+
+LA-1.23 now writes the durable owner notification and attempts the escalation email, but the in-app toast, browser notification and sound surface named by the escalation requirement belong to LA-1.25, which is still planned. Until that ticket lands, the event exists server-side but is not yet a complete browser alert experience.
+
+**Fix:** LA-1.25 should consume `agent_notifications` for `unclaimed_sla_escalation`, render the alert with the configured browser/sound preferences, and add authenticated desktop/mobile evidence without duplicating the source-key event.
+
 ---
 
 ## Related
