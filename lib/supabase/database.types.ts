@@ -1725,6 +1725,30 @@ export type Database = {
         Update: { status?: string; sent_at?: string | null };
         Relationships: [];
       };
+      lead_notes: {
+        Row: { id: string; tenant_id: string; lead_id: string; author_user_id: string; body: string; visibility: string; idempotency_key: string | null; created_at: string; edited_at: string | null; deleted_at: string | null };
+        Insert: { id?: string; tenant_id: string; lead_id: string; author_user_id: string; body: string; visibility?: string; idempotency_key?: string | null; created_at?: string; edited_at?: string | null; deleted_at?: string | null };
+        Update: { body?: string; visibility?: string; edited_at?: string | null; deleted_at?: string | null };
+        Relationships: [];
+      };
+      lead_note_edits: {
+        Row: { id: string; tenant_id: string; note_id: string; lead_id: string; actor_user_id: string; action: string; old_body: string; old_visibility: string; new_body: string | null; new_visibility: string | null; created_at: string };
+        Insert: { id?: string; tenant_id: string; note_id: string; lead_id: string; actor_user_id: string; action: string; old_body: string; old_visibility: string; new_body?: string | null; new_visibility?: string | null; created_at?: string };
+        Update: never;
+        Relationships: [];
+      };
+      agent_notifications: {
+        Row: { id: string; tenant_id: string; recipient_user_id: string; kind: string; title: string; body: string; link: string; source_key: string; created_at: string; read_at: string | null };
+        Insert: { id?: string; tenant_id: string; recipient_user_id: string; kind: string; title: string; body: string; link: string; source_key: string; created_at?: string; read_at?: string | null };
+        Update: { read_at?: string | null };
+        Relationships: [];
+      };
+      lead_note_mentions: {
+        Row: { id: string; tenant_id: string; note_id: string; mentioned_user_id: string; created_at: string };
+        Insert: { id?: string; tenant_id: string; note_id: string; mentioned_user_id: string; created_at?: string };
+        Update: never;
+        Relationships: [];
+      };
       partners: {
         Row: {
           id: string;

@@ -85,6 +85,7 @@
     "verify:buffer-handoff": "node --env-file=.env.local scripts/verify-buffer-handoff.mjs",
     "verify:agent-floor": "node --env-file=.env.local scripts/verify-agent-floor.mjs",
     "verify:lead-workspace": "node --env-file=.env.local scripts/verify-lead-workspace.mjs",
+    "verify:lead-notes": "node --env-file=.env.local scripts/verify-lead-notes.mjs",
     "verify:partner-chat": "node --env-file=.env.local scripts/verify-partner-chat.mjs",
     "verify:partner-pipeline": "node --env-file=.env.local scripts/verify-partner-lead-pipeline.mjs",
     "verify:partner-quality": "node --env-file=.env.local scripts/verify-partner-quality.mjs",

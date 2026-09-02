@@ -1976,6 +1976,15 @@ verifier, deep migration check, TypeScript, lint, production build, full 283-tes
 check, and authenticated desktop/mobile browser QA all passed. Nothing was left unmet, deferred,
 or unverified for LA-1.17, so nothing was added to the open backlog.
 
+### 137. ✅ LA-1.20 Notes tab blocker resolved by LA-1.21
+**From:** LA-1.20 · **Belongs to:** LA-1.21 · **Resolved:** 2026-09-02
+
+LA-1.21 replaced the lead-workspace Notes placeholder with tenant-scoped notes, author and
+timestamp display, internal/shared visibility, partner-channel synchronization, mention
+notifications, cross-lead search, edit history, and timeline tombstones. The live migrations and
+focused verifier passed. The prior LA-1.20 blocker is therefore resolved; authenticated browser
+verification remains tracked separately in #138 and #139.
+
 ### 134. 🔵 LA-1.18 partner-quality migration is not applied to the linked Supabase project
 **From:** LA-1.18 · **Belongs to:** LA-1.18
 
@@ -2016,19 +2025,6 @@ invite controls, specific upgrade messaging, visible focus, responsive layout, a
 and `/app/settings` at desktop and phone widths, capture the finished screens, and close this
 entry only after the browser console and interactive controls are clean.
 
-### 137. 🟡 LA-1.20 Notes tab waits for the LA-1.21 notes implementation
-**From:** LA-1.20 · **Belongs to:** LA-1.21
-
-The unified lead workspace includes a Notes tab, but LA-1.21 is still planned and the live database
-does not yet have `lead_notes`. The tab therefore explains that internal notes are not available
-yet instead of pretending that notes were saved. The rest of the workspace is wired to the existing
-lead, verification, partner-message, and audit data.
-
-**Fix:** LA-1.21 must add the tenant-scoped notes model and API, author/timestamp and edit history,
-partner visibility controls, mentions and search, then replace the placeholder tab and add the
-timeline note events. Cost of leaving it open: agents can inspect a lead in one place but still
-cannot record or review the internal notes promised by the combined experience.
-
 ### 138. 🔵 LA-1.20 authenticated lead-workspace browser QA is pending an authorized agent session
 **From:** LA-1.20 · **Belongs to:** LA-1.20
 
@@ -2041,6 +2037,22 @@ for the required authenticated browser acceptance.
 **Fix:** sign in as an entitled local agent owner, open a real lead from `/app/leads`, exercise the
 tabs and available actions at desktop and phone widths, inspect the console and focus states, and
 capture the finished workspace screenshot. Remove this entry only after that browser run is clean.
+
+### 139. 🔵 LA-1.21 authenticated notes browser QA is pending an authorized agent session
+**From:** LA-1.21 · **Belongs to:** LA-1.21
+
+The live API and database verifier cover note creation, default internal visibility, partner
+filtering, visibility reversal, edit history, tombstones, mentions, search, tenant isolation,
+role gates, expired/forged sessions, duplicate requests, concurrent requests, and hostile input.
+The real browser rendered the login screen cleanly, but this run had no authorized agent session;
+opening a protected lead therefore redirected to `/partner/login`. The finished authenticated Notes
+screen, desktop/mobile interaction, visible focus, and screenshot remain unverified.
+
+**Fix:** sign in as an entitled agent owner or producer, open a real lead at `/app/leads/<id>`,
+exercise add/edit/delete, internal/shared visibility, teammate mention, and cross-lead search at
+desktop and phone widths, inspect console errors and focus states, and capture the finished screen.
+Cost of leaving it open: server enforcement is verified, but the required end-user presentation and
+interaction evidence is not.
 
 ---
 

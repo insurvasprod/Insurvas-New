@@ -149,12 +149,17 @@ export async function getPartnerLeadDetail(tenantId: string, partnerId: string, 
   const lead = data.leads.find((item) => item.id === leadId);
   const queue = data.queues[0];
   if (!row || !lead || !queue) throw new Error("Lead not found");
-  const messages = await getSupabaseServiceClient().from("partner_messages").select("id, message, message_kind, created_at, created_by").eq("tenant_id", tenantId).eq("partner_id", partnerId).eq("work_item_id", queue.id).order("created_at");
+  const db = getSupabaseServiceClient();
+  const messages = await db.from("partner_messages").select("id, message, message_kind, created_at, created_by, event_key").eq("tenant_id", tenantId).eq("partner_id", partnerId).eq("work_item_id", queue.id).order("created_at");
   if (messages.error) throw new Error(`Could not load lead timeline: ${messages.error.message}`);
+  const noteIds = (messages.data ?? []).map((message) => message.event_key?.startsWith("lead-note:") ? message.event_key.slice("lead-note:".length) : null).filter((id): id is string => Boolean(id));
+  const sharedNotes = noteIds.length ? await db.from("lead_notes").select("id, visibility, deleted_at").eq("tenant_id", tenantId).in("id", noteIds) : { data: [], error: null };
+  if (sharedNotes.error) throw new Error(`Could not filter partner notes: ${sharedNotes.error.message}`);
+  const visibleNoteIds = new Set((sharedNotes.data ?? []).filter((note) => note.visibility === "shared" && !note.deleted_at).map((note) => note.id));
   const timeline: PartnerLeadDetail["timeline"] = [{ type: "submitted", label: "Lead submitted", at: lead.created_at, detail: row.submittedBy.name }];
   if (queue.claimed_at) timeline.push({ type: "claimed", label: "Lead claimed", at: queue.claimed_at, detail: queue.owner_user_id ? data.users.find((user) => user.id === queue.owner_user_id)?.name ?? "Agent" : "Agent" });
   if (queue.disposition_at) timeline.push({ type: "outcome", label: row.outcome ?? "Outcome recorded", at: queue.disposition_at, detail: row.outcomeNote });
-  for (const message of messages.data ?? []) timeline.push({ type: message.message_kind === "system_card" ? "system" : "message", label: message.message_kind === "system_card" ? "Pipeline update" : "Message", at: message.created_at, detail: message.message });
+  for (const message of (messages.data ?? []).filter((item) => !item.event_key?.startsWith("lead-note:") || visibleNoteIds.has(item.event_key.slice("lead-note:".length)))) timeline.push({ type: message.message_kind === "system_card" ? "system" : "message", label: message.message_kind === "system_card" ? "Pipeline update" : "Message", at: message.created_at, detail: message.message });
   timeline.sort((a, b) => a.at.localeCompare(b.at));
   return { ...row, values: maskValues(lead.values) as Record<string, unknown>, timeline };
 }

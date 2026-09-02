@@ -84,15 +84,29 @@ export async function postPartnerText(input: { tenantId: string; partnerId: stri
 
 function mapMessages(rows: unknown[]): PartnerMessage[] { return rows.map(parsePartnerMessage).filter((row): row is PartnerMessage => Boolean(row)); }
 
+async function visibleToPartner(db: ReturnType<typeof getSupabaseServiceClient>, tenantId: string, rows: Array<{ event_key?: string | null }>) {
+  const noteIds = rows.map((row) => row.event_key?.startsWith("lead-note:") ? row.event_key.slice("lead-note:".length) : null).filter((id): id is string => Boolean(id));
+  if (!noteIds.length) return new Set<string>();
+  const notes = await db.from("lead_notes").select("id, visibility, deleted_at").eq("tenant_id", tenantId).in("id", noteIds);
+  if (notes.error) throw new Error(`Could not filter shared notes: ${notes.error.message}`);
+  return new Set((notes.data ?? []).filter((note) => note.visibility === "shared" && !note.deleted_at).map((note) => note.id));
+}
+
+function filterNoteMessages<T extends { event_key?: string | null }>(rows: T[], visibleNoteIds: Set<string>) {
+  return rows.filter((row) => !row.event_key?.startsWith("lead-note:") || visibleNoteIds.has(row.event_key.slice("lead-note:".length)));
+}
+
 export async function getPartnerChat(tenantId: string, partnerId: string, userId: string) {
   const supabase = getSupabaseServiceClient();
   const channel = await supabase.from("partner_channels").select("id, partner_id, name, status, created_at, archived_at").eq("tenant_id", tenantId).eq("partner_id", partnerId).eq("channel_type", "partner").maybeSingle();
   if (channel.error || !channel.data) throw new Error("Partner channel is not available");
-  const messages = await supabase.from("partner_messages").select("id, channel_id, partner_id, work_item_id, message, message_kind, card_type, card_payload, created_by, created_at").eq("tenant_id", tenantId).eq("channel_id", channel.data.id).order("created_at", { ascending: true }).limit(200);
+  const messages = await supabase.from("partner_messages").select("id, channel_id, partner_id, work_item_id, message, message_kind, card_type, card_payload, created_by, created_at, event_key").eq("tenant_id", tenantId).eq("channel_id", channel.data.id).order("created_at", { ascending: true }).limit(200);
   if (messages.error) throw new Error(`Could not load chat: ${messages.error.message}`);
+  const visibleNoteIds = await visibleToPartner(supabase, tenantId, messages.data ?? []);
+  const visibleMessages = filterNoteMessages(messages.data ?? [], visibleNoteIds);
   const read = await supabase.from("partner_message_reads").select("read_at").eq("tenant_id", tenantId).eq("channel_id", channel.data.id).eq("user_id", userId).maybeSingle();
   const readAt = read.data?.read_at ? new Date(read.data.read_at).getTime() : 0;
-  return { channel: channel.data, messages: mapMessages(messages.data ?? []), unreadCount: (messages.data ?? []).filter((row) => new Date(row.created_at).getTime() > readAt && row.created_by !== userId).length, realtimeTopic: `partner-chat:${channel.data.id}` };
+  return { channel: channel.data, messages: mapMessages(visibleMessages), unreadCount: visibleMessages.filter((row) => new Date(row.created_at).getTime() > readAt && row.created_by !== userId).length, realtimeTopic: `partner-chat:${channel.data.id}` };
 }
 
 export async function markPartnerChatRead(tenantId: string, partnerId: string, userId: string) {

@@ -3,6 +3,7 @@ import "server-only";
 import { getTenantTemplateForProductVersion } from "@/lib/agentTemplates/service";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { listLicensedAgents, listPendingBufferHandoffs } from "@/lib/bufferHandoff/service";
+import { listLeadNotes, listTeammates } from "@/lib/leadNotes/service";
 import type { TemplateRow } from "@/lib/templates/constants";
 import type { TenantRole } from "@/lib/tenantAuth/roles";
 
@@ -53,12 +54,14 @@ export async function getLeadWorkspace(tenantId: string, userId: string, role: T
   const actorNames = new Map((actors.data ?? []).map((actor) => [actor.id, actor.name]));
   const verificationFields = verificationResult.data ? await db.from("verification_fields").select("session_id, field_key, state, is_required, is_visible, old_value, new_value, confirmed_at, actor_id").eq("session_id", verificationResult.data.id).order("field_key").returns<VerificationField[]>() : { data: [], error: null };
   if (verificationFields.error) throw new Error(`Could not load verification fields: ${verificationFields.error.message}`);
+  const [notes, teammates] = await Promise.all([listLeadNotes(tenantId, leadId), listTeammates(tenantId)]);
   const verification = verificationResult.data ? { session: verificationResult.data, fields: verificationFields.data ?? [], changes: changesResult.data ?? [] } : null;
   const events: LeadWorkspaceEvent[] = [];
   const addEvent = (id: string, at: string, action: string, actorId: string | null, detail: string | null) => events.push({ id, at, label: label(action), actor: actorId ? actorNames.get(actorId) ?? "Unknown actor" : "System", detail, immutable: true });
   addEvent(`created:${lead.id}`, lead.created_at, "lead submitted", lead.created_by, `Product: ${lead.product_line}`);
   for (const event of auditResult.data ?? []) addEvent(`audit:${event.id}`, event.ts, event.action, event.actor_id, event.reason ?? (record(event.metadata).stageId ? `Stage: ${record(event.metadata).stageId}` : null));
   for (const change of changesResult.data ?? []) addEvent(`correction:${change.id}`, change.created_at, "verification correction", change.actor_id, `${change.field_key}: ${display(change.old_value)} → ${display(change.new_value)}`);
+  for (const note of notes) addEvent(`note:${note.id}`, note.deletedAt ?? note.editedAt ?? note.createdAt, note.deletedAt ? "lead note deleted" : note.editedAt ? "lead note edited" : "lead note added", note.author.id, note.deletedAt ? "Note deleted (tombstone retained)" : `${note.visibility === "shared" ? "Shared" : "Internal"} note: ${note.body}`);
   for (const message of messagesResult.data ?? []) addEvent(`message:${message.id}`, message.created_at, message.message_kind === "system_card" ? "partner channel update" : "note/message", message.created_by, message.message);
   events.sort((a, b) => a.at.localeCompare(b.at));
   const licensedAgents = role === "assistant" && queue ? await listLicensedAgents(tenantId, userId) : [];
@@ -77,6 +80,8 @@ export async function getLeadWorkspace(tenantId: string, userId: string, role: T
     disposition: dispositionsResult.data,
     verification,
     corrections: changesResult.data ?? [],
+    notes,
+    teammates: teammates.map((user) => ({ id: user.id, name: user.name, role: user.role })),
     timeline: events,
     role,
     currentUserId: userId,
