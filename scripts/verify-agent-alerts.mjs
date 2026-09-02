@@ -31,6 +31,8 @@ const unauthenticated = await call("/api/app/notifications", "");
 assert.equal(unauthenticated.status, 401, "missing session must be rejected");
 const forged = await call("/api/app/notifications", "insurvas_tenant_session=not-a-token");
 assert.equal(forged.status, 401, "forged session must be rejected");
+const wrongPlane = await call("/api/app/notifications", "insurvas_admin_session=not-an-agent-session");
+assert.equal(wrongPlane.status, 401, "an admin-plane cookie must not authenticate the agent endpoint");
 
 const initial = await call("/api/app/notifications", cookie);
 const initialBody = await initial.json();
@@ -43,6 +45,14 @@ assert.equal(saved.status, 200, JSON.stringify(savedBody));
 assert.deepEqual(savedBody.settings, changed, "settings persist through the API");
 const reread = await call("/api/app/notifications", cookie);
 assert.equal((await reread.json()).settings.sound_volume, 42);
+
+for (const event of Object.keys(original.enabled_events)) {
+  const eventSettings = { ...original, enabled_events: { ...original.enabled_events, [event]: false } };
+  const eventSave = await call("/api/app/notifications", cookie, { method: "PATCH", body: JSON.stringify(eventSettings) });
+  assert.equal(eventSave.status, 200, `event setting ${event} must save`);
+  const eventRead = await call("/api/app/notifications", cookie);
+  assert.equal((await eventRead.json()).settings.enabled_events[event], false, `event setting ${event} must persist`);
+}
 
 const hostile = await call("/api/app/notifications", cookie, { method: "PATCH", body: JSON.stringify({ ...changed, sound_volume: 999, unexpected: "<script>" }) });
 assert.equal(hostile.status, 400, "hostile/out-of-range settings must be rejected");
