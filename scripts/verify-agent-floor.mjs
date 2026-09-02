@@ -91,13 +91,16 @@ async function main() {
     const staleFloor = await api("/api/app/agent-floor", owner); const staleBody = await staleFloor.json(); check("stale heartbeat is shown offline", staleBody.members?.find((member) => member.id === ownerId)?.availability === "offline");
 
     let realtimeReceived = false;
+    let realtimeReceivedAt = 0;
     let realtimeChannel;
     if (realtime) {
-      realtimeChannel = realtime.channel(`agent-floor:${tenantId}`).on("broadcast", { event: "floor_changed" }, (payload) => { if (payload.payload?.tenant_id === tenantId) realtimeReceived = true; });
+      realtimeChannel = realtime.channel(`agent-floor:${tenantId}`).on("broadcast", { event: "floor_changed" }, (payload) => { if (payload.payload?.tenant_id === tenantId) { realtimeReceived = true; realtimeReceivedAt = Date.now(); } });
       await new Promise((resolve) => { realtimeChannel.subscribe((status) => { if (status === "SUBSCRIBED") resolve(); }); setTimeout(resolve, 5000); });
+      const realtimeStartedAt = Date.now();
       await db.from("lead_queue").update({ updated_at: new Date().toISOString() }).eq("id", queueId);
       const deadline = Date.now() + 5000; while (!realtimeReceived && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 100));
       await realtime.removeChannel(realtimeChannel);
+      check("database change reaches every open floor in under one second", realtimeReceived && realtimeReceivedAt - realtimeStartedAt < 1000, realtimeReceived ? `${realtimeReceivedAt - realtimeStartedAt}ms` : "no event");
     }
     check("database change emits a tenant-scoped Realtime floor signal", Boolean(realtime) && realtimeReceived);
 
