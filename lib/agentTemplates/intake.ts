@@ -4,6 +4,7 @@ import { audit } from "@/lib/audit/log";
 import type { Json } from "@/lib/supabase/database.types";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { postPartnerSystemCard } from "@/lib/partnerChat/service";
+import { runExistingCustomerPreflight } from "@/lib/existingCustomerPreflight/service";
 
 type IntakeLead = {
   id: string;
@@ -40,7 +41,17 @@ export async function writePartnerIntakeArtifacts(input: IntakeActor): Promise<v
   const localDate = new Intl.DateTimeFormat("en-CA", { timeZone: input.partnerTimezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
   const supabase = getSupabaseServiceClient();
   const attribution = input.affiliateLinkId ? { affiliate_link_id: input.affiliateLinkId, affiliate_campaign: input.affiliateCampaign ?? null } : {};
-  const failures: Array<{ step: "work_item" | "deal_flow" | "notification"; error: string }> = [];
+  const failures: Array<{ step: "preflight" | "work_item" | "deal_flow" | "notification"; error: string }> = [];
+
+  try {
+    await runExistingCustomerPreflight({ tenantId: input.tenantId, leadId: input.lead.id, values: input.lead.values });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Existing-customer pre-flight failed";
+    const checkedAt = new Date().toISOString();
+    const stored = await supabase.from("agent_leads").update({ preflight_status: "not_checked", preflight_checked_at: checkedAt, preflight_result: { status: "not_checked", policy_matching_included: false, policy_matching_note: "Policy matching is not included yet; this check covers prior leads and contacts only.", checkedAt, matches: [], error: message.slice(0, 500) } as Json }).eq("tenant_id", input.tenantId).eq("id", input.lead.id);
+    if (stored.error) console.error("Existing-customer pre-flight result could not be stored", stored.error);
+    failures.push({ step: "preflight", error: message });
+  }
 
   const queue = await supabase.from("lead_queue").insert({
     tenant_id: input.tenantId,

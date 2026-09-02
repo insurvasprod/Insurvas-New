@@ -6,10 +6,11 @@ import { listLicensedAgents, listPendingBufferHandoffs } from "@/lib/bufferHando
 import { listLeadNotes, listTeammates } from "@/lib/leadNotes/service";
 import type { TemplateRow } from "@/lib/templates/constants";
 import type { TenantRole } from "@/lib/tenantAuth/roles";
+import type { PreflightResult } from "@/lib/existingCustomerPreflight/types";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-type LeadRow = { id: string; tenant_id: string; values: unknown; created_by: string | null; created_at: string; updated_at: string; product_line: string; definition_version: number; pipeline_id: string; stage_id: string; screening_outcome: string | null; screening_warning: string | null; screening_checked_at: string | null };
+type LeadRow = { id: string; tenant_id: string; values: unknown; created_by: string | null; created_at: string; updated_at: string; product_line: string; definition_version: number; pipeline_id: string; stage_id: string; screening_outcome: string | null; screening_warning: string | null; screening_checked_at: string | null; preflight_status: string; preflight_checked_at: string | null; preflight_result: unknown };
 type QueueRow = { id: string; lead_id: string; partner_id: string | null; status: string; claimed_by: string | null; owner_user_id: string | null; owner_role: string | null; claimed_at: string | null; queued_at: string; disposition: string | null; disposition_at: string | null; disposition_by: string | null; pipeline_id: string; stage_id: string; updated_at: string };
 type VerificationSession = { id: string; work_item_id: string; user_id: string; agent_role: string; status: string; started_at: string; completed_at: string | null; progress_percentage: number; last_actor_id: string | null };
 type VerificationField = { session_id: string; field_key: string; state: string; is_required: boolean; is_visible: boolean; old_value: unknown; new_value: unknown; confirmed_at: string | null; actor_id: string | null };
@@ -27,7 +28,7 @@ export type LeadWorkspaceEvent = { id: string; label: string; at: string; actor:
 export async function getLeadWorkspace(tenantId: string, userId: string, role: TenantRole, leadId: string) {
   if (!UUID.test(leadId)) throw new Error("Choose a valid lead");
   const db = getSupabaseServiceClient();
-  const leadResult = await db.from("agent_leads").select("id, tenant_id, values, created_by, created_at, updated_at, product_line, definition_version, pipeline_id, stage_id, screening_outcome, screening_warning, screening_checked_at").eq("tenant_id", tenantId).eq("id", leadId).maybeSingle<LeadRow>();
+  const leadResult = await db.from("agent_leads").select("id, tenant_id, values, created_by, created_at, updated_at, product_line, definition_version, pipeline_id, stage_id, screening_outcome, screening_warning, screening_checked_at, preflight_status, preflight_checked_at, preflight_result").eq("tenant_id", tenantId).eq("id", leadId).maybeSingle<LeadRow>();
   if (leadResult.error) throw new Error(`Could not load lead: ${leadResult.error.message}`);
   if (!leadResult.data) throw new Error("Lead not found");
   const lead = leadResult.data;
@@ -80,6 +81,16 @@ export async function getLeadWorkspace(tenantId: string, userId: string, role: T
     submitter: lead.created_by ? { id: lead.created_by, name: actorNames.get(lead.created_by) ?? "Unknown user" } : null,
     owner: queue?.owner_user_id ? { id: queue.owner_user_id, name: actorNames.get(queue.owner_user_id) ?? "Unknown user" } : null,
     screening: { outcome: lead.screening_outcome, warning: lead.screening_warning, checkedAt: lead.screening_checked_at },
+    preflight: {
+      ...(record(lead.preflight_result) as unknown as PreflightResult),
+      status: lead.preflight_status,
+      checkedAt: lead.preflight_checked_at,
+      policyMatchingIncluded: false,
+      policyMatchingNote:
+        typeof record(lead.preflight_result).policyMatchingNote === "string"
+          ? record(lead.preflight_result).policyMatchingNote
+          : "Policy matching is not included yet; this check covers prior leads and contacts only.",
+    },
     disposition: dispositionsResult.data,
     verification,
     corrections: changesResult.data ?? [],

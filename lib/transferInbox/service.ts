@@ -2,6 +2,7 @@ import "server-only";
 
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { postPartnerSystemCard } from "@/lib/partnerChat/service";
+import type { PreflightResult } from "@/lib/existingCustomerPreflight/types";
 
 export type InboxFilters = {
   status: "unclaimed" | "claimed" | "all";
@@ -55,6 +56,8 @@ export async function getTransferInbox(tenantId: string, filters: InboxFilters, 
     screeningOutcome: row.screening_outcome,
     screeningWarning: row.screening_warning,
     duplicateWarning: row.duplicate_warning,
+    preflightStatus: row.preflight_status,
+    preflight: row.preflight_result as unknown as PreflightResult,
   }));
   const partners = [...new Map(items.filter((item) => item.partnerId).map((item) => [item.partnerId!, item.partnerName])).entries()].map(([id, name]) => ({ id, name }));
   const pending = role === "owner" || role === "producer"

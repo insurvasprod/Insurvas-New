@@ -27,6 +27,8 @@ export type FloorLead = {
   screeningOutcome: string;
   screeningWarning: string | null;
   duplicateWarning: boolean;
+  preflightStatus: string;
+  preflight: unknown;
   queuedAt: string;
   ownerName: string | null;
 };
@@ -99,6 +101,8 @@ export async function getAgentFloor(tenantId: string, currentUserId: string, cur
     screeningOutcome: item.screeningOutcome,
     screeningWarning: item.screeningWarning,
     duplicateWarning: item.duplicateWarning,
+    preflightStatus: item.preflightStatus,
+    preflight: item.preflight,
     queuedAt: item.queuedAt,
     ownerName: item.ownerName,
   });

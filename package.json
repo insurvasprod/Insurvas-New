@@ -67,6 +67,7 @@
     "verify:carrier-library": "node --env-file=.env.local scripts/verify-carrier-library.mjs",
     "verify:appointment-vault": "node --env-file=.env.local --experimental-strip-types scripts/verify-appointment-vault.mjs",
     "verify:contacts": "node --env-file=.env.local --experimental-strip-types scripts/verify-contacts.mjs",
+    "verify:existing-customer-preflight": "node --env-file=.env.local scripts/verify-existing-customer-preflight.mjs",
     "verify:la0-rls": "node --env-file=.env.local scripts/verify-la0-rls.mjs",
     "verify:partners": "node --env-file=.env.local scripts/verify-partners.mjs",
     "verify:subscription-limits": "node --env-file=.env.local scripts/verify-subscription-limits.mjs",

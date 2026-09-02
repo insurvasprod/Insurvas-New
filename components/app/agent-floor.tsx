@@ -13,7 +13,7 @@ import { toast } from "sonner";
 
 type Lead = {
   id: string; leadId: string; customer: string; age: string; state: string; partnerName: string;
-  productLine: string; screeningOutcome: string; screeningWarning: string | null; duplicateWarning: boolean;
+  productLine: string; screeningOutcome: string; screeningWarning: string | null; duplicateWarning: boolean; preflightStatus: string; preflight: { matches?: Array<{ partnerName: string | null }> } | null;
   queuedAt: string; ownerName: string | null;
 };
 type Call = Lead & { activeCallId: string; agentId: string; agentName: string; agentRole: string; startedAt: string };
@@ -28,6 +28,8 @@ function durationSince(value: string, now: number) {
 }
 
 function screeningBadge(item: Lead) {
+  if (item.preflightStatus === "already_customer") return <Badge variant="destructive"><ShieldAlert className="size-3" />Already a customer</Badge>;
+  if (item.preflightStatus === "spoken_before") return <Badge variant="outline"><ShieldAlert className="size-3" />Spoken before</Badge>;
   if (item.duplicateWarning) return <Badge variant="destructive"><ShieldAlert className="size-3" />Duplicate warning</Badge>;
   if (item.screeningWarning) return <Badge variant="outline" className="border-amber-500/50 text-amber-700"><ShieldAlert className="size-3" />Review screening</Badge>;
   return <Badge variant="secondary"><CheckCircle2 className="size-3" />{item.screeningOutcome || "Screened"}</Badge>;
@@ -58,6 +60,7 @@ function LeadCard({ item, now, thresholds, readOnly, onClaim, onNudge, saving }:
       </div>
       <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground"><span>From {item.partnerName}</span>{screeningBadge(item)}</div>
       {item.screeningWarning && <p className="text-xs text-amber-700">{item.screeningWarning}</p>}
+      {item.preflightStatus !== "new_household" && <p className="text-xs text-muted-foreground">{item.preflight?.matches?.[0]?.partnerName ? `Previous lead from ${item.preflight.matches[0].partnerName}` : "Prior contact found"}. Policy matching is not included yet.</p>}
       <div className="flex flex-wrap gap-2">
         <Button size="sm" disabled={readOnly || saving === item.id} onClick={() => onClaim(item.id)}>{saving === item.id ? <Loader2 className="size-4 animate-spin" /> : <Phone className="size-4" />}Claim</Button>
         <Button size="sm" variant="outline" disabled={readOnly || saving === `nudge:${item.id}`} onClick={() => onNudge(item.id)}>{saving === `nudge:${item.id}` ? <Loader2 className="size-4 animate-spin" /> : <Bell className="size-4" />}Nudge team</Button>

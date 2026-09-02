@@ -2087,6 +2087,13 @@ LA-1.23 now writes the durable owner notification and attempts the escalation em
 
 **Fix:** LA-1.25 should consume `agent_notifications` for `unclaimed_sla_escalation`, render the alert with the configured browser/sound preferences, and add authenticated desktop/mobile evidence without duplicating the source-key event.
 
+### 145. 🔵 LA-1.24 authenticated existing-customer browser QA is pending an authorized agent session
+**From:** LA-1.24 · **Belongs to:** LA-1.24
+
+The local agent app was reachable during this run, but the available browser tabs had no authorized agent session. Opening `/app/leads` redirected to `/partner/login`, so the inbox row, Agent Floor card, lead workspace pre-flight card, manual re-check confirmation, desktop/mobile layout, visible keyboard focus, and clean authenticated console could not be driven. The live RPC, API authorization, persistence, tenant isolation, concurrency, hostile-input, and performance checks pass, but they do not replace the required authenticated browser evidence.
+
+**Fix:** sign in as an entitled local agent owner, producer, or assistant, open a real lead, verify the pre-flight result and policy-matching disclaimer on the inbox, Agent Floor, and lead workspace surfaces, exercise manual re-check, repeat at desktop and phone widths, inspect console errors and keyboard focus, and capture the finished authenticated screen. Remove this entry only after that browser run is clean.
+
 ---
 
 ## Related

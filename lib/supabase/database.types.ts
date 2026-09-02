@@ -1518,6 +1518,9 @@ export type Database = {
           duplicate_override_by: string | null;
           duplicate_override_at: string | null;
           callback_subtype: string | null;
+          preflight_status: string;
+          preflight_checked_at: string | null;
+          preflight_result: Json;
         };
         Insert: {
           id?: string;
@@ -1548,6 +1551,9 @@ export type Database = {
           duplicate_override_by?: string | null;
           duplicate_override_at?: string | null;
           callback_subtype?: string | null;
+          preflight_status?: string;
+          preflight_checked_at?: string | null;
+          preflight_result?: Json;
         };
         Update: {
           id?: string;
@@ -1578,6 +1584,9 @@ export type Database = {
           duplicate_override_by?: string | null;
           duplicate_override_at?: string | null;
           callback_subtype?: string | null;
+          preflight_status?: string;
+          preflight_checked_at?: string | null;
+          preflight_result?: Json;
         };
         Relationships: [];
       };
@@ -3343,7 +3352,7 @@ export type Database = {
       };
       list_transfer_inbox: {
         Args: { p_tenant_id: string; p_status?: string; p_partner_id?: string | null; p_product_line?: string | null; p_state?: string | null; p_screening_outcome?: string | null; p_claimed_by?: string | null };
-        Returns: { id: string; lead_id: string; partner_id: string | null; partner_name: string | null; product_line: string; status: string; owner_user_id: string | null; owner_name: string | null; claimed_at: string | null; queued_at: string; wait_seconds: number; customer: string; age: string; state: string; screening_outcome: string; screening_warning: string | null; duplicate_warning: boolean }[];
+        Returns: { id: string; lead_id: string; partner_id: string | null; partner_name: string | null; product_line: string; status: string; owner_user_id: string | null; owner_name: string | null; claimed_at: string | null; queued_at: string; wait_seconds: number; customer: string; age: string; state: string; screening_outcome: string; screening_warning: string | null; duplicate_warning: boolean; preflight_status: string; preflight_result: Json }[];
       };
       expire_buffer_handoffs: {
         Args: { p_tenant_id: string };
@@ -3469,6 +3478,10 @@ export type Database = {
       find_contact_duplicates: {
         Args: { p_tenant_id: string; p_name_search: string; p_dob?: string | null; p_phone?: string | null; p_address_search?: string | null; p_address_hash?: string | null; p_limit?: number };
         Returns: { contact_id: string; household_id: string | null; first_name: string; last_name: string; dob: string | null; primary_phone: string | null; state: string | null; custom_fields: Json; address_line1: string | null; city: string | null; postal_code: string | null; score: number; confidence: string; matched_on: string[] }[];
+      };
+      find_existing_customer_preflight: {
+        Args: { p_tenant_id: string; p_full_name?: string | null; p_dob?: string | null; p_phone_digits?: string | null; p_address_search?: string | null; p_exclude_lead_id?: string | null; p_limit?: number };
+        Returns: { lead_id: string | null; contact_id: string | null; submitted_at: string; partner_id: string | null; partner_name: string | null; product_line: string | null; outcome: string | null; score: number; matched_on: string[]; source_type: string }[];
       };
       save_contact: {
         Args: { p_tenant_id: string; p_first_name: string; p_last_name: string; p_dob: string | null; p_primary_phone: string | null; p_state: string | null; p_name_search: string; p_custom_fields: Json; p_address_hash: string | null; p_address_search: string | null; p_address_line1: string | null; p_city: string | null; p_postal_code: string | null; p_phones?: Json; p_emails?: Json };
