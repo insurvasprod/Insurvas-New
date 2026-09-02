@@ -2,6 +2,7 @@ import "server-only";
 
 import { audit } from "@/lib/audit/log";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
+import { agentFloorWaitThresholds } from "@/lib/settings/queries";
 
 export type AgentAvailability = "ready" | "on_break" | "off";
 
@@ -118,6 +119,7 @@ export async function getAgentFloor(tenantId: string, currentUserId: string, cur
     available: members.filter((member) => member.availability !== "on_call"),
     members,
     pendingHandoffs,
+    waitThresholds: await agentFloorWaitThresholds(),
     realtimeTopic: `agent-floor:${tenantId}`,
     generatedAt: new Date().toISOString(),
   };

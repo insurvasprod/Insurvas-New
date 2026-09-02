@@ -1921,7 +1921,9 @@ and team availability. It uses `queued_at` and `started_at` for refresh-safe tim
 signal rather than polling. Claim, handoff, accept, nudge, verification, and disposition actions
 remain available through the existing lead flow; the floor adds the team nudge action at the lead
 itself as well. The API derives tenant and role from the session, enforces the inbound entitlement,
-audits writes, rejects hostile input, and makes duplicate nudges idempotent under concurrency.
+audits writes, rejects hostile input, and makes duplicate nudges idempotent under concurrency. The
+amber and red wait thresholds are read from the existing admin settings registry, so operations can
+change them without a plan-specific branch or a code redeploy.
 
 The live migration, RLS policies, Realtime triggers, focused security/concurrency verifier, deep
 migration check, TypeScript, lint, production build, 282-test suite, feature-policy check, and
