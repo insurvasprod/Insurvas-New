@@ -2101,6 +2101,13 @@ The live settings/API verifier, migration inspection, typecheck, lint, build, un
 
 **Fix:** sign in as an entitled local agent owner, producer, assistant, or bookkeeper, open any `/app` page, exercise the Alert settings panel and each toggle, grant and deny browser permission in separate runs, create a test alert in a background tab, click it to open the lead, test DND, mute, volume, and a ten-lead burst at desktop and phone widths, inspect console errors and keyboard focus, and capture the finished screen. Remove this entry only after that authenticated run is clean.
 
+### 147. 🔴 LA-1.25 and LA-1.22 disagree about callback reminder email
+**From:** LA-1.25 · **Belongs to:** LA-1.25 / LA-1.22
+
+LA-1.25's channel matrix says callback-due alerts have no email and that email is for escalations only. LA-1.22 explicitly requires configurable callback reminders in-app and by email, and the existing callback reminder worker still sends that email. The alert center correctly does not add another email, but changing the worker here would break the earlier callback ticket without a product decision.
+
+**Fix:** decide whether callback reminder email remains a LA-1.22 exception or must be removed in favor of the LA-1.25 matrix, then update the owning callback worker, tests, and both ticket specifications together. Cost of leaving it open: the UI channels are correct for browser/toast/sound, but routine callback email behavior is not unambiguously aligned with the combined requirements.
+
 ---
 
 ## Related
