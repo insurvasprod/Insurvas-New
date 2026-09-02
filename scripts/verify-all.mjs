@@ -1,7 +1,7 @@
 /**
  * Runs every database-backed verification suite in one pass.
  *
- * Twenty suites exist and each one was previously run by hand, which meant "all of them pass" was a
+ * Twenty-five suites exist and each one was previously run by hand, which meant "all of them pass" was a
  * claim nobody could check cheaply — and it was wrong at least once this project, when ten of the
  * twenty-one had simply never been run. This runs the lot and, crucially, does NOT stop at the
  * first failure: one broken suite must not hide the state of the other nineteen.
@@ -37,6 +37,15 @@ const SUITES = [
   ["coupons", "verify-coupons.mjs"],
   ["subscription events", "verify-subscription-events.mjs"],
   ["period billing", "verify-period-billing.mjs"],
+  ["LA-0 RLS", "verify-la0-rls.mjs"],
+  ["LA-1.1 partners", "verify-partners.mjs"],
+  ["LA-1.2 partner users", "verify-partner-users.mjs"],
+  ["LA-1.3 partner products", "verify-partner-products.mjs"],
+  ["LA-1.4 dynamic forms and intake", "verify-dynamic-forms.mjs"],
+  ["LA-1.6 partner submission", "verify-partner-submission.mjs"],
+  ["LA-1.7 intake pipeline", "verify-intake-pipeline.mjs"],
+  ["LA-1.8 affiliate links", "verify-affiliate-links.mjs"],
+  ["LA-1.5 TCPA/DNC screening", "verify-screening.mjs"],
 ];
 
 // verify-payment-provider.mjs imports TypeScript directly, so it needs the type-stripping flag the

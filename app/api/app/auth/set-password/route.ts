@@ -11,6 +11,7 @@ type InvitationRow = {
   user_id: string;
   expires_at: string;
   accepted_at: string | null;
+  partner_id: string | null;
 };
 
 const INVALID = { error: "This invitation link is invalid or has expired" };
@@ -19,11 +20,12 @@ async function findValidInvitation(token: string) {
   const supabase = getSupabaseServiceClient();
   const { data: invitation } = await supabase
     .from("user_invitations")
-    .select("id, user_id, expires_at, accepted_at")
+    .select("id, user_id, expires_at, accepted_at, partner_id")
     .eq("token_hash", hashInviteToken(token))
     // Both purposes end in "choose a password". An email_change token must NOT be redeemable
     // here — it proves control of a mailbox, not the right to set credentials.
     .in("purpose", ["invite", "password_reset"])
+    .is("partner_id", null)
     .maybeSingle<InvitationRow>();
 
   if (!invitation) return null;

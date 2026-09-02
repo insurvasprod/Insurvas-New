@@ -168,3 +168,18 @@ export async function meterWarnThreshold(): Promise<number> {
 export function defaultCurrency(): Promise<string> {
   return getSetting<string>("platform.default_currency");
 }
+
+export async function agentFloorWaitThresholds(): Promise<{ amberSeconds: number; redSeconds: number }> {
+  const [amber, red] = await Promise.all([
+    getSetting<number>("agent_floor.wait_amber_seconds"),
+    getSetting<number>("agent_floor.wait_red_seconds"),
+  ]);
+  return {
+    amberSeconds: Math.min(amber, red - 1),
+    redSeconds: Math.max(red, amber + 1),
+  };
+}
+
+export function callbackReminderLeadMinutes(): Promise<number> {
+  return getSetting<number>("callbacks.reminder_lead_minutes");
+}

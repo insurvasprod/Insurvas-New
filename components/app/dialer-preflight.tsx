@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-export function DialerPreflight() {
+export function DialerPreflight({ readOnly = false }: { readOnly?: boolean }) {
   const [phone, setPhone] = useState("");
   const [fieldError, setFieldError] = useState("");
   const [result, setResult] = useState<{ tone: "success" | "blocked"; message: string } | null>(null);
@@ -54,7 +54,7 @@ export function DialerPreflight() {
         <CardHeader><CardTitle className="text-base">Check a number before dialing</CardTitle><p className="text-sm text-muted-foreground">Your number is sent to the configured DNC vendor over HTTPS. Only a masked number is retained in provider logs.</p></CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2"><Label htmlFor="dial-phone">Phone number</Label><Input id="dial-phone" type="tel" inputMode="tel" autoComplete="tel" placeholder="(555) 123-4567" value={phone} onChange={(event) => { setPhone(event.target.value); setFieldError(""); setResult(null); }} aria-invalid={Boolean(fieldError)} />{fieldError && <p className="text-sm text-destructive" role="alert">{fieldError}</p>}</div>
-          <Button type="button" onClick={() => void checkBeforeDialing()} disabled={checking || !phone.trim()}>{checking ? "Checking…" : "Check before dialing"}</Button>
+          <Button type="button" onClick={() => void checkBeforeDialing()} disabled={readOnly || checking || !phone.trim()}>{readOnly ? "Read-only account" : checking ? "Checking…" : "Check before dialing"}</Button>
           {result && <div role="status" className={`rounded-md border p-4 text-sm ${result.tone === "success" ? "border-[var(--color-success)]/40 bg-[var(--color-success)]/10 text-[var(--color-success)]" : "border-[var(--color-danger)]/40 bg-[var(--color-danger)]/10 text-[var(--color-danger)]"}`}><p className="font-semibold">{result.tone === "success" ? "Number cleared" : "Dialing blocked"}</p><p className="mt-1">{result.message}</p></div>}
         </CardContent>
       </Card>

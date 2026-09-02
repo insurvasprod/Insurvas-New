@@ -206,6 +206,9 @@ export async function performDncDialPreflight(
   fetcher: typeof fetch = fetch,
 ): Promise<{ allowed: boolean; phone: string }> {
   const normalized = normalizeDialPhone(phone);
+  const { data: tenantSuppressed, error: suppressionError } = await getSupabaseServiceClient().rpc("is_tenant_phone_suppressed", { p_tenant_id: tenantId, p_phone_digits: normalized });
+  if (suppressionError) throw new Error(`Could not check tenant do-not-call list: ${suppressionError.message}`);
+  if (tenantSuppressed) return { allowed: false, phone: maskDialPhone(normalized) };
   await assertDncVendorAvailable();
   const decision = await runWithComplianceFallback<DncScrubDecision>(
     "dnc_scrub",

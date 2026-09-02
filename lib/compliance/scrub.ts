@@ -2,6 +2,17 @@ export type DncScrubDecision = {
   allowed: boolean;
 };
 
+/** Canonical key for the US screening cache. Keep the last ten digits stable across +1/display forms. */
+export function getUsPhone10Digits(value: unknown): string {
+  if (typeof value !== "string") throw new Error("Enter a valid phone number");
+  const input = value.trim();
+  if (!/^[+()\d\s.-]+$/.test(input)) throw new Error("Enter a valid phone number");
+  const digits = input.replace(/\D/g, "");
+  if (digits.length === 11 && digits.startsWith("1")) return digits.slice(-10);
+  if (digits.length === 10) return digits;
+  throw new Error("Enter a valid US phone number");
+}
+
 /**
  * The vendor registry deliberately accepts a small adapter-neutral response contract. A vendor
  * adapter can answer with `allowed`, `listed`, or `is_dnc`; anything else fails closed so a

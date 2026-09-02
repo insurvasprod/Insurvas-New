@@ -3,7 +3,43 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, X, Building2 } from "lucide-react";
+import {
+  BookOpen,
+  BriefcaseBusiness,
+  Calculator,
+  CalendarCheck,
+  CalendarClock,
+  CalendarDays,
+  ChartNoAxesCombined,
+  Circle,
+  ClipboardList,
+  ContactRound,
+  CopyCheck,
+  ExternalLink,
+  FileChartColumn,
+  FileCheck,
+  FileText,
+  Landmark,
+  LayoutDashboard,
+  ListPlus,
+  LockKeyhole,
+  Menu,
+  PhoneIncoming,
+  PhoneOutgoing,
+  Radar,
+  RadioTower,
+  Receipt,
+  RotateCcw,
+  Settings,
+  ShieldCheck,
+  TriangleAlert,
+  TrendingUp,
+  Users,
+  WalletCards,
+  Wrench,
+  X,
+  Building2,
+} from "lucide-react";
 
 import type { MenuSection } from "@/lib/menu/definition";
 
@@ -32,11 +68,12 @@ function NavList({ menu, onNavigate }: { menu: MenuSection[]; onNavigate?: () =>
           </p>
           <ul className="space-y-0.5">
             {section.items.map((item) => {
-              const href = `/app/${item.id}`;
+              const href = item.path;
               const isActive = pathname === href;
+              const Icon = iconFor(item.icon);
 
               return (
-                <li key={item.id}>
+                <li key={item.key}>
                   <Link
                     href={href}
                     onClick={onNavigate}
@@ -47,7 +84,10 @@ function NavList({ menu, onNavigate }: { menu: MenuSection[]; onNavigate?: () =>
                         : "text-white/80 hover:bg-white/8 hover:text-white"
                     }`}
                   >
-                    <span className="truncate">{item.label}</span>
+                    <span className="flex min-w-0 items-center gap-2 truncate">
+                      <Icon className="size-4 shrink-0" aria-hidden="true" />
+                      <span className="truncate">{item.label}</span>
+                    </span>
                     {!item.built && (
                       <span
                         className="size-1.5 shrink-0 rounded-full bg-white/40"
@@ -64,6 +104,44 @@ function NavList({ menu, onNavigate }: { menu: MenuSection[]; onNavigate?: () =>
       ))}
     </nav>
   );
+}
+
+const ICONS = {
+  "layout-dashboard": LayoutDashboard,
+  "book-open": BookOpen,
+  "file-text": FileText,
+  receipt: Receipt,
+  "calendar-days": CalendarDays,
+  "triangle-alert": TriangleAlert,
+  "contact-round": ContactRound,
+  "phone-incoming": PhoneIncoming,
+  "phone-outgoing": PhoneOutgoing,
+  "list-plus": ListPlus,
+  "copy-check": CopyCheck,
+  calculator: Calculator,
+  "file-check": FileCheck,
+  "calendar-clock": CalendarClock,
+  "calendar-check": CalendarCheck,
+  "clipboard-list": ClipboardList,
+  radar: Radar,
+  "radio-tower": RadioTower,
+  wrench: Wrench,
+  "rotate-ccw": RotateCcw,
+  "chart-no-axes-combined": ChartNoAxesCombined,
+  "trending-up": TrendingUp,
+  users: Users,
+  "wallet-cards": WalletCards,
+  "external-link": ExternalLink,
+  landmark: Landmark,
+  "file-chart-column": FileChartColumn,
+  "shield-check": ShieldCheck,
+  "lock-keyhole": LockKeyhole,
+  "briefcase-business": BriefcaseBusiness,
+  settings: Settings,
+} as const;
+
+function iconFor(name: string) {
+  return ICONS[name as keyof typeof ICONS] ?? Circle;
 }
 
 export function AgentSidebar({ menu, footer }: { menu: MenuSection[]; footer?: React.ReactNode }) {

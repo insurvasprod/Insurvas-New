@@ -25,7 +25,17 @@ export type Entitlement = {
   computed_at: string;
   features: string[];
   meters: Record<string, EntitlementMeter>;
-  limits: { max_seats: number | null };
+  /** Nullable capacities are data from the cached entitlement; null means unlimited. */
+  limits: {
+    max_seats: number | null;
+    max_publishers: number | null;
+    max_marketing_partners: number | null;
+    max_affiliates: number | null;
+    max_buffer_seats: number | null;
+    max_partner_users: number | null;
+    /** Kept for old seeded snapshots until they are rebuilt. */
+    max_partners?: number | null;
+  };
   period_start?: string;
 };
 
@@ -46,5 +56,12 @@ export const EMPTY_ENTITLEMENT: Omit<Entitlement, "tenant_id"> = {
   computed_at: new Date(0).toISOString(),
   features: [],
   meters: {},
-  limits: { max_seats: null },
+  limits: {
+    max_seats: null,
+    max_publishers: null,
+    max_marketing_partners: null,
+    max_affiliates: null,
+    max_buffer_seats: null,
+    max_partner_users: null,
+  },
 };

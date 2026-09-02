@@ -6,6 +6,168 @@ export type Database = {
   };
   public: {
     Tables: {
+      advance_rules: {
+        Row: {
+          advance_months: number;
+          advance_pct_bp: number;
+          carrier_id: string;
+          clawback_months: number;
+          clawback_type: string;
+          created_at: string;
+          effective_from: string;
+          id: string;
+          product_code: string;
+          tenant_id: string;
+        };
+        Insert: {
+          advance_months: number;
+          advance_pct_bp: number;
+          carrier_id: string;
+          clawback_months: number;
+          clawback_type: string;
+          created_at?: string;
+          effective_from: string;
+          id?: string;
+          product_code: string;
+          tenant_id: string;
+        };
+        Update: {
+          advance_months?: number;
+          advance_pct_bp?: number;
+          carrier_id?: string;
+          clawback_months?: number;
+          clawback_type?: string;
+          created_at?: string;
+          effective_from?: string;
+          id?: string;
+          product_code?: string;
+          tenant_id?: string;
+        };
+        Relationships: [];
+      };
+      appointments: {
+        Row: { id: string; tenant_id: string; carrier_id: string; state: string; status: string; effective_from: string; terminated_at: string | null; created_at: string; updated_at: string };
+        Insert: { id?: string; tenant_id: string; carrier_id: string; state: string; status?: string; effective_from: string; terminated_at?: string | null; created_at?: string; updated_at?: string };
+        Update: { id?: string; tenant_id?: string; carrier_id?: string; state?: string; status?: string; effective_from?: string; terminated_at?: string | null; created_at?: string; updated_at?: string };
+        Relationships: [];
+      };
+      ce_records: {
+        Row: { id: string; tenant_id: string; state: string; credits_required: number; credits_completed: number; deadline: string; created_at: string; updated_at: string };
+        Insert: { id?: string; tenant_id: string; state: string; credits_required: number; credits_completed: number; deadline: string; created_at?: string; updated_at?: string };
+        Update: { id?: string; tenant_id?: string; state?: string; credits_required?: number; credits_completed?: number; deadline?: string; created_at?: string; updated_at?: string };
+        Relationships: [];
+      };
+      carriers: {
+        Row: {
+          code: string;
+          created_at: string;
+          id: string;
+          is_active: boolean;
+          name: string;
+          sort_order: number;
+          updated_at: string;
+        };
+        Insert: {
+          code: string;
+          created_at?: string;
+          id?: string;
+          is_active?: boolean;
+          name: string;
+          sort_order?: number;
+          updated_at?: string;
+        };
+        Update: {
+          code?: string;
+          created_at?: string;
+          id?: string;
+          is_active?: boolean;
+          name?: string;
+          sort_order?: number;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      eo_policies: {
+        Row: { id: string; tenant_id: string; carrier: string; policy_number: string; expires_at: string; coverage_amount_cents: number; created_at: string; updated_at: string };
+        Insert: { id?: string; tenant_id: string; carrier: string; policy_number: string; expires_at: string; coverage_amount_cents: number; created_at?: string; updated_at?: string };
+        Update: { id?: string; tenant_id?: string; carrier?: string; policy_number?: string; expires_at?: string; coverage_amount_cents?: number; created_at?: string; updated_at?: string };
+        Relationships: [];
+      };
+      licenses: {
+        Row: { id: string; tenant_id: string; state: string; license_number: string; expires_at: string; created_at: string; updated_at: string };
+        Insert: { id?: string; tenant_id: string; state: string; license_number: string; expires_at: string; created_at?: string; updated_at?: string };
+        Update: { id?: string; tenant_id?: string; state?: string; license_number?: string; expires_at?: string; created_at?: string; updated_at?: string };
+        Relationships: [];
+      };
+      commission_schedules: {
+        Row: {
+          carrier_id: string;
+          contract_level_bp: number;
+          created_at: string;
+          effective_from: string;
+          id: string;
+          policy_year: number;
+          product_code: string;
+          rate_bp: number;
+          tenant_id: string;
+        };
+        Insert: {
+          carrier_id: string;
+          contract_level_bp: number;
+          created_at?: string;
+          effective_from: string;
+          id?: string;
+          policy_year: number;
+          product_code: string;
+          rate_bp: number;
+          tenant_id: string;
+        };
+        Update: {
+          carrier_id?: string;
+          contract_level_bp?: number;
+          created_at?: string;
+          effective_from?: string;
+          id?: string;
+          policy_year?: number;
+          product_code?: string;
+          rate_bp?: number;
+          tenant_id?: string;
+        };
+        Relationships: [];
+      };
+      tenant_carriers: {
+        Row: {
+          carrier_id: string;
+          contract_level_bp: number;
+          created_at: string;
+          effective_from: string;
+          id: string;
+          is_active: boolean;
+          tenant_id: string;
+          writing_number: string;
+        };
+        Insert: {
+          carrier_id: string;
+          contract_level_bp: number;
+          created_at?: string;
+          effective_from: string;
+          id?: string;
+          is_active?: boolean;
+          tenant_id: string;
+          writing_number: string;
+        };
+        Update: {
+          carrier_id?: string;
+          contract_level_bp?: number;
+          created_at?: string;
+          effective_from?: string;
+          id?: string;
+          is_active?: boolean;
+          tenant_id?: string;
+          writing_number?: string;
+        };
+        Relationships: [];
+      };
       admin_users: {
         Row: {
           created_at: string;
@@ -233,6 +395,74 @@ export type Database = {
           failure_count_24h?: number;
           updated_at?: string;
         };
+        Relationships: [];
+      };
+      screening_results: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          phone_digits: string;
+          outcome: string;
+          vendor: string;
+          raw_response: Json;
+          warnings: Json;
+          version: number;
+          checked_at: string;
+          expires_at: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          tenant_id: string;
+          phone_digits: string;
+          outcome: string;
+          vendor: string;
+          raw_response: Json;
+          warnings?: Json;
+          version: number;
+          checked_at?: string;
+          expires_at: string;
+          created_at?: string;
+        };
+        Update: Record<string, never>;
+        Relationships: [];
+      };
+      screening_audit: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          partner_id: string | null;
+          user_id: string | null;
+          phone_digits: string | null;
+          outcome: string;
+          vendor: string | null;
+          raw_response: Json;
+          result_id: string | null;
+          cached: boolean;
+          version: number;
+          ts: string;
+        };
+        Insert: {
+          id?: string;
+          tenant_id: string;
+          partner_id?: string | null;
+          user_id?: string | null;
+          phone_digits?: string | null;
+          outcome: string;
+          vendor?: string | null;
+          raw_response: Json;
+          result_id?: string | null;
+          cached?: boolean;
+          version: number;
+          ts?: string;
+        };
+        Update: Record<string, never>;
+        Relationships: [];
+      };
+      screening_cache_locks: {
+        Row: { tenant_id: string; phone_digits: string; version: number; claim_token: string | null; claimed_until: string | null; updated_at: string };
+        Insert: { tenant_id: string; phone_digits: string; version: number; claim_token?: string | null; claimed_until?: string | null; updated_at?: string };
+        Update: { claim_token?: string | null; claimed_until?: string | null; updated_at?: string };
         Relationships: [];
       };
       credit_packs: {
@@ -1055,6 +1285,24 @@ export type Database = {
           },
         ];
       };
+      pipelines: {
+        Row: { id: string; tenant_id: string; name: string; partner_type: Database["public"]["Enums"]["partner_type"]; is_default: boolean; created_at: string; updated_at: string };
+        Insert: { id?: string; tenant_id: string; name: string; partner_type: Database["public"]["Enums"]["partner_type"]; is_default?: boolean; created_at?: string; updated_at?: string };
+        Update: { id?: string; tenant_id?: string; name?: string; partner_type?: Database["public"]["Enums"]["partner_type"]; is_default?: boolean; updated_at?: string };
+        Relationships: [];
+      };
+      pipeline_stages: {
+        Row: { id: string; pipeline_id: string; name: string; position: number; stage_type: string; color: string; is_archived: boolean; created_at: string; updated_at: string };
+        Insert: { id?: string; pipeline_id: string; name: string; position: number; stage_type: string; color: string; is_archived?: boolean; created_at?: string; updated_at?: string };
+        Update: { id?: string; pipeline_id?: string; name?: string; position?: number; stage_type?: string; color?: string; is_archived?: boolean; updated_at?: string };
+        Relationships: [];
+      };
+      stage_dispositions: {
+        Row: { id: string; tenant_id: string; stage_id: string; disposition_key: string; created_at: string; updated_at: string };
+        Insert: { id?: string; tenant_id: string; stage_id: string; disposition_key: string; created_at?: string; updated_at?: string };
+        Update: { stage_id?: string; disposition_key?: string; updated_at?: string };
+        Relationships: [];
+      };
       plans: {
         Row: {
           code: string;
@@ -1133,6 +1381,38 @@ export type Database = {
         };
         Relationships: [];
       };
+      tenant_products: {
+        Row: {
+          tenant_id: string;
+          product_code: string;
+          is_enabled: boolean;
+          sort_order: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          tenant_id: string;
+          product_code: string;
+          is_enabled?: boolean;
+          sort_order?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          tenant_id?: string;
+          product_code?: string;
+          is_enabled?: boolean;
+          sort_order?: number;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      partner_products: {
+        Row: { partner_id: string; product_code: string; approved_at: string; approved_by: string | null };
+        Insert: { partner_id: string; product_code: string; approved_at?: string; approved_by?: string | null };
+        Update: { approved_at?: string; approved_by?: string | null };
+        Relationships: [];
+      };
       plan_product_access: {
         Row: { plan_id: string; product_code: string; created_at: string };
         Insert: { plan_id: string; product_code: string; created_at?: string };
@@ -1140,15 +1420,15 @@ export type Database = {
         Relationships: [];
       };
       tenant_templates: {
-        Row: { id: string; tenant_id: string; template_id: string; template_version: number; product_code: string; name: string; description: string | null; applied_at: string; applied_by: string | null; created_at: string; updated_at: string };
-        Insert: { id?: string; tenant_id: string; template_id: string; template_version: number; product_code: string; name: string; description?: string | null; applied_at?: string; applied_by?: string | null; created_at?: string; updated_at?: string };
-        Update: { id?: string; tenant_id?: string; template_id?: string; template_version?: number; product_code?: string; name?: string; description?: string | null; applied_at?: string; applied_by?: string | null; created_at?: string; updated_at?: string };
+        Row: { id: string; tenant_id: string; template_id: string; template_version: number; definition_version: number; product_code: string; name: string; description: string | null; applied_at: string; applied_by: string | null; created_at: string; updated_at: string };
+        Insert: { id?: string; tenant_id: string; template_id: string; template_version: number; definition_version?: number; product_code: string; name: string; description?: string | null; applied_at?: string; applied_by?: string | null; created_at?: string; updated_at?: string };
+        Update: { id?: string; tenant_id?: string; template_id?: string; template_version?: number; definition_version?: number; product_code?: string; name?: string; description?: string | null; applied_at?: string; applied_by?: string | null; created_at?: string; updated_at?: string };
         Relationships: [];
       };
       tenant_template_fields: {
-        Row: { tenant_template_id: string; field_key: string; label: string; type: string; is_required: boolean; options: Json; sort_order: number };
-        Insert: { tenant_template_id: string; field_key: string; label: string; type: string; is_required?: boolean; options?: Json; sort_order?: number };
-        Update: { tenant_template_id?: string; field_key?: string; label?: string; type?: string; is_required?: boolean; options?: Json; sort_order?: number };
+        Row: { tenant_template_id: string; field_key: string; label: string; type: string; is_required: boolean; options: Json; sort_order: number; help_text: string | null; validation: Json };
+        Insert: { tenant_template_id: string; field_key: string; label: string; type: string; is_required?: boolean; options?: Json; sort_order?: number; help_text?: string | null; validation?: Json };
+        Update: { tenant_template_id?: string; field_key?: string; label?: string; type?: string; is_required?: boolean; options?: Json; sort_order?: number; help_text?: string | null; validation?: Json };
         Relationships: [];
       };
       tenant_template_stages: {
@@ -1161,6 +1441,18 @@ export type Database = {
         Row: { tenant_template_id: string; form_definition: Json };
         Insert: { tenant_template_id: string; form_definition: Json };
         Update: { tenant_template_id?: string; form_definition?: Json };
+        Relationships: [];
+      };
+      tenant_template_revisions: {
+        Row: { tenant_template_id: string; revision: number; name: string; description: string | null; fields: Json; stages: Json; form_definition: Json; created_by: string | null; created_at: string };
+        Insert: { tenant_template_id: string; revision: number; name: string; description?: string | null; fields: Json; stages: Json; form_definition: Json; created_by?: string | null; created_at?: string };
+        Update: { name?: string; description?: string | null; fields?: Json; stages?: Json; form_definition?: Json; created_by?: string | null };
+        Relationships: [];
+      };
+      form_drafts: {
+        Row: { id: string; tenant_id: string; partner_id: string | null; user_id: string; product_code: string; tenant_template_id: string; definition_version: number; payload: Json; created_at: string; updated_at: string; owner_key: string };
+        Insert: { id?: string; tenant_id: string; partner_id?: string | null; user_id: string; product_code: string; tenant_template_id: string; definition_version: number; payload?: Json; created_at?: string; updated_at?: string; owner_key?: string };
+        Update: { partner_id?: string | null; user_id?: string; product_code?: string; tenant_template_id?: string; definition_version?: number; payload?: Json; updated_at?: string };
         Relationships: [];
       };
       tenant_template_assignments: {
@@ -1199,40 +1491,434 @@ export type Database = {
       agent_leads: {
         Row: {
           id: string;
+          partner_id: string | null;
+          submission_id: string | null;
+          affiliate_link_id: string | null;
+          affiliate_campaign: string | null;
           tenant_id: string;
           tenant_template_id: string | null;
+          definition_version: number;
           template_id: string;
           template_version: number;
-          stage_key: string;
+          product_line: string;
+          pipeline_id: string;
+          stage_id: string;
           values: Json;
           created_by: string | null;
           created_at: string;
           updated_at: string;
+          screening_result_id: string | null;
+          screening_version: number | null;
+          screening_outcome: string | null;
+          screening_warning: string | null;
+          screening_checked_at: string | null;
+          screening_warning_acknowledged: boolean;
+          screening_warning_acknowledged_at: string | null;
+          duplicate_override_justification: string | null;
+          duplicate_override_by: string | null;
+          duplicate_override_at: string | null;
+          callback_subtype: string | null;
+          preflight_status: string;
+          preflight_checked_at: string | null;
+          preflight_result: Json;
+        };
+        Insert: {
+          id?: string;
+          partner_id?: string | null;
+          submission_id?: string | null;
+          affiliate_link_id?: string | null;
+          affiliate_campaign?: string | null;
+          tenant_id: string;
+          tenant_template_id?: string | null;
+          definition_version?: number;
+          template_id: string;
+          template_version: number;
+          product_line: string;
+          pipeline_id: string;
+          stage_id: string;
+          values?: Json;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+          screening_result_id?: string | null;
+          screening_version?: number | null;
+          screening_outcome?: string | null;
+          screening_warning?: string | null;
+          screening_checked_at?: string | null;
+          screening_warning_acknowledged?: boolean;
+          screening_warning_acknowledged_at?: string | null;
+          duplicate_override_justification?: string | null;
+          duplicate_override_by?: string | null;
+          duplicate_override_at?: string | null;
+          callback_subtype?: string | null;
+          preflight_status?: string;
+          preflight_checked_at?: string | null;
+          preflight_result?: Json;
+        };
+        Update: {
+          id?: string;
+          partner_id?: string | null;
+          submission_id?: string | null;
+          affiliate_link_id?: string | null;
+          affiliate_campaign?: string | null;
+          tenant_id?: string;
+          tenant_template_id?: string | null;
+          definition_version?: number;
+          template_id?: string;
+          template_version?: number;
+          product_line?: string;
+          pipeline_id?: string;
+          stage_id?: string;
+          values?: Json;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+          screening_result_id?: string | null;
+          screening_version?: number | null;
+          screening_outcome?: string | null;
+          screening_warning?: string | null;
+          screening_checked_at?: string | null;
+          screening_warning_acknowledged?: boolean;
+          screening_warning_acknowledged_at?: string | null;
+          duplicate_override_justification?: string | null;
+          duplicate_override_by?: string | null;
+          duplicate_override_at?: string | null;
+          callback_subtype?: string | null;
+          preflight_status?: string;
+          preflight_checked_at?: string | null;
+          preflight_result?: Json;
+        };
+        Relationships: [];
+      };
+      lead_queue: {
+        Row: { id: string; tenant_id: string; lead_id: string; partner_id: string | null; affiliate_link_id: string | null; affiliate_campaign: string | null; product_line: string; pipeline_id: string; stage_id: string; status: string; claimed_by: string | null; owner_user_id: string | null; owner_role: string | null; claimed_at: string | null; submission_id: string | null; queued_at: string; disposition: string | null; disposition_at: string | null; disposition_by: string | null; created_at: string; updated_at: string };
+        Insert: { id?: string; tenant_id: string; lead_id: string; partner_id?: string | null; affiliate_link_id?: string | null; affiliate_campaign?: string | null; product_line: string; pipeline_id: string; stage_id: string; status?: string; claimed_by?: string | null; owner_user_id?: string | null; owner_role?: string | null; claimed_at?: string | null; submission_id?: string | null; queued_at?: string; disposition?: string | null; disposition_at?: string | null; disposition_by?: string | null; created_at?: string; updated_at?: string };
+        Update: { pipeline_id?: string; stage_id?: string; status?: string; claimed_by?: string | null; owner_user_id?: string | null; owner_role?: string | null; claimed_at?: string | null; submission_id?: string | null; queued_at?: string; disposition?: string | null; disposition_at?: string | null; disposition_by?: string | null; updated_at?: string };
+        Relationships: [];
+      };
+      verification_sessions: {
+        Row: { id: string; tenant_id: string; work_item_id: string; lead_id: string; user_id: string; agent_role: string; status: string; started_at: string; ended_at: string | null; progress_percentage: number; completed_at: string | null; last_actor_id: string | null; created_at: string; updated_at: string };
+        Insert: { id?: string; tenant_id: string; work_item_id: string; lead_id: string; user_id: string; agent_role: string; status?: string; started_at?: string; ended_at?: string | null; progress_percentage?: number; completed_at?: string | null; last_actor_id?: string | null; created_at?: string; updated_at?: string };
+        Update: { status?: string; ended_at?: string | null; progress_percentage?: number; completed_at?: string | null; last_actor_id?: string | null; updated_at?: string };
+        Relationships: [];
+      };
+      verification_fields: {
+        Row: { session_id: string; field_key: string; state: string; is_required: boolean; is_visible: boolean; old_value: Json | null; new_value: Json | null; confirmed_at: string | null; actor_id: string | null };
+        Insert: { session_id: string; field_key: string; state?: string; is_required?: boolean; is_visible?: boolean; old_value?: Json | null; new_value?: Json | null; confirmed_at?: string | null; actor_id?: string | null };
+        Update: { state?: string; is_required?: boolean; is_visible?: boolean; old_value?: Json | null; new_value?: Json | null; confirmed_at?: string | null; actor_id?: string | null };
+        Relationships: [];
+      };
+      verification_field_changes: {
+        Row: { id: string; tenant_id: string; session_id: string; lead_id: string; field_key: string; old_value: Json | null; new_value: Json | null; actor_id: string | null; created_at: string };
+        Insert: { id?: string; tenant_id: string; session_id: string; lead_id: string; field_key: string; old_value?: Json | null; new_value?: Json | null; actor_id?: string | null; created_at?: string };
+        Update: Record<string, never>;
+        Relationships: [];
+      };
+      active_calls: {
+        Row: { id: string; tenant_id: string; work_item_id: string; lead_id: string; submission_id: string | null; user_id: string; agent_role: string; started_at: string; ended_at: string | null; created_at: string; updated_at: string };
+        Insert: { id?: string; tenant_id: string; work_item_id: string; lead_id: string; submission_id?: string | null; user_id: string; agent_role: string; started_at?: string; ended_at?: string | null; created_at?: string; updated_at?: string };
+        Update: { ended_at?: string | null; updated_at?: string };
+        Relationships: [];
+      };
+      agent_presence: {
+        Row: { tenant_id: string; user_id: string; status: string; last_seen_at: string; updated_at: string };
+        Insert: { tenant_id: string; user_id: string; status?: string; last_seen_at?: string; updated_at?: string };
+        Update: { status?: string; last_seen_at?: string; updated_at?: string };
+        Relationships: [];
+      };
+      agent_floor_nudges: {
+        Row: { id: string; tenant_id: string; work_item_id: string; target_user_id: string | null; created_by: string; idempotency_key: string; message: string; created_at: string };
+        Insert: { id?: string; tenant_id: string; work_item_id: string; target_user_id?: string | null; created_by: string; idempotency_key: string; message?: string; created_at?: string };
+        Update: { message?: string };
+        Relationships: [];
+      };
+      callbacks: {
+        Row: { id: string; tenant_id: string; lead_id: string; work_item_id: string; scheduled_at_utc: string; customer_timezone: string; assigned_to: string; note: string | null; status: string; reminder_sent_at: string | null; completed_at: string | null; created_by: string; created_at: string; updated_at: string; idempotency_key: string | null };
+        Insert: { id?: string; tenant_id: string; lead_id: string; work_item_id: string; scheduled_at_utc: string; customer_timezone: string; assigned_to: string; note?: string | null; status?: string; reminder_sent_at?: string | null; completed_at?: string | null; created_by: string; created_at?: string; updated_at?: string; idempotency_key?: string | null };
+        Update: { scheduled_at_utc?: string; customer_timezone?: string; assigned_to?: string; note?: string | null; status?: string; reminder_sent_at?: string | null; completed_at?: string | null; updated_at?: string };
+        Relationships: [];
+      };
+      callback_history: {
+        Row: { id: string; tenant_id: string; callback_id: string; lead_id: string; actor_user_id: string; action: string; old_scheduled_at_utc: string | null; new_scheduled_at_utc: string | null; old_status: string | null; new_status: string | null; note: string | null; created_at: string };
+        Insert: { id?: string; tenant_id: string; callback_id: string; lead_id: string; actor_user_id: string; action: string; old_scheduled_at_utc?: string | null; new_scheduled_at_utc?: string | null; old_status?: string | null; new_status?: string | null; note?: string | null; created_at?: string };
+        Update: Record<string, never>;
+        Relationships: [];
+      };
+      partner_messages: {
+        Row: { id: string; tenant_id: string; partner_id: string; channel_id: string; work_item_id: string | null; message: string; message_kind: string; card_type: string | null; card_payload: Json; event_key: string | null; created_by: string | null; created_at: string };
+        Insert: { id?: string; tenant_id: string; partner_id: string; channel_id: string; work_item_id?: string | null; message: string; message_kind?: string; card_type?: string | null; card_payload?: Json; event_key?: string | null; created_by?: string | null; created_at?: string };
+        Update: { message?: string };
+        Relationships: [];
+      };
+      partner_channels: {
+        Row: { id: string; tenant_id: string; partner_id: string; channel_type: string; name: string; status: string; created_by: string | null; created_at: string; archived_at: string | null };
+        Insert: { id?: string; tenant_id: string; partner_id: string; channel_type?: string; name?: string; status?: string; created_by?: string | null; created_at?: string; archived_at?: string | null };
+        Update: { name?: string; status?: string; archived_at?: string | null };
+        Relationships: [];
+      };
+      partner_message_reads: {
+        Row: { channel_id: string; tenant_id: string; user_id: string; read_at: string };
+        Insert: { channel_id: string; tenant_id: string; user_id: string; read_at?: string };
+        Update: { read_at?: string };
+        Relationships: [];
+      };
+      partner_message_mentions: {
+        Row: { id: string; tenant_id: string; message_id: string; mentioned_user_id: string; created_at: string };
+        Insert: { id?: string; tenant_id: string; message_id: string; mentioned_user_id: string; created_at?: string };
+        Update: Record<string, never>;
+        Relationships: [];
+      };
+      partner_message_attachments: {
+        Row: { id: string; tenant_id: string; message_id: string; file_name: string; storage_path: string; content_type: string; size_bytes: number; created_by: string | null; created_at: string };
+        Insert: { id?: string; tenant_id: string; message_id: string; file_name: string; storage_path: string; content_type: string; size_bytes: number; created_by?: string | null; created_at?: string };
+        Update: Record<string, never>;
+        Relationships: [];
+      };
+      deal_flow: {
+        Row: { id: string; tenant_id: string; lead_id: string; partner_id: string | null; affiliate_link_id: string | null; affiliate_campaign: string | null; submission_id: string | null; product_line: string; pipeline_id: string; stage_id: string; insured_name: string | null; phone: string | null; initial_quote: string | null; tracking_id: string | null; local_date: string; status: string; call_result: string | null; notes: string | null; disposition_at: string | null; disposition_by: string | null; carrier: string | null; product_type: string | null; monthly_premium_cents: number | null; face_amount_cents: number | null; draft_date: string | null; worked_by: string | null; manual_entry: boolean; created_at: string; updated_at: string };
+        Insert: { id?: string; tenant_id: string; lead_id: string; partner_id?: string | null; affiliate_link_id?: string | null; affiliate_campaign?: string | null; submission_id?: string | null; product_line: string; pipeline_id: string; stage_id: string; insured_name?: string | null; phone?: string | null; initial_quote?: string | null; tracking_id?: string | null; local_date: string; status?: string; call_result?: string | null; notes?: string | null; disposition_at?: string | null; disposition_by?: string | null; carrier?: string | null; product_type?: string | null; monthly_premium_cents?: number | null; face_amount_cents?: number | null; draft_date?: string | null; worked_by?: string | null; manual_entry?: boolean; created_at?: string; updated_at?: string };
+        Update: { pipeline_id?: string; stage_id?: string; insured_name?: string | null; phone?: string | null; initial_quote?: string | null; tracking_id?: string | null; local_date?: string; status?: string; call_result?: string | null; notes?: string | null; carrier?: string | null; product_type?: string | null; monthly_premium_cents?: number | null; face_amount_cents?: number | null; draft_date?: string | null; worked_by?: string | null; manual_entry?: boolean; disposition_at?: string | null; disposition_by?: string | null; updated_at?: string };
+        Relationships: [];
+      };
+      dispositions: {
+        Row: { id: string; tenant_id: string; disposition_key: string; label: string; counts_as_work_completed: boolean; closes_as: string; is_active: boolean; sort_order: number; created_at: string; updated_at: string };
+        Insert: { id?: string; tenant_id: string; disposition_key: string; label: string; counts_as_work_completed?: boolean; closes_as?: string; is_active?: boolean; sort_order?: number; created_at?: string; updated_at?: string };
+        Update: { label?: string; counts_as_work_completed?: boolean; closes_as?: string; is_active?: boolean; sort_order?: number; updated_at?: string };
+        Relationships: [];
+      };
+      disposition_flows: {
+        Row: { id: string; tenant_id: string; stage_id: string; name: string; is_active: boolean; root_node_id: string | null; created_at: string; updated_at: string };
+        Insert: { id?: string; tenant_id: string; stage_id: string; name: string; is_active?: boolean; root_node_id?: string | null; created_at?: string; updated_at?: string };
+        Update: { name?: string; is_active?: boolean; root_node_id?: string | null; updated_at?: string };
+        Relationships: [];
+      };
+      disposition_nodes: {
+        Row: { id: string; flow_id: string; node_key: string; label: string; prompt: string; node_type: string; field_key: string | null; note_template: string | null; next_node_id: string | null; sort_order: number; created_at: string; updated_at: string };
+        Insert: { id?: string; flow_id: string; node_key: string; label: string; prompt: string; node_type: string; field_key?: string | null; note_template?: string | null; next_node_id?: string | null; sort_order?: number; created_at?: string; updated_at?: string };
+        Update: { label?: string; prompt?: string; node_type?: string; note_template?: string | null; next_node_id?: string | null; updated_at?: string };
+        Relationships: [];
+      };
+      disposition_options: {
+        Row: { id: string; node_id: string; option_key: string; label: string; next_node_id: string | null; disposition_key: string | null; note_template: string | null; sort_order: number; created_at: string; updated_at: string };
+        Insert: { id?: string; node_id: string; option_key: string; label: string; next_node_id?: string | null; disposition_key?: string | null; note_template?: string | null; sort_order?: number; created_at?: string; updated_at?: string };
+        Update: { label?: string; next_node_id?: string | null; disposition_key?: string | null; note_template?: string | null; updated_at?: string };
+        Relationships: [];
+      };
+      disposition_walks: {
+        Row: { id: string; tenant_id: string; work_item_id: string; lead_id: string; flow_id: string; user_id: string; status: string; current_node_id: string | null; final_disposition_key: string | null; composed_note: string | null; started_at: string; completed_at: string | null; created_at: string; updated_at: string };
+        Insert: { id?: string; tenant_id: string; work_item_id: string; lead_id: string; flow_id: string; user_id: string; status?: string; current_node_id?: string | null; final_disposition_key?: string | null; composed_note?: string | null; started_at?: string; completed_at?: string | null; created_at?: string; updated_at?: string };
+        Update: { user_id?: string; status?: string; current_node_id?: string | null; final_disposition_key?: string | null; composed_note?: string | null; completed_at?: string | null; updated_at?: string };
+        Relationships: [];
+      };
+      disposition_walk_steps: {
+        Row: { id: string; walk_id: string; sequence: number; node_id: string; answer: Json; option_key: string | null; note_fragment: string; created_at: string; updated_at: string };
+        Insert: { id?: string; walk_id: string; sequence: number; node_id: string; answer?: Json; option_key?: string | null; note_fragment?: string; created_at?: string; updated_at?: string };
+        Update: { answer?: Json; option_key?: string | null; note_fragment?: string; updated_at?: string };
+        Relationships: [];
+      };
+      tenant_do_not_call: {
+        Row: { id: string; tenant_id: string; phone_digits: string; lead_id: string | null; added_by: string | null; reason: string; is_active: boolean; created_at: string; updated_at: string };
+        Insert: { id?: string; tenant_id: string; phone_digits: string; lead_id?: string | null; added_by?: string | null; reason?: string; is_active?: boolean; created_at?: string; updated_at?: string };
+        Update: { reason?: string; is_active?: boolean; updated_at?: string };
+        Relationships: [];
+      };
+      affiliate_links: {
+        Row: { id: string; tenant_id: string; partner_id: string; slug: string; campaign: string | null; is_active: boolean; click_count: number; created_at: string; updated_at: string };
+        Insert: { id?: string; tenant_id: string; partner_id: string; slug: string; campaign?: string | null; is_active?: boolean; click_count?: number; created_at?: string; updated_at?: string };
+        Update: { slug?: string; campaign?: string | null; is_active?: boolean; click_count?: number; updated_at?: string };
+        Relationships: [];
+      };
+      intake_failures: {
+        Row: { id: string; tenant_id: string; lead_id: string; step: string; error_message: string; metadata: Json; created_at: string; resolved_at: string | null };
+        Insert: { id?: string; tenant_id: string; lead_id: string; step: string; error_message: string; metadata?: Json; created_at?: string; resolved_at?: string | null };
+        Update: { resolved_at?: string | null };
+        Relationships: [];
+      };
+      intake_alerts: {
+        Row: { id: string; tenant_id: string; intake_failure_id: string; alert_type: string; status: string; created_at: string; acknowledged_at: string | null };
+        Insert: { id?: string; tenant_id: string; intake_failure_id: string; alert_type?: string; status?: string; created_at?: string; acknowledged_at?: string | null };
+        Update: { status?: string; acknowledged_at?: string | null };
+        Relationships: [];
+      };
+      lead_notifications: {
+        Row: { id: string; tenant_id: string; lead_id: string; channel: string; event_type: string; payload: Json; status: string; created_at: string; sent_at: string | null };
+        Insert: { id?: string; tenant_id: string; lead_id: string; channel?: string; event_type?: string; payload?: Json; status?: string; created_at?: string; sent_at?: string | null };
+        Update: { status?: string; sent_at?: string | null };
+        Relationships: [];
+      };
+      lead_notes: {
+        Row: { id: string; tenant_id: string; lead_id: string; author_user_id: string; body: string; visibility: string; idempotency_key: string | null; created_at: string; edited_at: string | null; deleted_at: string | null };
+        Insert: { id?: string; tenant_id: string; lead_id: string; author_user_id: string; body: string; visibility?: string; idempotency_key?: string | null; created_at?: string; edited_at?: string | null; deleted_at?: string | null };
+        Update: { body?: string; visibility?: string; edited_at?: string | null; deleted_at?: string | null };
+        Relationships: [];
+      };
+      lead_note_edits: {
+        Row: { id: string; tenant_id: string; note_id: string; lead_id: string; actor_user_id: string; action: string; old_body: string; old_visibility: string; new_body: string | null; new_visibility: string | null; created_at: string };
+        Insert: { id?: string; tenant_id: string; note_id: string; lead_id: string; actor_user_id: string; action: string; old_body: string; old_visibility: string; new_body?: string | null; new_visibility?: string | null; created_at?: string };
+        Update: never;
+        Relationships: [];
+      };
+      agent_notifications: {
+        Row: { id: string; tenant_id: string; recipient_user_id: string; kind: string; title: string; body: string; link: string; source_key: string; created_at: string; read_at: string | null };
+        Insert: { id?: string; tenant_id: string; recipient_user_id: string; kind: string; title: string; body: string; link: string; source_key: string; created_at?: string; read_at?: string | null };
+        Update: { read_at?: string | null };
+        Relationships: [];
+      };
+      agent_notification_settings: {
+        Row: { tenant_id: string; user_id: string; enabled_events: Json; do_not_disturb: boolean; sound_muted: boolean; sound_volume: number; updated_at: string };
+        Insert: { tenant_id: string; user_id: string; enabled_events?: Json; do_not_disturb?: boolean; sound_muted?: boolean; sound_volume?: number; updated_at?: string };
+        Update: { enabled_events?: Json; do_not_disturb?: boolean; sound_muted?: boolean; sound_volume?: number; updated_at?: string };
+        Relationships: [];
+      };
+      lead_note_mentions: {
+        Row: { id: string; tenant_id: string; note_id: string; mentioned_user_id: string; created_at: string };
+        Insert: { id?: string; tenant_id: string; note_id: string; mentioned_user_id: string; created_at?: string };
+        Update: never;
+        Relationships: [];
+      };
+      partners: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          name: string;
+          partner_type: Database["public"]["Enums"]["partner_type"];
+          status: Database["public"]["Enums"]["partner_status"];
+          country: string;
+          contact_name: string | null;
+          contact_email: string | null;
+          timezone: string;
+          notes: string | null;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+          paused_at: string | null;
+          offboarded_at: string | null;
         };
         Insert: {
           id?: string;
           tenant_id: string;
-          tenant_template_id?: string | null;
-          template_id: string;
-          template_version: number;
-          stage_key: string;
-          values?: Json;
+          name: string;
+          partner_type: Database["public"]["Enums"]["partner_type"];
+          status?: Database["public"]["Enums"]["partner_status"];
+          country?: string;
+          contact_name?: string | null;
+          contact_email?: string | null;
+          timezone?: string;
+          notes?: string | null;
           created_by?: string | null;
           created_at?: string;
           updated_at?: string;
+          paused_at?: string | null;
+          offboarded_at?: string | null;
         };
         Update: {
+          name?: string;
+          partner_type?: Database["public"]["Enums"]["partner_type"];
+          status?: Database["public"]["Enums"]["partner_status"];
+          country?: string;
+          contact_name?: string | null;
+          contact_email?: string | null;
+          timezone?: string;
+          notes?: string | null;
+          updated_at?: string;
+          paused_at?: string | null;
+          offboarded_at?: string | null;
+        };
+        Relationships: [];
+      };
+      partner_terms: {
+        Row: {
+          id: string;
+          partner_id: string;
+          payout_model: Database["public"]["Enums"]["partner_payout_model"];
+          rate_cents: number | null;
+          rate_pct_bp: number | null;
+          effective_from: string;
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: {
           id?: string;
-          tenant_id?: string;
-          tenant_template_id?: string | null;
-          template_id?: string;
-          template_version?: number;
-          stage_key?: string;
-          values?: Json;
+          partner_id: string;
+          payout_model: Database["public"]["Enums"]["partner_payout_model"];
+          rate_cents?: number | null;
+          rate_pct_bp?: number | null;
+          effective_from: string;
           created_by?: string | null;
           created_at?: string;
-          updated_at?: string;
         };
+        Update: Record<string, never>;
+        Relationships: [];
+      };
+      partner_users: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          partner_id: string;
+          user_id: string;
+          role: Database["public"]["Enums"]["partner_user_role"];
+          status: Database["public"]["Enums"]["partner_user_status"];
+          invited_at: string;
+          revoked_at: string | null;
+          accepted_at: string | null;
+          deactivated_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          tenant_id: string;
+          partner_id: string;
+          user_id: string;
+          role?: Database["public"]["Enums"]["partner_user_role"];
+          status?: Database["public"]["Enums"]["partner_user_status"];
+          invited_at?: string;
+          revoked_at?: string | null;
+          accepted_at?: string | null;
+          deactivated_at?: string | null;
+        };
+        Update: {
+          tenant_id?: string;
+          status?: Database["public"]["Enums"]["partner_user_status"];
+          revoked_at?: string | null;
+          role?: Database["public"]["Enums"]["partner_user_role"];
+          accepted_at?: string | null;
+          deactivated_at?: string | null;
+        };
+        Relationships: [];
+      };
+      households: {
+        Row: { id: string; tenant_id: string; address_hash: string | null; address_line1: string | null; city: string | null; state: string | null; postal_code: string | null; address_search: string | null; created_at: string; updated_at: string };
+        Insert: { id?: string; tenant_id: string; address_hash?: string | null; address_line1?: string | null; city?: string | null; state?: string | null; postal_code?: string | null; address_search?: string | null; created_at?: string; updated_at?: string };
+        Update: { id?: string; tenant_id?: string; address_hash?: string | null; address_line1?: string | null; city?: string | null; state?: string | null; postal_code?: string | null; address_search?: string | null; created_at?: string; updated_at?: string };
+        Relationships: [];
+      };
+      contacts: {
+        Row: { id: string; tenant_id: string; household_id: string | null; first_name: string; last_name: string; dob: string | null; primary_phone: string | null; state: string | null; name_search: string; custom_fields: Json; merged_into_id: string | null; created_at: string; updated_at: string };
+        Insert: { id?: string; tenant_id: string; household_id?: string | null; first_name: string; last_name: string; dob?: string | null; primary_phone?: string | null; state?: string | null; name_search: string; custom_fields?: Json; merged_into_id?: string | null; created_at?: string; updated_at?: string };
+        Update: { id?: string; tenant_id?: string; household_id?: string | null; first_name?: string; last_name?: string; dob?: string | null; primary_phone?: string | null; state?: string | null; name_search?: string; custom_fields?: Json; merged_into_id?: string | null; created_at?: string; updated_at?: string };
+        Relationships: [];
+      };
+      contact_phones: {
+        Row: { id: string; tenant_id: string; contact_id: string; phone: string; type: string; is_primary: boolean; created_at: string };
+        Insert: { id?: string; tenant_id: string; contact_id: string; phone: string; type?: string; is_primary?: boolean; created_at?: string };
+        Update: { id?: string; tenant_id?: string; contact_id?: string; phone?: string; type?: string; is_primary?: boolean; created_at?: string };
+        Relationships: [];
+      };
+      contact_emails: {
+        Row: { id: string; tenant_id: string; contact_id: string; email: string; is_primary: boolean; created_at: string };
+        Insert: { id?: string; tenant_id: string; contact_id: string; email: string; is_primary?: boolean; created_at?: string };
+        Update: { id?: string; tenant_id?: string; contact_id?: string; email?: string; is_primary?: boolean; created_at?: string };
+        Relationships: [];
+      };
+      field_schema: {
+        Row: { id: string; tenant_id: string; entity: string; field_key: string; label: string; type: string; options: Json; is_required: boolean; sort_order: number; created_at: string; updated_at: string };
+        Insert: { id?: string; tenant_id: string; entity: string; field_key: string; label: string; type: string; options?: Json; is_required?: boolean; sort_order?: number; created_at?: string; updated_at?: string };
+        Update: { id?: string; tenant_id?: string; entity?: string; field_key?: string; label?: string; type?: string; options?: Json; is_required?: boolean; sort_order?: number; created_at?: string; updated_at?: string };
+        Relationships: [];
+      };
+      merge_log: {
+        Row: { id: string; tenant_id: string; kept_id: string; merged_id: string; field_choices: Json; kept_snapshot: Json; merged_snapshot: Json; kept_phones: Json; merged_phones: Json; kept_emails: Json; merged_emails: Json; merged_by: string | null; merged_at: string; reversed_at: string | null };
+        Insert: { id?: string; tenant_id: string; kept_id: string; merged_id: string; field_choices?: Json; kept_snapshot: Json; merged_snapshot: Json; kept_phones?: Json; merged_phones?: Json; kept_emails?: Json; merged_emails?: Json; merged_by?: string | null; merged_at?: string; reversed_at?: string | null };
+        Update: { id?: string; tenant_id?: string; kept_id?: string; merged_id?: string; field_choices?: Json; kept_snapshot?: Json; merged_snapshot?: Json; kept_phones?: Json; merged_phones?: Json; kept_emails?: Json; merged_emails?: Json; merged_by?: string | null; reversed_at?: string | null };
         Relationships: [];
       };
       templates: {
@@ -1281,6 +1967,8 @@ export type Database = {
           is_required: boolean;
           options: Json;
           sort_order: number;
+          help_text: string | null;
+          validation: Json;
         };
         Insert: {
           template_id: string;
@@ -1291,6 +1979,8 @@ export type Database = {
           is_required?: boolean;
           options?: Json;
           sort_order?: number;
+          help_text?: string | null;
+          validation?: Json;
         };
         Update: {
           template_id?: string;
@@ -1301,6 +1991,8 @@ export type Database = {
           is_required?: boolean;
           options?: Json;
           sort_order?: number;
+          help_text?: string | null;
+          validation?: Json;
         };
         Relationships: [];
       };
@@ -1491,9 +2183,9 @@ export type Database = {
         Relationships: [];
       };
       plan_limits: {
-        Row: { max_carriers: number | null; max_seats: number | null; plan_id: string };
-        Insert: { max_carriers?: number | null; max_seats?: number | null; plan_id: string };
-        Update: { max_carriers?: number | null; max_seats?: number | null; plan_id?: string };
+        Row: { max_affiliates: number | null; max_buffer_seats: number | null; max_carriers: number | null; max_marketing_partners: number | null; max_partner_users: number | null; max_publishers: number | null; max_seats: number | null; plan_id: string };
+        Insert: { max_affiliates?: number | null; max_buffer_seats?: number | null; max_carriers?: number | null; max_marketing_partners?: number | null; max_partner_users?: number | null; max_publishers?: number | null; max_seats?: number | null; plan_id: string };
+        Update: { max_affiliates?: number | null; max_buffer_seats?: number | null; max_carriers?: number | null; max_marketing_partners?: number | null; max_partner_users?: number | null; max_publishers?: number | null; max_seats?: number | null; plan_id?: string };
         Relationships: [];
       };
       usage_events: {
@@ -1960,6 +2652,7 @@ export type Database = {
           purpose: Database["public"]["Enums"]["user_token_purpose"];
           token_hash: string;
           user_id: string;
+          partner_id: string | null;
         };
         Insert: {
           accepted_at?: string | null;
@@ -1971,6 +2664,7 @@ export type Database = {
           purpose?: Database["public"]["Enums"]["user_token_purpose"];
           token_hash: string;
           user_id: string;
+          partner_id?: string | null;
         };
         Update: {
           accepted_at?: string | null;
@@ -1982,6 +2676,7 @@ export type Database = {
           purpose?: Database["public"]["Enums"]["user_token_purpose"];
           token_hash?: string;
           user_id?: string;
+          partner_id?: string | null;
         };
         Relationships: [];
       };
@@ -2076,6 +2771,22 @@ export type Database = {
       };
     };
     Functions: {
+      archive_pipeline_stage: {
+        Args: { p_stage_id: string; p_tenant_id: string };
+        Returns: { id: string; pipeline_id: string; name: string; position: number; stage_type: string; color: string; is_archived: boolean; created_at: string; updated_at: string };
+      };
+      reorder_pipeline_stages: {
+        Args: { p_pipeline_id: string; p_stage_ids: string[]; p_tenant_id: string };
+        Returns: { id: string; pipeline_id: string; name: string; position: number; stage_type: string; color: string; is_archived: boolean; created_at: string; updated_at: string }[];
+      };
+      set_stage_disposition: {
+        Args: { p_disposition_key: string; p_stage_id: string; p_tenant_id: string };
+        Returns: { id: string; tenant_id: string; stage_id: string; disposition_key: string; created_at: string; updated_at: string };
+      };
+      move_lead_to_disposition: {
+        Args: { p_disposition_key: string; p_lead_id: string; p_tenant_id: string };
+        Returns: { lead_id: string; pipeline_id: string; stage_id: string }[];
+      };
       self_serve_signup: {
         Args: {
           p_billing_cycle: Database["public"]["Enums"]["billing_cycle"];
@@ -2149,6 +2860,37 @@ export type Database = {
           old_role: Database["public"]["Enums"]["tenant_user_role"];
         }[];
       };
+      tenant_invite_user: {
+        Args: {
+          p_created_by: string;
+          p_email: string;
+          p_expires_at: string;
+          p_name: string;
+          p_role: Database["public"]["Enums"]["tenant_user_role"];
+          p_tenant_id: string;
+          p_token_hash: string;
+        };
+        Returns: { tenant_id: string; user_id: string }[];
+      };
+      tenant_invite_user_with_limit: {
+        Args: { p_created_by: string; p_email: string; p_expires_at: string; p_max_buffer_seats?: number | null; p_name: string; p_role: Database["public"]["Enums"]["tenant_user_role"]; p_tenant_id: string; p_token_hash: string };
+        Returns: { tenant_id: string; user_id: string }[];
+      };
+      tenant_update_member_role: {
+        Args: {
+          p_role: Database["public"]["Enums"]["tenant_user_role"];
+          p_tenant_id: string;
+          p_user_id: string;
+        };
+        Returns: {
+          new_role: Database["public"]["Enums"]["tenant_user_role"];
+          old_role: Database["public"]["Enums"]["tenant_user_role"];
+        }[];
+      };
+      tenant_update_member_role_with_limit: {
+        Args: { p_max_buffer_seats?: number | null; p_role: Database["public"]["Enums"]["tenant_user_role"]; p_tenant_id: string; p_user_id: string };
+        Returns: { new_role: Database["public"]["Enums"]["tenant_user_role"]; old_role: Database["public"]["Enums"]["tenant_user_role"] }[];
+      };
       consume_user_email_change_token: {
         Args: { p_token_hash: string };
         Returns: {
@@ -2164,6 +2906,30 @@ export type Database = {
           purpose: Database["public"]["Enums"]["user_token_purpose"];
           user_id: string;
         }[];
+      };
+      consume_partner_password_token: {
+        Args: { p_password_hash: string; p_token_hash: string };
+        Returns: { accepted_at: string; partner_id: string; user_id: string }[];
+      };
+      partner_invite_user: {
+        Args: { p_email: string; p_expires_at: string; p_name: string; p_partner_id: string; p_role: Database["public"]["Enums"]["partner_user_role"]; p_tenant_id: string; p_token_hash: string };
+        Returns: { accepted_at: string | null; email: string; invited_at: string; name: string; partner_id: string; role: Database["public"]["Enums"]["partner_user_role"]; tenant_id: string; user_id: string }[];
+      };
+      partner_invite_user_with_limit: {
+        Args: { p_email: string; p_expires_at: string; p_max_partner_users?: number | null; p_name: string; p_partner_id: string; p_role: Database["public"]["Enums"]["partner_user_role"]; p_tenant_id: string; p_token_hash: string };
+        Returns: { accepted_at: string | null; email: string; invited_at: string; name: string; partner_id: string; role: Database["public"]["Enums"]["partner_user_role"]; tenant_id: string; user_id: string }[];
+      };
+      partner_resend_invite: {
+        Args: { p_expires_at: string; p_partner_id: string; p_tenant_id: string; p_token_hash: string; p_user_id: string };
+        Returns: { email: string; name: string; user_id: string }[];
+      };
+      partner_set_user_status: {
+        Args: { p_partner_id: string; p_status: Database["public"]["Enums"]["partner_user_status"]; p_tenant_id: string; p_user_id: string };
+        Returns: { new_status: Database["public"]["Enums"]["partner_user_status"]; old_status: Database["public"]["Enums"]["partner_user_status"] }[];
+      };
+      partner_set_user_status_with_limit: {
+        Args: { p_max_partner_users?: number | null; p_partner_id: string; p_status: Database["public"]["Enums"]["partner_user_status"]; p_tenant_id: string; p_user_id: string };
+        Returns: { new_status: Database["public"]["Enums"]["partner_user_status"]; old_status: Database["public"]["Enums"]["partner_user_status"] }[];
       };
       admin_create_plan_version: {
         Args: { p_plan_id: string };
@@ -2474,6 +3240,37 @@ export type Database = {
         };
         Returns: { billing_period_start: string; new_total: number; recorded: boolean }[];
       };
+      has_existing_lead_phone: {
+        Args: { p_phone_digits: string; p_tenant_id: string };
+        Returns: boolean;
+      };
+      claim_screening_cache: {
+        Args: { p_claim_seconds?: number; p_phone_digits: string; p_tenant_id: string; p_version: number };
+        Returns: { state: string; result_id: string | null; claim_token: string | null }[];
+      };
+      complete_screening_cache: {
+        Args: {
+          p_checked_at: string;
+          p_claim_token: string;
+          p_expires_at: string;
+          p_outcome: string;
+          p_phone_digits: string;
+          p_raw_response: Json;
+          p_tenant_id: string;
+          p_vendor: string;
+          p_version: number;
+          p_warnings: Json;
+        };
+        Returns: string;
+      };
+      release_screening_cache: {
+        Args: { p_claim_token: string; p_phone_digits: string; p_tenant_id: string; p_version: number };
+        Returns: boolean;
+      };
+      is_tenant_phone_suppressed: { Args: { p_phone_digits: string; p_tenant_id: string }; Returns: boolean };
+      start_disposition_walk: { Args: { p_tenant_id: string; p_work_item_id: string; p_user_id: string }; Returns: Json };
+      record_disposition_answer: { Args: { p_answer: Json | null; p_node_id: string; p_option_key?: string | null; p_sequence: number; p_tenant_id: string; p_user_id: string; p_walk_id: string; p_work_item_id: string }; Returns: Json };
+      complete_disposition: { Args: { p_callback_subtype?: string | null; p_disposition_key: string; p_tenant_id: string; p_user_id: string; p_walk_id: string; p_work_item_id: string }; Returns: Json };
       rebuild_usage_totals: { Args: never; Returns: number };
       tenant_current_period_start: { Args: { p_tenant_id: string }; Returns: string };
       tenant_current_plan: { Args: { p_tenant_id: string }; Returns: string | null };
@@ -2493,6 +3290,10 @@ export type Database = {
           target_plan_id: string;
           target_version: number;
         }[];
+      };
+      admin_save_plan_limits: {
+        Args: { p_max_affiliates?: number | null; p_max_buffer_seats?: number | null; p_max_marketing_partners?: number | null; p_max_partner_users?: number | null; p_max_publishers?: number | null; p_plan_id: string };
+        Returns: Database["public"]["Tables"]["plan_limits"]["Row"];
       };
       admin_update_plan: {
         Args: {
@@ -2538,6 +3339,50 @@ export type Database = {
       admin_update_tenant_template: {
         Args: { p_tenant_template_id: string; p_tenant_id: string; p_name: string; p_description: string | null; p_fields: Json; p_stages: Json; p_form_definition: Json };
         Returns: string;
+      };
+      save_form_draft: {
+        Args: { p_tenant_id: string; p_partner_id: string | null; p_user_id: string; p_product_code: string; p_tenant_template_id: string; p_definition_version: number; p_payload: Json };
+        Returns: string;
+      };
+      find_partner_lead_duplicates: {
+        Args: { p_tenant_id: string; p_phone_digits: string | null; p_full_name: string | null; p_ssn_digits: string | null };
+        Returns: { lead_id: string; matched_on: string[] }[];
+      };
+      claim_transfer_lead: {
+        Args: { p_tenant_id: string; p_work_item_id: string; p_user_id: string; p_owner_role: string };
+        Returns: Json;
+      };
+      update_verification_field: {
+        Args: { p_tenant_id: string; p_session_id: string; p_work_item_id: string; p_user_id: string; p_field_key: string; p_state: string; p_new_value: Json; p_required_keys: string[]; p_visible_keys: string[]; p_ip?: string | null; p_user_agent?: string | null };
+        Returns: Json;
+      };
+      list_transfer_inbox: {
+        Args: { p_tenant_id: string; p_status?: string; p_partner_id?: string | null; p_product_line?: string | null; p_state?: string | null; p_screening_outcome?: string | null; p_claimed_by?: string | null };
+        Returns: { id: string; lead_id: string; partner_id: string | null; partner_name: string | null; product_line: string; status: string; owner_user_id: string | null; owner_name: string | null; claimed_at: string | null; queued_at: string; wait_seconds: number; customer: string; age: string; state: string; screening_outcome: string; screening_warning: string | null; duplicate_warning: boolean; preflight_status: string; preflight_result: Json }[];
+      };
+      expire_buffer_handoffs: {
+        Args: { p_tenant_id: string };
+        Returns: number;
+      };
+      offer_buffer_handoff: {
+        Args: { p_tenant_id: string; p_work_item_id: string; p_buffer_user_id: string; p_target_user_id: string; p_timeout_seconds?: number; p_ip?: string | null; p_user_agent?: string | null };
+        Returns: Json;
+      };
+      list_buffer_handoffs: {
+        Args: { p_tenant_id: string; p_licensed_agent_id: string };
+        Returns: { id: string; work_item_id: string; buffer_user_id: string; buffer_name: string; product_line: string; customer: string; progress_percentage: number; verification_session_id: string; offered_at: string; expires_at: string }[];
+      };
+      accept_buffer_handoff: {
+        Args: { p_tenant_id: string; p_handoff_id: string; p_licensed_agent_id: string; p_ip?: string | null; p_user_agent?: string | null };
+        Returns: Json;
+      };
+      reconcile_partner_intake: {
+        Args: never;
+        Returns: { lead_id: string; tenant_id: string; submission_id: string | null; missing_steps: string[] }[];
+      };
+      record_affiliate_link_click: {
+        Args: { p_slug: string };
+        Returns: { id: string; tenant_id: string; partner_id: string; slug: string; campaign: string | null; click_count: number; partner_name: string; partner_status: string; partner_timezone: string }[];
       };
       admin_login_activity_stats: {
         Args: never;
@@ -2585,12 +3430,251 @@ export type Database = {
           subscription_id: string;
         }[];
       };
+      save_tenant_carrier: {
+        Args: {
+          p_carrier_id: string;
+          p_contract_level_bp: number;
+          p_effective_from: string;
+          p_tenant_id: string;
+          p_writing_number: string;
+        };
+        Returns: Database["public"]["Tables"]["tenant_carriers"]["Row"];
+      };
+      save_commission_schedule: {
+        Args: {
+          p_carrier_id: string;
+          p_contract_level_bp: number;
+          p_effective_from: string;
+          p_policy_year: number;
+          p_product_code: string;
+          p_rate_bp: number;
+          p_tenant_id: string;
+        };
+        Returns: Database["public"]["Tables"]["commission_schedules"]["Row"];
+      };
+      save_advance_rule: {
+        Args: {
+          p_advance_months: number;
+          p_advance_pct_bp: number;
+          p_carrier_id: string;
+          p_clawback_months: number;
+          p_clawback_type: string;
+          p_effective_from: string;
+          p_product_code: string;
+          p_tenant_id: string;
+        };
+        Returns: Database["public"]["Tables"]["advance_rules"]["Row"];
+      };
+      save_appointments: {
+        Args: { p_tenant_id: string; p_rows: Json };
+        Returns: Database["public"]["Tables"]["appointments"]["Row"][];
+      };
+      save_license: {
+        Args: { p_tenant_id: string; p_state: string; p_license_number: string; p_expires_at: string };
+        Returns: Database["public"]["Tables"]["licenses"]["Row"];
+      };
+      save_eo_policy: {
+        Args: { p_tenant_id: string; p_carrier: string; p_policy_number: string; p_expires_at: string; p_coverage_amount_cents: number };
+        Returns: Database["public"]["Tables"]["eo_policies"]["Row"];
+      };
+      save_ce_record: {
+        Args: { p_tenant_id: string; p_state: string; p_credits_required: number; p_credits_completed: number; p_deadline: string };
+        Returns: Database["public"]["Tables"]["ce_records"]["Row"];
+      };
+      find_contact_duplicates: {
+        Args: { p_tenant_id: string; p_name_search: string; p_dob?: string | null; p_phone?: string | null; p_address_search?: string | null; p_address_hash?: string | null; p_limit?: number };
+        Returns: { contact_id: string; household_id: string | null; first_name: string; last_name: string; dob: string | null; primary_phone: string | null; state: string | null; custom_fields: Json; address_line1: string | null; city: string | null; postal_code: string | null; score: number; confidence: string; matched_on: string[] }[];
+      };
+      find_existing_customer_preflight: {
+        Args: { p_tenant_id: string; p_full_name?: string | null; p_dob?: string | null; p_phone_digits?: string | null; p_address_search?: string | null; p_exclude_lead_id?: string | null; p_limit?: number };
+        Returns: { lead_id: string | null; contact_id: string | null; submitted_at: string; partner_id: string | null; partner_name: string | null; product_line: string | null; outcome: string | null; score: number; matched_on: string[]; source_type: string }[];
+      };
+      save_contact: {
+        Args: { p_tenant_id: string; p_first_name: string; p_last_name: string; p_dob: string | null; p_primary_phone: string | null; p_state: string | null; p_name_search: string; p_custom_fields: Json; p_address_hash: string | null; p_address_search: string | null; p_address_line1: string | null; p_city: string | null; p_postal_code: string | null; p_phones?: Json; p_emails?: Json };
+        Returns: string;
+      };
+      save_field_schema: {
+        Args: { p_tenant_id: string; p_entity: string; p_field_key: string; p_label: string; p_type: string; p_options: Json; p_is_required: boolean; p_sort_order: number };
+        Returns: Database["public"]["Tables"]["field_schema"]["Row"];
+      };
+      merge_contacts: {
+        Args: { p_tenant_id: string; p_kept_id: string; p_merged_id: string; p_field_choices: Json; p_merged_by: string };
+        Returns: string;
+      };
+      undo_contact_merge: {
+        Args: { p_tenant_id: string; p_merge_id: string };
+        Returns: string;
+      };
+      create_partner: {
+        Args: {
+          p_tenant_id: string;
+          p_name: string;
+          p_partner_type: Database["public"]["Enums"]["partner_type"];
+          p_country: string;
+          p_contact_name: string;
+          p_contact_email: string;
+          p_timezone: string;
+          p_notes: string;
+          p_created_by: string;
+          p_max_partners?: number | null;
+        };
+        Returns: Database["public"]["Tables"]["partners"]["Row"];
+      };
+      create_partner_with_limits: {
+        Args: { p_contact_email: string; p_contact_name: string; p_country: string; p_created_by: string; p_max_affiliates?: number | null; p_max_marketing_partners?: number | null; p_max_publishers?: number | null; p_name: string; p_notes: string; p_partner_type: Database["public"]["Enums"]["partner_type"]; p_tenant_id: string; p_timezone: string };
+        Returns: Database["public"]["Tables"]["partners"]["Row"];
+      };
+      update_partner: {
+        Args: {
+          p_tenant_id: string;
+          p_partner_id: string;
+          p_name: string;
+          p_partner_type: Database["public"]["Enums"]["partner_type"];
+          p_country: string;
+          p_contact_name: string;
+          p_contact_email: string;
+          p_timezone: string;
+          p_notes: string;
+        };
+        Returns: Database["public"]["Tables"]["partners"]["Row"];
+      };
+      update_partner_with_limits: {
+        Args: { p_contact_email: string; p_contact_name: string; p_country: string; p_max_affiliates?: number | null; p_max_marketing_partners?: number | null; p_max_publishers?: number | null; p_name: string; p_notes: string; p_partner_id: string; p_partner_type: Database["public"]["Enums"]["partner_type"]; p_tenant_id: string; p_timezone: string };
+        Returns: Database["public"]["Tables"]["partners"]["Row"];
+      };
+      add_partner_term: {
+        Args: {
+          p_tenant_id: string;
+          p_partner_id: string;
+          p_payout_model: Database["public"]["Enums"]["partner_payout_model"];
+          p_rate_cents: number | null;
+          p_rate_pct_bp: number | null;
+          p_effective_from: string;
+          p_created_by: string;
+        };
+        Returns: Database["public"]["Tables"]["partner_terms"]["Row"];
+      };
+      transition_partner: {
+        Args: {
+          p_tenant_id: string;
+          p_partner_id: string;
+          p_next_status: Database["public"]["Enums"]["partner_status"];
+          p_confirmation?: string | null;
+        };
+        Returns: Database["public"]["Tables"]["partners"]["Row"];
+      };
+      transition_partner_with_limits: {
+        Args: { p_confirmation?: string | null; p_max_affiliates?: number | null; p_max_marketing_partners?: number | null; p_max_partner_users?: number | null; p_max_publishers?: number | null; p_next_status: Database["public"]["Enums"]["partner_status"]; p_partner_id: string; p_tenant_id: string };
+        Returns: Database["public"]["Tables"]["partners"]["Row"];
+      };
+      set_tenant_product: {
+        Args: { p_is_enabled: boolean; p_product_code: string; p_sort_order?: number | null; p_tenant_id: string };
+        Returns: Database["public"]["Tables"]["tenant_products"]["Row"];
+      };
+      set_partner_product_approval: {
+        Args: { p_approved: boolean; p_approved_by: string; p_partner_id: string; p_product_code: string; p_tenant_id: string };
+        Returns: boolean;
+      };
+      list_deal_flow_report: {
+        Args: {
+          p_agent_id?: string | null;
+          p_from_date?: string | null;
+          p_page?: number;
+          p_page_size?: number;
+          p_partner_id?: string | null;
+          p_product_line?: string | null;
+          p_status?: string | null;
+          p_tenant_id: string;
+          p_to_date?: string | null;
+        };
+        Returns: Json;
+      };
+      partner_lead_pipeline_rows: {
+        Args: {
+          p_closer_id?: string | null;
+          p_date_from?: string | null;
+          p_date_to?: string | null;
+          p_outcome?: string | null;
+          p_partner_id: string;
+          p_product?: string | null;
+          p_stage_id?: string | null;
+          p_tenant_id: string;
+        };
+        Returns: {
+          id: string;
+          work_item_id: string;
+          customer: string;
+          values: Json;
+          submitted_at: string;
+          updated_at: string;
+          product: string;
+          stage_id: string;
+          stage_name: string;
+          stage_type: string;
+          stage_color: string;
+          stage_position: number;
+          stage_archived: boolean;
+          pipeline_id: string;
+          pipeline_name: string;
+          disposition: string | null;
+          outcome: string | null;
+          outcome_note: string | null;
+          submitted_by_id: string | null;
+          submitted_by_name: string;
+          status: string;
+        }[];
+      };
+      partner_lead_pipeline_payload: {
+        Args: {
+          p_closer_id?: string | null;
+          p_date_from?: string | null;
+          p_date_to?: string | null;
+          p_outcome?: string | null;
+          p_partner_id: string;
+          p_product?: string | null;
+          p_stage_id?: string | null;
+          p_tenant_id: string;
+        };
+        Returns: Json;
+      };
+      partner_quality_evidence: {
+        Args: { p_from_date: string; p_tenant_id: string; p_to_date: string };
+        Returns: { lead_id: string; partner_id: string; lead_date: string; full_name: string; phone: string | null; screening_outcome: string | null; screening_result_outcome: string | null; claimed: boolean; worked: boolean; submitted: boolean; duplicate: boolean; disposition: string | null }[];
+      };
+      partner_quality_report: {
+        Args: { p_from_date?: string | null; p_tenant_id: string; p_to_date?: string | null };
+        Returns: Json;
+      };
+      partner_quality_leads: {
+        Args: { p_disposition?: string | null; p_from_date: string; p_metric: string; p_page?: number; p_page_size?: number; p_partner_id: string; p_tenant_id: string; p_to_date: string };
+        Returns: Json;
+      };
+      complete_disposition_with_callback: {
+        Args: { p_assigned_to?: string | null; p_callback_local: string; p_callback_note?: string | null; p_customer_timezone: string; p_idempotency_key?: string | null; p_tenant_id: string; p_user_id: string; p_walk_id: string; p_work_item_id: string };
+        Returns: Json;
+      };
+      reschedule_callback: {
+        Args: { p_actor: string; p_callback_id: string; p_callback_local: string; p_tenant_id: string };
+        Returns: Json;
+      };
+      cancel_callback: {
+        Args: { p_actor: string; p_callback_id: string; p_tenant_id: string };
+        Returns: Json;
+      };
+      complete_callback: {
+        Args: { p_actor: string; p_callback_id: string; p_tenant_id: string };
+        Returns: Json;
+      };
+      claim_callback_reminders: {
+        Args: { p_limit?: number; p_now: string; p_until: string };
+        Returns: { id: string; tenant_id: string; lead_id: string; work_item_id: string; scheduled_at_utc: string; customer_timezone: string; assigned_to: string; note: string | null; status: string; reminder_sent_at: string | null; completed_at: string | null; created_by: string; created_at: string; updated_at: string; idempotency_key: string | null }[];
+      };
     };
     Enums: {
       legal_doc_type: "tos" | "privacy" | "dpa";
       email_status: "sent" | "failed" | "skipped";
       admin_role: "super_admin" | "support_agent" | "billing_admin" | "platform_config";
-      audit_actor_type: "admin" | "system";
+      audit_actor_type: "admin" | "tenant" | "system";
       billing_cycle: "monthly" | "quarterly" | "yearly";
       invoice_status: "draft" | "issued" | "paid" | "overdue" | "void" | "uncollectible";
       invoice_line_kind: "plan" | "addon" | "overage" | "discount" | "setup_fee" | "credit";
@@ -2618,6 +3702,11 @@ export type Database = {
       tenant_user_role: "owner" | "producer" | "assistant" | "bookkeeper";
       user_status: "pending_verification" | "active" | "inactive" | "suspended" | "deleted";
       user_token_purpose: "invite" | "password_reset" | "email_change" | "email_verification";
+      partner_type: "publisher" | "marketing" | "affiliate";
+      partner_status: "draft" | "active" | "paused" | "offboarded";
+      partner_payout_model: "per_transfer" | "per_lead" | "per_sale" | "per_issued_policy" | "revenue_share";
+      partner_user_status: "active" | "revoked";
+      partner_user_role: "partner_admin" | "partner_user";
     };
     CompositeTypes: {
       [_ in never]: never;

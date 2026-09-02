@@ -11,6 +11,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { FeatureModuleGroup } from "@/lib/features/constants";
+import type { PlanLimits } from "@/lib/metering/constants";
 import { buildAgentMenu } from "@/lib/menu/definition";
 import {
   BILLING_CYCLE_LABELS,
@@ -34,6 +35,7 @@ export function PlanVersionEditor({
   groups,
   initialGranted,
   initialPrices,
+  initialLimits,
   subscriberCount,
 }: {
   planId: string;
@@ -41,6 +43,7 @@ export function PlanVersionEditor({
   groups: FeatureModuleGroup[];
   initialGranted: string[];
   initialPrices: PlanPrices | null;
+  initialLimits: PlanLimits | null;
   subscriberCount: number;
 }) {
   const router = useRouter();
@@ -56,6 +59,13 @@ export function PlanVersionEditor({
   );
   const [setupFee, setSetupFee] = useState(formatCents(initialPrices?.setup_fee_cents ?? 0));
   const [trialDays, setTrialDays] = useState(String(initialPrices?.trial_days ?? 0));
+  const [limits, setLimits] = useState<Record<string, string>>({
+    max_publishers: initialLimits?.max_publishers == null ? "" : String(initialLimits.max_publishers),
+    max_marketing_partners: initialLimits?.max_marketing_partners == null ? "" : String(initialLimits.max_marketing_partners),
+    max_affiliates: initialLimits?.max_affiliates == null ? "" : String(initialLimits.max_affiliates),
+    max_buffer_seats: initialLimits?.max_buffer_seats == null ? "" : String(initialLimits.max_buffer_seats),
+    max_partner_users: initialLimits?.max_partner_users == null ? "" : String(initialLimits.max_partner_users),
+  });
   const [saving, setSaving] = useState(false);
 
   // An archived feature this plan already grants stays granted (SA-2.1) and can't be offered by
@@ -119,6 +129,7 @@ export function PlanVersionEditor({
         price_yearly_cents: parsedYearly.cents,
         setup_fee_cents: parsedSetup.cents ?? 0,
         trial_days: Number(trialDays) || 0,
+        limits: Object.fromEntries(Object.entries(limits).map(([key, value]) => [key, value.trim() === "" ? null : Number(value)])),
       }),
     });
     const body = await res.json().catch(() => null);
@@ -238,6 +249,15 @@ export function PlanVersionEditor({
             </CardContent>
           </Card>
 
+          <Card>
+            <CardContent className="space-y-3">
+              <div><h2 className="text-sm font-bold uppercase tracking-wide text-[var(--color-accent-ink)]">Capacity limits</h2><p className="text-xs text-muted-foreground">Blank means unlimited. These values are enforced for active records only.</p></div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {[['max_publishers', 'Publishers'], ['max_marketing_partners', 'Marketing partners'], ['max_affiliates', 'Affiliates'], ['max_buffer_seats', 'Buffer seats'], ['max_partner_users', 'Partner users']].map(([key, label]) => <div key={key} className="space-y-1.5"><Label htmlFor={`limit-${key}`}>{label} <code className="text-xs text-muted-foreground">({key})</code></Label><Input id={`limit-${key}`} type="number" min={0} step={1} placeholder="Unlimited" value={limits[key]} onChange={(event) => setLimits((previous) => ({ ...previous, [key]: event.target.value }))} /><p className="text-xs text-muted-foreground">Only non-negative whole numbers are accepted.</p></div>)}
+              </div>
+            </CardContent>
+          </Card>
+
           {/* ── Features ─────────────────────────────────────────── */}
           {groups.map((group) => {
             const selectable = group.features.filter((f) => !f.is_archived);
@@ -320,7 +340,7 @@ export function PlanVersionEditor({
                       {section.label}
                     </p>
                     {section.items.map((item) => (
-                      <p key={item.id} className="py-0.5 pl-2 text-white/90">
+                      <p key={item.key} className="py-0.5 pl-2 text-white/90">
                         {item.label}
                       </p>
                     ))}
