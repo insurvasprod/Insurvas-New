@@ -150,6 +150,21 @@ try {
   });
   check("an expired coupon is rejected", r4.data === "expired", String(r4.data));
 
+  console.log("\nPlan and billing-cycle restrictions\n");
+  const planMismatch = await makeSubscription("PlanMismatch");
+  const planRestricted = await makeCoupon({ restricted_to_plan_ids: ["00000000-0000-0000-0000-000000000001"] });
+  const planResult = await supabase.rpc("admin_apply_coupon", {
+    p_subscription_id: planMismatch.subscriptionId, p_coupon_id: planRestricted, p_applied_by: null,
+  });
+  check("the RPC rejects a coupon restricted to another plan", planResult.data === "plan_restricted", String(planResult.data));
+
+  const cycleMismatch = await makeSubscription("CycleMismatch");
+  const cycleRestricted = await makeCoupon({ billing_cycle: "yearly" });
+  const cycleResult = await supabase.rpc("admin_apply_coupon", {
+    p_subscription_id: cycleMismatch.subscriptionId, p_coupon_id: cycleRestricted, p_applied_by: null,
+  });
+  check("the RPC rejects a coupon restricted to another billing cycle", cycleResult.data === "billing_cycle_restricted", String(cycleResult.data));
+
   console.log("\nDiscount on the invoice\n");
 
   const f = await makeSubscription("F");

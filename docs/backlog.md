@@ -991,12 +991,6 @@ No new backlog item was created for the re-run itself.
 The invoice commits before `consume_coupon_period`. If consumption fails, retry finds the existing
 invoice and never consumes the period. Move both effects into one idempotent transaction. See M3-3.
 
-### 91. Coupon plan and billing-cycle restrictions are not enforced by the admin RPC  *(was #60 in the parked pre-merge review — renumbered on merge, where #60 was already taken)*
-**From:** Module 3 audit · **Financial correctness**
-
-`admin_apply_coupon` ignores `restricted_to_plan_ids` and `billing_cycle`. Current rows are clean,
-but the database permits an incompatible coupon assignment. See M3-5.
-
 ### 92. Refund and credit execution needs recoverable reconciliation states  *(was #61 in the parked pre-merge review — renumbered on merge, where #61 was already taken)*
 **From:** Module 3 audit · **Financial correctness**
 
@@ -2176,6 +2170,14 @@ outstanding balance, inserts the payment, settles the invoice, and changes only 
 past-due or suspended subscription in one transaction. `npm run verify:settlement` drove the real
 admin route and passed overpayment rollback, partial payment, final settlement, unrelated
 subscription protection, duplicate-reference handling, and the no-overpayment invariant.
+
+### 91. ✅ Coupon plan and billing-cycle restrictions are enforced by the RPC
+**From:** Module 3 audit · **Belongs to:** Module 3 coupon handling · **Resolved:** 2026-09-03
+
+`admin_apply_coupon` now locks the target subscription and coupon, checks `restricted_to_plan_ids`
+and `billing_cycle`, and returns named rejection results before creating a redemption. The live
+coupon verifier bypasses the UI and confirms both an incompatible-plan and incompatible-cycle
+coupon are refused without consuming a redemption.
 
 ---
 
