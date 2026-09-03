@@ -977,42 +977,6 @@ This supersedes the "9 migrations in the repo" half of [#56]: the baseline dump 
 ordering one.
 
 
-### 84. SA-4.8's two dialing criteria are structurally unproven, not just untested
-**From:** the PR #8 review · **Compliance-critical**
-
-Two acceptance criteria describe behaviour that no test exercises end to end:
-
-- *"Disabling the last enabled DNC vendor triggers a confirmation that names the consequence, then
-  blocks dialing platform-wide."* The blocking half is real and correct — `assertDncVendorAvailable`
-  refuses when the enabled `dnc_scrub` count is zero. The **confirmation that names the
-  consequence** is a UI affordance I could not find, and nothing asserts it.
-- *"With two vendors enabled, simulating a failure on the primary routes the call to the secondary
-  and logs the fallback."* `lib/compliance/fallback.test.mjs` proves the loop against an injected
-  callback, which is a fair unit test. Nothing drives two *registered* vendors through
-  `runWithComplianceFallback`, so the priority ordering read from the database and the
-  `provider_calls` fallback row are never proven together.
-
-The ticket is blunt about the stakes: a DNC-listed call costs $500–$1,500. The code is written to
-fail closed and, reading it, does. That is not the same as having watched it.
-
-**Fix:** add a `verify:compliance` case that registers two stub vendors against a local endpoint,
-fails the primary, and asserts both the secondary's answer and the fallback row. Add the
-confirmation dialog on disabling the last DNC vendor, quoting the cost.
-
-### 85. SA-4.8's "unreachable" case is only covered at scrub time, not by the status the UI reads
-**From:** the PR #8 review · **Minor, but the wording matters**
-
-The rule is *"if every vendor of type `dnc_scrub` is disabled **or unreachable**, outbound dialing
-is blocked"*. `getDncDialingStatus` — which feeds the Configuration Center status strip — counts
-only `is_enabled`. With one enabled vendor that is down, it reports dialing as available.
-
-Dialing itself is still safe: the scrub runs, every vendor fails, `runOrderedFallback` rethrows and
-the route returns 503 `blocked: true`. So the guarantee holds; only the *status display* is
-optimistic, which is the opposite of what an operator wants during an incident.
-
-**Fix:** fold the 24-hour health already computed in `health()` into the status, so a type whose
-every vendor is failing reads as at-risk rather than green.
-
 ### 87. ✅ Module 4's own verification scripts were re-run after the merge
 **From:** the module-4 merge · **Resolved:** 2026-09-01
 
@@ -2190,6 +2154,24 @@ embeds the options and grants execution to `service_role`; the focused verifier 
 **Resolution:** `npm run verify:deal-flow` passed all checks, including the performance threshold.
 The service fallback remains for migration-order safety. Cost before resolution: the report could
 exceed the two-second first-page contract under live database latency.
+
+### 84. ✅ SA-4.8 registered fallback and last-vendor confirmation verified
+**From:** the PR #8 review · **Belongs to:** SA-4.8 · **Resolved:** 2026-09-03
+
+The last-enabled DNC vendor confirmation is implemented in the admin screen and enforced again by
+the server with `confirm_dnc_block`. `npm run verify:compliance` proves the confirmation response,
+the platform-wide blocked state, and the audit trail. `npm run verify:screening` exercises two
+registered vendors in priority order, forces the primary failure, and verifies the secondary result
+and persisted fallback row. No per-vendor or browser-only bypass remains for these criteria.
+
+### 85. ✅ DNC availability status now reflects recent vendor health
+**From:** the PR #8 review · **Belongs to:** SA-4.8 · **Resolved:** 2026-09-03
+
+`getDncDialingStatus` now evaluates the rolling 24-hour provider-call health for every enabled DNC
+vendor. The admin registry also marks an enabled vendor as `Unreachable` and shows the blocked
+banner when every enabled vendor has failed observed calls. The focused verifier forced both
+registered vendors through failed connection tests and confirmed the unavailable response, while
+the static typecheck and production build passed.
 
 ---
 

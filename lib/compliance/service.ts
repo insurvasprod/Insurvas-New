@@ -34,7 +34,11 @@ function safe(row: VendorRow, stats: Awaited<ReturnType<typeof health>>): Compli
   return {
     id: row.id, name: row.name, vendor_type: row.vendor_type, endpoint: row.endpoint,
     is_enabled: row.is_enabled, priority: row.priority, cost_per_lookup_cents: row.cost_per_lookup_cents,
-    credentials_present: Boolean(row.credentials_enc), last_success_at: stats.latestSuccess ?? row.last_success_at,
+    credentials_present: Boolean(row.credentials_enc),
+    // No calls means health is unknown, not down. Once calls exist, a vendor is unavailable
+    // only when every observed call in the rolling window failed.
+    available: stats.calls24h === 0 || stats.failures24h < stats.calls24h,
+    last_success_at: stats.latestSuccess ?? row.last_success_at,
     calls_24h: stats.calls24h, failures_24h: stats.failures24h, failure_rate_24h: stats.failureRate24h,
   };
 }
@@ -83,8 +87,13 @@ export async function getComplianceVendorType(id: string): Promise<ComplianceVen
 }
 
 export async function getDncDialingStatus() {
-  const count = await getEnabledDncVendorCount();
-  return { blocked: count === 0, reason: count === 0 ? DNC_BLOCK_MESSAGE : null };
+  const { data, error } = await getSupabaseServiceClient().from("compliance_vendors")
+    .select("id").eq("vendor_type", "dnc_scrub").eq("is_enabled", true);
+  if (error) throw new Error(`Could not determine DNC availability: ${error.message}`);
+  const vendors = (data ?? []) as Array<{ id: string }>;
+  const healthResults = await Promise.all(vendors.map((vendor) => health(vendor.id)));
+  const available = healthResults.some((stats) => stats.calls24h === 0 || stats.failures24h < stats.calls24h);
+  return { blocked: vendors.length === 0 || !available, reason: vendors.length === 0 || !available ? DNC_BLOCK_MESSAGE : null };
 }
 
 export async function getEnabledDncVendorCount() {
