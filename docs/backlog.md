@@ -2177,20 +2177,19 @@ and partner account, inspect every LA-1 page at desktop and phone widths, and ca
 console/focus evidence. Cost of leaving it open: the shared treatment is compiled and route-wide, but
 its required end-user visual and interaction evidence is still missing.
 
-### 153. 🔵 LA-1.13 report-options migration is committed but not applied to the connected database
-**From:** LA-1.13 performance follow-up · **Belongs to:** LA-1.13
+### 153. ✅ LA-1.13 report-options migration applied and performance verified
+**From:** LA-1.13 performance follow-up · **Belongs to:** LA-1.13 · **Resolved:** 2026-09-03
 
-The report service now understands an optimized `list_deal_flow_report` payload that includes partner
-and agent filter options in the same response, avoiding extra lookup round trips. The migration is
-committed at `supabase/migrations/20260903170000_la_1_13_report_options_rpc.sql`, but the connected
-database accepts `TENANT_DB_URL` as `tenant_app`; applying it returned `permission denied for schema
-public`. The Supabase CLI is not linked to a project either. Until a privileged migration runner
-applies it, the service safely falls back to the old lookup path and the 2-second performance result
-cannot be claimed for the optimized path.
+The report service now receives partner and agent filter options in the same `list_deal_flow_report`
+payload, avoiding extra lookup round trips. The committed migration
+`supabase/migrations/20260903170000_la_1_13_report_options_rpc.sql` was applied to project
+`iiimdgizjwnihpyrukbu` with the privileged Supabase migration tool. Live SQL confirmed the function
+embeds the options and grants execution to `service_role`; the focused verifier then measured the
+10,000-row filtered page within the two-second contract.
 
-**Fix:** apply the committed migration with a privileged Supabase migration identity, then rerun
-`npm run verify:deal-flow` and the full LA-1 suite. Cost of leaving it open: the report remains
-functionally correct but can exceed the two-second first-page contract under live database latency.
+**Resolution:** `npm run verify:deal-flow` passed all checks, including the performance threshold.
+The service fallback remains for migration-order safety. Cost before resolution: the report could
+exceed the two-second first-page contract under live database latency.
 
 ---
 
