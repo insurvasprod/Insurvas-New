@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Bell, BellOff, Check, Volume2, VolumeX } from "lucide-react";
+import { Bell, BellOff, Volume2, VolumeX, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { AGENT_ALERT_EVENTS, coalesceAlertBatch, type AgentAlertEvent, type AgentAlertSettings } from "@/lib/agentAlerts/presentation";
@@ -87,11 +87,16 @@ export function AgentAlertCenter() {
 
   async function save(next: AgentAlertSettings) {
     setSaving(true);
-    const response = await fetch("/api/app/notifications", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(next) });
-    setSaving(false);
-    if (!response.ok) { toast.error("Alert settings could not be saved; your current choices are still shown."); return; }
-    setSettings((await response.json() as { settings: AgentAlertSettings }).settings);
-    toast.success("Alert settings saved");
+    try {
+      const response = await fetch("/api/app/notifications", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(next) });
+      if (!response.ok) { toast.error("Alert settings could not be saved; your current choices are still shown."); return; }
+      setSettings((await response.json() as { settings: AgentAlertSettings }).settings);
+      toast.success("Alert settings saved");
+    } catch {
+      toast.error("Alert settings could not be saved; your current choices are still shown.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   if (!settings) return null;
@@ -104,7 +109,7 @@ export function AgentAlertCenter() {
       {dnd ? <BellOff className="size-4" aria-hidden="true" /> : <Bell className="size-4" aria-hidden="true" />} Alerts {dnd ? "paused" : "on"}
     </button>
     {open && <section aria-label="Agent alert settings" className="absolute right-0 top-11 w-[min(23rem,calc(100vw-2rem))] rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] p-4 text-[var(--color-card-foreground)] shadow-xl">
-      <div className="mb-3 flex items-start justify-between gap-4"><div><h2 className="font-semibold">Alert settings</h2><p className="text-xs text-[var(--color-muted-foreground)]">These controls apply only to your alerts.</p></div><button type="button" aria-label="Close alert settings" onClick={() => setOpen(false)} className="rounded p-1 focus-visible:outline-2 focus-visible:outline-[var(--brand-500)]"><Check className="size-4" aria-hidden="true" /></button></div>
+      <div className="mb-3 flex items-start justify-between gap-4"><div><h2 className="font-semibold">Alert settings</h2><p className="text-xs text-[var(--color-muted-foreground)]">These controls apply only to your alerts.</p></div><button type="button" aria-label="Close alert settings" onClick={() => setOpen(false)} className="rounded p-1 focus-visible:outline-2 focus-visible:outline-[var(--brand-500)]"><X className="size-4" aria-hidden="true" /></button></div>
       <div className="space-y-2">{AGENT_ALERT_EVENTS.map((event) => <label key={event} className="flex items-center justify-between gap-3 rounded px-1 py-1 text-sm"><span>{LABELS[event]}</span><input type="checkbox" checked={settings.enabled_events[event]} onChange={() => toggle(event)} disabled={saving} className="size-4 accent-[var(--brand-500)]" /></label>)}</div>
       <div className="mt-4 space-y-3 border-t border-[var(--color-border)] pt-3 text-sm">
         <label className="flex items-center justify-between gap-3"><span>Do not disturb</span><input type="checkbox" checked={settings.do_not_disturb} onChange={() => void save({ ...settings, do_not_disturb: !settings.do_not_disturb })} disabled={saving} className="size-4 accent-[var(--brand-500)]" /></label>
