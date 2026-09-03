@@ -107,22 +107,29 @@ export async function recordWebhookEvent(
 
 export async function markProcessed(id: string): Promise<void> {
   const supabase = getSupabaseServiceClient();
-  await supabase
+  const { data, error } = await supabase
     .from("webhook_events")
     .update({ processed_at: new Date().toISOString(), process_error: null })
-    .eq("id", id);
+    .eq("id", id)
+    .select("id")
+    .single();
+  if (error || !data) throw new Error(`Could not mark webhook ${id} processed: ${error?.message ?? "event not found"}`);
 }
 
 export async function markFailed(id: string, message: string): Promise<void> {
   const supabase = getSupabaseServiceClient();
-  const { data: current } = await supabase
+  const { data: current, error: readError } = await supabase
     .from("webhook_events")
     .select("attempts")
     .eq("id", id)
     .single<{ attempts: number }>();
+  if (readError || !current) throw new Error(`Could not read webhook ${id} for failure update: ${readError?.message ?? "event not found"}`);
 
-  await supabase
+  const { data, error } = await supabase
     .from("webhook_events")
-    .update({ process_error: message.slice(0, 500), attempts: (current?.attempts ?? 0) + 1 })
-    .eq("id", id);
+    .update({ process_error: message.slice(0, 500), attempts: current.attempts + 1 })
+    .eq("id", id)
+    .select("id")
+    .single();
+  if (error || !data) throw new Error(`Could not mark webhook ${id} failed: ${error?.message ?? "event not found"}`);
 }

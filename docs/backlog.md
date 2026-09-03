@@ -985,13 +985,6 @@ the formerly failing configuration route, agent-template, credit-margin, and per
 checks. The LA-0 RLS suite is included in that count.
 
 No new backlog item was created for the re-run itself.
-### 88. Webhook completion is not durable  *(was #57 in the parked pre-merge review — renumbered on merge, where #57 was already taken)*
-**From:** Module 3 audit · **Release blocker**
-
-`markProcessed` and `markFailed` ignore Supabase update errors. The route can acknowledge Whop even
-though the event still looks unfinished locally. A real `payment.succeeded` can also be marked
-processed when invoice generation returns null. See M3-1 and M3-2 in `bugs_sa.md`.
-
 ### 89. Invoice creation and coupon consumption are not atomic  *(was #58 in the parked pre-merge review — renumbered on merge, where #58 was already taken)*
 **From:** Module 3 audit · **Financial correctness**
 
@@ -2172,6 +2165,15 @@ vendor. The admin registry also marks an enabled vendor as `Unreachable` and sho
 banner when every enabled vendor has failed observed calls. The focused verifier forced both
 registered vendors through failed connection tests and confirmed the unavailable response, while
 the static typecheck and production build passed.
+
+### 88. ✅ Webhook completion writes are durable and failure-visible
+**From:** Module 3 audit · **Belongs to:** Module 3 webhook handling · **Resolved:** 2026-09-03
+
+`markProcessed` and `markFailed` now check every Supabase write and require the target webhook row
+to exist. A failure to persist completion or failure state cannot be acknowledged as a successful
+webhook delivery; the route returns HTTP 500 and Whop can retry. Known-tenant `payment.succeeded`
+events already reject a missing invoice instead of marking themselves processed. The live signed
+webhook verifier and repository gates pass.
 
 ---
 
