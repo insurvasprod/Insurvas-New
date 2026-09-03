@@ -2771,6 +2771,10 @@ export type Database = {
       };
     };
     Functions: {
+      delete_tenant_pipeline: {
+        Args: { p_pipeline_id: string; p_tenant_id: string };
+        Returns: undefined;
+      };
       archive_pipeline_stage: {
         Args: { p_stage_id: string; p_tenant_id: string };
         Returns: { id: string; pipeline_id: string; name: string; position: number; stage_type: string; color: string; is_archived: boolean; created_at: string; updated_at: string };
@@ -3634,6 +3638,22 @@ export type Database = {
           p_product?: string | null;
           p_stage_id?: string | null;
           p_tenant_id: string;
+        };
+        Returns: Json;
+      };
+      partner_lead_pipeline_page: {
+        Args: {
+          p_closer_id?: string | null;
+          p_date_from?: string | null;
+          p_date_to?: string | null;
+          p_limit?: number;
+          p_offset?: number;
+          p_outcome?: string | null;
+          p_partner_id: string;
+          p_product?: string | null;
+          p_stage_id?: string | null;
+          p_tenant_id: string;
+          p_timezone?: string;
         };
         Returns: Json;
       };

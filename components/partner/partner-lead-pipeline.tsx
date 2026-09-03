@@ -1,13 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import type { PartnerLeadDetail, PartnerLeadRow, PartnerPipelineStage } from "@/lib/partnerLeads/types";
+import type { PartnerLeadDetail, PartnerLeadFacets, PartnerLeadRow, PartnerPipelineStage } from "@/lib/partnerLeads/types";
 
-type PipelineResponse = { rows: PartnerLeadRow[]; stages: PartnerPipelineStage[]; counters: { submittedToday: number; claimed: number; converted: number; stillOpen: number }; realtimeTopic: string; generatedAt: string };
+type PipelineResponse = { rows: PartnerLeadRow[]; stages: PartnerPipelineStage[]; facets: PartnerLeadFacets; counters: { submittedToday: number; claimed: number; converted: number; stillOpen: number }; total: number; nextOffset: number | null; pageSize: number; realtimeTopic: string; generatedAt: string };
 type Filters = { date_from: string; date_to: string; closer_id: string; product: string; stage_id: string; outcome: string };
 const EMPTY_FILTERS: Filters = { date_from: "", date_to: "", closer_id: "", product: "", stage_id: "", outcome: "" };
 
@@ -20,17 +20,39 @@ export function PartnerLeadPipeline({ partnerStatus }: { partnerStatus: "draft" 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<PartnerLeadDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const loadedLimitRef = useRef(250);
 
   const query = useMemo(() => new URLSearchParams(Object.entries(filters).filter(([, value]) => Boolean(value))).toString(), [filters]);
-  const load = useCallback(async () => {
-    const response = await fetch(`/api/partner/leads/pipeline${query ? `?${query}` : ""}`, { cache: "no-store" });
-    const body = await response.json().catch(() => null);
-    if (!response.ok) { setError(body?.error ?? "Could not load your lead pipeline"); setLoading(false); return; }
-    setData(body); setError(null); setLoading(false);
+  const load = useCallback(async (offset = 0, append = false, limit = 250) => {
+    if (append) setLoadingMore(true);
+    try {
+      const params = new URLSearchParams(query);
+      params.set("limit", String(limit));
+      params.set("offset", String(offset));
+      const response = await fetch(`/api/partner/leads/pipeline?${params}`, { cache: "no-store" });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) { setError(body?.error ?? "Could not load your lead pipeline"); return; }
+      setData((current) => {
+        if (!append || !current) {
+          loadedLimitRef.current = Math.max(250, body.rows.length);
+          return body;
+        }
+        const rows = [...current.rows, ...body.rows].filter((row, index, all) => all.findIndex((candidate) => candidate.id === row.id) === index);
+        loadedLimitRef.current = Math.max(250, rows.length);
+        return { ...body, rows, nextOffset: rows.length < body.total ? rows.length : null };
+      });
+      setError(null);
+    } catch {
+      setError("Could not load your lead pipeline. Check your connection and try again.");
+    } finally {
+      setLoading(false);
+      setLoadingMore(false);
+    }
   }, [query]);
 
-  useEffect(() => { const kickoff = window.setTimeout(() => void load(), 0); const timer = window.setInterval(() => void load(), 5000); return () => { window.clearTimeout(kickoff); window.clearInterval(timer); }; }, [load]);
+  useEffect(() => { loadedLimitRef.current = 250; const kickoff = window.setTimeout(() => { setData(null); setLoading(true); void load(); }, 0); const timer = window.setInterval(() => void load(0, false, loadedLimitRef.current), 5000); return () => { window.clearTimeout(kickoff); window.clearInterval(timer); }; }, [load]);
   useEffect(() => {
     if (!selectedId) return;
     let cancelled = false;
@@ -45,9 +67,9 @@ export function PartnerLeadPipeline({ partnerStatus }: { partnerStatus: "draft" 
     for (const row of data?.rows ?? []) map.set(row.stageId, [...(map.get(row.stageId) ?? []), row]);
     return map;
   }, [data]);
-  const closers = useMemo(() => [...new Map((data?.rows ?? []).filter((row) => row.submittedBy.id).map((row) => [row.submittedBy.id, row.submittedBy.name])).entries()], [data]);
-  const products = useMemo(() => [...new Set((data?.rows ?? []).map((row) => row.product))].sort(), [data]);
-  const outcomes = useMemo(() => [...new Map((data?.rows ?? []).filter((row) => row.disposition).map((row) => [row.disposition, row.outcome ?? row.disposition!])).entries()], [data]);
+  const closers = data?.facets.closers ?? [];
+  const products = data?.facets.products ?? [];
+  const outcomes = data?.facets.outcomes ?? [];
   const exportHref = `/api/partner/leads/export${query ? `?${query}` : ""}`;
 
   function changeFilter(key: keyof Filters, value: string) { setFilters((current) => ({ ...current, [key]: value })); setSelectedId(null); }
@@ -61,12 +83,13 @@ export function PartnerLeadPipeline({ partnerStatus }: { partnerStatus: "draft" 
       <div className="grid gap-3 rounded-lg border bg-muted/20 p-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         <div className="space-y-1.5"><Label htmlFor="partner-date-from">From</Label><Input id="partner-date-from" type="date" value={filters.date_from} onChange={(event) => changeFilter("date_from", event.target.value)} /></div>
         <div className="space-y-1.5"><Label htmlFor="partner-date-to">To</Label><Input id="partner-date-to" type="date" value={filters.date_to} onChange={(event) => changeFilter("date_to", event.target.value)} /></div>
-        <div className="space-y-1.5"><Label htmlFor="partner-closer">Closer</Label><select id="partner-closer" className="flex h-9 w-full rounded-md border bg-background px-3 text-sm" value={filters.closer_id} onChange={(event) => changeFilter("closer_id", event.target.value)}><option value="">All closers</option>{closers.map(([id, name]) => <option key={id ?? name} value={id ?? ""}>{name}</option>)}</select></div>
+        <div className="space-y-1.5"><Label htmlFor="partner-closer">Closer</Label><select id="partner-closer" className="flex h-9 w-full rounded-md border bg-background px-3 text-sm" value={filters.closer_id} onChange={(event) => changeFilter("closer_id", event.target.value)}><option value="">All closers</option>{closers.map((closer) => <option key={closer.id} value={closer.id}>{closer.name}</option>)}</select></div>
         <div className="space-y-1.5"><Label htmlFor="partner-product">Product</Label><select id="partner-product" className="flex h-9 w-full rounded-md border bg-background px-3 text-sm" value={filters.product} onChange={(event) => changeFilter("product", event.target.value)}><option value="">All products</option>{products.map((product) => <option key={product} value={product}>{product}</option>)}</select></div>
         <div className="space-y-1.5"><Label htmlFor="partner-stage">Stage</Label><select id="partner-stage" className="flex h-9 w-full rounded-md border bg-background px-3 text-sm" value={filters.stage_id} onChange={(event) => changeFilter("stage_id", event.target.value)}><option value="">All stages</option>{data?.stages.map((stage) => <option key={stage.id} value={stage.id}>{stage.name}</option>)}</select></div>
-        <div className="space-y-1.5"><Label htmlFor="partner-outcome">Outcome</Label><select id="partner-outcome" className="flex h-9 w-full rounded-md border bg-background px-3 text-sm" value={filters.outcome} onChange={(event) => changeFilter("outcome", event.target.value)}><option value="">All outcomes</option>{outcomes.map(([key, label]) => <option key={key ?? label} value={key ?? ""}>{label}</option>)}</select></div>
+        <div className="space-y-1.5"><Label htmlFor="partner-outcome">Outcome</Label><select id="partner-outcome" className="flex h-9 w-full rounded-md border bg-background px-3 text-sm" value={filters.outcome} onChange={(event) => changeFilter("outcome", event.target.value)}><option value="">All outcomes</option>{outcomes.map((outcome) => <option key={outcome.key} value={outcome.key}>{outcome.label}</option>)}</select></div>
       </div>
-      {loading && !data ? <p className="text-sm text-muted-foreground">Loading your pipeline…</p> : view === "board" ? <div className="flex gap-3 overflow-x-auto pb-2">{(data?.stages ?? []).map((stage) => <section className="min-w-[260px] flex-1 rounded-lg border bg-muted/10" key={stage.id}><div className="border-b p-3" style={{ borderTopColor: stage.color, borderTopWidth: 3 }}><div className="flex items-center justify-between gap-2"><h3 className="font-semibold">{stage.name}</h3><span className="rounded-full bg-muted px-2 py-0.5 text-xs tabular-nums">{groups.get(stage.id)?.length ?? 0}</span></div>{stage.isArchived && <p className="mt-1 text-xs text-muted-foreground">Archived stage</p>}</div><div className="space-y-2 p-2">{(groups.get(stage.id) ?? []).map((row) => <button className="w-full rounded-md border bg-card p-3 text-left shadow-sm transition hover:border-[var(--color-blue)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" key={row.id} onClick={() => openDetail(row.id)}><p className="font-medium">{row.customer}</p><p className="mt-1 text-xs text-muted-foreground">{row.product} · {row.submittedBy.name}</p><p className="mt-1 text-xs text-muted-foreground">{row.outcome ?? "No outcome yet"}</p></button>)}</div></section>)}{(data?.stages ?? []).length === 0 && <p className="text-sm text-muted-foreground">No pipeline stages are available.</p>}</div> : <div className="overflow-x-auto rounded-lg border"><table className="w-full min-w-[760px] text-sm"><thead className="bg-muted/30"><tr className="border-b text-left"><th className="px-3 py-2 font-medium">Customer</th><th className="px-3 py-2 font-medium">Submitted</th><th className="px-3 py-2 font-medium">Closer</th><th className="px-3 py-2 font-medium">Product</th><th className="px-3 py-2 font-medium">Stage</th><th className="px-3 py-2 font-medium">Outcome</th></tr></thead><tbody>{(data?.rows ?? []).map((row) => <tr className="border-b last:border-0 hover:bg-muted/20" key={row.id}><td className="px-3 py-3"><button className="font-medium text-left underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={() => openDetail(row.id)}>{row.customer}</button></td><td className="px-3 py-3 text-muted-foreground">{when(row.submittedAt)}</td><td className="px-3 py-3">{row.submittedBy.name}</td><td className="px-3 py-3">{row.product}</td><td className="px-3 py-3">{row.stageName}</td><td className="px-3 py-3">{row.outcome ?? "—"}</td></tr>)}</tbody></table>{data?.rows.length === 0 && <p className="p-4 text-sm text-muted-foreground">No leads match these filters.</p>}</div>}
+      {loading && !data ? <p className="text-sm text-muted-foreground">Loading your pipeline…</p> : view === "board" ? <div className="flex gap-3 overflow-x-auto pb-2">{(data?.stages ?? []).map((stage) => <section className="min-w-[260px] flex-1 rounded-lg border bg-muted/10" key={stage.id}><div className="border-b p-3" style={{ borderTopColor: stage.color, borderTopWidth: 3 }}><div className="flex items-center justify-between gap-2"><h3 className="font-semibold">{stage.name}</h3><span className="rounded-full bg-muted px-2 py-0.5 text-xs tabular-nums">{groups.get(stage.id)?.length ?? 0} / {stage.leadCount}</span></div>{stage.isArchived && <p className="mt-1 text-xs text-muted-foreground">Archived stage</p>}</div><div className="space-y-2 p-2">{(groups.get(stage.id) ?? []).map((row) => <button className="w-full rounded-md border bg-card p-3 text-left shadow-sm transition hover:border-[var(--color-blue)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" key={row.id} onClick={() => openDetail(row.id)}><p className="font-medium">{row.customer}</p><p className="mt-1 text-xs text-muted-foreground">{row.product} · {row.submittedBy.name}</p><p className="mt-1 text-xs text-muted-foreground">{row.outcome ?? "No outcome yet"}</p></button>)}</div></section>)}{(data?.stages ?? []).length === 0 && <p className="text-sm text-muted-foreground">No pipeline stages are available.</p>}</div> : <div className="overflow-x-auto rounded-lg border"><table className="w-full min-w-[760px] text-sm"><thead className="bg-muted/30"><tr className="border-b text-left"><th className="px-3 py-2 font-medium">Customer</th><th className="px-3 py-2 font-medium">Submitted</th><th className="px-3 py-2 font-medium">Closer</th><th className="px-3 py-2 font-medium">Product</th><th className="px-3 py-2 font-medium">Stage</th><th className="px-3 py-2 font-medium">Outcome</th></tr></thead><tbody>{(data?.rows ?? []).map((row) => <tr className="border-b last:border-0 hover:bg-muted/20" key={row.id}><td className="px-3 py-3"><button className="font-medium text-left underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={() => openDetail(row.id)}>{row.customer}</button></td><td className="px-3 py-3 text-muted-foreground">{when(row.submittedAt)}</td><td className="px-3 py-3">{row.submittedBy.name}</td><td className="px-3 py-3">{row.product}</td><td className="px-3 py-3">{row.stageName}</td><td className="px-3 py-3">{row.outcome ?? "—"}</td></tr>)}</tbody></table>{data?.rows.length === 0 && <p className="p-4 text-sm text-muted-foreground">No leads match these filters.</p>}</div>}
+      {data && data.rows.length < data.total && <div className="flex flex-wrap items-center justify-center gap-3"><p className="text-sm text-muted-foreground">Showing {data.rows.length.toLocaleString()} of {data.total.toLocaleString()} leads</p><Button type="button" variant="outline" disabled={loadingMore || data.nextOffset == null} onClick={() => void load(data.nextOffset ?? data.rows.length, true)}>{loadingMore ? "Loading…" : "Load more"}</Button></div>}
       {selectedId && detail && <div className="rounded-lg border bg-muted/10 p-4"><div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="text-lg font-semibold">{detail.customer}</h3><p className="text-sm text-muted-foreground">{detail.product} · {detail.stageName} · submitted {when(detail.submittedAt)}</p></div><Button variant="outline" size="sm" onClick={() => setSelectedId(null)}>Close detail</Button></div><div className="mt-4 grid gap-5 lg:grid-cols-2"><div><h4 className="font-medium">Form as submitted</h4><dl className="mt-2 divide-y rounded-md border">{Object.entries(detail.values).map(([key, value]) => <div className="grid grid-cols-[minmax(120px,0.7fr)_minmax(0,1fr)] gap-3 px-3 py-2 text-sm" key={key}><dt className="font-medium text-muted-foreground">{key}</dt><dd className="break-words">{typeof value === "object" ? JSON.stringify(value) : String(value ?? "—")}</dd></div>)}</dl></div><div><h4 className="font-medium">Timeline</h4><ol className="mt-2 space-y-3 border-l pl-4">{detail.timeline.map((event, index) => <li key={`${event.at}-${event.type}-${index}`}><p className="text-sm font-medium">{event.label}</p><time className="text-xs text-muted-foreground" dateTime={event.at}>{when(event.at)}</time>{event.detail && <p className="mt-1 text-sm text-muted-foreground">{event.detail}</p>}</li>)}</ol></div></div></div>}
     </CardContent>
   </Card>;

@@ -1,7 +1,7 @@
 import "server-only";
 
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
-import type { PartnerLeadDetail, PartnerLeadFilters, PartnerLeadRow, PartnerPipelineStage } from "@/lib/partnerLeads/types";
+import type { PartnerLeadDetail, PartnerLeadFacets, PartnerLeadFilters, PartnerLeadRow, PartnerPipelineStage } from "@/lib/partnerLeads/types";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const SENSITIVE_KEY = /(ssn|social.?security|routing|bank|account.?number|policy.?number|policy_no|credit.?card)/i;
@@ -29,7 +29,18 @@ type StageRow = { id: string; pipeline_id: string; name: string; position: numbe
 type PipelineRow = { id: string; name: string };
 type UserRow = { id: string; name: string };
 type DispositionRow = { disposition_key: string; label: string };
-type PipelineRpcRow = { id: string; work_item_id: string; customer: string; values: unknown; submitted_at: string; updated_at: string; product: string; stage_id: string; stage_name: string; stage_type: string; stage_color: string; stage_position: number; stage_archived: boolean; pipeline_id: string; pipeline_name: string; disposition: string | null; outcome: string | null; outcome_note: string | null; submitted_by_id: string | null; submitted_by_name: string; status: string };
+type PipelineRpcRow = [string, string, string, string, string, string, string, string | null, string | null, string | null, string | null, string, string];
+type PipelineRpcStage = [string, string, string, string, number, string, string, boolean, number];
+type PipelineRpcPayload = {
+  rows?: PipelineRpcRow[];
+  stages?: PipelineRpcStage[];
+  closers?: Array<[string, string]>;
+  products?: string[];
+  outcomes?: Array<[string, string]>;
+  total?: number;
+  next_offset?: number | null;
+  counters?: { submittedToday?: number; claimed?: number; converted?: number; stillOpen?: number };
+};
 
 function objectValues(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -57,15 +68,6 @@ function validateFilter(filters: PartnerLeadFilters) {
   if (filters.dateTo) filters.dateTo = isoDate(filters.dateTo, "End date");
   for (const [key, value] of Object.entries(filters)) if (value && (key.endsWith("Id") && !UUID.test(value) || value.length > 120)) throw new Error("Choose valid pipeline filters");
   if (filters.dateFrom && filters.dateTo && filters.dateFrom > filters.dateTo) throw new Error("Start date must be on or before end date");
-}
-
-function localDateFormatter(timezone: string) {
-  try {
-    const formatter = new Intl.DateTimeFormat("en-CA", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit" });
-    return (date: string) => formatter.format(new Date(date));
-  } catch {
-    return (date: string) => date.slice(0, 10);
-  }
 }
 
 async function loadPartnerData(tenantId: string, partnerId: string, filters: PartnerLeadFilters, leadId?: string) {
@@ -128,17 +130,40 @@ function mapRows(data: Awaited<ReturnType<typeof loadPartnerData>>, filters: Par
   });
 }
 
-export async function listPartnerLeads(tenantId: string, partnerId: string, filters: PartnerLeadFilters, timezone: string) {
+export async function listPartnerLeads(tenantId: string, partnerId: string, filters: PartnerLeadFilters, timezone: string, pagination: { limit?: number; offset?: number } = {}) {
   validateFilter({ ...filters });
+  const limit = pagination.limit ?? 250;
+  const offset = pagination.offset ?? 0;
+  if (!Number.isInteger(limit) || limit < 1 || limit > 5000 || !Number.isInteger(offset) || offset < 0) throw new Error("Choose valid pipeline pagination");
   const db = getSupabaseServiceClient();
-  const result = await db.rpc("partner_lead_pipeline_payload", { p_tenant_id: tenantId, p_partner_id: partnerId, p_date_from: filters.dateFrom ?? null, p_date_to: filters.dateTo ?? null, p_closer_id: filters.closerId ?? null, p_product: filters.product ?? null, p_stage_id: filters.stageId ?? null, p_outcome: filters.outcome ?? null });
+  const result = await db.rpc("partner_lead_pipeline_page", { p_tenant_id: tenantId, p_partner_id: partnerId, p_date_from: filters.dateFrom ?? null, p_date_to: filters.dateTo ?? null, p_closer_id: filters.closerId ?? null, p_product: filters.product ?? null, p_stage_id: filters.stageId ?? null, p_outcome: filters.outcome ?? null, p_timezone: timezone, p_limit: limit, p_offset: offset });
   if (result.error) throw new Error(`Could not load partner pipeline: ${result.error.message}`);
-  const rawRows = (Array.isArray(result.data) ? result.data : []) as PipelineRpcRow[];
-  const rows: PartnerLeadRow[] = rawRows.map((row) => ({ id: row.id, workItemId: row.work_item_id, customer: row.customer, submittedAt: row.submitted_at, updatedAt: row.updated_at, product: row.product, stageId: row.stage_id, stageName: row.stage_name, stageType: row.stage_type, disposition: row.disposition, outcome: row.outcome ?? row.disposition, outcomeNote: row.outcome_note, submittedBy: { id: row.submitted_by_id, name: row.submitted_by_name }, status: row.status }));
-  const formatLocalDate = localDateFormatter(timezone);
-  const today = formatLocalDate(new Date().toISOString());
-  const stages: PartnerPipelineStage[] = [...new Map(rawRows.map((row) => [row.stage_id, { id: row.stage_id, pipelineId: row.pipeline_id, pipelineName: row.pipeline_name, name: row.stage_name, position: row.stage_position, stageType: row.stage_type, color: row.stage_color, isArchived: row.stage_archived }])).values()].sort((a, b) => a.pipelineName.localeCompare(b.pipelineName) || a.position - b.position);
-  return { rows, stages, counters: { submittedToday: rows.filter((row) => formatLocalDate(row.submittedAt) === today).length, claimed: rows.filter((row) => ["claimed", "buffer_active", "handed_pending", "la_active"].includes(row.status)).length, converted: rows.filter((row) => row.stageType === "won").length, stillOpen: rows.filter((row) => row.stageType === "open" && !["completed", "dropped"].includes(row.status)).length }, realtimeTopic: `partner-pipeline:${partnerId}`, generatedAt: new Date().toISOString() };
+  const payload = result.data && typeof result.data === "object" && !Array.isArray(result.data) ? result.data as PipelineRpcPayload : {};
+  const rawRows = Array.isArray(payload.rows) ? payload.rows : [];
+  const rawStages = Array.isArray(payload.stages) ? payload.stages : [];
+  const stageById = new Map(rawStages.map((stage) => [stage[0], stage]));
+  const rows: PartnerLeadRow[] = rawRows.flatMap((row) => {
+    const stage = stageById.get(row[6]);
+    if (!stage) return [];
+    return [{ id: row[0], workItemId: row[1], customer: row[2], submittedAt: row[3], updatedAt: row[4], product: row[5], stageId: row[6], stageName: stage[3], stageType: stage[5], disposition: row[7], outcome: row[8] ?? row[7], outcomeNote: row[9], submittedBy: { id: row[10], name: row[11] }, status: row[12] }];
+  });
+  const stages: PartnerPipelineStage[] = rawStages.map((stage) => ({ id: stage[0], pipelineId: stage[1], pipelineName: stage[2], name: stage[3], position: stage[4], stageType: stage[5], color: stage[6], isArchived: stage[7], leadCount: stage[8] }));
+  const facets: PartnerLeadFacets = {
+    closers: (Array.isArray(payload.closers) ? payload.closers : []).map((closer) => ({ id: closer[0], name: closer[1] })),
+    products: Array.isArray(payload.products) ? payload.products : [],
+    outcomes: (Array.isArray(payload.outcomes) ? payload.outcomes : []).map((outcome) => ({ key: outcome[0], label: outcome[1] })),
+  };
+  return {
+    rows,
+    stages,
+    facets,
+    counters: { submittedToday: payload.counters?.submittedToday ?? 0, claimed: payload.counters?.claimed ?? 0, converted: payload.counters?.converted ?? 0, stillOpen: payload.counters?.stillOpen ?? 0 },
+    total: payload.total ?? rows.length,
+    nextOffset: payload.next_offset ?? null,
+    pageSize: limit,
+    realtimeTopic: `partner-pipeline:${partnerId}`,
+    generatedAt: new Date().toISOString(),
+  };
 }
 
 export async function getPartnerLeadDetail(tenantId: string, partnerId: string, leadId: string): Promise<PartnerLeadDetail> {

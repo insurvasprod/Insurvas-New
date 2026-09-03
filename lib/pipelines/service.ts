@@ -77,10 +77,13 @@ export async function updatePipeline(tenantId: string, pipelineId: string, input
 }
 
 export async function deletePipeline(tenantId: string, pipelineId: string) {
-  const current = await tenantPipeline(tenantId, pipelineId);
-  if (current.is_default) throw new Error("Default pipelines cannot be deleted; create another pipeline first");
-  const { error } = await getSupabaseServiceClient().from("pipelines").delete().eq("id", pipelineId).eq("tenant_id", tenantId);
-  if (error) throw new Error(error.message.includes("violates foreign key") ? "A pipeline with leads cannot be deleted" : error.message);
+  assertUuid(pipelineId, "pipeline id");
+  const { error } = await getSupabaseServiceClient().rpc("delete_tenant_pipeline", { p_tenant_id: tenantId, p_pipeline_id: pipelineId });
+  if (!error) return;
+  if (error.message.includes("pipeline_not_found")) throw new Error("Pipeline not found");
+  if (error.message.includes("default_pipeline")) throw new Error("Default pipelines cannot be deleted; create another pipeline first");
+  if (error.message.includes("pipeline_in_use")) throw new Error("A pipeline with leads or disposition history cannot be deleted");
+  throw new Error(error.message);
 }
 
 export async function createStage(tenantId: string, pipelineId: string, input: { name: unknown; stage_type: unknown; color: unknown }) {

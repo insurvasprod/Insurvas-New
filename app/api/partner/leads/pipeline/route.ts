@@ -18,7 +18,9 @@ export async function GET(request: NextRequest) {
   const auth = await requirePartner();
   if (auth instanceof NextResponse) return auth;
   if (!checkPartnerParam(request, auth.context.partnerId)) return NextResponse.json({ error: "You cannot access another partner pipeline" }, { status: 403 });
-  try { return NextResponse.json(await listPartnerLeads(auth.context.tenantId, auth.context.partnerId, filters(request), auth.context.partnerTimezone), { headers: { "Cache-Control": "no-store" } }); }
+  const limit = Number(request.nextUrl.searchParams.get("limit") ?? "250");
+  const offset = Number(request.nextUrl.searchParams.get("offset") ?? "0");
+  try { return NextResponse.json(await listPartnerLeads(auth.context.tenantId, auth.context.partnerId, filters(request), auth.context.partnerTimezone, { limit, offset }), { headers: { "Cache-Control": "no-store" } }); }
   catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Could not load partner pipeline" }, { status: 400 }); }
 }
 

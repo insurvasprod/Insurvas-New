@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
   const requested = request.nextUrl.searchParams.get("partner_id");
   if (requested && requested !== auth.context.partnerId) return NextResponse.json({ error: "You cannot export another partner's leads" }, { status: 403 });
   try {
-    const result = await listPartnerLeads(auth.context.tenantId, auth.context.partnerId, filters(request), auth.context.partnerTimezone);
+    const result = await listPartnerLeads(auth.context.tenantId, auth.context.partnerId, filters(request), auth.context.partnerTimezone, { limit: 5000, offset: 0 });
     return new NextResponse(partnerLeadsCsv(result.rows), { headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": "attachment; filename=partner-leads.csv", "Cache-Control": "no-store" } });
   } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Could not export partner leads" }, { status: 400 }); }
 }

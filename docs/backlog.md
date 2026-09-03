@@ -1931,15 +1931,15 @@ so a closed laptop becomes offline within one minute even when no further event 
 Nothing was left unmet, deferred, or unverified for LA-1.15, so nothing was added to the open
 backlog beyond this resolved record.
 
-### 130. 🟡 LA-1.16 nobody-claimed escalation is not wired to a worker
-**From:** LA-1.16 · **Belongs to:** LA-1.23
+### 130. ✅ LA-1.16 nobody-claimed escalation is wired to the LA-1.23 worker
+**From:** LA-1.16 · **Belongs to:** LA-1.23 · **Resolved:** 2026-09-02
 
-The partner card vocabulary includes `nobody_claimed`, but LA-1.16 has no scheduled or queue
-worker that observes the unclaimed threshold and emits the Ray-only card. The chat data model is
-ready for the event; the missing owner is the later unclaimed-SLA/escalation work. Leaving this
-unwired means a partner can wait past the threshold without the promised internal escalation.
-Add an idempotent threshold worker, route the card only to the tenant owner/producer view, and
-cover retry, clock-skew and concurrent-worker cases.
+LA-1.23 now advances unclaimed leads through one durable ladder and writes exactly-once outbox
+events. The worker creates the Ray-only `unclaimed_sla_escalation` notification and email at the
+escalation rung, then posts the `nobody_claimed` partner card at the partner-notification rung.
+The live verifier proved that all four rungs fire once when the scheduler is run twice and that a
+claimed lead is never advanced. Platform scheduling and job-failure alert delivery remain tracked
+separately in #143 under SA-6.1.
 
 ### 131. ⚪ LA-1.16 agent-created channels and direct messages are not implemented
 **From:** LA-1.16 · **Belongs to:** LA-1.16 follow-up
@@ -1966,13 +1966,12 @@ parameters, permits paused partners to read history, and rejects forged, expired
 access. The read RPCs are restricted to the service role, and the pipeline change trigger emits
 an opaque partner-scoped realtime signal while the UI refreshes its durable read model.
 
-The performance verifier initially found a cold 5,000-row request above two seconds because the
-request rebuilt a date formatter once per lead. Reusing one formatter per request fixed the
-measured path; the focused verifier then passed the under-two-second requirement. The live
-migrations, schema privilege checks, focused partner pipeline verifier, partner chat dependency
-verifier, deep migration check, TypeScript, lint, production build, full 283-test suite, feature
-check, and authenticated desktop/mobile browser QA all passed. Nothing was left unmet, deferred,
-or unverified for LA-1.17, so nothing was added to the open backlog.
+The performance verifier later reproduced a server-side N+1 latest-deal lookup at 5,000 rows. The
+read model now paginates on the server, computes complete counters and facets independently of the
+page, and enriches only the bounded page with one latest-deal join. `EXPLAIN ANALYZE` fell from
+about 3.38 seconds to 77.7 ms on the retained 5,000-lead fixture, and the focused API verifier
+proved distinct pagination plus the under-two-second first-page requirement. The UI loads 250
+rows at a time and preserves loaded pages during live refreshes.
 
 ### 137. ✅ LA-1.20 Notes tab blocker resolved by LA-1.21
 **From:** LA-1.20 · **Belongs to:** LA-1.21 · **Resolved:** 2026-09-02
@@ -1983,68 +1982,64 @@ notifications, cross-lead search, edit history, and timeline tombstones. The liv
 focused verifier passed. The prior LA-1.20 blocker is therefore resolved; authenticated browser
 verification remains tracked separately in #138 and #139.
 
-### 134. 🔵 LA-1.18 partner-quality migration is not applied to the linked Supabase project
+### 134. ✅ LA-1.18 partner-quality migration is applied and live-verified
+**From:** LA-1.18 · **Belongs to:** LA-1.18 · **Resolved:** 2026-09-02
+
+The numbered partner-quality migration and its follow-up count-field fix are applied to Supabase
+project `iiimdgizjwnihpyrukbu`. The live catalog now contains `partner_quality`; the report and
+drill-down RPCs exist and are executable only by `service_role`. `npm run check:features` passes,
+and `npm run verify:partner-quality` proves live record-derived counts, exact reconciliation,
+zero rows for partners with no leads, exact drill-downs, no cost fields, role and tenant isolation,
+session failure handling, hostile-input rejection, and concurrent reads.
+
+### 135. 🔵 LA-1.18 authenticated browser QA is blocked by the localhost browser policy
 **From:** LA-1.18 · **Belongs to:** LA-1.18
 
-The numbered migration `20260903150000_la_1_18_partner_quality.sql` is committed in the repository,
-but the linked project is currently reachable only through the `tenant_app` database role, which has
-no DDL privilege. Supabase CLI is also not linked because no Supabase access token is configured.
-Consequently the `partner_quality_report` and `partner_quality_leads` RPCs do not exist in the live
-project, the focused verifier cannot pass the five acceptance checks, and `npm run check:features`
-correctly reports that the new menu key is not yet in the live catalog.
+The live migration and API verifier now pass, and the page is present at `/app/partner-quality`.
+The available in-app browser refused control of `http://localhost:3000` under its URL safety policy,
+before an agent session could be inspected. Desktop/mobile layout, sorting, date validation, the
+cost disclaimer, zero-partner rendering, exact drill-down dialog, focus and console state therefore
+remain unverified in the required real browser.
 
-**Fix:** run `supabase link --project-ref iiimdgizjwnihpyrukbu` with an owner-capable Supabase access
-token, then run `supabase db push --include-all`. Re-run `npm run verify:partner-quality`,
-`npm run db:check:deep`, and `npm run check:features`; do not close this entry from local build
-evidence alone.
+**Fix:** use an approved browser surface that permits localhost, sign in with an entitled owner or
+producer, capture the finished desktop and phone views, inspect browser console logs, and verify
+every interactive control against `npm run verify:partner-quality`.
 
-### 135. 🔵 LA-1.18 authenticated browser QA is pending the live migration
-**From:** LA-1.18 · **Belongs to:** LA-1.18
-
-The new page and route compile and are present at `/app/partner-quality`, but an authenticated
-browser acceptance run cannot be completed while the live entitlement catalog and report RPCs are
-missing. Desktop/mobile layout, sorting, date validation, cost disclaimer, zero-partner rendering,
-and the exact drill-down dialog still need to be driven in the real browser after entry 134 is fixed.
-
-**Fix:** after applying the migration, sign in with an entitled owner or producer, capture the
-finished desktop and phone views, inspect browser console logs, and verify every interactive control
-against `npm run verify:partner-quality`.
-
-### 136. 🔵 LA-1.19 authenticated browser QA is pending an authorized agent session
+### 136. 🔵 LA-1.19 authenticated browser QA is blocked by the localhost browser policy
 **From:** LA-1.19 · **Belongs to:** LA-1.19
 
-The live API and database checks for subscription limits pass, but the required real-browser
-acceptance could not be completed because the available in-app tabs were stale connection-error
-pages and no authorized agent session was present. The implementation still needs a signed-in
-agent owner to open the partner and team screens, confirm capacity usage text, disabled create or
-invite controls, specific upgrade messaging, visible focus, responsive layout, and a clean console.
+The live API and database checks for subscription limits pass. A production server and an existing
+agent tab were both available on 2026-09-03, but the in-app browser rejected the localhost tab
+claim under its URL safety policy before the authenticated page could be inspected. The partner
+and team capacity text, disabled create/invite controls, upgrade messaging, visible focus,
+responsive layout, and console state remain unverified in the required real browser.
 
 **Fix:** open a working local app tab, sign in as an entitled agent owner, drive `/app/publishers`
 and `/app/settings` at desktop and phone widths, capture the finished screens, and close this
 entry only after the browser console and interactive controls are clean.
 
-### 138. 🔵 LA-1.20 authenticated lead-workspace browser QA is pending an authorized agent session
+### 138. 🔵 LA-1.20 authenticated lead-workspace browser QA is blocked by the localhost browser policy
 **From:** LA-1.20 · **Belongs to:** LA-1.20
 
-The fresh in-app browser tab rendered `/app/login` with no console errors, but no authorized agent
-session was available to open a real lead. Consequently the detail header, tabs, action controls,
-correction display, timeline, responsive layout, and finished-screen screenshot were not driven by
-browser interaction. The live API verifier covers those paths server-side, but it is not a substitute
-for the required authenticated browser acceptance.
+A production server and an existing agent tab were both available on 2026-09-03, but the in-app
+browser rejected the localhost tab claim under its URL safety policy. Consequently the detail
+header, tabs, action controls, correction display, timeline, responsive layout, and finished-screen
+screenshot were not driven by browser interaction. The live API verifier covers those paths
+server-side, but it is not a substitute for the required authenticated browser acceptance.
 
 **Fix:** sign in as an entitled local agent owner, open a real lead from `/app/leads`, exercise the
 tabs and available actions at desktop and phone widths, inspect the console and focus states, and
 capture the finished workspace screenshot. Remove this entry only after that browser run is clean.
 
-### 139. 🔵 LA-1.21 authenticated notes browser QA is pending an authorized agent session
+### 139. 🔵 LA-1.21 authenticated notes browser QA is blocked by the localhost browser policy
 **From:** LA-1.21 · **Belongs to:** LA-1.21
 
 The live API and database verifier cover note creation, default internal visibility, partner
 filtering, visibility reversal, edit history, tombstones, mentions, search, tenant isolation,
 role gates, expired/forged sessions, duplicate requests, concurrent requests, and hostile input.
-The real browser rendered the login screen cleanly, but this run had no authorized agent session;
-opening a protected lead therefore redirected to `/partner/login`. The finished authenticated Notes
-screen, desktop/mobile interaction, visible focus, and screenshot remain unverified.
+On 2026-09-03 the production server and an existing agent tab were available, but the in-app
+browser rejected the localhost tab claim under its URL safety policy. The finished authenticated
+Notes screen, desktop/mobile interaction, visible focus, and screenshot remain unverified.
 
 **Fix:** sign in as an entitled agent owner or producer, open a real lead at `/app/leads/<id>`,
 exercise add/edit/delete, internal/shared visibility, teammate mention, and cross-lead search at
@@ -2052,26 +2047,38 @@ desktop and phone widths, inspect console errors and focus states, and capture t
 Cost of leaving it open: server enforcement is verified, but the required end-user presentation and
 interaction evidence is not.
 
-### 140. 🔵 LA-1.22 authenticated callback browser QA is pending an authorized agent session
+### 140. 🔵 LA-1.22 authenticated callback browser QA is blocked by the localhost browser policy
 **From:** LA-1.22 · **Belongs to:** LA-1.22
 
-The live callback verifier and protected route checks pass, but the required authenticated browser acceptance cannot be completed in this run because no authorized agent session is available. The browser can verify the protected redirect/login screen, but cannot drive the callback picker, customer and agent timezone display, calendar actions, dashboard and Agent Floor cards, focus states, responsive layout, or capture the finished authenticated callback screen.
+The live callback verifier and protected route checks pass. On 2026-09-03 the production server
+and an existing agent tab were available, but the in-app browser rejected the localhost tab claim
+under its URL safety policy. It therefore could not drive the callback picker, customer and agent
+timezone display, calendar actions, dashboard and Agent Floor cards, focus states, responsive
+layout, or capture the finished authenticated callback screen.
 
 **Fix:** sign in as an entitled owner, producer, or assistant in the local agent app, open `/app/callbacks` and a real disposition flow, exercise schedule, reschedule, cancel, and complete at desktop and phone widths, inspect console errors and keyboard focus, and capture the finished authenticated callback screen. Cost of leaving it open: server and database behavior is verified, but the required end-user presentation and interaction evidence remains unverified.
 
-### 141. 🔵 LA-1.23 SLA migration is not applied to the connected Supabase project
-**From:** LA-1.23 · **Belongs to:** LA-1.23
+### 141. ✅ LA-1.23 SLA migration is applied and live-verified
+**From:** LA-1.23 · **Belongs to:** LA-1.23 · **Resolved:** 2026-09-02
 
-The repository contains `20260903000000_la_1_23_unclaimed_sla.sql`, but the connected project does not yet expose `tenant_queue_sla_settings` or `lead_sla_events`. The focused verifier stopped at this prerequisite, so the four-rung exactly-once behavior, claim cancellation, claim-safe expiry, expired-lead read/reopen flow, runtime threshold changes, daily digest and scheduler failure reporting cannot be marked live-passed. The Supabase CLI is not installed/authenticated in this workspace and the available database role cannot apply DDL.
-
-**Fix:** apply the numbered migration to project `iiimdgizjwnihpyrukbu` with an owner-capable Supabase migration path, then run `npm run verify:unclaimed-sla`, `npm run db:check:deep`, the protected API failure-path checks, and the full required verification commands. Do not close this item from local build evidence alone.
+The SLA migration and its runtime ambiguity fix are applied to project
+`iiimdgizjwnihpyrukbu`. Live schema checks confirm both tables, both tenant RLS policies, the
+service-role-only functions and no public function grants. `npm run verify:unclaimed-sla` proves
+all four rungs fire exactly once across duplicate runs, claimed rows are never expired, expired
+leads reopen successfully, and a second reopen is idempotent.
 
 ### 142. 🔵 LA-1.23 authenticated SLA settings and expired-lead browser QA is pending
 **From:** LA-1.23 · **Belongs to:** LA-1.23
 
-The real in-app browser had no usable authorized agent tab; the available binding referred to a stale/unknown tab. Therefore the owner settings form, validation message, save confirmation, expired-lead read screen, Reopen in queue control, desktop/mobile layout, visible focus, and clean console were not driven. The server route and production build are not substitutes for this required front-end evidence.
+The database and focused verifier now pass. The in-app browser refused localhost control under its
+URL safety policy before an authorized agent tab could be inspected. Therefore the owner settings
+form, validation message, save confirmation, expired-lead read screen, Reopen in queue control,
+desktop/mobile layout, visible focus, and clean console were not driven. The server route and
+production build are not substitutes for this required front-end evidence.
 
-**Fix:** after applying the migration, open a working local app tab, sign in as an entitled agent owner, exercise `/app/settings` and a real expired lead at desktop and phone widths, inspect the console and keyboard focus, and capture the finished screen. Remove this item only after that authenticated run is clean.
+**Fix:** use an approved browser surface that permits localhost, sign in as an entitled agent owner,
+exercise `/app/settings` and a real expired lead at desktop and phone widths, inspect the console and
+keyboard focus, and capture the finished screen. Remove this item only after that run is clean.
 
 ### 143. 🟡 LA-1.23 failure alerts still depend on SA-6.1
 **From:** LA-1.23 · **Belongs to:** SA-6.1
@@ -2080,26 +2087,41 @@ The scheduler returns a failure report and HTTP 503 when an outbox side effect f
 
 **Fix:** SA-6.1 should consume the scheduler failure signal and deliver the platform alert. Then add a live failure-injection check proving one alert is emitted without duplicating the SLA event.
 
-### 144. 🟡 LA-1.23 escalation browser surface depends on LA-1.25
-**From:** LA-1.23 · **Belongs to:** LA-1.25
+### 144. ✅ LA-1.23 escalation is consumed by the LA-1.25 alert center
+**From:** LA-1.23 · **Belongs to:** LA-1.25 · **Resolved:** 2026-09-02
 
-LA-1.23 now writes the durable owner notification and attempts the escalation email, but the in-app toast, browser notification and sound surface named by the escalation requirement belong to LA-1.25, which is still planned. Until that ticket lands, the event exists server-side but is not yet a complete browser alert experience.
+LA-1.25 consumes `agent_notifications`, maps `unclaimed_sla_escalation` to its own event controls,
+and provides the in-app toast, browser notification and distinct sound path without duplicating the
+source-key event. The live alert verifier proves durable source-key deduplication and per-event
+settings. Real browser presentation evidence remains tracked separately in #146.
 
-**Fix:** LA-1.25 should consume `agent_notifications` for `unclaimed_sla_escalation`, render the alert with the configured browser/sound preferences, and add authenticated desktop/mobile evidence without duplicating the source-key event.
-
-### 145. 🔵 LA-1.24 authenticated existing-customer browser QA is pending an authorized agent session
+### 145. 🔵 LA-1.24 authenticated existing-customer browser QA is blocked by the localhost browser policy
 **From:** LA-1.24 · **Belongs to:** LA-1.24
 
-The local agent app was reachable during this run, but the available browser tabs had no authorized agent session. Opening `/app/leads` redirected to `/partner/login`, so the inbox row, Agent Floor card, lead workspace pre-flight card, manual re-check confirmation, desktop/mobile layout, visible keyboard focus, and clean authenticated console could not be driven. The live RPC, API authorization, persistence, tenant isolation, concurrency, hostile-input, and performance checks pass, but they do not replace the required authenticated browser evidence.
+On 2026-09-03 the production server and an existing agent tab were available, but the in-app
+browser rejected the localhost tab claim under its URL safety policy. The inbox row, Agent Floor
+card, lead-workspace pre-flight card, manual re-check confirmation, desktop/mobile layout, visible
+keyboard focus, and authenticated console could not be driven. The live RPC, API authorization,
+persistence, tenant isolation, concurrency, hostile-input, and performance checks pass, but they
+do not replace the required authenticated browser evidence.
 
 **Fix:** sign in as an entitled local agent owner, producer, or assistant, open a real lead, verify the pre-flight result and policy-matching disclaimer on the inbox, Agent Floor, and lead workspace surfaces, exercise manual re-check, repeat at desktop and phone widths, inspect console errors and keyboard focus, and capture the finished authenticated screen. Remove this entry only after that browser run is clean.
 
 ### 146. 🔵 LA-1.25 authenticated alert-center browser QA is pending an authorized agent session
 **From:** LA-1.25 · **Belongs to:** LA-1.25
 
-The live settings/API verifier, migration inspection, typecheck, lint, build, unit tests, and protected unauthenticated redirect were run. The available in-app tabs still had no authorized agent session: the fresh tab resolved to `/partner/login`, so the finished authenticated alert center could not be opened. Browser notification permission, denied-permission fallback, notification click-through, DND indicator, sound controls, per-event persistence in the real UI, console cleanliness, keyboard focus, and desktop/mobile screenshots therefore remain unverified.
+The live settings/API verifier and migration checks pass. The available in-app browser refused
+localhost control under its URL safety policy before the authorized agent state could be inspected,
+so the finished authenticated alert center could not be driven. Browser notification permission,
+denied-permission fallback, notification click-through, DND indicator, sound controls, per-event
+persistence in the real UI, console cleanliness, keyboard focus, and desktop/mobile screenshots
+therefore remain unverified.
 
-**Fix:** sign in as an entitled local agent owner, producer, assistant, or bookkeeper, open any `/app` page, exercise the Alert settings panel and each toggle, grant and deny browser permission in separate runs, create a test alert in a background tab, click it to open the lead, test DND, mute, volume, and a ten-lead burst at desktop and phone widths, inspect console errors and keyboard focus, and capture the finished screen. Remove this entry only after that authenticated run is clean.
+**Fix:** use an approved browser surface that permits localhost, sign in as an entitled local agent
+owner, producer, assistant, or bookkeeper, open any `/app` page, exercise the Alert settings panel
+and each toggle, grant and deny browser permission in separate runs, create a test alert in a
+background tab, click it to open the lead, test DND, mute, volume, and a ten-lead burst at desktop
+and phone widths, inspect console errors and keyboard focus, and capture the finished screen.
 
 ### 147. 🔴 LA-1.25 and LA-1.22 disagree about callback reminder email
 **From:** LA-1.25 · **Belongs to:** LA-1.25 / LA-1.22
@@ -2107,6 +2129,42 @@ The live settings/API verifier, migration inspection, typecheck, lint, build, un
 LA-1.25's channel matrix says callback-due alerts have no email and that email is for escalations only. LA-1.22 explicitly requires configurable callback reminders in-app and by email, and the existing callback reminder worker still sends that email. The alert center correctly does not add another email, but changing the worker here would break the earlier callback ticket without a product decision.
 
 **Fix:** decide whether callback reminder email remains a LA-1.22 exception or must be removed in favor of the LA-1.25 matrix, then update the owning callback worker, tests, and both ticket specifications together. Cost of leaving it open: the UI channels are correct for browser/toast/sound, but routine callback email behavior is not unambiguously aligned with the combined requirements.
+
+### 148. ✅ LA-1 database RPC grants and early tenant-policy advisor findings resolved
+**From:** LA-1 module audit · **Belongs to:** LA-1.1 / LA-1.4 / LA-1.8 / LA-1.12 / LA-1.15 · **Resolved:** 2026-09-03
+
+The live security advisor found direct anonymous/authenticated execution on the LA-1.4 draft RPC
+and LA-1.15 Realtime trigger function, a mutable search path on LA-1.12 note rendering, and four
+early tenant policies that recomputed session context per row. Migration
+`20260903200000_la_1_security_and_rls_advisor_fix.sql` revokes those grants, pins the function
+search path, and recreates the policies with initplans. The migration is applied live;
+`npm run verify:la1-security` passes and the targeted security/performance advisor findings are zero.
+
+### 149. ✅ LA-1.15 transient Realtime verification failure passed on immediate rerun
+**From:** LA-1 module audit · **Belongs to:** LA-1.15 · **Resolved:** 2026-09-03
+
+One parallel QA run received no Agent Floor Realtime event inside the one-second probe and failed
+both delivery assertions. The immediate isolated rerun passed both assertions and the full
+LA-1.15 suite. No state transition failed and the durable floor read remained correct. Keep the
+one-second probe visible in CI; recurrence would indicate a Realtime reliability issue rather than
+an application-state failure.
+
+### 150. ✅ Stale LA-1.16 and LA-1.20 verification fixtures removed
+**From:** LA-1 module audit · **Belongs to:** LA-1.16 / LA-1.20 · **Resolved:** 2026-09-03
+
+Twelve synthetic tenants remained after earlier interrupted checks because the LA-1.16 cleanup
+attempted to delete partners before restrictive `partner_users` rows and ignored the failed delete.
+The cleanup order now deletes memberships first. All matching `@invalid.test` users and the exact
+synthetic tenant-name patterns were inspected, removed, and re-counted at zero.
+
+### 151. ✅ LA-1.17 sustained-load timing retry returned below the two-second contract
+**From:** LA-1 module audit · **Belongs to:** LA-1.17 · **Resolved:** 2026-09-03
+
+The first aggregate run after pagination measured one 250-row request at 2,123 ms while the live
+database was under concurrent verification load, 123 ms over the ticket limit. The visible retry
+passed, the focused pagination suite passed, and the underlying database plan measured 77.7 ms on
+5,000 leads after the latest-deal N+1 query was removed. Keep the threshold as a hard CI assertion;
+a repeatable isolated failure would require reducing the first page or profiling network latency.
 
 ---
 

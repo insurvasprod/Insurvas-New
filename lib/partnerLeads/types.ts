@@ -16,6 +16,13 @@ export type PartnerPipelineStage = {
   stageType: string;
   color: string;
   isArchived: boolean;
+  leadCount: number;
+};
+
+export type PartnerLeadFacets = {
+  closers: Array<{ id: string; name: string }>;
+  products: string[];
+  outcomes: Array<{ key: string; label: string }>;
 };
 
 export type PartnerLeadRow = {
