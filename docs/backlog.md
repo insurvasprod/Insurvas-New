@@ -2166,6 +2166,21 @@ passed, the focused pagination suite passed, and the underlying database plan me
 5,000 leads after the latest-deal N+1 query was removed. Keep the threshold as a hard CI assertion;
 a repeatable isolated failure would require reducing the first page or profiling network latency.
 
+### 152. 🔵 Shared LA-1 workspace UI needs authenticated browser verification
+**From:** LA-1 module UI improvement pass · **Belongs to:** LA-1.16 / LA-1.18–LA-1.25 · **Gap recorded:** 2026-09-03
+
+The agent shell now renders a shared responsive workspace bar on every `(shell)` route, showing the
+current menu section, nested-route page context, role, plan, workspace readiness, and read-only state.
+The partner portal header now uses the same hierarchy and clearly exposes partner identity, role, and
+non-active status. TypeScript, lint, and production build pass, but the in-app browser again refused
+to claim the available `localhost:3000` tab under its URL safety policy. Desktop/mobile screenshots,
+keyboard focus, console output, and live interaction behavior therefore remain unverified.
+
+**Fix:** use an approved browser surface that permits the local app, sign in with an authorized agent
+and partner account, inspect every LA-1 page at desktop and phone widths, and capture screenshots and
+console/focus evidence. Cost of leaving it open: the shared treatment is compiled and route-wide, but
+its required end-user visual and interaction evidence is still missing.
+
 ---
 
 ## Related

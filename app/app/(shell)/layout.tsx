@@ -15,6 +15,7 @@ import { getMaintenanceStatus, getActiveAnnouncements } from "@/lib/system/servi
 import { planDisplayName } from "@/lib/plans/display";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { AgentAlertCenter } from "@/components/app/agent-alert-center";
+import { AgentWorkspaceBar } from "@/components/app/agent-workspace-bar";
 
 /**
  * Enforcement point 1 of 3: the MENU.
@@ -83,6 +84,12 @@ export default async function AgentShellLayout({ children }: { children: React.R
         <AnnouncementStrip initialAnnouncements={announcements} />
         <SubscriptionStateBanner status={entitlement.status} />
         <AgentAlertCenter />
+        <AgentWorkspaceBar
+          menu={menu}
+          planName={entitlement.plan_code ? planDisplayName(entitlement.plan_code) : null}
+          role={context.role}
+          readOnly={entitlement.access === "read_only"}
+        />
         {children}
       </main>
     </div>
