@@ -2966,6 +2966,21 @@ export type Database = {
         };
         Returns: { invoice_id: string; number: string; created: boolean; reconciliation: string }[];
       };
+      create_invoice_for_payment_with_coupon: {
+        Args: {
+          p_tenant_id: string;
+          p_subscription_id: string | null;
+          p_provider: string;
+          p_provider_payment_id: string;
+          p_provider_total_cents: number | null;
+          p_period_start: string | null;
+          p_period_end: string | null;
+          p_paid_at: string | null;
+          p_lines: Json;
+          p_consume_coupon: boolean;
+        };
+        Returns: { invoice_id: string; number: string; created: boolean; reconciliation: string }[];
+      };
       prune_email_log: {
         Args: { p_days?: number };
         Returns: number;
