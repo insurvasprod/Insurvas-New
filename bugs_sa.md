@@ -1205,3 +1205,136 @@ Recorded so a re-review does not repeat the work:
   scoped to `app.tenant_id`, and the app routes pass `auth.context.tenantId` rather than anything
   client-supplied.
 - **CI now exists** (`.github/workflows/ci.yml`), which closes backlog #9.
+
+# PR #11 · LA-0 agent foundation — security & QA review
+
+Reviewed 2026-09-01 against branch `codex/la-0-module-audit` (208 files, +12,427/−662) and the six
+Notion LA-0 tickets. Everything below was reproduced locally, not read off the diff.
+
+Two caveats on my own method first, because they nearly became false findings:
+
+- `verify:tenant-roles` and `verify:appointment-vault` failed on my first run. Both were my own
+  fault: two dev servers were fighting over port 3000, and a production build was reading `.next/`
+  while a dev server wrote it. On a clean single server **all six LA-0 suites pass**. Neither
+  failure is a defect in this PR.
+- A crude "count `.from(` against count `tenant_id`" sweep flagged `lib/dashboard/service.ts`
+  (1 query, 0 tenant filters) and `lib/tenantTeam/service.ts` (2 queries, 1 filter). Both are
+  correct on inspection: the first scopes by `tenants.id`, which *is* the tenant, and the second
+  derives its `in("id", userIds)` list from an already-scoped query. Recorded so nobody re-flags them.
+
+## L0-1 (P1 for rebuild, not a merge blocker) · `0016_reference_data.sql` compounds the broken rebuild
+
+The PR adds `supabase/migrations/0016_reference_data.sql`, which upserts 9 feature modules and 27
+features. It is named in the old `00xx_` scheme, so it sorts **before every** `2026*` migration —
+including `20260831065500_seed_individual_agent_catalog.sql`, which inserts the same
+`feature_modules` keys with a plain `insert` and no `on conflict`.
+
+`feature_modules.key` is the primary key. Replaying the seed's own statement against a database
+where the reference data already exists:
+
+    ERROR: 23505: duplicate key value violates unique constraint "feature_modules_pkey"
+    DETAIL: Key (key)=(book) already exists.
+
+So `supabase db reset` gets as far as the catalog seed and dies. This is invisible today because
+`0016_reference_data` is **not in `supabase_migrations.schema_migrations`** — it has never been
+applied to the live database, which still holds 8 modules and no `agency` row.
+
+Two smaller consequences of the same file:
+
+- It reintroduces the `agency` module, which the catalog seed deliberately excludes as "Phase 2 of
+  the business".
+- Its labels disagree with the seed's (`Book of business` vs `Book of Business`,
+  `Policies & book of business` vs `Book of Business`). Whichever runs last silently wins.
+
+`npm run db:check:deep` reports `No syntax, ordering or missing-object errors` and exits 0 on this
+branch, and it does parse `0016_reference_data.sql` (3 statements, ok). It cannot catch this because
+it parses statements and blocks on rights rather than applying the sequence to an empty database — a
+limit its own closing line states. The green check is not evidence of rebuildability. This is
+backlog #83 (two migration schemes) turning into a concrete break.
+
+**Correction after checking #83:** I first called this a merge blocker. It is not. A from-scratch
+rebuild was **already** broken on `main` before this PR, for the same class of reason —
+`0000_baseline.sql` is a dump of the live database that already contains objects the timestamped
+migrations then try to create again. This PR adds one more collision to a rebuild path that did not
+work anyway, so merging does not move production backwards and the live database is unaffected.
+It does mean #83's fix now has one more file to reconcile, and that the fix cannot be verified by
+`db:check:deep` — only by an actual reset against a throwaway project.
+
+## L0-2 (P2) · A bulk appointment save can commit and then return 400, with a partial audit trail
+
+`app/api/app/appointment-vault/appointments/route.ts` writes all rows through one
+`save_appointments` RPC — which commits — and only then fans out one audit insert per row:
+
+    const rows = await saveAppointments(auth.context.tenantId, parsed.data.appointments);
+    await Promise.all(rows.map((row) => audit({ ... })));   // 40 concurrent single-row inserts
+
+`audit()` throws by design when an insert fails, and the route's `catch` maps everything to 400.
+Under the 40-appointment bulk case from LA-0.5 this actually happened: three of the forty audit
+inserts failed with an empty error object (transport-level, not a constraint — `tenant.*` actions
+insert fine, 625 such rows exist), the request returned
+`400 {"error":"Could not write audit log"}`, and the suite's own "every successful write has an
+audit row" check saw 43 rather than the expected count. The appointments were already committed.
+
+So the failure mode is: data saved, caller told it failed, audit trail incomplete — and a 400 blames
+the client for a server-side problem. It passes on a warm server, which makes it load-dependent
+rather than harmless. The fix is one batched insert (an `auditMany`) instead of N concurrent ones,
+and not mapping an audit failure onto a 4xx.
+
+## L0-3 (P2) · Locale-dependent normalisation is persisted into `address_hash`
+
+`lib/contacts/normalization.ts` uses `toLocaleLowerCase()` with no locale argument, and its output
+feeds both duplicate matching and the stored `address_hash`:
+
+    "Ismail Irwin"  toLowerCase: "ismailirwin"   tr-TR: "smailrwin"
+    "ISTANBUL"      toLowerCase: "istanbul"      tr-TR: "stanbul"
+    email path:     "ismail@x.com"        vs     "ısmail@x.com"
+
+Under a Turkish locale every capital `I` lowercases to dotless `ı`, which `[^a-z0-9]` then strips
+entirely. If the process locale ever differs — a container with a different `LANG`, a different ICU
+build — duplicate detection silently degrades and previously stored hashes stop matching newly
+computed ones. `toLowerCase()` is the whole fix.
+
+## L0-4 (P2) · An expiry threshold missed once is missed permanently
+
+`expiryWarningFor` fires only when the remaining days **exactly equal** 90, 60 or 30, and the dedupe
+key in `scripts/send-appointment-expiry-warnings.mjs` includes `warning.days`. There is no catch-up:
+if the daily run does not happen on the exact day — deploy, outage, timezone edge — that threshold
+is never sent and nothing later notices. A `days <= threshold and not yet sent for this threshold`
+rule would self-heal.
+
+Related, and worth separating: nothing in the repository schedules `npm run appointments:warn`. It
+is a package.json script only, exactly like the pre-existing `trials:remind`, and there is no cron
+configuration anywhere. LA-0.5's criterion "expiry warnings fire at 90, 60 and 30 days" is therefore
+not met in production regardless of the logic being correct. That is a platform gap, not a PR defect.
+
+## L0-5 (P3) · The PR description is unreliable in both directions
+
+- It states "All six LA-0 tickets remain Completed in Notion." All six are **In Review**.
+- Its "Known gaps" section reports the LA-0 RLS policies missing (#108) and `db:check:deep` timing
+  out (#109). Both were **resolved on this same branch** and are listed under "✅ Resolved" in
+  `docs/backlog.md`. The body understates the work as well as overstating the ticket status.
+
+## What I checked and found correct
+
+- **Route authorisation.** Every new API route carries `requireFeature`, `requireTenant`,
+  `requireFeatureRole` or `requireAdminRole`. The only two without are pre-existing
+  (`/api/app/checkout/coupon`, `/api/app/checkout/start`, which use `resolveSignupContext`).
+- **No client-supplied tenant.** Zero matches for a tenant id taken from a body, query string or
+  route param anywhere under `app/api/app`. Scope comes from the session at all 35 call sites
+  (`auth.context.tenantId` × 31, `context.tenantId` × 4).
+- **The admitted RLS gap was actually closed.** `20260901120100_la_0_operational_rls_policies.sql`
+  adds `tenant_id = nullif(current_setting('app.tenant_id', true), '')::uuid` select policies to all
+  14 LA-0 tables, matching the `tenant_templates` house pattern, with `carriers` correctly scoped by
+  `is_active` because it is global reference data. Mutations stay service-role-only; `tenant_app`
+  gets `select` only. `app.tenant_id` really is set, in `lib/tenantDb/withTenantScope.ts`.
+  `verify:la0-rls` proves per-tenant visibility across 14 tables for 2 tenant sessions, and it is
+  registered in `verify:all`.
+- **Role changes are safe.** `PATCH /api/app/team/[userId]` is `requireTenant(["owner"])`, and the
+  last-owner guard lives inside `tenant_update_member_role` behind a `for update` lock on the tenant
+  row, so two simultaneous demotions serialise. The RPC's ACL is
+  `postgres=X/postgres | service_role=X/postgres` — `anon`, `authenticated` and `tenant_app` all
+  lack EXECUTE, so the `p_tenant_id` parameter is not reachable from a tenant session.
+- **`canWrite` is centralised** in `lib/appointments/eligibility.ts` rather than copied per module,
+  which satisfies LA-0.5's "no module contains its own copy of the eligibility logic".
+- **Production build passes clean** (exit 0) once no dev server is racing it.
+- **`check:features` passes** — no drift between catalog, guards and menu.

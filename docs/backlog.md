@@ -974,6 +974,16 @@ merge and delete the SA-5 files it now subsumes, leaving `0000_baseline.sql` plu
 came after it. Then verify with an actual reset against a throwaway project — this is precisely the
 class of problem that is only real when someone tries it.
 
+**Update 2026-09-01, from the PR #11 (LA-0) merge:** there is now a third collision in this same
+path. `0016_reference_data.sql` upserts the `feature_modules` and `features` catalogs, and sorts
+before `20260831065500_seed_individual_agent_catalog.sql`, which inserts the same keys with a plain
+`insert` — proven to fail with `duplicate key value violates unique constraint
+"feature_modules_pkey", Key (key)=(book)`. It also reintroduces the `agency` module the catalog seed
+deliberately excludes, and disagrees with the seed's labels. It has never been applied to the live
+database. Whoever fixes this item must reconcile it along with the SA-5 files. Note that
+`db:check:deep` passes all of these — it parses statements rather than applying the sequence, so
+only a real reset proves the fix.
+
 This supersedes the "9 migrations in the repo" half of [#56]: the baseline dump and
 `scripts/dump-schema.mjs` genuinely fixed the missing-schema problem, and replaced it with an
 ordering one.
@@ -1209,6 +1219,65 @@ either keep money that is not ours or reverse a charge that was legitimate.
 path (SA-3.8) or a refund. Both are already built and audit-logged.
 
 ---
+
+
+### 110. Four of the five new LA-0 verification suites never run in CI
+
+`scripts/verify-all.mjs` lists 22 suites. PR #11 added five — `verify-tenant-roles.mjs`,
+`verify-carrier-library.mjs`, `verify-appointment-vault.mjs`, `verify-contacts.mjs` and
+`verify-la0-rls.mjs` — and registered only the last one. The four unregistered suites are the ones
+that prove the LA-0 features actually work: role denial per permission, cross-tenant match
+impossibility, merge/undo, effective-dated eligibility, hostile input, forged sessions. They exist
+only as npm scripts a human has to remember to run.
+
+This is precisely the failure `verify-all.mjs`'s own header warns about: "it was wrong at least once
+this project, when ten of the twenty-one had simply never been run."
+
+Registering them is not a one-line change, because all four drive HTTP and need a running app.
+CI's "Verification suites" step has no server up — they fail with `ECONNREFUSED` (exit 1) there.
+They also do not degrade gracefully the way `verify-tenant-isolation.mjs` does, which prints
+`skip HTTP check — dev server not reachable` and carries on. Two options: start a server for that
+step the way the `verify:switches:multi` step already does, or give each suite the same skip
+behaviour. The first is worth more.
+
+### 111. Nothing schedules the reminder and warning crons
+
+`npm run trials:remind` (SA-5.3) and `npm run appointments:warn` (LA-0.5) are package.json scripts
+with no scheduler anywhere in the repository — no `vercel.json` cron, nothing in
+`.github/workflows/`. Both are written correctly, with `email_log.dedupe_key` guarding repeats, and
+both are dead code in production until something runs them daily.
+
+LA-0.5's acceptance criterion "expiry warnings fire at 90, 60 and 30 days and stop once renewed" is
+unmet for this reason alone. See also bugs_sa.md L0-4: because the threshold test is exact equality
+and the dedupe key includes the day count, a single missed run drops that warning permanently, so
+the scheduler needs to be reliable rather than best-effort.
+
+### 112. Three verify:all suites fail on main, unrelated to any LA-0 work
+
+A full `verify:all` on the PR branch: 19 of 22 pass in 637s. The three failures are `compliance
+vendors`, `credits & limits` and `system maintenance` — none of them LA-0, and none of the failing
+assertions touched by PR #11.
+
+`verify:credits-limits` exits 1 on `main` too, so these are pre-existing red, not a regression from
+the PR. Two of the three deserve their own look:
+
+- **credits & limits** fails on "buying a pack actually grants the credits — included went 6020 ->
+  6020" and "buying a pack creates its invoice line". That is bugs_sa.md #11, recorded as resolved.
+  Either the fix regressed or the fixture is polluted — an `included` of 6020 and a leftover grant
+  reason of "Concurrent grant 1 1788264672411" point at accumulated state from earlier runs rather
+  than at the fix. Needs deciding which, because #11 is currently marked resolved on the strength of
+  a suite that now fails.
+- **system maintenance** fails with `DOMException [TimeoutError]`, i.e. an environment timeout rather
+  than an assertion.
+
+The one thing PR #11 changed in this area is a genuine improvement: `verify-credits-limits.mjs` no
+longer hardcodes `cost_cents === 0`, which the individual-agent catalog seed had invalidated.
+
+### 113. The build writes untracked AGENTS.md and CLAUDE.md into the repository root
+
+`next build` prints "Generated AGENTS.md and CLAUDE.md for AI agents" and leaves both files
+untracked in the working tree, so `git status` is dirty after any build. Either commit them, add
+them to `.gitignore`, or set `agentRules: false` in `next.config.ts`.
 
 ## ✅ Resolved
 
