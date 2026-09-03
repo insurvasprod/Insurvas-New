@@ -1275,23 +1275,19 @@ later-ticket items remain recorded: the separate inbound-transfer webhook is sti
 and current SA-2.8 plan-limit payloads do not yet populate the exact per-partner limits owned by
 LA-1.19.
 
-### 111. 🟡 LA-1.1 submission enforcement and production partner limits await later tickets
-**From:** LA-1.1 · **Belongs to:** LA-1.6 / LA-1.7 / LA-1.19 · **Gap recorded:** 2026-09-01
+### 111. 🟡 LA-1.1 provider inbound-transfer adapter remains outside the current app frame
+**From:** LA-1.1 · **Belongs to:** provider inbound-transfer integration follow-up · **Gap recorded:** 2026-09-03
 
-LA-1.1 stores the partner lifecycle atomically and the partner portal submission API now enforces
-active status and product approval before its fatal lead insert. The separate inbound transfer
-webhook still returns `501 Not Implemented`, so that provider-facing path remains owned by LA-1.6/
-LA-1.7. The live SA-2.8 entitlement refresh also currently emits `max_seats` but not the exact
-per-type limits required by LA-1.19; the LA-1.1 verifier uses a synthetic cached entitlement to
-prove the current enforcement path without querying plans.
+LA-1.1 stores the partner lifecycle atomically and the partner portal submission API enforces active
+status and product approval before its fatal lead insert. The separate inbound transfer webhook still
+returns `501 Not Implemented`, so that provider-facing adapter remains outside the current app frame.
+LA-1.19 now adds and refreshes the per-type partner limits (`max_publishers`,
+`max_marketing_partners`, and `max_affiliates`) and its live verifier exercises those limits.
 
-**Fix:** LA-1.6/LA-1.7 must call the shared partner acceptance check before creating any inbound
-or outbound submission and add the end-to-end paused-partner rejection test. LA-1.19 must add
-and seed `max_partners` in the plan-limit and entitlement pipeline, then add a real-plan limit
-test. Until then, the partner API is safe for existing operations but those future submission
-and production-limit paths cannot be claimed complete. Cost of leaving it: a future intake
-route could forget the shared status check, and a plan could appear unlimited until LA-1.19 is
-delivered.
+**Fix:** implement the provider-specific inbound-transfer adapter when that integration is in scope,
+using the existing tenant, partner-status, product-approval, and entitlement checks. Cost of leaving
+it open: a provider cannot yet post a live transfer through the production-facing webhook, although
+the existing partner portal operations and subscription-backed limits are protected.
 
 ### 112. ✅ LA-1.1 authenticated browser acceptance completed
 **From:** LA-1.1 · **Belongs to:** LA-1.1 · **Resolved:** 2026-09-01
