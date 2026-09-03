@@ -68,10 +68,13 @@ export async function listDealFlow(tenantId: string, filters: { fromDate?: strin
   const productLine = filters.productLine ? text(filters.productLine, "Product", 120) : null;
   const agentId = filters.agentId ? assertUuid(filters.agentId, "agent") : null;
   const selectedStatus = filters.status ? status(filters.status) : null;
-  const reportPromise = db.rpc("list_deal_flow_report", { p_tenant_id: tenantId, p_from_date: fromDate, p_to_date: toDate, p_partner_id: partnerId, p_product_line: productLine, p_agent_id: agentId, p_status: selectedStatus, p_page: page, p_page_size: pageSize });
-  const [reportResult, options] = await Promise.all([reportPromise, lookups(tenantId)]);
+  const reportResult = await db.rpc("list_deal_flow_report", { p_tenant_id: tenantId, p_from_date: fromDate, p_to_date: toDate, p_partner_id: partnerId, p_product_line: productLine, p_agent_id: agentId, p_status: selectedStatus, p_page: page, p_page_size: pageSize });
   if (reportResult.error) throw new Error(`Could not load daily deal flow: ${reportResult.error.message}`);
-  const report = (reportResult.data && typeof reportResult.data === "object" && !Array.isArray(reportResult.data) ? reportResult.data : {}) as unknown as { total?: unknown; rows?: unknown; summary?: unknown };
+  const report = (reportResult.data && typeof reportResult.data === "object" && !Array.isArray(reportResult.data) ? reportResult.data : {}) as unknown as { total?: unknown; rows?: unknown; summary?: unknown; options?: unknown };
+  const embeddedOptions = report.options && typeof report.options === "object" && !Array.isArray(report.options) ? report.options as { partners?: unknown; agents?: unknown } : null;
+  const options = embeddedOptions && Array.isArray(embeddedOptions.partners) && Array.isArray(embeddedOptions.agents)
+    ? { partners: embeddedOptions.partners as DealFlowFilterOptions["partners"], agents: embeddedOptions.agents as DealFlowFilterOptions["agents"] }
+    : await lookups(tenantId);
   const data = Array.isArray(report.rows) ? report.rows : [];
   const count = typeof report.total === "number" ? report.total : 0;
   const summaryData = Array.isArray(report.summary) ? report.summary : [];
