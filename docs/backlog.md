@@ -991,13 +991,6 @@ No new backlog item was created for the re-run itself.
 The invoice commits before `consume_coupon_period`. If consumption fails, retry finds the existing
 invoice and never consumes the period. Move both effects into one idempotent transaction. See M3-3.
 
-### 90. Manual payment settlement is non-atomic and permits overpayment  *(was #59 in the parked pre-merge review — renumbered on merge, where #59 was already taken)*
-**From:** Module 3 audit · **Financial correctness; live data affected**
-
-Settlement inserts the payment, updates the invoice, activates subscriptions, rebuilds entitlement,
-and audits in separate operations. It activates by tenant rather than the invoice's subscription.
-The live database already has one $99 invoice with $198 in successful payments. See M3-4.
-
 ### 91. Coupon plan and billing-cycle restrictions are not enforced by the admin RPC  *(was #60 in the parked pre-merge review — renumbered on merge, where #60 was already taken)*
 **From:** Module 3 audit · **Financial correctness**
 
@@ -2174,6 +2167,15 @@ to exist. A failure to persist completion or failure state cannot be acknowledge
 webhook delivery; the route returns HTTP 500 and Whop can retry. Known-tenant `payment.succeeded`
 events already reject a missing invoice instead of marking themselves processed. The live signed
 webhook verifier and repository gates pass.
+
+### 90. ✅ Manual settlement is atomic, targeted, and rejects overpayment
+**From:** Module 3 audit · **Belongs to:** Module 3 manual billing · **Resolved:** 2026-09-03
+
+The service-role RPC locks the invoice, sums successful payments, rejects amounts above the
+outstanding balance, inserts the payment, settles the invoice, and changes only the invoice's own
+past-due or suspended subscription in one transaction. `npm run verify:settlement` drove the real
+admin route and passed overpayment rollback, partial payment, final settlement, unrelated
+subscription protection, duplicate-reference handling, and the no-overpayment invariant.
 
 ---
 
