@@ -8,6 +8,7 @@ import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { audit } from "@/lib/audit/log";
 import { buildInviteUrl, generateInviteToken, hashInviteToken, inviteExpiryFromNow } from "@/lib/users/invitations";
 import { sendInvitationEmail } from "@/lib/email/sendInvitationEmail";
+import { configuredAppOrigin } from "@/lib/urls/origin";
 
 export async function GET() {
   const auth = await requireTenant(["owner"]);
@@ -33,6 +34,7 @@ export async function POST(request: NextRequest) {
   const { name, email, role } = parsed.data;
   const token = generateInviteToken();
   const expiresAt = await inviteExpiryFromNow();
+  const origin = configuredAppOrigin("agent");
   const supabase = getSupabaseServiceClient();
   const entitlement = await getEntitlement(auth.context.tenantId);
   const { data, error } = await supabase.rpc("tenant_invite_user_with_limit", {
@@ -54,7 +56,6 @@ export async function POST(request: NextRequest) {
   }
 
   const result = Array.isArray(data) ? data[0] : data;
-  const origin = process.env.NEXT_PUBLIC_AGENT_APP_URL || process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
   const inviteUrl = buildInviteUrl(token, origin);
   const { delivered } = await sendInvitationEmail({ to: email, name, inviteUrl, expiresAt, userId: result.user_id, tenantId: result.tenant_id });
 

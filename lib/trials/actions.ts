@@ -52,7 +52,7 @@ export async function extendTrial(subscriptionId: string, days: number): Promise
 
   if (trial.whop_membership_id) {
     try {
-      const provider = buildProvider("whop");
+      const provider = buildProvider("whop", { tenantId: trial.tenant_id });
       if (provider instanceof WhopProvider) {
         await provider.addFreeDays(trial.whop_membership_id, days);
       }
@@ -117,7 +117,7 @@ export async function convertTrialNow(subscriptionId: string): Promise<{ charged
   const companyId = process.env.WHOP_ACCOUNT_ID;
   if (!companyId) throw new TrialError("WHOP_ACCOUNT_ID is not set.");
 
-  const whop = buildProvider("whop");
+  const whop = buildProvider("whop", { tenantId: trial.tenant_id });
   if (!(whop instanceof WhopProvider)) throw new TrialError("Converting requires the Whop provider.");
 
   await whop.createInvoice({
@@ -142,7 +142,7 @@ export async function cancelTrial(subscriptionId: string, reason: string): Promi
 
   if (trial.whop_membership_id) {
     try {
-      const provider = buildProvider("whop");
+      const provider = buildProvider("whop", { tenantId: trial.tenant_id });
       if (provider instanceof WhopProvider) {
         await provider.pauseMembership(trial.whop_membership_id);
       }

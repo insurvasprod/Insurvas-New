@@ -25,6 +25,7 @@ export default async function CreditNotesPage() {
   const notes = (data ?? []) as unknown as CreditNoteRow[];
   const pending = notes.filter((n) => n.status === "pending_approval");
   const failed = notes.filter((n) => n.status === "failed");
+  const providerPending = notes.filter((n) => n.reconciliation_state === "provider_pending");
 
   return (
     <div className="space-y-6">
@@ -55,6 +56,20 @@ export default async function CreditNotesPage() {
             <p className="mt-1 text-sm text-muted-foreground">
               The credit note is kept in <code>failed</code> so the attempt is on record. Investigate before
               retrying — the money may or may not have moved.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {providerPending.length > 0 && (
+        <Card className="border-[var(--color-warning)]/40">
+          <CardContent>
+            <p className="text-sm font-medium text-[var(--color-warning)]">
+              {providerPending.length} refund{providerPending.length === 1 ? " is" : "s are"} awaiting local reconciliation
+            </p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              The provider may already have accepted the refund. Retry reconciliation to check the same idempotent
+              request; do not raise a second credit note.
             </p>
           </CardContent>
         </Card>

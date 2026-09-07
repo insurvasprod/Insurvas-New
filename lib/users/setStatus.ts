@@ -47,19 +47,24 @@ export async function setUserStatus(
     return NextResponse.json({ error: `This user is already ${target}` }, { status: 409 });
   }
 
-  const { error } = await supabase
-    .from("users")
-    .update({
-      status: target,
-      // The CHECK constraint requires these to move together with the status.
-      suspended_at: target === "suspended" ? new Date().toISOString() : null,
-      suspension_reason: target === "suspended" ? (reason ?? null) : null,
-    })
-    .eq("id", userId);
+  const { data, error } = await supabase.rpc("admin_set_user_status", {
+    p_user_id: userId,
+    p_status: target,
+    p_reason: reason ?? null,
+  });
 
   if (error) {
+    if (/USER_ALREADY_IN_STATE|USER_TRANSITION_NOT_ALLOWED/i.test(error.message ?? "")) {
+      return NextResponse.json({ error: "That user cannot move to this state from their current state" }, { status: 409 });
+    }
+    if (/seat_limit_reached:(\d+):(\d+)/i.test(error.message ?? "")) {
+      const [, used, max] = /seat_limit_reached:(\d+):(\d+)/i.exec(error.message ?? "")!;
+      return NextResponse.json({ error: `This tenant is using all ${max} seats (${used} in use). Upgrade the plan or deactivate another user.` }, { status: 409 });
+    }
     return NextResponse.json({ error: "Could not update this user's state" }, { status: 500 });
   }
+
+  if (!data) return NextResponse.json({ error: "Could not update this user's state" }, { status: 500 });
 
   await audit({
     actorId: auth.session.sub,

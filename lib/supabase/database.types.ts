@@ -663,6 +663,11 @@ export type Database = {
           invoice_id: string | null;
           number: string;
           provider_refund_id: string | null;
+          reconciliation_attempts: number;
+          reconciliation_state: string;
+          provider_succeeded_at: string | null;
+          reconciled_at: string | null;
+          last_reconciliation_error: string | null;
           reason_code: Database["public"]["Enums"]["credit_reason"];
           reason_text: string | null;
           rejected_reason: string | null;
@@ -681,6 +686,11 @@ export type Database = {
           invoice_id?: string | null;
           number: string;
           provider_refund_id?: string | null;
+          reconciliation_attempts?: number;
+          reconciliation_state?: string;
+          provider_succeeded_at?: string | null;
+          reconciled_at?: string | null;
+          last_reconciliation_error?: string | null;
           reason_code: Database["public"]["Enums"]["credit_reason"];
           reason_text?: string | null;
           rejected_reason?: string | null;
@@ -696,6 +706,11 @@ export type Database = {
           approved_by?: string | null;
           failure_reason?: string | null;
           provider_refund_id?: string | null;
+          reconciliation_attempts?: number;
+          reconciliation_state?: string;
+          provider_succeeded_at?: string | null;
+          reconciled_at?: string | null;
+          last_reconciliation_error?: string | null;
           rejected_reason?: string | null;
           status?: Database["public"]["Enums"]["credit_note_status"];
         };
@@ -947,7 +962,7 @@ export type Database = {
           created_at: string;
           id: string;
           included_qty: number | null;
-          invoice_id: string;
+          invoice_id: string | null;
           kind: Database["public"]["Enums"]["invoice_line_kind"];
           label: string;
           position: number;
@@ -2608,6 +2623,7 @@ export type Database = {
           id: string;
           last_login_at: string | null;
           name: string;
+          session_version: number;
           // Null until an invited user sets one via their invite link (SA-1.2).
           password_hash: string | null;
           phone: string | null;
@@ -2621,6 +2637,7 @@ export type Database = {
           id?: string;
           last_login_at?: string | null;
           name: string;
+          session_version?: number;
           password_hash?: string | null;
           phone?: string | null;
           status?: Database["public"]["Enums"]["user_status"];
@@ -2633,6 +2650,7 @@ export type Database = {
           id?: string;
           last_login_at?: string | null;
           name?: string;
+          session_version?: number;
           password_hash?: string | null;
           phone?: string | null;
           status?: Database["public"]["Enums"]["user_status"];
@@ -2864,6 +2882,38 @@ export type Database = {
           old_role: Database["public"]["Enums"]["tenant_user_role"];
         }[];
       };
+      admin_update_user_with_email_change: {
+        Args: {
+          p_created_by: string;
+          p_expires_at: string;
+          p_name: string;
+          p_phone: string | null;
+          p_requested_email: string;
+          p_role: Database["public"]["Enums"]["tenant_user_role"];
+          p_token_hash: string;
+          p_user_id: string;
+        };
+        Returns: {
+          email_change_created: boolean;
+          new_email: string;
+          new_name: string;
+          new_phone: string | null;
+          new_role: Database["public"]["Enums"]["tenant_user_role"];
+          old_email: string;
+          old_name: string;
+          old_phone: string | null;
+          old_role: Database["public"]["Enums"]["tenant_user_role"];
+          requested_email: string;
+        }[];
+      };
+      admin_replace_user_token: {
+        Args: { p_created_by: string; p_expires_at: string; p_purpose: Database["public"]["Enums"]["user_token_purpose"]; p_token_hash: string; p_user_id: string };
+        Returns: { email: string; name: string; token_id: string }[];
+      };
+      admin_set_user_status: {
+        Args: { p_reason?: string | null; p_status: Database["public"]["Enums"]["user_status"]; p_user_id: string };
+        Returns: { new_status: Database["public"]["Enums"]["user_status"]; old_status: Database["public"]["Enums"]["user_status"] }[];
+      };
       tenant_invite_user: {
         Args: {
           p_created_by: string;
@@ -3066,6 +3116,37 @@ export type Database = {
           status: Database["public"]["Enums"]["credit_note_status"];
         }[];
       };
+      claim_credit_note_refund: {
+        Args: { p_credit_note_id: string };
+        Returns: {
+          id: string;
+          number: string;
+          tenant_id: string;
+          invoice_id: string | null;
+          amount_cents: number;
+          provider_refund_id: string | null;
+          reconciliation_state: string;
+        }[];
+      };
+      apply_credit_note_balance: {
+        Args: { p_credit_note_id: string };
+        Returns: {
+          balance_cents: number;
+          status: Database["public"]["Enums"]["credit_note_status"];
+        }[];
+      };
+      finish_credit_note_refund: {
+        Args: { p_credit_note_id: string; p_provider_refund_id: string };
+        Returns: boolean;
+      };
+      fail_credit_note_refund: {
+        Args: { p_credit_note_id: string; p_reason: string };
+        Returns: boolean;
+      };
+      mark_credit_note_provider_pending: {
+        Args: { p_credit_note_id: string; p_reason: string };
+        Returns: boolean;
+      };
       adjust_tenant_credit: {
         Args: { p_tenant_id: string; p_delta_cents: number };
         Returns: number;
@@ -3090,6 +3171,10 @@ export type Database = {
           subscription_id: string | null;
           subscription_activated: boolean;
         }[];
+      };
+      admin_detach_addon_for_subscription: {
+        Args: { p_subscription_id: string; p_subscription_addon_id: string };
+        Returns: boolean;
       };
       admin_set_subscription_pause_state: {
         Args: { p_subscription_id: string; p_pause: boolean };

@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { audit } from "@/lib/audit/log";
 import { buildPartnerInviteUrl, generateInviteToken, hashInviteToken, inviteExpiryFromNow } from "@/lib/users/invitations";
 import { sendInvitationEmail } from "@/lib/email/sendInvitationEmail";
+import { configuredAppOrigin } from "@/lib/urls/origin";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import { partnerUserInviteSchema } from "@/lib/partnerAuth/schemas";
 import { invitePartnerUser, listPartnerUsers } from "@/lib/partnerUsers/service";
@@ -40,9 +41,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   const token = generateInviteToken();
   const expiresAt = await inviteExpiryFromNow();
+  const origin = configuredAppOrigin("partner");
   try {
     const result = await invitePartnerUser({ tenantId: auth.context.tenantId, partnerId, ...parsed.data, tokenHash: hashInviteToken(token), expiresAt: expiresAt.toISOString(), maxPartnerUsers: auth.entitlement.limits.max_partner_users });
-    const origin = process.env.NEXT_PUBLIC_PARTNER_APP_URL || process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
     const inviteUrl = buildPartnerInviteUrl(token, origin);
     const { delivered } = await sendInvitationEmail({ to: result.email, name: result.name, inviteUrl, expiresAt, userId: result.user_id, tenantId: result.tenant_id });
     await audit({ actorType: "tenant", actorId: auth.context.userId, action: "tenant.partner_user_invited", targetType: "partner_user", targetId: result.user_id, metadata: { partnerId, email: result.email, role: result.role, delivered, actorPlane: "agent" }, request });

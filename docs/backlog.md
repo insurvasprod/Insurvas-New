@@ -20,8 +20,6 @@ password, directly-created users get an invite link.
 **Fix:** drop the password field from Create Tenant and issue an invite via the same
 `admin_create_user` / `user_invitations` machinery SA-1.2 built. Roughly an hour's work.
 
----
-
 ## 🟠 Descoped by decision
 
 ### 76. Nine of the eleven settings the ticket lists were not created  *(was #53 on the module-4 branch — renumbered on merge, where main had already used #53 for something else)*
@@ -202,19 +200,6 @@ SA-5.3 added a second caller with the same shape: `scripts/send-trial-reminders.
 real reminder — the customer's own plan, price and end date — decides delivery, and records a row
 with `delivered: false`. Everything except the transport is real, and the column says which it was,
 so the day keys arrive nothing about the job changes.
-
-### 6. Users list still reads the wrong plan source — STILL OPEN
-**From:** SA-1.1 · ⚠️ **Now definitely wrong, not just empty. Worth doing next.**
-
-The Users list's Plan column (and its filter) read `tenants.plan_code` — a free-text column from
-SA-0.2 that nothing writes. SA-2.7 completed the real source of truth: `subscriptions.plan_id` →
-`plans`, which the tenant detail page reads correctly.
-
-**SA-2.7 did not repoint the Users screen**, so a tenant can now genuinely be on Plan B while the
-Users list shows "No plan yet". Two notions of the same fact, and the screen reads the dead one.
-
-Fix: repoint `admin_user_list.plan_code` at the subscription's plan, then drop `tenants.plan_code`
-rather than leaving a decoy column that will mislead the next person.
 
 ### 20. Removing an archived feature from a plan needs a detour
 **From:** SA-2.3 · Minor
@@ -985,126 +970,6 @@ the formerly failing configuration route, agent-template, credit-margin, and per
 checks. The LA-0 RLS suite is included in that count.
 
 No new backlog item was created for the re-run itself.
-### 89. Invoice creation and coupon consumption are not atomic  *(was #58 in the parked pre-merge review — renumbered on merge, where #58 was already taken)*
-**From:** Module 3 audit · **Financial correctness**
-
-The invoice commits before `consume_coupon_period`. If consumption fails, retry finds the existing
-invoice and never consumes the period. Move both effects into one idempotent transaction. See M3-3.
-
-### 92. Refund and credit execution needs recoverable reconciliation states  *(was #61 in the parked pre-merge review — renumbered on merge, where #61 was already taken)*
-**From:** Module 3 audit · **Financial correctness**
-
-Whop can succeed while the following local update fails; local credit adjustment errors can also be
-reported as success. Add checked writes, idempotent retries, and a provider-success/local-reconcile
-state. See M3-6.
-
-### 93. Provider-call logging covers only part of Whop  *(was #62 in the parked pre-merge review — renumbered on merge, where #62 was already taken)*
-**From:** SA-3.1 audit · **Observability**
-
-Whop-specific plan, promo, invoice, refundability, membership, and free-day methods bypass the
-logging decorator. Live `provider_calls` contains only three connection-test lookups. See M3-9.
-
-### 63. Cross-tenant billing relationships are not enforced
-**From:** Module 3 audit · **Data integrity**
-
-Custom invoices can pair one tenant with another tenant's subscription, and credit notes can pair a
-tenant with another tenant's invoice. No live mismatch exists, but both RPCs permit one. See M3-10.
-
-### 94. Credit-to-free-days conversion uses the monthly price for every cycle  *(was #64 in the parked pre-merge review — renumbered on merge, where #64 was already taken)*
-**From:** SA-3.8 audit · **Latent billing defect**
-
-The not-yet-wired redemption function ignores the subscription billing cycle. Correct this before
-automatic credit consumption is enabled. See M3-11.
-
-### 65. Plan versioning drops limits, meters and available add-ons
-**From:** Module 2 audit · **Release blocker**
-
-`admin_create_plan_version` copies features and prices only. A new live-plan version loses seat and
-carrier limits, all meter allowances, and plan add-on availability. See M2-1 in `bugs_sa.md`.
-
-### 95. Entitlement refresh failures are acknowledged as successful changes  *(was #66 in the parked pre-merge review — renumbered on merge, where #66 was already taken)*
-**From:** SA-2.7 / SA-2.8 audit · **Access-control correctness**
-
-`rebuildEntitlement` catches and logs failures, so a downgrade, suspension, cancellation, feature
-removal or add-on removal can return success while stale access remains cached. See M2-2.
-
-### 96. Add-on meter credits do not reach enforcement or usage display  *(was #67 in the parked pre-merge review — renumbered on merge, where #67 was already taken)*
-**From:** SA-2.6 audit · **Entitlement correctness**
-
-The resolver stacks add-on credits, but `check_meter_capacity` and the usage screen read plan meters
-only. The displayed entitlement and enforced allowance can disagree. See M2-3.
-
-### 68. Add-on detach is not bound to the route subscription
-**From:** SA-2.6 audit · **Cross-tenant/data-integrity risk**
-
-An attachment ID from subscription B can be sent through subscription A's URL. B is modified while
-A is audited and refreshed, leaving B's cached entitlement stale. See M2-4.
-
-### 69. Subscription transition rules are enforced only by the UI
-**From:** SA-2.7 audit · **Access-control correctness**
-
-A crafted `resume` can activate a cancelled or suspended subscription; cancel/pause/change-plan
-also accept invalid source states. Move the state machine into a locked RPC. See M2-5.
-
-### 70. Archived plans are still assignable by API
-**From:** SA-2.2 / SA-2.7 audit · **Product-control bypass**
-
-The picker hides archived plans, but assignment and change-plan RPCs do not reject them. See M2-6.
-
-### 97. New individual plans are not seeded with their mandatory one-seat limit  *(was #71 in the parked pre-merge review — renumbered on merge, where #71 was already taken)*
-**From:** SA-2.2 / SA-2.5 audit · **Plan configuration defect**
-
-Plan creation inserts no `plan_limits` or `plan_meters`, and no editor writes those tables. A new
-individual plan is unlimited until Supabase is edited manually. See M2-7.
-
-### 98. Entitlement verification does not pin the intended plan contents  *(was #72 in the parked pre-merge review — renumbered on merge, where #72 was already taken)*
-**From:** SA-2.8 audit · **Test gap**
-
-`verify-entitlements` reads its expected list from `plan_features`, so an incorrectly configured
-plan still passes. Pin reviewed arrays for Plan A/B/C and assert all three exist. See M2-10.
-
-### 99. Edit User and token replacement can partially commit  *(was #74 in the parked pre-merge review — renumbered on merge, where #74 was already taken)*
-**From:** SA-1.3 audit · **Transactional correctness**
-
-Name/phone/role can commit before a duplicate-email conflict is returned. Replacement links delete
-the old token before the new token commits; Resend Invite can also delete other token purposes.
-Make these operations atomic and check every result. See M1-3/M1-8.
-
-### 100. Lifecycle changes block sessions but do not revoke them  *(was #75 in the parked pre-merge review — renumbered on merge, where #75 was already taken)*
-**From:** SA-1.4 audit · **Authentication correctness**
-
-The live status check blocks the old cookie while a user is inactive/suspended, but the same 12-hour
-cookie works again after reactivation. Add a per-user session version or revocation timestamp and
-advance it on every state change. See M1-4.
-
-### 101. User reactivation bypasses seat limits and lifecycle transition rules  *(was #76 in the parked pre-merge review — renumbered on merge, where #76 was already taken)*
-**From:** SA-1.4 / SA-2.5 audit · **Licensing and state-machine correctness**
-
-Activation is a direct update with no seat check, and all four lifecycle endpoints accept source
-states that their buttons hide. Put the seat check and allowed transition graph in one locked RPC.
-See M1-5/M1-7.
-
-### 102. The database does not guarantee that every tenant keeps an owner  *(was #77 in the parked pre-merge review — renumbered on merge, where #77 was already taken)*
-**From:** SA-1.2 / SA-1.3 audit · **Authorization invariant**
-
-A new tenant can be created with its only user as `producer`; concurrent demotions lock different
-membership rows and can both pass the owner count. Force the first member to owner and serialize
-role changes with a tenant-scoped lock. See M1-6.
-
-### 103. Module 1 links still fall back to the request Host  *(was #78 in the parked pre-merge review — renumbered on merge, where #78 was already taken)*
-**From:** SA-1.2 / SA-1.3 audit · **Security hardening**
-
-Invitation, reset, and email-change routes still use `request.nextUrl.origin` when the canonical URL
-is missing. Reuse SA-5.1's strict configured-origin helper and fail before mutating tokens. See M1-9.
-
-### 104. Login activity can silently stop recording  *(was #79 in the parked pre-merge review — renumbered on merge, where #79 was already taken)*
-**From:** SA-1.5 audit · **Observability**
-
-Supabase write errors are returned, not thrown, but login-event and last-login writes ignore the
-returned errors. Keep authentication available while surfacing and retrying telemetry failures.
-See M1-10.
-
-
 ### 105. Tenant users have no self-service account recovery — deferred to LA-0
 **From:** the SA-4.11 email audit · **Deferred by decision on 2026-08-30**
 
@@ -1170,6 +1035,127 @@ exists; it does not block the current dynamic-form submission path.
 ## ✅ Resolved
 
 *Terse log — details live in git history.*
+
+### 63. ✅ Billing relationships are tenant-scoped in the database
+**From:** Module 3 audit · **Belongs to:** Module 3 billing integrity · **Resolved:** 2026-09-03
+
+Database triggers reject an invoice paired with another tenant's subscription or a credit note paired
+with another tenant's invoice. The follow-up trigger migration is table-safe for both row shapes. A
+rollback-wrapped live SQL probe rejected both mismatches.
+
+### 94. ✅ Free-day credits use the subscription billing cycle
+**From:** SA-3.8 audit · **Belongs to:** Module 3 credit-note handling · **Resolved:** 2026-09-03
+
+Credit-to-free-days conversion now uses the subscription's monthly, quarterly, or yearly price
+through `priceForCycle`, rather than always using the monthly price. Credit-note verification passes.
+
+### 65. ✅ Plan versions retain the complete commercial configuration
+**From:** Module 2 audit · **Belongs to:** Module 2 plan management · **Resolved:** 2026-09-03
+
+Plan version creation now copies features, prices, limits, meters, and available add-ons. The live
+`npm run verify:plan-version` suite passed every category.
+
+### 95. ✅ Entitlement refresh failures are no longer swallowed
+**From:** SA-2.7 / SA-2.8 audit · **Belongs to:** Module 2 entitlement lifecycle · **Resolved:** 2026-09-03
+
+Entitlement rebuild failures are logged and rethrown, and credit execution no longer ignores them,
+so a source mutation cannot report success while stale access remains cached.
+
+### 96. ✅ Add-on meter credits reach display and enforcement
+**From:** SA-2.6 audit · **Belongs to:** Module 2 add-ons and metering · **Resolved:** 2026-09-03
+
+The resolver, usage display, and meter-capacity check use the same plan-plus-add-on allowance.
+`npm run verify:addon-meters` passed plan-only, attached, agreement, and detach checks.
+
+### 154. ✅ Add-on detach is scoped to the subscription URL
+**From:** SA-2.6 audit · **Belongs to:** Module 2 add-ons · **Resolved:** 2026-09-03
+
+The admin DELETE route calls the subscription-scoped detach RPC. A live rollback-wrapped probe
+confirmed that subscription A cannot detach subscription B's attachment.
+
+### 155. ✅ Subscription transitions are guarded in SQL
+**From:** SA-2.7 audit · **Belongs to:** Module 2 subscription lifecycle · **Resolved:** 2026-09-03
+
+Locked subscription RPCs reject invalid source states and preserve valid pause/resume behavior.
+`npm run verify:transitions` passed crafted invalid transitions and valid admin-route transitions.
+
+### 70. ✅ Archived plans are rejected by subscription APIs
+**From:** SA-2.2 / SA-2.7 audit · **Belongs to:** Module 2 plan and subscription lifecycle · **Resolved:** 2026-09-03
+
+Assignment and change-plan RPCs reject archived or missing plans before writing. The live transition
+verifier attempted both archived-plan operations and confirmed the rejection.
+
+### 97. ✅ Individual plans receive their mandatory one-seat default
+**From:** SA-2.2 / SA-2.5 audit · **Belongs to:** Module 2 plan management · **Resolved:** 2026-09-03
+
+The plan-default trigger and backfill ensure an individual plan has `max_seats = 1` unless an
+explicit limit exists. The live plan-version verifier confirmed newly-created behavior.
+
+### 98. ✅ Entitlement verification pins reviewed plan contents
+**From:** SA-2.8 audit · **Belongs to:** Module 2 entitlement verification · **Resolved:** 2026-09-03
+
+`verify-entitlements` now pins reviewed Basic, Pro, and Advance feature arrays and asserts all three
+plans exist before comparing live snapshots. Exact feature and suspended-read-only checks pass.
+
+### 99. ✅ Admin user edits and token replacement are atomic
+**From:** SA-1.3 audit · **Belongs to:** Module 1 admin user management · **Resolved:** 2026-09-03
+
+Locked database functions now cover profile/role plus email-change edits, invite replacement, and
+password-reset replacement. Live duplicate-email and duplicate-token probes confirmed no partial
+mutation.
+
+### 100. ✅ Lifecycle changes revoke old user sessions
+**From:** SA-1.4 audit · **Belongs to:** Module 1 authentication · **Resolved:** 2026-09-03
+
+Users carry a session version; lifecycle changes increment it, new tenant/partner tokens carry it,
+and guards compare it on every request. The live user-integrity verifier confirmed old-session
+rejection after reactivation and fresh-session success.
+
+### 101. ✅ User reactivation enforces state transitions and seat limits
+**From:** SA-1.4 / SA-2.5 audit · **Belongs to:** Module 1 admin user management · **Resolved:** 2026-09-03
+
+`admin_set_user_status` is a locked SQL transition function that enforces allowed states, seat
+limits, suspension fields, and session invalidation. Live failure-path checks pass.
+
+### 102. ✅ Owner preservation is enforced by user-management operations
+**From:** SA-1.2 / SA-1.3 audit · **Belongs to:** Module 1 tenant membership · **Resolved:** 2026-09-03
+
+Admin tenant creation forces the first membership to owner, and role changes lock the tenant before
+checking the last-owner invariant. The live user-integrity verifier confirmed both behaviors.
+
+### 103. ✅ Credential links require a configured application origin
+**From:** SA-1.2 / SA-1.3 audit · **Belongs to:** Module 1 authentication links · **Resolved:** 2026-09-03
+
+Admin, agent, and partner invite/reset/email-change routes use the server-only configured-origin
+helper and validate it before token creation. No route falls back to `request.nextUrl.origin`.
+
+### 104. ✅ Login telemetry retries without blocking authentication
+**From:** SA-1.5 audit · **Belongs to:** Module 1 authentication observability · **Resolved:** 2026-09-03
+
+Login-event inserts and last-login updates check Supabase errors, retry once, and log a visible
+server error after retry while preserving the authentication response across admin, agent, partner,
+and signup flows.
+
+### 156. ✅ Users list now reads the live subscription plan
+**From:** SA-1.1 · **Belongs to:** SA-1.1 · **Resolved:** 2026-09-03
+
+The `admin_user_list` view and Users plan-filter options now derive `plan_code` from the tenant's
+non-cancelled subscription and its `plans` row. The migration is applied live; the current 14 view
+rows all match their live subscription plan.
+
+### 89. ✅ Invoice creation and coupon consumption are atomic
+**From:** Module 3 audit · **Belongs to:** Module 3 invoice and coupon handling · **Resolved:** 2026-09-03
+
+The invoice/coupon operation now uses one idempotent database transaction, so a failed coupon
+consumption cannot leave an invoice committed without consuming the matching period. The live
+coupon verifier passed replay and counter-restoration checks.
+
+### 93. ✅ Whop provider calls carry tenant context and are logged
+**From:** SA-3.1 audit · **Belongs to:** Module 3 provider observability · **Resolved:** 2026-09-03
+
+Whop client construction accepts the tenant context and all known tenant billing, checkout, trial,
+credit, invoice, and billing-mode call sites pass it through to provider-call logging. The live
+membership lookup verifier passed positive, wrong-plan, unknown-tenant, and no-throw checks.
 
 ### 109. ✅ Migration deep semantic verification no longer times out or misreports screening policies
 **From:** repository verification audit · **Belongs to:** repository verification · **Resolved:** 2026-09-01
@@ -2097,15 +2083,6 @@ attempted to delete partners before restrictive `partner_users` rows and ignored
 The cleanup order now deletes memberships first. All matching `@invalid.test` users and the exact
 synthetic tenant-name patterns were inspected, removed, and re-counted at zero.
 
-### 151. ✅ LA-1.17 sustained-load timing retry returned below the two-second contract
-**From:** LA-1 module audit · **Belongs to:** LA-1.17 · **Resolved:** 2026-09-03
-
-The first aggregate run after pagination measured one 250-row request at 2,123 ms while the live
-database was under concurrent verification load, 123 ms over the ticket limit. The visible retry
-passed, the focused pagination suite passed, and the underlying database plan measured 77.7 ms on
-5,000 leads after the latest-deal N+1 query was removed. Keep the threshold as a hard CI assertion;
-a repeatable isolated failure would require reducing the first page or profiling network latency.
-
 ### 152. 🔵 Shared LA-1 workspace UI needs authenticated browser verification
 **From:** LA-1 module UI improvement pass · **Belongs to:** LA-1.16 / LA-1.18–LA-1.25 · **Gap recorded:** 2026-09-03
 
@@ -2178,6 +2155,27 @@ subscription protection, duplicate-reference handling, and the no-overpayment in
 and `billing_cycle`, and returns named rejection results before creating a redemption. The live
 coupon verifier bypasses the UI and confirms both an incompatible-plan and incompatible-cycle
 coupon are refused without consuming a redemption.
+
+### 92. ✅ Refund and credit execution have recoverable reconciliation states
+**From:** Module 3 audit · **Belongs to:** Module 3 credit-note handling · **Resolved:** 2026-09-03
+
+Credit-note execution now records an explicit reconciliation state and attempt count. Credits and
+waivers apply their balance and mark the note reconciled in one locked transaction, so a retry
+cannot apply the same credit twice. Refund execution claims a note in a locked service-role
+function, reuses the same provider idempotency key on retry, preserves provider-pending state
+when the provider outcome is unknown or local reconciliation fails, and exposes an audited admin
+retry route. Definite provider failures are recorded as failed with a reason. The live credit-note
+verification passed the failure-state and replay checks.
+
+### 157. ✅ LA-1.17 cold first-page performance is within contract
+**From:** LA-1 module audit · **Belongs to:** LA-1.17 · **Resolved:** 2026-09-03
+
+The partner pipeline RPC pages before display enrichment and uses scoped 16MB `work_mem` for its
+5,000-row bounded aggregate window. Two consecutive live runs passed the first-page requirement:
+250 rows returned from 5,000+ partner leads in under two seconds, while tenant/partner isolation,
+filters, masking, pagination, and fail-closed session checks also passed. The migration is committed
+as `supabase/migrations/20260903360000_la_1_17_pipeline_work_mem.sql` and applied to the connected
+Supabase project.
 
 ---
 

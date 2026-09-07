@@ -8,6 +8,7 @@ import { fetchPlans } from "@/lib/plans/queries";
 import { publicSignupSchema } from "@/lib/signup/schemas";
 import { buildVerificationUrl, createEmailVerification } from "@/lib/signup/verification";
 import { documentsRequiredAtSignup, recordAcceptances, verifySignupAcceptance } from "@/lib/legal/acceptance";
+import { recordLastLogin } from "@/lib/loginEvents/record";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import {
   signTenantSessionToken,
@@ -110,10 +111,7 @@ export async function POST(request: NextRequest) {
   // who signed up and never used the login FORM — so SA-5.3's trials screen would report an
   // actively-engaged brand-new customer as "never signed in" and prompt a needless phone call.
   // Found by driving the whole journey in a browser.
-  await supabase
-    .from("users")
-    .update({ last_login_at: new Date().toISOString() })
-    .eq("id", created.user_id);
+  await recordLastLogin("user", created.user_id);
 
   const token = await signTenantSessionToken(created.user_id, created.tenant_id);
   const response = NextResponse.json({

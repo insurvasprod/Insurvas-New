@@ -28,17 +28,31 @@ export async function resolvePartnerContext(): Promise<PartnerContext | null> {
   if (!session) return null;
 
   const supabase = getSupabaseServiceClient();
-  const [{ data: membership }, { data: user }, { data: partner }] = await Promise.all([
-    supabase.from("partner_users").select("tenant_id, partner_id, role, status, accepted_at").eq("tenant_id", session.tenantId).eq("partner_id", session.partnerId).eq("user_id", session.sub).maybeSingle<{ tenant_id: string; partner_id: string; role: string; status: string; accepted_at: string | null }>(),
-    supabase.from("users").select("status").eq("id", session.sub).maybeSingle<{ status: string }>(),
-    supabase.from("partners").select("name, status, timezone").eq("id", session.partnerId).eq("tenant_id", session.tenantId).maybeSingle<{ name: string; status: PartnerContext["partnerStatus"]; timezone: string }>(),
-  ]);
+  const { data: membership } = await supabase
+    .from("partner_users")
+    .select("tenant_id, partner_id, role, status, accepted_at, users!inner(status, session_version), partners!inner(name, status, timezone)")
+    .eq("tenant_id", session.tenantId)
+    .eq("partner_id", session.partnerId)
+    .eq("user_id", session.sub)
+    .maybeSingle();
 
-  if (!membership || membership.status !== "active" || !membership.accepted_at || !isPartnerRole(membership.role)) return null;
-  if (!user || user.status !== "active") return null;
-  if (!partner || partner.status === "offboarded") return null;
+  type PartnerMembershipRow = {
+    tenant_id: string;
+    partner_id: string;
+    role: string;
+    status: string;
+    accepted_at: string | null;
+    users: { status: string; session_version: number };
+    partners: { name: string; status: PartnerContext["partnerStatus"]; timezone: string };
+  };
+  const row = membership as unknown as PartnerMembershipRow | null;
 
-  return { userId: session.sub, tenantId: session.tenantId, partnerId: session.partnerId, role: membership.role, partnerName: partner.name, partnerTimezone: partner.timezone, partnerStatus: partner.status };
+  if (!row || row.status !== "active" || !row.accepted_at || !isPartnerRole(row.role)) return null;
+  if (row.users.status !== "active") return null;
+  if (session.sessionVersion !== undefined && session.sessionVersion !== row.users.session_version) return null;
+  if (row.partners.status === "offboarded") return null;
+
+  return { userId: session.sub, tenantId: session.tenantId, partnerId: session.partnerId, role: row.role, partnerName: row.partners.name, partnerTimezone: row.partners.timezone, partnerStatus: row.partners.status };
 }
 
 export async function requirePartner(allowedRoles?: readonly PartnerRole[]): Promise<{ context: PartnerContext } | NextResponse> {

@@ -51,6 +51,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       });
 
       if (error) {
+        if (/plan_archived|plan_not_found/.test(error.message ?? "")) {
+          return NextResponse.json({ error: "That plan is not available for new subscriptions" }, { status: 409 });
+        }
         if (error.message?.includes("cycle_not_offered")) {
           return NextResponse.json(
             { error: "That plan isn't sold on this subscription's billing cycle" },
@@ -136,7 +139,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         p_immediate: parsed.data.immediate,
       });
 
-      if (error) return NextResponse.json({ error: "Could not cancel the subscription" }, { status: 500 });
+      if (error) {
+        if (/subscription_state_not_cancellable|plan_archived|plan_not_found/.test(error.message ?? "")) {
+          return NextResponse.json({ error: "That subscription cannot be cancelled in its current state" }, { status: 409 });
+        }
+        return NextResponse.json({ error: "Could not cancel the subscription" }, { status: 500 });
+      }
 
       const result = Array.isArray(data) ? data[0] : data;
       if (result.cancelled_now) {

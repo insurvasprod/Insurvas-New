@@ -10,6 +10,7 @@ import {
   inviteExpiryFromNow,
 } from "@/lib/users/invitations";
 import { sendInvitationEmail } from "@/lib/email/sendInvitationEmail";
+import { configuredAppOrigin } from "@/lib/urls/origin";
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireAdminRole(["super_admin"]);
@@ -36,22 +37,24 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   const token = generateInviteToken();
   const expiresAt = await inviteExpiryFromNow();
+  const origin = configuredAppOrigin("agent");
 
-  // Supersede any prior invitations so an older link can't still be redeemed.
-  await supabase.from("user_invitations").delete().eq("user_id", id).is("accepted_at", null);
-
-  const { error } = await supabase.from("user_invitations").insert({
-    user_id: id,
-    token_hash: hashInviteToken(token),
-    expires_at: expiresAt.toISOString(),
-    created_by: auth.session.sub,
+  const { data: replacement, error } = await supabase.rpc("admin_replace_user_token", {
+    p_user_id: id,
+    p_purpose: "invite",
+    p_token_hash: hashInviteToken(token),
+    p_expires_at: expiresAt.toISOString(),
+    p_created_by: auth.session.sub,
   });
 
   if (error) {
+    if (/PASSWORD_ALREADY_SET|USER_REMOVED/i.test(error.message ?? "")) {
+      return NextResponse.json({ error: "This user is no longer waiting for an invitation" }, { status: 409 });
+    }
     return NextResponse.json({ error: "Could not create invitation" }, { status: 500 });
   }
 
-  const origin = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
+  if (!replacement) return NextResponse.json({ error: "Could not create invitation" }, { status: 500 });
   const inviteUrl = buildInviteUrl(token, origin);
   const { delivered } = await sendInvitationEmail({ to: user.email, name: user.name, inviteUrl, expiresAt });
 

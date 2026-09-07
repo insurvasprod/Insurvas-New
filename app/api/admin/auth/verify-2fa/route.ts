@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { audit } from "@/lib/audit/log";
-import { recordLoginEvent } from "@/lib/loginEvents/record";
+import { recordLastLogin, recordLoginEvent } from "@/lib/loginEvents/record";
 import { verify2faSchema } from "@/lib/adminAuth/schemas";
 import { verifyTotpCode } from "@/lib/adminAuth/totp";
 import { isAdminRole } from "@/lib/adminAuth/roles";
@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(GENERIC_ERROR, { status: 401 });
   }
 
-  await supabase.from("admin_users").update({ last_login_at: new Date().toISOString() }).eq("id", admin.id);
+  await recordLastLogin("admin", admin.id);
 
   // Both steps passed — this is the point the login actually succeeded.
   await recordLoginEvent({

@@ -15,10 +15,10 @@ function getSecret(): Uint8Array {
   return new TextEncoder().encode(secret);
 }
 
-export type PartnerSessionPayload = { sub: string; tenantId: string; partnerId: string };
+export type PartnerSessionPayload = { sub: string; tenantId: string; partnerId: string; sessionVersion?: number };
 
-export async function signPartnerSessionToken(userId: string, tenantId: string, partnerId: string): Promise<string> {
-  return new SignJWT({ tenantId, partnerId })
+export async function signPartnerSessionToken(userId: string, tenantId: string, partnerId: string, sessionVersion = 0): Promise<string> {
+  return new SignJWT({ tenantId, partnerId, sessionVersion })
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(userId)
     .setIssuedAt()

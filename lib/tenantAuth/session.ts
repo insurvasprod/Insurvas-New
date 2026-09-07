@@ -21,10 +21,11 @@ function getSecret(): Uint8Array {
 export type TenantSessionPayload = {
   sub: string; // user id
   tenantId: string;
+  sessionVersion?: number;
 };
 
-export async function signTenantSessionToken(userId: string, tenantId: string): Promise<string> {
-  return new SignJWT({ tenantId })
+export async function signTenantSessionToken(userId: string, tenantId: string, sessionVersion = 0): Promise<string> {
+  return new SignJWT({ tenantId, sessionVersion })
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(userId)
     .setIssuedAt()

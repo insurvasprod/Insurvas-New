@@ -131,7 +131,7 @@ export async function startCheckout(tenantId: string, couponCode?: string): Prom
   // trial lives on that plan.
   const mapping = await ensureWhopPlan(plan.id, selection.billing_cycle);
 
-  const provider = buildProvider("whop");
+  const provider = buildProvider("whop", { tenantId });
   if (!(provider instanceof WhopProvider)) throw new CheckoutError("Checkout requires the Whop provider.");
 
   const session = await provider.createCheckoutSession({

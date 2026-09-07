@@ -39,7 +39,7 @@ export async function setBillingMode(tenantId: string, mode: BillingMode): Promi
         : null;
   } else {
     try {
-      const whop = buildProvider("whop");
+      const whop = buildProvider("whop", { tenantId });
       if (whop instanceof WhopProvider) {
         if (mode === "manual") await whop.pauseMembership(subscription.whop_membership_id);
         else await whop.resumeMembership(subscription.whop_membership_id);

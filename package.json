@@ -97,7 +97,9 @@
     "callbacks:remind": "node --env-file=.env.local scripts/send-callback-reminders.mjs",
     "sla:run": "node --env-file=.env.local scripts/run-unclaimed-sla.mjs",
     "verify:unclaimed-sla": "node --env-file=.env.local scripts/verify-unclaimed-sla.mjs",
-    "verify:callbacks": "node --env-file=.env.local scripts/verify-callbacks.mjs"
+    "verify:callbacks": "node --env-file=.env.local scripts/verify-callbacks.mjs",
+    "verify:plan-version": "node --env-file=.env.local scripts/verify-plan-version-integrity.mjs",
+    "verify:user-integrity": "node --env-file=.env.local scripts/verify-user-integrity.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.99.0",

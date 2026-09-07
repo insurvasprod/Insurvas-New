@@ -104,3 +104,20 @@ export async function reopenExpiredLead(params: { tenantId: string; workItemId: 
   if (error || !data) throw new Error(error?.message ?? "Could not reopen lead");
   return data;
 }
+
+/**
+ * The public agent URL is keyed by lead id. Resolve its queue item on the server so the client
+ * never has to know that the database RPC is keyed by work-item id, and keep the tenant predicate
+ * beside the lookup so a hand-crafted cross-tenant lead id cannot be reopened.
+ */
+export async function reopenExpiredLeadByLeadId(params: { tenantId: string; leadId: string; actorId: string }) {
+  const queue = await db()
+    .from("lead_queue")
+    .select("id")
+    .eq("tenant_id", params.tenantId)
+    .eq("lead_id", params.leadId)
+    .maybeSingle();
+  if (queue.error) throw new Error(`Could not resolve lead queue item: ${queue.error.message}`);
+  if (!queue.data?.id) throw new Error("WORK_ITEM_NOT_FOUND");
+  return reopenExpiredLead({ tenantId: params.tenantId, workItemId: queue.data.id, actorId: params.actorId });
+}

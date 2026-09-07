@@ -22,6 +22,8 @@ export type CreditNoteRow = {
   reason_text: string | null;
   requested_by: string | null;
   created_at: string;
+  reconciliation_state?: string;
+  last_reconciliation_error?: string | null;
   tenants: { name: string } | null;
   invoices: { number: string } | null;
 };
@@ -62,6 +64,21 @@ export function CreditNotesTable({
     router.refresh();
   }
 
+  async function reconcile(note: CreditNoteRow) {
+    setBusy(note.id);
+    const res = await fetch(`/api/admin/credit-notes/${note.id}/reconcile`, { method: "POST" });
+    const body = await res.json().catch(() => null);
+    setBusy(null);
+
+    if (!res.ok) {
+      toast.error(body?.error ?? "Could not reconcile");
+      return;
+    }
+
+    toast.success(body.message ?? `${note.number} reconciled`);
+    router.refresh();
+  }
+
   return (
     <div className={tableShell}>
       <Table>
@@ -90,6 +107,7 @@ export function CreditNotesTable({
             notes.map((note) => {
               const isOwn = note.requested_by === currentAdminId;
               const pending = note.status === "pending_approval";
+              const providerPending = note.reconciliation_state === "provider_pending";
 
               return (
                 <TableRow key={note.id}>
@@ -104,12 +122,23 @@ export function CreditNotesTable({
                     )}
                   </TableCell>
                   <TableCell>
-                    <StatusChip tone={CREDIT_NOTE_TONE[note.status] ?? "neutral"} dot>
-                      {note.status.replace("_", " ")}
-                    </StatusChip>
+                    <div className="space-y-1">
+                      <StatusChip tone={providerPending ? "warning" : CREDIT_NOTE_TONE[note.status] ?? "neutral"} dot>
+                        {providerPending ? "provider pending" : note.status.replace("_", " ")}
+                      </StatusChip>
+                      {providerPending && note.last_reconciliation_error && (
+                        <span className="block max-w-[220px] text-xs text-muted-foreground">
+                          {note.last_reconciliation_error}
+                        </span>
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell className="text-right">
-                    {pending &&
+                    {providerPending ? (
+                      <Button size="sm" variant="outline" disabled={busy === note.id} onClick={() => reconcile(note)}>
+                        Retry reconciliation
+                      </Button>
+                    ) : pending &&
                       (isOwn ? (
                         // Shown rather than hidden: the person waiting needs to know WHY they
                         // cannot act, not merely find no button.

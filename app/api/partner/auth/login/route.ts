@@ -5,7 +5,7 @@ import { partnerLoginSchema } from "@/lib/partnerAuth/schemas";
 import { PARTNER_SESSION_COOKIE, partnerSessionCookieOptions, signPartnerSessionToken } from "@/lib/partnerAuth/session";
 import { verifyPassword } from "@/lib/password";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
-import { recordLoginEvent } from "@/lib/loginEvents/record";
+import { recordLastLogin, recordLoginEvent } from "@/lib/loginEvents/record";
 
 const DUMMY_HASH = "$2b$12$C6UzMDM.H6dfI/f/IKcEeOG1JDFsDLK7g7HDkVK6PmVNv7HDvXe5S";
 const GENERIC_ERROR = { error: "Invalid email or password" };
@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
 
   const { email, password } = parsed.data;
   const supabase = getSupabaseServiceClient();
-  const { data: user } = await supabase.from("users").select("id, password_hash, status").eq("email", email).maybeSingle<{ id: string; password_hash: string | null; status: string }>();
+  const { data: user } = await supabase.from("users").select("id, password_hash, status, session_version").eq("email", email).maybeSingle<{ id: string; password_hash: string | null; status: string; session_version: number }>();
   const passwordOk = await verifyPassword(password, user?.password_hash ?? DUMMY_HASH);
   if (!user || !user.password_hash || !passwordOk) {
     await recordLoginEvent({ request, email, success: false, userId: user?.id ?? null, actorType: "user", failureReason: !user?.password_hash ? "no_password_set" : "invalid_credentials" });
@@ -39,9 +39,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(GENERIC_ERROR, { status: 401 });
   }
 
-  await supabase.from("users").update({ last_login_at: new Date().toISOString() }).eq("id", user.id);
+  await recordLastLogin("user", user.id);
   await recordLoginEvent({ request, email, success: true, userId: user.id, actorType: "user" });
-  const token = await signPartnerSessionToken(user.id, membership.tenant_id, membership.partner_id);
+  const token = await signPartnerSessionToken(user.id, membership.tenant_id, membership.partner_id, user.session_version);
   const response = NextResponse.json({ ok: true, redirectTo: "/partner" });
   response.cookies.set(PARTNER_SESSION_COOKIE, token, partnerSessionCookieOptions);
   return response;

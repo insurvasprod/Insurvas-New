@@ -5,6 +5,7 @@ import { requirePartner } from "@/lib/partnerAuth/requirePartner";
 import { partnerUserInviteSchema } from "@/lib/partnerAuth/schemas";
 import { buildPartnerInviteUrl, generateInviteToken, hashInviteToken, inviteExpiryFromNow } from "@/lib/users/invitations";
 import { sendInvitationEmail } from "@/lib/email/sendInvitationEmail";
+import { configuredAppOrigin } from "@/lib/urls/origin";
 import { invitePartnerUser, listPartnerUsers } from "@/lib/partnerUsers/service";
 
 export async function GET() {
@@ -21,9 +22,9 @@ export async function POST(request: NextRequest) {
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Enter valid user details" }, { status: 400 });
   const token = generateInviteToken();
   const expiresAt = await inviteExpiryFromNow();
+  const origin = configuredAppOrigin("partner");
   try {
     const result = await invitePartnerUser({ tenantId: auth.context.tenantId, partnerId: auth.context.partnerId, ...parsed.data, tokenHash: hashInviteToken(token), expiresAt: expiresAt.toISOString() });
-    const origin = process.env.NEXT_PUBLIC_PARTNER_APP_URL || process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
     const inviteUrl = buildPartnerInviteUrl(token, origin);
     const { delivered } = await sendInvitationEmail({ to: result.email, name: result.name, inviteUrl, expiresAt, userId: result.user_id, tenantId: auth.context.tenantId });
     await audit({ actorType: "tenant", actorId: auth.context.userId, action: "tenant.partner_user_invited", targetType: "partner_user", targetId: result.user_id, metadata: { partnerId: auth.context.partnerId, email: result.email, role: result.role, delivered, actorPlane: "partner" }, request });

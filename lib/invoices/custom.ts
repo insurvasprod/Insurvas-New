@@ -69,7 +69,7 @@ export async function createCustomInvoice(input: CustomInvoiceInput): Promise<Cu
     sendWarning = "WHOP_ACCOUNT_ID is not set, so the invoice was not sent for online payment.";
   } else {
     try {
-      const whop = buildProvider("whop");
+      const whop = buildProvider("whop", { tenantId: input.tenantId });
       if (whop instanceof WhopProvider) {
         const sent = await whop.createInvoice({
           companyId,

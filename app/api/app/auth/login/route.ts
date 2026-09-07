@@ -5,7 +5,7 @@ import { isTenantRole } from "@/lib/tenantAuth/roles";
 import { verifyPassword } from "@/lib/password";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { signTenantSessionToken, tenantSessionCookieOptions, TENANT_SESSION_COOKIE } from "@/lib/tenantAuth/session";
-import { recordLoginEvent, type LoginFailureReason } from "@/lib/loginEvents/record";
+import { recordLastLogin, recordLoginEvent, type LoginFailureReason } from "@/lib/loginEvents/record";
 import { signupDestination } from "@/lib/signup/context";
 import { getMaintenanceStatus } from "@/lib/system/service";
 
@@ -45,9 +45,9 @@ export async function POST(request: NextRequest) {
   // service-role client — the same reason admin login doesn't go through requireAdminRole.
   const { data: user } = await supabase
     .from("users")
-    .select("id, password_hash, status")
+    .select("id, password_hash, status, session_version")
     .eq("email", email)
-    .maybeSingle<{ id: string; password_hash: string | null; status: string }>();
+    .maybeSingle<{ id: string; password_hash: string | null; status: string; session_version: number }>();
 
   // A null password_hash means an invited user who hasn't set one yet (SA-1.2) — they cannot
   // log in. The dummy-hash compare still runs so the response time doesn't reveal that.
@@ -105,11 +105,11 @@ export async function POST(request: NextRequest) {
   }
 
   // Only a successful login moves last_login_at — failures must never touch it (SA-1.5).
-  await supabase.from("users").update({ last_login_at: new Date().toISOString() }).eq("id", user.id);
+  await recordLastLogin("user", user.id);
   await recordLoginEvent({ request, email, success: true, userId: user.id, actorType: "user" });
 
   // Role is intentionally not baked into the token — it's resolved per request (SA-1.3).
-  const sessionToken = await signTenantSessionToken(user.id, membership.tenant_id);
+  const sessionToken = await signTenantSessionToken(user.id, membership.tenant_id, user.session_version);
   const response = NextResponse.json({
     ok: true,
     redirectTo: signupDestination({ userStatus: user.status, onboardingState: tenant.onboarding_state }) ?? "/app",
