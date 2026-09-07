@@ -39,12 +39,13 @@ export async function resolveTenantContext(): Promise<TenantContext | null> {
       .eq("user_id", session.sub)
       .eq("tenant_id", session.tenantId)
       .maybeSingle<{ role: string }>(),
-    supabase.from("users").select("status").eq("id", session.sub).maybeSingle<{ status: string }>(),
+    supabase.from("users").select("status, session_version").eq("id", session.sub).maybeSingle<{ status: string; session_version: number }>(),
   ]);
 
   // Membership revoked, account no longer active, or an unrecognised role — all mean "no session".
   if (!membership || !isTenantRole(membership.role)) return null;
   if (!user || user.status !== "active") return null;
+  if (session.sessionVersion !== undefined && session.sessionVersion !== user.session_version) return null;
 
   return { userId: session.sub, tenantId: session.tenantId, role: membership.role };
 }

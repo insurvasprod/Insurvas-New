@@ -15,6 +15,7 @@ import {
   inviteExpiryFromNow,
 } from "@/lib/users/invitations";
 import { sendInvitationEmail } from "@/lib/email/sendInvitationEmail";
+import { configuredAppOrigin } from "@/lib/urls/origin";
 
 export async function GET(request: NextRequest) {
   const auth = await requireAdminRole(CAN_VIEW_USERS);
@@ -47,6 +48,7 @@ export async function POST(request: NextRequest) {
 
   const token = generateInviteToken();
   const expiresAt = await inviteExpiryFromNow();
+  const origin = configuredAppOrigin("agent");
 
   const { data, error } = await supabase.rpc("admin_create_user", {
     p_name: name,
@@ -84,7 +86,6 @@ export async function POST(request: NextRequest) {
 
   const result = Array.isArray(data) ? data[0] : data;
 
-  const origin = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
   const inviteUrl = buildInviteUrl(token, origin);
   const { delivered } = await sendInvitationEmail({ to: email, name, inviteUrl, expiresAt });
 

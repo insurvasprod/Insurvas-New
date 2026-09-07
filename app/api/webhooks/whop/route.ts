@@ -105,7 +105,13 @@ export async function POST(request: NextRequest) {
     await markProcessed(stored.id);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    await markFailed(stored.id, message).catch(() => {});
+    try {
+      await markFailed(stored.id, message);
+    } catch (failureUpdateError) {
+      // Do not turn a state-write failure into a false acknowledgement. The original handler
+      // error remains the response reason; the secondary error is retained in server logs.
+      console.error(`[whop-webhook] could not persist failure for ${stored.id}:`, failureUpdateError);
+    }
     console.error(`[whop-webhook] handling ${envelope.type} failed:`, error);
     // Leave processed_at null and ask for the retry — the store treats an unprocessed repeat as
     // work still to do rather than as a duplicate.

@@ -2,10 +2,13 @@
 
 export const TEMPLATE_FIELD_TYPES = [
   "text",
+  "long_text",
   "number",
   "date",
   "currency",
   "phone",
+  "email",
+  "ssn",
   "boolean",
   "single_select",
   "multi_select",
@@ -14,10 +17,13 @@ export type TemplateFieldType = (typeof TEMPLATE_FIELD_TYPES)[number];
 
 export const TEMPLATE_FIELD_TYPE_LABELS: Record<TemplateFieldType, string> = {
   text: "Text",
+  long_text: "Long text",
   number: "Number",
   date: "Date",
   currency: "Currency",
   phone: "Phone",
+  email: "Email",
+  ssn: "SSN",
   boolean: "Boolean",
   single_select: "Single select",
   multi_select: "Multi-select",
@@ -39,6 +45,18 @@ export type TemplateField = {
   is_required: boolean;
   options: string[];
   sort_order: number;
+  help_text?: string | null;
+  validation?: TemplateValidation;
+};
+
+export type TemplateValidation = {
+  min?: number;
+  max?: number;
+  min_length?: number;
+  max_length?: number;
+  pattern?: string;
+  age_min?: number;
+  age_max?: number;
 };
 
 export type TemplateStage = {
@@ -53,6 +71,7 @@ export type TemplateFormField = {
   field_key: string;
   is_required: boolean;
   show_when: { field_key: string; equals: string } | null;
+  conditional_on?: { field_key: string; equals: string } | null;
 };
 
 export type TemplateFormSection = {
@@ -72,6 +91,7 @@ export type TemplateRow = {
   product_code: string;
   product_name: string;
   version: number;
+  definition_version?: number;
   description: string | null;
   is_active: boolean;
   created_by: string | null;

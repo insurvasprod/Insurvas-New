@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { requireFeature } from "@/lib/entitlements/requireFeature";
+import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 
 /**
  * Enforcement point 3 of 3: the API. THE only real one.
@@ -10,7 +10,7 @@ import { requireFeature } from "@/lib/entitlements/requireFeature";
  * reads the entitlement server-side rather than trusting anything the client sent.
  */
 export async function GET() {
-  const auth = await requireFeature("chargeback_radar");
+  const auth = await requireFeatureRole("chargeback_radar", ["owner", "producer"]);
   if (auth instanceof NextResponse) return auth;
 
   return NextResponse.json({

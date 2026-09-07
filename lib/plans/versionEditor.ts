@@ -4,6 +4,7 @@ import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { fetchFeatureCatalog } from "@/lib/features/queries";
 import type { FeatureModuleGroup } from "@/lib/features/constants";
 import type { PlanPrices } from "@/lib/money";
+import type { PlanLimits } from "@/lib/metering/constants";
 
 export type PlanVersionEditorData = {
   plan: {
@@ -18,6 +19,7 @@ export type PlanVersionEditorData = {
   grantedKeys: string[];
   /** Null when pricing has never been set, i.e. the plan isn't sellable yet. */
   prices: PlanPrices | null;
+  limits: PlanLimits | null;
   /** Non-cancelled subscriptions on THIS version. Non-zero means saving publishes a new version. */
   subscriberCount: number;
 };
@@ -33,7 +35,7 @@ export async function fetchPlanVersionEditorData(planId: string): Promise<PlanVe
 
   if (!plan) return null;
 
-  const [groups, { data: granted }, { data: prices }, { count }] = await Promise.all([
+  const [groups, { data: granted }, { data: prices }, { data: limits }, { count }] = await Promise.all([
     fetchFeatureCatalog({ includeArchived: true }),
     supabase.from("plan_features").select("feature_key").eq("plan_id", planId),
     supabase
@@ -43,6 +45,7 @@ export async function fetchPlanVersionEditorData(planId: string): Promise<PlanVe
       )
       .eq("plan_id", planId)
       .maybeSingle<PlanPrices>(),
+    supabase.from("plan_limits").select("max_seats, max_carriers, max_publishers, max_marketing_partners, max_affiliates, max_buffer_seats, max_partner_users").eq("plan_id", planId).maybeSingle<PlanLimits>(),
     supabase
       .from("subscriptions")
       .select("id", { count: "exact", head: true })
@@ -55,6 +58,7 @@ export async function fetchPlanVersionEditorData(planId: string): Promise<PlanVe
     groups,
     grantedKeys: (granted ?? []).map((row) => row.feature_key),
     prices: prices ?? null,
+    limits: limits ?? null,
     subscriberCount: count ?? 0,
   };
 }

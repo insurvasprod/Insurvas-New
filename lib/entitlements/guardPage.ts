@@ -5,6 +5,8 @@ import { resolveTenantContext } from "@/lib/tenantAuth/requireTenant";
 import { getEntitlement } from "./get";
 import { hasFeature, type Entitlement } from "./types";
 import { featureKillState } from "@/lib/features/killSwitch";
+import type { TenantRole } from "@/lib/tenantAuth/roles";
+import type { TenantContext } from "@/lib/tenantAuth/requireTenant";
 
 /**
  * Enforcement point 2 of 3: the ROUTE GUARD.
@@ -16,11 +18,11 @@ import { featureKillState } from "@/lib/features/killSwitch";
  * requireFeature(). This is about not showing someone a broken screen.
  */
 export type PageGuardResult =
-  | { entitled: true; killed: false; notice: null; entitlement: Entitlement }
+  | { entitled: true; killed: false; notice: null; entitlement: Entitlement; role: TenantRole; context: TenantContext }
   // Killed and unentitled are kept apart so the page can show a maintenance notice rather than an
   // upgrade prompt. Selling someone an upgrade for something that is switched off platform-wide
   // is the specific mistake SA-4.10 exists to prevent.
-  | { entitled: false; killed: boolean; notice: string | null; entitlement: Entitlement };
+  | { entitled: false; killed: boolean; notice: string | null; entitlement: Entitlement; role: TenantRole; context: TenantContext };
 
 export async function guardPage(featureKey: string): Promise<PageGuardResult> {
   const context = await resolveTenantContext();
@@ -31,10 +33,10 @@ export async function guardPage(featureKey: string): Promise<PageGuardResult> {
   // Kill switch first, then entitlement — the same order as requireFeature (SA-4.10).
   const kill = await featureKillState(featureKey, context.tenantId);
   if (kill.killed) {
-    return { entitled: false, killed: true, notice: kill.notice, entitlement };
+    return { entitled: false, killed: true, notice: kill.notice, entitlement, role: context.role, context };
   }
 
   return hasFeature(entitlement, featureKey)
-    ? { entitled: true, killed: false, notice: null, entitlement }
-    : { entitled: false, killed: false, notice: null, entitlement };
+    ? { entitled: true, killed: false, notice: null, entitlement, role: context.role, context }
+    : { entitled: false, killed: false, notice: null, entitlement, role: context.role, context };
 }

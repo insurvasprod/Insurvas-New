@@ -82,13 +82,15 @@ export async function createCoupon(input: CreateCouponInput): Promise<{ id: stri
   return { id: data.id, whopPromoCodeId: promo.promoCodeId };
 }
 
-export type ApplyResult = "ok" | "not_found" | "inactive" | "expired" | "exhausted" | "already_has_coupon";
+export type ApplyResult = "ok" | "not_found" | "inactive" | "expired" | "exhausted" | "plan_restricted" | "billing_cycle_restricted" | "already_has_coupon";
 
 const APPLY_MESSAGES: Record<Exclude<ApplyResult, "ok">, string> = {
   not_found: "That coupon does not exist.",
   inactive: "That coupon has been deactivated.",
   expired: "That coupon has expired.",
   exhausted: "That coupon has reached its redemption limit.",
+  plan_restricted: "That coupon does not apply to this plan.",
+  billing_cycle_restricted: "That coupon does not apply to this billing cycle.",
   already_has_coupon: "This subscription already has a coupon. Remove it before applying another.",
 };
 

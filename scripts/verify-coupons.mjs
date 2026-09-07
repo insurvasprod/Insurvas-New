@@ -150,6 +150,21 @@ try {
   });
   check("an expired coupon is rejected", r4.data === "expired", String(r4.data));
 
+  console.log("\nPlan and billing-cycle restrictions\n");
+  const planMismatch = await makeSubscription("PlanMismatch");
+  const planRestricted = await makeCoupon({ restricted_to_plan_ids: ["00000000-0000-0000-0000-000000000001"] });
+  const planResult = await supabase.rpc("admin_apply_coupon", {
+    p_subscription_id: planMismatch.subscriptionId, p_coupon_id: planRestricted, p_applied_by: null,
+  });
+  check("the RPC rejects a coupon restricted to another plan", planResult.data === "plan_restricted", String(planResult.data));
+
+  const cycleMismatch = await makeSubscription("CycleMismatch");
+  const cycleRestricted = await makeCoupon({ billing_cycle: "yearly" });
+  const cycleResult = await supabase.rpc("admin_apply_coupon", {
+    p_subscription_id: cycleMismatch.subscriptionId, p_coupon_id: cycleRestricted, p_applied_by: null,
+  });
+  check("the RPC rejects a coupon restricted to another billing cycle", cycleResult.data === "billing_cycle_restricted", String(cycleResult.data));
+
   console.log("\nDiscount on the invoice\n");
 
   const f = await makeSubscription("F");
@@ -157,6 +172,35 @@ try {
   await supabase.rpc("admin_apply_coupon", {
     p_subscription_id: f.subscriptionId, p_coupon_id: halfOff, p_applied_by: null,
   });
+
+  console.log("\nAtomic invoice and coupon consumption\n");
+  const atomic = await makeSubscription("Atomic");
+  const atomicCoupon = await makeCoupon({ max_redemptions: null, duration: "n_periods", duration_periods: 3, billing_cycle: "monthly" });
+  await supabase.rpc("admin_apply_coupon", {
+    p_subscription_id: atomic.subscriptionId, p_coupon_id: atomicCoupon, p_applied_by: null,
+  });
+  const { data: atomicBefore } = await supabase.from("subscription_coupons")
+    .select("periods_remaining").eq("subscription_id", atomic.subscriptionId).single();
+  const atomicInvoiceArgs = {
+    p_tenant_id: atomic.tenantId,
+    p_subscription_id: atomic.subscriptionId,
+    p_provider: "whop",
+    p_provider_payment_id: `pay_atomic_coupon_${stamp}`,
+    p_provider_total_cents: 24900,
+    p_period_start: new Date().toISOString(),
+    p_period_end: new Date().toISOString(),
+    p_paid_at: new Date().toISOString(),
+    p_lines: [{ kind: "plan", label: "Plan B monthly", quantity: 1, unit_cents: 24900, amount_cents: 24900 }],
+    p_consume_coupon: true,
+  };
+  const { data: atomicRows, error: atomicError } = await supabase.rpc("create_invoice_for_payment_with_coupon", atomicInvoiceArgs);
+  const { data: atomicAfter } = await supabase.from("subscription_coupons")
+    .select("periods_remaining").eq("subscription_id", atomic.subscriptionId).single();
+  check("one atomic RPC creates the invoice and consumes exactly one coupon period", !atomicError && atomicRows?.[0]?.created === true && atomicBefore?.periods_remaining === 3 && atomicAfter?.periods_remaining === 2, atomicError?.message ?? JSON.stringify({ atomicBefore, atomicAfter }));
+  const { data: atomicReplay } = await supabase.rpc("create_invoice_for_payment_with_coupon", atomicInvoiceArgs);
+  const { data: atomicReplayState } = await supabase.from("subscription_coupons")
+    .select("periods_remaining").eq("subscription_id", atomic.subscriptionId).single();
+  check("an invoice replay does not consume a second coupon period", atomicReplay?.[0]?.created === false && atomicReplayState?.periods_remaining === 2, JSON.stringify(atomicReplayState));
 
   // Plan B is $249; 50% off means the provider charges $124.50 and our lines must say the same.
   const { data: invoiceRows } = await supabase.rpc("create_invoice_for_payment", {

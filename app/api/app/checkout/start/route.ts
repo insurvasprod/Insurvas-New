@@ -9,6 +9,9 @@ const schema = z.object({ couponCode: z.string().trim().max(40).optional() });
 export async function POST(request: NextRequest) {
   const context = await resolveSignupContext();
   if (!context) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  if (context.role !== "owner") {
+    return NextResponse.json({ error: "Only the tenant owner can manage billing" }, { status: 403 });
+  }
   if (context.userStatus !== "active") {
     return NextResponse.json({ error: "Verify your email address first" }, { status: 409 });
   }

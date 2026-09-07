@@ -11,6 +11,7 @@ import { rebuildEntitlementsForPlan } from "@/lib/entitlements/rebuild";
 // Cents arrive as integers already — the browser does the dollars→cents conversion with the
 // shared helper, so nothing here ever sees a decimal.
 const centsField = z.number().int().min(0).max(100_000_000).nullable();
+const capacityField = z.number().int().min(0).max(1_000_000).nullable();
 
 const savePlanVersionSchema = z.object({
   feature_keys: z.array(z.string().trim().min(1)).min(1, "A plan must grant at least one feature"),
@@ -19,6 +20,13 @@ const savePlanVersionSchema = z.object({
   price_yearly_cents: centsField,
   setup_fee_cents: z.number().int().min(0).max(100_000_000).default(0),
   trial_days: z.number().int().min(0).max(365).default(0),
+  limits: z.object({
+    max_publishers: capacityField,
+    max_marketing_partners: capacityField,
+    max_affiliates: capacityField,
+    max_buffer_seats: capacityField,
+    max_partner_users: capacityField,
+  }),
 });
 
 /** Saves features AND pricing together, so one logical edit produces at most one new version. */
@@ -43,6 +51,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     .select("price_monthly_cents, price_quarterly_cents, price_yearly_cents, setup_fee_cents, trial_days")
     .eq("plan_id", id)
     .maybeSingle();
+  const { data: limitsBefore } = await supabase.from("plan_limits").select("max_publishers, max_marketing_partners, max_affiliates, max_buffer_seats, max_partner_users").eq("plan_id", id).maybeSingle();
 
   const { data, error } = await supabase.rpc("admin_save_plan_version", {
     p_plan_id: id,
@@ -68,15 +77,21 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   }
 
   const result = Array.isArray(data) ? data[0] : data;
+  const { error: limitsError } = await supabase.rpc("admin_save_plan_limits", {
+    p_plan_id: result.target_plan_id,
+    p_max_publishers: parsed.data.limits.max_publishers,
+    p_max_marketing_partners: parsed.data.limits.max_marketing_partners,
+    p_max_affiliates: parsed.data.limits.max_affiliates,
+    p_max_buffer_seats: parsed.data.limits.max_buffer_seats,
+    p_max_partner_users: parsed.data.limits.max_partner_users,
+  });
+  if (limitsError) return NextResponse.json({ error: "Could not save plan capacity limits" }, { status: 500 });
+  if (!result.created_new_version) await rebuildEntitlementsForPlan(result.target_plan_id);
   const featuresAfter = await fetchPlanFeatureKeys(result.target_plan_id);
 
   // Editing a plan in place changes what its existing subscribers get, so their cached
   // entitlements must be rebuilt. (A new version has no subscribers yet — theirs are untouched,
   // which is the whole point of versioning.)
-  if (!result.created_new_version) {
-    await rebuildEntitlementsForPlan(result.target_plan_id);
-  }
-
   const added = featuresAfter.filter((k) => !featuresBefore.includes(k));
   const removed = featuresBefore.filter((k) => !featuresAfter.includes(k));
 
@@ -98,7 +113,14 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   const somethingChanged =
     added.length > 0 || removed.length > 0 || Object.keys(priceChanges).length > 0 || result.created_new_version;
 
-  if (somethingChanged) {
+  const limitChanges: Record<string, { from: unknown; to: unknown }> = {};
+  for (const key of ["max_publishers", "max_marketing_partners", "max_affiliates", "max_buffer_seats", "max_partner_users"] as const) {
+    const previous = (limitsBefore as Record<string, unknown> | null)?.[key] ?? null;
+    const next = parsed.data.limits[key];
+    if (previous !== next) limitChanges[key] = { from: previous, to: next };
+  }
+
+  if (somethingChanged || Object.keys(limitChanges).length > 0) {
     await audit({
       actorId: auth.session.sub,
       action: result.created_new_version ? "plan.version_created" : "plan.updated",
@@ -107,6 +129,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       metadata: {
         features: { added, removed },
         prices: priceChanges,
+        limits: limitChanges,
         version: result.target_version,
         createdNewVersion: result.created_new_version,
         ...(result.created_new_version ? { supersededPlanId: id } : {}),

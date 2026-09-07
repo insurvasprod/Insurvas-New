@@ -149,7 +149,8 @@ try {
   const otherBody = await otherApprove.json();
 
   const { data: afterApproval } = await supabase
-    .from("credit_notes").select("status, approved_by, failure_reason").eq("id", big.credit_note_id).single();
+    .from("credit_notes").select("status, approved_by, failure_reason, reconciliation_state, reconciliation_attempts")
+    .eq("id", big.credit_note_id).single();
 
   check(
     "a DIFFERENT admin's approval is accepted",
@@ -161,7 +162,8 @@ try {
   // failed provider refund being LEFT in failed rather than rolled back or retried silently.
   check(
     "a refund that cannot be executed is left in `failed` with a reason",
-    afterApproval.status === "failed" && Boolean(afterApproval.failure_reason),
+    afterApproval.status === "failed" && afterApproval.reconciliation_state === "failed" &&
+      afterApproval.reconciliation_attempts === 1 && Boolean(afterApproval.failure_reason),
     JSON.stringify(afterApproval),
   );
 
@@ -188,6 +190,22 @@ try {
   const { data: balance } = await supabase
     .from("tenant_credits").select("balance_cents").eq("tenant_id", tenantId).single();
   check("the credit reaches the tenant's balance", balance.balance_cents === 12450, String(balance.balance_cents));
+
+  const { data: creditNote } = await supabase
+    .from("credit_notes")
+    .select("reconciliation_state, reconciled_at")
+    .eq("id", creditBody.id).single();
+  check("a successful credit is marked reconciled", creditNote.reconciliation_state === "reconciled" &&
+    Boolean(creditNote.reconciled_at), JSON.stringify(creditNote));
+
+  // Replaying the local application is safe too: the RPC locks the note and returns the existing
+  // balance without adding the credit again.
+  const { data: replayRows, error: replayError } = await supabase.rpc("apply_credit_note_balance", {
+    p_credit_note_id: creditBody.id,
+  });
+  const replay = Array.isArray(replayRows) ? replayRows[0] : replayRows;
+  check("replaying a succeeded credit does not apply it twice",
+    !replayError && replay?.balance_cents === 12450, replayError?.message ?? JSON.stringify(replay));
 
   const { data: notes } = await supabase
     .from("credit_notes").select("number").eq("tenant_id", tenantId).order("number");

@@ -10,6 +10,7 @@ import {
   inviteExpiryFromNow,
 } from "@/lib/users/invitations";
 import { sendPasswordResetEmail } from "@/lib/email/sendInvitationEmail";
+import { configuredAppOrigin } from "@/lib/urls/origin";
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireAdminRole(["super_admin"]);
@@ -36,29 +37,24 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   const token = generateInviteToken();
   const expiresAt = await inviteExpiryFromNow();
+  const origin = configuredAppOrigin("agent");
 
-  // Only the newest reset link should work. Scoped to purpose so this can't clobber a pending
-  // invite or email change.
-  await supabase
-    .from("user_invitations")
-    .delete()
-    .eq("user_id", id)
-    .eq("purpose", "password_reset")
-    .is("accepted_at", null);
-
-  const { error } = await supabase.from("user_invitations").insert({
-    user_id: id,
-    token_hash: hashInviteToken(token),
-    expires_at: expiresAt.toISOString(),
-    created_by: auth.session.sub,
-    purpose: "password_reset",
+  const { data: replacement, error } = await supabase.rpc("admin_replace_user_token", {
+    p_user_id: id,
+    p_purpose: "password_reset",
+    p_token_hash: hashInviteToken(token),
+    p_expires_at: expiresAt.toISOString(),
+    p_created_by: auth.session.sub,
   });
 
   if (error) {
+    if (/PASSWORD_NOT_SET|USER_REMOVED/i.test(error.message ?? "")) {
+      return NextResponse.json({ error: "This user is not eligible for a password reset" }, { status: 409 });
+    }
     return NextResponse.json({ error: "Could not create reset link" }, { status: 500 });
   }
 
-  const origin = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
+  if (!replacement) return NextResponse.json({ error: "Could not create reset link" }, { status: 500 });
   const resetUrl = buildPasswordResetUrl(token, origin);
   const { delivered } = await sendPasswordResetEmail({
     to: user.email,

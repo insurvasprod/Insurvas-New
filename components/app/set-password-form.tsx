@@ -11,7 +11,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 
 type TokenState = { status: "checking" } | { status: "valid"; email: string; name: string } | { status: "invalid" };
 
-export function SetPasswordForm() {
+export function SetPasswordForm({
+  endpoint = "/api/app/auth/set-password",
+  loginPath = "/app/login",
+}: { endpoint?: string; loginPath?: string } = {}) {
   const router = useRouter();
   const token = useSearchParams().get("token") ?? "";
 
@@ -31,7 +34,7 @@ export function SetPasswordForm() {
     if (!token) return;
 
     let cancelled = false;
-    fetch(`/api/app/auth/set-password?token=${encodeURIComponent(token)}`)
+    fetch(`${endpoint}?token=${encodeURIComponent(token)}`)
       .then((res) => (res.ok ? res.json() : null))
       .then((body) => {
         if (cancelled) return;
@@ -42,7 +45,7 @@ export function SetPasswordForm() {
     return () => {
       cancelled = true;
     };
-  }, [token]);
+  }, [endpoint, token]);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -54,7 +57,7 @@ export function SetPasswordForm() {
     }
 
     setLoading(true);
-    const res = await fetch("/api/app/auth/set-password", {
+    const res = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ token, password }),
@@ -68,7 +71,7 @@ export function SetPasswordForm() {
     }
 
     setDone(true);
-    setTimeout(() => router.push("/app/login"), 1800);
+    setTimeout(() => router.push(loginPath), 1800);
   }
 
   if (tokenState.status === "checking") {

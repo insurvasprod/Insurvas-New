@@ -2,6 +2,8 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { requireFeature } from "@/lib/entitlements/requireFeature";
 import { createAgentLead, getAgentTemplate, listAgentLeads } from "@/lib/agentTemplates/service";
+import { listPipelines } from "@/lib/pipelines/service";
+import { audit } from "@/lib/audit/log";
 
 export async function GET(request: NextRequest) {
   const auth = await requireFeature("book_of_business");
@@ -19,7 +21,8 @@ export async function GET(request: NextRequest) {
       params.get("sort") ?? "",
       direction,
     );
-    return NextResponse.json({ template, leads, readOnly: auth.entitlement.access === "read_only" });
+    const pipelines = await listPipelines(auth.context.tenantId);
+    return NextResponse.json({ template, leads, pipelines, readOnly: auth.entitlement.access === "read_only" });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Could not load leads" }, { status: 500 });
   }
@@ -28,10 +31,11 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const auth = await requireFeature("book_of_business", { write: true });
   if (auth instanceof NextResponse) return auth;
-  const body = await request.json().catch(() => null) as { values?: unknown; stage_key?: string } | null;
+  const body = await request.json().catch(() => null) as { values?: unknown; stage_id?: string; stage_key?: string } | null;
   try {
     const template = await getAgentTemplate(auth.context.tenantId, auth.context.userId);
-    const lead = await createAgentLead(auth.context.tenantId, auth.context.userId, template, body?.values, body?.stage_key);
+    const lead = await createAgentLead(auth.context.tenantId, auth.context.userId, template, body?.values, body?.stage_id ?? body?.stage_key);
+    await audit({ actorType: "tenant", actorId: auth.context.userId, action: "tenant.lead_stage_changed", targetType: "agent_lead", targetId: lead.id, metadata: { operation: "created", stageId: lead.stage_id }, request });
     return NextResponse.json({ lead }, { status: 201 });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Could not create lead" }, { status: 400 });

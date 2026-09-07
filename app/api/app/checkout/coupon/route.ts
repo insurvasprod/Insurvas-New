@@ -24,6 +24,9 @@ const schema = z.object({ code: z.string().trim().min(1).max(40) });
 export async function POST(request: NextRequest) {
   const context = await resolveSignupContext();
   if (!context) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  if (context.role !== "owner") {
+    return NextResponse.json({ error: "Only the tenant owner can manage billing" }, { status: 403 });
+  }
 
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Enter a code" }, { status: 400 });

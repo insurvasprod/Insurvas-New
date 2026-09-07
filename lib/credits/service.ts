@@ -11,9 +11,9 @@ import { buildProvider } from "@/lib/payments/registry";
 import { WhopProvider } from "@/lib/payments/whop/provider";
 import { rebuildEntitlement } from "@/lib/entitlements/rebuild";
 import { refundApprovalThresholdCents } from "@/lib/settings/queries";
+import { priceForCycle, type PlanPrices } from "@/lib/money";
 import {
   approvalRefusalReason,
-  creditBalanceDelta,
   creditToFreeDays,
   needsSecondApprover,
   requestRefusalReason,
@@ -49,9 +49,9 @@ async function assertRefundable(invoiceId: string, amountCents: number): Promise
   const supabase = getSupabaseServiceClient();
   const { data: invoice } = await supabase
     .from("invoices")
-    .select("provider_payment_id, total_cents")
+    .select("provider_payment_id, total_cents, tenant_id")
     .eq("id", invoiceId)
-    .maybeSingle<{ provider_payment_id: string | null; total_cents: number }>();
+    .maybeSingle<{ provider_payment_id: string | null; total_cents: number; tenant_id: string }>();
 
   if (!invoice) throw new CreditNoteError("That invoice does not exist.");
 
@@ -63,7 +63,7 @@ async function assertRefundable(invoiceId: string, amountCents: number): Promise
     );
   }
 
-  const provider = buildProvider("whop");
+  const provider = buildProvider("whop", { tenantId: invoice.tenant_id });
   if (!(provider instanceof WhopProvider)) throw new CreditNoteError("Refunds require the Whop provider.");
 
   const refundability = await provider.getRefundability(invoice.provider_payment_id);
@@ -176,9 +176,9 @@ export async function approveCreditNote(
 export async function executeCreditNote(id: string): Promise<{ status: string; message: string }> {
   const supabase = getSupabaseServiceClient();
 
-  const { data: note } = await supabase
+  const { data: note, error: noteError } = await supabase
     .from("credit_notes")
-    .select("id, number, tenant_id, invoice_id, type, amount_cents, status")
+    .select("id, number, tenant_id, invoice_id, type, amount_cents, status, reconciliation_state")
     .eq("id", id)
     .single<{
       id: string;
@@ -188,32 +188,57 @@ export async function executeCreditNote(id: string): Promise<{ status: string; m
       type: CreditNoteType;
       amount_cents: number;
       status: string;
+      reconciliation_state: string;
     }>();
 
-  if (!note) throw new CreditNoteError("That credit note does not exist.");
-  if (note.status !== "approved") {
-    throw new CreditNoteError(`${note.number} is not approved, so it cannot be executed.`);
-  }
+  if (noteError || !note) throw new CreditNoteError("That credit note does not exist.");
 
   if (note.type === "refund") {
-    await supabase.from("credit_notes").update({ status: "processing" }).eq("id", id);
+    let claim;
+    try {
+      const result = await supabase.rpc("claim_credit_note_refund", { p_credit_note_id: id });
+      if (result.error) throw result.error;
+      claim = Array.isArray(result.data) ? result.data[0] : result.data;
+    } catch (error) {
+      throw new CreditNoteError(error instanceof Error ? error.message : String(error));
+    }
 
-    const { data: invoice } = await supabase
+    if (!claim) throw new CreditNoteError("The refund could not be claimed for execution.");
+    if (claim.provider_refund_id) {
+      return { status: "succeeded", message: `${claim.number}: refund is already reconciled.` };
+    }
+
+    const invoiceId = note.invoice_id ?? claim.invoice_id;
+    if (!invoiceId) {
+      const { data: failed, error: failedError } = await supabase.rpc("fail_credit_note_refund", {
+        p_credit_note_id: id,
+        p_reason: "refund has no invoice",
+      });
+      if (failedError || failed !== true) {
+        throw new CreditNoteError(`Could not record refund failure: ${failedError?.message ?? "credit note was not processing"}`);
+      }
+      throw new CreditNoteError("That refund has no invoice to refund against.");
+    }
+
+    const { data: invoice, error: invoiceError } = await supabase
       .from("invoices")
       .select("provider_payment_id")
-      .eq("id", note.invoice_id!)
+      .eq("id", invoiceId)
       .single<{ provider_payment_id: string | null }>();
 
-    if (!invoice?.provider_payment_id) {
-      await supabase
-        .from("credit_notes")
-        .update({ status: "failed", failure_reason: "no provider payment on the invoice" })
-        .eq("id", id);
+    if (invoiceError || !invoice?.provider_payment_id) {
+      const { data: failed, error: failedError } = await supabase.rpc("fail_credit_note_refund", {
+        p_credit_note_id: id,
+        p_reason: "no provider payment on the invoice",
+      });
+      if (failedError || failed !== true) {
+        throw new CreditNoteError(`Could not record refund failure: ${failedError?.message ?? "credit note was not processing"}`);
+      }
       throw new CreditNoteError("That invoice has no provider payment to refund against.");
     }
 
     try {
-      const provider = buildProvider("whop");
+      const provider = buildProvider("whop", { tenantId: note.tenant_id });
       if (!(provider instanceof WhopProvider)) throw new Error("Refunds require the Whop provider");
 
       const result = await provider.refund({
@@ -222,35 +247,84 @@ export async function executeCreditNote(id: string): Promise<{ status: string; m
         idempotencyKey: `refund_${note.id}`,
       });
 
-      await supabase
-        .from("credit_notes")
-        .update({ status: "succeeded", provider_refund_id: result.id })
-        .eq("id", id);
+      const { data: reconciled, error: reconcileError } = await supabase.rpc("finish_credit_note_refund", {
+        p_credit_note_id: id,
+        p_provider_refund_id: result.id,
+      });
+
+      if (reconcileError || reconciled !== true) {
+        // The provider has already accepted the idempotent refund. Keep the row recoverable and
+        // make the next attempt repeat the same provider key, never a new refund.
+        const { data: pending, error: pendingError } = await supabase.rpc("mark_credit_note_provider_pending", {
+          p_credit_note_id: id,
+          p_reason: reconcileError?.message ?? "local reconciliation affected no row",
+        });
+        if (pendingError || pending !== true) {
+          throw new CreditNoteError(
+            `The provider accepted the refund, and local reconciliation also failed: ${pendingError?.message ?? "credit note was not marked recoverable"}`,
+          );
+        }
+        throw new CreditNoteError(
+          "The provider accepted the refund, but local reconciliation did not finish. Retry this credit note with the same idempotency key.",
+        );
+      }
 
       return { status: "succeeded", message: `${note.number}: refund sent to the provider.` };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      // Left in `failed` rather than rolled back: the attempt happened and the record of it is
-      // what an admin needs in order to decide what to do next.
-      await supabase.from("credit_notes").update({ status: "failed", failure_reason: message }).eq("id", id);
+      // This branch already recorded provider_pending. Do not let the generic failure handler
+      // overwrite a recoverable provider success with a permanent failure.
+      if (/provider accepted the refund/i.test(message)) {
+        throw new CreditNoteError(message);
+      }
+      // A timeout means the provider's outcome is unknown. Keep provider_pending so a retry uses
+      // the same key. A definite provider refusal is safe to mark failed.
+      if (/timed out|outcome is unknown/i.test(message)) {
+        const { data: pending, error: pendingError } = await supabase.rpc("mark_credit_note_provider_pending", {
+          p_credit_note_id: id,
+          p_reason: message,
+        });
+        if (pendingError || pending !== true) {
+          throw new CreditNoteError(`Could not record unknown provider outcome: ${pendingError?.message ?? "credit note was not marked recoverable"}`);
+        }
+        throw new CreditNoteError(`${note.number}: provider outcome is unknown; retry reconciliation.`);
+      }
+
+      const { data: current } = await supabase
+        .from("credit_notes")
+        .select("status, provider_refund_id")
+        .eq("id", id)
+        .maybeSingle<{ status: string; provider_refund_id: string | null }>();
+      if (current?.status === "succeeded" && current.provider_refund_id) {
+        return { status: "succeeded", message: `${note.number}: refund is already reconciled.` };
+      }
+
+      const { data: failed, error: failedError } = await supabase.rpc("fail_credit_note_refund", {
+        p_credit_note_id: id,
+        p_reason: message,
+      });
+      if (failedError || failed !== true) {
+        throw new CreditNoteError(`Could not record refund failure: ${failedError?.message ?? "credit note was not processing"}`);
+      }
       console.error(`[credit-note] ${note.number} refund FAILED: ${message}`);
       return { status: "failed", message: `${note.number}: the provider refused the refund — ${message}` };
     }
   }
 
-  // A credit: no money moves, a balance is held against future billing.
-  const delta = creditBalanceDelta(note.type, note.amount_cents);
-  const { data: balance } = await supabase.rpc("adjust_tenant_credit", {
-    p_tenant_id: note.tenant_id,
-    p_delta_cents: delta,
+  // A credit: balance adjustment and success are one database transaction, so retrying after a
+  // local failure cannot apply the same credit twice.
+  const { data: balanceResult, error: balanceError } = await supabase.rpc("apply_credit_note_balance", {
+    p_credit_note_id: id,
   });
+  if (balanceError) throw new CreditNoteError(`Could not apply the credit: ${balanceError.message}`);
+  const balanceRow = Array.isArray(balanceResult) ? balanceResult[0] : balanceResult;
+  if (!balanceRow) throw new CreditNoteError("The credit balance was not updated.");
 
-  await supabase.from("credit_notes").update({ status: "succeeded" }).eq("id", id);
-  await rebuildEntitlement(note.tenant_id, "subscription.plan_changed").catch(() => {});
+  await rebuildEntitlement(note.tenant_id, "subscription.plan_changed");
 
   return {
     status: "succeeded",
-    message: `${note.number}: credit applied. Balance is now ${((balance ?? 0) / 100).toFixed(2)}.`,
+    message: `${note.number}: credit applied. Balance is now ${((balanceRow.balance_cents ?? 0) / 100).toFixed(2)}.`,
   };
 }
 
@@ -270,7 +344,7 @@ export async function redeemCreditAsFreeDays(tenantId: string): Promise<{ days: 
 
   const { data: subscription } = await supabase
     .from("subscriptions")
-    .select("id, whop_membership_id, current_period_start, current_period_end, plan_id")
+    .select("id, whop_membership_id, current_period_start, current_period_end, plan_id, billing_cycle")
     .eq("tenant_id", tenantId)
     .maybeSingle<{
       id: string;
@@ -278,6 +352,7 @@ export async function redeemCreditAsFreeDays(tenantId: string): Promise<{ days: 
       current_period_start: string | null;
       current_period_end: string | null;
       plan_id: string;
+      billing_cycle: "monthly" | "quarterly" | "yearly";
     }>();
 
   if (!subscription?.whop_membership_id) {
@@ -285,11 +360,12 @@ export async function redeemCreditAsFreeDays(tenantId: string): Promise<{ days: 
   }
 
   const { data: prices } = await supabase
-    .from("plan_prices").select("price_monthly_cents").eq("plan_id", subscription.plan_id).maybeSingle<{
-      price_monthly_cents: number | null;
-    }>();
+    .from("plan_prices")
+    .select("price_monthly_cents, price_quarterly_cents, price_yearly_cents, setup_fee_cents, trial_days, currency")
+    .eq("plan_id", subscription.plan_id)
+    .maybeSingle<PlanPrices>();
 
-  const periodPrice = prices?.price_monthly_cents ?? 0;
+  const periodPrice = priceForCycle(prices, subscription.billing_cycle as "monthly" | "quarterly" | "yearly") ?? 0;
   const periodDays =
     subscription.current_period_start && subscription.current_period_end
       ? Math.max(
@@ -307,7 +383,7 @@ export async function redeemCreditAsFreeDays(tenantId: string): Promise<{ days: 
     return { days: 0, message: "The balance is worth less than a single day, so no free days were added." };
   }
 
-  const provider = buildProvider("whop");
+  const provider = buildProvider("whop", { tenantId });
   if (!(provider instanceof WhopProvider)) throw new CreditNoteError("Free days require the Whop provider.");
 
   await provider.addFreeDays(subscription.whop_membership_id, days);

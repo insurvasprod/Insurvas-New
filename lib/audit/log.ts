@@ -6,7 +6,8 @@ import type { AuditAction } from "./actions";
 import { getClientIp, getUserAgent } from "@/lib/request/clientInfo";
 
 type AuditParams = {
-  actorId: string;
+  actorId: string | null;
+  actorType?: "admin" | "tenant" | "system";
   action: AuditAction;
   targetType?: string;
   targetId?: string;
@@ -25,7 +26,7 @@ export async function audit(params: AuditParams): Promise<void> {
   const supabase = getSupabaseServiceClient();
 
   const { error } = await supabase.from("audit_log").insert({
-    actor_type: "admin",
+    actor_type: params.actorType ?? "admin",
     actor_id: params.actorId,
     action: params.action,
     target_type: params.targetType ?? null,

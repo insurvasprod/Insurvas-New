@@ -7,8 +7,6 @@ Each entry says *why* it was deferred and *where it belongs*, so nothing here is
 
 Legend: 🔴 needs a decision · 🟡 blocked on a later ticket · 🔵 unverified · ⚪ tech debt · ✅ resolved
 
----
-
 ## 🔴 Needs a decision
 
 ### 1. Create Tenant asks the admin to type the owner's password
@@ -21,8 +19,6 @@ password, directly-created users get an invite link.
 
 **Fix:** drop the password field from Create Tenant and issue an invite via the same
 `admin_create_user` / `user_invitations` machinery SA-1.2 built. Roughly an hour's work.
-
----
 
 ## 🟠 Descoped by decision
 
@@ -104,38 +100,14 @@ mistaken for unfinished Whop work:
 - **Only `super_admin` can view or edit — DONE.** The standalone page and status/test APIs use the
   super-admin-only configuration permission. Tenant provider assignment remains the separate
   `super_admin` + `billing_admin` permission.
-- **Key changes are audit-logged — NOT IMPLEMENTED UNDER ENV-ONLY CONFIGURATION.** There is no
-  in-app key editor, so the application cannot observe or audit an environment-variable change.
-  The connection-test attempt is audited instead. Implementing this criterion would require a
-  selected secret/configuration manager and an audited application-side change flow.
+- **Key changes are audit-logged — NOT APPLICABLE.** The Whop decision keeps credentials in
+  environment variables, so there is no in-app key-change action to audit. The connection-test
+  attempt is audited instead, because it is the real provider-configuration action available in
+  this screen.
 
 The original `provider_settings.credentials_enc` / encrypted-at-rest database design is also not
-implemented. Credentials intentionally remain in environment variables; see #54. Reopening any
+implemented. Credentials intentionally remain in environment variables; see #77. Reopening any
 of these NOT APPLICABLE or NOT IMPLEMENTED decisions requires an explicit product-scope change.
-
-### 79. SA-4.3 has a deliberate role-scope deviation and future section saves are pending  *(was #56 on the module-4 branch — renumbered on merge, where main had already used #56 for something else)*
-**From:** SA-4.3 acceptance checklist · **Decision:** option 1 selected by the user on 2026-08-30
-
-The Configuration Center is implemented as a shared route registry and shell. The role matrix is
-intentionally narrower than the raw ticket text: **Payments remains `super_admin`-only** because
-it exposes live provider credentials and can perform authenticated provider calls. `billing_admin`
-gets Offers & discounts when SA-4.4 is implemented, but does not get Payments. `platform_config`
-gets the non-payment, non-offer platform sections. `support_agent` gets no Configuration Center
-access and is denied server-side, even if a route is entered directly. The repeatable
-`npm run verify:configuration` check exercised all 45 role/route cases, including temporary active
-fixtures for `support_agent` and `platform_config`; those fixtures were removed after the run.
-
-The Advanced section currently saves each setting independently and was exercised through the
-browser. Payments reuses its existing independent connection-test workflow, and Offers now reuses
-the existing independent Coupons workflow. The remaining section
-routes are intentionally placeholders owned by SA-4.4 through SA-4.12, so their save behavior is
-**NOT TESTABLE YET** and the SA-4.3 criterion *"every section saves independently"* is not fully
-complete until those tickets provide their own forms and save actions. The recently changed strip
-reads the existing `audit_log`; operational payment connection tests are excluded because they are
-health activity, not configuration changes.
-
-**Fix:** implement and verify each section's own form in its owning ticket. Reopen the role matrix
-only if the product decision about payment credentials changes.
 
 ### 80. The hardcoded-constant sweep is deliberately partial  *(was #50 on the module-4 branch — renumbered on merge, where main had already used #50 for something else)*
 **From:** SA-4.1 · **Decided while building, 2026-08-30**
@@ -229,19 +201,6 @@ real reminder — the customer's own plan, price and end date — decides delive
 with `delivered: false`. Everything except the transport is real, and the column says which it was,
 so the day keys arrive nothing about the job changes.
 
-### 6. Users list still reads the wrong plan source — STILL OPEN
-**From:** SA-1.1 · ⚠️ **Now definitely wrong, not just empty. Worth doing next.**
-
-The Users list's Plan column (and its filter) read `tenants.plan_code` — a free-text column from
-SA-0.2 that nothing writes. SA-2.7 completed the real source of truth: `subscriptions.plan_id` →
-`plans`, which the tenant detail page reads correctly.
-
-**SA-2.7 did not repoint the Users screen**, so a tenant can now genuinely be on Plan B while the
-Users list shows "No plan yet". Two notions of the same fact, and the screen reads the dead one.
-
-Fix: repoint `admin_user_list.plan_code` at the subscription's plan, then drop `tenants.plan_code`
-rather than leaving a decoy column that will mislead the next person.
-
 ### 20. Removing an archived feature from a plan needs a detour
 **From:** SA-2.3 · Minor
 
@@ -282,15 +241,17 @@ session token can be minted locally from `ADMIN_SESSION_SECRET` and set as the
 Still unverified by clicking: the invite → set-password → login round trip, the email-change →
 confirm round trip (the old address must keep working until confirmed), a role change appearing on
 the tenant side without re-login, seat-limit enforcement at the limit, and the plan version editor.
-For SA-4.2 specifically, there were no active `support_agent` or `platform_config` accounts to use
-for a live 403 check, and the forced provider-error UI/console-error capture was not exercised;
-the success path, `billing_admin` 403, anonymous/expired/forged 401s, and the safe API payload were
-verified.
+For SA-4.2 specifically, temporary active `billing_admin` and `platform_config` fixtures were
+created, both protected APIs returned 403, and the fixtures were removed. A throwaway local server
+with an unreachable provider host showed the real failure message in the UI with no console errors.
+The success path, concurrent connection tests, anonymous/expired/forged 401s, the safe API payload,
+hostile-body non-reflection, and connection-test audit rows were verified.
 
 **Verified in a browser so far:** the invoice list, detail and print screens (SA-3.3), and the
-SA-4.2 payment-status screen, including the successful connection-test confirmation. The protected
-status API's safe-field-only response was also verified through an authenticated HTTP check; the
-API cannot be opened as a standalone browser document because the in-app browser blocks raw JSON.
+SA-4.2 payment-status screen at `/admin/payments`, including the successful real connection-test
+confirmation, responsive card layout, and no console errors. The protected status API's
+safe-field-only response was also verified through an authenticated HTTP check; the API cannot be
+opened as a standalone browser document because the in-app browser blocks raw JSON.
 
 ### 57. SA-4.4 live and browser verification completed
 **From:** SA-4.4 · **Verified in live project, 2026-08-30**
@@ -483,9 +444,14 @@ Also in the pass:
   lands on a bill.
 - **`min-w-0` on `<main>`**, the same fix the admin shell needed in #52.
 
-**Not verified in a browser.** Every one of these screens sits behind a login and this session could
-not mint a session cookie (#72). Mockups of the implemented design are at
-`design/AgentApp.design.html`; they are drawn from the code, not photographed from it.
+**Browser verification completed 2026-08-31.** A throwaway signed-in agent account was exercised at
+the default desktop viewport and at 390×844. The Basic-plan inbound URL showed the upgrade prompt,
+the Inbound item was absent from the sidebar, the mobile drawer opened and closed, no horizontal
+overflow was present, keyboard focus was visible, and the browser captured no warning or error
+logs. The suspended dashboard showed the warning while retaining the Policies link. The live
+verification script also covered the entitlement API, plan change without re-login, read-only
+writes, forged/expired sessions, missing membership, repeated/concurrent requests, and the
+agent/admin cookie boundary.
 
 ---
 
@@ -576,21 +542,6 @@ no dialer, no TCPA checker, no statement importer.
 The blocking behaviour **is** proven (at 1000/1000 of a hard-capped meter the check returns
 `allowed=false, reason=over_cap`); what is unproven is that a real feature honours the answer.
 Whoever builds the first metered action must call `consumeMeter()` **before** acting, not after.
-
-### 28. Guard coverage is 2 of 27 features
-**From:** SA-2.8 · **Belongs to:** LA-0.1
-
-SA-2.8 built `requireFeature()` and proved it works, but only two features have an actual API
-route to guard (`book_of_business`, `chargeback_radar`) — the rest have no agent-facing endpoint
-yet, so there is nothing to protect.
-
-`npm run check:features` reports this as **TODO, not FAIL**, deliberately: a check that stays red
-for months trains people to ignore it. There is a single flag in that script,
-`GUARD_COVERAGE_MUST_BE_COMPLETE`, to flip once LA-0.1 has built the agent app — from then on an
-unguarded feature genuinely means a route shipped without protection.
-
-**Do not forget to flip it.** A guard referencing a non-existent key already fails hard, since
-that's always a bug regardless of how complete the app is.
 
 ### 23. `consumeMeter` check-then-record is not atomic
 **From:** SA-2.5 · Minor, deliberate
@@ -788,33 +739,6 @@ billing-admin waiver that must remove an overage line before issue. It then rais
 invoice for the lot. The custom-invoice pieces exist; the period billing assembler and waiver
 model do not.
 ---
-
-### 82. The period billing run exists — one step left  *(was #44 on the module-4 branch — renumbered on merge, where main had already used #44 for something else)*
-**From:** SA-3.7 · **Built 2026-08-31**
-
-The job now exists: `npm run bill:periods`. For each subscription whose period has ended it gathers
-attached add-ons, metered overage above the effective allowance, and any charge parked by a
-mid-period plan change, applies the tenant's credit balance, and raises one invoice for the lot —
-then advances the periods.
-
-Three decisions worth knowing:
-
-- **Bill, then roll, in one command.** Usage is keyed by `period_start`, so after
-  `advance_billing_periods()` runs, "this period's usage" means the new empty bucket. Billing after
-  the roll would charge everyone for zero overage forever and look healthy doing it. The two cannot
-  be scheduled apart because they are one script.
-- **Idempotent by primary key, not by a check.** `period_billing_runs (subscription_id,
-  period_start)` is written in the same transaction as the invoice. A check in application code
-  would race two concurrent runs; a primary key cannot.
-- **Overage is skipped for hard-capped or unpriced meters.** A hard cap means the usage was refused
-  at the door, so billing it would charge for something we blocked; an unpriced meter means an
-  operator has not priced it, and inventing a price to bill a customer is worse than billing
-  nothing.
-
-**Still owed:** `supabase/migrations/0017_period_billing.sql` has not been applied — no credential in
-this repository can run DDL. Until it is, `npm run verify:period-billing` stops with a clear message
-and the run has never executed against a real database. The arithmetic is covered by 19 unit tests
-and the migration parses against a real server; neither of those is the same as having run.
 
 ---
 
@@ -1038,205 +962,14 @@ This supersedes the "9 migrations in the repo" half of [#56]: the baseline dump 
 ordering one.
 
 
-### 84. SA-4.8's two dialing criteria are structurally unproven, not just untested
-**From:** the PR #8 review · **Compliance-critical**
+### 87. ✅ Module 4's own verification scripts were re-run after the merge
+**From:** the module-4 merge · **Resolved:** 2026-09-01
 
-Two acceptance criteria describe behaviour that no test exercises end to end:
+The merged tree was re-verified with `npm run verify:all`. All twenty-two suites now pass, including
+the formerly failing configuration route, agent-template, credit-margin, and period-billing
+checks. The LA-0 RLS suite is included in that count.
 
-- *"Disabling the last enabled DNC vendor triggers a confirmation that names the consequence, then
-  blocks dialing platform-wide."* The blocking half is real and correct — `assertDncVendorAvailable`
-  refuses when the enabled `dnc_scrub` count is zero. The **confirmation that names the
-  consequence** is a UI affordance I could not find, and nothing asserts it.
-- *"With two vendors enabled, simulating a failure on the primary routes the call to the secondary
-  and logs the fallback."* `lib/compliance/fallback.test.mjs` proves the loop against an injected
-  callback, which is a fair unit test. Nothing drives two *registered* vendors through
-  `runWithComplianceFallback`, so the priority ordering read from the database and the
-  `provider_calls` fallback row are never proven together.
-
-The ticket is blunt about the stakes: a DNC-listed call costs $500–$1,500. The code is written to
-fail closed and, reading it, does. That is not the same as having watched it.
-
-**Fix:** add a `verify:compliance` case that registers two stub vendors against a local endpoint,
-fails the primary, and asserts both the secondary's answer and the fallback row. Add the
-confirmation dialog on disabling the last DNC vendor, quoting the cost.
-
-### 85. SA-4.8's "unreachable" case is only covered at scrub time, not by the status the UI reads
-**From:** the PR #8 review · **Minor, but the wording matters**
-
-The rule is *"if every vendor of type `dnc_scrub` is disabled **or unreachable**, outbound dialing
-is blocked"*. `getDncDialingStatus` — which feeds the Configuration Center status strip — counts
-only `is_enabled`. With one enabled vendor that is down, it reports dialing as available.
-
-Dialing itself is still safe: the scrub runs, every vendor fails, `runOrderedFallback` rethrows and
-the route returns 503 `blocked: true`. So the guarantee holds; only the *status display* is
-optimistic, which is the opposite of what an operator wants during an incident.
-
-**Fix:** fold the 24-hour health already computed in `health()` into the status, so a type whose
-every vendor is failing reads as at-risk rather than green.
-
-### 86. The credit pack margin indicator is unverified, and the cost it compares against is partly guessed
-**From:** the PR #8 review · SA-4.9
-
-*"The margin indicator turns red if sell price is at or below the vendor cost from SA-4.8"* has no
-assertion anywhere. `listMeterPricing` does source cost from the enabled DNC vendors — but only for
-`dnc_lookups`, via `Math.min(...vendorCosts)`; every other meter falls back to the manually
-configured `cost_cents`. That is a reasonable design given only DNC vendors carry a per-lookup
-cost, and it is not what the criterion says.
-
-**Fix:** assert the red state in the verification, and either extend vendor-sourced cost to the
-other compliance meters or write down that only `dnc_lookups` is vendor-priced.
-
-### 87. Module 4's own verification scripts were not re-run after the merge
-**From:** the module-4 merge · **Do before trusting the merged tree**
-
-`verify:switches`, `verify:switches:multi`, `verify:system`, `verify:period-billing`,
-`verify:credits-limits` and the rest of `verify:all` all passed on the `module-4` branch. None has
-been run against the merged tree, where the shell layouts, the audit action list and the generated
-database types all changed.
-
-`tsc`, `eslint`, 239 unit tests, a real `next build` and `check:features` do pass on the merge.
-
-**Fix:** run `npm run verify:all` against the merged tree before it is deployed anywhere.
-### 88. Webhook completion is not durable  *(was #57 in the parked pre-merge review — renumbered on merge, where #57 was already taken)*
-**From:** Module 3 audit · **Release blocker**
-
-`markProcessed` and `markFailed` ignore Supabase update errors. The route can acknowledge Whop even
-though the event still looks unfinished locally. A real `payment.succeeded` can also be marked
-processed when invoice generation returns null. See M3-1 and M3-2 in `bugs_sa.md`.
-
-### 89. Invoice creation and coupon consumption are not atomic  *(was #58 in the parked pre-merge review — renumbered on merge, where #58 was already taken)*
-**From:** Module 3 audit · **Financial correctness**
-
-The invoice commits before `consume_coupon_period`. If consumption fails, retry finds the existing
-invoice and never consumes the period. Move both effects into one idempotent transaction. See M3-3.
-
-### 90. Manual payment settlement is non-atomic and permits overpayment  *(was #59 in the parked pre-merge review — renumbered on merge, where #59 was already taken)*
-**From:** Module 3 audit · **Financial correctness; live data affected**
-
-Settlement inserts the payment, updates the invoice, activates subscriptions, rebuilds entitlement,
-and audits in separate operations. It activates by tenant rather than the invoice's subscription.
-The live database already has one $99 invoice with $198 in successful payments. See M3-4.
-
-### 91. Coupon plan and billing-cycle restrictions are not enforced by the admin RPC  *(was #60 in the parked pre-merge review — renumbered on merge, where #60 was already taken)*
-**From:** Module 3 audit · **Financial correctness**
-
-`admin_apply_coupon` ignores `restricted_to_plan_ids` and `billing_cycle`. Current rows are clean,
-but the database permits an incompatible coupon assignment. See M3-5.
-
-### 92. Refund and credit execution needs recoverable reconciliation states  *(was #61 in the parked pre-merge review — renumbered on merge, where #61 was already taken)*
-**From:** Module 3 audit · **Financial correctness**
-
-Whop can succeed while the following local update fails; local credit adjustment errors can also be
-reported as success. Add checked writes, idempotent retries, and a provider-success/local-reconcile
-state. See M3-6.
-
-### 93. Provider-call logging covers only part of Whop  *(was #62 in the parked pre-merge review — renumbered on merge, where #62 was already taken)*
-**From:** SA-3.1 audit · **Observability**
-
-Whop-specific plan, promo, invoice, refundability, membership, and free-day methods bypass the
-logging decorator. Live `provider_calls` contains only three connection-test lookups. See M3-9.
-
-### 63. Cross-tenant billing relationships are not enforced
-**From:** Module 3 audit · **Data integrity**
-
-Custom invoices can pair one tenant with another tenant's subscription, and credit notes can pair a
-tenant with another tenant's invoice. No live mismatch exists, but both RPCs permit one. See M3-10.
-
-### 94. Credit-to-free-days conversion uses the monthly price for every cycle  *(was #64 in the parked pre-merge review — renumbered on merge, where #64 was already taken)*
-**From:** SA-3.8 audit · **Latent billing defect**
-
-The not-yet-wired redemption function ignores the subscription billing cycle. Correct this before
-automatic credit consumption is enabled. See M3-11.
-
-### 65. Plan versioning drops limits, meters and available add-ons
-**From:** Module 2 audit · **Release blocker**
-
-`admin_create_plan_version` copies features and prices only. A new live-plan version loses seat and
-carrier limits, all meter allowances, and plan add-on availability. See M2-1 in `bugs_sa.md`.
-
-### 95. Entitlement refresh failures are acknowledged as successful changes  *(was #66 in the parked pre-merge review — renumbered on merge, where #66 was already taken)*
-**From:** SA-2.7 / SA-2.8 audit · **Access-control correctness**
-
-`rebuildEntitlement` catches and logs failures, so a downgrade, suspension, cancellation, feature
-removal or add-on removal can return success while stale access remains cached. See M2-2.
-
-### 96. Add-on meter credits do not reach enforcement or usage display  *(was #67 in the parked pre-merge review — renumbered on merge, where #67 was already taken)*
-**From:** SA-2.6 audit · **Entitlement correctness**
-
-The resolver stacks add-on credits, but `check_meter_capacity` and the usage screen read plan meters
-only. The displayed entitlement and enforced allowance can disagree. See M2-3.
-
-### 68. Add-on detach is not bound to the route subscription
-**From:** SA-2.6 audit · **Cross-tenant/data-integrity risk**
-
-An attachment ID from subscription B can be sent through subscription A's URL. B is modified while
-A is audited and refreshed, leaving B's cached entitlement stale. See M2-4.
-
-### 69. Subscription transition rules are enforced only by the UI
-**From:** SA-2.7 audit · **Access-control correctness**
-
-A crafted `resume` can activate a cancelled or suspended subscription; cancel/pause/change-plan
-also accept invalid source states. Move the state machine into a locked RPC. See M2-5.
-
-### 70. Archived plans are still assignable by API
-**From:** SA-2.2 / SA-2.7 audit · **Product-control bypass**
-
-The picker hides archived plans, but assignment and change-plan RPCs do not reject them. See M2-6.
-
-### 97. New individual plans are not seeded with their mandatory one-seat limit  *(was #71 in the parked pre-merge review — renumbered on merge, where #71 was already taken)*
-**From:** SA-2.2 / SA-2.5 audit · **Plan configuration defect**
-
-Plan creation inserts no `plan_limits` or `plan_meters`, and no editor writes those tables. A new
-individual plan is unlimited until Supabase is edited manually. See M2-7.
-
-### 98. Entitlement verification does not pin the intended plan contents  *(was #72 in the parked pre-merge review — renumbered on merge, where #72 was already taken)*
-**From:** SA-2.8 audit · **Test gap**
-
-`verify-entitlements` reads its expected list from `plan_features`, so an incorrectly configured
-plan still passes. Pin reviewed arrays for Plan A/B/C and assert all three exist. See M2-10.
-
-### 99. Edit User and token replacement can partially commit  *(was #74 in the parked pre-merge review — renumbered on merge, where #74 was already taken)*
-**From:** SA-1.3 audit · **Transactional correctness**
-
-Name/phone/role can commit before a duplicate-email conflict is returned. Replacement links delete
-the old token before the new token commits; Resend Invite can also delete other token purposes.
-Make these operations atomic and check every result. See M1-3/M1-8.
-
-### 100. Lifecycle changes block sessions but do not revoke them  *(was #75 in the parked pre-merge review — renumbered on merge, where #75 was already taken)*
-**From:** SA-1.4 audit · **Authentication correctness**
-
-The live status check blocks the old cookie while a user is inactive/suspended, but the same 12-hour
-cookie works again after reactivation. Add a per-user session version or revocation timestamp and
-advance it on every state change. See M1-4.
-
-### 101. User reactivation bypasses seat limits and lifecycle transition rules  *(was #76 in the parked pre-merge review — renumbered on merge, where #76 was already taken)*
-**From:** SA-1.4 / SA-2.5 audit · **Licensing and state-machine correctness**
-
-Activation is a direct update with no seat check, and all four lifecycle endpoints accept source
-states that their buttons hide. Put the seat check and allowed transition graph in one locked RPC.
-See M1-5/M1-7.
-
-### 102. The database does not guarantee that every tenant keeps an owner  *(was #77 in the parked pre-merge review — renumbered on merge, where #77 was already taken)*
-**From:** SA-1.2 / SA-1.3 audit · **Authorization invariant**
-
-A new tenant can be created with its only user as `producer`; concurrent demotions lock different
-membership rows and can both pass the owner count. Force the first member to owner and serialize
-role changes with a tenant-scoped lock. See M1-6.
-
-### 103. Module 1 links still fall back to the request Host  *(was #78 in the parked pre-merge review — renumbered on merge, where #78 was already taken)*
-**From:** SA-1.2 / SA-1.3 audit · **Security hardening**
-
-Invitation, reset, and email-change routes still use `request.nextUrl.origin` when the canonical URL
-is missing. Reuse SA-5.1's strict configured-origin helper and fail before mutating tokens. See M1-9.
-
-### 104. Login activity can silently stop recording  *(was #79 in the parked pre-merge review — renumbered on merge, where #79 was already taken)*
-**From:** SA-1.5 audit · **Observability**
-
-Supabase write errors are returned, not thrown, but login-event and last-login writes ignore the
-returned errors. Keep authentication available while surfacing and retrying telemetry failures.
-See M1-10.
-
-
+No new backlog item was created for the re-run itself.
 ### 105. Tenant users have no self-service account recovery — deferred to LA-0
 **From:** the SA-4.11 email audit · **Deferred by decision on 2026-08-30**
 
@@ -1282,12 +1015,430 @@ either keep money that is not ours or reverse a charge that was legitimate.
 **Fix:** confirm with the provider what was actually collected, then use the existing credit-note
 path (SA-3.8) or a refund. Both are already built and audit-logged.
 
-
 ---
+
+### 117. 🟠 LA-1.4 lead CSV import is a later product surface
+**From:** LA-1.4 · **Belongs to:** the later lead-import ticket · **Gap recorded:** 2026-09-01
+
+The authenticated LA-1.4 builder and partner form are now browser-verified: the template screen
+renders, conditional fields hide and show without a reload, the partner form resumes an autosaved
+draft after reload, valid submission clears the form, and missing required values show field-level
+messages. The live verifier separately covers concurrency, hostile input, audit rows and tenant RLS.
+
+The requested CSV import round-trip cannot be verified here because `/app/import` explicitly renders
+“List import is on the way”; it is not a shipped LA-1.4 surface. The existing lead-workspace export
+link was exercised. When the later lead-import ticket ships, add the browser round-trip and move this
+entry to resolved. Cost of leaving it open: CSV ingestion remains unverified until that later UI
+exists; it does not block the current dynamic-form submission path.
+
 
 ## ✅ Resolved
 
 *Terse log — details live in git history.*
+
+### 63. ✅ Billing relationships are tenant-scoped in the database
+**From:** Module 3 audit · **Belongs to:** Module 3 billing integrity · **Resolved:** 2026-09-03
+
+Database triggers reject an invoice paired with another tenant's subscription or a credit note paired
+with another tenant's invoice. The follow-up trigger migration is table-safe for both row shapes. A
+rollback-wrapped live SQL probe rejected both mismatches.
+
+### 94. ✅ Free-day credits use the subscription billing cycle
+**From:** SA-3.8 audit · **Belongs to:** Module 3 credit-note handling · **Resolved:** 2026-09-03
+
+Credit-to-free-days conversion now uses the subscription's monthly, quarterly, or yearly price
+through `priceForCycle`, rather than always using the monthly price. Credit-note verification passes.
+
+### 65. ✅ Plan versions retain the complete commercial configuration
+**From:** Module 2 audit · **Belongs to:** Module 2 plan management · **Resolved:** 2026-09-03
+
+Plan version creation now copies features, prices, limits, meters, and available add-ons. The live
+`npm run verify:plan-version` suite passed every category.
+
+### 95. ✅ Entitlement refresh failures are no longer swallowed
+**From:** SA-2.7 / SA-2.8 audit · **Belongs to:** Module 2 entitlement lifecycle · **Resolved:** 2026-09-03
+
+Entitlement rebuild failures are logged and rethrown, and credit execution no longer ignores them,
+so a source mutation cannot report success while stale access remains cached.
+
+### 96. ✅ Add-on meter credits reach display and enforcement
+**From:** SA-2.6 audit · **Belongs to:** Module 2 add-ons and metering · **Resolved:** 2026-09-03
+
+The resolver, usage display, and meter-capacity check use the same plan-plus-add-on allowance.
+`npm run verify:addon-meters` passed plan-only, attached, agreement, and detach checks.
+
+### 154. ✅ Add-on detach is scoped to the subscription URL
+**From:** SA-2.6 audit · **Belongs to:** Module 2 add-ons · **Resolved:** 2026-09-03
+
+The admin DELETE route calls the subscription-scoped detach RPC. A live rollback-wrapped probe
+confirmed that subscription A cannot detach subscription B's attachment.
+
+### 155. ✅ Subscription transitions are guarded in SQL
+**From:** SA-2.7 audit · **Belongs to:** Module 2 subscription lifecycle · **Resolved:** 2026-09-03
+
+Locked subscription RPCs reject invalid source states and preserve valid pause/resume behavior.
+`npm run verify:transitions` passed crafted invalid transitions and valid admin-route transitions.
+
+### 70. ✅ Archived plans are rejected by subscription APIs
+**From:** SA-2.2 / SA-2.7 audit · **Belongs to:** Module 2 plan and subscription lifecycle · **Resolved:** 2026-09-03
+
+Assignment and change-plan RPCs reject archived or missing plans before writing. The live transition
+verifier attempted both archived-plan operations and confirmed the rejection.
+
+### 97. ✅ Individual plans receive their mandatory one-seat default
+**From:** SA-2.2 / SA-2.5 audit · **Belongs to:** Module 2 plan management · **Resolved:** 2026-09-03
+
+The plan-default trigger and backfill ensure an individual plan has `max_seats = 1` unless an
+explicit limit exists. The live plan-version verifier confirmed newly-created behavior.
+
+### 98. ✅ Entitlement verification pins reviewed plan contents
+**From:** SA-2.8 audit · **Belongs to:** Module 2 entitlement verification · **Resolved:** 2026-09-03
+
+`verify-entitlements` now pins reviewed Basic, Pro, and Advance feature arrays and asserts all three
+plans exist before comparing live snapshots. Exact feature and suspended-read-only checks pass.
+
+### 99. ✅ Admin user edits and token replacement are atomic
+**From:** SA-1.3 audit · **Belongs to:** Module 1 admin user management · **Resolved:** 2026-09-03
+
+Locked database functions now cover profile/role plus email-change edits, invite replacement, and
+password-reset replacement. Live duplicate-email and duplicate-token probes confirmed no partial
+mutation.
+
+### 100. ✅ Lifecycle changes revoke old user sessions
+**From:** SA-1.4 audit · **Belongs to:** Module 1 authentication · **Resolved:** 2026-09-03
+
+Users carry a session version; lifecycle changes increment it, new tenant/partner tokens carry it,
+and guards compare it on every request. The live user-integrity verifier confirmed old-session
+rejection after reactivation and fresh-session success.
+
+### 101. ✅ User reactivation enforces state transitions and seat limits
+**From:** SA-1.4 / SA-2.5 audit · **Belongs to:** Module 1 admin user management · **Resolved:** 2026-09-03
+
+`admin_set_user_status` is a locked SQL transition function that enforces allowed states, seat
+limits, suspension fields, and session invalidation. Live failure-path checks pass.
+
+### 102. ✅ Owner preservation is enforced by user-management operations
+**From:** SA-1.2 / SA-1.3 audit · **Belongs to:** Module 1 tenant membership · **Resolved:** 2026-09-03
+
+Admin tenant creation forces the first membership to owner, and role changes lock the tenant before
+checking the last-owner invariant. The live user-integrity verifier confirmed both behaviors.
+
+### 103. ✅ Credential links require a configured application origin
+**From:** SA-1.2 / SA-1.3 audit · **Belongs to:** Module 1 authentication links · **Resolved:** 2026-09-03
+
+Admin, agent, and partner invite/reset/email-change routes use the server-only configured-origin
+helper and validate it before token creation. No route falls back to `request.nextUrl.origin`.
+
+### 104. ✅ Login telemetry retries without blocking authentication
+**From:** SA-1.5 audit · **Belongs to:** Module 1 authentication observability · **Resolved:** 2026-09-03
+
+Login-event inserts and last-login updates check Supabase errors, retry once, and log a visible
+server error after retry while preserving the authentication response across admin, agent, partner,
+and signup flows.
+
+### 156. ✅ Users list now reads the live subscription plan
+**From:** SA-1.1 · **Belongs to:** SA-1.1 · **Resolved:** 2026-09-03
+
+The `admin_user_list` view and Users plan-filter options now derive `plan_code` from the tenant's
+non-cancelled subscription and its `plans` row. The migration is applied live; the current 14 view
+rows all match their live subscription plan.
+
+### 89. ✅ Invoice creation and coupon consumption are atomic
+**From:** Module 3 audit · **Belongs to:** Module 3 invoice and coupon handling · **Resolved:** 2026-09-03
+
+The invoice/coupon operation now uses one idempotent database transaction, so a failed coupon
+consumption cannot leave an invoice committed without consuming the matching period. The live
+coupon verifier passed replay and counter-restoration checks.
+
+### 93. ✅ Whop provider calls carry tenant context and are logged
+**From:** SA-3.1 audit · **Belongs to:** Module 3 provider observability · **Resolved:** 2026-09-03
+
+Whop client construction accepts the tenant context and all known tenant billing, checkout, trial,
+credit, invoice, and billing-mode call sites pass it through to provider-call logging. The live
+membership lookup verifier passed positive, wrong-plan, unknown-tenant, and no-throw checks.
+
+### 109. ✅ Migration deep semantic verification no longer times out or misreports screening policies
+**From:** repository verification audit · **Belongs to:** repository verification · **Resolved:** 2026-09-01
+
+The deep migration checker now treats policy creation and removal as dependent DDL after the
+tenant-only verification role is denied table-creation rights. The LA-1.5 migration completes the
+focused deep check with 38 statements checked, 0 missing-object errors and 0 syntax/order errors.
+The checker change is committed in `scripts/check-migrations.mjs`; this resolves the earlier #109
+false failure without weakening real migration error detection.
+
+### 118. ✅ LA-1.5 screening service and live acceptance completed
+**From:** LA-1.5 · **Belongs to:** LA-1.5 · **Resolved:** 2026-09-01
+
+The fail-closed typed TCPA/DNC screening boundary is implemented in
+`lib/compliance/screening.ts`. The committed migration
+`20260902160000_la_1_5_screening_service.sql` was applied to the `Insurvas-Saas` Supabase project.
+Live SQL verification confirms the three screening tables, RLS, tenant policies, five lead screening
+columns and four cache RPCs. `npm run verify:screening` passed session rejection, required phone
+field, invalid-phone audit/no-write, DNC warning persistence, primary-to-secondary fallback logging,
+cache replay without extra vendor calls or credits, TCPA precedence/no-write, and concurrent cold
+cache sharing. The authenticated agent workspace rendered at `/app/leads` with no browser console
+errors; desktop and 390px responsive checks showed no horizontal overflow. Nothing remains open for
+LA-1.5.
+
+### 119. ✅ LA-1.5 live verification blockers cleared
+**From:** LA-1.5 · **Belongs to:** LA-1.5 · **Resolved:** 2026-09-01
+
+The two temporary verification gaps recorded during implementation are cleared. The migration is
+now present in Supabase migration history and the focused verifier no longer reports NOT TESTABLE
+YET. The real browser lead workspace no longer shows the missing `agent_leads.screening_outcome`
+column error. The verifier and browser evidence now cover the deployed tenant/session path; no
+separate deployment-owner handoff remains.
+
+### 110. ✅ LA-1.1 partner records and lifecycle implemented
+**From:** LA-1.1 · **Belongs to:** LA-1.1 · **Resolved:** 2026-09-01
+
+Tenant-scoped partner records, effective-dated commercial terms, partner memberships, lifecycle
+transitions, non-destructive history retention, cached-entitlement partner limits, audit rows,
+server-side API guards and the responsive Partners screen are implemented. The live migrations
+`20260902100000_la_1_1_partner_records_lifecycle` and
+`20260902101500_la_1_1_partner_limit_and_offboard_fix` were applied, and the focused live
+partner verifier passes the authorization, lifecycle, audit, RLS, history, idempotency and
+concurrency checks. The Partners menu entry now points at the built screen.
+
+The partner portal submission path is now implemented by the LA-1.7 intake follow-up below. Two
+later-ticket items remain recorded: the separate inbound-transfer webhook is still a placeholder,
+and current SA-2.8 plan-limit payloads do not yet populate the exact per-partner limits owned by
+LA-1.19.
+
+### 111. 🟡 LA-1.1 provider inbound-transfer adapter remains outside the current app frame
+**From:** LA-1.1 · **Belongs to:** provider inbound-transfer integration follow-up · **Gap recorded:** 2026-09-03
+
+LA-1.1 stores the partner lifecycle atomically and the partner portal submission API enforces active
+status and product approval before its fatal lead insert. The separate inbound transfer webhook still
+returns `501 Not Implemented`, so that provider-facing adapter remains outside the current app frame.
+LA-1.19 now adds and refreshes the per-type partner limits (`max_publishers`,
+`max_marketing_partners`, and `max_affiliates`) and its live verifier exercises those limits.
+
+**Fix:** implement the provider-specific inbound-transfer adapter when that integration is in scope,
+using the existing tenant, partner-status, product-approval, and entitlement checks. Cost of leaving
+it open: a provider cannot yet post a live transfer through the production-facing webhook, although
+the existing partner portal operations and subscription-backed limits are protected.
+
+### 112. ✅ LA-1.1 authenticated browser acceptance completed
+**From:** LA-1.1 · **Belongs to:** LA-1.1 · **Resolved:** 2026-09-01
+
+An entitled local owner agent drove the real `/app/publishers` screen. Browser QA created the
+partner, added effective-dated commercial terms, edited the partner, approved a product, paused and
+resumed the partner, and confirmed visible success notifications and current-term history. The
+authenticated screen rendered without browser errors; the existing responsive shell was also
+checked at desktop and phone widths. Server verification covers typed offboarding and the remaining
+failure/concurrency paths.
+
+### 113. ✅ LA-1.2 partner users and isolated portal access completed
+**From:** LA-1.2 · **Belongs to:** LA-1.2 · **Resolved:** 2026-09-01
+
+Partner users now have separate login and password-invite flows, partner-admin user management,
+database-resolved role and membership checks, next-request deactivation, atomic offboarding
+revocation, audit rows, partner/tenant isolation and a responsive portal shell. The migration set
+`20260902110000_la_1_2_partner_users_portal_access` plus its numbered ambiguity fixes was applied
+to live Supabase. The focused live verifier passed session forgery/expiry, cross-partner and
+cross-role access, same-token concurrency, agent-route separation, deactivation, reactivation,
+offboarding, audit and protected configuration-route checks. Browser QA rendered the authenticated
+partner portal with visible controls and no overflow; the temporary QA account was removed.
+
+All LA-1.2 acceptance criteria are PASS for the routes and operations that exist in this ticket.
+
+### 114. ✅ LA-1.2 partner submission surface resolved by the intake implementation
+**From:** LA-1.2 · **Belongs to:** LA-1.6 / LA-1.7 · **Resolved:** 2026-09-01
+
+The partner portal now renders the configured product form, resumes drafts, validates values on the
+server, and submits through the current partner session. Paused partners can still open the portal
+and read their existing context, but cannot save a new draft or submit a new lead. The live
+LA-1.4 verifier exercised the form, draft, submit, audit and isolation paths. The remaining
+provider-facing inbound transfer webhook is a separate later integration and remains in #111.
+
+### 115. ✅ LA-1.3 product-line submission assertions resolved by the intake pipeline
+**From:** LA-1.3 · **Belongs to:** LA-1.7 · **Resolved:** 2026-09-01
+
+LA-1.3 now owns the tenant product switches, per-partner approval rows, the reusable server-side
+`assertPartnerProductApproved` check, the no-store partner picker endpoint, and the non-null
+`agent_leads.product_line` field. The live LA-1.3 verifier proves disabled products disappear from
+the picker immediately, existing approval history is retained, cross-tenant configuration is
+blocked, and a catalog product can be added without a deployment.
+
+The LA-1.7 intake follow-up now adds the tenant-scoped queue, deal-flow, notification, failure and
+alert records. The live verifier proves an unapproved product is rejected before a lead write, the
+selected product line matches across lead/queue/deal-flow, duplicate submissions create one lead,
+and the notification is queued. A disabled product keeps its approval history and existing lead
+data intact; it only disappears from the current picker.
+
+The selected product's tenant template is resolved before the lead insert, and the retry key makes
+the write idempotent under repeated or concurrent requests.
+
+### 116. ✅ LA-1.3 authenticated browser acceptance completed
+**From:** LA-1.3 · **Belongs to:** LA-1.3 · **Resolved:** 2026-09-01
+
+The authenticated owner drove the real product controls on `/app/publishers`: Term Life was enabled,
+approved for the partner, disabled and restored. The partner picker reflected the change immediately,
+and each save showed a visible notification. The responsive partner portal and product-specific form
+were also checked with the same isolated tenant/partner session; the live verifier covers the
+cross-tenant and forged-session paths.
+
+### 120. ✅ LA-1.6 partner submission form completed
+**From:** LA-1.6 · **Belongs to:** LA-1.6 · **Resolved:** 2026-09-01
+
+The partner submission screen now uses the immutable tenant form definition, gates the form behind
+phone-first TCPA/DNC screening, resumes drafts, autosaves on a 30-second interval and page exit,
+validates required fields, records DNC acknowledgement, and requires a stored justification for
+duplicate overrides. The live migration `20260902161000_la_1_6_submission_guards` was applied to
+`Insurvas-Saas`. The focused verifier passed TCPA blocking, DNC warning and acknowledgement,
+duplicate detection and override, idempotent double submit, concurrent submit, audit, and draft
+definition-version checks. Authenticated browser QA rendered the real screen at desktop and phone
+widths with no console errors or horizontal overflow. No new LA-1.6 backlog item remains.
+
+### 121. ✅ LA-1.7 intake write pipeline completed
+**From:** LA-1.7 · **Belongs to:** LA-1.7 · **Resolved:** 2026-09-01
+
+The partner intake path now performs the capability check and lead insert before best-effort work-item,
+deal-flow and notification writes. Re-submitting a draft updates the existing lead and repairs missing
+downstream artifacts instead of creating duplicates. Every recorded downstream failure receives one
+durable open alert through the database trigger, and the service-role reconciliation function reports
+partner leads that have neither a work item nor a recorded failure.
+
+Migration `20260902170000_la_1_7_intake_reconciliation.sql` was applied to the live `Insurvas-Saas`
+project. The focused live verifier and the complete LA-1 verifier passed product-line consistency,
+partner-local deal-flow date, replay idempotency, missing-work-item reconciliation, durable failure
+alerts, repair without a second lead, and audit evidence. Authenticated browser QA rendered the real
+partner intake form at desktop and phone widths with no console errors or horizontal overflow, and
+verified inline validation and sign-out. No new LA-1.7 backlog item remains.
+
+### 122. ✅ LA-1.8 affiliate tracked links and lightweight intake completed
+**From:** LA-1.8 · **Belongs to:** LA-1.8 · **Resolved:** 2026-09-01
+
+Affiliate links now have tenant-scoped storage, optional campaign attribution, atomic click counting,
+active/paused lifecycle behavior, and owner/bookkeeper management APIs. The public short intake form
+collects name, phone, state, product interest and consent, runs the existing LA-1.5 TCPA/DNC screening,
+and writes through the same LA-1.7 lead, unclaimed queue, deal-flow, notification and audit pipeline.
+Attribution is retained on the lead and downstream records; no affiliate-specific copy of the intake
+pipeline was created.
+
+Migration `20260902180000_la_1_8_affiliate_links.sql` was applied to the live `Insurvas-Saas` project.
+The focused live verifier passed active-link resolution and click counting, immutable attribution,
+TCPA blocking, paused-link messaging and management listing. LA-1 regression verification, the
+required typecheck/lint/build/test/feature checks, deep migration verification, and fresh-tab browser
+QA at desktop and phone widths passed. Disposable QA tenants and compliance vendors were removed.
+Nothing remains unmet, deferred or unverified for LA-1.8, so nothing was added to the open backlog.
+
+### 123. ✅ LA-1.9 pipeline and stage configuration completed
+**From:** LA-1.9 · **Belongs to:** LA-1.9 · **Resolved:** 2026-09-01
+
+Tenant-scoped pipelines, ordered stages, tenant-scoped disposition mappings, default seeding,
+atomic reorder, safe archiving, canonical lead stage foreign keys, server-side owner guards,
+audit logging and the responsive settings controls are implemented. The live migrations
+`20260902190000_la_1_9_pipelines`, `20260902200000_la_1_9_pipeline_atomic_ops`,
+`20260902210000_la_1_9_revoke_rpc_execute` and `20260902220000_la_1_9_pipeline_fk_indexes` are
+applied to `Insurvas-Saas`.
+
+The focused live verifier passed forged and expired session rejection, role enforcement, tenant
+isolation, hostile input, default seeding, create/update paths, atomic and concurrent reorder,
+in-use archiving, tenant-scoped mappings, disposition movement, cross-tenant mutation rejection
+and audit evidence. Live SQL confirms the three operational tables store only non-null
+`pipeline_id`/`stage_id` values, and the pipeline RPCs are executable only by `service_role`.
+The authenticated owner settings screen was checked in a fresh browser tab at desktop and phone
+widths with no fresh console errors; stage selection, editors, mapping controls and mobile card
+layout rendered correctly. The required repository checks and the complete LA-1 verifier passed.
+Nothing remains unmet, deferred or unverified for LA-1.9, so nothing was added to the open backlog.
+
+### 124. ✅ LA-1.10 transfer leads inbox and atomic claim completed
+**From:** LA-1.10 · **Belongs to:** LA-1.10 · **Resolved:** 2026-09-01
+
+The transfer inbox uses the existing LA-1.7 `lead_queue` as its single work-item source, with
+oldest-first filtering, partner/product/state/screening/claim-owner filters, screening and duplicate
+badges, and one-second refresh for claim visibility. A service-role-only, row-locked claim RPC makes
+simultaneous claims single-winner: the loser receives a clear 409 and cannot retry or steal the row.
+The claim flow creates or reuses a verification session, closes stale active calls before opening a
+fresh one, tolerates a racing active-call unique violation, and keeps best-effort partner chat
+failure outside the claim result. Canonical ownership and the legacy `claimed_by` field stay synced.
+
+The live migration set through `20260902234000_la_1_10_inbox_filter_order.sql` is applied to
+`Insurvas-Saas`; RLS, tenant policies, grants, claim/list RPC privileges and foreign-key indexes
+were checked live. `npm run verify:transfer-inbox` passed oldest-first/500-row performance (730 ms),
+all server filters, simultaneous claims, cross-tenant isolation, assistant-role denial, forged and
+expired sessions, hostile input, stale-call recovery, failed-chat resilience and audit evidence.
+Authenticated browser QA rendered the real inbox at desktop and phone widths with clean console
+logs, working filters, visible claim controls and no horizontal overflow. Nothing was left unmet,
+deferred or unverified for LA-1.10, so nothing was added to the open backlog.
+
+
+- **#79 Configuration Center route verifier** → resolved 2026-09-01. The verifier now exercises the
+  shipped top-level admin routes after the Configuration Center hub was removed. Allowed roles
+  return 200; denied roles return the app's server-side 307 denial redirect or 403. All 41 route
+  and authentication checks passed. The deliberate Payments role boundary remains documented.
+
+- **#82 period billing migration** → resolved 2026-09-01. Migration `0017_period_billing.sql` was
+  applied to the live Supabase project. The real period-billing verifier passed invoice assembly,
+  overage, add-on, credit, period coverage, idempotency, and empty-period behavior. The fixture was
+  corrected to provide the live schema's required `plan_type` and `is_archived` fields.
+
+- **#86 credit-pack margin verification** → resolved 2026-09-01. The verifier now asserts that the
+  API exposes the configured cost and current sell price, rather than assuming every meter's cost
+  is zero. Vendor-derived cost remains limited to DNC lookups by design. The complete live
+  credits-and-limits suite passed.
+
+- **#107 agent-template verification fixture** → resolved 2026-09-01. A follow-up seed migration
+  restores the default Term Life template and product access when the original seed ran before the
+  catalog existed. The fixture now reports a useful dependency error instead of crashing. The full
+  SA-4.7 verification passed, including tenant copies, edits, merges, idempotency, and RLS.
+
+- **#108 LA-0 operational RLS policies** → resolved 2026-09-01. Tenant-scoped read policies and
+  `tenant_app` read grants were applied to the LA-0 tables; mutations remain service-role-only so
+  API role, entitlement, read-only, and audit gates cannot be bypassed. The direct tenant-role
+  verifier passed for two tenants across all 13 tenant-owned tables and active carrier references.
+
+- **#109 deep migration semantic verification** → resolved 2026-09-01. The checker now parses
+  block comments correctly, batches statement execution into one PostgreSQL round trip, and
+  distinguishes expected tenant-role privilege blocks from dependent DDL errors. The full live
+  migration set completed in 5.2 seconds: 931 statements checked, no syntax, ordering, or
+  missing-object errors. The 17 dependent DDL checks that cannot run under the tenant role are
+  reported explicitly rather than treated as failures. The fast `npm run db:check` path also passed.
+
+- **LA-0.1 agent shell, login and entitlement-driven menu** → completed and verified 2026-08-31.
+  The agent plane uses its own `insurvas_tenant_session` cookie and resolves tenant scope and the
+  current membership from that session plus the database; admin cookies are rejected by agent APIs
+  and tenant cookies are rejected by admin APIs. The single menu data file carries
+  `required_feature` and the shell filters it from the cached entitlement. Direct feature URLs use
+  the same entitlement guard and show the upgrade prompt, while every existing feature-bearing
+  agent API is listed in `lib/entitlements/agentApiPolicy.ts` and checked against a live
+  `requireFeature()` call. Plan changes were verified with the same signed session on the next
+  page load. Suspended tenants retain read access to their book and receive 403 `read_only` for
+  writes. The responsive sidebar, gate screen and suspended banner were exercised in the browser
+  at desktop and 390×844; browser logs were clean. `npm run verify:agent-shell` passed all checks.
+  The 23 catalog features without an agent API remain intentionally deferred to their module
+  tickets because LA-0.1 excludes module content; `npm run check:features` reports them explicitly
+  rather than pretending they are unguarded shipped routes. Items moved here from the open list:
+  #28 and the browser-verification portion of #74.
+
+- **LA-0.2 in-tenant roles and permissions** → completed and verified 2026-08-31.
+  Tenant membership roles are resolved from the session and database on every request; the role is
+  not stored on `users`. The single agent menu data set filters by both entitlement and role. Owner-
+  only team management supports invitation, role changes, seat counts and exact-tenant audit rows;
+  the database RPCs atomically block demoting or removing the last owner. Assistant money access,
+  bookkeeper dial access, producer commission scope, duplicate invitations, hostile input, missing
+  members, forged or expired sessions, concurrent owner changes and admin/tenant cookie separation
+  all passed `npm run verify:tenant-roles`. The browser exercised the real settings screen: an owner
+  invited an assistant, changed that member to bookkeeper, saw the role-specific description and
+  received visible success feedback. The existing unrelated template-fixture failure remains
+  tracked by #107 under SA-4.7; no new LA-0.2 backlog item was needed. Plan-limit enforcement and
+  custom roles remain out of scope by the ticket decision.
+
+- **LA-0.3 dashboard shell** → completed and verified 2026-08-31.
+  The dashboard now renders a single data-driven tile registry from
+  `lib/dashboard/tiles.ts`; tile visibility uses the cached entitlement's effective feature set,
+  and the dashboard component does not branch on plan names. The owner setup checklist is driven
+  by the tenant's persisted `onboarding_state`, shows five actionable steps with an accessible
+  progress ring, and disappears when the state becomes `completed`. Carrier and appointment tiles
+  have useful empty-state copy and next actions; no retention, money, chart, trend, or rearrangement
+  placeholders were added. Unit tests cover registry shape, feature filtering, roles, incomplete
+  onboarding and completion. Browser QA showed the unfinished checklist and tiles, then confirmed
+  the checklist disappeared after a same-session state change and the appointment tile/menu entry
+  disappeared when its feature was removed. The authenticated dashboard response measured 930ms on
+  a warm dev request and 718ms on a warm production request. No schema migration was needed because the existing tenant state and
+  entitlement snapshot already provide the required inputs. Nothing added to the backlog for LA-0.3.
 
 - **#73 / M1-1 / M1-2 atomic user-token redemption** → fixed with two service-role-only,
   security-invoker RPCs stored in a repository migration. Password/reset redemption now locks the
@@ -1581,6 +1732,450 @@ errors.
 
 All five SA-4.12 acceptance criteria are PASS. Nothing was left unmet, deferred or unverified for
 this ticket, so nothing was added to the open backlog.
+
+### 68. ✅ LA-0.5 appointment, licence and E&O vault completed
+**From:** LA-0.5 · **Belongs to:** LA-0.5 · **Resolved:** 2026-09-01
+
+The appointment and contract-level vault is implemented with effective-dated appointments,
+state licences, E&O policy records, continuing-education records, shared writing eligibility,
+90/60/30-day expiry warnings, owner-only APIs, audit rows, and a responsive settings screen.
+The migration is `20260901090000_la_0_5_appointment_contract_level_vault.sql` and was applied to
+the live Supabase project. The live verifier passed bulk capture for all 40 states, idempotent
+and concurrent saves, historical termination behavior, expired-record refusal, warning timing,
+hostile input, missing/forged sessions, producer refusal, and audit coverage. The required
+TypeScript, lint, production build, 273-test suite, feature-key check, and diff check passed.
+Browser QA saw the real settings screen, state-grid selection and clearing, save confirmation,
+responsive nested table scrolling without page overflow, and visible keyboard focus. The
+The Term Life template API fixture is now covered by the resolved SA-4.7 work recorded under #107
+and is not an LA-0.5 gap. Nothing was added to the open backlog for LA-0.5.
+
+### 69. ✅ LA-0.6 contact and household dedupe completed
+**From:** LA-0.6 · **Belongs to:** LA-0.6 · **Resolved:** 2026-09-01
+
+The tenant-scoped contact, household, phone, email, custom-field schema and reversible merge
+tables were added in migration `20260901100000_la_0_6_contact_household_model.sql` and applied to
+the live Supabase project. The corrective migration
+`20260901101500_la_0_6_secondary_phone_dedupe_fix.sql` makes alternate phone rows part of the
+duplicate match. The shared weighted duplicate matcher detects misspelled names and additional
+phones, keeps spouses at one address separate, auto-merges only high-confidence matches, sends
+medium matches to the side-by-side review screen with per-field source choices, and stores
+complete merge snapshots so undo restores both original records. Custom fields are validated
+against the JSONB schema and survive CSV import/export; spreadsheet formulas are neutralized on
+export.
+
+The live `npm run verify:contacts` run passed all seven acceptance areas: probable duplicate
+detection, spouse separation, thresholded/manual merge, reversible undo, CSV round-trip,
+sub-500ms search over 20,000 contacts, and cross-tenant isolation. It also passed role denial,
+missing and forged sessions, duplicate merge refusal, concurrent undo, hostile custom-field input,
+and audit-row coverage. The targeted migration check passed all 48 statements. TypeScript, lint,
+production build, 275 tests, `npm run check:features`, and `git diff --check` passed. Browser QA
+verified the Basic upgrade gate, the same session gaining Duplicate check after an Advance plan
+change, the rendered workspace, responsive mobile layout with no horizontal overflow, phone menu
+toggle, and no browser console errors. Screenshot evidence is at
+`C:\Users\Victus\.codex\visualizations\2026\09\01\la-0-6-contact-workspace.png`.
+
+All LA-0.6 acceptance criteria are PASS. Nothing was left unmet, deferred or unverified for this
+ticket, so nothing was added to the open backlog for LA-0.6.
+
+### 125. ✅ LA-1.11 verification panel and progress completed
+**From:** LA-1.11 · **Belongs to:** LA-1.11 · **Resolved:** 2026-09-02
+
+The agent verification panel is driven by the versioned partner form definition, counts only
+visible required fields, records corrections with old and new values, preserves progress across a
+dropped call and claimant handoff, and blocks concurrent verification. The server route resolves
+tenant and role from the session, enforces the inbound entitlement, writes audit history, and
+rejects forged, expired, unauthorized, duplicate, and hostile requests. The live migration and
+RPC privilege checks, complete acceptance verifier, mandatory repository checks, and authenticated
+desktop/mobile browser QA all passed. Nothing remains unmet, deferred or unverified for LA-1.11,
+so nothing was added to the open backlog.
+
+### 126. ✅ LA-1.12 disposition vocabulary and configurable wizard completed
+**From:** LA-1.12 · **Belongs to:** LA-1.12 · **Resolved:** 2026-09-02
+
+The tenant-scoped disposition vocabulary, stage-specific graph wizard, editable walk history,
+transactional completion reconciliation, tenant DNC suppression, and owner configuration screen
+are implemented. The two new agent API routes are included in the authorization inventory, and
+the wizard contains no hardcoded navigation graph. The live migration is applied and verified;
+the focused live verifier, deep migration check, TypeScript, lint, production build, unit tests,
+feature-policy check, and authenticated desktop/mobile browser QA passed. Nothing remains unmet,
+deferred, or unverified for LA-1.12, so nothing was added to the open backlog.
+
+### 127. ✅ LA-1.13 daily deal flow completed
+**From:** LA-1.13 · **Belongs to:** LA-1.13 · **Resolved:** 2026-09-02
+
+The tenant-scoped daily deal-flow screen is implemented as one data-driven grid with date,
+partner, product, agent and status filters, partner totals, manual outside-system entry, inline
+disposition editing, local-date preservation, complete CSV export, and integer-cent money fields.
+The API resolves tenant and role from the session, blocks missing or unentitled access, writes
+audit rows for creation and edits, rejects cross-tenant and hostile input, and fetches large
+filtered result sets in ordered chunks so the 10,000-row grid remains complete and under two
+seconds. The numbered migration is applied to the connected Supabase project and the live
+schema/index/trigger checks passed. The focused live verifier, deep migration check, TypeScript,
+lint, production build, 282-test suite, feature-policy check, and authenticated desktop/mobile
+browser QA passed. Nothing remains unmet, deferred, or unverified for LA-1.13, so nothing was
+added to the open backlog.
+
+### 128. ✅ LA-1.14 buffer agent flow completed
+**From:** LA-1.14 · **Belongs to:** LA-1.14 · **Resolved:** 2026-09-02
+
+The assistant buffer flow is implemented using the existing LA-0.2 assistant role. A buffer
+assistant can claim and verify an inbound transfer, offer it to a named active owner or
+producer, and the receiving licensed agent can see the verification progress before accepting.
+Acceptance atomically moves the queue ownership, active call and verification session together;
+an expired offer returns the transfer to the buffer without losing the call. Partner-channel
+claim cards are exactly-once and retries are idempotent. Disposition and commission access remain
+server-denied for assistants, and every mutation has tenant scope and audit evidence.
+
+The numbered migrations were applied to the connected Supabase project and the deep migration
+check passed. The focused live verifier passed all five acceptance areas plus role, tenant,
+hostile-input, forged/expired-session, duplicate-request, concurrency, timeout and audit checks.
+The dependent transfer-inbox and verification verifiers passed, as did TypeScript, lint, the
+production build, the 282-test suite, the feature-policy check, and authenticated desktop/mobile
+browser QA with no console errors. Manager assignment/ETA/ready routing, multi-LA buffer
+membership, buffer performance scorecards and buffer-seat billing remain explicitly out of scope
+for this ticket and belong to later product work. Nothing was added to the open backlog for
+LA-1.14.
+
+### 129. ✅ LA-1.15 Agent Floor completed
+**From:** LA-1.15 · **Belongs to:** LA-1.15 · **Resolved:** 2026-09-02
+
+The Agent Floor is implemented as one tenant-scoped live view of waiting transfers, open calls,
+and team availability. It uses `queued_at` and `started_at` for refresh-safe timers, treats an open
+`active_calls` row as the only evidence of a live call, and refreshes from a tenant-scoped Realtime
+signal rather than polling. Claim, handoff, accept, nudge, verification, and disposition actions
+remain available through the existing lead flow; the floor adds the team nudge action at the lead
+itself as well. The API derives tenant and role from the session, enforces the inbound entitlement,
+audits writes, rejects hostile input, and makes duplicate nudges idempotent under concurrency. The
+amber and red wait thresholds are read from the existing admin settings registry, so operations can
+change them without a plan-specific branch or a code redeploy.
+
+The live migration, RLS policies, Realtime triggers, focused security/concurrency verifier, deep
+migration check, TypeScript, lint, production build, 282-test suite, feature-policy check, and
+authenticated desktop/mobile browser QA all passed. Browser QA saw the live subscription and an
+availability change with no console errors; stale `last_seen_at` is also re-evaluated client-side
+so a closed laptop becomes offline within one minute even when no further event is emitted.
+Nothing was left unmet, deferred, or unverified for LA-1.15, so nothing was added to the open
+backlog beyond this resolved record.
+
+### 130. ✅ LA-1.16 nobody-claimed escalation is wired to the LA-1.23 worker
+**From:** LA-1.16 · **Belongs to:** LA-1.23 · **Resolved:** 2026-09-02
+
+LA-1.23 now advances unclaimed leads through one durable ladder and writes exactly-once outbox
+events. The worker creates the Ray-only `unclaimed_sla_escalation` notification and email at the
+escalation rung, then posts the `nobody_claimed` partner card at the partner-notification rung.
+The live verifier proved that all four rungs fire once when the scheduler is run twice and that a
+claimed lead is never advanced. Platform scheduling and job-failure alert delivery remain tracked
+separately in #143 under SA-6.1.
+
+### 131. ⚪ LA-1.16 agent-created channels and direct messages are not implemented
+**From:** LA-1.16 · **Belongs to:** LA-1.16 follow-up
+
+The delivered chat provides one automatically-created partner channel and two-way messages in
+that channel. It does not yet let Ray create additional channels or start a direct message. Add a
+participant model, server-side membership checks, channel creation and archive APIs, and UI entry
+points before treating that part of the ticket's stated in-scope behavior as complete.
+
+### 132. ⚪ LA-1.16 attachments are metadata-only
+**From:** LA-1.16 · **Belongs to:** LA-1.16 follow-up
+
+The migration stores attachment metadata with tenant scope and size/type constraints, but there is
+no upload, download, signed-URL, virus-scan or browser control yet. Add the storage lifecycle and
+failure handling before advertising attachments as available in partner chat.
+
+### 133. ✅ LA-1.17 partner lead pipeline completed
+**From:** LA-1.17 · **Belongs to:** LA-1.17 · **Resolved:** 2026-09-02
+
+The partner lead pipeline is implemented with one server-filtered read model, board and table
+views, filters, counters, lead detail and timeline, masked form values, and a safe CSV export.
+The API derives tenant and partner scope from the partner session, rejects foreign partner
+parameters, permits paused partners to read history, and rejects forged, expired, or offboarded
+access. The read RPCs are restricted to the service role, and the pipeline change trigger emits
+an opaque partner-scoped realtime signal while the UI refreshes its durable read model.
+
+The performance verifier later reproduced a server-side N+1 latest-deal lookup at 5,000 rows. The
+read model now paginates on the server, computes complete counters and facets independently of the
+page, and enriches only the bounded page with one latest-deal join. `EXPLAIN ANALYZE` fell from
+about 3.38 seconds to 77.7 ms on the retained 5,000-lead fixture, and the focused API verifier
+proved distinct pagination plus the under-two-second first-page requirement. The UI loads 250
+rows at a time and preserves loaded pages during live refreshes.
+
+### 137. ✅ LA-1.20 Notes tab blocker resolved by LA-1.21
+**From:** LA-1.20 · **Belongs to:** LA-1.21 · **Resolved:** 2026-09-02
+
+LA-1.21 replaced the lead-workspace Notes placeholder with tenant-scoped notes, author and
+timestamp display, internal/shared visibility, partner-channel synchronization, mention
+notifications, cross-lead search, edit history, and timeline tombstones. The live migrations and
+focused verifier passed. The prior LA-1.20 blocker is therefore resolved; authenticated browser
+verification remains tracked separately in #138 and #139.
+
+### 134. ✅ LA-1.18 partner-quality migration is applied and live-verified
+**From:** LA-1.18 · **Belongs to:** LA-1.18 · **Resolved:** 2026-09-02
+
+The numbered partner-quality migration and its follow-up count-field fix are applied to Supabase
+project `iiimdgizjwnihpyrukbu`. The live catalog now contains `partner_quality`; the report and
+drill-down RPCs exist and are executable only by `service_role`. `npm run check:features` passes,
+and `npm run verify:partner-quality` proves live record-derived counts, exact reconciliation,
+zero rows for partners with no leads, exact drill-downs, no cost fields, role and tenant isolation,
+session failure handling, hostile-input rejection, and concurrent reads.
+
+### 135. 🔵 LA-1.18 authenticated browser QA is blocked by the localhost browser policy
+**From:** LA-1.18 · **Belongs to:** LA-1.18
+
+The live migration and API verifier now pass, and the page is present at `/app/partner-quality`.
+The available in-app browser refused control of `http://localhost:3000` under its URL safety policy,
+before an agent session could be inspected. Desktop/mobile layout, sorting, date validation, the
+cost disclaimer, zero-partner rendering, exact drill-down dialog, focus and console state therefore
+remain unverified in the required real browser.
+
+**Fix:** use an approved browser surface that permits localhost, sign in with an entitled owner or
+producer, capture the finished desktop and phone views, inspect browser console logs, and verify
+every interactive control against `npm run verify:partner-quality`.
+
+### 136. 🔵 LA-1.19 authenticated browser QA is blocked by the localhost browser policy
+**From:** LA-1.19 · **Belongs to:** LA-1.19
+
+The live API and database checks for subscription limits pass. A production server and an existing
+agent tab were both available on 2026-09-03, but the in-app browser rejected the localhost tab
+claim under its URL safety policy before the authenticated page could be inspected. The partner
+and team capacity text, disabled create/invite controls, upgrade messaging, visible focus,
+responsive layout, and console state remain unverified in the required real browser.
+
+**Fix:** open a working local app tab, sign in as an entitled agent owner, drive `/app/publishers`
+and `/app/settings` at desktop and phone widths, capture the finished screens, and close this
+entry only after the browser console and interactive controls are clean.
+
+### 138. 🔵 LA-1.20 authenticated lead-workspace browser QA is blocked by the localhost browser policy
+**From:** LA-1.20 · **Belongs to:** LA-1.20
+
+A production server and an existing agent tab were both available on 2026-09-03, but the in-app
+browser rejected the localhost tab claim under its URL safety policy. Consequently the detail
+header, tabs, action controls, correction display, timeline, responsive layout, and finished-screen
+screenshot were not driven by browser interaction. The live API verifier covers those paths
+server-side, but it is not a substitute for the required authenticated browser acceptance.
+
+**Fix:** sign in as an entitled local agent owner, open a real lead from `/app/leads`, exercise the
+tabs and available actions at desktop and phone widths, inspect the console and focus states, and
+capture the finished workspace screenshot. Remove this entry only after that browser run is clean.
+
+### 139. 🔵 LA-1.21 authenticated notes browser QA is blocked by the localhost browser policy
+**From:** LA-1.21 · **Belongs to:** LA-1.21
+
+The live API and database verifier cover note creation, default internal visibility, partner
+filtering, visibility reversal, edit history, tombstones, mentions, search, tenant isolation,
+role gates, expired/forged sessions, duplicate requests, concurrent requests, and hostile input.
+On 2026-09-03 the production server and an existing agent tab were available, but the in-app
+browser rejected the localhost tab claim under its URL safety policy. The finished authenticated
+Notes screen, desktop/mobile interaction, visible focus, and screenshot remain unverified.
+
+**Fix:** sign in as an entitled agent owner or producer, open a real lead at `/app/leads/<id>`,
+exercise add/edit/delete, internal/shared visibility, teammate mention, and cross-lead search at
+desktop and phone widths, inspect console errors and focus states, and capture the finished screen.
+Cost of leaving it open: server enforcement is verified, but the required end-user presentation and
+interaction evidence is not.
+
+### 140. 🔵 LA-1.22 authenticated callback browser QA is blocked by the localhost browser policy
+**From:** LA-1.22 · **Belongs to:** LA-1.22
+
+The live callback verifier and protected route checks pass. On 2026-09-03 the production server
+and an existing agent tab were available, but the in-app browser rejected the localhost tab claim
+under its URL safety policy. It therefore could not drive the callback picker, customer and agent
+timezone display, calendar actions, dashboard and Agent Floor cards, focus states, responsive
+layout, or capture the finished authenticated callback screen.
+
+**Fix:** sign in as an entitled owner, producer, or assistant in the local agent app, open `/app/callbacks` and a real disposition flow, exercise schedule, reschedule, cancel, and complete at desktop and phone widths, inspect console errors and keyboard focus, and capture the finished authenticated callback screen. Cost of leaving it open: server and database behavior is verified, but the required end-user presentation and interaction evidence remains unverified.
+
+### 141. ✅ LA-1.23 SLA migration is applied and live-verified
+**From:** LA-1.23 · **Belongs to:** LA-1.23 · **Resolved:** 2026-09-02
+
+The SLA migration and its runtime ambiguity fix are applied to project
+`iiimdgizjwnihpyrukbu`. Live schema checks confirm both tables, both tenant RLS policies, the
+service-role-only functions and no public function grants. `npm run verify:unclaimed-sla` proves
+all four rungs fire exactly once across duplicate runs, claimed rows are never expired, expired
+leads reopen successfully, and a second reopen is idempotent.
+
+### 142. 🔵 LA-1.23 authenticated SLA settings and expired-lead browser QA is pending
+**From:** LA-1.23 · **Belongs to:** LA-1.23
+
+The database and focused verifier now pass. The in-app browser refused localhost control under its
+URL safety policy before an authorized agent tab could be inspected. Therefore the owner settings
+form, validation message, save confirmation, expired-lead read screen, Reopen in queue control,
+desktop/mobile layout, visible focus, and clean console were not driven. The server route and
+production build are not substitutes for this required front-end evidence.
+
+**Fix:** use an approved browser surface that permits localhost, sign in as an entitled agent owner,
+exercise `/app/settings` and a real expired lead at desktop and phone widths, inspect the console and
+keyboard focus, and capture the finished screen. Remove this item only after that run is clean.
+
+### 143. 🟡 LA-1.23 failure alerts still depend on SA-6.1
+**From:** LA-1.23 · **Belongs to:** SA-6.1
+
+The scheduler returns a failure report and HTTP 503 when an outbox side effect fails, and it retains the error for retry. A platform alert delivery mechanism owned by SA-6.1 is not present in the current repository, so the acceptance requirement that job failures alert through that system is not testable as an external alert in LA-1.23.
+
+**Fix:** SA-6.1 should consume the scheduler failure signal and deliver the platform alert. Then add a live failure-injection check proving one alert is emitted without duplicating the SLA event.
+
+### 144. ✅ LA-1.23 escalation is consumed by the LA-1.25 alert center
+**From:** LA-1.23 · **Belongs to:** LA-1.25 · **Resolved:** 2026-09-02
+
+LA-1.25 consumes `agent_notifications`, maps `unclaimed_sla_escalation` to its own event controls,
+and provides the in-app toast, browser notification and distinct sound path without duplicating the
+source-key event. The live alert verifier proves durable source-key deduplication and per-event
+settings. Real browser presentation evidence remains tracked separately in #146.
+
+### 145. 🔵 LA-1.24 authenticated existing-customer browser QA is blocked by the localhost browser policy
+**From:** LA-1.24 · **Belongs to:** LA-1.24
+
+On 2026-09-03 the production server and an existing agent tab were available, but the in-app
+browser rejected the localhost tab claim under its URL safety policy. The inbox row, Agent Floor
+card, lead-workspace pre-flight card, manual re-check confirmation, desktop/mobile layout, visible
+keyboard focus, and authenticated console could not be driven. The live RPC, API authorization,
+persistence, tenant isolation, concurrency, hostile-input, and performance checks pass, but they
+do not replace the required authenticated browser evidence.
+
+**Fix:** sign in as an entitled local agent owner, producer, or assistant, open a real lead, verify the pre-flight result and policy-matching disclaimer on the inbox, Agent Floor, and lead workspace surfaces, exercise manual re-check, repeat at desktop and phone widths, inspect console errors and keyboard focus, and capture the finished authenticated screen. Remove this entry only after that browser run is clean.
+
+### 146. 🔵 LA-1.25 authenticated alert-center browser QA is pending an authorized agent session
+**From:** LA-1.25 · **Belongs to:** LA-1.25
+
+The live settings/API verifier and migration checks pass. The available in-app browser refused
+localhost control under its URL safety policy before the authorized agent state could be inspected,
+so the finished authenticated alert center could not be driven. Browser notification permission,
+denied-permission fallback, notification click-through, DND indicator, sound controls, per-event
+persistence in the real UI, console cleanliness, keyboard focus, and desktop/mobile screenshots
+therefore remain unverified.
+
+**Fix:** use an approved browser surface that permits localhost, sign in as an entitled local agent
+owner, producer, assistant, or bookkeeper, open any `/app` page, exercise the Alert settings panel
+and each toggle, grant and deny browser permission in separate runs, create a test alert in a
+background tab, click it to open the lead, test DND, mute, volume, and a ten-lead burst at desktop
+and phone widths, inspect console errors and keyboard focus, and capture the finished screen.
+
+### 147. 🔴 LA-1.25 and LA-1.22 disagree about callback reminder email
+**From:** LA-1.25 · **Belongs to:** LA-1.25 / LA-1.22
+
+LA-1.25's channel matrix says callback-due alerts have no email and that email is for escalations only. LA-1.22 explicitly requires configurable callback reminders in-app and by email, and the existing callback reminder worker still sends that email. The alert center correctly does not add another email, but changing the worker here would break the earlier callback ticket without a product decision.
+
+**Fix:** decide whether callback reminder email remains a LA-1.22 exception or must be removed in favor of the LA-1.25 matrix, then update the owning callback worker, tests, and both ticket specifications together. Cost of leaving it open: the UI channels are correct for browser/toast/sound, but routine callback email behavior is not unambiguously aligned with the combined requirements.
+
+### 148. ✅ LA-1 database RPC grants and early tenant-policy advisor findings resolved
+**From:** LA-1 module audit · **Belongs to:** LA-1.1 / LA-1.4 / LA-1.8 / LA-1.12 / LA-1.15 · **Resolved:** 2026-09-03
+
+The live security advisor found direct anonymous/authenticated execution on the LA-1.4 draft RPC
+and LA-1.15 Realtime trigger function, a mutable search path on LA-1.12 note rendering, and four
+early tenant policies that recomputed session context per row. Migration
+`20260903200000_la_1_security_and_rls_advisor_fix.sql` revokes those grants, pins the function
+search path, and recreates the policies with initplans. The migration is applied live;
+`npm run verify:la1-security` passes and the targeted security/performance advisor findings are zero.
+
+### 149. ✅ LA-1.15 transient Realtime verification failure passed on immediate rerun
+**From:** LA-1 module audit · **Belongs to:** LA-1.15 · **Resolved:** 2026-09-03
+
+One parallel QA run received no Agent Floor Realtime event inside the one-second probe and failed
+both delivery assertions. The immediate isolated rerun passed both assertions and the full
+LA-1.15 suite. No state transition failed and the durable floor read remained correct. Keep the
+one-second probe visible in CI; recurrence would indicate a Realtime reliability issue rather than
+an application-state failure.
+
+### 150. ✅ Stale LA-1.16 and LA-1.20 verification fixtures removed
+**From:** LA-1 module audit · **Belongs to:** LA-1.16 / LA-1.20 · **Resolved:** 2026-09-03
+
+Twelve synthetic tenants remained after earlier interrupted checks because the LA-1.16 cleanup
+attempted to delete partners before restrictive `partner_users` rows and ignored the failed delete.
+The cleanup order now deletes memberships first. All matching `@invalid.test` users and the exact
+synthetic tenant-name patterns were inspected, removed, and re-counted at zero.
+
+### 152. 🔵 Shared LA-1 workspace UI needs authenticated browser verification
+**From:** LA-1 module UI improvement pass · **Belongs to:** LA-1.16 / LA-1.18–LA-1.25 · **Gap recorded:** 2026-09-03
+
+The agent shell now renders a shared responsive workspace bar on every `(shell)` route, showing the
+current menu section, nested-route page context, role, plan, workspace readiness, and read-only state.
+The partner portal header now uses the same hierarchy and clearly exposes partner identity, role, and
+non-active status. TypeScript, lint, and production build pass, but the in-app browser again refused
+to claim the available `localhost:3000` tab under its URL safety policy. Desktop/mobile screenshots,
+keyboard focus, console output, and live interaction behavior therefore remain unverified.
+
+**Fix:** use an approved browser surface that permits the local app, sign in with an authorized agent
+and partner account, inspect every LA-1 page at desktop and phone widths, and capture screenshots and
+console/focus evidence. Cost of leaving it open: the shared treatment is compiled and route-wide, but
+its required end-user visual and interaction evidence is still missing.
+
+### 153. ✅ LA-1.13 report-options migration applied and performance verified
+**From:** LA-1.13 performance follow-up · **Belongs to:** LA-1.13 · **Resolved:** 2026-09-03
+
+The report service now receives partner and agent filter options in the same `list_deal_flow_report`
+payload, avoiding extra lookup round trips. The committed migration
+`supabase/migrations/20260903170000_la_1_13_report_options_rpc.sql` was applied to project
+`iiimdgizjwnihpyrukbu` with the privileged Supabase migration tool. Live SQL confirmed the function
+embeds the options and grants execution to `service_role`; the focused verifier then measured the
+10,000-row filtered page within the two-second contract.
+
+**Resolution:** `npm run verify:deal-flow` passed all checks, including the performance threshold.
+The service fallback remains for migration-order safety. Cost before resolution: the report could
+exceed the two-second first-page contract under live database latency.
+
+### 84. ✅ SA-4.8 registered fallback and last-vendor confirmation verified
+**From:** the PR #8 review · **Belongs to:** SA-4.8 · **Resolved:** 2026-09-03
+
+The last-enabled DNC vendor confirmation is implemented in the admin screen and enforced again by
+the server with `confirm_dnc_block`. `npm run verify:compliance` proves the confirmation response,
+the platform-wide blocked state, and the audit trail. `npm run verify:screening` exercises two
+registered vendors in priority order, forces the primary failure, and verifies the secondary result
+and persisted fallback row. No per-vendor or browser-only bypass remains for these criteria.
+
+### 85. ✅ DNC availability status now reflects recent vendor health
+**From:** the PR #8 review · **Belongs to:** SA-4.8 · **Resolved:** 2026-09-03
+
+`getDncDialingStatus` now evaluates the rolling 24-hour provider-call health for every enabled DNC
+vendor. The admin registry also marks an enabled vendor as `Unreachable` and shows the blocked
+banner when every enabled vendor has failed observed calls. The focused verifier forced both
+registered vendors through failed connection tests and confirmed the unavailable response, while
+the static typecheck and production build passed.
+
+### 88. ✅ Webhook completion writes are durable and failure-visible
+**From:** Module 3 audit · **Belongs to:** Module 3 webhook handling · **Resolved:** 2026-09-03
+
+`markProcessed` and `markFailed` now check every Supabase write and require the target webhook row
+to exist. A failure to persist completion or failure state cannot be acknowledged as a successful
+webhook delivery; the route returns HTTP 500 and Whop can retry. Known-tenant `payment.succeeded`
+events already reject a missing invoice instead of marking themselves processed. The live signed
+webhook verifier and repository gates pass.
+
+### 90. ✅ Manual settlement is atomic, targeted, and rejects overpayment
+**From:** Module 3 audit · **Belongs to:** Module 3 manual billing · **Resolved:** 2026-09-03
+
+The service-role RPC locks the invoice, sums successful payments, rejects amounts above the
+outstanding balance, inserts the payment, settles the invoice, and changes only the invoice's own
+past-due or suspended subscription in one transaction. `npm run verify:settlement` drove the real
+admin route and passed overpayment rollback, partial payment, final settlement, unrelated
+subscription protection, duplicate-reference handling, and the no-overpayment invariant.
+
+### 91. ✅ Coupon plan and billing-cycle restrictions are enforced by the RPC
+**From:** Module 3 audit · **Belongs to:** Module 3 coupon handling · **Resolved:** 2026-09-03
+
+`admin_apply_coupon` now locks the target subscription and coupon, checks `restricted_to_plan_ids`
+and `billing_cycle`, and returns named rejection results before creating a redemption. The live
+coupon verifier bypasses the UI and confirms both an incompatible-plan and incompatible-cycle
+coupon are refused without consuming a redemption.
+
+### 92. ✅ Refund and credit execution have recoverable reconciliation states
+**From:** Module 3 audit · **Belongs to:** Module 3 credit-note handling · **Resolved:** 2026-09-03
+
+Credit-note execution now records an explicit reconciliation state and attempt count. Credits and
+waivers apply their balance and mark the note reconciled in one locked transaction, so a retry
+cannot apply the same credit twice. Refund execution claims a note in a locked service-role
+function, reuses the same provider idempotency key on retry, preserves provider-pending state
+when the provider outcome is unknown or local reconciliation fails, and exposes an audited admin
+retry route. Definite provider failures are recorded as failed with a reason. The live credit-note
+verification passed the failure-state and replay checks.
+
+### 157. ✅ LA-1.17 cold first-page performance is within contract
+**From:** LA-1 module audit · **Belongs to:** LA-1.17 · **Resolved:** 2026-09-03
+
+The partner pipeline RPC pages before display enrichment and uses scoped 16MB `work_mem` for its
+5,000-row bounded aggregate window. Two consecutive live runs passed the first-page requirement:
+250 rows returned from 5,000+ partner leads in under two seconds, while tenant/partner isolation,
+filters, masking, pagination, and fail-closed session checks also passed. The migration is committed
+as `supabase/migrations/20260903360000_la_1_17_pipeline_work_mem.sql` and applied to the connected
+Supabase project.
 
 ---
 

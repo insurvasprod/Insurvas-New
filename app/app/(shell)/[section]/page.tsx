@@ -6,6 +6,7 @@ import { getEntitlement } from "@/lib/entitlements/get";
 import { menuItemById, grantedAndBuilt } from "@/lib/menu/definition";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { ComingSoon } from "@/components/app/coming-soon";
+import { RoleGateNotice } from "@/components/app/role-gate-notice";
 
 /**
  * Every menu destination that has no screen of its own yet.
@@ -37,12 +38,15 @@ export default async function AgentSectionPage({ params }: { params: Promise<{ s
   if (item.built) notFound();
 
   // An item with no required feature is visible to everyone, so there is nothing to guard.
-  if (item.requiredFeature) {
-    const guard = await guardPage(item.requiredFeature);
+  if (item.required_feature) {
+    const guard = await guardPage(item.required_feature);
     if (!guard.entitled) {
       return <FeatureGateNotice guard={guard} featureLabel={item.label} description={item.blurb} />;
     }
-    return <ComingSoon item={item} available={grantedAndBuilt(guard.entitlement.features)} />;
+    if (item.required_roles && !item.required_roles.includes(guard.role)) {
+      return <RoleGateNotice featureLabel={item.label} detail="Your tenant role does not include this workspace." />;
+    }
+    return <ComingSoon item={item} available={grantedAndBuilt(guard.entitlement.features, guard.role)} />;
   }
 
   // No required feature means nothing to gate on, so the entitlement is read only to work out
@@ -52,5 +56,9 @@ export default async function AgentSectionPage({ params }: { params: Promise<{ s
   if (!context) redirect("/app/login");
   const entitlement = await getEntitlement(context.tenantId);
 
-  return <ComingSoon item={item} available={grantedAndBuilt(entitlement.features)} />;
+  if (item.required_roles && !item.required_roles.includes(context.role)) {
+    return <RoleGateNotice featureLabel={item.label} detail="Your tenant role does not include this workspace." />;
+  }
+
+  return <ComingSoon item={item} available={grantedAndBuilt(entitlement.features, context.role)} />;
 }

@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { ADMIN_SESSION_COOKIE, verifyAdminSessionToken } from "@/lib/adminAuth/session";
 import { TENANT_SESSION_COOKIE, verifyTenantSessionToken } from "@/lib/tenantAuth/session";
+import { PARTNER_SESSION_COOKIE, verifyPartnerSessionToken } from "@/lib/partnerAuth/session";
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -41,10 +42,23 @@ export async function middleware(request: NextRequest) {
   }
 
   if (pathname.startsWith("/app")) {
+    const partnerToken = request.cookies.get(PARTNER_SESSION_COOKIE)?.value;
+    if (partnerToken && await verifyPartnerSessionToken(partnerToken)) return redirectTo(request, "/partner");
     const token = request.cookies.get(TENANT_SESSION_COOKIE)?.value;
     const session = token ? await verifyTenantSessionToken(token) : null;
 
     if (!session) return redirectTo(request, "/app/login");
+    return NextResponse.next();
+  }
+
+  if (pathname.startsWith("/partner/login") || pathname.startsWith("/partner/set-password")) {
+    return NextResponse.next();
+  }
+
+  if (pathname.startsWith("/partner")) {
+    const token = request.cookies.get(PARTNER_SESSION_COOKIE)?.value;
+    const session = token ? await verifyPartnerSessionToken(token) : null;
+    if (!session) return redirectTo(request, "/partner/login");
     return NextResponse.next();
   }
 
@@ -59,5 +73,5 @@ function redirectTo(request: NextRequest, pathname: string) {
 }
 
 export const config = {
-  matcher: ["/", "/admin/:path*", "/app/:path*"],
+  matcher: ["/", "/admin/:path*", "/app/:path*", "/partner/:path*"],
 };

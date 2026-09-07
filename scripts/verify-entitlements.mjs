@@ -17,6 +17,14 @@ if (!url || !serviceKey) {
 
 const supabase = createClient(url, serviceKey, { auth: { persistSession: false } });
 
+// These are the reviewed v1 entitlements. The verifier must fail if the catalog drifts, rather
+// than reading the current catalog back and congratulating itself for matching its own mistake.
+const EXPECTED_FEATURES = {
+  basic: ["appointment_vault", "book_of_business", "commission_ledger", "discrepancy_report", "statement_ingestion"],
+  pro: ["applications", "appointment_vault", "book_of_business", "callback_calendar", "commission_ledger", "consent_locker", "daily_deal_flow", "discrepancy_report", "draft_date_optimizer", "duplicate_detection", "inbound_transfers", "lead_import", "outbound_dialing", "quoting", "statement_ingestion", "tcpa_checker"],
+  advance: ["applications", "appointment_vault", "book_of_business", "callback_calendar", "chargeback_radar", "cohort_persistency", "commission_ledger", "consent_locker", "daily_deal_flow", "discrepancy_report", "draft_date_optimizer", "duplicate_detection", "inbound_transfers", "lead_import", "litigation_packet", "outbound_dialing", "payment_repair", "payout_runs", "profit_and_loss", "publisher_records", "quoting", "statement_ingestion", "tax_summaries", "tcpa_checker", "true_cpa", "winback"],
+};
+
 let failures = 0;
 function check(label, condition, detail = "") {
   if (condition) {
@@ -52,13 +60,10 @@ try {
 
   console.log("Exact feature list per seeded plan\n");
 
+  check("all reviewed v1 plans exist", (plans ?? []).length === Object.keys(EXPECTED_FEATURES).length);
+
   for (const plan of plans ?? []) {
-    // What the plan grants, straight from plan_features — the independent expectation.
-    const { data: planFeatures } = await supabase
-      .from("plan_features")
-      .select("feature_key")
-      .eq("plan_id", plan.id);
-    const expected = (planFeatures ?? []).map((f) => f.feature_key).sort();
+    const expected = [...(EXPECTED_FEATURES[plan.code] ?? [])].sort();
 
     await supabase.from("subscriptions").delete().eq("tenant_id", tenantId);
     const { error: assignError } = await supabase.rpc("admin_assign_subscription", {

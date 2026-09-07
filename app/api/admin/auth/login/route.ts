@@ -13,7 +13,7 @@ import {
   signAdminSessionToken,
   signPending2faToken,
 } from "@/lib/adminAuth/session";
-import { recordLoginEvent } from "@/lib/loginEvents/record";
+import { recordLastLogin, recordLoginEvent } from "@/lib/loginEvents/record";
 import { audit } from "@/lib/audit/log";
 
 // A hash of a value nobody will ever type, used to keep the response time and
@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
   }
 
   if (!isAdmin2faEnabled()) {
-    await supabase.from("admin_users").update({ last_login_at: new Date().toISOString() }).eq("id", admin.id);
+    await recordLastLogin("admin", admin.id);
 
     await recordLoginEvent({
       request,

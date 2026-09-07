@@ -23,6 +23,8 @@ export type ComplianceVendor = {
   priority: number;
   cost_per_lookup_cents: number;
   credentials_present: boolean;
+  /** False only when recent provider calls show that every observed call failed. */
+  available: boolean;
   last_success_at: string | null;
   calls_24h: number;
   failures_24h: number;

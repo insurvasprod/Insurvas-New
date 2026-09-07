@@ -35,7 +35,7 @@ type Actor = { id: string; name: string; email: string };
 type AuditEntry = {
   id: string;
   ts: string;
-  actor_type: "admin" | "system";
+  actor_type: "admin" | "tenant" | "system";
   actor_id: string | null;
   action: string;
   target_type: string | null;

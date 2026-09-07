@@ -13,7 +13,7 @@ export async function fetchTemplates(options: { includeArchived: boolean } = { i
   const [{ data: templates, error }, { data: products }, { data: fields }, { data: stages }, { data: forms }] = await Promise.all([
     request,
     supabase.from("products").select("code, name"),
-    supabase.from("template_fields").select("template_id, version, field_key, label, type, is_required, options, sort_order").order("sort_order"),
+    supabase.from("template_fields").select("template_id, version, field_key, label, type, is_required, options, sort_order, help_text, validation").order("sort_order"),
     supabase.from("template_stages").select("template_id, version, stage_key, label, stage_type, color, sort_order").order("sort_order"),
     supabase.from("template_forms").select("template_id, version, form_definition"),
   ]);
@@ -39,7 +39,7 @@ export async function fetchTemplateVersion(templateId: string, version: number):
   const [{ data: template, error }, { data: product }, { data: fields }, { data: stages }, { data: form }] = await Promise.all([
     supabase.from("templates").select(TEMPLATE_COLUMNS).eq("id", templateId).maybeSingle(),
     supabase.from("products").select("code, name"),
-    supabase.from("template_fields").select("template_id, version, field_key, label, type, is_required, options, sort_order").eq("template_id", templateId).eq("version", version).order("sort_order"),
+    supabase.from("template_fields").select("template_id, version, field_key, label, type, is_required, options, sort_order, help_text, validation").eq("template_id", templateId).eq("version", version).order("sort_order"),
     supabase.from("template_stages").select("template_id, version, stage_key, label, stage_type, color, sort_order").eq("template_id", templateId).eq("version", version).order("sort_order"),
     supabase.from("template_forms").select("template_id, version, form_definition").eq("template_id", templateId).eq("version", version).maybeSingle(),
   ]);

@@ -11,6 +11,7 @@ import {
   inviteExpiryFromNow,
 } from "@/lib/users/invitations";
 import { sendEmailChangeConfirmation } from "@/lib/email/sendInvitationEmail";
+import { configuredAppOrigin } from "@/lib/urls/origin";
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireAdminRole(["super_admin"]);
@@ -37,19 +38,30 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
 
-  const { data, error } = await supabase.rpc("admin_update_user", {
+  const emailChangeRequested = email !== existing.email;
+  const origin = emailChangeRequested ? configuredAppOrigin("agent") : null;
+  const token = generateInviteToken();
+  const expiresAt = await inviteExpiryFromNow();
+  const { data, error } = await supabase.rpc("admin_update_user_with_email_change", {
     p_user_id: id,
     p_name: name,
     p_phone: phone || null,
     p_role: role,
+    p_requested_email: email,
+    p_token_hash: hashInviteToken(token),
+    p_expires_at: expiresAt.toISOString(),
+    p_created_by: auth.session.sub,
   });
 
   if (error) {
-    if (error.message?.includes("last_owner")) {
+    if (/LAST_OWNER|last_owner/i.test(error.message ?? "")) {
       return NextResponse.json(
         { error: "This is the tenant's only owner — promote someone else before changing this role" },
         { status: 409 },
       );
+    }
+    if (/EMAIL_ALREADY_REGISTERED|duplicate key/i.test(error.message ?? "")) {
+      return NextResponse.json({ error: "This email is already registered" }, { status: 409 });
     }
     return NextResponse.json({ error: "Could not update user" }, { status: 500 });
   }
@@ -77,39 +89,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   // can't lock the user out of their own account.
   let emailChange: { url: string; expiresAt: string; newEmail: string } | null = null;
 
-  if (email !== existing.email) {
-    const { data: clash } = await supabase
-      .from("users")
-      .select("id")
-      .eq("email", email)
-      .maybeSingle<{ id: string }>();
-
-    if (clash) {
-      return NextResponse.json({ error: "This email is already registered" }, { status: 409 });
-    }
-
-    const token = generateInviteToken();
-    const expiresAt = await inviteExpiryFromNow();
-
-    // Supersede any earlier pending change so only the newest link works.
-    await supabase
-      .from("user_invitations")
-      .delete()
-      .eq("user_id", id)
-      .eq("purpose", "email_change")
-      .is("accepted_at", null);
-
-    await supabase.from("user_invitations").insert({
-      user_id: id,
-      token_hash: hashInviteToken(token),
-      expires_at: expiresAt.toISOString(),
-      created_by: auth.session.sub,
-      purpose: "email_change",
-      new_email: email,
-    });
-
-    const origin = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
-    const url = buildEmailChangeUrl(token, origin);
+  if (result.email_change_created) {
+    const url = buildEmailChangeUrl(token, origin!);
     await sendEmailChangeConfirmation({ to: email, name, confirmUrl: url, expiresAt });
 
     await audit({

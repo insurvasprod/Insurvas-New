@@ -1,6 +1,7 @@
 import { guardPage } from "@/lib/entitlements/guardPage";
 import { Card, CardContent } from "@/components/ui/card";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
+import { RoleGateNotice } from "@/components/app/role-gate-notice";
 
 /**
  * Scaffolding for LA-0.1 to replace — it exists so SA-2.8's three enforcement points are real
@@ -20,6 +21,10 @@ export default async function PoliciesPage() {
         description="Your policies, premiums and carriers in one place."
       />
     );
+  }
+
+  if (!["owner", "producer", "bookkeeper"].includes(guard.role)) {
+    return <RoleGateNotice featureLabel="Policies" detail="Your tenant role does not include the book of business." />;
   }
 
   const readOnly = guard.entitlement.access === "read_only";
