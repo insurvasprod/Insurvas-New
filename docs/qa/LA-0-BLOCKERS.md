@@ -94,6 +94,31 @@ corrected.
 
 ---
 
+## Symptom 2b — the entitlement source plane is absent, so LA-0.1 criterion 5 is not a defect
+
+Catalog check against the live project (`pg_class`, schema `public`) over the 49 tables this
+application uses:
+
+**Present (20)** — the complete LA-0 set: `tenants`, `tenant_users`, `tenant_entitlements`,
+`contacts`, `households`, `appointments`, `licenses`, `eo_policies`, `ce_records`, `field_schema`,
+`merge_log`, `tenant_carriers`, `commission_schedules`, `advance_rules`, plus `users`,
+`organizations`, `admin_users`, `audit_log`, `platform_audit_events`, `invoices`.
+
+**Absent (29)** — essentially the whole SA plane: `plans`, `plan_versions`, `plan_features`,
+`plan_limits`, `plan_prices`, `subscriptions`, `payments`, `coupons`, `credit_notes`, `meters`,
+`usage_events`, `usage_totals`, `features`, `feature_modules`, `addons`, `legal_documents`,
+`legal_acceptances`, `email_log`, `settings`, `checkout_sessions`, `webhook_events`, `whop_plans`,
+`business_profiles`, `template_fields`, `tenant_products`, `tenant_credits`, `form_drafts`,
+`affiliate_links`, `buffer_handoffs`.
+
+This resolves the one item the audit recorded as a *suspected defect*. `npm run verify:entitlements`
+fails four checks, including suspended access resolving to `full` instead of `read_only`. The cause
+is now clear and it is not application logic: **`tenant_entitlements` exists and holds 6 cached
+rows, but `plans` and `subscriptions` — the source those rows are derived from — do not exist.**
+The cache has no producer, so there is no subscription whose status could be read as suspended.
+
+`LA-0.1 criterion 5` is therefore `BLOCKED`, not failing. Re-judge it only once the SA plane exists.
+
 ## Symptom 3 — `db:check:deep` cannot replay the chain
 
 `npm run db:check:deep` fails: `credit_notes`, `plan_limits`, `subscriptions` and several functions
@@ -154,10 +179,9 @@ enough. Everything after them is mechanical.
 
 4. `npm run verify:la0` then `npm test`. 19 blocked criteria are expected to turn green.
 
-5. Re-run `npm run verify:entitlements`. It currently fails 4 checks, including suspended access
-   resolving to `full` instead of `read_only` — LA-0.1 criterion 5. Its first failure ("all
-   reviewed v1 plans exist") probably causes the rest, so re-judge after the plans exist. If
-   suspended still resolves to `full`, that is a defect, not a proof gap.
+5. Re-run `npm run verify:entitlements`. Its 4 failures are explained by symptom 2b — `plans` and
+   `subscriptions` do not exist, so no subscription status can be resolved. Re-judge only once the
+   SA plane is present.
 
 6. Build the LA-0.3 load-time harness. No number has ever been recorded against the 1-second
    budget.
