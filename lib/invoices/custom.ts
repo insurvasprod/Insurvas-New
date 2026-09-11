@@ -80,7 +80,7 @@ export async function createCustomInvoice(input: CustomInvoiceInput): Promise<Cu
         });
         payOnlineUrl = sent.payOnlineUrl;
         await supabase
-          .from("invoices")
+          .from("platform_invoices")
           .update({ provider_invoice_id: sent.invoiceId, pay_online_url: sent.payOnlineUrl })
           .eq("id", row.invoice_id);
       }

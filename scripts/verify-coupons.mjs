@@ -62,7 +62,7 @@ async function makeCoupon(overrides = {}) {
 
 async function cleanup() {
   for (const id of tenantIds) {
-    await supabase.from("invoices").delete().eq("tenant_id", id);
+    await supabase.from("platform_invoices").delete().eq("tenant_id", id);
     await supabase.from("tenant_entitlements").delete().eq("tenant_id", id);
     await supabase.from("subscriptions").delete().eq("tenant_id", id);
     await supabase.from("tenants").delete().eq("id", id);
@@ -220,7 +220,7 @@ try {
   const invoice = invoiceRows[0];
 
   const { data: inv } = await supabase
-    .from("invoices").select("subtotal_cents, discount_cents, tax_cents, total_cents, reconciliation")
+    .from("platform_invoices").select("subtotal_cents, discount_cents, tax_cents, total_cents, reconciliation")
     .eq("id", invoice.invoice_id).single();
 
   check("the discount is a separate line, not folded into the plan price",

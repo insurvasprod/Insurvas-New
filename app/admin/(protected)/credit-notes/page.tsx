@@ -19,7 +19,7 @@ export default async function CreditNotesPage() {
   const supabase = getSupabaseServiceClient();
   const { data } = await supabase
     .from("credit_notes")
-    .select("*, tenants(name), invoices(number)")
+    .select("*, tenants(name), platform_invoices(number)")
     .order("created_at", { ascending: false });
 
   const notes = (data ?? []) as unknown as CreditNoteRow[];

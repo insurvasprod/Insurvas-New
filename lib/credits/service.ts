@@ -48,7 +48,7 @@ export class CreditNoteError extends Error {}
 async function assertRefundable(invoiceId: string, amountCents: number): Promise<void> {
   const supabase = getSupabaseServiceClient();
   const { data: invoice } = await supabase
-    .from("invoices")
+    .from("platform_invoices")
     .select("provider_payment_id, total_cents, tenant_id")
     .eq("id", invoiceId)
     .maybeSingle<{ provider_payment_id: string | null; total_cents: number; tenant_id: string }>();
@@ -221,7 +221,7 @@ export async function executeCreditNote(id: string): Promise<{ status: string; m
     }
 
     const { data: invoice, error: invoiceError } = await supabase
-      .from("invoices")
+      .from("platform_invoices")
       .select("provider_payment_id")
       .eq("id", invoiceId)
       .single<{ provider_payment_id: string | null }>();

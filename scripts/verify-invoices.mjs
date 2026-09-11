@@ -63,8 +63,8 @@ try {
     `${a.number} then ${b.number}`,
   );
 
-  const { data: lines } = await supabase.from("invoice_lines").select("amount_cents").eq("invoice_id", a.invoice_id);
-  const { data: inv } = await supabase.from("invoices").select("total_cents, status").eq("id", a.invoice_id).single();
+  const { data: lines } = await supabase.from("platform_invoice_lines").select("amount_cents").eq("invoice_id", a.invoice_id);
+  const { data: inv } = await supabase.from("platform_invoices").select("total_cents, status").eq("id", a.invoice_id).single();
   check(
     "lines sum exactly to the total",
     lines.reduce((s, l) => s + l.amount_cents, 0) === inv.total_cents,
@@ -74,23 +74,23 @@ try {
 
   console.log("\nImmutability (as the app's own service-role client)\n");
 
-  const { error: editTotal } = await supabase.from("invoices").update({ total_cents: 1 }).eq("id", a.invoice_id);
+  const { error: editTotal } = await supabase.from("platform_invoices").update({ total_cents: 1 }).eq("id", a.invoice_id);
   check("the app CANNOT rewrite an issued invoice's total", editTotal !== null,
         "corrections must be credit notes, never edits");
 
-  const { error: voidIt } = await supabase.from("invoices")
+  const { error: voidIt } = await supabase.from("platform_invoices")
     .update({ status: "void", voided_at: new Date().toISOString(), void_reason: "verification" })
     .eq("id", b.invoice_id);
   check("voiding IS allowed", voidIt === null, voidIt?.message ?? "");
 
-  const { error: editLine } = await supabase.from("invoice_lines").update({ amount_cents: 1 }).eq("invoice_id", a.invoice_id);
+  const { error: editLine } = await supabase.from("platform_invoice_lines").update({ amount_cents: 1 }).eq("invoice_id", a.invoice_id);
   check("the app CANNOT edit a line", editLine !== null);
 
-  const { error: dropLine } = await supabase.from("invoice_lines").delete().eq("invoice_id", a.invoice_id);
+  const { error: dropLine } = await supabase.from("platform_invoice_lines").delete().eq("invoice_id", a.invoice_id);
   check("the app CANNOT delete a line", dropLine !== null);
 } finally {
   console.log("\nCleaning up…");
-  await supabase.from("invoices").delete().eq("tenant_id", tenantId);
+  await supabase.from("platform_invoices").delete().eq("tenant_id", tenantId);
   await supabase.from("tenants").delete().eq("id", tenantId);
 
   // Put the counter back, so verifying never leaves a hole in the real sequence.

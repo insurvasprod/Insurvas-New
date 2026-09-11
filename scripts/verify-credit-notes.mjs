@@ -70,7 +70,7 @@ const invoice = invRows[0];
 async function cleanup() {
   await supabase.from("credit_notes").delete().eq("tenant_id", tenantId);
   await supabase.from("tenant_credits").delete().eq("tenant_id", tenantId);
-  await supabase.from("invoices").delete().eq("tenant_id", tenantId);
+  await supabase.from("platform_invoices").delete().eq("tenant_id", tenantId);
   await supabase.from("tenants").delete().eq("id", tenantId);
   await supabase.from("admin_users").delete().eq("id", secondAdmin.id);
   for (const [series, value] of Object.entries(counters)) {
@@ -170,7 +170,7 @@ try {
   console.log("\nThe invoice is never edited\n");
 
   const { data: untouched } = await supabase
-    .from("invoices").select("total_cents, status, number").eq("id", invoice.invoice_id).single();
+    .from("platform_invoices").select("total_cents, status, number").eq("id", invoice.invoice_id).single();
   check(
     "the original invoice is unchanged by the credit note",
     untouched.total_cents === 80000 && untouched.number === invoice.number,

@@ -33,7 +33,7 @@ const { data: plan } = await supabase
 
 async function cleanup() {
   await supabase.from("payments").delete().eq("tenant_id", tenantId);
-  await supabase.from("invoices").delete().eq("tenant_id", tenantId);
+  await supabase.from("platform_invoices").delete().eq("tenant_id", tenantId);
   await supabase.from("webhook_events").delete().like("event_id", `msg_ev_${stamp}%`);
   await supabase.from("tenant_entitlements").delete().eq("tenant_id", tenantId);
   await supabase.from("subscriptions").delete().eq("tenant_id", tenantId);

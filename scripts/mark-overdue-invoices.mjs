@@ -21,7 +21,7 @@ if (error) {
 console.log(`${data} invoice(s) moved to overdue.`);
 
 const { data: overdue } = await supabase
-  .from("invoices")
+  .from("platform_invoices")
   .select("number, total_cents, due_at, tenants(name)")
   .eq("status", "overdue")
   .order("due_at");

@@ -48,11 +48,11 @@ async function cleanup() {
     await sb.from("subscription_addons").delete().eq("subscription_id", subscriptionId);
   }
   for (const id of invoiceIds) {
-    await sb.from("invoice_lines").delete().eq("invoice_id", id);
-    await sb.from("invoices").delete().eq("id", id);
+    await sb.from("platform_invoice_lines").delete().eq("invoice_id", id);
+    await sb.from("platform_invoices").delete().eq("id", id);
   }
   if (tenantId) {
-    await sb.from("invoices").delete().eq("tenant_id", tenantId);
+    await sb.from("platform_invoices").delete().eq("tenant_id", tenantId);
     await sb.from("usage_totals").delete().eq("tenant_id", tenantId);
     await sb.from("tenant_credits").delete().eq("tenant_id", tenantId);
     await sb.from("tenants").delete().eq("id", tenantId);
@@ -199,7 +199,7 @@ try {
 
   // ── the invoice itself ─────────────────────────────────────────────────────
   const { data: invoice } = await sb
-    .from("invoices")
+    .from("platform_invoices")
     .select("number, status, kind, total_cents, discount_cents, period_start, period_end")
     .eq("id", run.invoice_id)
     .single();
@@ -210,7 +210,7 @@ try {
   ensure("it records which period it covers", invoice.period_start !== null && invoice.period_end !== null,
     "period_start/period_end are null, so the invoice does not say what it is for");
 
-  const { data: lines } = await sb.from("invoice_lines").select("kind, amount_cents, included_qty").eq("invoice_id", run.invoice_id);
+  const { data: lines } = await sb.from("platform_invoice_lines").select("kind, amount_cents, included_qty").eq("invoice_id", run.invoice_id);
   const kinds = (lines ?? []).map((l) => l.kind).sort();
   check("the four line kinds are all present", kinds, ["addon", "credit", "overage", "plan"]);
   const overageLine = (lines ?? []).find((l) => l.kind === "overage");
@@ -238,7 +238,7 @@ try {
   check("it returns the first invoice rather than raising another", repeat.invoice_id, run.invoice_id);
 
   const { count } = await sb
-    .from("invoices")
+    .from("platform_invoices")
     .select("id", { count: "exact", head: true })
     .eq("tenant_id", tenantId);
   check("exactly one invoice exists for this tenant", count, 1);

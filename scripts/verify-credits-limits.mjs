@@ -14,6 +14,14 @@ const createdInvoiceIds = [];
 let temporarySubscriptionId = null;
 let temporaryTenantId = null;
 
+async function cleanupOrphanedPerformanceTenants() {
+  // A request can time out after Postgres commits a chunk, before Supabase returns its IDs.
+  // Remove only this verifier's named disposable fixtures so a rerun is not slowed by orphaned
+  // tenants and their seeded pipelines.
+  const { error } = await supabase.from("tenants").delete().like("name", "SA-4.9 perf%");
+  if (error) throw new Error(`orphaned performance fixtures: ${error.message}`);
+}
+
 function check(label, ok, detail = "") {
   if (ok) console.log(`  PASS ${label}`);
   else { console.log(`  FAIL ${label}${detail ? ` — ${detail}` : ""}`); failures++; }
@@ -40,6 +48,7 @@ async function json(response) { return response.json().catch(() => ({})); }
 
 async function main() {
   const stamp = Date.now();
+  await cleanupOrphanedPerformanceTenants();
   const roles = {};
   for (const role of ["super_admin", "platform_config", "billing_admin", "support_agent"]) {
     roles[role] = await adminFor(role, stamp);
@@ -123,7 +132,7 @@ async function main() {
     const purchaseResponse = await request(`/api/admin/credits-limits/packs/${packBody.pack.id}/purchase`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ tenant_id: tenant.id, subscription_id: subscriptionId, quantity: 1, reason: "Invoice credit pack test" }) }, superCookie);
     const purchaseBody = await json(purchaseResponse);
     if (purchaseBody.invoiceId) createdInvoiceIds.push(purchaseBody.invoiceId);
-    const { data: invoiceLine } = purchaseBody.invoiceId ? await supabase.from("invoice_lines").select("label, amount_cents").eq("invoice_id", purchaseBody.invoiceId).maybeSingle() : { data: null };
+    const { data: invoiceLine } = purchaseBody.invoiceId ? await supabase.from("platform_invoice_lines").select("label, amount_cents").eq("invoice_id", purchaseBody.invoiceId).maybeSingle() : { data: null };
     check("buying a pack creates its invoice line", purchaseResponse.status === 201 && invoiceLine?.amount_cents === 1250);
 
     // bugs_sa.md #11. The assertion above was the ONLY one covering a purchase, so the suite stayed
@@ -152,17 +161,20 @@ async function main() {
     await supabase.from("meter_pricing").update({ default_included: defaultBefore.data.default_included }).eq("meter_key", "statement_pages");
 
     const performanceTenants = Array.from({ length: 500 }, (_, index) => ({ name: `SA-4.9 perf ${stamp}-${index}`, status: "provisioning", plan_code: null }));
-    const { data: insertedTenants, error: tenantError } = await supabase.from("tenants").insert(performanceTenants).select("id");
-    if (tenantError) throw new Error(`performance fixtures: ${tenantError.message}`);
-    temporaryTenantId = insertedTenants.map((row) => row.id);
+    temporaryTenantId = [];
+    for (let offset = 0; offset < performanceTenants.length; offset += 100) {
+      const { data: insertedTenants, error: tenantError } = await supabase.from("tenants").insert(performanceTenants.slice(offset, offset + 100)).select("id");
+      if (tenantError) throw new Error(`performance fixtures: ${tenantError.message}`);
+      temporaryTenantId.push(...insertedTenants.map((row) => row.id));
+    }
     const started = performance.now();
     const performanceResponse = await request("/api/admin/credits-limits", {}, superCookie);
     const performanceBody = await json(performanceResponse);
     const elapsed = Math.round(performance.now() - started);
     check("usage monitor handles 500 tenants × 6 meters", performanceResponse.status === 200 && performanceBody.monitor.length >= 3006 && elapsed < 5000, `${elapsed}ms, ${performanceBody.monitor?.length ?? 0} rows`);
   } finally {
-    if (createdInvoiceIds.length) await supabase.from("invoice_lines").delete().in("invoice_id", createdInvoiceIds);
-    if (createdInvoiceIds.length) await supabase.from("invoices").delete().in("id", createdInvoiceIds);
+    if (createdInvoiceIds.length) await supabase.from("platform_invoice_lines").delete().in("invoice_id", createdInvoiceIds);
+    if (createdInvoiceIds.length) await supabase.from("platform_invoices").delete().in("id", createdInvoiceIds);
     if (createdGrantIds.length) await supabase.from("credit_grants").delete().in("id", createdGrantIds);
     if (createdPackIds.length) await supabase.from("credit_packs").delete().in("id", createdPackIds);
     if (temporarySubscriptionId) await supabase.from("subscriptions").delete().eq("id", temporarySubscriptionId);

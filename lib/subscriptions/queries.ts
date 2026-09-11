@@ -89,7 +89,7 @@ export async function fetchSubscriptions(filters?: {
 export async function fetchTenantSubscription(tenantId: string): Promise<SubscriptionRow | null> {
   const supabase = getSupabaseServiceClient();
 
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("subscriptions")
     .select(COLUMNS)
     .eq("tenant_id", tenantId)
@@ -97,6 +97,10 @@ export async function fetchTenantSubscription(tenantId: string): Promise<Subscri
     .order("started_at", { ascending: false })
     .limit(1)
     .returns<RawRow[]>();
+
+  // "No subscription" is a real, meaningful state for a tenant, so it must not be something a
+  // failed query can imitate.
+  if (error) throw new Error(`Could not load the tenant subscription: ${error.message}`);
 
   const decorated = await decorate(data ?? []);
   return decorated[0] ?? null;

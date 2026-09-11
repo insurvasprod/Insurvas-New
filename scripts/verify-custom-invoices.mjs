@@ -44,7 +44,7 @@ const { data: sub } = await supabase.from("subscriptions").select("id").eq("tena
 
 async function cleanup() {
   await supabase.from("payments").delete().eq("tenant_id", tenantId);
-  await supabase.from("invoices").delete().eq("tenant_id", tenantId);
+  await supabase.from("platform_invoices").delete().eq("tenant_id", tenantId);
   await supabase.from("tenant_entitlements").delete().eq("tenant_id", tenantId);
   await supabase.from("subscriptions").delete().eq("tenant_id", tenantId);
   await supabase.from("tenants").delete().eq("id", tenantId);
@@ -101,7 +101,7 @@ try {
   check("the lines are summed", body.totalCents === 75000, String(body.totalCents));
 
   const { data: inv } = await supabase
-    .from("invoices").select("status, kind, reason, total_cents, created_by").eq("id", body.invoiceId).single();
+    .from("platform_invoices").select("status, kind, reason, total_cents, created_by").eq("id", body.invoiceId).single();
   check("it is born ISSUED, not paid", inv.status === "issued", inv.status);
   check("it is marked as a custom invoice", inv.kind === "custom");
   check("the reason is stored on the invoice", (inv.reason ?? "").includes("migration"));
@@ -110,7 +110,7 @@ try {
   console.log("\nOverdue\n");
 
   await supabase.rpc("mark_overdue_invoices");
-  const { data: afterSweep } = await supabase.from("invoices").select("status").eq("id", body.invoiceId).single();
+  const { data: afterSweep } = await supabase.from("platform_invoices").select("status").eq("id", body.invoiceId).single();
   check(
     "an invoice past its due date becomes overdue",
     afterSweep.status === "overdue",
@@ -130,7 +130,7 @@ try {
   check("the invoice can be settled by bank transfer", paid.status === 200, JSON.stringify(paidBody).slice(0, 160));
   check("it is recorded as settled in full", paidBody.settled === true && paidBody.remainingCents === 0);
 
-  const { data: settled } = await supabase.from("invoices").select("status").eq("id", body.invoiceId).single();
+  const { data: settled } = await supabase.from("platform_invoices").select("status").eq("id", body.invoiceId).single();
   check("the invoice becomes paid", settled.status === "paid", settled.status);
 
   const { data: reactivated } = await supabase.from("subscriptions").select("status").eq("id", sub.id).single();

@@ -210,7 +210,25 @@ All four parse (`db:check`); **none has been applied** — that still needs gate
 > recorded for `/api/admin/features`, in its worst form — and it is worth fixing on its own merits
 > whichever way the collision is resolved.
 >
-> **This needs a decision before any SA-3 migration can be written.** Options:
+> ### ✅ Resolved 2026-09-11 — option 1, rename the SaaS tables
+>
+> `invoices` → **`platform_invoices`**, `invoice_lines` → **`platform_invoice_lines`**, across 20
+> files plus the two declarations in `database.types.ts` and the two PostgREST embeds in the
+> credit-notes surfaces. Created by `20260911143000_sa_3_platform_invoices.sql`. The names are
+> honest: these are the *platform's* invoices, billed to a tenant for a subscription, not the
+> agency's invoices to its own customers.
+>
+> **The swallowed error is fixed too**, in three places — `lib/invoices/queries.ts`,
+> `lib/offers/queries.ts` and `lib/subscriptions/queries.ts` all destructured only `data`. The
+> invoices route now returns a 500 naming the cause instead of `200` with an empty list.
+>
+> **Carried forward:** four historical migrations (`0017_period_billing.sql`,
+> `20260831062000_…`, `20260903240000_…`, `20260903300000_…`) still name `public.invoices` inside
+> function and trigger bodies. None of those functions exists in the database, so nothing is broken
+> today — but they must be superseded to target `platform_invoices` before they are applied, or
+> they would aim at the CRM's table. SA-3.2's billing functions are the natural place to do it.
+>
+> The options considered were:
 >
 > 1. **Rename the SaaS tables** — `platform_invoices`, `platform_payments`, and so on. No risk to
 >    the live CRM. Costs a rename across `lib/invoices/*`, `lib/credits/*`, the admin routes and

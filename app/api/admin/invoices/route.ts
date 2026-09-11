@@ -12,16 +12,25 @@ export async function GET(request: NextRequest) {
   const params = request.nextUrl.searchParams;
   const status = params.get("status");
 
-  const invoices = await fetchInvoices({
-    status: status && (INVOICE_STATUSES as readonly string[]).includes(status)
-      ? (status as InvoiceStatus)
-      : "all",
-    tenantId: params.get("tenant") ?? undefined,
-    overdueOnly: params.get("overdue") === "true",
-    mismatchedOnly: params.get("mismatched") === "true",
-    from: params.get("from") ?? undefined,
-    to: params.get("to") ?? undefined,
-  });
+  try {
+    const invoices = await fetchInvoices({
+      status: status && (INVOICE_STATUSES as readonly string[]).includes(status)
+        ? (status as InvoiceStatus)
+        : "all",
+      tenantId: params.get("tenant") ?? undefined,
+      overdueOnly: params.get("overdue") === "true",
+      mismatchedOnly: params.get("mismatched") === "true",
+      from: params.get("from") ?? undefined,
+      to: params.get("to") ?? undefined,
+    });
 
-  return NextResponse.json({ invoices });
+    return NextResponse.json({ invoices });
+  } catch (error) {
+    // fetchInvoices now throws rather than returning an empty list on a failed query, so this
+    // reports the cause instead of the screen quietly claiming there are no invoices.
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Could not load invoices" },
+      { status: 500 },
+    );
+  }
 }

@@ -34,7 +34,7 @@ const SELECT = `id, number, tenant_id, status, total_cents, provider_total_cents
 
 export async function fetchInvoices(filters: InvoiceFilters = {}): Promise<InvoiceListRow[]> {
   const supabase = getSupabaseServiceClient();
-  let query = supabase.from("invoices").select(SELECT).order("number", { ascending: false });
+  let query = supabase.from("platform_invoices").select(SELECT).order("number", { ascending: false });
 
   if (filters.status && filters.status !== "all") query = query.eq("status", filters.status);
   if (filters.tenantId) query = query.eq("tenant_id", filters.tenantId);
@@ -43,7 +43,11 @@ export async function fetchInvoices(filters: InvoiceFilters = {}): Promise<Invoi
   if (filters.from) query = query.gte("created_at", filters.from);
   if (filters.to) query = query.lte("created_at", filters.to);
 
-  const { data } = await query.returns<Raw[]>();
+  // Check the error. Destructuring only `data` turns a failed query into an empty list, and an
+  // invoice screen that says "no invoices" when the query is broken is worse than one that errors:
+  // it is indistinguishable from a tenant who has genuinely never been billed.
+  const { data, error } = await query.returns<Raw[]>();
+  if (error) throw new Error(`Could not load invoices: ${error.message}`);
 
   return (data ?? []).map((row) => ({
     ...row,
@@ -131,7 +135,7 @@ export async function fetchInvoiceDetail(id: string): Promise<InvoiceDetail | nu
   const supabase = getSupabaseServiceClient();
 
   const { data: invoice } = await supabase
-    .from("invoices")
+    .from("platform_invoices")
     .select(`${SELECT}, subtotal_cents, discount_cents, tax_cents, currency, period_start, period_end,
              provider, provider_payment_id, voided_at, void_reason`)
     .eq("id", id)
@@ -140,7 +144,7 @@ export async function fetchInvoiceDetail(id: string): Promise<InvoiceDetail | nu
   if (!invoice) return null;
 
   const { data: lines } = await supabase
-    .from("invoice_lines")
+    .from("platform_invoice_lines")
     .select("id, position, kind, label, quantity, included_qty, unit_cents, amount_cents")
     .eq("invoice_id", id)
     .order("position");

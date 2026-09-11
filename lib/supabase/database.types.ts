@@ -884,7 +884,7 @@ export type Database = {
         Update: { status?: Database["public"]["Enums"]["payment_status"] };
         Relationships: [];
       };
-      invoices: {
+      platform_invoices: {
         Row: {
           created_at: string;
           created_by: string | null;
@@ -956,7 +956,7 @@ export type Database = {
         };
         Relationships: [];
       };
-      invoice_lines: {
+      platform_invoice_lines: {
         Row: {
           amount_cents: number;
           created_at: string;

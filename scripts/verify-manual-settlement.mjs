@@ -65,7 +65,7 @@ try {
   const partBody = await part.json();
   check("a partial payment is accepted", part.status === 200 && partBody.settled === false, JSON.stringify(partBody));
 
-  const { data: stillOpen } = await supabase.from("invoices").select("status").eq("id", invoice.invoice_id).single();
+  const { data: stillOpen } = await supabase.from("platform_invoices").select("status").eq("id", invoice.invoice_id).single();
   check("  and the invoice stays unpaid", stillOpen.status !== "paid", stillOpen.status);
 
   const rest = await settle(invoice.invoice_id, 6000, `rest-${stamp}`);
@@ -88,12 +88,12 @@ try {
   check("payments never exceed the invoice total", total === 10000, `${total} vs 10000`);
 } finally {
   for (const id of tenants) {
-    const { data: invs } = await supabase.from("invoices").select("id").eq("tenant_id", id);
+    const { data: invs } = await supabase.from("platform_invoices").select("id").eq("tenant_id", id);
     for (const i of invs ?? []) {
       await supabase.from("payments").delete().eq("invoice_id", i.id);
-      await supabase.from("invoice_lines").delete().eq("invoice_id", i.id);
+      await supabase.from("platform_invoice_lines").delete().eq("invoice_id", i.id);
     }
-    await supabase.from("invoices").delete().eq("tenant_id", id);
+    await supabase.from("platform_invoices").delete().eq("tenant_id", id);
     await supabase.from("tenant_entitlements").delete().eq("tenant_id", id);
     await supabase.from("subscriptions").delete().eq("tenant_id", id);
     await supabase.from("tenants").delete().eq("id", id);
