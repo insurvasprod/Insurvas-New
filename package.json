@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "test": "node --experimental-strip-types --test \"lib/**/*.test.mjs\"",
     "seed:super-admin": "node --env-file=.env.local scripts/seed-super-admin.mjs",
+    "demo:provision-accounts": "node --env-file=.env.local --env-file=.env.demo.local scripts/provision-demo-accounts.mjs",
     "reset:totp": "node --env-file=.env.local scripts/reset-admin-totp.mjs",
     "verify:tenant-isolation": "node --env-file=.env.local scripts/verify-tenant-isolation.mjs",
     "check:features": "node --experimental-strip-types --env-file=.env.local scripts/check-feature-keys.mjs",
@@ -58,6 +59,7 @@
     "session": "node --env-file=.env.local scripts/mint-session.mjs",
     "verify:user-tokens": "node --env-file=.env.local scripts/verify-user-token-redemption.mjs",
     "email:test": "node --env-file=.env.local scripts/send-test-email.mjs",
+    "demo:seed-la1": "node --env-file=.env.local scripts/seed-la1-demo.mjs",
     "email:prune": "node --env-file=.env.local scripts/prune-email-log.mjs",
     "verify:addon-meters": "node --env-file=.env.local scripts/verify-addon-meters.mjs",
     "verify:transitions": "node --env-file=.env.local scripts/verify-subscription-transitions.mjs",
@@ -75,6 +77,7 @@
     "verify:partner-users": "node --env-file=.env.local scripts/verify-partner-users.mjs",
     "verify:partner-products": "node --env-file=.env.local scripts/verify-partner-products.mjs",
     "verify:dynamic-forms": "node --env-file=.env.local scripts/verify-dynamic-forms.mjs",
+    "verify:lead-import": "node --env-file=.env.local scripts/verify-lead-import.mjs",
     "verify:partner-submission": "node --env-file=.env.local scripts/verify-partner-submission.mjs",
     "reconcile:intake": "node --env-file=.env.local scripts/reconcile-intake.mjs",
     "verify:intake": "node --env-file=.env.local scripts/verify-intake-pipeline.mjs",
@@ -99,7 +102,8 @@
     "verify:unclaimed-sla": "node --env-file=.env.local scripts/verify-unclaimed-sla.mjs",
     "verify:callbacks": "node --env-file=.env.local scripts/verify-callbacks.mjs",
     "verify:plan-version": "node --env-file=.env.local scripts/verify-plan-version-integrity.mjs",
-    "verify:user-integrity": "node --env-file=.env.local scripts/verify-user-integrity.mjs"
+    "verify:user-integrity": "node --env-file=.env.local scripts/verify-user-integrity.mjs",
+    "verify:la0": "node scripts/verify-la0.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.99.0",

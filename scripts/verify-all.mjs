@@ -38,6 +38,13 @@ const SUITES = [
   ["subscription events", "verify-subscription-events.mjs"],
   ["period billing", "verify-period-billing.mjs"],
   ["LA-0 RLS", "verify-la0-rls.mjs"],
+  // These four carry almost all of the LA-0 acceptance evidence and were missing from this list
+  // until 2026-09-11. That omission is why the LA-0.1–LA-0.6 audit could only mark six tasks
+  // PARTIAL: the proof existed and nothing ran it. Exactly the failure the header warns about.
+  ["LA-0.1 agent shell", "verify-agent-shell.mjs"],
+  ["LA-0.4 carrier library", "verify-carrier-library.mjs"],
+  ["LA-0.5 appointment vault", "verify-appointment-vault.mjs"],
+  ["LA-0.6 contacts & dedupe", "verify-contacts.mjs"],
   ["LA-1.1 partners", "verify-partners.mjs"],
   ["LA-1.2 partner users", "verify-partner-users.mjs"],
   ["LA-1.3 partner products", "verify-partner-products.mjs"],
