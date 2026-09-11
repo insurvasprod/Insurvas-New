@@ -62,10 +62,11 @@ The deepest dependency in the whole product, and the one that unblocks the most.
 gives `tenant_entitlements` the producer it currently lacks, which resolves LA-0.1 criterion 5 as a
 side effect.
 
-**Tables:** ~~`features`~~ · ~~`feature_modules`~~ · ~~`plans`~~ · `plan_features` · `plan_limits` ·
-`plan_prices` · `plan_available_addons` · `plan_meters` · `plan_product_access` · `addons` ·
-`addon_features` · `addon_meters` · `meters` · `meter_pricing` · ~~`subscriptions`~~ ·
-`subscription_addons` · `subscription_coupons` · `usage_events` · `usage_totals`
+**Tables:** ~~`features`~~ · ~~`feature_modules`~~ · ~~`plans`~~ · ~~`plan_features`~~ ·
+`plan_limits` · ~~`plan_prices`~~ · `plan_available_addons` · `plan_meters` ·
+`plan_product_access` · `addons` · `addon_features` · `addon_meters` · `meters` · `meter_pricing` ·
+~~`subscriptions`~~ · `subscription_addons` · `subscription_coupons` · `usage_events` ·
+`usage_totals`
 
 **View:** ~~`admin_plan_list`~~
 
@@ -74,10 +75,29 @@ table and nothing in the codebase references one. Versioning lives on `plans` it
 `(code, version)` rows — `fetchPlanVersions()` selects every row sharing a code and
 `admin_plan_list` collapses them to the latest per code.
 
-**Done 2026-09-11** (struck through above): `20260911130000_sa_2_1_feature_catalog.sql` and
-`20260911131000_sa_2_2_plans.sql`. `subscriptions` was created as the table only, because
-`admin_plan_list` cannot count subscribers without it; its operations remain SA-2.7. Both
-migrations parse; **neither has been applied** — that still needs gate 0.1/0.2.
+**Done 2026-09-11** (struck through above), four migrations:
+
+| Migration | Covers |
+|---|---|
+| `20260911130000_sa_2_1_feature_catalog.sql` | `feature_modules`, `features`, 9-module / 28-feature seed |
+| `20260911131000_sa_2_2_plans.sql` | `plan_type` enum, `plans`, `admin_plan_list` view, `subscriptions` table |
+| `20260911132000_sa_2_3_plan_features.sql` | `plan_features` + the three reviewed v1 plans and their 47 feature grants |
+| `20260911133000_sa_2_4_plan_prices.sql` | `plan_prices` |
+
+`subscriptions` is the table only — `admin_plan_list` cannot count subscribers without it; its
+operations remain SA-2.7.
+
+**The three v1 plans are `basic`, `pro` and `advance`, seeded at version 1, `individual`.** Those
+codes are not a guess: `scripts/verify-entitlements.mjs` queries `plans` for exactly them at
+`version = 1` and pins their feature sets (5 / 16 / 26). `lib/features/planSeed.test.mjs` keeps the
+migration and the verifier in step without a database.
+
+**No prices are seeded.** The plan codes are pinned by the verifier; the amounts are not pinned
+anywhere, and SA-2.2 says names and contents are set by the business. Inventing figures that
+checkout would later charge against is not a safe default — **this is the one open input needed to
+finish SA-2.4.**
+
+All four parse (`db:check`); **none has been applied** — that still needs gate 0.1/0.2.
 
 **Functions:** `admin_update_plan` · `admin_create_plan_version` · `admin_save_plan_version` ·
 `admin_save_plan_limits` · `admin_assign_subscription` · `admin_change_subscription_plan` ·
