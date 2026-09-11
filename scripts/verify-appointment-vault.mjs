@@ -2,6 +2,7 @@
 import { randomUUID } from "node:crypto";
 import { SignJWT } from "jose";
 import { createClient } from "@supabase/supabase-js";
+import { createFixtureUser, deleteFixtureUser } from "./lib/fixtureUser.mjs";
 import { canWriteFromVault } from "../lib/appointments/eligibility.ts";
 import { dueExpiryWarnings } from "../lib/appointments/warnings.ts";
 
@@ -9,8 +10,8 @@ const BASE = process.env.APP_BASE_URL ?? "http://localhost:3000";
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
 const stamp = Date.now();
 const tenantId = randomUUID();
-const ownerId = randomUUID();
-const producerId = randomUUID();
+let ownerId = null;
+let producerId = null;
 let failures = 0;
 let carrierId = null;
 
@@ -29,7 +30,7 @@ async function cleanup() {
   await supabase.from("tenant_carriers").delete().eq("tenant_id", tenantId);
   await supabase.from("tenant_entitlements").delete().eq("tenant_id", tenantId);
   await supabase.from("tenant_users").delete().eq("tenant_id", tenantId);
-  await supabase.from("users").delete().in("id", [ownerId, producerId]);
+  for (const id of [ownerId, producerId]) await deleteFixtureUser(supabase, id);
   await supabase.from("tenants").delete().eq("id", tenantId);
 }
 
@@ -39,10 +40,8 @@ async function main() {
   carrierId = carrier.id;
   const { error: tenantError } = await supabase.from("tenants").insert({ id: tenantId, name: `LA-0.5 verification ${stamp}`, status: "active", onboarding_state: "completed" });
   if (tenantError) throw new Error(tenantError.message);
-  await supabase.from("users").insert([
-    { id: ownerId, email: `la05-owner-${stamp}@invalid.test`, name: "LA-0.5 owner", password_hash: "verification-only", status: "active" },
-    { id: producerId, email: `la05-producer-${stamp}@invalid.test`, name: "LA-0.5 producer", password_hash: "verification-only", status: "active" },
-  ]);
+  ({ userId: ownerId } = await createFixtureUser(supabase, { email: `la05-owner-${stamp}@invalid.test`, name: "LA-0.5 owner" }));
+  ({ userId: producerId } = await createFixtureUser(supabase, { email: `la05-producer-${stamp}@invalid.test`, name: "LA-0.5 producer" }));
   await supabase.from("tenant_users").insert([{ tenant_id: tenantId, user_id: ownerId, role: "owner" }, { tenant_id: tenantId, user_id: producerId, role: "producer" }]);
   await supabase.from("tenant_entitlements").insert({ tenant_id: tenantId, entitlement: { tenant_id: tenantId, plan_code: "qa", plan_version: 1, status: "active", access: "full", computed_at: new Date().toISOString(), features: ["appointment_vault", "book_of_business"], meters: {}, limits: { max_seats: 1 } } });
   const { error: contractError } = await supabase.from("tenant_carriers").insert({ tenant_id: tenantId, carrier_id: carrierId, contract_level_bp: 11000, writing_number: "LA05-QA", effective_from: "2025-01-01", is_active: true });
@@ -87,7 +86,11 @@ async function main() {
     const noSession = await fetch(`${BASE}/api/app/appointment-vault`);
     const forged = await api("/api/app/appointment-vault", "insurvas_tenant_session=forged");
     check("missing and forged sessions are rejected", noSession.status === 401 && forged.status === 401);
-    check("a producer cannot change owner-only vault settings", (await api("/api/app/appointment-vault", producer)).status === 403);
+    // The GET path is deliberately open to producers (owner-only applies to WRITES), so the
+    // read returning 200 is correct and this check now exercises the owner-only half.
+    const producerRead = await api("/api/app/appointment-vault", producer);
+    const producerWrite = await api("/api/app/appointment-vault/appointments", producer, { method: "POST", ...json({ rows: [] }) });
+    check("a producer can read the vault but cannot change owner-only settings", producerRead.status === 200 && producerWrite.status === 403, `read ${producerRead.status}, write ${producerWrite.status}`);
     const { count: auditCount } = await supabase.from("audit_log").select("id", { count: "exact", head: true }).eq("actor_id", ownerId).in("action", ["tenant.appointment_saved", "tenant.license_saved", "tenant.eo_policy_saved", "tenant.ce_record_saved"]);
     check("every successful write has an audit row", (auditCount ?? 0) >= 46, `count ${auditCount}`);
   } finally { await cleanup(); }

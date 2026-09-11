@@ -2,13 +2,14 @@
 import { randomUUID } from "node:crypto";
 import { SignJWT } from "jose";
 import { createClient } from "@supabase/supabase-js";
+import { createFixtureUser, deleteFixtureUser } from "./lib/fixtureUser.mjs";
 
 const BASE = process.env.APP_BASE_URL ?? "http://localhost:3000";
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
 const stamp = Date.now();
 let failures = 0;
 const tenantId = randomUUID();
-const userId = randomUUID();
+let userId = null;
 let carrierId = null;
 let qaCarrierId = null;
 const createdIds = { tenantCarriers: [], schedules: [], rules: [] };
@@ -37,7 +38,7 @@ async function cleanup() {
   await supabase.from("tenant_carriers").delete().eq("tenant_id", tenantId);
   await supabase.from("tenant_entitlements").delete().eq("tenant_id", tenantId);
   await supabase.from("tenant_users").delete().eq("tenant_id", tenantId);
-  await supabase.from("users").delete().eq("id", userId);
+  await deleteFixtureUser(supabase, userId);
   await supabase.from("tenants").delete().eq("id", tenantId);
   if (qaCarrierId) await supabase.from("carriers").delete().eq("id", qaCarrierId);
   for (const id of temporaryAdmins) await supabase.from("admin_users").delete().eq("id", id);
@@ -51,7 +52,7 @@ async function main() {
   if (!carrier || !product) throw new Error("Seed carrier/product missing");
   carrierId = carrier.id;
   await supabase.from("tenants").insert({ id: tenantId, name: `LA-0.4 verification ${stamp}`, status: "active", onboarding_state: "completed" });
-  await supabase.from("users").insert({ id: userId, email: `la04-${stamp}@invalid.test`, name: "LA-0.4 verification", password_hash: "verification-only", status: "active" });
+  ({ userId } = await createFixtureUser(supabase, { email: `la04-${stamp}@invalid.test`, name: "LA-0.4 verification" }));
   await supabase.from("tenant_users").insert({ tenant_id: tenantId, user_id: userId, role: "owner" });
   await supabase.from("tenant_entitlements").insert({ tenant_id: tenantId, entitlement: { tenant_id: tenantId, plan_code: "qa", plan_version: 1, status: "active", access: "full", computed_at: new Date().toISOString(), features: ["appointment_vault"], meters: {}, limits: { max_seats: 1 } } });
   const cookie = `insurvas_tenant_session=${await token()}`;

@@ -86,8 +86,19 @@ table and nothing in the codebase references one. Versioning lives on `plans` it
 | `20260911134000_sa_2_8_entitlement_engine.sql` | `refresh_tenant_entitlement` rewritten to compute from subscription + plan + features; `entitlement_access_for_status`; `admin_assign_subscription` (assign only) |
 | `20260911135000_sa_2_5_limits_and_meters.sql` | `meters`, `plan_meters`, `plan_limits`, `usage_events`, `usage_totals`; `check_meter_capacity`, `record_usage`, `rebuild_usage_totals`, `tenant_current_plan`, `tenant_current_period_start`, `tenant_seats_used`; meter seed; entitlement extended with real limits and meters |
 
-**SA-2 remaining:** SA-2.6 (add-ons) and SA-2.7 (change / pause / cancel — assign is done).
+| `20260911136000_sa_2_6_addons.sql` | `addons`, `addon_features`, `addon_meters`, `plan_available_addons`, `subscription_addons`; `admin_attach_addon`, `admin_detach_addon_for_subscription`; entitlement extended to union add-on features and stack add-on credits |
+| `20260911137000_sa_2_7_subscription_lifecycle.sql` | `admin_change_subscription_plan`, `admin_cancel_subscription`, `admin_set_subscription_pause_state` |
+
+**SA-2 is complete** — all eight tasks have migrations, and all six SA-2 migrations have been
+applied to the live project. `npm run verify:entitlements` passes every check, including the
+suspended-is-read-only and cancelled-is-empty cases that failed before.
+
 `tenant_seats_used` from SA-2.5 also closes LA-0.2 criterion 6's missing function.
+
+Two business inputs are still open and are the only things left on SA-2's own scope: **plan
+prices** (monthly / quarterly / yearly cents, setup fee, trial days per plan) and **meter
+allowances** per plan. Neither is pinned anywhere, and both are read by enforcement, so neither
+was guessed.
 
 **SA-2.8 is the one that makes the rest observable.** `refresh_tenant_entitlement` already
 existed, but the LA-0 bridge defined it as a pass-through to `la0_default_entitlement()` — a fixed
