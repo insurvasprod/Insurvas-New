@@ -50,7 +50,31 @@ export async function POST(request: NextRequest) {
   const expiresAt = await inviteExpiryFromNow();
   const origin = configuredAppOrigin("agent");
 
-  const { data, error } = await supabase.rpc("admin_create_user", {
+  // The user is born in Supabase Auth, not here. `public.users.id` is foreign-keyed to
+  // `auth.users` (LA-0 made Auth the credential authority for the tenant plane), so a SQL-only
+  // create has nothing to point at. The `on_auth_user_created` trigger writes the `public.users`
+  // row; `admin_attach_user_to_tenant` then does the tenant, role, seat check and invitation in
+  // one transaction.
+  //
+  // No password is set: the account is reached through the invitation link below, which is the
+  // whole point of an invite. `email_confirm` stays false so the address is still unverified
+  // until they act on it.
+  const { data: authUser, error: authError } = await supabase.auth.admin.createUser({
+    email,
+    email_confirm: false,
+    user_metadata: { name, full_name: name },
+  });
+
+  if (authError || !authUser?.user) {
+    const alreadyRegistered = /already|exists|registered|duplicate/i.test(authError?.message ?? "");
+    return NextResponse.json(
+      { error: alreadyRegistered ? "This email is already registered" : "Could not create user" },
+      { status: alreadyRegistered ? 409 : 500 },
+    );
+  }
+
+  const { data, error } = await supabase.rpc("admin_attach_user_to_tenant", {
+    p_user_id: authUser.user.id,
     p_name: name,
     p_email: email,
     p_phone: phone || null,
@@ -61,6 +85,15 @@ export async function POST(request: NextRequest) {
     p_expires_at: expiresAt.toISOString(),
     p_created_by: auth.session.sub,
   });
+
+  // Atomicity does not span the Auth boundary, so it is bought back by compensation: if the
+  // attach failed, the half-made account is removed rather than left as an orphan that blocks the
+  // address from ever being used again.
+  if (error) {
+    await supabase.auth.admin.deleteUser(authUser.user.id).catch(() => {
+      // Nothing more to try. The attach error is the one worth reporting.
+    });
+  }
 
   if (error) {
     // 23505 = unique violation on users.email. The whole function is one transaction, so

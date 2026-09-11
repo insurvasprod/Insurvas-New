@@ -1611,6 +1611,12 @@ export type Database = {
         Update: { pipeline_id?: string; stage_id?: string; status?: string; claimed_by?: string | null; owner_user_id?: string | null; owner_role?: string | null; claimed_at?: string | null; submission_id?: string | null; queued_at?: string; disposition?: string | null; disposition_at?: string | null; disposition_by?: string | null; updated_at?: string };
         Relationships: [];
       };
+      agent_lead_import_batches: {
+        Row: { id: string; tenant_id: string; idempotency_key: string; created_by: string; status: string; response: Json | null; error_message: string | null; created_at: string; updated_at: string; completed_at: string | null };
+        Insert: { id?: string; tenant_id: string; idempotency_key: string; created_by: string; status?: string; response?: Json | null; error_message?: string | null; created_at?: string; updated_at?: string; completed_at?: string | null };
+        Update: { status?: string; response?: Json | null; error_message?: string | null; updated_at?: string; completed_at?: string | null };
+        Relationships: [];
+      };
       verification_sessions: {
         Row: { id: string; tenant_id: string; work_item_id: string; lead_id: string; user_id: string; agent_role: string; status: string; started_at: string; ended_at: string | null; progress_percentage: number; completed_at: string | null; last_actor_id: string | null; created_at: string; updated_at: string };
         Insert: { id?: string; tenant_id: string; work_item_id: string; lead_id: string; user_id: string; agent_role: string; status?: string; started_at?: string; ended_at?: string | null; progress_percentage?: number; completed_at?: string | null; last_actor_id?: string | null; created_at?: string; updated_at?: string };
@@ -1660,15 +1666,21 @@ export type Database = {
         Relationships: [];
       };
       partner_messages: {
-        Row: { id: string; tenant_id: string; partner_id: string; channel_id: string; work_item_id: string | null; message: string; message_kind: string; card_type: string | null; card_payload: Json; event_key: string | null; created_by: string | null; created_at: string };
-        Insert: { id?: string; tenant_id: string; partner_id: string; channel_id: string; work_item_id?: string | null; message: string; message_kind?: string; card_type?: string | null; card_payload?: Json; event_key?: string | null; created_by?: string | null; created_at?: string };
+        Row: { id: string; tenant_id: string; partner_id: string | null; channel_id: string | null; work_item_id: string | null; message: string; message_kind: string; card_type: string | null; card_payload: Json; event_key: string | null; created_by: string | null; created_at: string };
+        Insert: { id?: string; tenant_id: string; partner_id?: string | null; channel_id?: string | null; work_item_id?: string | null; message: string; message_kind?: string; card_type?: string | null; card_payload?: Json; event_key?: string | null; created_by?: string | null; created_at?: string };
         Update: { message?: string };
         Relationships: [];
       };
       partner_channels: {
-        Row: { id: string; tenant_id: string; partner_id: string; channel_type: string; name: string; status: string; created_by: string | null; created_at: string; archived_at: string | null };
-        Insert: { id?: string; tenant_id: string; partner_id: string; channel_type?: string; name?: string; status?: string; created_by?: string | null; created_at?: string; archived_at?: string | null };
+        Row: { id: string; tenant_id: string; partner_id: string | null; channel_type: string; name: string; status: string; created_by: string | null; created_at: string; archived_at: string | null; direct_key: string | null };
+        Insert: { id?: string; tenant_id: string; partner_id?: string | null; channel_type?: string; name?: string; status?: string; created_by?: string | null; archived_at?: string | null; direct_key?: string | null };
         Update: { name?: string; status?: string; archived_at?: string | null };
+        Relationships: [];
+      };
+      partner_channel_members: {
+        Row: { channel_id: string; tenant_id: string; user_id: string; created_at: string };
+        Insert: { channel_id: string; tenant_id: string; user_id: string; created_at?: string };
+        Update: { created_at?: string };
         Relationships: [];
       };
       partner_message_reads: {
@@ -2930,6 +2942,16 @@ export type Database = {
         Args: { p_created_by: string; p_email: string; p_expires_at: string; p_max_buffer_seats?: number | null; p_name: string; p_role: Database["public"]["Enums"]["tenant_user_role"]; p_tenant_id: string; p_token_hash: string };
         Returns: { tenant_id: string; user_id: string }[];
       };
+      // Takes the Auth user id because public.users.id is foreign-keyed to auth.users: the route
+      // creates the account in Supabase Auth and this attaches it to the tenant.
+      tenant_invite_user_with_auth: {
+        Args: { p_auth_user_id: string; p_created_by: string; p_email: string; p_expires_at: string; p_max_buffer_seats?: number | null; p_name: string; p_role: Database["public"]["Enums"]["tenant_user_role"]; p_tenant_id: string; p_token_hash: string };
+        Returns: { tenant_id: string; user_id: string }[];
+      };
+      admin_attach_user_to_tenant: {
+        Args: { p_created_by: string; p_email: string; p_expires_at: string; p_name: string; p_new_tenant_name: string | null; p_phone: string | null; p_role: string; p_tenant_id: string | null; p_token_hash: string; p_user_id: string };
+        Returns: { tenant_id: string; user_id: string }[];
+      };
       tenant_update_member_role: {
         Args: {
           p_role: Database["public"]["Enums"]["tenant_user_role"];
@@ -2972,6 +2994,14 @@ export type Database = {
       partner_invite_user_with_limit: {
         Args: { p_email: string; p_expires_at: string; p_max_partner_users?: number | null; p_name: string; p_partner_id: string; p_role: Database["public"]["Enums"]["partner_user_role"]; p_tenant_id: string; p_token_hash: string };
         Returns: { accepted_at: string | null; email: string; invited_at: string; name: string; partner_id: string; role: Database["public"]["Enums"]["partner_user_role"]; tenant_id: string; user_id: string }[];
+      };
+      consume_existing_partner_invite: {
+        Args: { p_token_hash: string };
+        Returns: { user_id: string; tenant_id: string; partner_id: string; accepted_at: string }[];
+      };
+      admin_usage_monitor_json: {
+        Args: { p_over_80?: boolean };
+        Returns: Json;
       };
       partner_resend_invite: {
         Args: { p_expires_at: string; p_partner_id: string; p_tenant_id: string; p_token_hash: string; p_user_id: string };
