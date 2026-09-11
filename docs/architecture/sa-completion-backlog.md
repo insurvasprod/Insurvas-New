@@ -37,10 +37,45 @@ Nothing downstream can be verified until these clear.
 
 ## SA-1 — User administration (5 tasks, all blocked on the same objects)
 
-**View/table:** `admin_user_list`
+**View/table:** ~~`admin_user_list`~~ · ~~`user_invitations`~~ · ~~`users.suspended_at` /
+`users.suspension_reason`~~
 
-**Functions:** `admin_create_user` · `admin_update_user_with_email_change` · `admin_set_user_status`
-· `admin_replace_user_token` · `admin_user_stats` · `admin_login_activity_stats`
+**Functions:** `admin_create_user` · `admin_update_user_with_email_change` ·
+~~`admin_set_user_status`~~ · ~~`admin_replace_user_token`~~ · ~~`admin_user_stats`~~ ·
+~~`admin_login_activity_stats`~~
+
+**Done 2026-09-11:** `20260911141000_sa_1_user_administration.sql`. The `admin_user_list`
+definition already existed in `20260903340000_sa_1_1_admin_users_live_plan.sql` and could never be
+applied because it joins `subscriptions` and `plans`, which did not exist until SA-2.2 — it is
+repeated in a migration that can now run. Seat enforcement on re-activation uses SA-2.5's
+`plan_limits` and raises the `seat_limit_reached:<used>:<max>` the routes already parse.
+
+### Two functions need an architectural decision first
+
+`admin_create_user` and `admin_update_user_with_email_change` **cannot be written as SQL-only
+transactions any more.** `public.users.id` has no default and carries `users_id_fkey` to
+`auth.users`, because LA-0 made Supabase Auth the credential authority for the tenant plane:
+
+- a function that inserts a brand-new `public.users` row has nothing to point at; and
+- creating the `auth.users` row from SQL means hand-writing `encrypted_password` and an
+  `auth.identities` row, which breaks quietly on the next Auth upgrade.
+
+The same applies to an email change: the address lives in `auth.users` too, so a SQL-only update
+leaves the two halves disagreeing about who the user is.
+
+**Options**, in the order I would rank them:
+
+1. **Move creation into the route.** `app/api/admin/users/route.ts` calls
+   `auth.admin.createUser()`, then a narrower `admin_attach_user_to_tenant(...)` does the tenant,
+   role, seat check and invitation in one transaction. Loses single-statement atomicity across the
+   auth boundary — the compensating action is deleting the auth user if the attach fails.
+2. **Keep the RPC signature and add `p_user_id`**, with the route creating the auth user first.
+   Smallest change to the SQL, same atomicity caveat.
+3. **Drop `users_id_fkey`** and let the tenant plane own its own user rows. Cleanest SQL, but
+   reopens the question LA-0 already answered and would need the login path revisited.
+
+Same class of decision as the tenant-versus-organizations question in `database.md`, and it should
+be taken with that one.
 
 Note the database already contains `admin_create_user_projection`, `admin_set_user_state`,
 `admin_update_user_profile` and `platform_login_activity_summary` — the organizations-era
