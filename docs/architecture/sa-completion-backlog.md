@@ -83,6 +83,14 @@ table and nothing in the codebase references one. Versioning lives on `plans` it
 | `20260911131000_sa_2_2_plans.sql` | `plan_type` enum, `plans`, `admin_plan_list` view, `subscriptions` table |
 | `20260911132000_sa_2_3_plan_features.sql` | `plan_features` + the three reviewed v1 plans and their 47 feature grants |
 | `20260911133000_sa_2_4_plan_prices.sql` | `plan_prices` |
+| `20260911134000_sa_2_8_entitlement_engine.sql` | `refresh_tenant_entitlement` rewritten to compute from subscription + plan + features; `entitlement_access_for_status`; `admin_assign_subscription` (assign only) |
+
+**SA-2.8 is the one that makes the rest observable.** `refresh_tenant_entitlement` already
+existed, but the LA-0 bridge defined it as a pass-through to `la0_default_entitlement()` — a fixed
+feature list that never reads a subscription. That is the whole reason every tenant reports
+`access: full` regardless of status, and why `verify:entitlements` fails "access is read_only" and
+"access is none". The cache now has a producer. Tenants with no subscription still get the bridge
+default, so the six existing LA-0 tenants are unaffected.
 
 `subscriptions` is the table only — `admin_plan_list` cannot count subscribers without it; its
 operations remain SA-2.7.
