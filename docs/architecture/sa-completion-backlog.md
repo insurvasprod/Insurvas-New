@@ -179,6 +179,56 @@ All four parse (`db:check`); **none has been applied** — that still needs gate
 
 ## SA-3 — Billing & payments (9 tasks, 1 cancelled)
 
+> ### ⛔ SA-3 is blocked on a table-name collision, not on effort
+>
+> Surveyed 2026-09-11. `public.invoices` and `public.invoice_lines` **already exist — as the
+> organizations-era CRM's tables**, and their shape is incompatible with SA-3's in every way that
+> matters:
+>
+> | | Live table | What this application queries |
+> |---|---|---|
+> | Scope | `organization_id` | `tenant_id` |
+> | Identifier | `invoice_number` | `number` |
+> | Money | `total_amount numeric(12,2)` | `subtotal_cents`, `discount_cents`, `tax_cents`, `total_cents` |
+> | Shape | approval workflow (`submitted_by`, `approved_by`, `rejection_reason`) | SaaS billing (`kind`, `subscription_id`, `provider_*`, `reconciliation`) |
+>
+> `total_amount numeric(12,2)` also violates an SA-00 locked decision outright: *"Money is integer
+> cents. Never floats, never decimals."*
+>
+> Proven against the live database:
+>
+> ```
+> app-shaped select   : ERROR column invoices.number does not exist
+> legacy-shaped select: OK 0 rows
+> ```
+>
+> **And the application does not notice.** `lib/invoices/queries.ts:46` reads
+> `const { data } = await query.returns<Raw[]>()` — the error is destructured away, never checked.
+> So `/api/admin/invoices` answers `200` with `invoices: []`. The invoice screen will report "no
+> invoices" forever, including after real invoices exist, because it is querying columns the table
+> does not have and silently swallowing the failure. This is the same silent-empty pattern already
+> recorded for `/api/admin/features`, in its worst form — and it is worth fixing on its own merits
+> whichever way the collision is resolved.
+>
+> **This needs a decision before any SA-3 migration can be written.** Options:
+>
+> 1. **Rename the SaaS tables** — `platform_invoices`, `platform_payments`, and so on. No risk to
+>    the live CRM. Costs a rename across `lib/invoices/*`, `lib/credits/*`, the admin routes and
+>    `database.types.ts`.
+> 2. **Separate schemas** — put the SaaS billing tables in their own schema. Cleanest conceptually,
+>    but PostgREST exposes `public` by default, so it needs a config change and every call site
+>    updated.
+> 3. **Move the legacy CRM's tables aside.** Smallest code change, largest blast radius: it edits a
+>    live product this repository does not own.
+>
+> I would take option 1. It is the only one that touches nothing outside this repository, and the
+> names are honest — these *are* the platform's invoices, not the agency's.
+>
+> Note this is the tenant-versus-organizations question from `database.md` arriving with teeth.
+> Every remaining SA-3 table (`payments`, `coupons`, `credit_notes`, `webhook_events`,
+> `whop_plans`, `provider_settings`) is absent and uncollided, so once the naming is settled the
+> rest is ordinary work.
+
 **Tables:** `payments` · `coupons` · `subscription_coupons` · `credit_notes` · `webhook_events` ·
 `whop_plans` · `provider_settings`
 (`invoices` already exists, 0 rows.)
