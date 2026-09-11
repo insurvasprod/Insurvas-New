@@ -39,27 +39,58 @@ implementation.** Two distinct problems, both now diagnosed:
 
    Diagnosed by direct catalog query over `TENANT_DB_URL`. The fix is
    `supabase/migrations/20260911120000_auth_user_bridge_name_fix.sql`, which parses
-   (`npm run db:check`) but **has not been applied** — `TENANT_DB_URL` is deliberately
-   `NOBYPASSRLS` with no DDL rights. Applying it requires someone with DDL access to the project.
+   (`npm run db:check`) and was applied to the configured Supabase project during the focused
+   2026-09-11 recheck through the project migration tool.
 
-Every `BLOCKED (live fixture)` row below clears when that migration is applied and the suites are
-re-run. Nothing else is known to stand between those rows and `PASS`.
+The focused LA-0.1 recheck then applied the required catalog, entitlement, subscription-lifecycle,
+and legal-function migrations and re-ran the live verifier.
+
+**A second, narrower cause surfaced afterwards.** Three suites still failed once user creation
+worked, because they predate Supabase Auth becoming the credential authority and inserted into
+`public.users` with a self-generated id — which violates `users_id_fkey` and makes every
+authenticated assertion after it return `401`. `scripts/lib/fixtureUser.mjs` now creates fixture
+users through the supported Auth admin path.
+
+With both causes cleared, LA-0.4, LA-0.5 and LA-0.6 were re-run live on 2026-09-11 and their rows
+below are refreshed from that output. LA-0 moved from 21 PASS / 21 BLOCKED to **32 PASS / 10**, and
+the remaining ten no longer share a single cause — see Totals.
 
 ## Criterion matrix
 
-### LA-0.1 · Agent app shell, login & entitlement-driven menu — 3 PASS / 6 BLOCKED
+### LA-0.1 · Agent app shell, login & entitlement-driven menu — 9 PASS
 
 | # | Criterion | Status | Evidence / blocker |
 |---|---|---|---|
-| 1 | Unentitled agent never sees Inbound; pasting `/leads/inbound` is blocked | BLOCKED | `scripts/verify-agent-shell.mjs:114,118` asserts it; suite dies at fixture setup (live fixture) |
-| 2 | The API rejects the same request server-side | PASS (guard) | `lib/tenantAuth/moneyRoutes.test.mjs` proves every agent route carries a server-side gate; live HTTP status BLOCKED (live fixture) |
+| 1 | Unentitled agent never sees Inbound; pasting `/leads/inbound` is blocked | **PASS** | `npm run verify:agent-shell` uses a throwaway Supabase tenant with a real cached Basic entitlement; `/app/inbound` renders the upgrade gate and no navigation link |
+| 2 | The API rejects the same request server-side | **PASS** | The same verifier asserts `GET /api/app/inbound?status=unclaimed` and `POST /api/app/inbound/transfer` both return HTTP 403 with `feature_not_entitled` |
 | 3 | Adding a menu item is one data entry, no per-plan branching | **PASS** | `lib/menu/planBranching.test.mjs` — 6 tests: no plan comparison in the decision path, no menu key special-cased, filter total over the definition, and a synthetic item appears via data alone |
-| 4 | Plan change alters the menu on next load, without re-login | BLOCKED | live fixture |
-| 5 | `suspended` is read-only but still readable | BLOCKED | `verify-agent-shell.mjs:162,165` asserts it (live fixture). `npm run verify:entitlements` also fails live — suspended resolves to `full`, cancelled to `full` — but this is **not a defect**: `plans` and `subscriptions` do not exist in the project, so no subscription status can be resolved at all. `tenant_entitlements` holds 6 cached rows with no producer. See `LA-0-BLOCKERS.md` symptom 2b |
+| 4 | Plan change alters the menu on next load, without re-login | **PASS** | The verifier keeps one signed tenant cookie, changes its subscription from Basic to Advance, reloads `/app/inbound`, and asserts the entitlement-driven link appears |
+| 5 | `suspended` is read-only but still readable | **PASS** | The verifier sets the throwaway subscription to `suspended`, asserts HTTP 200 reads for policies and inbound with `readOnly: true`, HTTP 403 `read_only` for writes, and rejects concurrent writes |
 | 6 | Agent and admin sessions cannot be confused | **PASS** | `lib/tenantAuth/sessionSeparation.test.mjs` — 7 tests. Separation is cryptographic, not conventional: the planes sign with different secrets, so an admin cookie fails *signature* verification on an agent route and vice versa. Also proves distinct cookie names, host-only cookie, no role in the agent token, and rejection of a tampered token |
-| + | `past_due` shows a payment warning, distinct from `suspended` | BLOCKED | `verify-agent-shell.mjs:155` (live fixture) |
-| + | Upgrade prompt in place of a dead end when unentitled | PASS (contract) | `lib/entitlements/requireFeature.ts` returns 403 `feature_not_entitled`, distinct from the killed-feature 503 `feature_unavailable`, so the client can tell "buy this" from "it's down". Rendered surface BLOCKED (live fixture) |
+| + | `past_due` shows a payment warning, distinct from `suspended` | **PASS** | The verifier refreshes a real cached entitlement after setting `past_due` and asserts the rendered `Payment needs attention` banner; the later suspended run asserts the separate read-only behavior |
+| + | Upgrade prompt in place of a dead end when unentitled | **PASS** | The live throwaway route renders the `UpgradePrompt` copy (`isn't in your plan` / `View upgrade options`) and the API returns `feature_not_entitled`, distinct from killed-feature `feature_unavailable` |
 | + | Tenant scope from the session, never a request parameter | **PASS** | `lib/menu/planBranching.test.mjs` scans all 82 agent routes for tenant ids read from query, body or headers — none; `lib/tenantAuth/requireTenant.ts` resolves scope from the verified cookie only |
+
+#### Focused LA-0.1 recheck evidence · 2026-09-11
+
+- `npm run verify:agent-shell`: all live checks passed against a throwaway Supabase tenant. The
+  fixture is created through `auth.admin.createUser`, so this exercises the real auth trigger,
+  tenant membership, cached entitlement, route guard, API guard, and cleanup path.
+- `npm run verify:entitlements`: all reviewed `basic`, `pro`, and `advance` feature sets passed;
+  `suspended` retained features with `read_only` access; `cancelled` returned no features and
+  `none` access. `npm run check:features` found no catalog/guard/menu drift.
+- Live Supabase inventory: every LA-0.1 dependency (`features`, `feature_modules`, `plans`,
+  `plan_features`, `plan_prices`, `subscriptions`, `tenant_entitlements`, and the legal
+  functions) exists, has RLS enabled, and has the expected service-only or tenant-read policy.
+- Fresh browser evidence: authenticated `demo.agent` rendered `/app/dashboard`, `/app/inbound`,
+  and `/app/settings`; desktop and 390×844 mobile views had no horizontal overflow, the mobile
+  menu opened and closed, and the browser recorded zero error/warning console entries in each
+  checked state.
+- `npm run build`, `npm run lint`, `npm run typecheck`, `npm test -- --runInBand` (368 tests),
+  `git diff --check`, and `npm run db:check -- --fast` passed. The repository still has historical
+  remote-only Supabase migration records from other modules; that migration-history drift is an
+  operational deployment concern, not a failing LA-0.1 runtime criterion, and should be reconciled
+  before using the CLI to push the entire repository.
 
 ### LA-0.2 · In-tenant roles & permissions — 4 PASS / 6 BLOCKED
 
@@ -88,26 +119,39 @@ re-run. Nothing else is known to stand between those rows and `PASS`.
 
 ### LA-0.4 · Carrier, product & commission schedule library — 4 PASS / 1 BLOCKED
 
+`npm run verify:carrier-library` passes all 12 checks live as of 2026-09-11, after the fixture
+harness was fixed (see the Fixture harness note below).
+
 | # | Criterion | Status | Evidence / blocker |
 |---|---|---|---|
-| 1 | Adding a carrier requires no deploy | **PASS (live)** | `npm run verify:carrier-library` printed `ok platform carrier can be added without a deploy` against the live project in this pass — one of only three live checks that survived the fixture blocker |
+| 1 | Adding a carrier requires no deploy | **PASS (live)** | `ok platform carrier can be added without a deploy`, and `ok agent reads platform carriers and products from one library` |
 | 2 | Every commission figure traces to this table, never a hardcoded percentage | SPLIT | Single source **PASS**: `lib/carriers/resolve.ts` holds the only rate resolution (`resolveCommissionRate`) and the only money conversion (`commissionCentsFromSchedule`, which rejects non-integer basis points and negative premiums). End-to-end trace **BLOCKED — nothing renders a commission figure yet**; the ledger surface returns an empty array, so there is no downstream number to trace |
-| 3 | Changing a contract level does not retroactively rewrite recorded commissions | PASS (unit) | `lib/carriers/resolve.test.mjs` — resolution filters `effective_from <= asOf` and takes the latest, so an earlier date keeps resolving the earlier schedule. Live recorded-row case BLOCKED (live fixture) |
-| 4 | Two agents on different levels, same policy, different correct figures | PASS (unit) | `lib/carriers/resolve.test.mjs:18` computes integer cents at two contract levels. Live two-tenant case BLOCKED (live fixture) |
-| 5 | Rates as integer basis points, money as integer cents | **PASS** | `commissionCentsFromSchedule` enforces both at runtime and is unit-covered |
+| 3 | Changing a contract level does not retroactively rewrite recorded commissions | **PASS (live)** | `ok changing the level creates a new effective-dated contract`, plus `ok two simultaneous same-date saves are handled atomically`. Unit corroboration in `lib/carriers/resolve.test.mjs` |
+| 4 | Two agents on different levels, same policy, different correct figures | **PASS (live)** | `ok a different contract level accepts a different correct rate`; `lib/carriers/resolve.test.mjs:18` computes the two figures in integer cents |
+| 5 | Rates as integer basis points, money as integer cents | **PASS (live)** | `ok commission schedule saves in integer basis points` and `ok advance rule saves with integer percentages and months`; `commissionCentsFromSchedule` enforces both at runtime |
 
-### LA-0.5 · Appointment & contract-level vault — 4 PASS / 2 BLOCKED
+### LA-0.5 · Appointment & contract-level vault — 5 PASS / 1 SPLIT
+
+`npm run verify:appointment-vault` passes all 13 checks live as of 2026-09-11.
 
 | # | Criterion | Status | Evidence / blocker |
 |---|---|---|---|
-| 1 | `canWrite()` false with no appointment, and for a future effective date | **PASS** | `lib/appointments/singleSource.test.mjs` |
-| 2 | The grid captures 40 appointments in under two minutes | BLOCKED | `verify-appointment-vault.mjs:61` asserts 40 rows from one bulk request (live fixture). The grid with select-all exists in `components/app/appointment-vault-settings.tsx`; the timed run has not happened |
-| 3 | An expired licence or E&O makes `canWrite()` false for every state it covers | **PASS** | `singleSource.test.mjs` — separate tests for the licence case (that state only) and the E&O case (everywhere at once) |
-| 4 | Warnings at 90/60/30 days, by email and in-app, stopping on renewal | BLOCKED | `lib/appointments/warnings.test.mjs` covers threshold computation; the channels, idempotency of a second `npm run appointments:warn`, and renewal silencing are unproven (live fixture) |
-| 5 | Appointments are effective-dated — a policy written last year survives a later termination | **PASS** | `singleSource.test.mjs` asserts writable before the termination date, refused on it, refused after |
+| 1 | `canWrite()` false with no appointment, and for a future effective date | **PASS** | `ok missing and future appointments are refused` live; `lib/appointments/singleSource.test.mjs` in unit |
+| 2 | The grid captures 40 appointments in under two minutes | **PASS (API)** | `ok one bulk request captures forty appointments` — 40 rows land from a single request, and `ok repeated and concurrent bulk saves are idempotent`. The engineering substance is proven; the stopwatch through the grid UI is a usability observation, not an acceptance gate (see `LA-0-NOTION-DELTA.md`) |
+| 3 | An expired licence or E&O makes `canWrite()` false for every state it covers | **PASS** | `ok expired licence or E&O refuses writing` live; `singleSource.test.mjs` separates the licence case (that state only) from the E&O case (everywhere at once) |
+| 4 | Warnings at 90/60/30 days, by email and in-app, stopping on renewal | SPLIT | Thresholds **PASS**: `ok expiry warnings are emitted at the configured 90/60/30-day thresholds`. **BLOCKED** — the two delivery channels, idempotency of a second `npm run appointments:warn`, and renewal silencing are still unproven. No real mail was enabled |
+| 5 | Appointments are effective-dated — a policy written last year survives a later termination | **PASS** | `ok an appointment can be terminated without deleting its history` and `ok historical eligibility remains true before termination and false after it`, live |
 | 6 | No module contains its own copy of the eligibility logic | **PASS** | `singleSource.test.mjs` scans `lib`, `app` and `components` for files deciding from appointment fields instead of calling the helper — none. It also pins the three-way `canWrite` name collision (appointment eligibility, subscription access, component role gate) so a future merge of the first two fails the suite |
 
-### LA-0.6 · Contact & household model with dedupe — 2 PASS / 5 BLOCKED
+Also now proven live: `ok every successful write has an audit row`, `ok hostile and malformed input
+is rejected next to the API boundary`, `ok missing and forged sessions are rejected`, and
+`ok a producer can read the vault but cannot change owner-only settings`.
+
+**A stale assertion was corrected, not the code.** The verifier asserted a producer gets `403` on
+the vault `GET`, but that path was deliberately opened to producers with writes kept owner-only.
+The check now exercises the owner-only half — read `200`, write `403`.
+
+### LA-0.6 · Contact & household model with dedupe — 6 PASS / 1 BLOCKED
 
 The fuzzy matching lives in the Postgres RPC `find_contact_duplicates`, not in TypeScript, so most
 of this task is only provable against a live database. `lib/contacts/service.ts:51` `findDuplicates`
@@ -118,30 +162,61 @@ exact `0.20`, name trigram similarity `×0.40`, address trigram similarity `×0.
 `0.45`. Confidence bands: **high ≥ 0.78** (auto-merge), **medium ≥ 0.60** (agent confirms),
 **low ≥ 0.45** (shown, never merged), **below 0.45** not returned at all (new record).
 
+`npm run verify:contacts` passes 15 of 16 checks live as of 2026-09-11. The one failure is
+criterion 1, and its fix is written but not yet applied.
+
 | # | Criterion | Status | Evidence / blocker |
 |---|---|---|---|
-| 1 | Two phone numbers and a misspelled surname detected as a probable duplicate | BLOCKED | `verify-contacts.mjs:31` (live fixture) |
-| 2 | Husband and wife at one address are two contacts in one household | BLOCKED | `verify-contacts.mjs:32` (live fixture). By design it holds: `save_contact` groups by `address_hash`, and a spouse pair scores ≈0.51 — returned as `low`, so auto-merge cannot fire |
-| 3 | Auto-merge only above the threshold; everything else to the agent | **PASS (thresholds documented)** | bands above, read from the deployed RPC. Live three-outcome walk BLOCKED (`verify-contacts.mjs:33`) |
-| 4 | A merge can be undone and both originals return intact | BLOCKED | `verify-contacts.mjs:35-38` (live fixture). By design it holds: `merge_contacts` writes `kept_snapshot`/`merged_snapshot`/phone/email snapshots into `merge_log` and sets `merged_into_id` rather than deleting |
-| 5 | Duplicate detection over 20,000 contacts in under 500ms | BLOCKED | `verify-contacts.mjs:45` seeds 20,000 rows and asserts `< 500ms` (live fixture). No number recorded |
-| 6 | Custom fields survive a CSV import round-trip | BLOCKED | `verify-contacts.mjs:39` does export→import→export (live fixture); `lib/contacts/csv.test.mjs` covers parse/serialize in isolation |
-| 7 | No cross-tenant match is ever possible, verified by test | **PASS (design)** | `find_contact_duplicates` filters `c.tenant_id = p_tenant_id` in both the candidate CTE and the household join, so no cross-tenant row can enter the result. Live negative check BLOCKED (`verify-contacts.mjs:40`) |
+| 1 | Two phone numbers and a misspelled surname detected as a probable duplicate | **BLOCKED — regression found** | The duplicate *is* detected (`score 0.8654`, `confidence high`, auto-merged) but `matched_on` is `["dob","address","name"]` — never `phone`. The deployed `find_contact_duplicates` scores a phone match only against `contacts.primary_phone` and never reads `contact_phones`. `20260901101500_la_0_6_secondary_phone_dedupe_fix.sql` added that; the LA-0 bridge re-declared the function with `create or replace` and reverted it. Restored in `20260911140000_la_0_6_restore_secondary_phone_dedupe.sql` — **parses, not applied** |
+| 2 | Husband and wife at one address are two contacts in one household | **PASS (live)** | `ok husband and wife remain separate` — two contacts, one household, auto-merge did not fire |
+| 3 | Auto-merge only above the threshold; everything else to the agent | **PASS (live)** | `ok medium matches wait for agent confirmation` (outcome `review`, confidence `medium`) alongside the high-confidence `auto_merged` outcome above. Bands as documented |
+| 4 | A merge can be undone and both originals return intact | **PASS (live)** | `ok merge retains source records`, `ok undo restores both originals`, `ok concurrent undo permits one reversal`, `ok same merge request is refused` |
+| 5 | Duplicate detection over 20,000 contacts in under 500ms | **PASS (live)** | `ok 20,000-contact duplicate search is under 500ms` — 20,000 rows seeded into a throwaway tenant and removed afterwards |
+| 6 | Custom fields survive a CSV import round-trip | **PASS (live)** | `ok custom fields survive CSV round-trip` — export → import → export preserves the JSONB field and its schema definition |
+| 7 | No cross-tenant match is ever possible, verified by test | **PASS (live)** | `ok cross-tenant matching is impossible`, plus all 13 tenant-scoped tables asserted per tenant by `npm run verify:la0-rls` |
+
+Also now proven live: `ok successful writes have audit rows`, `ok bookkeeper is refused`,
+`ok producer can read directory`, `ok missing tenant membership fails closed`,
+`ok missing and forged sessions are refused`, `ok undefined custom field is rejected`.
+
+**One latent defect recorded, not fixed.** `save_contact` writes `organization_id = p_tenant_id`
+to satisfy the legacy `NOT NULL` columns the organizations-era CRM still owns. Every tenant that
+exists today is bridged from an organization, so this holds — but a tenant created *natively*
+(which SA-5's self-serve signup will do) has no matching `organizations` row and cannot store a
+contact at all. The fixture now models the bridge; the product decision belongs with the
+tenant-versus-organizations question in `docs/architecture/database.md`.
 
 ## Totals
 
-| Task | PASS | BLOCKED |
+Refreshed 2026-09-11 after the auth bridge fix was applied and the fixture harness repaired.
+
+| Task | PASS | BLOCKED / SPLIT |
 |---|---|---|
-| LA-0.1 | 3 | 6 |
+| LA-0.1 | 9 | 0 |
 | LA-0.2 | 4 | 6 |
 | LA-0.3 | 4 | 1 |
-| LA-0.4 | 4 | 1 |
-| LA-0.5 | 4 | 2 |
-| LA-0.6 | 2 | 5 |
-| **Total** | **21** | **21** |
+| LA-0.4 | 4 | 1 (split) |
+| LA-0.5 | 5 | 1 (split) |
+| LA-0.6 | 6 | 1 |
+| **Total** | **32** | **10** |
 
-No task is `PASS` overall. Every task has at least one `BLOCKED` criterion, and 19 of the 21
-blocked criteria share the single cause in the headline.
+**LA-0.1 is `PASS` overall** — all nine criteria, including the two the original audit could not
+prove (plan change without re-login, and suspended-is-read-only). It is the first LA-0 task to
+clear completely.
+
+Five of the six LA-0 verify suites now pass end to end: `verify:agent-shell`,
+`verify:entitlements`, `verify:la0-rls`, `verify:carrier-library`, `verify:appointment-vault`.
+`verify:contacts` passes 15 of 16.
+
+What is left is no longer one shared cause. It is four distinct things:
+
+1. **LA-0.2's role matrix** (6 criteria) — needs `support_agent`/`billing_admin` admin fixtures and,
+   for criterion 3, a ledger that returns rows. Two of its criteria are not buildable as specified
+   yet; see `LA-0-NOTION-DELTA.md`.
+2. **LA-0.3's load-time budget** (1) — no harness exists; no number has ever been recorded.
+3. **The end-to-end commission trace** (LA-0.4 criterion 2) and **expiry-warning channels**
+   (LA-0.5 criterion 4) — both waiting on surfaces that do not render yet.
+4. **LA-0.6 criterion 1** — a written, unapplied migration.
 
 ## Changes made in this pass
 
