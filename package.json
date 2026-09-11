@@ -103,7 +103,8 @@
     "verify:callbacks": "node --env-file=.env.local scripts/verify-callbacks.mjs",
     "verify:plan-version": "node --env-file=.env.local scripts/verify-plan-version-integrity.mjs",
     "verify:user-integrity": "node --env-file=.env.local scripts/verify-user-integrity.mjs",
-    "verify:la0": "node scripts/verify-la0.mjs"
+    "verify:la0": "node scripts/verify-la0.mjs",
+    "verify:rpc-contract": "node --env-file=.env.local scripts/verify-rpc-contract.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.99.0",
