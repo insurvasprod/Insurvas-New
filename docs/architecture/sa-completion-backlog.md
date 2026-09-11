@@ -62,12 +62,22 @@ The deepest dependency in the whole product, and the one that unblocks the most.
 gives `tenant_entitlements` the producer it currently lacks, which resolves LA-0.1 criterion 5 as a
 side effect.
 
-**Tables:** `features` · `feature_modules` · `plans` · `plan_versions` · `plan_features` ·
-`plan_limits` · `plan_prices` · `plan_available_addons` · `plan_meters` · `plan_product_access` ·
-`addons` · `addon_features` · `addon_meters` · `meters` · `meter_pricing` · `subscriptions` ·
+**Tables:** ~~`features`~~ · ~~`feature_modules`~~ · ~~`plans`~~ · `plan_features` · `plan_limits` ·
+`plan_prices` · `plan_available_addons` · `plan_meters` · `plan_product_access` · `addons` ·
+`addon_features` · `addon_meters` · `meters` · `meter_pricing` · ~~`subscriptions`~~ ·
 `subscription_addons` · `subscription_coupons` · `usage_events` · `usage_totals`
 
-**View:** `admin_plan_list`
+**View:** ~~`admin_plan_list`~~
+
+**Correction:** an earlier draft of this list named a **`plan_versions`** table. There is no such
+table and nothing in the codebase references one. Versioning lives on `plans` itself as
+`(code, version)` rows — `fetchPlanVersions()` selects every row sharing a code and
+`admin_plan_list` collapses them to the latest per code.
+
+**Done 2026-09-11** (struck through above): `20260911130000_sa_2_1_feature_catalog.sql` and
+`20260911131000_sa_2_2_plans.sql`. `subscriptions` was created as the table only, because
+`admin_plan_list` cannot count subscribers without it; its operations remain SA-2.7. Both
+migrations parse; **neither has been applied** — that still needs gate 0.1/0.2.
 
 **Functions:** `admin_update_plan` · `admin_create_plan_version` · `admin_save_plan_version` ·
 `admin_save_plan_limits` · `admin_assign_subscription` · `admin_change_subscription_plan` ·
