@@ -63,10 +63,10 @@ gives `tenant_entitlements` the producer it currently lacks, which resolves LA-0
 side effect.
 
 **Tables:** ~~`features`~~ · ~~`feature_modules`~~ · ~~`plans`~~ · ~~`plan_features`~~ ·
-`plan_limits` · ~~`plan_prices`~~ · `plan_available_addons` · `plan_meters` ·
-`plan_product_access` · `addons` · `addon_features` · `addon_meters` · `meters` · `meter_pricing` ·
-~~`subscriptions`~~ · `subscription_addons` · `subscription_coupons` · `usage_events` ·
-`usage_totals`
+~~`plan_limits`~~ · ~~`plan_prices`~~ · `plan_available_addons` · ~~`plan_meters`~~ ·
+`plan_product_access` · `addons` · `addon_features` · `addon_meters` · ~~`meters`~~ ·
+`meter_pricing` · ~~`subscriptions`~~ · `subscription_addons` · `subscription_coupons` ·
+~~`usage_events`~~ · ~~`usage_totals`~~
 
 **View:** ~~`admin_plan_list`~~
 
@@ -84,6 +84,10 @@ table and nothing in the codebase references one. Versioning lives on `plans` it
 | `20260911132000_sa_2_3_plan_features.sql` | `plan_features` + the three reviewed v1 plans and their 47 feature grants |
 | `20260911133000_sa_2_4_plan_prices.sql` | `plan_prices` |
 | `20260911134000_sa_2_8_entitlement_engine.sql` | `refresh_tenant_entitlement` rewritten to compute from subscription + plan + features; `entitlement_access_for_status`; `admin_assign_subscription` (assign only) |
+| `20260911135000_sa_2_5_limits_and_meters.sql` | `meters`, `plan_meters`, `plan_limits`, `usage_events`, `usage_totals`; `check_meter_capacity`, `record_usage`, `rebuild_usage_totals`, `tenant_current_plan`, `tenant_current_period_start`, `tenant_seats_used`; meter seed; entitlement extended with real limits and meters |
+
+**SA-2 remaining:** SA-2.6 (add-ons) and SA-2.7 (change / pause / cancel — assign is done).
+`tenant_seats_used` from SA-2.5 also closes LA-0.2 criterion 6's missing function.
 
 **SA-2.8 is the one that makes the rest observable.** `refresh_tenant_entitlement` already
 existed, but the LA-0 bridge defined it as a pass-through to `la0_default_entitlement()` — a fixed
