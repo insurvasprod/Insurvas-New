@@ -115,7 +115,7 @@ export function BusinessProfileForm() {
             </div>
           )}
 
-          {error && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-[var(--color-danger)]">{error}</p>}
+          {error && <p role="alert" className="rounded-lg border border-[color-mix(in_srgb,var(--error)_24%,transparent)] bg-[var(--error-surface)] p-3 text-sm text-[var(--color-danger)]">{error}</p>}
           <Button type="submit" size="lg" className="w-full" disabled={submitting || products.length === 0 || leadSources.length === 0}>
             {submitting ? <LoaderCircle className="animate-spin" /> : <Save />}
             {submitting ? "Saving profile…" : "Save and continue"}

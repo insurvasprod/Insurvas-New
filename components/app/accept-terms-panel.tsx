@@ -148,7 +148,7 @@ export function AcceptTermsPanel({ documents }: { documents: OutstandingDoc[] })
           </label>
 
           {error && (
-            <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-[var(--color-danger)]">
+            <div role="alert" className="rounded-lg border border-[color-mix(in_srgb,var(--error)_24%,transparent)] bg-[var(--error-surface)] px-4 py-3 text-sm text-[var(--color-danger)]">
               {error}
             </div>
           )}
