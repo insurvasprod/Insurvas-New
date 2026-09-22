@@ -221,7 +221,7 @@ export function SignupForm({ initialPlanCode, initialCycle }: Props) {
               <div className="space-y-5">
                 <div>
                   <div className="flex items-start justify-between gap-3">
-                    <h2 className="text-xl font-semibold">{selectedPlan.name}</h2>
+                    <h2 className="text-lg font-semibold leading-[1.28] tracking-[-0.015em]">{selectedPlan.name}</h2>
                     <Link href="/pricing" className="text-sm font-semibold text-[var(--brand-600)] hover:underline">Change</Link>
                   </div>
                   <p className="mt-1 text-sm text-[var(--color-text-muted)]">

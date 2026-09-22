@@ -103,7 +103,7 @@ export function PaymentProviderPanel({
     <Card>
       <CardContent className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--color-accent-ink)]">Payment provider</h2>
+          <h2 className="text-lg font-semibold leading-[1.28] tracking-[-0.015em]">Payment provider</h2>
           {!record && platformDefault && (
             <span className="text-sm text-muted-foreground">
               Using the platform default ({platformDefault})

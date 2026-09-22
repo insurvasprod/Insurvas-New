@@ -182,7 +182,7 @@ export function LegalScreen({ canPublish, stats, versions, lookup }: Props) {
 
       <Card>
         <CardContent className="space-y-3">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--brand-700)]">
+          <h2 className="text-lg font-semibold leading-[1.28] tracking-[-0.015em]">
             Look up a user&apos;s acceptance history
           </h2>
 

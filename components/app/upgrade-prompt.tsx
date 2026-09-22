@@ -32,7 +32,7 @@ export function UpgradePrompt({
         <div className="mx-auto flex size-10 items-center justify-center rounded-full bg-[var(--color-blue-faint)] text-[var(--color-blue)]">
           <Lock className="size-5" />
         </div>
-        <h2 className="text-lg font-semibold">{limitKey ? `${featureLabel} limit reached` : `${featureLabel} isn&apos;t in your plan`}</h2>
+        <h2 className="text-lg font-semibold leading-[1.28] tracking-[-0.015em]">{limitKey ? `${featureLabel} limit reached` : `${featureLabel} isn&apos;t in your plan`}</h2>
         {description && <p className="text-sm text-muted-foreground">{description}</p>}
         {limitKey && <p className="text-sm text-muted-foreground"><code>{limitKey}</code>{usage != null && limit != null ? ` · ${usage} of ${limit} used` : ""}</p>}
         <p className="text-sm text-muted-foreground">

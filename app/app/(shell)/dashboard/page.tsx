@@ -60,7 +60,7 @@ export default async function AgentDashboardPage() {
           <CardContent className="space-y-5 p-6 sm:p-8">
             <div className="flex flex-wrap items-end justify-between gap-3">
               <div>
-                <h2 className="text-2xl font-semibold tracking-[-0.02em]">Callbacks due today</h2>
+                <h2 className="text-2xl font-semibold leading-[1.21] tracking-[-0.02em]">Callbacks due today</h2>
                 <p className="mt-1 text-sm text-muted-foreground">Follow up with these prospects and clients.</p>
               </div>
               <LinkArrow href="/app/callbacks">Open calendar</LinkArrow>
@@ -115,14 +115,14 @@ export default async function AgentDashboardPage() {
           <CardContent className="space-y-2 py-8 text-center">
             {available.length === 0 ? (
               <>
-                <h2 className="font-semibold">Your workspace is waiting for its first feature</h2>
+                <h2 className="text-lg font-semibold leading-[1.28] tracking-[-0.015em]">Your workspace is waiting for its first feature</h2>
                 <p className="mx-auto max-w-[52ch] text-sm text-muted-foreground">
                   Ask your account owner to activate a workspace feature, then come back here to start using it.
                 </p>
               </>
             ) : (
               <>
-                <h2 className="font-semibold">Nothing pinned here yet</h2>
+                <h2 className="text-lg font-semibold leading-[1.28] tracking-[-0.015em]">Nothing pinned here yet</h2>
                 <p className="mx-auto max-w-[52ch] text-sm text-muted-foreground">
                   Your plan is active and your workspace is open — this dashboard just has no shortcut
                   for your role yet. Use the sidebar to reach the screens you work in.

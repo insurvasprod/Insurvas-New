@@ -34,7 +34,7 @@ export function FeatureGateNotice({
           <div className="mx-auto flex size-10 items-center justify-center rounded-full bg-[var(--color-warning)]/10 text-[var(--color-warning)]">
             <Wrench className="size-5" />
           </div>
-          <h2 className="text-lg font-semibold">{featureLabel} is temporarily unavailable</h2>
+          <h2 className="text-lg font-semibold leading-[1.28] tracking-[-0.015em]">{featureLabel} is temporarily unavailable</h2>
           <p className="text-sm text-muted-foreground">
             {/* The admin's own words when they left a message, and a plain statement when they did
                 not. Never an invented explanation — a made-up reason is worse than none. */}

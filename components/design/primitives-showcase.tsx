@@ -52,7 +52,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 function Section({ title, note, children }: { title: string; note: string; children: React.ReactNode }) {
   return (
     <section className="border-t border-border py-8">
-      <h2 className="text-lg font-semibold tracking-[-0.015em]">{title}</h2>
+      <h2 className="text-lg font-semibold leading-[1.28] tracking-[-0.015em]">{title}</h2>
       <p className="mt-1 max-w-2xl text-sm text-muted-foreground">{note}</p>
       <div className="mt-6 flex flex-wrap items-center gap-4">{children}</div>
     </section>

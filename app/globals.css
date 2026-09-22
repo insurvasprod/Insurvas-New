@@ -3392,7 +3392,7 @@ html.dark { color-scheme: dark; }
 
 .portal-import-section { border-top: 1px solid var(--portal-line); padding-top: 1.25rem; }
 .portal-import-section-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .75rem; }
-.portal-import-section-title { font-size: .9375rem; font-weight: 600; letter-spacing: -.01em; }
+.portal-import-section-title { font-size: 1.125rem; font-weight: 600; letter-spacing: -.015em; line-height: 1.28; }
 .portal-import-section-title span { color: var(--portal-muted); font-weight: 400; }
 .portal-import-table-scroll { margin-top: .75rem; overflow-x: auto; border: 1px solid var(--portal-line); border-radius: 8px; }
 .portal-import-table { width: 100%; border-collapse: collapse; font-size: .8125rem; }

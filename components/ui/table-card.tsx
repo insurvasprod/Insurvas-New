@@ -36,7 +36,7 @@ export function TableCard({
       {hasHeading && (
         <div className="flex flex-wrap items-start justify-between gap-3 px-5 py-4">
           <div className="min-w-0">
-            {title && <h2 className="text-lg font-semibold tracking-[-0.015em]">{title}</h2>}
+            {title && <h2 className="text-lg font-semibold leading-[1.28] tracking-[-0.015em]">{title}</h2>}
             {description && <p className="mt-0.5 text-sm text-muted-foreground">{description}</p>}
           </div>
           {action && <div className="flex shrink-0 items-center gap-2">{action}</div>}

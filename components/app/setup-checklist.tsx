@@ -28,7 +28,7 @@ export function SetupChecklist({ checklist }: { checklist: SetupChecklistData })
       <CardContent className="space-y-6 p-6 sm:p-8">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <h2 className="text-2xl font-semibold tracking-[-0.02em]">Get set up</h2>
+            <h2 className="text-2xl font-semibold leading-[1.21] tracking-[-0.02em]">Get set up</h2>
             <p className="mt-1 text-sm text-muted-foreground">
               Complete these steps to start helping more families.
             </p>

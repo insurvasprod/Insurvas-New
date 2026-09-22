@@ -177,7 +177,7 @@ export function PlanVersionEditor({
           <Card>
             <CardContent className="space-y-3">
               <div>
-                <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--color-accent-ink)]">Pricing</h2>
+                <h2 className="text-lg font-semibold leading-[1.28] tracking-[-0.015em]">Pricing</h2>
                 <p className="text-xs text-muted-foreground">
                   Leave a cycle blank to not offer it. USD only. Stored as whole cents.
                 </p>
@@ -253,7 +253,7 @@ export function PlanVersionEditor({
 
           <Card>
             <CardContent className="space-y-3">
-              <div><h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--color-accent-ink)]">Capacity limits</h2><p className="text-xs text-muted-foreground">Blank means unlimited. These values are enforced for active records only.</p></div>
+              <div><h2 className="text-lg font-semibold leading-[1.28] tracking-[-0.015em]">Capacity limits</h2><p className="text-xs text-muted-foreground">Blank means unlimited. These values are enforced for active records only.</p></div>
               <div className="grid gap-3 sm:grid-cols-2">
                 {[['max_publishers', 'Publishers'], ['max_marketing_partners', 'Marketing partners'], ['max_affiliates', 'Affiliates'], ['max_buffer_seats', 'Buffer seats'], ['max_partner_users', 'Partner users'], ['max_setter_seats', 'Setter seats'], ['max_active_campaigns', 'Active campaigns']].map(([key, label]) => <div key={key} className="space-y-1.5"><Label htmlFor={`limit-${key}`}>{label} <code className="text-xs text-muted-foreground">({key})</code></Label><Input id={`limit-${key}`} type="number" min={0} step={1} placeholder="Unlimited" value={limits[key]} onChange={(event) => setLimits((previous) => ({ ...previous, [key]: event.target.value }))} /><p className="text-xs text-muted-foreground">Only non-negative whole numbers are accepted.</p></div>)}
               </div>
@@ -272,7 +272,7 @@ export function PlanVersionEditor({
               <Card key={group.module.key}>
                 <CardContent className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--color-accent-ink)]">
+                    <h2 className="text-lg font-semibold leading-[1.28] tracking-[-0.015em]">
                       {group.module.label}
                     </h2>
                     {selectable.length > 0 && (
@@ -327,7 +327,7 @@ export function PlanVersionEditor({
           <Card>
             <CardContent className="space-y-3">
               <div>
-                <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--color-accent-ink)]">
+                <h2 className="text-lg font-semibold leading-[1.28] tracking-[-0.015em]">
                   An owner will see
                 </h2>
                 {/*
