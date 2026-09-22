@@ -15,6 +15,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { EmptyState } from "@/components/ui/page-states";
 import { LEGAL_DOC_LABELS, LEGAL_DOC_TYPES, type LegalDocType } from "@/lib/legal/constants";
 import { tableHeaderRow, tableHeadCell, tableShell } from "./table-styles";
 
@@ -270,8 +271,11 @@ export function LegalScreen({ canPublish, stats, versions, lookup }: Props) {
           <TableBody>
             {versions.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="py-6 text-center text-sm text-muted-foreground">
-                  Nothing published yet.
+                <TableCell colSpan={5} className="p-0">
+                  <EmptyState
+                    title="Nothing published yet"
+                    hint="Publishing a version is what users are asked to accept. Until one exists, no one has agreed to anything."
+                  />
                 </TableCell>
               </TableRow>
             ) : (

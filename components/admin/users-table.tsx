@@ -51,6 +51,7 @@ import type { PlanListRow } from "@/lib/plans/constants";
 import { relativeTime } from "@/lib/relativeTime";
 import { PaginationBar } from "./pagination-bar";
 import { TableCard } from "@/components/ui/table-card";
+import { LoadingRows, NoMatches } from "@/components/ui/page-states";
 import { UserStatStrip } from "./user-stat-strip";
 import { tableHeaderRow, tableHeadCell } from "./table-styles";
 import { CreateUserDialog, type TenantOption } from "./create-user-dialog";
@@ -374,8 +375,23 @@ export function UsersTable({
             <TableBody>
               {users.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={COLUMNS.length + (canCreate ? 1 : 0)} className="h-24 text-center text-muted-foreground">
-                    {loading ? "Loading…" : "No users match these filters."}
+                  <TableCell colSpan={COLUMNS.length + (canCreate ? 1 : 0)} className="p-0">
+                    {/* Loading and no-matches are different facts and were being told as one
+                        sentence: an operator who had filtered themselves into a corner read
+                        "Loading…" and waited for rows that were never coming. */}
+                    {loading ? (
+                      <LoadingRows rows={5} columns={COLUMNS.length} />
+                    ) : (
+                      <NoMatches
+                        noun="users"
+                        onClear={() => {
+                          setSearchInput("");
+                          setQ("");
+                          setFilters(EMPTY_FILTERS);
+                          setPage(1);
+                        }}
+                      />
+                    )}
                   </TableCell>
                 </TableRow>
               )}

@@ -13,6 +13,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { EmptyState } from "@/components/ui/page-states";
 import type { TrialRow } from "@/lib/trials/queries";
 import { tableHeaderRow, tableHeadCell, tableShell } from "./table-styles";
 
@@ -89,8 +90,11 @@ export function TrialsTable({ trials }: { trials: TrialRow[] }) {
           <TableBody>
             {trials.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="py-8 text-center text-sm text-muted-foreground">
-                  No trials in flight.
+                <TableCell colSpan={7} className="p-0">
+                  <EmptyState
+                    title="No trials in flight"
+                    hint="A trial appears here the moment a tenant starts one, with the days left and what it converts to."
+                  />
                 </TableCell>
               </TableRow>
             ) : (
