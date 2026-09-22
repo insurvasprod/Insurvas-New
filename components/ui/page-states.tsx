@@ -60,7 +60,7 @@ export function NoMatches({
         <button
           type="button"
           onClick={onClear}
-          className="mt-1 rounded-md px-2 py-1 text-sm font-medium text-[var(--primary)] transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)]"
+          className="mt-1 rounded-md px-2 py-1 text-sm font-medium text-[var(--accent-ink)] transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)]"
         >
           Clear all filters
         </button>

@@ -321,7 +321,7 @@ export function LeadDetailWorkspace({ leadId }: { leadId: string }) {
               onClick={() => setTab(item.key)}
               className={`-mb-px border-b-2 px-3 py-2.5 text-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring ${
                 tab === item.key
-                  ? "border-[var(--primary)] font-semibold text-[var(--primary)]"
+                  ? "border-[var(--primary)] font-semibold text-[var(--accent-ink)]"
                   : "border-transparent font-medium text-muted-foreground hover:text-foreground"
               }`}
             >

@@ -52,7 +52,7 @@ export function SettingsLayout({
                 "flex shrink-0 items-center gap-2.5 rounded-md px-3 py-2 text-left text-sm font-medium whitespace-nowrap transition-colors",
                 "outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
                 isActive
-                  ? "bg-[var(--soft-orange-surface)] font-semibold text-[var(--primary)] shadow-[inset_2px_0_0_var(--primary)]"
+                  ? "bg-[var(--soft-orange-surface)] font-semibold text-[var(--accent-ink)] shadow-[inset_2px_0_0_var(--primary)]"
                   : "text-muted-foreground hover:bg-muted hover:text-foreground"
               )}
             >
