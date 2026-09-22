@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -44,6 +46,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { SettingsLayout, SettingsSaveBar } from "@/components/ui/settings-layout";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 function Section({ title, note, children }: { title: string; note: string; children: React.ReactNode }) {
@@ -66,6 +69,10 @@ const TONE_LABEL: Record<StatusTone, string> = {
 };
 
 export function PrimitivesShowcase() {
+  const [pressed, setPressed] = useState<string | null>(null);
+  const [section, setSection] = useState("agency-profile");
+  const press = (label: string) => () => setPressed(label);
+
   return (
     <main className="mx-auto max-w-5xl px-6 py-10">
       <header className="flex items-start justify-between gap-4">
@@ -81,21 +88,25 @@ export function PrimitivesShowcase() {
       </header>
 
       <Section title="Button" note="One primary per view. Secondary is the calm companion; ghost is for toolbars and rows.">
-        <Button>Create lead</Button>
-        <Button variant="secondary">See a demo</Button>
-        <Button variant="outline">Export</Button>
-        <Button variant="ghost">Cancel</Button>
-        <Button variant="destructive">Suspend account</Button>
-        <Button variant="link">View policy</Button>
+        <Button onClick={press("Create lead")}>Create lead</Button>
+        <Button variant="secondary" onClick={press("See a demo")}>See a demo</Button>
+        <Button variant="outline" onClick={press("Export")}>Export</Button>
+        <Button variant="ghost" onClick={press("Cancel")}>Cancel</Button>
+        <Button variant="destructive" onClick={press("Suspend account")}>Suspend account</Button>
+        <Button variant="link" onClick={press("View policy")}>View policy</Button>
         <Button disabled>Disabled</Button>
       </Section>
 
+      <p aria-live="polite" className="text-sm text-muted-foreground">
+        {pressed ? `Last pressed: ${pressed}` : "Press a control — this line reports it."}
+      </p>
+
       <Section title="Button sizes" note="Heights stay as they were: this is a dense product and rows are the budget.">
-        <Button size="lg">Large</Button>
-        <Button>Default</Button>
-        <Button size="sm">Small</Button>
-        <Button size="xs">XS</Button>
-        <Button size="icon" aria-label="More">…</Button>
+        <Button size="lg" onClick={press("Large")}>Large</Button>
+        <Button onClick={press("Default")}>Default</Button>
+        <Button size="sm" onClick={press("Small")}>Small</Button>
+        <Button size="xs" onClick={press("XS")}>XS</Button>
+        <Button size="icon" aria-label="More" onClick={press("More")}>…</Button>
       </Section>
 
       <Section title="LinkArrow" note="The secondary action. Ink text, an arrow that slides on hover, and a label that names the destination.">
@@ -120,7 +131,11 @@ export function PrimitivesShowcase() {
       </Section>
 
       <Section title="SearchCommand" note="A utility control, never a call to action: muted band, muted text, no fill.">
-        <SearchCommand placeholder="Search leads, policies, agents" label="Search the workspace" />
+        <SearchCommand
+          placeholder="Search leads, policies, agents"
+          label="Search the workspace"
+          onClick={press("SearchCommand")}
+        />
       </Section>
 
       <Section title="Input, Label, Select" note="A control's edge is stronger than a divider, and every field has a visible label.">
@@ -171,7 +186,7 @@ export function PrimitivesShowcase() {
             <CardTitle>Lead pipeline</CardTitle>
             <CardDescription>Open leads by stage, this week.</CardDescription>
             <CardAction>
-              <Button variant="outline" size="sm">
+              <Button variant="outline" size="sm" onClick={press("Card · Export")}>
                 Export
               </Button>
             </CardAction>
@@ -228,6 +243,33 @@ export function PrimitivesShowcase() {
         </Card>
       </Section>
 
+      <Section title="SettingsLayout" note="Sections on the left, the open one in the middle, and the save bar that appears when a form is dirty.">
+        <div className="w-full">
+          <SettingsLayout
+            sections={[
+              { key: "agency-profile", label: "Agency profile" },
+              { key: "carrier-library", label: "Carrier library" },
+              { key: "team-access", label: "Team & access" },
+            ]}
+            active={section}
+            onSelect={setSection}
+          >
+            <Card>
+              <CardHeader>
+                <CardTitle>{section === "agency-profile" ? "Agency profile" : section === "carrier-library" ? "Carrier library" : "Team & access"}</CardTitle>
+                <CardDescription>The open panel renders here.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <SettingsSaveBar note="Changes are effective-dated and audited.">
+                  <Button variant="secondary" onClick={press("Discard")}>Discard</Button>
+                  <Button onClick={press("Save changes")}>Save changes</Button>
+                </SettingsSaveBar>
+              </CardContent>
+            </Card>
+          </SettingsLayout>
+        </div>
+      </Section>
+
       <Section title="Dialog" note="One decision. The title names the thing, and the destructive confirm is never autofocused.">
         <Dialog>
           <DialogTrigger asChild>
@@ -243,9 +285,9 @@ export function PrimitivesShowcase() {
             </DialogHeader>
             <DialogFooter>
               <DialogClose asChild>
-                <Button variant="secondary">Cancel</Button>
+                <Button variant="secondary" onClick={press("Cancel")}>Cancel</Button>
               </DialogClose>
-              <Button variant="destructive">Suspend account</Button>
+              <Button variant="destructive" onClick={press("Suspend account")}>Suspend account</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

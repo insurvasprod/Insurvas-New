@@ -10,23 +10,29 @@ import { cn } from "@/lib/utils"
  * Deliberately quiet — muted band, muted text, no fill and no pill — so it never competes with the
  * page's primary action. The keycap hint is decorative; the control still needs its own accessible
  * name, which the label provides.
+ *
+ * `onClick` is required and forwarded explicitly rather than arriving through the spread: a search
+ * box that opens nothing reads as a broken product, so the type refuses to render one.
  */
 function SearchCommand({
   label = "Search",
   placeholder = "Search…",
   shortcut = ["⌘", "K"],
   className,
+  onClick,
   ...props
-}: Omit<React.ComponentProps<"button">, "children"> & {
+}: Omit<React.ComponentProps<"button">, "children" | "onClick"> & {
   label?: string
   placeholder?: string
   shortcut?: string[] | null
+  onClick: React.MouseEventHandler<HTMLButtonElement>
 }) {
   return (
     <button
       type="button"
       data-slot="search-command"
       aria-label={label}
+      onClick={onClick}
       className={cn(
         "inline-flex w-full max-w-md items-center gap-2 rounded-md border border-border bg-muted px-3 py-2",
         "text-sm text-muted-foreground transition-colors hover:text-foreground",
