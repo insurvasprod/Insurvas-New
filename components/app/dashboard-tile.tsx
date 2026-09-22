@@ -1,40 +1,65 @@
 import Link from "next/link";
-import { ArrowRight, BriefcaseBusiness, CalendarCheck, Circle } from "lucide-react";
+import {
+  BookOpen,
+  BriefcaseBusiness,
+  CalendarCheck,
+  ChevronRight,
+  Circle,
+  ContactRound,
+  ListChecks,
+  PhoneIncoming,
+  PhoneOutgoing,
+  RadioTower,
+  Receipt,
+  Route,
+} from "lucide-react";
 
-import { Card, CardContent } from "@/components/ui/card";
 import type { DashboardTile as DashboardTileData } from "@/lib/dashboard/tiles";
 
+// Keyed by the same icon names the menu uses, so a tile and its sidebar entry cannot disagree.
 const ICONS = {
+  "book-open": BookOpen,
   "briefcase-business": BriefcaseBusiness,
   "calendar-check": CalendarCheck,
+  "contact-round": ContactRound,
+  "list-checks": ListChecks,
+  "phone-incoming": PhoneIncoming,
+  "phone-outgoing": PhoneOutgoing,
+  "radio-tower": RadioTower,
+  receipt: Receipt,
+  route: Route,
 } as const;
 
+/**
+ * The whole tile is the link.
+ *
+ * It used to be a card with a text link inside it, which gave the pointer a 40x16px target on a
+ * 300px object and meant two things to aim at. One target, one destination, and the chevron says
+ * where it goes.
+ */
 export function DashboardTile({ tile }: { tile: DashboardTileData }) {
   const Icon = ICONS[tile.icon as keyof typeof ICONS] ?? Circle;
 
   return (
-    <Card className="h-full">
-      <CardContent className="flex h-full flex-col gap-4">
-        <div className="flex items-start gap-3">
-          <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-[var(--color-blue)]/10 text-[var(--color-blue)]">
-            <Icon className="size-5" aria-hidden="true" />
-          </span>
-          <div>
-            <h2 className="font-semibold">{tile.label}</h2>
-            <p className="mt-1 text-sm text-muted-foreground">{tile.description}</p>
-          </div>
-        </div>
-        <div className="flex flex-1 flex-col justify-between gap-4">
-          <p className="text-sm text-muted-foreground">{tile.empty_state}</p>
-          <Link
-            href={tile.path}
-            className="group inline-flex w-fit items-center gap-2 text-sm font-semibold text-[var(--color-blue)] underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-blue)]"
-          >
-            {tile.action_label}
-            <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
-          </Link>
-        </div>
-      </CardContent>
-    </Card>
+    <Link
+      href={tile.path}
+      aria-label={`${tile.label} — ${tile.action_label}`}
+      className="portal-dashboard-tile group flex h-full items-start gap-4 rounded-lg border border-border bg-card p-5 outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+    >
+      <span className="portal-dashboard-tile-icon">
+        <Icon className="size-5" aria-hidden="true" />
+      </span>
+
+      <span className="min-w-0 flex-1">
+        <span className="block text-base font-semibold tracking-[-0.01em]">{tile.label}</span>
+        <span className="mt-1 block text-sm leading-6 text-muted-foreground">{tile.description}</span>
+        <span className="mt-2 block text-xs text-muted-foreground">{tile.hint}</span>
+      </span>
+
+      <ChevronRight
+        className="mt-1 size-4 shrink-0 text-muted-foreground transition-transform duration-150 group-hover:translate-x-0.5 motion-reduce:transition-none motion-reduce:group-hover:translate-x-0"
+        aria-hidden="true"
+      />
+    </Link>
   );
 }

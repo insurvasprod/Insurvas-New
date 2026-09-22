@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, Check, Circle } from "lucide-react";
+import { Check } from "lucide-react";
 
 import { Card, CardContent } from "@/components/ui/card";
 import type { SetupChecklist as SetupChecklistData } from "@/lib/dashboard/checklist";
@@ -9,39 +9,85 @@ export function SetupChecklist({ checklist }: { checklist: SetupChecklistData })
 
   const percentage = Math.round((checklist.completed / checklist.total) * 100);
 
+  // Only the next unfinished step gets the filled action. One primary per view is the rule, and on
+  // a setup list it is also the useful answer: the reader wants to know which step to do now, not
+  // to choose between four equally loud buttons.
+  const nextIndex = checklist.steps.findIndex((step) => !step.complete);
+
+  const actionLabel = (key: string) => {
+    if (key === "carriers") return "Add carriers";
+    if (key === "appointments") return "Review appointments";
+    if (key === "statement") return "Upload statement";
+    if (key === "lead-sources") return "Add lead sources";
+    if (key === "phone") return "Connect phone";
+    return "Open settings";
+  };
+
   return (
-    <Card className="border-[var(--color-blue)]/25">
-      <CardContent className="space-y-5">
-        <div className="flex flex-wrap items-center justify-between gap-4">
+    <Card className="portal-dashboard-setup">
+      <CardContent className="space-y-6 p-6 sm:p-8">
+        <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <p className="text-sm font-bold uppercase tracking-wide text-[var(--color-accent-ink)]">Get set up</p>
-            <p className="mt-1 text-sm text-muted-foreground">A short checklist to make the workspace useful from day one.</p>
+            <h2 className="text-2xl font-semibold tracking-[-0.02em]">Get set up</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Complete these steps to start helping more families.
+            </p>
           </div>
-          <div className="flex items-center gap-3">
+          <div
+            className="flex min-w-[16rem] items-center gap-3"
+            aria-label={`${checklist.completed} of ${checklist.total} complete`}
+          >
+            <span className="whitespace-nowrap text-sm text-muted-foreground">
+              {checklist.completed} of {checklist.total} complete
+            </span>
             <div
-              className="relative flex size-14 items-center justify-center rounded-full"
+              className="h-1.5 min-w-24 flex-1 overflow-hidden rounded-full bg-muted"
               role="progressbar"
               aria-label="Setup progress"
               aria-valuemin={0}
               aria-valuemax={checklist.total}
               aria-valuenow={checklist.completed}
-              style={{ background: `conic-gradient(var(--color-blue) ${percentage}%, var(--color-border) ${percentage}% 100%)` }}
             >
-              <span className="flex size-10 items-center justify-center rounded-full bg-card text-xs font-bold">{checklist.completed}/{checklist.total}</span>
+              <span
+                className="block h-full rounded-full bg-[var(--primary)] transition-[width] duration-200"
+                style={{ width: `${percentage}%` }}
+              />
             </div>
-            <span className="text-sm font-medium">{checklist.completed} of {checklist.total} complete</span>
           </div>
         </div>
-        <ol className="grid gap-2 sm:grid-cols-2">
+
+        <ol className="portal-dashboard-setup-list">
           {checklist.steps.map((step, index) => (
             <li key={step.key}>
-              <Link
-                href={step.path}
-                className="group flex items-center gap-3 rounded-md border border-border px-3 py-2.5 text-sm transition-colors hover:border-[var(--color-blue)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-blue)]"
-              >
-                {step.complete ? <Check className="size-4 shrink-0 text-[var(--color-success)]" aria-hidden="true" /> : <Circle className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />}
-                <span className="min-w-0 flex-1"><span className="mr-1 text-muted-foreground">{index + 1}.</span>{step.label}</span>
-                <ArrowRight className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
+              <Link href={step.path} className="portal-dashboard-setup-row group">
+                <span
+                  className={`portal-dashboard-setup-icon ${step.complete ? "is-complete" : ""}`}
+                  aria-hidden="true"
+                >
+                  {step.complete ? <Check className="size-3.5" strokeWidth={3} /> : null}
+                </span>
+
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-semibold">
+                    <span className="mr-1.5 text-muted-foreground">{index + 1}.</span>
+                    {step.label}
+                  </span>
+                  <span className="mt-0.5 block text-xs text-muted-foreground">
+                    {step.complete
+                      ? "This setup step is complete."
+                      : "Connect this workspace setting before you start."}
+                  </span>
+                </span>
+
+                {step.complete ? (
+                  <span className="portal-dashboard-complete-pill">Completed</span>
+                ) : (
+                  <span
+                    className={`portal-dashboard-setup-action ${index === nextIndex ? "" : "is-secondary"}`}
+                  >
+                    {actionLabel(step.key)}
+                  </span>
+                )}
               </Link>
             </li>
           ))}

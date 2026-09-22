@@ -187,7 +187,7 @@ export function PlanDialog({
                   <SelectItem value="public">Public</SelectItem>
                 </SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground">Public plans appear on the pricing page (SA-5.1).</p>
+              <p className="text-xs text-muted-foreground">Public plans appear on the pricing page.</p>
             </div>
           </div>
 

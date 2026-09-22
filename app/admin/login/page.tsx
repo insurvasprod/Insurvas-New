@@ -8,7 +8,7 @@ import { ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader } from "@/components/ui/card";
 
 type Step = "credentials" | "totp";
 
@@ -72,15 +72,24 @@ export default function AdminLoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[var(--brand-700)] p-4">
+    <div className="flex min-h-screen items-center justify-center bg-[var(--canvas)] p-4">
       <Card className="w-full max-w-sm">
         <CardHeader className="items-center text-center">
-          <div className="mb-2 flex size-10 items-center justify-center rounded-full bg-[var(--color-blue-faint)] text-[var(--color-blue)]">
+          <div className="mb-2 flex size-10 items-center justify-center rounded-full bg-[var(--soft-orange-surface)] text-[var(--primary)]">
             <ShieldCheck className="size-5" />
           </div>
-          <CardTitle className="text-xl">Insurvas Super Admin</CardTitle>
+          {/*
+            A real <h1>, not CardTitle — which renders a <div>. This is the entry point to the whole
+            control plane and it was the one admin screen with no heading element at all, so a
+            screen-reader user landed on a page that announced no title. Every other admin screen
+            gets its <h1> from AdminPageHeader. No stylesheet rule targets card-title here; the
+            `[data-slot="card-title"]` selectors in globals.css are all scoped to `.portal-*`.
+          */}
+          <h1 className="text-xl leading-none font-semibold">Insurvas Super Admin</h1>
           <CardDescription>
-            {step === "credentials" ? "Sign in to the platform admin panel" : "Enter your 6-digit authenticator code"}
+            {step === "credentials"
+              ? "Sign in to the platform admin panel. You will be asked for your authenticator code next."
+              : "Enter your 6-digit authenticator code"}
           </CardDescription>
         </CardHeader>
         <CardContent>

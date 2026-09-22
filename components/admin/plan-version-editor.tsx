@@ -65,6 +65,8 @@ export function PlanVersionEditor({
     max_affiliates: initialLimits?.max_affiliates == null ? "" : String(initialLimits.max_affiliates),
     max_buffer_seats: initialLimits?.max_buffer_seats == null ? "" : String(initialLimits.max_buffer_seats),
     max_partner_users: initialLimits?.max_partner_users == null ? "" : String(initialLimits.max_partner_users),
+    max_setter_seats: initialLimits?.max_setter_seats == null ? "" : String(initialLimits.max_setter_seats),
+    max_active_campaigns: initialLimits?.max_active_campaigns == null ? "" : String(initialLimits.max_active_campaigns),
   });
   const [saving, setSaving] = useState(false);
 
@@ -175,7 +177,7 @@ export function PlanVersionEditor({
           <Card>
             <CardContent className="space-y-3">
               <div>
-                <h2 className="text-sm font-bold uppercase tracking-wide text-[var(--color-accent-ink)]">Pricing</h2>
+                <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--color-accent-ink)]">Pricing</h2>
                 <p className="text-xs text-muted-foreground">
                   Leave a cycle blank to not offer it. USD only. Stored as whole cents.
                 </p>
@@ -251,9 +253,9 @@ export function PlanVersionEditor({
 
           <Card>
             <CardContent className="space-y-3">
-              <div><h2 className="text-sm font-bold uppercase tracking-wide text-[var(--color-accent-ink)]">Capacity limits</h2><p className="text-xs text-muted-foreground">Blank means unlimited. These values are enforced for active records only.</p></div>
+              <div><h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--color-accent-ink)]">Capacity limits</h2><p className="text-xs text-muted-foreground">Blank means unlimited. These values are enforced for active records only.</p></div>
               <div className="grid gap-3 sm:grid-cols-2">
-                {[['max_publishers', 'Publishers'], ['max_marketing_partners', 'Marketing partners'], ['max_affiliates', 'Affiliates'], ['max_buffer_seats', 'Buffer seats'], ['max_partner_users', 'Partner users']].map(([key, label]) => <div key={key} className="space-y-1.5"><Label htmlFor={`limit-${key}`}>{label} <code className="text-xs text-muted-foreground">({key})</code></Label><Input id={`limit-${key}`} type="number" min={0} step={1} placeholder="Unlimited" value={limits[key]} onChange={(event) => setLimits((previous) => ({ ...previous, [key]: event.target.value }))} /><p className="text-xs text-muted-foreground">Only non-negative whole numbers are accepted.</p></div>)}
+                {[['max_publishers', 'Publishers'], ['max_marketing_partners', 'Marketing partners'], ['max_affiliates', 'Affiliates'], ['max_buffer_seats', 'Buffer seats'], ['max_partner_users', 'Partner users'], ['max_setter_seats', 'Setter seats'], ['max_active_campaigns', 'Active campaigns']].map(([key, label]) => <div key={key} className="space-y-1.5"><Label htmlFor={`limit-${key}`}>{label} <code className="text-xs text-muted-foreground">({key})</code></Label><Input id={`limit-${key}`} type="number" min={0} step={1} placeholder="Unlimited" value={limits[key]} onChange={(event) => setLimits((previous) => ({ ...previous, [key]: event.target.value }))} /><p className="text-xs text-muted-foreground">Only non-negative whole numbers are accepted.</p></div>)}
               </div>
             </CardContent>
           </Card>
@@ -270,7 +272,7 @@ export function PlanVersionEditor({
               <Card key={group.module.key}>
                 <CardContent className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <h2 className="text-sm font-bold uppercase tracking-wide text-[var(--color-accent-ink)]">
+                    <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--color-accent-ink)]">
                       {group.module.label}
                     </h2>
                     {selectable.length > 0 && (
@@ -325,18 +327,28 @@ export function PlanVersionEditor({
           <Card>
             <CardContent className="space-y-3">
               <div>
-                <h2 className="text-sm font-bold uppercase tracking-wide text-[var(--color-accent-ink)]">
-                  Agent will see
+                <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--color-accent-ink)]">
+                  An owner will see
                 </h2>
+                {/*
+                  Named for the role it actually renders. `buildAgentMenu(granted)` defaults its
+                  second argument to "owner", while the agent shell passes the signed-in user's
+                  real role — so this panel shows the widest menu the plan can produce, and a
+                  producer, assistant, setter or bookkeeper on the same plan sees a subset.
+                  That is the correct thing for a PLAN editor to show (role gating is orthogonal to
+                  what the plan grants), but a heading of "Agent will see" claimed more than it
+                  renders, and SA-2.3's criterion is that this panel matches exactly.
+                */}
                 <p className="text-xs text-muted-foreground">
-                  Rendered from the same menu definition the agent app uses.
+                  Rendered from the same menu definition the agent app uses, at the widest role.
+                  Producers, assistants, setters and bookkeepers see a subset of this.
                 </p>
               </div>
 
-              <div className="rounded-md bg-[var(--brand-700)] p-3 text-sm text-white">
+              <div className="rounded-md border border-border bg-muted p-3 text-sm">
                 {previewMenu.map((section) => (
                   <div key={section.id} className="mb-3 last:mb-0">
-                    <p className="mb-1 text-[11px] font-bold uppercase tracking-wide text-white/60">
+                    <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-white/60">
                       {section.label}
                     </p>
                     {section.items.map((item) => (

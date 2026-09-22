@@ -121,10 +121,10 @@ export function SignupForm({ initialPlanCode, initialCycle }: Props) {
 
   return (
     <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">
-      <Card className="bg-white shadow-[0_18px_50px_rgba(0,64,127,0.10)]">
+      <Card>
         <CardHeader>
-          <p className="text-sm font-bold uppercase tracking-[0.18em] text-[var(--brand-600)]">Create account</p>
-          <CardTitle className="text-3xl font-extrabold tracking-tight">Start your Insurvas workspace</CardTitle>
+          <p className="text-xs font-semibold uppercase tracking-[0.02em] text-muted-foreground">Create account</p>
+          <CardTitle className="text-3xl font-semibold tracking-[-0.02em]">Start your Insurvas workspace</CardTitle>
           <p className="text-sm text-[var(--color-text-muted)]">Four details now. Business setup comes after email verification.</p>
         </CardHeader>
         <CardContent>
@@ -174,7 +174,7 @@ export function SignupForm({ initialPlanCode, initialCycle }: Props) {
                         <Link
                           href={`/legal/${doc.doc_type}?v=${doc.version}`}
                           target="_blank"
-                          className="font-bold text-[var(--brand-600)] underline"
+                          className="font-semibold text-[var(--brand-600)] underline"
                         >
                           {doc.title}
                         </Link>{" "}
@@ -203,15 +203,15 @@ export function SignupForm({ initialPlanCode, initialCycle }: Props) {
               {submitting ? "Creating account…" : "Create account"}
             </Button>
             <p className="text-center text-xs text-[var(--color-text-muted)]">
-              Already have an account? <Link href="/app/login" className="font-bold text-[var(--brand-600)]">Sign in</Link>
+              Already have an account? <Link href="/app/login" className="font-semibold text-[var(--brand-600)]">Sign in</Link>
             </p>
           </form>
         </CardContent>
       </Card>
 
       <aside className="space-y-4 lg:sticky lg:top-6">
-        <Card className="overflow-hidden bg-white">
-          <div className="bg-[var(--brand-700)] px-6 py-4 text-sm font-extrabold uppercase tracking-wide text-white">
+        <Card className="overflow-hidden">
+          <div className="border-b border-border bg-muted px-6 py-4 text-xs font-semibold uppercase tracking-[0.02em] text-muted-foreground">
             Selected plan
           </div>
           <CardContent className="pt-1">
@@ -221,13 +221,13 @@ export function SignupForm({ initialPlanCode, initialCycle }: Props) {
               <div className="space-y-5">
                 <div>
                   <div className="flex items-start justify-between gap-3">
-                    <h2 className="text-xl font-extrabold">{selectedPlan.name}</h2>
-                    <Link href="/pricing" className="text-sm font-bold text-[var(--brand-600)] hover:underline">Change</Link>
+                    <h2 className="text-xl font-semibold">{selectedPlan.name}</h2>
+                    <Link href="/pricing" className="text-sm font-semibold text-[var(--brand-600)] hover:underline">Change</Link>
                   </div>
                   <p className="mt-1 text-sm text-[var(--color-text-muted)]">
                     {priceCents == null ? "Cycle unavailable" : `${formatCentsAsCurrency(priceCents)} / ${cycle}`}
                   </p>
-                  <p className="mt-2 text-sm font-bold text-[var(--color-success)]">
+                  <p className="mt-2 text-sm font-semibold text-[var(--color-success)]">
                     {selectedPlan.trial_days}-day trial
                   </p>
                 </div>
@@ -238,7 +238,7 @@ export function SignupForm({ initialPlanCode, initialCycle }: Props) {
                     id="plan"
                     value={planCode}
                     onChange={(event) => selectPlan(event.target.value)}
-                    className="h-10 w-full rounded-md border border-[var(--color-border)] bg-white px-3 text-sm"
+                    className="h-10 w-full rounded-md border border-[var(--border-strong)] bg-card px-3 text-sm"
                   >
                     {plans.map((plan) => <option key={plan.code} value={plan.code}>{plan.name}</option>)}
                   </select>
@@ -250,7 +250,7 @@ export function SignupForm({ initialPlanCode, initialCycle }: Props) {
                     id="cycle"
                     value={cycle}
                     onChange={(event) => setCycle(event.target.value as BillingCycle)}
-                    className="h-10 w-full rounded-md border border-[var(--color-border)] bg-white px-3 text-sm"
+                    className="h-10 w-full rounded-md border border-[var(--border-strong)] bg-card px-3 text-sm"
                   >
                     {BILLING_CYCLES.map((item) => (
                       <option key={item} value={item} disabled={!publicPriceForCycle(selectedPlan, item)}>

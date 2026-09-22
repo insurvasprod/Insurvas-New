@@ -123,7 +123,7 @@ export function LegalScreen({ canPublish, stats, versions, lookup }: Props) {
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <p className="text-sm text-muted-foreground">{stat.label}</p>
-                    <p className="text-2xl font-bold">
+                    <p className="text-2xl font-semibold">
                       v{stat.version}{" "}
                       <span className="text-base font-normal text-muted-foreground">
                         · {(rate * 100).toFixed(0)}% accepted
@@ -182,7 +182,7 @@ export function LegalScreen({ canPublish, stats, versions, lookup }: Props) {
 
       <Card>
         <CardContent className="space-y-3">
-          <h2 className="text-sm font-bold uppercase tracking-wide text-[var(--brand-700)]">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--brand-700)]">
             Look up a user&apos;s acceptance history
           </h2>
 

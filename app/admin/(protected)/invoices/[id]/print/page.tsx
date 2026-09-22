@@ -39,11 +39,11 @@ export default async function InvoicePrintPage({ params }: { params: Promise<{ i
 
       <header className="flex items-start justify-between border-b border-neutral-300 pb-4">
         <div>
-          <h1 className="text-2xl font-bold">Insurvas</h1>
+          <h1 className="text-2xl font-semibold">Insurvas</h1>
           <p className="text-sm text-neutral-600">Invoice</p>
         </div>
         <div className="text-right">
-          <p className="text-lg font-bold">{invoice.number}</p>
+          <p className="text-lg font-semibold">{invoice.number}</p>
           <p className="text-sm text-neutral-600">{INVOICE_STATUS_LABELS[invoice.status]}</p>
         </div>
       </header>
@@ -112,14 +112,14 @@ export default async function InvoicePrintPage({ params }: { params: Promise<{ i
           <span className="text-neutral-600">Tax</span>
           <span>{formatCentsAsCurrency(invoice.tax_cents)}</span>
         </div>
-        <div className="flex justify-between border-t border-neutral-400 pt-1 text-base font-bold">
+        <div className="flex justify-between border-t border-neutral-400 pt-1 text-base font-semibold">
           <span>Total</span>
           <span>{formatCentsAsCurrency(invoice.total_cents)}</span>
         </div>
       </section>
 
       {invoice.status === "void" && (
-        <p className="text-sm font-bold uppercase tracking-widest text-neutral-400">
+        <p className="text-sm font-semibold uppercase tracking-widest text-neutral-400">
           Void{invoice.void_reason ? ` — ${invoice.void_reason}` : ""}
         </p>
       )}

@@ -44,7 +44,7 @@ export default async function AcceptTermsPage() {
   );
 
   return (
-    <div className="min-h-screen bg-[var(--color-page-bg)] py-10">
+    <div className="portal-agent min-h-screen bg-[var(--color-page-bg)] py-10">
       <main className="mx-auto max-w-3xl px-4 sm:px-6">
         <AcceptTermsPanel documents={documents} />
       </main>

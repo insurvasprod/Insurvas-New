@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 
 import { Badge } from "@/components/ui/badge";
 import {
@@ -27,7 +28,8 @@ import {
 } from "@/components/ui/table";
 import { AUDIT_ACTIONS, AUDIT_ACTION_LABELS, type AuditAction } from "@/lib/audit/actions";
 import { PaginationBar } from "./pagination-bar";
-import { tableHeaderRow, tableHeadCell, tableShell } from "./table-styles";
+import { tableHeaderRow, tableHeadCell } from "./table-styles";
+import { TableCard } from "@/components/ui/table-card";
 import { NoMatches } from "@/components/admin/empty-state";
 
 type Actor = { id: string; name: string; email: string };
@@ -66,9 +68,22 @@ export function AuditLogTable({
   const [actorId, setActorId] = useState<string>("all");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
+  // SA-0.3's fourth filter. Seeded from `?target=` so a detail screen can deep-link straight to
+  // one record's history — which is what turns "who suspended this user and when" into two clicks
+  // instead of paging through 43,000 rows looking at the target column.
+  //
+  // Read through useSearchParams and a lazy initialiser rather than an effect: this is a client
+  // component that Next also renders on the server, so `window.location` is not available, and
+  // setting state in a mount effect is both a lint error and an extra render.
+  const searchParams = useSearchParams();
+  const initialTarget = searchParams.get("target")?.trim() ?? "";
+  const [target, setTarget] = useState(initialTarget);
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<AuditEntry | null>(null);
-  const isFirstRun = useRef(true);
+  // Only skip the first fetch when the server-rendered rows actually match the filter state. They
+  // reflect "no filters", so a target arriving in the URL has to be fetched immediately — without
+  // this the deep link would show the unfiltered log while claiming to be filtered.
+  const isFirstRun = useRef(initialTarget === "");
 
   useEffect(() => {
     // Skip the very first run — initialEntries (server-rendered) already reflects "no filters".
@@ -82,6 +97,7 @@ export function AuditLogTable({
     if (isSuperAdmin && actorId !== "all") params.set("actorId", actorId);
     if (from) params.set("from", from);
     if (to) params.set("to", to);
+    if (target) params.set("target", target);
     params.set("page", String(page));
 
     fetch(`/api/admin/audit-log?${params.toString()}`)
@@ -92,7 +108,7 @@ export function AuditLogTable({
         setTotal(body.total);
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [action, actorId, from, to, page]);
+  }, [action, actorId, from, to, target, page]);
 
   function resetToFirstPage<T>(setter: (value: T) => void) {
     return (value: T) => {
@@ -149,9 +165,38 @@ export function AuditLogTable({
           className="h-9 rounded-md border border-input bg-transparent px-3 text-sm shadow-xs"
           aria-label="To date"
         />
+
+        <input
+          type="text"
+          value={target}
+          onChange={(e) => resetToFirstPage(setTarget)(e.target.value)}
+          placeholder="Target ID"
+          className="h-9 min-w-[200px] rounded-md border border-input bg-transparent px-3 text-sm shadow-xs"
+          aria-label="Target ID"
+          title="Paste a user, tenant or invoice id to see only what happened to that record."
+        />
+
+        {target && (
+          <button
+            type="button"
+            onClick={() => resetToFirstPage(setTarget)("")}
+            className="h-9 rounded-md border border-input px-3 text-sm text-muted-foreground transition hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-primary)]"
+          >
+            Clear target
+          </button>
+        )}
       </div>
 
-      <div className={tableShell}>
+      {target && (
+        <p className="text-sm text-muted-foreground">
+          Showing only entries whose target is{" "}
+          <code className="font-mono text-xs">{target}</code>. {total.toLocaleString()} found.
+        </p>
+      )}
+
+      <TableCard
+        footer={<PaginationBar page={page} totalItems={total} itemsPerPage={pageSize} itemLabel="entries" onPageChange={setPage} />}
+      >
         <Table>
           <TableHeader>
             <TableRow className={tableHeaderRow}>
@@ -168,7 +213,9 @@ export function AuditLogTable({
                 <TableCell colSpan={5} className="p-0">
                   <NoMatches
                     noun="audit entries"
-                    onClear={() => { setAction("all"); setActorId("all"); setFrom(""); setTo(""); setPage(1); }}
+                    // `target` must be cleared here too. A "clear filters" control that leaves one
+                    // filter applied is the same class of lying control as the rest of this audit.
+                    onClear={() => { setAction("all"); setActorId("all"); setFrom(""); setTo(""); setTarget(""); setPage(1); }}
                   />
                 </TableCell>
               </TableRow>
@@ -192,8 +239,7 @@ export function AuditLogTable({
             ))}
           </TableBody>
         </Table>
-        <PaginationBar page={page} totalItems={total} itemsPerPage={pageSize} itemLabel="entries" onPageChange={setPage} />
-      </div>
+      </TableCard>
 
       <Dialog open={selected !== null} onOpenChange={(open) => !open && setSelected(null)}>
         <DialogContent>

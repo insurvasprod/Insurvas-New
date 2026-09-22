@@ -1,10 +1,9 @@
-// Matches the Insurvas CRM's page-header typography convention
-// (components/agent-commissions/CommissionsPageHeader.tsx): bold dark title, muted subtitle.
+import { PageHeader } from "@/components/ui/page-header";
+
+/**
+ * The admin wrapper kept so its 20-odd call sites keep working; PageHeader in components/ui is the
+ * shared one, and takes an eyebrow and actions this signature never had.
+ */
 export function AdminPageHeader({ title, subtitle }: { title: string; subtitle: string }) {
-  return (
-    <div>
-      <h1 className="text-2xl font-extrabold tracking-tight text-foreground">{title}</h1>
-      <p className="mt-1 text-sm font-medium text-muted-foreground">{subtitle}</p>
-    </div>
-  );
+  return <PageHeader title={title} description={subtitle} />;
 }

@@ -49,13 +49,13 @@ export default async function LegalPage({ params, searchParams }: Params) {
       <SiteHeader />
       <main className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
         <div className="rounded-xl bg-white p-8 shadow-[0_18px_50px_rgba(0,64,127,0.10)]">
-          <p className="text-sm font-bold uppercase tracking-[0.18em] text-[var(--brand-600)]">
+          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[var(--brand-600)]">
             Version {doc.version} · effective {new Date(doc.effective_date).toLocaleDateString()}
           </p>
 
           {doc.is_draft && (
             <div className="mt-4 rounded-lg border border-[var(--color-warning)]/40 bg-[var(--color-warning)]/10 p-4 text-sm">
-              <span className="font-bold">This is a draft.</span> It has not been reviewed by a lawyer
+              <span className="font-semibold">This is a draft.</span> It has not been reviewed by a lawyer
               and is not final.
             </div>
           )}
@@ -64,7 +64,7 @@ export default async function LegalPage({ params, searchParams }: Params) {
             <div className="mt-4 rounded-lg border border-[var(--color-border)] bg-[var(--color-page-bg)] p-4 text-sm">
               This version has been superseded by version {current!.version}. It is kept because
               people accepted it, and what they accepted is what it says here.{" "}
-              <a href={`/legal/${doc.doc_type}`} className="font-bold text-[var(--brand-600)] underline">
+              <a href={`/legal/${doc.doc_type}`} className="font-semibold text-[var(--brand-600)] underline">
                 Read the current version
               </a>
               .

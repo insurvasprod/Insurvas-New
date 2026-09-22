@@ -36,7 +36,7 @@ export default async function TrialsPage() {
           <Card key={tile.label}>
             <CardContent>
               <p className="text-sm text-muted-foreground">{tile.label}</p>
-              <p className="mt-1 text-2xl font-bold">{tile.value}</p>
+              <p className="mt-1 text-2xl font-semibold">{tile.value}</p>
             </CardContent>
           </Card>
         ))}
@@ -46,7 +46,7 @@ export default async function TrialsPage() {
 
       <Card>
         <CardContent className="space-y-3">
-          <h2 className="text-sm font-bold uppercase tracking-wide text-[var(--brand-700)]">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--brand-700)]">
             What separates the trials that convert
           </h2>
 

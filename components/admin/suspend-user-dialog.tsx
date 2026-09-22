@@ -76,7 +76,7 @@ export function SuspendUserDialog({
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               placeholder="e.g. Non-payment — invoice INV-2026-08-0412 unpaid 45 days"
-              className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+              className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             />
             <p className="text-xs text-muted-foreground">
               Required, and permanently recorded in the audit log.

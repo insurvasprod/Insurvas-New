@@ -23,12 +23,12 @@ export function PaginationBar({
   const nextDisabled = safePage >= totalPages;
 
   return (
-    <div className="flex flex-col items-center justify-between gap-3 border-t border-border bg-[var(--color-row-bg)] px-5 py-3 sm:flex-row">
-      <span className="text-xs font-semibold text-[var(--color-accent-ink)]">
+    <div className="flex flex-col items-center justify-between gap-3 border-t border-border px-5 py-3 sm:flex-row">
+      <span className="text-sm text-muted-foreground">
         Showing {start}-{end} of {totalItems} {itemLabel}
       </span>
       <div className="flex items-center gap-3">
-        <span className="text-xs font-bold text-[var(--color-accent-ink)]">
+        <span className="text-sm text-muted-foreground">
           Page {safePage} of {totalPages}
         </span>
         <div className="flex items-center gap-2">
@@ -36,7 +36,7 @@ export function PaginationBar({
             type="button"
             onClick={() => onPageChange(safePage - 1)}
             disabled={prevDisabled}
-            className="rounded-md border border-border px-3.5 py-1.5 text-xs font-bold text-foreground transition-opacity disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-md border border-border bg-card px-3 py-1.5 text-sm font-semibold tracking-[-0.01em] text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
           >
             Previous
           </button>
@@ -44,7 +44,7 @@ export function PaginationBar({
             type="button"
             onClick={() => onPageChange(safePage + 1)}
             disabled={nextDisabled}
-            className="rounded-md border border-border px-3.5 py-1.5 text-xs font-bold text-foreground transition-opacity disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-md border border-border bg-card px-3 py-1.5 text-sm font-semibold tracking-[-0.01em] text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
           >
             Next
           </button>

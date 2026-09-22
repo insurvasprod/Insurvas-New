@@ -29,7 +29,7 @@ export function AgentWorkspaceBar({ menu, planName, role, readOnly }: Props) {
   return (
     <section
       aria-label="Current workspace"
-      className="mb-6 overflow-hidden rounded-xl border border-border bg-card shadow-sm"
+      className="portal-agent-workspace-bar mb-6 overflow-hidden rounded-xl border border-border bg-card shadow-sm"
     >
       <div className="flex flex-wrap items-center justify-between gap-4 px-4 py-4 sm:px-5">
         <div className="flex min-w-0 items-center gap-2 text-sm text-muted-foreground">
@@ -38,10 +38,10 @@ export function AgentWorkspaceBar({ menu, planName, role, readOnly }: Props) {
           </span>
           <ChevronRight className="size-4 shrink-0" aria-hidden="true" />
           <div className="min-w-0">
-            <p className="truncate text-[11px] font-bold uppercase tracking-wider text-[var(--color-accent-ink)]">
+            <p className="truncate text-[11px] font-semibold uppercase tracking-wider text-[var(--color-accent-ink)]">
               {sectionLabel}
             </p>
-            <p className="truncate text-lg font-extrabold tracking-tight text-foreground sm:text-xl">
+            <p className="truncate text-lg font-semibold tracking-[-0.015em] text-foreground sm:text-xl">
               {pageLabel}
             </p>
           </div>

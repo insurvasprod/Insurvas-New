@@ -31,7 +31,8 @@ import {
 import { ADMIN_ROLES, ADMIN_ROLE_LABELS, type AdminRole } from "@/lib/adminAuth/roles";
 import { CreateAdminDialog } from "./create-admin-dialog";
 import { PaginationBar } from "./pagination-bar";
-import { tableHeaderRow, tableHeadCell, tableShell } from "./table-styles";
+import { tableHeaderRow, tableHeadCell } from "./table-styles";
+import { TableCard } from "@/components/ui/table-card";
 import { NoMatches } from "@/components/admin/empty-state";
 
 const PAGE_SIZE = 10;
@@ -150,7 +151,17 @@ export function AdminUsersTable({
         </div>
       </div>
 
-      <div className={tableShell}>
+      <TableCard
+        footer={
+          <PaginationBar
+          page={safePage}
+          totalItems={filtered.length}
+          itemsPerPage={PAGE_SIZE}
+          itemLabel="admins"
+          onPageChange={setPage}
+          />
+        }
+      >
         <Table>
           <TableHeader>
             <TableRow className={tableHeaderRow}>
@@ -221,14 +232,7 @@ export function AdminUsersTable({
             ))}
           </TableBody>
         </Table>
-        <PaginationBar
-          page={safePage}
-          totalItems={filtered.length}
-          itemsPerPage={PAGE_SIZE}
-          itemLabel="admins"
-          onPageChange={setPage}
-        />
-      </div>
+      </TableCard>
     </div>
   );
 }

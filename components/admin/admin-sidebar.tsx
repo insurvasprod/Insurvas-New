@@ -30,6 +30,7 @@ import {
   ShieldCheck as ShieldIcon,
   Gauge,
   Mail,
+  Menu,
   ServerCog,
   Tag,
   ToggleRight,
@@ -37,6 +38,7 @@ import {
   Undo2,
   UserRound,
   Users,
+  X,
 } from "lucide-react";
 
 import { LogoutButton } from "./logout-button";
@@ -70,6 +72,7 @@ const ICONS: Record<SidebarIconKey, typeof LayoutDashboard> = {
   payments: CardIcon,
   offers: BadgePercent,
   products: Boxes,
+  carriers: Building2,
   templates: LayoutTemplate,
   compliance: ShieldIcon,
   limits: Gauge,
@@ -83,9 +86,9 @@ const OPEN_GROUPS_KEY = "insurvas.admin.sidebar.openGroups";
 const DEFAULT_OPEN_GROUPS = ["customers", "billing"];
 
 const ACTIVE_STYLE = {
-  borderColor: "rgba(255,255,255,0.22)",
-  background: "linear-gradient(180deg, #00539c 0%, #003468 100%)",
-  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.22), 0 8px 22px rgba(0,31,63,0.45)",
+  borderColor: "transparent",
+  background: "var(--soft-orange-surface)",
+  boxShadow: "inset 2px 0 0 var(--primary)",
 } as const;
 
 type Props = { nodes: SidebarNode[]; adminName: string; roleLabel: string };
@@ -97,6 +100,7 @@ export function AdminSidebar({ nodes, adminName, roleLabel }: Props) {
   const [collapsed, setCollapsed] = usePersistedState<boolean>(COLLAPSED_KEY, false);
   const [openGroups, setOpenGroups] = usePersistedState<string[]>(OPEN_GROUPS_KEY, DEFAULT_OPEN_GROUPS);
   const [flyout, setFlyout] = useState<string | null>(null);
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   function toggleGroup(id: string) {
     setOpenGroups(openGroups.includes(id) ? openGroups.filter((entry) => entry !== id) : [...openGroups, id]);
@@ -105,6 +109,76 @@ export function AdminSidebar({ nodes, adminName, roleLabel }: Props) {
   function toggleCollapsed() {
     setCollapsed(!collapsed);
     setFlyout(null);
+  }
+
+  function renderMobileNavigation() {
+    return nodes.map((node) => {
+      if (node.kind === "link") {
+        const Icon = ICONS[node.icon];
+        const active = isLinkActive(node.href, pathname);
+
+        return (
+          <Link
+            key={node.href}
+            href={node.href}
+            onClick={() => setMobileOpen(false)}
+            className="flex items-center gap-3 rounded-[14px] border px-4 py-3 text-[15px] transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)]"
+            style={{
+              borderColor: active ? ACTIVE_STYLE.borderColor : "transparent",
+              background: active ? ACTIVE_STYLE.background : "transparent",
+              boxShadow: active ? ACTIVE_STYLE.boxShadow : "none",
+              fontWeight: active ? 700 : 600,
+              color: active ? "var(--primary)" : "var(--ink)",
+            }}
+          >
+            <Icon size={20} strokeWidth={1.8} className="shrink-0" />
+            <span className="truncate">{node.label}</span>
+          </Link>
+        );
+      }
+
+      const Icon = ICONS[node.icon];
+      const open = isOpen(node.id);
+
+      return (
+        <div key={node.id} className="relative">
+          <button
+            type="button"
+            onClick={() => toggleGroup(node.id)}
+            aria-expanded={open}
+            className="flex w-full items-center gap-3 rounded-[14px] border border-transparent px-4 py-3 text-left text-[15px] font-semibold transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)]"
+          >
+            <Icon size={20} strokeWidth={1.8} className="shrink-0" />
+            <span className="truncate">{node.label}</span>
+            {open ? <ChevronDown size={14} className="ml-auto shrink-0 opacity-70" /> : <ChevronRight size={14} className="ml-auto shrink-0 opacity-70" />}
+          </button>
+          {open && (
+            <div className="mt-1 flex flex-col gap-1">
+              {node.links.map((entry) => {
+                const active = isLinkActive(entry.href, pathname);
+                return (
+                  <Link
+                    key={entry.href}
+                    href={entry.href}
+                    onClick={() => setMobileOpen(false)}
+                    className="flex items-center gap-3 rounded-[14px] border py-2.5 pl-11 pr-4 text-[15px] transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)]"
+                    style={{
+                      borderColor: active ? ACTIVE_STYLE.borderColor : "transparent",
+                      background: active ? ACTIVE_STYLE.background : "transparent",
+                      boxShadow: active ? ACTIVE_STYLE.boxShadow : "none",
+                      fontWeight: active ? 700 : 500,
+                      color: "rgba(255,255,255,0.92)",
+                    }}
+                  >
+                    <span className="truncate">{entry.label}</span>
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      );
+    });
   }
 
   /**
@@ -124,8 +198,9 @@ export function AdminSidebar({ nodes, adminName, roleLabel }: Props) {
       <Link
         key={entry.href}
         href={entry.href}
+        aria-current={active ? "page" : undefined}
         title={collapsed ? entry.label : undefined}
-        className={`flex items-center gap-3 rounded-[14px] border text-[15px] transition-all ${
+        className={`flex items-center gap-3 rounded-[14px] border text-[15px] transition-all focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)] ${
           collapsed ? "justify-center px-0 py-3" : nested ? "py-2.5 pl-11 pr-4" : "px-4 py-3"
         }`}
         style={{
@@ -133,11 +208,11 @@ export function AdminSidebar({ nodes, adminName, roleLabel }: Props) {
           background: active ? ACTIVE_STYLE.background : "transparent",
           boxShadow: active ? ACTIVE_STYLE.boxShadow : "none",
           fontWeight: active ? 700 : nested ? 500 : 600,
-          color: active || !nested ? "#ffffff" : "rgba(255,255,255,0.88)",
+          color: active ? "var(--primary)" : nested ? "var(--muted)" : "var(--ink)",
         }}
         onMouseEnter={(event) => {
           if (active) return;
-          event.currentTarget.style.background = "rgba(255,255,255,0.10)";
+          event.currentTarget.style.background = "var(--surface-alt)";
         }}
         onMouseLeave={(event) => {
           if (active) return;
@@ -151,17 +226,82 @@ export function AdminSidebar({ nodes, adminName, roleLabel }: Props) {
   }
 
   return (
-    <aside
-      data-print-hide
-      className={`relative flex shrink-0 flex-col justify-between rounded-br-3xl p-4 text-white transition-[width] duration-200 ${
-        collapsed ? "w-[76px]" : "w-60"
-      }`}
-      style={{
-        background:
-          "radial-gradient(760px 360px at 100% 0%, rgba(63,151,230,0.16) 0%, transparent 62%)," +
-          "linear-gradient(135deg, #005ba8 0%, #00407f 32%, #003162 72%, #001f3f 100%)",
-      }}
-    >
+    <>
+      <header
+        data-print-hide
+        className="sticky top-0 z-30 flex items-center gap-3 border-b border-border bg-card px-4 py-3 text-foreground md:hidden"
+      >
+        <button
+          type="button"
+          onClick={() => setMobileOpen(true)}
+          aria-label="Open admin menu"
+          aria-expanded={mobileOpen}
+          className="-ml-1 rounded-md p-1.5 transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)]"
+        >
+          <Menu className="size-5" aria-hidden="true" />
+        </button>
+        <div className="flex items-center gap-2">
+          <ShieldCheck className="size-4" aria-hidden="true" />
+          <span className="font-semibold tracking-tight">Insurvas Admin</span>
+        </div>
+      </header>
+
+      {mobileOpen && (
+        <div className="fixed inset-0 z-40 md:hidden">
+          <button
+            type="button"
+            aria-label="Close admin menu"
+            onClick={() => setMobileOpen(false)}
+            className="absolute inset-0 bg-black/50"
+          />
+          <aside
+            data-print-hide
+            className="absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col justify-between overflow-y-auto p-4 text-foreground shadow-[0_4px_16px_rgba(0,0,0,0.12)]"
+            style={{
+              background:
+                "var(--surface)",
+            }}
+          >
+            <div>
+              <div className="mb-6 flex items-center justify-between px-2">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="size-5" aria-hidden="true" />
+                  <span className="font-semibold tracking-tight">Insurvas Admin</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setMobileOpen(false)}
+                  aria-label="Close admin menu"
+                  className="rounded-md p-1.5 transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)]"
+                >
+                  <X className="size-5" aria-hidden="true" />
+                </button>
+              </div>
+              <nav className="flex flex-col gap-1" aria-label="Admin navigation">
+                {renderMobileNavigation()}
+              </nav>
+            </div>
+            <div className="mt-6 border-t border-border pt-4">
+              <p className="truncate px-2 text-sm font-medium">{adminName}</p>
+              <p className="px-2 text-xs text-muted-foreground">{roleLabel}</p>
+              <div className="mt-3 px-2">
+                <LogoutButton />
+              </div>
+            </div>
+          </aside>
+        </div>
+      )}
+
+      <aside
+        data-print-hide
+        className={`relative hidden shrink-0 flex-col justify-between border-r border-border p-4 text-foreground transition-[width] duration-200 md:flex ${
+          collapsed ? "w-[76px]" : "w-60"
+        }`}
+        style={{
+          background:
+            "var(--surface)",
+        }}
+      >
       <div>
         <div className={`mb-8 flex items-center gap-2 px-2 ${collapsed ? "justify-center" : ""}`}>
           <ShieldCheck className="size-5 shrink-0" />
@@ -188,7 +328,7 @@ export function AdminSidebar({ nodes, adminName, roleLabel }: Props) {
                   onClick={() => (collapsed ? toggleCollapsed() : toggleGroup(node.id))}
                   title={collapsed ? node.label : undefined}
                   aria-expanded={collapsed ? undefined : open}
-                  className={`flex w-full items-center gap-3 rounded-[14px] border border-transparent text-[15px] font-bold transition-all hover:bg-white/10 ${
+                  className={`flex w-full items-center gap-3 rounded-[14px] border border-transparent text-[15px] font-semibold transition-all hover:bg-muted ${
                     collapsed ? "justify-center px-0 py-3" : "px-4 py-3"
                   }`}
                   style={{
@@ -219,10 +359,10 @@ export function AdminSidebar({ nodes, adminName, roleLabel }: Props) {
 
                 {collapsed && flyout === node.id && (
                   <div
-                    className="absolute left-full top-0 z-50 ml-2 w-56 rounded-[16px] border border-white/20 p-2 shadow-[0_18px_46px_rgba(0,20,45,0.55)]"
-                    style={{ background: "#00305f" }}
+                    className="absolute left-full top-0 z-50 ml-2 w-56 rounded-[16px] border border-border p-2 shadow-[0_4px_16px_rgba(0,0,0,0.12)]"
+                    style={{ background: "var(--surface)" }}
                   >
-                    <p className="px-3 pb-2 pt-1 text-[11px] font-extrabold uppercase tracking-wider text-white/60">
+                    <p className="px-3 pb-2 pt-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                       {node.label}
                     </p>
                     {node.links.map((entry) => {
@@ -231,10 +371,10 @@ export function AdminSidebar({ nodes, adminName, roleLabel }: Props) {
                         <Link
                           key={entry.href}
                           href={entry.href}
-                          className="block rounded-[10px] px-3 py-2 text-sm transition-colors hover:bg-white/10"
+                          className="block rounded-[10px] px-3 py-2 text-sm transition-colors hover:bg-muted"
                           style={{
                             fontWeight: active ? 700 : 500,
-                            background: active ? "rgba(255,255,255,0.14)" : "transparent",
+                            background: active ? "var(--soft-orange-surface)" : "transparent",
                           }}
                         >
                           {entry.label}
@@ -249,12 +389,12 @@ export function AdminSidebar({ nodes, adminName, roleLabel }: Props) {
         </nav>
       </div>
 
-      <div className="border-t border-white/10 pt-4">
+      <div className="border-t border-border pt-4">
         <button
           type="button"
           onClick={toggleCollapsed}
           aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          className={`mb-3 flex w-full items-center gap-3 rounded-[12px] px-2 py-2 text-xs text-white/70 transition-colors hover:bg-white/10 hover:text-white ${
+          className={`mb-3 flex w-full items-center gap-3 rounded-[12px] px-2 py-2 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground ${
             collapsed ? "justify-center" : ""
           }`}
         >
@@ -265,13 +405,14 @@ export function AdminSidebar({ nodes, adminName, roleLabel }: Props) {
         {!collapsed && (
           <>
             <p className="truncate px-2 text-sm font-medium">{adminName}</p>
-            <p className="px-2 text-xs text-white/70">{roleLabel}</p>
+            <p className="px-2 text-xs text-muted-foreground">{roleLabel}</p>
           </>
         )}
         <div className={`mt-3 ${collapsed ? "" : "px-2"}`}>
           <LogoutButton compact={collapsed} />
         </div>
       </div>
-    </aside>
+      </aside>
+    </>
   );
 }

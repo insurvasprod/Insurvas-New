@@ -10,16 +10,19 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { DetailHeader, DetailLayout } from "@/components/ui/detail-layout";
+import { ErrorState, LoadingRows } from "@/components/ui/page-states";
+import { StatusChip } from "@/components/ui/status-chip";
 
 type Template = { product_name: string; definition_version?: number; fields: Array<{ field_key: string; label: string; type: string; is_required: boolean; options: string[]; help_text?: string | null }>; form_definition: { sections: Array<{ section_key: string; label: string; fields: Array<{ field_key: string; is_required: boolean; show_when: { field_key: string; equals: string } | null; conditional_on?: { field_key: string; equals: string } | null }> }> } };
-type Event = { id: string; label: string; at: string; actor: string; detail: string | null; immutable: true };
+type Event = { id: string; label: string; at: string; actor: string; detail: string | null; immutable: boolean };
 type Note = { id: string; leadId: string; body: string | null; visibility: "internal" | "shared"; author: { id: string; name: string }; createdAt: string; editedAt: string | null; deletedAt: string | null; mentions: string[]; history: Array<{ id: string; action: string; old_body: string; old_visibility: string; new_body: string | null; new_visibility: string | null; created_at: string; actor: { id: string; name: string } }> };
-type Workspace = { lead: { id: string; values: Record<string, unknown>; product_line: string; definition_version: number; created_at: string; updated_at: string }; template: Template; queue: { id: string; status: string; owner_user_id: string | null; claimed_at: string | null; disposition: string | null } | null; partner: { name: string; partner_type: string } | null; stage: { id: string; name: string; stage_type: string; color: string } | null; stages: Array<{ id: string; name: string; stage_type: string; color: string }>; submitter: { name: string } | null; owner: { name: string } | null; screening: { outcome: string | null; warning: string | null; checkedAt: string | null }; preflight: { status: string; checkedAt: string | null; policyMatchingIncluded?: false; policyMatchingNote?: string; matches?: Array<{ leadId: string | null; contactId: string | null; submittedAt: string; partnerName: string | null; productLine: string | null; outcome: string | null; matchedOn: string[]; sourceType: "lead" | "contact" }> }; disposition: { label: string } | null; verification: { session: { status: string; progress_percentage: number; started_at: string; completed_at: string | null }; fields: Array<{ field_key: string; state: string; old_value: unknown; new_value: unknown; confirmed_at: string | null }> } | null; corrections: Array<{ id: string; field_key: string; old_value: unknown; new_value: unknown; actor_id: string | null; created_at: string }>; notes: Note[]; teammates: Array<{ id: string; name: string; role?: string }>; timeline: Event[]; role: string; currentUserId: string; licensedAgents: Array<{ id: string; name: string; role: string }>; pendingHandoff: { id: string; workItemId: string } | null; actions: { canClaim: boolean; canHandoff: boolean; canAcceptHandoff: boolean; canDisposition: boolean; canChangeStage: boolean }; readOnly: boolean };
+type Workspace = { lead: { id: string; values: Record<string, unknown>; product_line: string; definition_version: number; created_at: string; updated_at: string }; template: Template; queue: { id: string; status: string; owner_user_id: string | null; claimed_at: string | null; disposition: string | null } | null; partner: { name: string; partner_type: string } | null; stage: { id: string; name: string; stage_type: string; color: string } | null; stages: Array<{ id: string; name: string; stage_type: string; color: string }>; submitter: { name: string } | null; owner: { name: string } | null; screening: { outcome: string | null; warning: string | null; checkedAt: string | null }; attemptHistory: Array<{ id: string; attempt_number: number; slot: string; attempted_at: string; disposition: string | null; dial_clicked_at: string | null }>; preflight: { status: string; checkedAt: string | null; policyMatchingIncluded?: false; policyMatchingNote?: string; matches?: Array<{ leadId: string | null; contactId: string | null; submittedAt: string; partnerName: string | null; productLine: string | null; outcome: string | null; matchedOn: string[]; sourceType: "lead" | "contact" }> }; disposition: { label: string } | null; verification: { session: { status: string; progress_percentage: number; started_at: string; completed_at: string | null }; fields: Array<{ field_key: string; state: string; old_value: unknown; new_value: unknown; confirmed_at: string | null }> } | null; corrections: Array<{ id: string; field_key: string; old_value: unknown; new_value: unknown; actor_id: string | null; created_at: string }>; notes: Note[]; teammates: Array<{ id: string; name: string; role?: string }>; timeline: Event[]; role: string; currentUserId: string; licensedAgents: Array<{ id: string; name: string; role: string }>; pendingHandoff: { id: string; workItemId: string } | null; actions: { canClaim: boolean; canHandoff: boolean; canAcceptHandoff: boolean; canDisposition: boolean; canChangeStage: boolean }; readOnly: boolean };
 
 function ExistingCustomerPreflight({ data, onRecheck, busy }: { data: Workspace; onRecheck: () => void; busy: boolean }) {
   const matches = data.preflight.matches ?? [];
   const label = data.preflight.status === "already_customer" ? "Already a customer" : data.preflight.status === "spoken_before" ? "Spoken before" : data.preflight.status === "not_checked" ? "Pre-flight unavailable" : "New household";
-  return <Card className={data.preflight.status === "already_customer" ? "border-red-500/50 bg-red-500/5" : data.preflight.status === "spoken_before" ? "border-amber-500/50 bg-amber-500/5" : ""}><CardContent className="space-y-3 p-4"><div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Existing-customer pre-flight</p><p className="mt-1 font-semibold">{label}</p></div><div className="flex items-center gap-2"><Badge variant={data.preflight.status === "already_customer" ? "destructive" : data.preflight.status === "spoken_before" ? "outline" : "secondary"}>{matches.length} prior match{matches.length === 1 ? "" : "es"}</Badge><Button type="button" size="sm" variant="outline" disabled={busy} onClick={onRecheck}>{busy ? "Checking…" : "Re-check"}</Button></div></div>{matches.length > 0 && <div className="space-y-2">{matches.slice(0, 5).map((match, index) => <div key={`${match.leadId ?? match.contactId ?? "match"}-${index}`} className="rounded-md border bg-background/60 p-3 text-sm"><p className="font-medium">{match.sourceType === "contact" ? "Contact on file" : `Prior lead${match.partnerName ? ` from ${match.partnerName}` : ""}`}</p><p className="mt-1 text-xs text-muted-foreground">{match.productLine ? `${match.productLine} · ` : ""}{match.outcome ?? "No outcome recorded"} · {when(match.submittedAt)}</p><p className="mt-1 text-xs text-muted-foreground">Matched on {match.matchedOn.join(", ") || "household details"}.</p></div>)}</div>}{data.preflight.policyMatchingNote && <p className="text-xs text-muted-foreground">{data.preflight.policyMatchingNote}</p>}</CardContent></Card>;
+  return <Card className={data.preflight.status === "already_customer" ? "border-red-500/50 bg-red-500/5" : data.preflight.status === "spoken_before" ? "border-amber-500/50 bg-amber-500/5" : ""}><CardContent className="space-y-3 p-4"><div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Existing-customer pre-flight</p><p className="mt-1 font-semibold">{label}</p></div><div className="flex items-center gap-2"><Badge variant={data.preflight.status === "already_customer" ? "destructive" : data.preflight.status === "spoken_before" ? "outline" : "secondary"}>{matches.length} prior match{matches.length === 1 ? "" : "es"}</Badge><Button type="button" size="sm" variant="outline" disabled={busy} onClick={onRecheck}>{busy ? "Checking…" : "Re-check"}</Button></div></div>{matches.length > 0 && <div className="space-y-2">{matches.slice(0, 5).map((match, index) => <div key={`${match.leadId ?? match.contactId ?? "match"}-${index}`} className="rounded-md border bg-background/60 p-3 text-sm"><p className="font-medium">{match.sourceType === "contact" ? "Contact on file" : `Prior lead${match.partnerName ? ` from ${match.partnerName}` : ""}`}</p><p className="mt-1 text-xs text-muted-foreground">{match.productLine ? `${match.productLine} · ` : ""}{match.outcome ?? "No outcome recorded"} · {when(match.submittedAt)}</p><p className="mt-1 text-xs text-muted-foreground">Matched on {match.matchedOn.join(", ") || "household details"}.</p></div>)}</div>}{data.preflight.policyMatchingNote && <p className="text-xs text-muted-foreground">{data.preflight.policyMatchingNote}</p>}</CardContent></Card>;
 }
 
 function display(value: unknown) { return Array.isArray(value) ? value.join(", ") : value === null || value === undefined || value === "" ? "Not provided" : String(value); }
@@ -41,7 +44,7 @@ function ApplicationTab({ data }: { data: Workspace }) {
 
 function VerificationTab({ data }: { data: Workspace }) {
   if (!data.verification) return <Card><CardContent className="p-6 text-sm text-muted-foreground">Verification has not started for this lead. Claim the transfer from the inbox or Floor to begin.</CardContent></Card>;
-  return <div className="space-y-4"><Card><CardContent className="space-y-3 p-5"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Verification progress</p><p className="mt-1 text-2xl font-extrabold">{data.verification.session.progress_percentage}%</p></div><Badge variant={data.verification.session.progress_percentage === 100 ? "secondary" : "outline"}>{data.verification.session.status}</Badge></div><div className="h-3 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${data.verification.session.progress_percentage}%` }} /></div><p className="text-xs text-muted-foreground">Started {when(data.verification.session.started_at)}{data.verification.session.completed_at ? ` · completed ${when(data.verification.session.completed_at)}` : ""}</p></CardContent></Card><Card><CardHeader className="pb-3"><CardTitle className="text-base">Field confirmation</CardTitle></CardHeader><CardContent className="space-y-2">{data.verification.fields.map((field) => <div key={field.field_key} className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-3 text-sm"><span>{field.field_key}</span><div className="flex items-center gap-2"><Badge variant={stateVariant(field.state)}>{field.state}</Badge>{field.state === "corrected" && <span className="text-xs text-muted-foreground">{display(field.old_value)} → {display(field.new_value)}</span>}</div></div>)}</CardContent></Card>{data.queue && data.queue.owner_user_id === data.currentUserId && <Button asChild><Link href={`/app/inbound/${data.queue.id}/verification`}>Open live verification</Link></Button>}</div>;
+  return <div className="space-y-4"><Card><CardContent className="space-y-3 p-5"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Verification progress</p><p className="mt-1 text-2xl font-semibold">{data.verification.session.progress_percentage}%</p></div><Badge variant={data.verification.session.progress_percentage === 100 ? "secondary" : "outline"}>{data.verification.session.status}</Badge></div><div className="h-3 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${data.verification.session.progress_percentage}%` }} /></div><p className="text-xs text-muted-foreground">Started {when(data.verification.session.started_at)}{data.verification.session.completed_at ? ` · completed ${when(data.verification.session.completed_at)}` : ""}</p></CardContent></Card><Card><CardHeader className="pb-3"><CardTitle className="text-base">Field confirmation</CardTitle></CardHeader><CardContent className="space-y-2">{data.verification.fields.map((field) => <div key={field.field_key} className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-3 text-sm"><span>{field.field_key}</span><div className="flex items-center gap-2"><Badge variant={stateVariant(field.state)}>{field.state}</Badge>{field.state === "corrected" && <span className="text-xs text-muted-foreground">{display(field.old_value)} → {display(field.new_value)}</span>}</div></div>)}</CardContent></Card>{data.queue && data.queue.owner_user_id === data.currentUserId && <Button asChild><Link href={`/app/inbound/${data.queue.id}/verification`}>Open live verification</Link></Button>}</div>;
 }
 
 function NotesTab({ data, refresh }: { data: Workspace; refresh: () => Promise<void> }) {
@@ -79,7 +82,7 @@ function NotesTab({ data, refresh }: { data: Workspace; refresh: () => Promise<v
   }
   function toggleMention(id: string) { setMentions((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]); }
   const shown = searchResults ?? data.notes;
-  return <div className="space-y-4"><Card><CardHeader className="pb-3"><CardTitle className="flex items-center gap-2 text-base"><MessageSquare className="size-4" />{editing ? "Edit note" : "Add note"}</CardTitle></CardHeader><CardContent className="space-y-3"><textarea aria-label="Note text" value={body} onChange={(event) => setBody(event.target.value)} disabled={!canWrite || busy} maxLength={10000} rows={4} placeholder="What happened? Keep it plain text." className="min-h-24 w-full resize-y rounded-md border border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50" /><div className="flex flex-wrap items-center gap-3"><label className="text-sm font-medium" htmlFor="note-visibility">Visibility</label><select id="note-visibility" aria-label="Note visibility" value={noteVisibility} onChange={(event) => setNoteVisibility(event.target.value as "internal" | "shared")} disabled={!canWrite || busy} className="h-9 rounded-md border border-input bg-background px-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"><option value="internal">Internal — team only</option><option value="shared">Shared — partner can see</option></select><span className="text-xs text-muted-foreground">Internal is the default.</span>{editing && <Button type="button" variant="ghost" onClick={reset}>Cancel</Button>}<Button type="button" disabled={!canWrite || busy || !body.trim()} onClick={() => void save()}>{busy ? <Loader2 className="size-4 animate-spin" /> : null}{editing ? "Save changes" : "Save note"}</Button></div>{data.teammates.length > 1 && <div className="space-y-2"><p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Mention teammates</p><div className="flex flex-wrap gap-3">{data.teammates.filter((user) => user.id !== data.currentUserId).map((user) => <label key={user.id} className="inline-flex items-center gap-2 text-sm"><input type="checkbox" checked={mentions.includes(user.id)} onChange={() => toggleMention(user.id)} disabled={!canWrite || busy} className="size-4 accent-primary" />{user.name}{user.role ? ` (${user.role})` : ""}</label>)}</div></div>}</CardContent></Card><Card><CardContent className="space-y-3 p-4"><div className="flex flex-wrap items-center gap-2"><Label htmlFor="note-search">Search notes across leads</Label><Input id="note-search" value={search} onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void runSearch(); }} placeholder="Search note text" className="max-w-sm" /><Button type="button" variant="outline" onClick={() => void runSearch()}>Search</Button>{searchResults && <Button type="button" variant="ghost" onClick={() => { setSearchResults(null); setSearch(""); }}>Clear</Button>}</div>{shown.map((note) => <div key={note.id} className={`rounded-md border p-4 ${note.deletedAt ? "border-dashed bg-muted/30" : ""}`}><div className="flex flex-wrap items-start justify-between gap-2"><div className="flex flex-wrap items-center gap-2"><span className="font-medium">{note.deletedAt ? "Note deleted" : note.author.name}</span>{!note.deletedAt && <Badge variant="outline">{note.visibility}</Badge>}{note.editedAt && !note.deletedAt && <span className="text-xs text-muted-foreground">edited</span>}</div><div className="flex gap-1">{!note.deletedAt && note.author.id === data.currentUserId && <><Button type="button" variant="ghost" size="sm" disabled={!canWrite || busy} onClick={() => edit(note)}>Edit</Button><Button type="button" variant="ghost" size="sm" disabled={!canWrite || busy} onClick={() => void remove(note)}>Delete</Button></>}{!note.deletedAt && data.role === "owner" && note.author.id !== data.currentUserId && <Button type="button" variant="ghost" size="sm" disabled={!canWrite || busy} onClick={() => void changeVisibility(note)}>{note.visibility === "shared" ? "Make internal" : "Share note"}</Button>}</div></div><p className="mt-2 whitespace-pre-wrap break-words text-sm">{note.deletedAt ? "This note was deleted. The timeline record is retained." : note.body}</p><p className="mt-2 text-xs text-muted-foreground">{when(note.createdAt)}{note.visibility === "shared" && !note.deletedAt ? " · posted to partner channel" : ""}</p>{note.history.length > 0 && <details className="mt-2 text-xs"><summary className="cursor-pointer text-muted-foreground">View edit history ({note.history.length})</summary><div className="mt-2 space-y-2 border-l pl-3">{note.history.map((change) => <p key={change.id}>{change.actor.name} · {change.action} · {when(change.created_at)}</p>)}</div></details>}</div>)}{shown.length === 0 && <p className="text-sm text-muted-foreground">No notes yet.</p>}</CardContent></Card></div>;
+  return <div className="space-y-4"><Card><CardHeader className="pb-3"><CardTitle className="flex items-center gap-2 text-base"><MessageSquare className="size-4" />{editing ? "Edit note" : "Add note"}</CardTitle></CardHeader><CardContent className="space-y-3"><textarea aria-label="Note text" value={body} onChange={(event) => setBody(event.target.value)} disabled={!canWrite || busy} maxLength={10000} rows={4} placeholder="What happened? Keep it plain text." className="min-h-24 w-full resize-y rounded-md border border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50" /><div className="flex flex-wrap items-center gap-3"><label className="text-sm font-medium" htmlFor="note-visibility">Visibility</label><select id="note-visibility" aria-label="Note visibility" value={noteVisibility} onChange={(event) => setNoteVisibility(event.target.value as "internal" | "shared")} disabled={!canWrite || busy} className="h-9 rounded-md border border-input bg-background px-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"><option value="internal">Internal — team only</option><option value="shared">Shared — partner can see</option></select><span className="text-xs text-muted-foreground">Internal is the default.</span>{editing && <Button type="button" variant="ghost" onClick={reset}>Cancel</Button>}<Button type="button" disabled={!canWrite || busy || !body.trim()} onClick={() => void save()}>{busy ? <Loader2 className="size-4 animate-spin" /> : null}{editing ? "Save changes" : "Save note"}</Button></div>{data.teammates.length > 1 && <div className="space-y-2"><p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Mention teammates</p><div className="flex flex-wrap gap-3">{data.teammates.filter((user) => user.id !== data.currentUserId).map((user) => <label key={user.id} className="inline-flex items-center gap-2 text-sm"><input type="checkbox" checked={mentions.includes(user.id)} onChange={() => toggleMention(user.id)} disabled={!canWrite || busy} className="size-4 accent-primary" />{user.name}{user.role ? ` (${user.role})` : ""}</label>)}</div></div>}</CardContent></Card><Card><CardContent className="space-y-3 p-4"><div className="flex flex-wrap items-center gap-2"><Label htmlFor="note-search">Search notes across leads</Label><Input id="note-search" value={search} onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void runSearch(); }} placeholder="Search note text" className="max-w-sm" /><Button type="button" variant="outline" onClick={() => void runSearch()}>Search</Button>{searchResults && <Button type="button" variant="ghost" onClick={() => { setSearchResults(null); setSearch(""); }}>Clear</Button>}</div>{shown.map((note) => <div key={note.id} className={`rounded-md border p-4 ${note.deletedAt ? "border-dashed bg-muted/30" : ""}`}><div className="flex flex-wrap items-start justify-between gap-2"><div className="flex flex-wrap items-center gap-2"><span className="font-medium">{note.deletedAt ? "Note deleted" : note.author.name}</span>{!note.deletedAt && <Badge variant="outline">{note.visibility}</Badge>}{note.editedAt && !note.deletedAt && <span className="text-xs text-muted-foreground">edited</span>}</div><div className="flex gap-1">{!note.deletedAt && note.author.id === data.currentUserId && <><Button type="button" variant="ghost" size="sm" disabled={!canWrite || busy} onClick={() => edit(note)}>Edit</Button><Button type="button" variant="ghost" size="sm" disabled={!canWrite || busy} onClick={() => void remove(note)}>Delete</Button></>}{!note.deletedAt && data.role === "owner" && note.author.id !== data.currentUserId && <Button type="button" variant="ghost" size="sm" disabled={!canWrite || busy} onClick={() => void changeVisibility(note)}>{note.visibility === "shared" ? "Make internal" : "Share note"}</Button>}</div></div><p className="mt-2 whitespace-pre-wrap break-words text-sm">{note.deletedAt ? "This note was deleted. The timeline record is retained." : note.body}</p><p className="mt-2 text-xs text-muted-foreground">{when(note.createdAt)}{note.visibility === "shared" && !note.deletedAt ? " · posted to partner channel" : ""}</p>{note.history.length > 0 && <details className="mt-2 text-xs"><summary className="cursor-pointer text-muted-foreground">View edit history ({note.history.length})</summary><div className="mt-2 space-y-2 border-l pl-3">{note.history.map((change) => <p key={change.id}>{change.actor.name} · {change.action} · {when(change.created_at)}</p>)}</div></details>}</div>)}{shown.length === 0 && <p className="text-sm text-muted-foreground">No notes yet.</p>}</CardContent></Card></div>;
 }
 
 export function LeadDetailWorkspace({ leadId }: { leadId: string }) {
@@ -102,13 +105,266 @@ export function LeadDetailWorkspace({ leadId }: { leadId: string }) {
   function nudge() { if (!data?.queue) return; void action("nudge", "/api/app/agent-floor", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "nudge", work_item_id: data.queue.id, idempotency_key: crypto.randomUUID() }) }, "Team nudged"); }
   function recheckPreflight() { if (!data) return; void action("preflight", `/api/app/leads/${encodeURIComponent(data.lead.id)}/preflight`, { method: "POST" }, "Existing-customer check refreshed"); }
 
-  if (error) return <Card><CardContent className="space-y-3 p-6"><p role="alert" className="text-sm text-destructive">{error}</p><Button variant="outline" onClick={() => void load()}>Try again</Button></CardContent></Card>;
-  if (!data) return <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin" />Loading lead workspace…</div>;
+  if (error)
+    return (
+      <Card>
+        <CardContent className="p-0">
+          <ErrorState
+            detail={error}
+            action={
+              <Button variant="outline" onClick={() => void load()}>
+                Try again
+              </Button>
+            }
+          />
+        </CardContent>
+      </Card>
+    );
+
+  if (!data)
+    return (
+      <div className="mx-auto max-w-7xl space-y-6">
+        <span role="status" className="sr-only">Loading lead workspace</span>
+        <div aria-hidden="true" className="space-y-3">
+          <div className="h-4 w-32 animate-pulse rounded-full bg-muted motion-reduce:animate-none" />
+          <div className="h-9 w-72 animate-pulse rounded-md bg-muted motion-reduce:animate-none" />
+        </div>
+        <Card>
+          <CardContent className="p-0">
+            <LoadingRows rows={4} columns={3} />
+          </CardContent>
+        </Card>
+      </div>
+    );
+
   const readOnly = data.readOnly;
-  const tabs = [{ key: "application", label: "Application" }, { key: "verification", label: "Verification" }, { key: "notes", label: "Notes" }, { key: "timeline", label: "Timeline" }] as const;
-  return <div className="mx-auto max-w-7xl space-y-5"><div className="flex flex-wrap items-start justify-between gap-4"><div><Link href="/app/leads" className="inline-flex items-center gap-1 text-sm text-muted-foreground underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"><ArrowLeft className="size-4" />Back to leads</Link><div className="mt-3 flex flex-wrap items-center gap-2"><h1 className="text-2xl font-extrabold tracking-tight">{display(data.lead.values.full_name ?? data.lead.values.name ?? "Unnamed lead")}</h1>{data.screening.outcome && <Badge variant={data.screening.outcome === "blocked" ? "destructive" : data.screening.warning ? "outline" : "secondary"}><ShieldCheck className="size-3" />Screening {data.screening.outcome}</Badge>}{data.queue?.status && <Badge variant="outline">{data.queue.status}</Badge>}</div><p className="mt-1 text-sm text-muted-foreground">{data.partner?.name ?? "Direct lead"} · {data.template.product_name} · submitted {when(data.lead.created_at)}</p>{data.screening.warning && <p className="mt-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-800">⚠ {data.screening.warning}</p>}</div><div className="flex flex-wrap items-center gap-2">{data.queue && <Button variant="outline" disabled={readOnly || saving === "nudge"} onClick={nudge}>Nudge team</Button>}{data.actions.canClaim && <Button disabled={readOnly || saving === "claim"} onClick={claim}>{saving === "claim" ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}{readOnly ? "Read-only" : "Claim"}</Button>}{data.actions.canAcceptHandoff && <Button disabled={readOnly || saving === "accept"} onClick={acceptHandoff}>Accept handoff</Button>}{data.queue && data.actions.canHandoff && <><select aria-label="Licensed agent for handoff" disabled={readOnly || saving === "handoff"} value={handoffTarget || data.licensedAgents[0]?.id || ""} onChange={(event) => setHandoffTarget(event.target.value)} className="border-input bg-background h-9 rounded-md border px-2 text-sm"><option value="">Choose agent…</option>{data.licensedAgents.map((agent) => <option key={agent.id} value={agent.id}>{agent.name} ({agent.role})</option>)}</select><Button variant="outline" disabled={readOnly || saving === "handoff"} onClick={handoff}><Hand className="size-4" />Hand off</Button></>}{data.queue && data.actions.canDisposition && <Button asChild variant="outline"><Link href={`/app/inbound/${data.queue.id}/disposition`}>Disposition</Link></Button>}{data.queue && data.queue.owner_user_id === data.currentUserId && <Button asChild variant="outline"><Link href={`/app/inbound/${data.queue.id}/verification`}>Verification</Link></Button>}</div></div>
-    {data.queue?.status === "expired" && <ExpiredLeadAction leadId={data.lead.id} readOnly={readOnly} refresh={load} />}<Card><CardContent className="grid gap-4 p-4 sm:grid-cols-2 lg:grid-cols-4"><div><p className="text-xs text-muted-foreground">Partner</p><p className="mt-1 font-medium">{data.partner?.name ?? "Direct"}</p></div><div><p className="text-xs text-muted-foreground">Submitted by</p><p className="mt-1 font-medium">{data.submitter?.name ?? "System"}</p></div><div><p className="text-xs text-muted-foreground">Owner</p><p className="mt-1 font-medium">{data.owner?.name ?? "Unclaimed"}</p></div><div><Label htmlFor="lead-stage">Stage</Label>{data.stage && <select id="lead-stage" disabled={readOnly || !data.actions.canChangeStage || saving === "stage"} value={data.stage.id} onChange={moveStage} className="border-input bg-background mt-1 h-9 w-full rounded-md border px-2 text-sm">{data.stages.map((stage) => <option key={stage.id} value={stage.id}>{stage.name}</option>)}</select>}</div></CardContent></Card><ExistingCustomerPreflight data={data} busy={saving === "preflight"} onRecheck={recheckPreflight} />
-    <div className="flex flex-wrap gap-2 border-b" role="tablist" aria-label="Lead detail sections">{tabs.map((item) => <button key={item.key} type="button" role="tab" aria-selected={tab === item.key} onClick={() => setTab(item.key)} className={`border-b-2 px-3 py-2 text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring ${tab === item.key ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}>{item.label}</button>)}</div>
-    {tab === "application" && <ApplicationTab data={data} />}{tab === "verification" && <VerificationTab data={data} />}{tab === "notes" && <NotesTab data={data} refresh={load} />}{tab === "timeline" && <Card><CardContent className="p-6"><div className="mb-4 flex items-center gap-2"><Clock3 className="size-4" /><p className="font-semibold">Immutable lead timeline</p></div><ol className="space-y-4 border-l pl-5">{data.timeline.map((event) => <li key={event.id} className="relative"><span className="absolute -left-[1.43rem] top-1 size-2 rounded-full bg-primary" /><p className="font-medium">{event.label}</p><p className="text-xs text-muted-foreground">{event.actor} · {when(event.at)}</p>{event.detail && <p className="mt-1 break-words text-sm text-muted-foreground">{event.detail}</p>}</li>)}</ol>{data.timeline.length === 0 && <p className="text-sm text-muted-foreground">No events recorded yet.</p>}<p className="mt-5 flex items-center gap-2 text-xs text-muted-foreground"><GitBranch className="size-3" />Events are append-only audit records.</p></CardContent></Card>}
-  </div>;
+  const tabs = [
+    { key: "application", label: "Application" },
+    { key: "verification", label: "Verification" },
+    { key: "notes", label: "Notes" },
+    { key: "timeline", label: "Timeline" },
+  ] as const;
+
+  const leadName = display(data.lead.values.full_name ?? data.lead.values.name ?? "Unnamed lead");
+
+  return (
+    <div className="mx-auto max-w-7xl space-y-6">
+      <DetailHeader
+        breadcrumb={
+          <Link
+            href="/app/leads"
+            className="inline-flex items-center gap-1.5 rounded-sm underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <ArrowLeft className="size-4" aria-hidden="true" />
+            Lead workspace
+          </Link>
+        }
+        title={leadName}
+        meta={
+          <>
+            {data.screening.outcome && (
+              <StatusChip
+                tone={data.screening.outcome === "blocked" ? "danger" : data.screening.warning ? "warning" : "good"}
+                dot
+              >
+                Screening {data.screening.outcome}
+              </StatusChip>
+            )}
+            {data.queue?.status && <StatusChip tone="info" dot>{data.queue.status}</StatusChip>}
+            <span className="text-muted-foreground">{data.partner?.name ?? "Direct lead"}</span>
+            <span aria-hidden="true" className="text-border">·</span>
+            <span className="text-muted-foreground">{data.template.product_name}</span>
+            <span aria-hidden="true" className="text-border">·</span>
+            <span className="text-muted-foreground">Submitted {when(data.lead.created_at)}</span>
+          </>
+        }
+        actions={
+          <>
+            {data.queue && (
+              <Button variant="outline" disabled={readOnly || saving === "nudge"} onClick={nudge}>
+                Nudge team
+              </Button>
+            )}
+            {data.actions.canClaim && (
+              <Button disabled={readOnly || saving === "claim"} onClick={claim}>
+                {saving === "claim" ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}
+                {readOnly ? "Read-only" : "Claim"}
+              </Button>
+            )}
+            {data.actions.canAcceptHandoff && (
+              <Button disabled={readOnly || saving === "accept"} onClick={acceptHandoff}>
+                Accept handoff
+              </Button>
+            )}
+            {data.queue && data.actions.canHandoff && (
+              <>
+                <select
+                  aria-label="Licensed agent for handoff"
+                  disabled={readOnly || saving === "handoff"}
+                  value={handoffTarget || data.licensedAgents[0]?.id || ""}
+                  onChange={(event) => setHandoffTarget(event.target.value)}
+                  className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+                >
+                  <option value="">Choose agent…</option>
+                  {data.licensedAgents.map((agent) => (
+                    <option key={agent.id} value={agent.id}>
+                      {agent.name} ({agent.role})
+                    </option>
+                  ))}
+                </select>
+                <Button variant="outline" disabled={readOnly || saving === "handoff"} onClick={handoff}>
+                  <Hand className="size-4" />
+                  Hand off
+                </Button>
+              </>
+            )}
+            {data.queue && data.actions.canDisposition && (
+              <Button asChild variant="outline">
+                <Link href={`/app/inbound/${data.queue.id}/disposition`}>Disposition</Link>
+              </Button>
+            )}
+            {data.queue && data.queue.owner_user_id === data.currentUserId && (
+              <Button asChild variant="outline">
+                <Link href={`/app/inbound/${data.queue.id}/verification`}>Verification</Link>
+              </Button>
+            )}
+          </>
+        }
+      />
+
+      {data.screening.warning && (
+        <p className="rounded-md border border-[var(--warning)]/40 bg-[color-mix(in_srgb,var(--warning)_10%,transparent)] px-3 py-2 text-sm text-[var(--warning)]">
+          {data.screening.warning}
+        </p>
+      )}
+
+      {data.queue?.status === "expired" && (
+        <ExpiredLeadAction leadId={data.lead.id} readOnly={readOnly} refresh={load} />
+      )}
+
+      <DetailLayout
+        rail={
+          <>
+            <ExistingCustomerPreflight data={data} busy={saving === "preflight"} onRecheck={recheckPreflight} />
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Outbound attempts</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {data.attemptHistory.length ? (
+                  <ol className="space-y-3">
+                    {data.attemptHistory.map((attempt) => (
+                      <li key={attempt.id} className="border-b border-border pb-3 text-sm last:border-b-0 last:pb-0">
+                        <p className="font-medium">
+                          Attempt {attempt.attempt_number} · {attempt.slot.replaceAll("_", " ")}
+                        </p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">
+                          {when(attempt.attempted_at)} · {attempt.disposition ?? "No disposition"}
+                          {attempt.dial_clicked_at ? " · number clicked" : " · no click recorded"}
+                        </p>
+                      </li>
+                    ))}
+                  </ol>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No outbound attempts recorded.</p>
+                )}
+                <p className="mt-3 text-xs text-muted-foreground">
+                  Reactivation resets the serving counter but keeps every prior attempt here.
+                </p>
+              </CardContent>
+            </Card>
+          </>
+        }
+      >
+        <Card>
+          <CardContent className="grid gap-5 p-5 sm:grid-cols-2 lg:grid-cols-4">
+            {[
+              ["Partner", data.partner?.name ?? "Direct"],
+              ["Submitted by", data.submitter?.name ?? "System"],
+              ["Owner", data.owner?.name ?? "Unclaimed"],
+            ].map(([label, value]) => (
+              <div key={label}>
+                <p className="text-xs font-semibold uppercase tracking-[0.02em] text-muted-foreground">{label}</p>
+                <p className="mt-1.5 text-sm font-medium">{value}</p>
+              </div>
+            ))}
+            <div>
+              <Label htmlFor="lead-stage" className="text-xs font-semibold uppercase tracking-[0.02em] text-muted-foreground">
+                Stage
+              </Label>
+              {data.stage && (
+                <select
+                  id="lead-stage"
+                  disabled={readOnly || !data.actions.canChangeStage || saving === "stage"}
+                  value={data.stage.id}
+                  onChange={moveStage}
+                  className="mt-1.5 h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                >
+                  {data.stages.map((stage) => (
+                    <option key={stage.id} value={stage.id}>
+                      {stage.name}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        <div className="flex flex-wrap gap-1 border-b border-border" role="tablist" aria-label="Lead detail sections">
+          {tabs.map((item) => (
+            <button
+              key={item.key}
+              type="button"
+              role="tab"
+              aria-selected={tab === item.key}
+              onClick={() => setTab(item.key)}
+              className={`-mb-px border-b-2 px-3 py-2.5 text-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring ${
+                tab === item.key
+                  ? "border-[var(--primary)] font-semibold text-[var(--primary)]"
+                  : "border-transparent font-medium text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+
+        {tab === "application" && <ApplicationTab data={data} />}
+        {tab === "verification" && <VerificationTab data={data} />}
+        {tab === "notes" && <NotesTab data={data} refresh={load} />}
+        {tab === "timeline" && (
+          <Card>
+            <CardContent className="p-6">
+              <div className="mb-4 flex items-center gap-2">
+                <Clock3 className="size-4" aria-hidden="true" />
+                <p className="font-semibold">Immutable lead timeline</p>
+              </div>
+              <ol className="space-y-4 border-l border-border pl-5">
+                {data.timeline.map((event) => (
+                  <li key={event.id} className="relative">
+                    <span className="absolute -left-[1.43rem] top-1 size-2 rounded-full bg-[var(--primary)]" />
+                    <p className="font-medium">{event.label}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {event.actor} · {when(event.at)}
+                    </p>
+                    {event.detail && (
+                      <p className="mt-1 break-words text-sm text-muted-foreground">{event.detail}</p>
+                    )}
+                  </li>
+                ))}
+              </ol>
+              {data.timeline.length === 0 && (
+                <p className="text-sm text-muted-foreground">No events recorded yet.</p>
+              )}
+              <p className="mt-5 flex items-center gap-2 text-xs text-muted-foreground">
+                <GitBranch className="size-3" aria-hidden="true" />
+                Events are append-only audit records.
+              </p>
+            </CardContent>
+          </Card>
+        )}
+      </DetailLayout>
+    </div>
+  );
 }

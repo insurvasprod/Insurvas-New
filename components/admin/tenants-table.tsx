@@ -22,7 +22,8 @@ import {
 } from "@/components/ui/table";
 import { CreateTenantDialog } from "./create-tenant-dialog";
 import { PaginationBar } from "./pagination-bar";
-import { tableHeaderRow, tableHeadCell, tableShell } from "./table-styles";
+import { tableHeaderRow, tableHeadCell } from "./table-styles";
+import { TableCard } from "@/components/ui/table-card";
 import { NoMatches } from "@/components/admin/empty-state";
 import { StatusChip, accountTone } from "@/components/admin/status-chip";
 
@@ -114,7 +115,17 @@ export function TenantsTable({ initialTenants }: { initialTenants: TenantRow[] }
         </div>
       </div>
 
-      <div className={tableShell}>
+      <TableCard
+        footer={
+          <PaginationBar
+          page={safePage}
+          totalItems={filtered.length}
+          itemsPerPage={PAGE_SIZE}
+          itemLabel="tenants"
+          onPageChange={setPage}
+          />
+        }
+      >
         <Table>
           <TableHeader>
             <TableRow className={tableHeaderRow}>
@@ -165,14 +176,7 @@ export function TenantsTable({ initialTenants }: { initialTenants: TenantRow[] }
             ))}
           </TableBody>
         </Table>
-        <PaginationBar
-          page={safePage}
-          totalItems={filtered.length}
-          itemsPerPage={PAGE_SIZE}
-          itemLabel="tenants"
-          onPageChange={setPage}
-        />
-      </div>
+      </TableCard>
     </div>
   );
 }

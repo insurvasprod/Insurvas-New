@@ -25,11 +25,11 @@ export function LegalDocumentBody({ content, className }: { content: string; cla
       {blocks.map((block, index) => {
         if (block.kind === "heading") {
           return block.level === 1 ? (
-            <h1 key={index} className="text-2xl font-extrabold tracking-tight">
+            <h1 key={index} className="text-2xl font-semibold tracking-[-0.02em]">
               <Inline text={block.text} />
             </h1>
           ) : (
-            <h2 key={index} className="pt-2 text-lg font-bold tracking-tight">
+            <h2 key={index} className="pt-2 text-lg font-semibold tracking-tight">
               <Inline text={block.text} />
             </h2>
           );

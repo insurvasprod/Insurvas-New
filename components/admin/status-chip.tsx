@@ -1,52 +1,11 @@
-import type { ReactNode } from "react";
+import type { StatusTone } from "@/components/ui/status-chip";
 
 /**
- * One chip, six tables.
- *
- * Every table that shows a status was hand-rolling `<Badge variant="outline" className="border-transparent
- * bg-[var(--color-success)]/10 text-[10px] text-[var(--color-success)]">`. Six copies of the same
- * idea drift, and they had: some carried `text-[10px]` and some did not, some tinted with
- * `--color-blue-faint` and some with a `/10` alpha of the same hue. None of it was wrong; all of it
- * was slightly different, which is what makes a set of screens feel unmaintained.
- *
- * Tone rather than colour in the API. A caller says what the state MEANS — `danger` for money that
- * failed, `good` for a subscription that is running — and this decides how that looks. That is what
- * lets the dark palette shift every chip in one place, and it stops a table inventing a seventh
- * shade of amber.
+ * StatusChip now lives in components/ui — it is a shared primitive, not an admin one. Re-exported
+ * here so the six tables that import it from this path keep working unchanged.
  */
-export type StatusTone = "neutral" | "good" | "info" | "warning" | "danger";
+export { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 
-const TONE: Record<StatusTone, string> = {
-  // Muted rather than grey-on-grey: a neutral state is still a state worth reading.
-  neutral: "bg-muted text-muted-foreground",
-  good: "bg-[var(--color-success)]/12 text-[var(--color-success)]",
-  info: "bg-[var(--color-blue)]/12 text-[var(--color-blue)]",
-  warning: "bg-[var(--color-warning)]/12 text-[var(--color-warning)]",
-  danger: "bg-[var(--color-danger)]/12 text-[var(--color-danger)]",
-};
-
-export function StatusChip({
-  tone = "neutral",
-  children,
-  title,
-  /** A dot carries the state for anyone who cannot separate the hues. */
-  dot = false,
-}: {
-  tone?: StatusTone;
-  children: ReactNode;
-  title?: string;
-  dot?: boolean;
-}) {
-  return (
-    <span
-      title={title}
-      className={`inline-flex w-fit items-center gap-1.5 whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-semibold ${TONE[tone]}`}
-    >
-      {dot && <span className="size-1.5 shrink-0 rounded-full bg-current" aria-hidden="true" />}
-      {children}
-    </span>
-  );
-}
 
 /**
  * Tone for a subscription status.

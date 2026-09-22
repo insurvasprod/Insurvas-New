@@ -43,17 +43,21 @@ import {
   USERS_PAGE_SIZE,
   USER_STATUSES,
   USER_STATUS_LABELS,
+  userStatusLabel,
   type UserSortColumn,
 } from "@/lib/users/constants";
 import type { UserListRow, UserStats } from "@/lib/users/list";
+import type { PlanListRow } from "@/lib/plans/constants";
 import { relativeTime } from "@/lib/relativeTime";
 import { PaginationBar } from "./pagination-bar";
+import { TableCard } from "@/components/ui/table-card";
 import { UserStatStrip } from "./user-stat-strip";
-import { tableHeaderRow, tableHeadCell, tableShell } from "./table-styles";
+import { tableHeaderRow, tableHeadCell } from "./table-styles";
 import { CreateUserDialog, type TenantOption } from "./create-user-dialog";
 import { InviteLinkPanel } from "./invite-link-panel";
 import { EditUserDialog } from "./edit-user-dialog";
 import { SuspendUserDialog } from "./suspend-user-dialog";
+import { DeleteUserDialog } from "./delete-user-dialog";
 import { StatusChip, accountTone } from "@/components/admin/status-chip";
 
 const COLUMNS: { key: UserSortColumn; label: string }[] = [
@@ -94,6 +98,7 @@ export function UsersTable({
   initialStats,
   planCodes,
   tenants,
+  plans,
   canCreate,
 }: {
   initialUsers: UserListRow[];
@@ -101,6 +106,7 @@ export function UsersTable({
   initialStats: UserStats;
   planCodes: string[];
   tenants: TenantOption[];
+  plans: PlanListRow[];
   canCreate: boolean;
 }) {
   const [users, setUsers] = useState(initialUsers);
@@ -123,6 +129,8 @@ export function UsersTable({
   const [editOpen, setEditOpen] = useState(false);
   const [suspending, setSuspending] = useState<UserListRow | null>(null);
   const [suspendOpen, setSuspendOpen] = useState(false);
+  const [deleting, setDeleting] = useState<UserListRow | null>(null);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const isFirstRun = useRef(true);
   const isFirstStatsRun = useRef(true);
 
@@ -252,8 +260,10 @@ export function UsersTable({
     <div className="space-y-6">
       <UserStatStrip stats={stats} />
 
-      <div className="space-y-4">
-        <div className="flex flex-wrap items-center gap-3">
+      <TableCard
+        toolbar={
+          <div className="w-full space-y-3">
+            <div className="flex flex-wrap items-center gap-3">
           <div className="relative min-w-[240px] flex-1">
             <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
@@ -294,7 +304,7 @@ export function UsersTable({
 
           {canCreate && (
             <div className="ml-auto">
-              <CreateUserDialog tenants={tenants} onCreated={() => setRefreshKey((k) => k + 1)} />
+              <CreateUserDialog tenants={tenants} plans={plans} onCreated={() => setRefreshKey((k) => k + 1)} />
             </div>
           )}
         </div>
@@ -323,7 +333,18 @@ export function UsersTable({
           />
         </div>
 
-        <div className={tableShell}>
+          </div>
+        }
+        footer={
+          <PaginationBar
+            page={page}
+            totalItems={total}
+            itemsPerPage={USERS_PAGE_SIZE}
+            itemLabel="users"
+            onPageChange={setPage}
+          />
+        }
+      >
           <Table>
             <TableHeader>
               <TableRow className={tableHeaderRow}>
@@ -396,7 +417,7 @@ export function UsersTable({
                       // Hovering a suspended user shows why, without a trip to the audit log.
                       title={user.suspension_reason ?? undefined}
                     >
-                      {USER_STATUS_LABELS[user.status]}
+                      {userStatusLabel(user.status)}
                     </StatusChip>
                   </TableCell>
                   <TableCell
@@ -457,16 +478,37 @@ export function UsersTable({
                               Lift suspension
                             </DropdownMenuItem>
                           ) : (
-                            <DropdownMenuItem
-                              variant="destructive"
-                              onSelect={() => {
-                                setSuspending(user);
-                                setSuspendOpen(true);
-                              }}
-                            >
-                              Suspend…
-                            </DropdownMenuItem>
+                            // Only from `active`. The comment above claims this menu "can't produce
+                            // a no-op or a 409", and offering Suspend… on every non-suspended state
+                            // broke that: the database refuses `pending_verification -> suspended`,
+                            // so an invited user's Suspend… returned 409. Suspension is for
+                            // somebody who can currently get in, which is what `active` means.
+                            user.status === "active" && (
+                              <DropdownMenuItem
+                                variant="destructive"
+                                onSelect={() => {
+                                  setSuspending(user);
+                                  setSuspendOpen(true);
+                                }}
+                              >
+                                Suspend…
+                              </DropdownMenuItem>
+                            )
                           )}
+
+                          {/* Offered from every state including `pending_verification`, which is
+                              the point: before DELETE existed, a mistyped invitation could not be
+                              suspended, deactivated or removed, and the only way to clear it was to
+                              mark the account active. */}
+                          <DropdownMenuItem
+                            variant="destructive"
+                            onSelect={() => {
+                              setDeleting(user);
+                              setDeleteOpen(true);
+                            }}
+                          >
+                            Delete…
+                          </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </TableCell>
@@ -475,15 +517,7 @@ export function UsersTable({
               ))}
             </TableBody>
           </Table>
-          <PaginationBar
-            page={page}
-            totalItems={total}
-            itemsPerPage={USERS_PAGE_SIZE}
-            itemLabel="users"
-            onPageChange={setPage}
-          />
-        </div>
-      </div>
+      </TableCard>
 
       {/* Keyed by row id so each dialog remounts with fresh state when a *different* user is
           opened — that's what lets them seed from props instead of resetting in an effect. */}
@@ -501,6 +535,14 @@ export function UsersTable({
         open={suspendOpen}
         onClose={() => setSuspendOpen(false)}
         onSuspended={() => setRefreshKey((k) => k + 1)}
+      />
+
+      <DeleteUserDialog
+        key={`delete-${deleting?.id ?? "none"}`}
+        user={deleting}
+        open={deleteOpen}
+        onClose={() => setDeleteOpen(false)}
+        onDeleted={() => setRefreshKey((k) => k + 1)}
       />
 
       <Dialog open={resentInvite !== null} onOpenChange={(open) => !open && setResentInvite(null)}>

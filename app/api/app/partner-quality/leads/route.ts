@@ -9,6 +9,6 @@ export async function GET(request: NextRequest) {
   const auth = await requireFeatureRole("partner_quality", ["owner", "producer", "bookkeeper"]);
   if (auth instanceof NextResponse) return auth;
   const params = request.nextUrl.searchParams;
-  try { return NextResponse.json(await listPartnerQualityLeads(auth.context.tenantId, { from: params.get("from"), to: params.get("to"), partnerId: params.get("partner_id"), metric: params.get("metric"), disposition: params.get("disposition"), page: params.get("page"), pageSize: params.get("page_size") }), { headers: { "Cache-Control": "no-store" } }); }
+  try { return NextResponse.json(await listPartnerQualityLeads(auth.context.tenantId, { from: params.get("from"), to: params.get("to"), partnerId: params.get("partner_id"), partnerUserId: params.get("partner_user_id"), metric: params.get("metric"), disposition: params.get("disposition"), page: params.get("page"), pageSize: params.get("page_size") }), { headers: { "Cache-Control": "no-store" } }); }
   catch (error) { return errorResponse(error); }
 }

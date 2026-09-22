@@ -52,8 +52,8 @@ export function BusinessProfileForm() {
   return (
     <Card className="bg-white shadow-[0_18px_50px_rgba(0,64,127,0.12)]">
       <CardHeader>
-        <p className="text-sm font-bold uppercase tracking-[0.18em] text-[var(--brand-600)]">Email verified</p>
-        <CardTitle className="text-3xl font-extrabold tracking-tight">Tell us about your business</CardTitle>
+        <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[var(--brand-600)]">Email verified</p>
+        <CardTitle className="text-3xl font-semibold tracking-[-0.02em]">Tell us about your business</CardTitle>
         <p className="text-sm text-[var(--color-text-muted)]">These answers personalize the setup checklist you see after checkout.</p>
       </CardHeader>
       <CardContent>

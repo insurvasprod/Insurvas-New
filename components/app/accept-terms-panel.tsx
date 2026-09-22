@@ -52,11 +52,11 @@ export function AcceptTermsPanel({ documents }: { documents: OutstandingDoc[] })
     <div className="space-y-6">
       <Card className="bg-white">
         <CardHeader>
-          <p className="flex items-center gap-2 text-sm font-bold uppercase tracking-[0.18em] text-[var(--brand-600)]">
+          <p className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.18em] text-[var(--brand-600)]">
             <ScrollText className="size-4" />
             {documents.length === 1 ? "An updated document" : "Updated documents"}
           </p>
-          <CardTitle className="text-2xl font-extrabold tracking-tight">
+          <CardTitle className="text-2xl font-semibold tracking-[-0.02em]">
             Please review before continuing
           </CardTitle>
           <p className="text-sm text-[var(--color-text-muted)]">
@@ -71,7 +71,7 @@ export function AcceptTermsPanel({ documents }: { documents: OutstandingDoc[] })
       {documents.map((doc) => (
         <Card key={doc.id} className="bg-white">
           <CardHeader>
-            <CardTitle className="text-lg font-bold">
+            <CardTitle className="text-lg font-semibold">
               {doc.title} <span className="font-normal text-[var(--color-text-muted)]">v{doc.version}</span>
             </CardTitle>
             <p className="text-xs text-[var(--color-text-muted)]">
@@ -81,7 +81,7 @@ export function AcceptTermsPanel({ documents }: { documents: OutstandingDoc[] })
           <CardContent className="space-y-4">
             {doc.isDraft && (
               <div className="rounded-lg border border-[var(--color-warning)]/40 bg-[var(--color-warning)]/10 p-3 text-sm">
-                <span className="font-bold">This is a draft</span> and has not been reviewed by a lawyer.
+                <span className="font-semibold">This is a draft</span> and has not been reviewed by a lawyer.
               </div>
             )}
 
@@ -89,13 +89,13 @@ export function AcceptTermsPanel({ documents }: { documents: OutstandingDoc[] })
                 prose tells a reader nothing. Absent rather than faked when nobody wrote one. */}
             {doc.changeSummary ? (
               <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-page-bg)] p-3 text-sm">
-                <p className="font-bold">What changed</p>
+                <p className="font-semibold">What changed</p>
                 <p className="mt-1">{doc.changeSummary}</p>
                 {doc.previousVersion && (
                   <Link
                     href={`/legal/${doc.docType}?v=${doc.previousVersion}`}
                     target="_blank"
-                    className="mt-2 inline-block font-bold text-[var(--brand-600)] underline"
+                    className="mt-2 inline-block font-semibold text-[var(--brand-600)] underline"
                   >
                     Read version {doc.previousVersion}
                   </Link>
@@ -108,7 +108,7 @@ export function AcceptTermsPanel({ documents }: { documents: OutstandingDoc[] })
                   <Link
                     href={`/legal/${doc.docType}?v=${doc.previousVersion}`}
                     target="_blank"
-                    className="font-bold text-[var(--brand-600)] underline"
+                    className="font-semibold text-[var(--brand-600)] underline"
                   >
                     Read version {doc.previousVersion}
                   </Link>{" "}
@@ -138,7 +138,7 @@ export function AcceptTermsPanel({ documents }: { documents: OutstandingDoc[] })
               {documents.map((doc, index) => (
                 <span key={doc.id}>
                   {index > 0 && (index === documents.length - 1 ? " and " : ", ")}
-                  <span className="font-bold">
+                  <span className="font-semibold">
                     {doc.title} v{doc.version}
                   </span>
                 </span>
