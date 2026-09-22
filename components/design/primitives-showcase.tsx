@@ -59,13 +59,14 @@ function Section({ title, note, children }: { title: string; note: string; child
   );
 }
 
-const TONES: StatusTone[] = ["neutral", "good", "info", "warning", "danger"];
+const TONES: StatusTone[] = ["neutral", "good", "info", "warning", "danger", "action"];
 const TONE_LABEL: Record<StatusTone, string> = {
   neutral: "Draft",
   good: "Active",
-  info: "Processing",
+  info: "Verifying",
   warning: "Pending review",
   danger: "Past due",
+  action: "Action needed",
 };
 
 export function PrimitivesShowcase() {

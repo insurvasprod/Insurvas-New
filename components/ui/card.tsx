@@ -2,12 +2,30 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
-function Card({ className, ...props }: React.ComponentProps<"div">) {
+/**
+ * A white module on the page grey.
+ *
+ * The hairline shadow is not decoration: with the old ramp a card sat 1.03:1 above its page and was
+ * invisible, so the border did all the work and every screen read as one flat sheet. The ramp now
+ * separates them, and this adds the last edge of lift.
+ *
+ * `interactive` is for a tile that is itself a link or a button. It gets the real shadow on hover
+ * plus a 1px rise, so the thing you can press is the thing that moves.
+ */
+function Card({
+  className,
+  interactive = false,
+  ...props
+}: React.ComponentProps<"div"> & { interactive?: boolean }) {
   return (
     <div
       data-slot="card"
+      data-interactive={interactive || undefined}
       className={cn(
         "flex flex-col gap-6 rounded-lg border bg-card py-6 text-card-foreground",
+        "shadow-[0_1px_2px_rgba(16,20,26,.05)] dark:shadow-[0_1px_2px_rgba(0,0,0,.55)]",
+        interactive &&
+          "cursor-pointer transition-[box-shadow,transform,border-color] duration-150 hover:-translate-y-px hover:border-[var(--border-strong)] hover:shadow-[var(--shadow-hover)] motion-reduce:transition-none motion-reduce:hover:translate-y-0",
         className
       )}
       {...props}
