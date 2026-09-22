@@ -49,7 +49,7 @@ export default async function LegalPage({ params, searchParams }: Params) {
       <SiteHeader />
       <main className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
         <div className="rounded-xl bg-white p-8 shadow-[0_18px_50px_rgba(0,64,127,0.10)]">
-          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[var(--brand-600)]">
+          <p className="text-xs font-semibold uppercase tracking-[0.02em] text-muted-foreground">
             Version {doc.version} · effective {new Date(doc.effective_date).toLocaleDateString()}
           </p>
 

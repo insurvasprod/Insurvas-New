@@ -52,7 +52,7 @@ export function AcceptTermsPanel({ documents }: { documents: OutstandingDoc[] })
     <div className="space-y-6">
       <Card className="bg-white">
         <CardHeader>
-          <p className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.18em] text-[var(--brand-600)]">
+          <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.02em] text-muted-foreground">
             <ScrollText className="size-4" />
             {documents.length === 1 ? "An updated document" : "Updated documents"}
           </p>

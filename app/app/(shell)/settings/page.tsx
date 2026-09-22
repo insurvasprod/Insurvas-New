@@ -31,8 +31,8 @@ export default async function SettingsPage() {
       <header className="portal-settings-header flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="portal-page-eyebrow">{sectionForPath("/app/settings")}</p>
-          <h1 className="text-[40px] font-semibold leading-[1.08] tracking-[-0.03em]">Settings</h1>
-          <p className="mt-2 text-lg tracking-[-0.02em] text-muted-foreground">Manage agency products, credentials, and team access.</p>
+          <h1 className="text-2xl font-semibold leading-[1.21] tracking-[-0.02em]">Settings</h1>
+          <p className="mt-2 text-sm tracking-[-0.02em] text-muted-foreground">Manage agency products, credentials, and team access.</p>
         </div>
         <div className="portal-settings-owner-note">
           <Badge variant="outline">Owner only</Badge>

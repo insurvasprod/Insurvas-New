@@ -3370,7 +3370,7 @@ html.dark { color-scheme: dark; }
    Working tables stay dense and border-led; orange is reserved for the one primary action and
    for a genuine attention state, never as a surface wash. */
 .portal-import-page { color: var(--portal-ink); }
-.portal-import-title { font-size: 2rem; font-weight: 600; letter-spacing: -.025em; line-height: 1.13; }
+.portal-import-title { font-size: 1.5rem; font-weight: 600; letter-spacing: -.02em; line-height: 1.21; }
 .portal-import-subtitle { margin-top: .35rem; color: var(--portal-muted); font-size: .875rem; }
 .portal-import-layout { display: grid; gap: 1.5rem; align-items: start; }
 @media (min-width: 1024px) { .portal-import-layout { grid-template-columns: minmax(0, 1.55fr) minmax(280px, .85fr); } }
@@ -3463,7 +3463,7 @@ html.dark { color-scheme: dark; }
    no screen, so "effective cost per record changes and the change is visible" had nowhere to be
    visible. Dense, border-led, money right-aligned. */
 .portal-campaigns-page { color: var(--portal-ink); }
-.portal-campaigns-title { font-size: 2rem; font-weight: 600; letter-spacing: -.025em; line-height: 1.13; }
+.portal-campaigns-title { font-size: 1.5rem; font-weight: 600; letter-spacing: -.02em; line-height: 1.21; }
 .portal-campaigns-subtitle { margin-top: .35rem; color: var(--portal-muted); font-size: .875rem; }
 .portal-campaigns-page [data-slot="card"] { border-color: var(--portal-line); border-radius: 12px; background: var(--portal-panel); box-shadow: none; }
 .portal-campaigns-empty { color: var(--portal-muted); font-size: .875rem; }
@@ -3790,7 +3790,7 @@ body:has(.portal-agent-sidebar-desktop.is-collapsed) .portal-quality-drawer-shel
    Each group is a different question, so each gets its own card and its own choice. Tone carries
    the meaning: green is landing, orange is a decision, red is impossible. */
 .portal-review-page { color: var(--portal-ink); }
-.portal-review-title { font-size: 2rem; font-weight: 600; letter-spacing: -.025em; line-height: 1.13; }
+.portal-review-title { font-size: 1.5rem; font-weight: 600; letter-spacing: -.02em; line-height: 1.21; }
 .portal-review-subtitle { margin-top: .4rem; max-width: 62ch; color: var(--portal-muted); font-size: .875rem; line-height: 1.6; }
 .portal-review-warn { color: var(--accent-ink); font-weight: 600; }
 .portal-review-groups { display: grid; gap: 1rem; }
@@ -3840,7 +3840,7 @@ body:has(.portal-agent-sidebar-desktop.is-collapsed) .portal-quality-drawer-shel
    The holdout comparison first, because "is it working" is the question, and the weights second,
    because they are the answer to "then change it". */
 .portal-scoring-page { color: var(--portal-ink); }
-.portal-scoring-title { font-size: 2rem; font-weight: 600; letter-spacing: -.025em; line-height: 1.13; }
+.portal-scoring-title { font-size: 1.5rem; font-weight: 600; letter-spacing: -.02em; line-height: 1.21; }
 .portal-scoring-subtitle { margin-top: .35rem; max-width: 64ch; color: var(--portal-muted); font-size: .875rem; line-height: 1.6; }
 .portal-scoring-page [data-slot="card"] { border-color: var(--portal-line); border-radius: 12px; background: var(--portal-panel); box-shadow: none; }
 .portal-scoring-empty { color: var(--portal-muted); font-size: .875rem; }

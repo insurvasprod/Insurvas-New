@@ -59,7 +59,7 @@ export function PricingPage() {
         <p className="mb-4 text-xs font-semibold uppercase tracking-[0.02em] text-muted-foreground">
           Simple, transparent pricing
         </p>
-        <h1 className="mx-auto max-w-3xl text-4xl font-semibold tracking-[-0.03em] sm:text-5xl sm:tracking-[-0.035em]">
+        <h1 className="mx-auto max-w-3xl text-[40px] font-semibold leading-[1.08] tracking-[-0.03em]">
           The operating system for modern insurance teams
         </h1>
         <p className="mx-auto mt-5 max-w-2xl text-lg text-muted-foreground">

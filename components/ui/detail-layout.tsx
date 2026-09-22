@@ -23,7 +23,7 @@ export function DetailHeader({
     <div className="space-y-3">
       {breadcrumb && <div className="text-sm text-muted-foreground">{breadcrumb}</div>}
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <h1 className="min-w-0 text-[32px] font-semibold leading-[1.13] tracking-[-0.025em]">
+        <h1 className="min-w-0 text-2xl font-semibold leading-[1.21] tracking-[-0.02em]">
           {title}
         </h1>
         {actions && <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>}

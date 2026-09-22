@@ -28,7 +28,7 @@ export default async function LapseRiskPage() {
   return (
     <div className="mx-auto max-w-3xl space-y-4">
       <div>
-        <h1 className="text-2xl font-semibold tracking-[-0.02em]">Lapse risk</h1>
+        <h1 className="text-2xl font-semibold leading-[1.21] tracking-[-0.02em]">Lapse risk</h1>
         <p className="mt-1 text-sm font-medium text-muted-foreground">
           Policies most likely to lapse in the next 30 days.
         </p>

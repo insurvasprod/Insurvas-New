@@ -77,7 +77,7 @@ export function PrimitivesShowcase() {
     <main className="mx-auto max-w-5xl px-6 py-10">
       <header className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-semibold tracking-[-0.03em]">Insurvas primitives</h1>
+          <h1 className="text-2xl font-semibold leading-[1.21] tracking-[-0.02em]">Insurvas primitives</h1>
           <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
             Every variant and state of the shared controls. Toggle the theme and check both; this
             page is the exit check for a primitive change, and the reference a page review is held

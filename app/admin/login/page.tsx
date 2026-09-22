@@ -85,7 +85,7 @@ export default function AdminLoginPage() {
             gets its <h1> from AdminPageHeader. No stylesheet rule targets card-title here; the
             `[data-slot="card-title"]` selectors in globals.css are all scoped to `.portal-*`.
           */}
-          <h1 className="text-xl leading-none font-semibold">Insurvas Super Admin</h1>
+          <h1 className="text-2xl font-semibold leading-[1.21] tracking-[-0.02em]">Insurvas Super Admin</h1>
           <CardDescription>
             {step === "credentials"
               ? "Sign in to the platform admin panel. You will be asked for your authenticator code next."
