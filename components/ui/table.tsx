@@ -78,12 +78,19 @@ function TableHead({ className, ...props }: React.ComponentProps<"th">) {
   )
 }
 
+/**
+ * 8px vertical padding, not 12.
+ *
+ * The roomier cell measured 46.7px a row against 38.7px, which is three fewer rows in a 900px
+ * viewport — a 19% loss on screens an agent reads all day. Marketing spacing belongs on marketing
+ * pages; a queue is paid for in rows.
+ */
 function TableCell({ className, ...props }: React.ComponentProps<"td">) {
   return (
     <td
       data-slot="table-cell"
       className={cn(
-        "px-2 py-3 align-middle whitespace-nowrap [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
+        "p-2 align-middle whitespace-nowrap [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
         className
       )}
       {...props}
