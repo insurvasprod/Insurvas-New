@@ -2,7 +2,7 @@ import "server-only";
 
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { createVendorReturnClaim, describeClaims, optionalScorecardUuid } from "./service";
-import { CLAIM_REASONS, isClaimReason } from "./returnModel";
+import { CLAIM_REASONS, calendarDaysLeft, isClaimReason } from "./returnModel";
 import type { CampaignCandidateSummary, CampaignCostPerPolicy, CandidateReasonRow, ClaimReason, ReturnCandidateRow, VendorReturnsPageData, VendorUndialableRate } from "./returnModel";
 import type { VendorReturnCandidate, VendorReturnClaim, VendorReturnsReport } from "./types";
 
@@ -165,13 +165,36 @@ function normalizeUndialable(value: unknown): VendorUndialableRate[] {
   }));
 }
 
+/**
+ * The tenant's own zone for counting calendar days: Settings › Agency profile, as deal_local_date
+ * reads it. UTC when none is set (or it cannot be read), which is what the SQL falls back to too.
+ */
+export async function tenantCalendarZone(tenantId: string): Promise<string> {
+  const { data, error } = await db().from("agency_profiles").select("timezone").eq("tenant_id", tenantId).limit(1);
+  const zone = error ? null : ((data as Array<{ timezone: string | null }> | null) ?? [])[0]?.timezone ?? null;
+  if (!zone) return "UTC";
+  try { new Intl.DateTimeFormat("en-US", { timeZone: zone }); return zone; } catch { return "UTC"; }
+}
+
+/**
+ * Days left counted as calendar days in the tenant's zone (LA-2.19-2), from the closing instant the
+ * database returns. Done here as well as in SQL (20260925709810) so the countdown is right whether
+ * or not that migration is applied, and so the two can never disagree.
+ */
+function withCalendarDays(rows: CampaignCandidateSummary[], zone: string, now = new Date()): CampaignCandidateSummary[] {
+  return rows.map((row) => ({ ...row, days_left: row.soonest_closes_at ? calendarDaysLeft(row.soonest_closes_at, zone, now) : row.days_left }));
+}
+
 /** Claimable dollars and days left per campaign — the ONE definition (Vendors reads it by vendor). */
-export async function getReturnCandidatesSummary(tenantId: string, vendorId?: string | null): Promise<{ rows: CampaignCandidateSummary[]; fallback: boolean }> {
-  const { data, error } = await db().rpc("vendor_returns_candidates_summary", { p_tenant_id: tenantId, p_vendor_id: vendorId ?? null, p_campaign_id: null });
-  if (!error) return { rows: normalizeSummary(data), fallback: false };
+export async function getReturnCandidatesSummary(tenantId: string, vendorId?: string | null): Promise<{ rows: CampaignCandidateSummary[]; fallback: boolean; zone: string }> {
+  const [{ data, error }, zone] = await Promise.all([
+    db().rpc("vendor_returns_candidates_summary", { p_tenant_id: tenantId, p_vendor_id: vendorId ?? null, p_campaign_id: null }),
+    tenantCalendarZone(tenantId),
+  ]);
+  if (!error) return { rows: withCalendarDays(normalizeSummary(data), zone), fallback: false, zone };
   if (!isMissingSchema(error)) throw new Error(`Could not load what is claimable: ${error.message}`);
-  const rows = await fallbackSummary(tenantId);
-  return { rows: vendorId ? rows.filter((row) => row.vendor_id === vendorId) : rows, fallback: true };
+  const rows = withCalendarDays(await fallbackSummary(tenantId), zone);
+  return { rows: vendorId ? rows.filter((row) => row.vendor_id === vendorId) : rows, fallback: true, zone };
 }
 
 /** The undialable share per vendor, or null before 20260925707800. Never the claim acceptance rate. */
@@ -197,7 +220,12 @@ export const CANDIDATE_ROW_LIMIT = 500;
 export async function getCampaignCandidateRows(tenantId: string, campaignId: unknown): Promise<ReturnCandidateRow[]> {
   const parsed = optionalScorecardUuid(campaignId, "campaign");
   if (!parsed) throw new ReturnsRequestError("Choose a campaign", 400);
-  const { data, error } = await db().rpc("vendor_return_candidates", { p_tenant_id: tenantId, p_campaign_id: parsed }).limit(CANDIDATE_ROW_LIMIT);
+  const [{ data, error }, zone] = await Promise.all([
+    db().rpc("vendor_return_candidates", { p_tenant_id: tenantId, p_campaign_id: parsed }).limit(CANDIDATE_ROW_LIMIT),
+    tenantCalendarZone(tenantId),
+  ]);
+  const now = new Date();
+  const days = (until: string, fallback: number) => (until ? calendarDaysLeft(until, zone, now) : fallback);
   if (!error) {
     return ((data ?? []) as Array<Record<string, unknown>>).filter((row) => isClaimReason(row.reason)).map((row) => ({
       source: row.source === "import" ? "import" : "lead",
@@ -206,7 +234,7 @@ export async function getCampaignCandidateRows(tenantId: string, campaignId: unk
       reason: row.reason as ClaimReason,
       evidence: (row.evidence as Record<string, unknown> | null) ?? {},
       claimable_until: text(row.claimable_until),
-      days_remaining: num(row.days_remaining),
+      days_remaining: days(text(row.claimable_until), num(row.days_remaining)),
       claimable: row.claimable === true,
     }));
   }
@@ -220,7 +248,7 @@ export async function getCampaignCandidateRows(tenantId: string, campaignId: unk
     reason: row.reason,
     evidence: row.evidence ?? {},
     claimable_until: row.claimable_until,
-    days_remaining: row.days_remaining,
+    days_remaining: days(row.claimable_until, row.days_remaining),
     claimable: row.claimable,
   }));
 }

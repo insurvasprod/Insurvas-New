@@ -374,6 +374,7 @@ export function explainAssignmentError(error: DbError): string {
     case "ASSIGNMENT_WORK_ITEM_NOT_FOUND": return "There is no such work item, or nothing is waiting in the pool.";
     case "ASSIGNMENT_LEAD_NOT_FOUND": return "That work item's lead no longer exists.";
     case "ASSIGNMENT_WORK_ITEM_CLOSED": return "That work item is closed, so it cannot be assigned.";
+    case "ASSIGNMENT_NUMBER_SUPPRESSED": return "This lead's number is on a do-not-call list, so it cannot be assigned to anyone.";
     case "ASSIGNMENT_MANAGER_REQUIRED": return "Only an owner or producer can move a lead someone else owns.";
     case "REASSIGNMENT_REASON_REQUIRED": return "Give a reason to move a lead that someone already owns.";
     case "ASSIGNMENT_TARGET_AT_CAPACITY": return "That person is at their capacity ceiling. Raise it in the capacity table or pick someone else.";

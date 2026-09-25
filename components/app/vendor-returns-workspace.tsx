@@ -14,6 +14,7 @@ import type { VendorReturnClaim } from "@/lib/vendorScorecard/types";
 import {
   REASON_LABEL,
   claimAmountCents,
+  closesLabel,
   costPerIssuedAfterCredit,
   costPerIssuedBeforeCredit,
   reasonEvidence,
@@ -46,7 +47,8 @@ const STATUS: Record<VendorReturnClaim["status"], { label: string; tone: StatusT
   rejected: { label: "Rejected", tone: "danger" },
 };
 const unreconciled = (claim: VendorReturnClaim) => claim.status === "draft" || claim.status === "submitted";
-const daysText = (days: number | null) => (days === null ? "Window closed" : days === 0 ? "Closes today" : `${days} day${days === 1 ? "" : "s"} left`);
+// Calendar days in the tenant's zone, counted by the service (LA-2.19-2): 1 is "Closes tomorrow".
+const daysText = (days: number | null) => closesLabel(days);
 
 const control = "box-border inline-flex h-10 items-center gap-2 rounded-lg border border-[var(--border-strong)] bg-card px-3.5 text-sm font-semibold leading-[1.43] tracking-[-0.01em] text-foreground";
 const field = "h-9 w-full rounded-lg border border-[var(--border-strong)] bg-card px-2.5 text-sm text-foreground";
@@ -212,7 +214,7 @@ function CandidateRows({ state }: { state: { rows: ReturnCandidateRow[]; limit: 
             : <span className="font-semibold text-foreground">{line ? `File line ${line}` : "Removed at import"}{phone ? <span className="font-normal text-muted-foreground"> &middot; &hellip;{phone}</span> : null}</span>}</td>
           <td className={td}>{REASON_LABEL[item.reason]}</td>
           <td className={td}>{item.source === "import" ? "Removed at import" : evidence.source === "disposition" ? `Call disposition${attempt ? ` · attempt ${attempt}` : ""}` : "Scrub result"}</td>
-          <td className={td}>{item.claimable ? <StatusChip tone={item.days_remaining <= 3 ? "danger" : "neutral"}>{item.days_remaining === 0 ? "Closes today" : `${item.days_remaining} days left`}</StatusChip> : <StatusChip tone="neutral" dot={false}>Expired</StatusChip>}</td>
+          <td className={td}>{item.claimable ? <StatusChip tone={item.days_remaining <= 3 ? "danger" : "neutral"}>{closesLabel(item.days_remaining)}</StatusChip> : <StatusChip tone="neutral" dot={false}>Expired</StatusChip>}</td>
         </tr>;
       })}</tbody>
     </table>
@@ -392,7 +394,7 @@ export function VendorReturnsWorkspace({ eyebrow, initialVendorId }: { eyebrow?:
           {draftable.length === 0 ? <p className="text-sm leading-normal text-muted-foreground">Nothing is claimable right now{vendorId ? " for this vendor" : ""}. A row becomes claimable when a scrub removes or flags it, or a call is dispositioned wrong number or disconnected, and stays so until its return window closes.</p>
             : draftable.map((entry) => <button key={entry.campaign_id} type="button" role="menuitem" className="flex items-baseline justify-between gap-3 rounded-lg px-2.5 py-2 text-left hover:bg-[var(--surface-alt)]" onClick={() => openPreview(entry.campaign_id)}>
               <span className="min-w-0"><span className="block truncate text-sm font-semibold text-foreground">{entry.vendor_name} &middot; {entry.campaign_name}</span><span className="block text-xs text-muted-foreground">{count(entry.claimable_rows)} claimable row{entry.claimable_rows === 1 ? "" : "s"}{entry.unit_cost_cents == null ? "" : ` · ${dollars(entry.claimable_cents)}`}</span></span>
-              <span className={`shrink-0 text-xs font-semibold tabular-nums ${entry.days_left !== null && entry.days_left <= 3 ? "text-[var(--error-ink)]" : "text-muted-foreground"}`}>{entry.days_left === 0 ? "closes today" : `${entry.days_left}d left`}</span>
+              <span className={`shrink-0 text-xs font-semibold tabular-nums ${entry.days_left !== null && entry.days_left <= 3 ? "text-[var(--error-ink)]" : "text-muted-foreground"}`}>{entry.days_left === 0 ? "closes today" : entry.days_left === 1 ? "closes tomorrow" : `${entry.days_left}d left`}</span>
             </button>)}
         </div>}
       </div>}

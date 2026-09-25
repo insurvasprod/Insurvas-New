@@ -15,7 +15,7 @@ function errorResponse(error: unknown) {
   if (!(error instanceof BufferHandoffError)) return NextResponse.json({ error: "The handoff service is unavailable." }, { status: 500 });
   const status = ["licensed_agent_required", "buffer_role_required", "buffer_owner_required"].includes(error.code) ? 403
     : ["handoff_not_found", "work_item_not_found"].includes(error.code) ? 404
-      : ["handoff_pending", "handoff_not_available", "handoff_expired"].includes(error.code) ? 409
+      : ["handoff_pending", "handoff_not_available", "handoff_expired", "language_not_spoken"].includes(error.code) ? 409
         : ["invalid_input"].includes(error.code) ? 400 : 500;
   return NextResponse.json({ error: error.message, code: error.code }, { status });
 }

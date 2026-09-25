@@ -4,7 +4,7 @@ import { audit } from "@/lib/audit/log";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { postPartnerSystemCard } from "@/lib/partnerChat/service";
 import type { PreflightResult } from "@/lib/existingCustomerPreflight/types";
-import { isWithAgent, screeningSignal, type InboxSummary } from "./constants";
+import { isWithAgent, screeningSignal, transferPhase, TRANSFER_PHASE_LABEL, type InboxSummary } from "./constants";
 
 export type InboxFilters = {
   /** `open` is unclaimed plus in progress (20260924170000): what Agent Floor shows, without history. */
@@ -97,6 +97,9 @@ export async function getTransferInbox(tenantId: string, filters: InboxFilters, 
     partnerName: row.partner_name ?? "Unassigned partner",
     productLine: row.product_line,
     status: row.status,
+    // LA-1.14-6: the spec's five states, whichever of the two licensed-agent words is stored.
+    phase: transferPhase(row.status),
+    phaseLabel: TRANSFER_PHASE_LABEL[transferPhase(row.status)],
     ownerUserId: row.owner_user_id,
     ownerName: row.owner_name,
     claimedAt: row.claimed_at,
@@ -139,6 +142,11 @@ export function transferCustomerName(values: unknown): string {
   return pick(v.full_name) || pick(v.name) || composed || "Unnamed customer";
 }
 
+/**
+ * The partner's "Connected" card, once per claim (LA-1.14-7). A buffer claim is a connection too: the
+ * customer is now on the line with the agency. "Transferred" is the licensed agent accepting the
+ * buffer's handoff (lib/bufferHandoff). The event key keeps each card to exactly one post.
+ */
 export async function postPartnerClaimMessage(tenantId: string, workItemId: string, userId: string, customer: string, options: { eventKey?: string; message?: string; partnerId?: string | null } = {}) {
   // Callers that already read the tenant-scoped queue row pass partnerId, saving a round trip.
   let partnerId = options.partnerId;
@@ -148,7 +156,7 @@ export async function postPartnerClaimMessage(tenantId: string, workItemId: stri
     partnerId = queue?.partner_id ?? null;
   }
   if (!partnerId) throw new Error("Partner channel is not available for this transfer");
-  return postPartnerSystemCard({ tenantId, partnerId, workItemId, userId, eventKey: options.eventKey ?? `claim:${workItemId}`, cardType: options.eventKey?.startsWith("buffer-claim:") ? "transferred" : "connected", message: options.message ?? `${customer} is connected to the agent` });
+  return postPartnerSystemCard({ tenantId, partnerId, workItemId, userId, eventKey: options.eventKey ?? `claim:${workItemId}`, cardType: "connected", message: options.message ?? `${customer} is connected to the agent` });
 }
 
 /**
@@ -180,7 +188,7 @@ export async function getInboxSummaryFallback(tenantId: string): Promise<InboxSu
 }
 
 export class ClaimNextError extends Error {
-  constructor(public code: "no_transfer_waiting" | "role_not_allowed" | "schema_pending" | "claim_failed", message: string) { super(message); }
+  constructor(public code: "no_transfer_waiting" | "role_not_allowed" | "language_not_spoken" | "schema_pending" | "claim_failed", message: string) { super(message); }
 }
 
 /**
@@ -201,6 +209,7 @@ export async function claimNextTransfer(params: { tenantId: string; userId: stri
   });
   if (error) {
     if (error.message === "NO_TRANSFER_WAITING") throw new ClaimNextError("no_transfer_waiting", "No transfer is waiting that matches these filters.");
+    if (error.message === "LANGUAGE_NOT_SPOKEN") throw new ClaimNextError("language_not_spoken", "The next caller asked for a language you do not list.");
     if (error.message === "ROLE_NOT_ALLOWED") throw new ClaimNextError("role_not_allowed", "Your role cannot claim transfers.");
     if (error.code === "42883" || error.code === "PGRST202") throw new ClaimNextError("schema_pending", "This setting needs a database update that has not been applied yet.");
     console.error("[claim-next] claim_next_transfer failed", error.code, error.message, error.details);

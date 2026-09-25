@@ -34,6 +34,37 @@ const USABLE_BASIS_MISSING: SchemaGapNotice = {
     "Cost per usable record needs the scrub-rejection ledger, which a pending migration creates. Spend, records purchased and cost per purchased record are exact.",
 };
 
+type FunnelRow = { leads_received: number; dialable_leads: number; dialed_leads: number; contacted_leads: number; quoted_leads: number };
+
+const FUNNEL_PENDING: SchemaGapNotice = {
+  missing: ["contacted_leads"],
+  detail: "Contacts per campaign need a database update that has not been applied yet. Leads and dialled counts are exact.",
+};
+
+/**
+ * LA-2.1-3: leads, dialable, dialled and contacted per campaign, all time, by the scorecard's own
+ * definitions (tenant_campaign_funnel, 20260925709800) — the numbers /app/lead-lists shows for the
+ * same campaign. Null with a notice until that migration is applied; a real fault is a fault.
+ */
+async function campaignFunnel(tenantId: string): Promise<{ rows: Record<string, FunnelRow> | null; pending: SchemaGapNotice | null }> {
+  const { data, error } = await (getSupabaseServiceClient() as unknown as { rpc(name: string, args: Record<string, unknown>): PromiseLike<{ data: unknown; error: { message: string; code?: string } | null }> }).rpc("tenant_campaign_funnel", { p_tenant_id: tenantId });
+  if (error) {
+    if (isSchemaGap(error) || error.code === "PGRST202" || /could not find the function/i.test(error.message)) return { rows: null, pending: FUNNEL_PENDING };
+    throw new Error(`Could not count each campaign's contacts: ${error.message}`);
+  }
+  const rows: Record<string, FunnelRow> = {};
+  for (const row of (data ?? []) as Array<Record<string, unknown>>) {
+    rows[String(row.campaign_id)] = {
+      leads_received: Number(row.leads_received ?? 0),
+      dialable_leads: Number(row.dialable_leads ?? 0),
+      dialed_leads: Number(row.dialed_leads ?? 0),
+      contacted_leads: Number(row.contacted_leads ?? 0),
+      quoted_leads: Number(row.quoted_leads ?? 0),
+    };
+  }
+  return { rows, pending: null };
+}
+
 export async function GET() {
   const auth = await requireFeatureRole("outbound_dialing", roles);
   if (auth instanceof NextResponse) return auth;
@@ -44,11 +75,12 @@ export async function GET() {
   // cost-per-record column ended up captured and never displayed.
   // The concept audit's per-campaign facts (worked, workable, cadence, scrub run, cost per issued,
   // test batch) ride alongside, each tolerant of its own migration not being applied yet.
-  const [full, extras] = await Promise.all([
+  const [full, extras, funnel] = await Promise.all([
     db.from("tenant_campaign_costs").select(COST_COLUMNS).eq("tenant_id", auth.context.tenantId).order("name"),
     campaignExtras(auth.context.tenantId, auth.entitlement),
+    campaignFunnel(auth.context.tenantId),
   ]);
-  const shared = { ...extras, canScrub: auth.context.role === "owner" };
+  const shared = { ...extras, funnel: funnel.rows, canScrub: auth.context.role === "owner", ...(funnel.pending ? { funnelPending: funnel.pending } : {}) };
   if (!full.error)
     return NextResponse.json(
       { campaigns: full.data ?? [], limits: await outboundLimitSnapshot(auth.context.tenantId), ...shared },

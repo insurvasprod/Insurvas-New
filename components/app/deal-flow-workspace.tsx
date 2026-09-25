@@ -13,6 +13,7 @@
  */
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
+import Link from "next/link";
 import { CalendarDays, ChevronDown, Copy } from "lucide-react";
 
 import { PageHeader } from "@/components/ui/page-header";
@@ -525,6 +526,7 @@ export function DealFlowWorkspace({ focusLeadId, timeZone = null }: { focusLeadI
                         <button type="button" onClick={(event) => { event.stopPropagation(); setSelectedId(row.id); }} className="block max-w-full truncate rounded-[4px] text-left text-inherit focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]">
                           {customerName(row)}
                         </button>
+                        <Link href={`/app/leads/${row.lead_id}`} onClick={(event) => event.stopPropagation()} className="text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--accent-ink)] hover:underline">Open lead</Link>
                         {isPinned && <span className={st.sub}>Outside these filters</span>}
                       </td>
                       <td className={st.td}>{row.campaign_name ?? "—"}</td>
@@ -594,6 +596,8 @@ export function DealFlowWorkspace({ focusLeadId, timeZone = null }: { focusLeadI
                 { label: "Annualised", value: annualised(selectedRow.monthly_premium_cents) },
                 { label: "Written", value: formatStamp(selectedRow.created_at, timeZone) ?? "—" },
                 { label: "Owner", value: shortPerson(selectedRow.agent_name) },
+                // LA-1.13-2: the buffer who took the call first, when one did.
+                { label: "Buffer", value: selectedRow.buffer_agent_name ? shortPerson(selectedRow.buffer_agent_name) : "—" },
               ]}
             />
             <div className="mt-4 border-t border-[var(--border)] pt-4">
@@ -605,6 +609,7 @@ export function DealFlowWorkspace({ focusLeadId, timeZone = null }: { focusLeadI
                   { label: "Draft date", value: formatDay(selectedRow.draft_date) },
                   { label: "Phone", value: selectedRow.phone ?? "—" },
                   { label: "Partner", value: selectedRow.partner_name },
+                  { label: "Initial quote", value: selectedRow.initial_quote ?? "—" },
                 ]}
               />
             </div>
@@ -615,7 +620,11 @@ export function DealFlowWorkspace({ focusLeadId, timeZone = null }: { focusLeadI
             </div>
             <IssuedPolicyPanel dealId={selectedRow.id} defaultCarrier={selectedRow.carrier} readOnly={data.readOnly} onChanged={() => void load(query)} />
             <div className="mt-4">
-              <button type="button" className={btn("secondary")} disabled={data.readOnly || editing === selectedRow.id} onClick={() => startEdit(selectedRow)}>Edit record</button>
+              <span className="flex flex-wrap gap-2">
+                <button type="button" className={btn("secondary")} disabled={data.readOnly || editing === selectedRow.id} onClick={() => startEdit(selectedRow)}>Edit record</button>
+                {/* LA-1.20-5: every lead list links to the lead workspace. */}
+                <Link href={`/app/leads/${selectedRow.lead_id}`} className={btn("secondary")}>Open lead</Link>
+              </span>
               {data.readOnly && <span className="mt-1.5 block text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">Read-only access cannot edit deals.</span>}
             </div>
           </Card>

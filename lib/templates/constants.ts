@@ -9,6 +9,9 @@ export const TEMPLATE_FIELD_TYPES = [
   "phone",
   "email",
   "ssn",
+  // LA-1.4-6: stored as digit strings; routing numbers pass the ABA checksum (lib/templates/formats).
+  "bank_routing",
+  "bank_account",
   "boolean",
   "single_select",
   "multi_select",
@@ -24,6 +27,8 @@ export const TEMPLATE_FIELD_TYPE_LABELS: Record<TemplateFieldType, string> = {
   phone: "Phone",
   email: "Email",
   ssn: "SSN",
+  bank_routing: "Bank routing number",
+  bank_account: "Bank account number",
   // The form templates board calls a pick-one field a "Choice". Only the labels changed: the stored
   // type values (boolean, single_select, multi_select) are untouched.
   boolean: "Yes / no choice",
@@ -107,8 +112,17 @@ export type TemplateFormSection = {
   sort_order: number;
 };
 
+/**
+ * LA-1.4-3: which of the six application-form section groups this product's form offers. A missing
+ * key means available. Sections are matched to a group by their key or label (sectionAvailability.ts).
+ */
+export const TEMPLATE_SECTION_GROUPS = ["personal", "medical", "insurance", "beneficiary", "banking", "signature"] as const;
+export type TemplateSectionGroup = (typeof TEMPLATE_SECTION_GROUPS)[number];
+export type TemplateSectionAvailability = Partial<Record<TemplateSectionGroup, boolean>>;
+
 export type TemplateFormDefinition = {
   sections: TemplateFormSection[];
+  section_availability?: TemplateSectionAvailability;
 };
 
 export type TemplateRow = {

@@ -7,8 +7,10 @@ import {
   deleteFormDraft,
   getPartnerTemplateForProduct,
   getPartnerTemplateForProductProfileRevision,
-  getTenantTemplateForProductVersion,
+  getPartnerTenantTemplateForProductVersion,
+  deletePartnerFormDraftById,
   loadFormDraft,
+  loadPartnerFormDraftById,
   PartnerDuplicateError,
   validateValues,
 } from "@/lib/agentTemplates/service";
@@ -40,6 +42,7 @@ export async function POST(request: NextRequest) {
     consent_attested?: unknown;
     carrier_id?: unknown;
     carrier_state?: unknown;
+    draft_id?: unknown;
   } | null;
   if (
     typeof body?.product_code !== "string" ||
@@ -84,6 +87,20 @@ export async function POST(request: NextRequest) {
       { error: "The consent confirmation is invalid" },
       { status: 400 },
     );
+  const slottedDraft = Object.prototype.hasOwnProperty.call(body, "draft_id");
+  if (
+    slottedDraft &&
+    body.draft_id !== null &&
+    (typeof body.draft_id !== "string" ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+        body.draft_id,
+      ))
+  )
+    return NextResponse.json(
+      { error: "The draft id is invalid" },
+      { status: 400 },
+    );
+  const draftId = typeof body.draft_id === "string" ? body.draft_id : null;
   try {
     if (
       typeof body.carrier_id !== "string" ||
@@ -132,12 +149,23 @@ export async function POST(request: NextRequest) {
           auth.context.userId,
           body.product_code,
         ),
-        loadFormDraft(
-          auth.context.tenantId,
-          auth.context.userId,
-          body.product_code,
-          auth.context.partnerId,
-        ),
+        // LA-1.6-5: the portal names the draft it is submitting (null for a form never saved);
+        // a caller that sends no draft_id gets the newest draft for the product, as before.
+        slottedDraft
+          ? draftId
+            ? loadPartnerFormDraftById(
+                auth.context.tenantId,
+                auth.context.userId,
+                auth.context.partnerId,
+                draftId,
+              ).then((draft) => (draft?.product_code === body.product_code ? draft : null))
+            : Promise.resolve(null)
+          : loadFormDraft(
+              auth.context.tenantId,
+              auth.context.userId,
+              body.product_code,
+              auth.context.partnerId,
+            ),
       ]);
     const settled = <T,>(result: PromiseSettledResult<T>): T => {
       if (result.status === "rejected") throw result.reason;
@@ -158,7 +186,7 @@ export async function POST(request: NextRequest) {
               existingDraft.partner_submission_profile_revision,
               body.product_code,
             )
-          : await getTenantTemplateForProductVersion(
+          : await getPartnerTenantTemplateForProductVersion(
               auth.context.tenantId,
               body.product_code,
               existingDraft.definition_version,
@@ -267,6 +295,8 @@ export async function POST(request: NextRequest) {
       {
         screeningWarningAcknowledged:
           body.screening_warning_acknowledged === true,
+        // LA-1.5-4: submitting over an internal DQ needs a reason, stored like a duplicate override.
+        requireInternalDqReason: true,
         duplicateOverrideJustification:
           typeof body.duplicate_override_justification === "string"
             ? body.duplicate_override_justification
@@ -295,12 +325,20 @@ export async function POST(request: NextRequest) {
       request,
       failureInjection,
     });
-    await deleteFormDraft(
-      auth.context.tenantId,
-      auth.context.userId,
-      body.product_code,
-      auth.context.partnerId,
-    );
+    if (!slottedDraft)
+      await deleteFormDraft(
+        auth.context.tenantId,
+        auth.context.userId,
+        body.product_code,
+        auth.context.partnerId,
+      );
+    else if (draftId)
+      await deletePartnerFormDraftById(
+        auth.context.tenantId,
+        auth.context.userId,
+        auth.context.partnerId,
+        draftId,
+      );
     await audit({
       actorType: "tenant",
       actorId: auth.context.userId,
@@ -331,6 +369,7 @@ export async function POST(request: NextRequest) {
         metadata: {
           partnerId: auth.context.partnerId,
           productCode: body.product_code,
+          internalDq: screening.outcome === "internal_dq",
         },
         request,
       });
@@ -364,6 +403,23 @@ export async function POST(request: NextRequest) {
     }
     const message =
       error instanceof Error ? error.message : "Could not submit lead";
+    if (message === "internal_dq_reason_required")
+      return NextResponse.json(
+        {
+          error:
+            "This number matches an existing lead. Say why this is a separate lead (10 to 1000 characters) to submit it.",
+          code: "internal_dq_reason_required",
+        },
+        { status: 409 },
+      );
+    if (message === "unknown_screening_version")
+      return NextResponse.json(
+        {
+          error: "Screening could not be completed. Do not treat this number as safe.",
+          code: "unknown_screening_version",
+        },
+        { status: 503 },
+      );
     const status =
       message === "partner_product_not_approved" ||
       message === "product_not_enabled" ||

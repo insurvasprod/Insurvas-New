@@ -9,6 +9,37 @@ export const WITH_AGENT_STATUSES = ["claimed", "buffer_active", "handed_pending"
 /** Waiting or with an agent -- everything not yet finished. The inbox RPC's `open` (20260924170000). */
 export const OPEN_TRANSFER_STATUSES = ["unclaimed", ...WITH_AGENT_STATUSES] as const;
 
+/**
+ * LA-1.14's five states for a transfer, read from the stored status. The spec gives two words for
+ * the licensed agent having the call: LA-1.10's claim stores `claimed` (a licensed agent took it
+ * straight from the queue) and LA-1.14's handoff stores `la_active` (they took it from a buffer).
+ * Both are the one state `la_active`. `completed`, `dropped`, `expired` and `closed` are all
+ * `closed`. The stored values stay as they are: `claimed` is also the outbound dialer's served
+ * state and the activity log's served trigger, so renaming it would break both for no gain.
+ */
+export const TRANSFER_PHASES = ["unclaimed", "buffer_active", "handed_pending", "la_active", "closed"] as const;
+export type TransferPhase = (typeof TRANSFER_PHASES)[number];
+
+export const TRANSFER_PHASE_LABEL: Record<TransferPhase, string> = {
+  unclaimed: "Waiting",
+  buffer_active: "With a buffer",
+  handed_pending: "Being handed off",
+  la_active: "With a licensed agent",
+  closed: "Closed",
+};
+
+export function transferPhase(status: string): TransferPhase {
+  if (status === "unclaimed" || status === "buffer_active" || status === "handed_pending") return status;
+  if (status === "claimed" || status === "la_active") return "la_active";
+  return "closed";
+}
+
+/** "Spanish" for a language key the database returns ("spanish"), for refusal messages. */
+export function languageName(key: string | null | undefined) {
+  const value = (key ?? "").trim();
+  return value ? value.replace(/\b\w/g, (letter) => letter.toUpperCase()) : "another language";
+}
+
 export function isWithAgent(status: string) {
   return (WITH_AGENT_STATUSES as readonly string[]).includes(status);
 }

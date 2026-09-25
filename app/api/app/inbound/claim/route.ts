@@ -4,6 +4,7 @@ import { z } from "zod";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import { announceTransferClaim } from "@/lib/transferInbox/service";
+import { languageRefusal } from "@/lib/transferInbox/release";
 
 const bodySchema = z.object({ work_item_id: z.string().uuid() }).strict();
 
@@ -32,6 +33,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: `This transfer was already claimed by ${ownerName}.`, code: "already_claimed", claimed_by: claimedBy }, { status: 409 });
     }
     if (error.message === "WORK_ITEM_NOT_FOUND") return NextResponse.json({ error: "That transfer is no longer available." }, { status: 404 });
+    // LA-1.14-10 (20260925709860): the caller asked for a language this agent does not list.
+    if (error.message === "LANGUAGE_NOT_SPOKEN") return NextResponse.json({ error: languageRefusal(error.details), code: "language_not_spoken", language: error.details ?? null }, { status: 409 });
     if (error.message === "ROLE_NOT_ALLOWED") return NextResponse.json({ error: "Your role cannot claim transfers.", code: "role_not_allowed" }, { status: 403 });
     console.error("[claim] claim_transfer_lead failed", error.code, error.message, error.details);
     return NextResponse.json({ error: "Could not claim this transfer" }, { status: 500 });

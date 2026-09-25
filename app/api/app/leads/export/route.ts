@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
-import { consentForLeads, csvForLeads, getAgentTemplate, listAgentLeads } from "@/lib/agentTemplates/service";
+import { consentForLeads, csvForLeads, exportAgentLeads, getAgentTemplate } from "@/lib/agentTemplates/service";
 import { listPipelines } from "@/lib/pipelines/service";
 
 // LA-2.12. The book of business is the licensed agent's — it carries premiums, quotes and
@@ -16,7 +16,8 @@ export async function GET(request: NextRequest) {
   try {
     const template = await getAgentTemplate(auth.context.tenantId, auth.context.userId);
     const params = request.nextUrl.searchParams;
-    const leads = await listAgentLeads(auth.context.tenantId, template, params.get("q")?.trim() ?? "", params.get("filter_field") ?? "", params.get("filter_value") ?? "", params.get("sort") ?? "", params.get("direction") === "desc" ? "desc" : "asc");
+    // Every lead of this product, posted ones included, paged past the row cap (LA-2.6-6).
+    const leads = await exportAgentLeads(auth.context.tenantId, template, params.get("q")?.trim() ?? "", params.get("filter_field") ?? "", params.get("filter_value") ?? "", params.get("sort") ?? "", params.get("direction") === "desc" ? "desc" : "asc");
     const pipelines = await listPipelines(auth.context.tenantId);
 
     // LA-2.6 criterion 6. The certificate is the thing a regulator or a plaintiff's lawyer asks

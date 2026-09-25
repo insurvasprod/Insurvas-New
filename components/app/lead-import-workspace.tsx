@@ -13,6 +13,7 @@ import { ColumnMappingDialog, columnMappingStatus, type MappingRow } from "@/com
 import { sectionForPath } from "@/lib/menu/definition";
 import { EMPTY_DATE_SCAN, inferredImportDateOrder, isImportDateOrder, parseCsv, previewLeadCsv, suggestLeadCsvMappings, type ImportDateOrder } from "@/lib/agentTemplates/csv";
 import { IMPORT_CSV_KEY, parseDollarsToCents, parseRecordCount } from "@/lib/agentTemplates/importReviewModel";
+import { isXlsxFile, readXlsxAsCsv, XLSX_TYPES } from "@/lib/agentTemplates/xlsx";
 import type { TemplateFieldType } from "@/lib/templates/constants";
 import { cn } from "@/lib/utils";
 
@@ -117,6 +118,10 @@ export function LeadImportWorkspace() {
   const [pickedDateOrder, setPickedDateOrder] = useState<ImportDateOrder | null>(null);
   /** A quiet word when the vendor's map could not be saved on Continue. Never blocks the import. */
   const [saveNote, setSaveNote] = useState<string | null>(null);
+  /** An Excel file is being read into CSV. */
+  const [reading, setReading] = useState(false);
+  /** Which worksheet of a multi-sheet workbook was read. */
+  const [sheetNote, setSheetNote] = useState<string | null>(null);
   const router = useRouter();
   const storageOk = useSyncExternalStore(noSubscription, sessionStorageWorks, () => true);
 
@@ -174,7 +179,7 @@ export function LeadImportWorkspace() {
               : null;
   // One reason, shown under the button, for why it cannot be pressed yet — never a silent grey.
   const blockedReason =
-    !csv ? "Choose a CSV file first."
+    !csv ? "Choose a CSV or Excel file first."
       : !info ? "Loading the import settings…"
         : validation?.error ? "Correct the file and choose it again."
           : !mapConfirmed ? "Confirm the column mapping first: use Map columns."
@@ -193,8 +198,27 @@ export function LeadImportWorkspace() {
 
   async function takeFile(chosen: File | undefined) {
     if (!chosen) return;
+    // LA-2.2-1: an Excel file is read here, in the browser, into the same CSV text a CSV upload
+    // gives — so every rule after this line (mapping, validation, scrub, dedupe) is the CSV path.
+    let text: string;
+    if (isXlsxFile(chosen)) {
+      setReading(true);
+      try {
+        const read = await readXlsxAsCsv(await chosen.arrayBuffer());
+        text = read.csv;
+        setSheetNote(read.sheets > 1 ? `Read the worksheet “${read.sheetName}”, the first of ${read.sheets} with data. Save the others as their own files to import them.` : null);
+      } catch (error) {
+        notify.block("This Excel file could not be read", { detail: error instanceof Error ? error.message : "Save it again as .xlsx, or export it as CSV." });
+        return;
+      } finally {
+        setReading(false);
+      }
+    } else {
+      text = await chosen.text();
+      setSheetNote(null);
+    }
     setFile({ name: chosen.name, size: chosen.size });
-    setCsv(await chosen.text());
+    setCsv(text);
     setMapping({});
     setErrorsOpen(false);
     setRecordsText(null);
@@ -206,7 +230,7 @@ export function LeadImportWorkspace() {
   }
 
   function reset() {
-    setCsv(""); setFile(null); setMapping({}); setErrorsOpen(false); setRecordsText(null);
+    setCsv(""); setFile(null); setMapping({}); setErrorsOpen(false); setRecordsText(null); setSheetNote(null);
     setMapOpen(false); setConfirmedKey(null); setPickedDateOrder(null); setSaveNote(null);
   }
 
@@ -346,6 +370,7 @@ export function LeadImportWorkspace() {
               <span className="min-w-0 flex-1">
                 <strong className="block truncate text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">{file.name}</strong>
                 <span className="block text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)] tabular-nums">{fileRows.toLocaleString()} rows · {formatBytes(file.size)}</span>
+                {sheetNote && <span className="block text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">{sheetNote}</span>}
               </span>
               <button type="button" className={btn("row")} onClick={reset}>Replace</button>
             </div>
@@ -356,10 +381,10 @@ export function LeadImportWorkspace() {
               onDrop={(event) => { event.preventDefault(); setDragging(false); void takeFile(event.dataTransfer.files?.[0]); }}
             >
               <span className="inline-flex size-[34px] items-center justify-center rounded-full bg-[var(--surface-alt)] text-[var(--muted)]"><Upload className="size-4" aria-hidden /></span>
-              <p className="mt-2.5 text-[18px] leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]">Drop a vendor CSV here</p>
-              <p className="mt-1.5 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">Up to {(info?.maxRows ?? 20000).toLocaleString()} rows per file</p>
-              <input id="lead-csv" className="peer sr-only" type="file" accept=".csv,text/csv" onChange={(event) => void takeFile(event.target.files?.[0])} />
-              <label htmlFor="lead-csv" className={btn("secondary", "mt-4 h-11 peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-[var(--ring-color)]")}>Choose CSV file</label>
+              <p className="mt-2.5 text-[18px] leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]">Drop a vendor CSV or Excel file here</p>
+              <p className="mt-1.5 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">{reading ? "Reading the workbook…" : `.csv or .xlsx · up to ${(info?.maxRows ?? 20000).toLocaleString()} rows per file`}</p>
+              <input id="lead-csv" className="peer sr-only" type="file" accept={`.csv,text/csv,${XLSX_TYPES}`} disabled={reading} onChange={(event) => void takeFile(event.target.files?.[0])} />
+              <label htmlFor="lead-csv" className={btn("secondary", "mt-4 h-11 peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-[var(--ring-color)]")}>Choose file</label>
             </div>}
 
         {/* Where the inline mapping table was: its summary, and the way back into the dialog. */}

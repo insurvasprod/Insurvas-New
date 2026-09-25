@@ -18,7 +18,7 @@ const filtersSchema = z.object({
 });
 
 /**
- * The inbox polls every second; the SLA ladder changes when an owner edits it. Held for 30 seconds
+ * The inbox re-reads on every realtime change; the SLA ladder changes when an owner edits it. Held for 30 seconds
  * per tenant in this server instance, so an edit shows up within half a minute without a query on
  * every tick.
  */

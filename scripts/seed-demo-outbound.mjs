@@ -48,6 +48,7 @@
  *   node --env-file=.env.local scripts/seed-demo-outbound.mjs --dry-run
  *   node --env-file=.env.local scripts/seed-demo-outbound.mjs
  *   node --env-file=.env.local scripts/seed-demo-outbound.mjs --today
+ *   node --env-file=.env.local scripts/seed-demo-outbound.mjs --resume-recycle   # finish an open recycle batch
  *
  * Needs the dev server on http://localhost:3000 (DEMO_SCREENING_MODE=true: numbers ending 0101 are
  * DNC-listed and 0001 litigator-listed).
@@ -134,6 +135,8 @@ async function insertIgnore(table, rows, size = 400) {
 
 // ── determinism ───────────────────────────────────────────────────────────────
 const sha = (text) => createHash("sha256").update(text).digest("hex");
+/** JSON with sorted keys: jsonb does not keep key order, so a plain stringify never matches a read-back. */
+const stable = (value) => JSON.stringify(value, (_, v) => (v && typeof v === "object" && !Array.isArray(v) ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => a.localeCompare(b))) : v));
 /** A stable uuid for a natural key, so every service-role insert is ON CONFLICT DO NOTHING. */
 function uid(kind, key) {
   const h = sha(`qa-d2:${kind}:${key}`);
@@ -633,7 +636,7 @@ await section("D15 scripts + rebuttals", async () => {
   for (const spec of scripts) {
     const campaignId = spec.campaign ? CAMPAIGN_ID[spec.campaign] : null;
     const match = have.filter((row) => (row.campaign_id ?? null) === campaignId && row.product_code === PRODUCT).sort((a, b) => b.version - a.version)[0];
-    if (match && JSON.stringify(match.sections) === JSON.stringify(spec.sections)) { SCRIPT[spec.key] = match; bump("tenant_scripts", "kept"); continue; }
+    if (match && stable(match.sections) === stable(spec.sections)) { SCRIPT[spec.key] = match; bump("tenant_scripts", "kept"); continue; }
     bump("tenant_scripts", "inserted");
     if (DRY) { SCRIPT[spec.key] = { id: null, version: 1 }; continue; }
     const saved = ok(await api("PUT", "/api/app/dialer/scripts", "owner", { campaign_id: campaignId, product_code: PRODUCT, sections: spec.sections }), `save script ${spec.key}`);
@@ -736,7 +739,7 @@ await section("D4 vendor column maps", async () => {
   for (const [vendor, style] of [["bayview", "bayview"], ["crestview", "crestview"], ["oakridge", "oakridge"]]) {
     const found = have.find((row) => row.vendor_id === VENDOR_ID[vendor]);
     const want = STYLES[style].map;
-    if (found && JSON.stringify(found.mapping) === JSON.stringify(want) && (found.date_order ?? null) === STYLES[style].dateOrder) { bump("tenant_import_mappings", "kept"); continue; }
+    if (found && stable(found.mapping) === stable(want) && (found.date_order ?? null) === STYLES[style].dateOrder) { bump("tenant_import_mappings", "kept"); continue; }
     bump("tenant_import_mappings", found ? "updated" : "inserted");
     if (!DRY) ok(await api("PUT", "/api/app/leads/import/mappings", "owner", { vendor_id: VENDOR_ID[vendor], product_code: PRODUCT, mapping: want, date_order: STYLES[style].dateOrder }), `save mapping ${vendor}`);
   }
@@ -847,10 +850,13 @@ await section("AG-D9 contacts + duplicates + one merge", async () => {
   const people = LEAD_ROWS.filter((r) => (r.campaign === "bayviewA" || r.campaign === "crest") && r.state).slice(0, 1980);
   const dupSource = people.filter((_, i) => i % 97 === 11).slice(0, 20);
   const typoDob = (dob) => { const d = new Date(`${dob}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + (d.getUTCDate() > 27 ? -1 : 1)); return d.toISOString().slice(0, 10); };
+  // Only the custom fields the tenant's contact schema defines right now (it has changed under us once).
+  const schema = DRY ? [] : (ok(await api("GET", "/api/app/contacts/field-schema", "priya"), "read contact fields").fieldSchema ?? []).filter((f) => f.entity === "contact");
+  const defined = new Set(schema.map((f) => f.field_key));
   const body = (r, dup) => {
     const dob = dup ? typoDob(r.dob) : r.dob;
     const email = dup ? `${r.first}.${r.last}.home@example.com`.toLowerCase().normalize("NFD").replace(/[^a-z0-9.@]/g, "") : r.email || null;
-    return { first_name: r.first, last_name: r.last, dob, primary_phone: r.phone, email, state: r.state, postal_code: r.zip, custom_fields: { first_name: r.first, last_name: r.last, phone: r.phone, date_of_birth: dob, state: r.state, tobacco: r.tobacco, zip: r.zip, ...(email ? { email } : {}), ...(r.language ? { language: r.language } : {}) } };
+    return { first_name: r.first, last_name: r.last, dob, primary_phone: r.phone, email, state: r.state, postal_code: r.zip, custom_fields: Object.fromEntries(Object.entries({ first_name: r.first, last_name: r.last, phone: r.phone, date_of_birth: dob, state: r.state, tobacco: r.tobacco, zip: r.zip, ...(email ? { email } : {}), ...(r.language ? { language: r.language } : {}) }).filter(([key]) => defined.has(key))) };
   };
   const rows = [...people.map((r) => ({ r, dup: false })), ...dupSource.map((r) => ({ r, dup: true }))];
   const existing = await inChunks([...new Set(rows.map(({ r }) => r.phone))], 150, (part) => db.from("contacts").select("id, primary_phone, dob, merged_into_id").eq("tenant_id", TENANT_ID).in("primary_phone", part));
@@ -890,12 +896,12 @@ await section("read back seeded leads", async () => {
     return;
   }
   const ids = Object.values(CAMPAIGN_ID);
-  const leads = await fetchAll(() => db.from("agent_leads").select("id, campaign_id, values, created_at, posted_at, lead_state, attempts_made").eq("tenant_id", TENANT_ID).in("campaign_id", ids).order("id"));
+  const leads = await fetchAll(() => db.from("agent_leads").select("id, campaign_id, values, created_at, posted_at, lead_state, attempts_made, last_reactivated_at").eq("tenant_id", TENANT_ID).in("campaign_id", ids).order("id"));
   const rowByPhone = new Map(LEAD_ROWS.map((row) => [row.phone, row]));
   const postByPhone = new Map(POSTS.filter((p) => p.kind === "accepted").map((p) => [p.phone, p]));
   for (const lead of leads) {
     const phone = String(lead.values?.phone ?? "");
-    LEAD.set(phone, { id: lead.id, campaign: campaignKeyById[lead.campaign_id], row: rowByPhone.get(phone), post: postByPhone.get(phone), state: lead.values?.state ?? "", tz2: splitZone(rowByPhone.get(phone)), values: lead.values, createdAt: lead.created_at, postedAt: lead.posted_at, leadState: lead.lead_state, attemptsMade: lead.attempts_made });
+    LEAD.set(phone, { id: lead.id, campaign: campaignKeyById[lead.campaign_id], row: rowByPhone.get(phone), post: postByPhone.get(phone), state: lead.values?.state ?? "", tz2: splitZone(rowByPhone.get(phone)), values: lead.values, createdAt: lead.created_at, postedAt: lead.posted_at, leadState: lead.lead_state, attemptsMade: lead.attempts_made, reactivatedAt: lead.last_reactivated_at });
   }
   const queue = await inChunks(leads.map((l) => l.id), 150, (part) => db.from("lead_queue").select("id, lead_id, status, created_at, nurtured_from_work_item_id").eq("tenant_id", TENANT_ID).in("lead_id", part).order("created_at"));
   const firstItem = new Map();
@@ -913,7 +919,9 @@ await section("AG-D9 link leads to contacts", async () => {
   const norm = (v) => String(v ?? "").normalize("NFKD").replace(/[̀-ͯ]/g, "").toLocaleLowerCase().replace(/[^a-z0-9]+/g, "").trim();
   const items = unlinked.map((l) => {
     const v = l.values ?? {};
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(v.date_of_birth ?? "")) || !v.first_name || !v.last_name) return null;
+    const dob = String(v.date_of_birth ?? "");
+    // The importer lets a well-formed but impossible date through (e.g. 1958-13-02); skip those.
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dob) || Number.isNaN(Date.parse(`${dob}T00:00:00Z`)) || new Date(`${dob}T00:00:00Z`).toISOString().slice(0, 10) !== dob || !v.first_name || !v.last_name) return null;
     const search = v.zip ? norm([v.zip, v.state].filter(Boolean).join(" ")) : "";
     return { lead_id: l.id, name_search: norm(`${v.first_name} ${v.last_name}`), dob: v.date_of_birth, phone: String(v.phone ?? "").replace(/\D/g, "") || null, address_hash: search ? sha(search) : null, address_search: search || null };
   }).filter(Boolean);
@@ -1430,7 +1438,8 @@ await section("D5 lead + work-item state (what the dispositions imply)", async (
     const needsTag = lead.values?.qa_seed !== TAG;
     const sim = lead.sim;
     // Written by this run, or behind the history (a run that stopped between the attempts and here).
-    const written = WRITTEN.has(lead.id) || (sim?.attempts.length && (lead.attemptsMade ?? 0) < sim.attempts.length);
+    // A recycled lead (attempts reset to 0 by complete_nurture_reactivation) is never "behind".
+    const written = WRITTEN.has(lead.id) || (!lead.reactivatedAt && sim?.attempts.length && (lead.attemptsMade ?? 0) < sim.attempts.length);
     if (!needsTag && !written) { bump("agent_leads", "kept"); return; }
     const update = {};
     if (needsTag) update.values = { ...(lead.values ?? {}), qa_seed: TAG };
@@ -1516,10 +1525,12 @@ await section("D7 availability", async () => {
     { key: "aaliyah", timezone: "America/New_York", hours: [1, 2, 3, 4, 5].map((weekday) => ({ weekday, startTime: "09:00", endTime: "17:00" })), blocks: [], policy: { appointmentMinutes: 30, bufferMinutes: 0, maxPerDay: 8, allowSameDay: true } },
   ];
   for (const spec of specs) {
-    const member = members.find((m) => (m.userId ?? m.user_id) === idOf(spec.key));
-    const hours = member?.hours ?? [];
-    const tz = member?.timezone ?? hours[0]?.timezone ?? null;
-    const same = tz === spec.timezone && hours.length === spec.hours.length && (member?.blocks?.length ?? 0) === spec.blocks.length;
+    void members;
+    // Read from the tables: the settings GET lists bookable members only, so a setter never "matches".
+    const hours = must(await db.from("tenant_agent_availability").select("weekday, start_time, end_time, timezone").eq("tenant_id", TENANT_ID).eq("user_id", idOf(spec.key)), "read hours");
+    const blocks = must(await db.from("tenant_agent_blocks").select("id").eq("tenant_id", TENANT_ID).eq("user_id", idOf(spec.key)), "read blocks");
+    const key = (h) => `${h.weekday} ${String(h.startTime ?? h.start_time).slice(0, 5)}-${String(h.endTime ?? h.end_time).slice(0, 5)}`;
+    const same = hours.every((h) => h.timezone === spec.timezone) && stable(hours.map(key).sort()) === stable(spec.hours.map(key).sort()) && blocks.length === spec.blocks.length;
     if (same) { bump("tenant_agent_availability", "kept", spec.hours.length); continue; }
     ok(await api("PUT", "/api/app/availability", "owner", { user_id: idOf(spec.key), timezone: spec.timezone, hours: spec.hours, blocks: spec.blocks, policy: spec.policy }), `save calendar ${spec.key}`);
     bump("tenant_agent_availability", "inserted", spec.hours.length); bump("tenant_agent_blocks", "inserted", spec.blocks.length); bump("tenant_agent_booking_policy", "inserted");
@@ -1637,13 +1648,74 @@ await section("D6 callbacks", async () => {
   }
 });
 
+// The history resolves most call-backs (kept, or missed and dialled again). An agency's list on a
+// given morning also has ~20 due later today and 10–15 overdue: missed ones are moved into today with
+// the product's own reschedule_callback (a "rescheduled" history row each), in the customer's window.
+await section("D6 today's call-backs (reschedule_callback)", async () => {
+  if (DRY) return;
+  const leadById = new Map([...LEAD.values()].map((l) => [l.id, l]));
+  const rows = await inChunks([...leadById.keys()], 150, (part) => db.from("tenant_callbacks").select("id, lead_id, work_item_id, status, scheduled_at_utc, customer_timezone, assigned_to").eq("tenant_id", TENANT_ID).in("lead_id", part));
+  const todayUtc = (ms) => new Date(ms).toISOString().slice(0, 10);
+  const openToday = rows.filter((c) => ["scheduled", "due"].includes(c.status) && todayUtc(Date.parse(c.scheduled_at_utc)) === todayUtc(NOW) && Date.parse(c.scheduled_at_utc) > NOW);
+  const overdue = rows.filter((c) => ["scheduled", "due", "missed"].includes(c.status) && Date.parse(c.scheduled_at_utc) < NOW);
+  note(`call-backs: ${openToday.length} open later today, ${overdue.length} overdue before moving any`);
+  // An agency clears its stale ones: every overdue call-back from before the horizon except the 12
+  // most recent is cancelled the way an agent cancels one (cancel_callback writes the history row).
+  const stale = overdue.filter((c) => Date.parse(c.scheduled_at_utc) < T0).sort((a, b) => Date.parse(b.scheduled_at_utc) - Date.parse(a.scheduled_at_utc)).slice(12);
+  let cancelled = 0;
+  for (const cb of stale) {
+    const r = await db.rpc("cancel_callback", { p_tenant_id: TENANT_ID, p_callback_id: cb.id, p_actor: cb.assigned_to });
+    if (r.error) note(`cancel ${cb.id}: ${r.error.message}`); else cancelled += 1;
+  }
+  bump("tenant_callbacks (stale cancelled)", "updated", cancelled);
+  if (cancelled) note(`cancelled ${cancelled} stale overdue call-backs; ${overdue.length - cancelled} overdue remain`);
+  const want = 20 - openToday.length;
+  if (want <= 0) { bump("tenant_callbacks (moved into today)", "kept", openToday.length); return; }
+  const busyItems = new Set(rows.filter((c) => ["scheduled", "due"].includes(c.status)).map((c) => c.work_item_id));
+  const keepOverdue = 12;
+  const cancelledIds = new Set(stale.map((c) => c.id));
+  const movable = overdue.filter((c) => c.status === "missed" && !busyItems.has(c.work_item_id) && !cancelledIds.has(c.id)).sort((a, b) => seedOf(`move:${a.id}`) - seedOf(`move:${b.id}`));
+  let moved = 0;
+  for (const cb of movable.slice(0, Math.max(0, Math.min(want, movable.length - keepOverdue)))) {
+    const lead = leadById.get(cb.lead_id);
+    const tz = cb.customer_timezone;
+    if (!lead || !OFFSET[tz]) continue;
+    const rng = rngFor(`today-cb:${cb.id}`);
+    let at = null;
+    for (let tries = 0; tries < 8 && !at; tries += 1) {
+      const t = Math.ceil((NOW + rng.int(90, 480) * MIN) / (15 * MIN)) * 15 * MIN;
+      if (todayUtc(t) === todayUtc(NOW) && legal(t, lead) && legal(t + 30 * MIN, lead)) at = t;
+    }
+    if (!at) continue;
+    const l = local(at, tz);
+    const r = await db.rpc("reschedule_callback", { p_tenant_id: TENANT_ID, p_callback_id: cb.id, p_actor: cb.assigned_to, p_callback_local: `${l.date}T${String(l.hour).padStart(2, "0")}:${String(l.minute).padStart(2, "0")}` });
+    if (r.error) { note(`reschedule ${cb.id}: ${r.error.message}`); continue; }
+    busyItems.add(cb.work_item_id); moved += 1;
+  }
+  bump("tenant_callbacks (moved into today)", "updated", moved);
+  note(`moved ${moved} missed call-backs into later today; ${overdue.length - moved} stay overdue`);
+});
+
 // =============================================================================
 // D13 · nurture: the recycling rule and one reactivation batch
 // =============================================================================
 await section("D13 nurture rule + reactivation batch", async () => {
   const campaignId = CAMPAIGN_ID.bayviewA;
   const batches = must(await db.from("tenant_recycle_batches").select("id, status, cleared, queued, created_at").eq("tenant_id", TENANT_ID).eq("campaign_id", campaignId), "read batches");
-  if (batches.length) { bump("tenant_recycle_batches", "kept", batches.length); note(`recycle batch already there: ${batches.map((b) => `${b.status} ${b.cleared}/${b.queued}`).join(", ")}`); return; }
+  if (batches.length) {
+    bump("tenant_recycle_batches", "kept", batches.length);
+    note(`recycle batch already there: ${batches.map((b) => `${b.status} ${b.cleared}/${b.queued}`).join(", ")}`);
+    // Screening an open batch is resumed only on request (--resume-recycle), e.g. once 20260925709300 is live.
+    const open = batches.find((b) => b.status === "screening");
+    if (open && process.argv.includes("--resume-recycle") && !DRY) {
+      for (let i = 0; i < 60; i += 1) {
+        const step = ok(await api("POST", "/api/app/nurture", "owner", { action: "screen_chunk", batch_id: open.id }), "screen chunk");
+        if (step.done || step.pending === 0) break;
+      }
+      bump("tenant_recycle_batches (screening resumed)", "updated");
+    }
+    return;
+  }
   // Eligible: exhausted on a no-answer or voicemail, rested long enough. Pick the rest period that
   // yields ~200 from what the history actually left behind.
   const exhausted = SIM.leads.filter((l) => l.campaign === "bayviewA" && l.sim?.state === "exhausted" && ["no_answer", "voicemail"].includes(l.sim.last?.disposition));
@@ -1665,19 +1737,26 @@ await section("D13 date the batch and give it some dials", async () => {
   const batch = must(await db.from("tenant_recycle_batches").select("id, status, created_at, queued, cleared, blocked").eq("tenant_id", TENANT_ID).eq("campaign_id", CAMPAIGN_ID.bayviewA).order("created_at").limit(1).maybeSingle(), "read batch");
   if (!batch) return;
   const batchAt = Date.parse("2026-09-22T14:30:00Z");
+  // Only a FINISHED batch is dated and dialled: dating one still screening (as run 4 on 2026-09-25 did)
+  // stamps completed_at on a batch and on reactivations that are still pending.
+  if (batch.status !== "complete") { note(`recycle batch still ${batch.status} (${batch.cleared} cleared of ${batch.queued}); not dated or dialled until it completes`); bump("tenant_recycle_batches (backdate)", "kept"); return; }
   const fresh = Math.abs(Date.parse(batch.created_at) - batchAt) > 1000;
   const reactivations = must(await db.from("tenant_nurture_reactivations").select("id, lead_id, status").eq("tenant_id", TENANT_ID).eq("batch_id", batch.id), "read reactivations");
   const cleared = reactivations.filter((r) => r.status === "cleared");
   note(`recycle batch ${batch.status}: ${batch.cleared} cleared, ${batch.blocked} blocked of ${batch.queued}`);
-  if (!fresh) { bump("tenant_recycle_batches (backdate)", "kept"); return; }
+  if (fresh) {
   must(await db.from("tenant_recycle_batches").update({ created_at: iso(batchAt), last_progress_at: iso(batchAt + 4 * MIN), completed_at: iso(batchAt + 4 * MIN) }).eq("id", batch.id), "date batch");
   for (const part of chunk(reactivations.map((r) => r.id), 150)) must(await db.from("tenant_nurture_reactivations").update({ reactivated_at: iso(batchAt), completed_at: iso(batchAt + 3 * MIN) }).in("id", part), "date reactivations");
   for (const part of chunk(cleared.map((r) => r.lead_id), 150)) {
     must(await db.from("agent_leads").update({ last_reactivated_at: iso(batchAt + 3 * MIN), nurture_entered_at: iso(batchAt + 3 * MIN), next_dial_after: iso(batchAt + 3 * MIN) }).eq("tenant_id", TENANT_ID).in("id", part), "date recycled leads");
     must(await db.from("tenant_lead_sources").update({ created_at: iso(batchAt + 3 * MIN) }).eq("tenant_id", TENANT_ID).eq("source_type", "recycle").in("lead_id", part), "date recycle sources");
   }
+  } else bump("tenant_recycle_batches (backdate)", "kept");
   // ~60 of the recycled leads have been dialled since, at the lowest tier.
-  const items = await inChunks(cleared.map((r) => r.lead_id), 150, (part) => db.from("lead_queue").select("id, lead_id").eq("tenant_id", TENANT_ID).in("lead_id", part).not("nurtured_from_work_item_id", "is", null));
+  // 20260925709300: a recycled lead keeps its one work item, reopened as unclaimed.
+  const items = await inChunks(cleared.map((r) => r.lead_id), 150, (part) => db.from("lead_queue").select("id, lead_id").eq("tenant_id", TENANT_ID).in("lead_id", part).eq("status", "unclaimed"));
+  // Dials can only follow the moment each lead was actually reactivated.
+  const reactivatedAt = new Map((await inChunks(cleared.map((r) => r.lead_id), 150, (part) => db.from("agent_leads").select("id, last_reactivated_at").in("id", part))).map((r) => [r.id, r.last_reactivated_at ? Date.parse(r.last_reactivated_at) : batchAt]));
   const itemByLead = new Map(items.map((i) => [i.lead_id, i.id]));
   const byId = new Map([...LEAD.values()].map((l) => [l.id, l]));
   const recycled = cleared.map((r) => byId.get(r.lead_id)).filter((l) => l && itemByLead.has(l.id)).sort((a, b) => seedOf(`rc:${a.id}`) - seedOf(`rc:${b.id}`)).slice(0, 60);
@@ -1687,7 +1766,7 @@ await section("D13 date the batch and give it some dials", async () => {
     const rng = rngFor(`recycle:${lead.id}`);
     const wi = itemByLead.get(lead.id);
     const tried = new Set();
-    let due = batchAt + rng.int(1, 40) * HOUR, k = 0, state = "nurture", last = null, nextDue = null;
+    let due = Math.max(batchAt, reactivatedAt.get(lead.id) ?? batchAt) + rng.int(1, 40) * HOUR, k = 0, state = "nurture", last = null, nextDue = null;
     const base = lead.sim?.attempts.length ?? 7;
     while (k < 3) {
       const pick = nextDialTime({ ...lead, campaign: "bayviewA" }, due, tried, rng);
@@ -1711,10 +1790,10 @@ await section("D13 date the batch and give it some dials", async () => {
     }
     if (last) leadUpdates.push({ lead, wi, k, state, last, nextDue });
   }
-  await insertIgnore("tenant_call_attempts", attempts);
+  const newAttempts = await insertIgnore("tenant_call_attempts", attempts);
   await insertIgnore("tenant_lead_activity", cards);
   await insertIgnore("tenant_scoring_decisions", decisions);
-  for (const u of leadUpdates) {
+  for (const u of newAttempts ? leadUpdates : []) {
     must(await db.from("agent_leads").update({ attempts_made: u.k, lead_state: u.state, next_dial_after: u.nextDue ? iso(u.nextDue) : null, next_preferred_slot: null }).eq("id", u.lead.id).eq("tenant_id", TENANT_ID), "recycled lead state");
     must(await db.from("lead_queue").update({ status: u.state === "retry" ? "unclaimed" : "completed", disposition: u.last.disposition, disposition_at: iso(u.last.endAt), disposition_by: idOf(u.last.agent) }).eq("id", u.wi).eq("tenant_id", TENANT_ID), "recycled work item");
     if (u.state === "exhausted") must(await db.from("agent_leads").update({ nurture_entered_at: iso(u.last.endAt) }).eq("id", u.lead.id), "recycled nurture date");
@@ -1930,7 +2009,7 @@ if (TODAY_MODE) await section("today: dials, applications, bookings, due-soon ca
       } else outcome = a.outcome = a.disposition = "not_interested";
     }
     if (outcome === "booking") {
-      const producer = rng.pick(producerFor(lead));
+      const producer = rng.pick(producerFor(lead).filter((p) => p !== "owner").length ? producerFor(lead).filter((p) => p !== "owner") : producerFor(lead));
       let booked = null;
       for (let d = 1; d <= 6 && !booked; d += 1) for (const hh of [10, 11, 14, 15]) {
         const start = atLocal(local(NOW + d * DAY, "America/Chicago").date, hh, 0, "America/Chicago");
@@ -1984,7 +2063,7 @@ if (TODAY_MODE) await section("today: dials, applications, bookings, due-soon ca
     let booked = false;
     const candidates = SIM.leads.filter((l) => l.sim?.state === "retry" && legal(start, l) && legal(start + 30 * MIN, l)).sort((a, b) => seedOf(`soon:${a.id}`) - seedOf(`soon:${b.id}`)).slice(0, 12);
     for (const lead of candidates) {
-      for (const producer of ["owner", ...producerFor(lead).filter((p) => p !== "owner")]) {
+      for (const producer of [...producerFor(lead).filter((p) => p !== "owner"), "owner"]) { // producers first; the owner's calendar is full of QA bookings
         const r = await api("POST", "/api/app/appointments", "jordan", { lead_id: lead.id, agent_user_id: idOf(producer), starts_at_utc: iso(start), notes: "Booked by Jordan: wants a 20-year term quote before his lunch break; call on time." });
         if (r.status < 300) { booked = true; note(`due-soon appointment for ${USER[producer].name} at ${iso(start)} (${lead.state} lead)`); bump("due-soon appointment", "inserted"); break; }
         if (lead === candidates[0]) note(`due-soon appointment with ${producer}: HTTP ${r.status} ${r.text.slice(0, 140)}`);

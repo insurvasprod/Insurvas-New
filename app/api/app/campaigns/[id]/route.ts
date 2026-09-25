@@ -64,6 +64,10 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     // stored, and saying so beats a 404 for a campaign that plainly exists.
     if (error && parsed.data.is_test_batch !== undefined && isSchemaGap(error))
       return NextResponse.json({ error: "This setting needs a database update that has not been applied yet.", code: "schema_pending" }, { status: 503 });
+    // The database's own cap (constraint trigger, reads plan_limits live) comes back as an error
+    // value, not a throw. It is the same limit the check above names, so it answers the same 403
+    // rather than a "Campaign not found" for a campaign that plainly exists.
+    if (error && /max_active_campaigns/.test(error.message)) return NextResponse.json(activeCampaignCapResponse(error.message), { status: 403 });
     if (error || !data) return NextResponse.json({ error: "Campaign not found" }, { status: 404 });
 
     await audit({
@@ -87,7 +91,24 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const limit = outboundLimitResponse(error);
     if (limit) return NextResponse.json(limit, { status: 403 });
     const message = error instanceof Error ? error.message : "Could not change campaign status";
-    if (message.includes("max_active_campaigns")) return NextResponse.json({ error: "Your plan has reached active campaigns. Pause a campaign or upgrade before activating another.", code: "limit_reached", limitKey: "max_active_campaigns", upgrade: true }, { status: 403 });
+    if (message.includes("max_active_campaigns")) return NextResponse.json(activeCampaignCapResponse(message), { status: 403 });
     return NextResponse.json({ error: "Could not change campaign status" }, { status: 400 });
   }
+}
+
+/** "max_active_campaigns:19:19" from the trigger, in words, with the way out. */
+function activeCampaignCapResponse(message: string) {
+  const match = /max_active_campaigns:(\d+):(\d+)/.exec(message);
+  const usage = match ? Number(match[1]) : null;
+  const limit = match ? Number(match[2]) : null;
+  return {
+    error: limit === null
+      ? "Your plan has reached its limit of active campaigns. Pause a campaign or upgrade before activating another."
+      : `Your plan has reached its limit of ${limit} active campaigns (${usage} of ${limit} active). Pause a campaign or upgrade before activating another.`,
+    code: "limit_reached",
+    limitKey: "max_active_campaigns",
+    usage,
+    limit,
+    upgrade: true,
+  };
 }

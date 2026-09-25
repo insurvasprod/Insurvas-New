@@ -134,7 +134,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(responseBody, { status: 201, headers: { "Idempotency-Key": idempotencyKey } });
   } catch (error) {
     const limit = outboundLimitResponse(error);
-    if (limit) return NextResponse.json(limit, { status: 403 });
+    if (limit) {
+      // Release the claim. Left 'processing', the same file was refused as "already being processed"
+      // for good, even after the plan was raised (found 2026-09-25); marked 'failed' it would be
+      // refused just the same, since the key is the file's hash. Nothing was imported, so the claim
+      // is dropped and the same file can be sent again once there is room.
+      await supabase.from("agent_lead_import_batches").delete().eq("id", claimed.data.id).eq("tenant_id", result.auth.context.tenantId).eq("status", "processing");
+      return NextResponse.json(limit, { status: 403 });
+    }
     const failure = recordImportFailure(error, "direct import");
     // `cause`, not `message`. The batch row is the operator's record of what happened, and storing
     // the user-facing "temporarily unavailable, please try again later" there loses the only

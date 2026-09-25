@@ -132,8 +132,40 @@ async function resolvedCard(supabase: ReturnType<typeof getSupabaseServiceClient
   return { text: text.slice(0, 2000), payload: { customer: name, agent, product, disposition, ...(state ? { state } : {}) } };
 }
 
+/**
+ * LA-1.16-4: "nobody_claimed → Ray only". The card type decides the destination, so every caller
+ * lands on the agency side: an owner-only alert (the same kind as the SLA escalation, so each
+ * owner's "unclaimed escalation" preference applies), never a row in the partner's channel. The
+ * partner hears about it separately, through the Queue & SLA partner-notice rung and the pipeline
+ * row that reads "Nobody claimed it".
+ */
+export const NOBODY_CLAIMED_ALERT_KIND = "unclaimed_sla_escalation";
+export function nobodyClaimedSourceKey(input: { workItemId?: string | null; eventKey: string }) {
+  return input.workItemId ? `unclaimed-sla:${input.workItemId}:nobody-claimed` : `${input.eventKey}:nobody-claimed`;
+}
+
+async function alertOwnersNobodyClaimed(supabase: ReturnType<typeof getSupabaseServiceClient>, input: CardInput) {
+  const [card, partner] = await Promise.all([
+    resolvedCard(supabase, { ...input, message: undefined }),
+    supabase.from("partners").select("name").eq("tenant_id", input.tenantId).eq("id", input.partnerId).maybeSingle(),
+  ]);
+  const name = String(card.payload.customer);
+  const partnerName = partner.data?.name ?? "the partner";
+  const result = await notifyTenantAgents({
+    tenantId: input.tenantId,
+    roles: ["owner"],
+    kind: NOBODY_CLAIMED_ALERT_KIND,
+    title: `Nobody claimed: ${name}`,
+    body: `${name} from ${partnerName} was not claimed before the response window.`,
+    link: input.leadId ? `/app/leads/${input.leadId}` : "/app/inbound",
+    sourceKey: nobodyClaimedSourceKey(input),
+  });
+  return { alreadyPosted: false, id: null, routedTo: "owners" as const, notified: result.notified };
+}
+
 export async function postPartnerSystemCard(input: CardInput) {
   const supabase = getSupabaseServiceClient();
+  if (input.cardType === "nobody_claimed") return alertOwnersNobodyClaimed(supabase, input);
   const channelId = await channelFor(supabase, input.tenantId, input.partnerId);
   const card = await resolvedCard(supabase, input);
   const { data, error } = await supabase.from("partner_messages").insert({ tenant_id: input.tenantId, partner_id: input.partnerId, channel_id: channelId, work_item_id: input.workItemId ?? null, message: card.text, message_kind: "system_card", card_type: input.cardType, card_payload: card.payload, event_key: input.eventKey, created_by: input.userId ?? null }).select("id").maybeSingle();
@@ -266,7 +298,10 @@ async function chatForLoadedChannel(supabase: ReturnType<typeof getSupabaseServi
     supabase.from("partner_message_reads").select("read_at").eq("tenant_id", tenantId).eq("channel_id", channel.id).eq("user_id", userId).maybeSingle(),
   ]);
   if (messages.error) throw new Error(`Could not load chat: ${messages.error.message}`);
-  const rows = await enrichCards(supabase, tenantId, [...(messages.data ?? [])].reverse());
+  // "nobody_claimed → Ray only" (LA-1.16-4): cards posted to a partner channel before the writer
+  // routed them to the owners stay stored, but the channel no longer shows them to anyone.
+  const stored = [...(messages.data ?? [])].reverse();
+  const rows = await enrichCards(supabase, tenantId, channel.channel_type === "partner" ? stored.filter((row) => row.card_type !== "nobody_claimed") : stored);
   // Attachments are fetched alongside the note filter; hidden notes' entries are simply never attached below.
   const [visibleNoteIds, attachments] = await Promise.all([
     channel.channel_type === "partner" ? visibleToPartner(supabase, tenantId, rows) : Promise.resolve(new Set<string>()),

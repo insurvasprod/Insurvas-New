@@ -21,7 +21,14 @@ export type VendorScorecardRow = {
   leads_received: number;
   attempts: number;
   contacted_leads: number;
-  applications: number;
+  /** Distinct leads with a call attempt in the period (20260925709800). Null before it: the old report counts attempts only. */
+  dialed_leads: number | null;
+  /** Leads with a quote recorded on the deal, or an application opened, in the period. Null before 20260925709800. */
+  quoted_leads: number | null;
+  /** Leads with at least one application in the period. Null before 20260925709800. */
+  applied_leads: number | null;
+  /** Net spend ÷ contacted leads. Null (a dash, never $0) when nobody was contacted. */
+  effective_cost_per_contact_cents: number | null;  applications: number;
   issued_policies: number;
   lapsed_policies: number;
   policies_not_yet_measurable: number;
@@ -66,7 +73,14 @@ export type VendorScorecardVendorRow = {
   leads_received: number;
   attempts: number;
   contacted_leads: number;
-  applications: number;
+  /** Distinct leads with a call attempt in the period (20260925709800). Null before it: the old report counts attempts only. */
+  dialed_leads: number | null;
+  /** Leads with a quote recorded on the deal, or an application opened, in the period. Null before 20260925709800. */
+  quoted_leads: number | null;
+  /** Leads with at least one application in the period. Null before 20260925709800. */
+  applied_leads: number | null;
+  /** Net spend ÷ contacted leads. Null (a dash, never $0) when nobody was contacted. */
+  effective_cost_per_contact_cents: number | null;  applications: number;
   issued_policies: number;
   lapsed_policies: number;
   policies_not_yet_measurable: number;
@@ -109,7 +123,14 @@ export type VendorScorecardTotals = {
   leads_received: number;
   attempts: number;
   contacted_leads: number;
-  applications: number;
+  /** Distinct leads with a call attempt in the period (20260925709800). Null before it: the old report counts attempts only. */
+  dialed_leads: number | null;
+  /** Leads with a quote recorded on the deal, or an application opened, in the period. Null before 20260925709800. */
+  quoted_leads: number | null;
+  /** Leads with at least one application in the period. Null before 20260925709800. */
+  applied_leads: number | null;
+  /** Net spend ÷ contacted leads. Null (a dash, never $0) when nobody was contacted. */
+  effective_cost_per_contact_cents: number | null;  applications: number;
   issued_policies: number;
   lapsed_policies: number;
   policies_not_yet_measurable: number;
@@ -149,6 +170,8 @@ export type VendorScorecardReport = {
    * vendor roll-up, no persistency and no test batches. The page says so instead of pretending.
    */
   upgraded: boolean;
+  /** True once 20260925709800 is applied: dialed and quoted leads exist, and every figure drills to its rows. */
+  funnel: boolean;
 };
 
 export type VendorScorecardLead = {
@@ -162,9 +185,31 @@ export type VendorScorecardLead = {
   applications: number;
   issued_policies: number;
   attribution_status: "linked" | "review attribution";
+  /** Per-lead funnel flags, from tenant_vendor_scorecard_drill (20260925709800). */
+  dialed?: boolean;
+  contacted?: boolean;
+  quoted?: boolean;
+  dialable?: boolean;
 };
 
-export type VendorScorecardLeadResult = { rows: VendorScorecardLead[] };
+/** A funnel stage a figure can be drilled into. */
+export type ScorecardStage = "received" | "dialable" | "undialable" | "dialed" | "contacted" | "quoted" | "applied" | "issued";
+export const SCORECARD_STAGES: readonly ScorecardStage[] = ["received", "dialable", "undialable", "dialed", "contacted", "quoted", "applied", "issued"];
+
+export type VendorScorecardLeadResult = {
+  rows: VendorScorecardLead[];
+  stage: ScorecardStage;
+  /** Every lead the figure counts, not just this page. Null from the old drill, which cannot say. */
+  total: number | null;
+  offset: number;
+  limit: number;
+  /** More rows than this page: the next page is offset + limit. */
+  has_more: boolean;
+  /** The whole selection's sums, which reconcile with the figure clicked. Null from the old drill. */
+  sums: { leads: number; attempts: number; dialed_leads: number; contacted_leads: number; quoted_leads: number; applications: number; issued_policies: number; undialable_leads: number } | null;
+  /** False before 20260925709800: only campaign rows drill, 500 leads at most, attempts of all time. */
+  drillReady: boolean;
+};
 
 export type ComparisonMetricKey = "contact_rate" | "conversion_rate" | "cost_per_issued";
 export type CampaignComparison = {

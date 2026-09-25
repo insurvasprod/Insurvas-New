@@ -209,6 +209,11 @@ export function TeamSettings({ initial, workspace }: { initial: TeamSnapshot; wo
   const filterCount = roleFilter.size + statusFilter.size;
   const planName = workspace?.planName ?? "Your plan";
   const outbound = snapshot.outboundLimits?.filter((item) => ["max_setter_seats", "max_active_campaigns"].includes(item.key)) ?? [];
+  // LA-2.22: the setter-seat cap is its own limit, apart from total seats. At 80% it is named as a
+  // warning, and at the cap the prompt says which limit refuses the next setter invite.
+  const setterSeats = outbound.find((item) => item.key === "max_setter_seats" && item.limit !== null) ?? null;
+  const setterAtLimit = setterSeats !== null && setterSeats.usage >= (setterSeats.limit ?? 0);
+  const setterNearLimit = setterSeats !== null && !setterAtLimit && (setterSeats.limit ?? 0) > 0 && setterSeats.usage / (setterSeats.limit ?? 1) >= 0.8;
 
   return (
     <SettingsStack>
@@ -228,6 +233,14 @@ export function TeamSettings({ initial, workspace }: { initial: TeamSnapshot; wo
             <p className="m-0 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">
               Invite teammates and control what each person can see. Role changes apply on their next request. An invite that is never accepted still holds a seat until it is revoked.
             </p>
+          )}
+          {setterSeats && (setterAtLimit || setterNearLimit) && (
+            <Callout tone="warning" title={setterAtLimit ? "Your plan has reached its setter-seat limit" : "Setter seats are nearly full"}>
+              {planName} includes {inWords(setterSeats.limit ?? 0)} setter seat{setterSeats.limit === 1 ? "" : "s"} and {setterSeats.usage.toLocaleString()} of {(setterSeats.limit ?? 0).toLocaleString()} {setterSeats.usage === 1 ? "is" : "are"} in use.
+              {setterAtLimit
+                ? " Inviting another setter will be refused until a setter is deactivated or the plan is upgraded to more setter seats. Other roles use the plan's total seats, not this limit."
+                : " Upgrade the plan before the next setter invite if you need more than that."}
+            </Callout>
           )}
         </div>
         <div className="flex w-full shrink-0 flex-col gap-3 lg:w-[300px]">
@@ -460,6 +473,7 @@ export function TeamSettings({ initial, workspace }: { initial: TeamSnapshot; wo
           bufferAtLimit={bufferAtLimit}
           bufferSeats={snapshot.bufferSeats}
           atSeatLimit={atSeatLimit}
+          setterSeats={setterAtLimit && setterSeats ? { used: setterSeats.usage, max: setterSeats.limit ?? 0 } : null}
           onInvited={async () => {
             setInviteOpen(false);
             await refresh();
@@ -526,12 +540,15 @@ function InviteDialog({
   bufferAtLimit,
   bufferSeats,
   atSeatLimit,
+  setterSeats,
 }: {
   onClose: () => void;
   onInvited: () => Promise<void>;
   bufferAtLimit: boolean;
   bufferSeats: TeamSnapshot["bufferSeats"];
   atSeatLimit: boolean;
+  /** Set only when the plan's setter seats are all in use. */
+  setterSeats: { used: number; max: number } | null;
 }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -580,6 +597,11 @@ function InviteDialog({
             Your plan has reached <code>max_buffer_seats</code> ({bufferSeats.used} of {bufferSeats.max}). Upgrade to invite another buffer agent.
           </p>
         )}
+        {role === "setter" && setterSeats && (
+          <p className="text-[14px] text-[var(--error-ink)] sm:col-span-2" role="alert">
+            Your plan has reached its setter-seat limit ({setterSeats.used} of {setterSeats.max} setter seats). Upgrade the plan to invite another setter.
+          </p>
+        )}
         {error && (
           <p role="alert" className="text-[14px] text-[var(--error-ink)] sm:col-span-2">
             {error}
@@ -587,7 +609,7 @@ function InviteDialog({
         )}
         <div className="flex justify-end gap-2.5 sm:col-span-2">
           <button type="button" className={btn("ghost")} onClick={onClose}>Cancel</button>
-          <button type="submit" className={btn("primary")} disabled={busy || (role === "assistant" && bufferAtLimit)}>
+          <button type="submit" className={btn("primary")} disabled={busy || (role === "assistant" && bufferAtLimit) || (role === "setter" && Boolean(setterSeats))}>
             {busy ? "Inviting…" : "Invite teammate"}
           </button>
         </div>

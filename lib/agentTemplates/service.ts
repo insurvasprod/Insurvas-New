@@ -4,6 +4,7 @@ import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import type { Json } from "@/lib/supabase/database.types";
 import { getEntitlement } from "@/lib/entitlements/get";
 import {
+  isKnownScreeningVersion,
   screenPartnerPhone,
   type ScreeningDecision,
 } from "@/lib/compliance/screening";
@@ -23,13 +24,16 @@ import {
   type TemplateStage,
   type TemplateValidation,
 } from "@/lib/templates/constants";
+import { DERIVED_AGE_KEY, bankFormatError, withDerivedAge } from "@/lib/templates/formats";
+import { effectiveTemplateForm, sectionAvailabilityError } from "@/lib/templates/sectionAvailability";
 import {
   partnerTypeForLead,
-  resolvePartnerSubmissionStage,
+  resolvePartnerEntryStage,
   resolveRuntimeStage,
   assertUuid,
 } from "@/lib/pipelines/service";
-import { isRequiredLeadImportField, parseLeadCsv, sanitizeImportMapping, type ImportDateOrder, type LeadImportRow } from "./csv";
+import { isRequiredLeadImportField, parseLeadCsv, sanitizeImportMapping, US_STATE_CODES, type ImportDateOrder, type LeadImportRow } from "./csv";
+import { commitLeadImport, ImportCommitRefusal, projectedUsableCostCents } from "./importCommit";
 
 const PRODUCT_CODE = "term_life";
 // Each screening is ~10 sequential round trips; this bounds how many a CSV import runs at once.
@@ -436,6 +440,15 @@ function resolveVerificationChoices(
   return explicitChoices.length ? explicitChoices : submissionChoices;
 }
 
+/**
+ * The form as a partner receives it (LA-1.4-3): sections of the section groups this product's form
+ * switches off are removed, so the partner form, its preview, drafts and intake validation agree.
+ */
+function partnerFacing<T extends { template: TemplateRow }>(resolved: T): T {
+  const form_definition = effectiveTemplateForm(resolved.template.form_definition, resolved.template.fields);
+  return form_definition === resolved.template.form_definition ? resolved : { ...resolved, template: { ...resolved.template, form_definition } };
+}
+
 /** Apply a saved profile revision to an immutable tenant-template revision. */
 export function composePartnerTemplate<
   T extends Awaited<ReturnType<typeof getTenantTemplateForProduct>>,
@@ -506,7 +519,7 @@ export function composePartnerTemplate<
         : []),
     ],
   };
-  return { ...base, template: { ...base.template, fields, form_definition } };
+  return partnerFacing({ ...base, template: { ...base.template, fields, form_definition } });
 }
 
 /** Load one immutable partner-profile revision for a saved lead or draft. */
@@ -641,7 +654,7 @@ export async function getPartnerTemplateForProduct(
     } | null;
     if (!old)
       return {
-        ...base,
+        ...partnerFacing(base),
         partner_submission_profile_id: null as string | null,
         profile_revision: null as number | null,
         profile_source: "tenant_template" as const,
@@ -695,7 +708,7 @@ export async function getPartnerTemplateForProduct(
   } | null;
   if (!current)
     return {
-      ...base,
+      ...partnerFacing(base),
       partner_submission_profile_id: null as string | null,
       profile_revision: null as number | null,
       profile_source: "tenant_template" as const,
@@ -769,6 +782,18 @@ export async function getTenantTemplateForProductVersion(
     },
     template: templateRow(copy, await productName(copy.product_code)),
   };
+}
+
+/**
+ * One immutable tenant-form revision as the partner receives it: the partner routes resume a draft
+ * on this. The agent's lead page and verification read the full revision above.
+ */
+export async function getPartnerTenantTemplateForProductVersion(
+  tenantId: string,
+  productCode: string,
+  definitionVersion: number,
+) {
+  return partnerFacing(await getTenantTemplateForProductVersion(tenantId, productCode, definitionVersion));
 }
 
 export class TemplateProductError extends Error {}
@@ -1009,7 +1034,9 @@ function validateCopy(
         return "Form conditional rules are invalid";
     }
   }
-  return null;
+  // LA-1.4-3: the six section-group switches, and never one that hides the phone or a field
+  // required on every form.
+  return sectionAvailabilityError(form, fields);
 }
 
 export async function updateTenantTemplateCopy(
@@ -1045,6 +1072,9 @@ export async function updateTenantTemplateCopy(
       p_form_definition: input.form_definition as unknown as Json,
     },
   );
+  // The bank field types need 20260925515000; until it is applied the type check refuses them.
+  if (error && /tenant_template_fields_type_check/.test(error.message) && input.fields.some((field) => field.type === "bank_routing" || field.type === "bank_account"))
+    throw new Error("Bank routing and account fields need a database update that has not been applied yet. Use another type for now.");
   if (error || !data)
     throw new Error(error?.message ?? "Could not save template copy");
   return loadCopy(tenantId, undefined, id);
@@ -1378,7 +1408,8 @@ export async function importAgentLeads(
       product_line: template.template.product_code,
       pipeline_id: stage.pipeline_id,
       stage_id: stage.id,
-      values: row.values as Json,
+      // The age a date of birth implies is stored with every lead, imported ones too (LA-1.4-6).
+      values: withDerivedAge(row.values, template.template.fields) as Json,
       ...(campaignId ? { campaign_id: campaignId } : {}),
       screening_result_id: screenings[index]?.resultId ?? null,
       screening_version: screenings[index]?.version ?? null,
@@ -1386,6 +1417,10 @@ export async function importAgentLeads(
       screening_warning: screenings[index]?.warning?.message ?? null,
       screening_checked_at: screenings[index]?.checkedAt ?? null,
       created_by: userId,
+      // LA-2.2-4 and LA-2.6-1: the corrected calling zone and the row's certificate, written in the
+      // same transaction as the lead (20260925709610).
+      dial_timezone: row.dialTimezone ?? null,
+      consent: row.consent ?? null,
     };
   });
   const db = getSupabaseServiceClient() as unknown as LooseDb;
@@ -1409,55 +1444,41 @@ export async function importAgentLeads(
       /* leads without a usable phone cannot be identity-matched */
     }
   }
-  // The rejection evidence is written BEFORE the leads, and the ordering is the point.
-  //
-  // Two RPCs cannot share one transaction from here, so one of them goes first and the question is
-  // which failure to prefer. Evidence first means a crash between the two leaves rejections
-  // recorded for leads that did not import: the usable count is too low, so the cost per usable
-  // lead reads too HIGH. Leads first would leave the rejections missing and the cost too LOW.
-  //
-  // Too high is the safe direction. An overstated lead cost makes Ray buy less of a list than he
-  // should; an understated one makes him buy more of a list that is quietly worse than it looks,
-  // and that is the failure LA-2.17 exists to prevent. The ledger is idempotent on
-  // (tenant, campaign, phone), so retrying the import corrects the count rather than doubling it.
-  if (campaignId && rejected.length > 0) {
-    const recorded = await db.rpc("record_campaign_scrub_rejections", {
-      p_tenant_id: tenantId,
-      p_campaign_id: campaignId,
-      p_created_by: userId,
-      p_rejections: rejected
-        .filter((item) => item.phoneDigits)
+  // The rejection evidence (record_campaign_scrub_rejections) is written INSIDE the commit's
+  // transaction now (LA-2.2-9, 20260925709610): it used to go first, as its own round trip, so a
+  // file that failed on a later row left ledger rows for a list that never imported. See
+  // commitLeadImport for the order before that migration — the leads first, the ledger only after.
+  const ledger = campaignId
+    ? rejected
+        .filter((item): item is typeof item & { phoneDigits: string } => Boolean(item.phoneDigits))
         .map((item) => ({
           phone_digits: item.phoneDigits,
           outcome: item.outcome,
           detail: item.detail,
           source_key: `csv:${item.rowNumber}`,
-        })),
-    });
-    // Fail closed. If the rejections cannot be recorded, the cost of this campaign would be wrong
-    // for as long as it lives, and no lead has been written yet — so nothing is imported and the
-    // whole file can be retried safely.
-    if (recorded.error)
-      throw new Error(
-        `Could not record the scrub rejections for this campaign, so nothing was imported: ${recorded.error.message}`,
-      );
-  }
+        }))
+    : [];
 
   let costCents = 0;
   if (campaignId) {
     // The cost stamped on each lead is the cost per USABLE record, not per purchased record.
     // LA-2.2: "Allocate over usable rows, not purchased rows, and record both." The campaign row
-    // keeps the purchased basis; `tenant_campaign_costs` derives the usable basis from the ledger
-    // written just above, so this read already reflects this file's rejections.
+    // keeps the purchased basis; `tenant_campaign_costs` derives the usable basis from the ledger.
+    // This file's own rejections land in the same transaction as its leads, so they are counted
+    // into the divisor here rather than read back (projectedUsableCostCents).
     const campaign = (await db
       .from("tenant_campaign_costs")
       .select(
-        "campaign_id, cost_per_record_cents, cost_per_usable_record_cents",
+        "campaign_id, total_spend_cents, credits_received_cents, records_purchased, records_rejected, cost_per_record_cents, cost_per_usable_record_cents",
       )
       .eq("tenant_id", tenantId)
       .eq("campaign_id", campaignId)
       .maybeSingle()) as LooseResult<{
       campaign_id: string;
+      total_spend_cents: number | null;
+      credits_received_cents: number | null;
+      records_purchased: number | null;
+      records_rejected: number | null;
       cost_per_record_cents: number | null;
       cost_per_usable_record_cents: number | null;
     } | null>;
@@ -1473,16 +1494,7 @@ export async function importAgentLeads(
     // Falling back to the purchased basis when the usable basis is null is correct rather than
     // lazy: null means every purchased row was rejected, and in that case there is no usable row
     // for this cost to be attached to anyway.
-    costCents = Math.max(
-      0,
-      Math.round(
-        Number(
-          campaign.data.cost_per_usable_record_cents ??
-            campaign.data.cost_per_record_cents ??
-            0,
-        ),
-      ),
-    );
+    costCents = projectedUsableCostCents(campaign.data, ledger.length);
   }
   const pending: Array<{
     rowNumber: number;
@@ -1513,7 +1525,8 @@ export async function importAgentLeads(
         pending.push({
           rowNumber: row.rowNumber,
           matchedId: matched.id,
-          insert: {},
+          // Only the certificate: this vendor's evidence for a person someone else sold first.
+          insert: { consent: row.consent ?? null },
           created: false,
         }) - 1;
       rowRefs.push({ rowNumber: row.rowNumber, pendingIndex, created: false });
@@ -1546,27 +1559,33 @@ export async function importAgentLeads(
   // Every row was rejected at scrub. That is a real and complete outcome, not an error: the
   // rejections are recorded, the vendor claim is now provable, and there is nothing to commit. The
   // commit function rejects an empty batch by design, so it must not be called at all.
-  if (pending.length === 0)
+  // The ledger is still written, on its own: commitLeadImport with no items records it alone.
+  const commit = async (items: Array<Record<string, unknown>>) => {
+    try {
+      return await commitLeadImport({ tenantId, userId, items, batchId: null, spend: null, campaignId: campaignId ?? null, rejections: ledger });
+    } catch (error) {
+      // No batch and no spend on this path, so the only refusal is a database one, already worded.
+      throw error instanceof ImportCommitRefusal ? new Error(error.message) : error;
+    }
+  };
+  if (pending.length === 0) {
+    if (ledger.length > 0) await commit([]);
     return { imported: [] as ImportedLeadResult[], rejected };
+  }
 
-  const batch = await db.rpc("import_agent_lead_batch", {
-    p_tenant_id: tenantId,
-    p_created_by: userId,
-    p_items: pending.map((item) => ({
+  // One transaction: the ledger, then the leads (import_agent_lead_batch inside
+  // commit_reviewed_lead_import), their zones and certificates.
+  const committed = await commit(
+    pending.map((item) => ({
       lead_id: item.matchedId,
-      ...(item.matchedId ? {} : item.insert),
+      ...(item.matchedId ? { consent: item.insert.consent ?? null } : item.insert),
       campaign_id: campaignId,
       cost_cents: costCents,
       source_key: `csv:${item.rowNumber}`,
     })),
-  });
-  if (batch.error || !Array.isArray(batch.data))
-    throw new Error(
-      batch.error?.message ?? "Could not commit the lead import batch",
-    );
-  const leadIds = batch.data.filter(
-    (value): value is string => typeof value === "string",
   );
+  const leadIds = committed.ids;
+  if (committed.warning) console.error(`[import] direct import: ${committed.warning}`);
 
   // Mark the campaign scrubbed, because this import just scrubbed it.
   //
@@ -1722,7 +1741,12 @@ function normalizeFormValues(
 ): { values: Record<string, unknown>; error: string | null } {
   if (!values || typeof values !== "object" || Array.isArray(values))
     return { values: {}, error: "Lead values must be an object" };
-  const record = values as Record<string, unknown>;
+  // `age` is derived from the date of birth and stored with the lead (LA-1.4-6). When the form has no
+  // field of that name, a stored age sent back with an edit is not an unknown field: it is dropped
+  // here and derived again below.
+  const record = fields.some((field) => field.field_key === DERIVED_AGE_KEY)
+    ? withDerivedAge(values as Record<string, unknown>, fields)
+    : Object.fromEntries(Object.entries(values as Record<string, unknown>).filter(([key]) => key !== DERIVED_AGE_KEY));
   const formFields = form?.sections.flatMap((section) => section.fields) ?? [];
   const active = formFields.length
     ? formFields.filter((item) => {
@@ -1743,6 +1767,7 @@ function normalizeFormValues(
     Object.keys(record).some(
       (key) =>
         !activeKeys.has(key) &&
+        key !== DERIVED_AGE_KEY &&
         record[key] !== undefined &&
         record[key] !== null &&
         record[key] !== "",
@@ -1770,12 +1795,18 @@ function normalizeFormValues(
       continue;
     }
     if (
-      ["text", "long_text", "date", "phone", "email", "ssn"].includes(
+      ["text", "long_text", "date", "phone", "email", "ssn", "bank_routing", "bank_account"].includes(
         field.type,
       ) &&
       typeof value !== "string"
     )
       return { values: {}, error: `${field.label} must be text` };
+    // Routing (ABA checksum) and account formats, LA-1.4-6. Stored as the digits alone.
+    if (field.type === "bank_routing" || field.type === "bank_account") {
+      const formatError = bankFormatError(field, value as string);
+      if (formatError) return { values: {}, error: formatError };
+      value = (value as string).replace(/\D/g, "");
+    }
     if (
       ["number", "currency"].includes(field.type) &&
       (typeof value !== "number" ||
@@ -1877,7 +1908,7 @@ function normalizeFormValues(
     }
     output[field.field_key] = value;
   }
-  return { values: output, error: null };
+  return { values: withDerivedAge(output, fields), error: null };
 }
 
 export function validateValues(
@@ -1917,8 +1948,19 @@ export function validateImportValues(
   // Passing no form definition validates against the complete field catalog while making every
   // non-phone field optional. The interactive form still uses validateValues and keeps its own
   // required/conditional rules.
+  //
+  // A state picker accepts every US state at import (LA-2.2-4: "TN must be accepted"). Where a
+  // person lives is a fact about the row, not a choice from the form's list — a template limited
+  // to the agency's licensed states refused a Tennessee row as "unreadable", when the review's own
+  // "outside your licensed states" line is the place to say so.
   return validateValues(
-    fields.map((field) => ({ ...field, is_required: false })),
+    fields.map((field) => ({
+      ...field,
+      is_required: false,
+      ...(field.field_key === "state" && field.type === "single_select"
+        ? { options: [...new Set([...field.options, ...US_STATE_CODES])] }
+        : {}),
+    })),
     values,
     null,
   );
@@ -1970,7 +2012,12 @@ export async function loadFormDraft(
   request = partnerId
     ? request.eq("partner_id", partnerId)
     : request.is("partner_id", null);
-  let { data, error } = await request.maybeSingle();
+  // A partner user can hold several drafts for one product (LA-1.6-5); without a draft id the
+  // newest one is "the" draft, as it was when there could only be one.
+  let { data, error } = await request
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
   if (
     error &&
     /partner_submission_profile_id|schema cache|column .* does not exist/i.test(
@@ -2078,6 +2125,149 @@ export async function deleteFormDraft(
   if (error) throw new Error(`Could not clear form draft: ${error.message}`);
 }
 
+/* ── LA-1.6-5: a partner user's list of started forms, each addressed by id ─────────────────────── */
+
+const DRAFT_COLUMNS =
+  "id, tenant_id, partner_id, user_id, product_code, tenant_template_id, definition_version, partner_submission_profile_id, partner_submission_profile_revision, carrier_id, carrier_state, partner_market_access_profile_id, partner_market_access_profile_revision, payload, created_at, updated_at";
+
+export type PartnerDraftSummary = {
+  id: string;
+  product_code: string;
+  carrier_id: string | null;
+  carrier_state: string | null;
+  /** The customer's name as typed so far, or null. */
+  label: string | null;
+  /** The last four digits of the phone typed so far, or null. */
+  phone_last4: string | null;
+  answered: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export function summarizePartnerDraft(row: {
+  id: string;
+  product_code: string;
+  carrier_id?: string | null;
+  carrier_state?: string | null;
+  payload: unknown;
+  created_at: string;
+  updated_at: string;
+}): PartnerDraftSummary {
+  const payload =
+    row.payload && typeof row.payload === "object" && !Array.isArray(row.payload)
+      ? (row.payload as Record<string, unknown>)
+      : {};
+  const phone = textValue(payload, ["phone", "phone_number"])?.replace(/\D/g, "") ?? "";
+  return {
+    id: row.id,
+    product_code: row.product_code,
+    carrier_id: row.carrier_id ?? null,
+    carrier_state: row.carrier_state ?? null,
+    label: fullNameForDuplicate(payload),
+    phone_last4: phone.length >= 4 ? phone.slice(-4) : null,
+    answered: Object.values(payload).filter(
+      (value) => value !== undefined && value !== null && value !== "" && !(Array.isArray(value) && value.length === 0),
+    ).length,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  };
+}
+
+export async function listPartnerFormDrafts(
+  tenantId: string,
+  userId: string,
+  partnerId: string,
+): Promise<PartnerDraftSummary[]> {
+  const { data, error } = await getSupabaseServiceClient()
+    .from("form_drafts")
+    .select("id, product_code, carrier_id, carrier_state, payload, created_at, updated_at")
+    .eq("tenant_id", tenantId)
+    .eq("user_id", userId)
+    .eq("partner_id", partnerId)
+    .order("updated_at", { ascending: false })
+    .limit(50);
+  if (error) throw new Error(`Could not load drafts: ${error.message}`);
+  return (data ?? []).map(summarizePartnerDraft);
+}
+
+export async function loadPartnerFormDraftById(
+  tenantId: string,
+  userId: string,
+  partnerId: string,
+  draftId: string,
+) {
+  const { data, error } = await getSupabaseServiceClient()
+    .from("form_drafts")
+    .select(DRAFT_COLUMNS)
+    .eq("tenant_id", tenantId)
+    .eq("user_id", userId)
+    .eq("partner_id", partnerId)
+    .eq("id", draftId)
+    .maybeSingle();
+  if (error) throw new Error(`Could not load form draft: ${error.message}`);
+  return data;
+}
+
+/**
+ * Saves one partner draft by id (p_draft_id) or starts a new one (null). Before
+ * 20260925510100 is applied the slot function does not exist, and this falls back to the one-draft-
+ * per-product save, which is what the portal did before.
+ */
+export async function savePartnerFormDraftSlot(
+  tenantId: string,
+  userId: string,
+  partnerId: string,
+  productCode: string,
+  template: {
+    tenant_template_id: string;
+    definition_version: number;
+    partner_submission_profile_id?: string | null;
+    profile_revision?: number | null;
+  },
+  payload: unknown,
+  draftId: string | null,
+): Promise<string> {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload))
+    throw new Error("Draft values must be an object");
+  const { data, error } = await getSupabaseServiceClient().rpc(
+    "save_partner_form_draft_slot" as never,
+    {
+      p_tenant_id: tenantId,
+      p_partner_id: partnerId,
+      p_user_id: userId,
+      p_product_code: productCode,
+      p_tenant_template_id: template.tenant_template_id,
+      p_definition_version: template.definition_version,
+      p_profile_id: template.partner_submission_profile_id ?? null,
+      p_profile_revision: template.profile_revision ?? null,
+      p_payload: payload as Json,
+      p_draft_id: draftId,
+    } as never,
+  );
+  if (error && /save_partner_form_draft_slot|schema cache|Could not find the function/i.test(error.message))
+    return saveFormDraft(tenantId, userId, productCode, template, payload, partnerId);
+  if (error?.message.includes("form_draft_not_found")) throw new Error("form_draft_not_found");
+  if (error?.message.includes("form_draft_limit_reached")) throw new Error("form_draft_limit_reached");
+  if (error || !data) throw new Error(error?.message ?? "Could not save form draft");
+  return data as unknown as string;
+}
+
+export async function deletePartnerFormDraftById(
+  tenantId: string,
+  userId: string,
+  partnerId: string,
+  draftId: string,
+) {
+  const { error } = await getSupabaseServiceClient()
+    .from("form_drafts")
+    .delete()
+    .eq("tenant_id", tenantId)
+    .eq("user_id", userId)
+    .eq("partner_id", partnerId)
+    .eq("id", draftId);
+  if (error) throw new Error(`Could not clear form draft: ${error.message}`);
+}
+
 export type PartnerLeadDuplicate = { leadId: string; matchedOn: string[] };
 
 export class PartnerDuplicateError extends Error {
@@ -2173,6 +2363,8 @@ export async function createPartnerLead(
   >,
   options: {
     screeningWarningAcknowledged?: boolean;
+    /** LA-1.5-4: a new lead over an internal DQ needs a 10–1000 character reason. */
+    requireInternalDqReason?: boolean;
     duplicateOverrideJustification?: string | null;
     affiliateLinkId?: string | null;
     affiliateCampaign?: string | null;
@@ -2190,6 +2382,9 @@ export async function createPartnerLead(
     values,
   );
   if (normalized.error) throw new Error(normalized.error);
+  // LA-1.5-10: a lead only stores a screening result from a version this build can read.
+  if (!isKnownScreeningVersion(screening.version))
+    throw new Error("unknown_screening_version");
   const supabase = getSupabaseServiceClient();
   const selected =
     "id, product_line, partner_id, submission_id, pipeline_id, stage_id, values, affiliate_link_id, affiliate_campaign, screening_outcome, screening_warning, screening_warning_acknowledged, screening_warning_acknowledged_at, duplicate_override_justification, duplicate_override_by, duplicate_override_at, screening_checked_at, created_at, updated_at";
@@ -2239,10 +2434,32 @@ export async function createPartnerLead(
     }
     throw new PartnerDuplicateError(externalDuplicates);
   }
+  // A replay's own lead makes its number look like an internal DQ. That is not a new match: the
+  // replay neither asks for a reason nor rewrites the screening the first request stored.
+  const replayOwnMatch =
+    Boolean(existing.data) &&
+    screening.outcome === "internal_dq" &&
+    existing.data?.screening_outcome !== "internal_dq";
+  if (
+    options.requireInternalDqReason &&
+    screening.outcome === "internal_dq" &&
+    !existing.data &&
+    (!justification || justification.length < 10 || justification.length > 1000)
+  ) {
+    for (const delay of [25, 50, 100]) {
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      const racing = await loadExisting();
+      if (racing.error)
+        throw new Error(
+          `Could not check submission status: ${racing.error.message}`,
+        );
+      if (racing.data) return { lead: racing.data, replayed: true as const };
+    }
+    throw new Error("internal_dq_reason_required");
+  }
   const partnerType = await partnerTypeForLead(tenantId, partnerId);
-  const stage = partnerType === "publisher"
-    ? await resolvePartnerSubmissionStage(tenantId)
-    : await resolveRuntimeStage(tenantId, template.template.stages[0]?.stage_key ?? "new", partnerType);
+  // The partner-type pipeline's entry stage ("New Transfer" for a publisher), LA-1.9-4.
+  const stage = await resolvePartnerEntryStage(tenantId, partnerType);
   const warningAcknowledged =
     screening.warning?.code === "dnc" &&
     Boolean(options.screeningWarningAcknowledged);
@@ -2268,9 +2485,20 @@ export async function createPartnerLead(
       : {}),
   };
   const updateExisting = async (leadId: string) => {
+    const replayMetadata = replayOwnMatch
+      ? {
+          values: metadata.values,
+          ...(options.affiliateLinkId
+            ? {
+                affiliate_link_id: options.affiliateLinkId,
+                affiliate_campaign: options.affiliateCampaign ?? null,
+              }
+            : {}),
+        }
+      : metadata;
     const updated = await supabase
       .from("agent_leads")
-      .update(metadata)
+      .update(replayMetadata)
       .eq("id", leadId)
       .eq("tenant_id", tenantId)
       .eq("partner_id", partnerId)
@@ -2407,34 +2635,116 @@ export async function consentForLeads(
   const byLead = new Map<string, LeadConsentExport>();
   if (leadIds.length === 0) return byLead;
 
-  const db = getSupabaseServiceClient() as unknown as LooseDb;
-  // The ids travel in the request URL (`lead_id=in.(...)`); a full export of 1,000 leads made that
-  // URL too long and PostgREST answered "Bad Request", so the whole export failed. Read in chunks.
-  const CHUNK = 150;
-  for (let start = 0; start < leadIds.length; start += CHUNK) {
-    const { data, error } = (await db
-      .from("tenant_consent_artefacts")
-      .select(
-        "lead_id, provider, certificate_id, certificate_url, consent_timestamp, captured_at, claimed_at, capture_status, stored_ref",
-      )
-      .eq("tenant_id", tenantId)
-      .in("lead_id", leadIds.slice(start, start + CHUNK))
-      .order("captured_at", { ascending: false })) as LooseResult<
-      Array<LeadConsentExport & { lead_id: string }>
-    >;
-    // Reported, not swallowed. An export that silently omits the consent columns because a query
-    // failed looks exactly like an export of leads that have no certificates — and the whole point of
-    // this column is to tell those two apart.
-    if (error)
-      throw new Error(`Could not load consent certificates: ${error.message}`);
-
-    for (const row of data ?? []) {
-      // Ordered newest first, so the first row seen for a lead is the one to keep. A lead's rows
-      // all fall in the same chunk, so the order holds across chunks too.
-      if (!byLead.has(row.lead_id)) byLead.set(row.lead_id, row);
+  const db = getSupabaseServiceClient() as unknown as {
+    from(table: string): {
+      select(columns: string): {
+        eq(column: string, value: unknown): ConsentQuery;
+      };
+    };
+  };
+  type ConsentQuery = PromiseLike<LooseResult<Array<LeadConsentExport & { lead_id: string }> | null>> & {
+    in(column: string, values: unknown[]): ConsentQuery;
+    order(column: string, options?: { ascending?: boolean }): ConsentQuery;
+    range(from: number, to: number): ConsentQuery;
+  };
+  // `stored_copy` is not read (it can be large); `claimed_at` says a copy was taken.
+  const COLUMNS = "lead_id, provider, certificate_id, certificate_url, consent_timestamp, captured_at, claimed_at, capture_status, stored_ref";
+  const keep = (rows: Array<LeadConsentExport & { lead_id: string }> | null, wanted: Set<string> | null) => {
+    for (const row of rows ?? []) {
+      // Ordered newest first, so the first row seen for a lead is the one to keep.
+      if ((!wanted || wanted.has(row.lead_id)) && !byLead.has(row.lead_id)) byLead.set(row.lead_id, row);
     }
+  };
+  // One retry for a dropped connection: a full export makes many reads, and one "fetch failed"
+  // among them used to fail the whole export with a 500 (LA-2.6-6).
+  const read = async (query: () => ConsentQuery) => {
+    let result = await query();
+    if (result.error && /fetch failed|ECONNRESET|ETIMEDOUT|socket/i.test(result.error.message)) result = await query();
+    // Reported, not swallowed. An export that silently omits the consent columns because a query
+    // failed looks exactly like an export of leads that have no certificates — and the whole point
+    // of this column is to tell those two apart.
+    if (result.error) throw new Error(`Could not load consent certificates: ${result.error.message}`);
+    return result.data;
+  };
+
+  // A few hundred leads: their ids, in chunks — the ids travel in the request URL, and a full
+  // export of 1,000 made that URL too long for PostgREST. A lead's rows all fall in one chunk.
+  const CHUNK = 150;
+  if (leadIds.length <= CHUNK * 4) {
+    for (let start = 0; start < leadIds.length; start += CHUNK) {
+      const ids = leadIds.slice(start, start + CHUNK);
+      keep(await read(() => db.from("tenant_consent_artefacts").select(COLUMNS).eq("tenant_id", tenantId).in("lead_id", ids).order("captured_at", { ascending: false })), null);
+    }
+    return byLead;
+  }
+
+  // A whole book: every certificate the tenant holds, a page at a time, kept for the exported leads.
+  // Fewer reads than 15,000 ids in 100 chunks, and no id list in any URL.
+  const wanted = new Set(leadIds);
+  const PAGE = 1000;
+  for (let from = 0; ; from += PAGE) {
+    const page = await read(() =>
+      db.from("tenant_consent_artefacts").select(COLUMNS).eq("tenant_id", tenantId)
+        .order("captured_at", { ascending: false }).order("id", { ascending: true }).range(from, from + PAGE - 1),
+    );
+    keep(page, wanted);
+    if (!page || page.length < PAGE) break;
   }
   return byLead;
+}
+
+/**
+ * Every lead the book-of-business export covers, paged past PostgREST's row cap.
+ *
+ * LA-2.6-6: posted leads never reached the export — a lead posted by a vendor has no
+ * `tenant_template_id`, and the export filtered on it, so the only leads that carry certificates
+ * were the ones left out. A lead with no template copy is exported when it is this product's.
+ * The same search, filter and sort as the leads list.
+ */
+export async function exportAgentLeads(
+  tenantId: string,
+  template: AgentTemplate,
+  search: string,
+  filterField: string,
+  filterValue: string,
+  sortField: string,
+  direction: "asc" | "desc",
+) {
+  type ExportLead = { id: string; stage_id: string; values: Record<string, unknown> | null; created_at: string };
+  type PageQuery = PromiseLike<LooseResult<ExportLead[] | null>> & {
+    eq(column: string, value: unknown): PageQuery;
+    or(filters: string): PageQuery;
+    order(column: string, options?: { ascending?: boolean }): PageQuery;
+    range(from: number, to: number): PageQuery;
+  };
+  const db = getSupabaseServiceClient() as unknown as { from(table: string): { select(columns: string): PageQuery } };
+  const allowedFields = new Set(template.template.fields.map((field) => field.field_key));
+  const safeFilterField = allowedFields.has(filterField) ? filterField : "";
+  const safeSortField = allowedFields.has(sortField) ? sortField : "";
+  const product = template.template.product_code.replace(/[^a-z0-9_]/gi, "");
+  const PAGE = 1000;
+  const leads: Array<ExportLead & { values: Record<string, unknown> }> = [];
+  for (let from = 0; ; from += PAGE) {
+    const page = await db
+      .from("agent_leads")
+      .select("id, stage_id, values, created_at")
+      .eq("tenant_id", tenantId)
+      .or(`tenant_template_id.eq.${template.tenant_template_id},and(tenant_template_id.is.null,product_line.eq.${product})`)
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: true })
+      .range(from, from + PAGE - 1);
+    if (page.error) throw new Error(`Could not load leads: ${page.error.message}`);
+    for (const lead of page.data ?? []) leads.push({ ...lead, values: (lead.values ?? {}) as Record<string, unknown> });
+    if (!page.data || page.data.length < PAGE) break;
+  }
+  const needle = search.toLocaleLowerCase();
+  const filter = filterValue.toLocaleLowerCase();
+  const matched = leads
+    .filter((lead) => !needle || Object.values(lead.values).some((value) => String(value ?? "").toLocaleLowerCase().includes(needle)))
+    .filter((lead) => !safeFilterField || !filter || String(lead.values[safeFilterField] ?? "").toLocaleLowerCase().includes(filter));
+  if (safeSortField)
+    matched.sort((a, b) => String(a.values[safeSortField] ?? "").localeCompare(String(b.values[safeSortField] ?? ""), undefined, { numeric: true }) * (direction === "desc" ? -1 : 1));
+  return matched;
 }
 
 export function csvForLeads(
@@ -2465,7 +2775,8 @@ export function csvForLeads(
     // expires, so "we have a URL" and "we have the evidence" are different facts, and a row that
     // reported only the URL would look like proof it is not.
     ["consent_capture_status", (value) => value?.capture_status ?? (value ? "captured" : "none")],
-    ["consent_stored_copy", (value) => (value?.stored_ref ? "yes" : "no")],
+    // A claim stores the copy in `stored_copy` (never read here) and stamps `claimed_at`.
+    ["consent_stored_copy", (value) => (value?.stored_ref || value?.claimed_at || value?.capture_status === "claimed" ? "yes" : "no")],
   ];
   const withConsent = Boolean(consentByLead);
 

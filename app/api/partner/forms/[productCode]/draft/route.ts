@@ -4,9 +4,11 @@ import { audit } from "@/lib/audit/log";
 import {
   getPartnerTemplateForProduct,
   getPartnerTemplateForProductProfileRevision,
-  getTenantTemplateForProductVersion,
+  getPartnerTenantTemplateForProductVersion,
   loadFormDraft,
+  loadPartnerFormDraftById,
   saveFormDraft,
+  savePartnerFormDraftSlot,
 } from "@/lib/agentTemplates/service";
 import { partnerProductHttpError } from "@/lib/partnerProducts/http";
 import { requirePartner } from "@/lib/partnerAuth/requirePartner";
@@ -14,8 +16,24 @@ import { assertPartnerProductApproved } from "@/lib/partnerProducts/service";
 import { assertPartnerMarketAccess } from "@/lib/partnerMarkets/service";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+type DraftRow = NonNullable<Awaited<ReturnType<typeof loadFormDraft>>>;
+
+/** The immutable template a saved draft was started on. */
+async function draftTemplate(tenantId: string, productCode: string, draft: DraftRow) {
+  return draft.partner_submission_profile_id && draft.partner_submission_profile_revision
+    ? getPartnerTemplateForProductProfileRevision(tenantId, draft.partner_submission_profile_id, draft.partner_submission_profile_revision, productCode)
+    : getPartnerTenantTemplateForProductVersion(tenantId, productCode, draft.definition_version);
+}
+
+/**
+ * GET ?draft_id=<id>  resumes that draft (LA-1.6-5: any started form can be resumed).
+ * GET ?new=1          a fresh form: no draft.
+ * GET                 the newest draft for the product (the behaviour before the draft list).
+ */
 export async function GET(
-  _request: Request,
+  request: NextRequest,
   { params }: { params: Promise<{ productCode: string }> },
 ) {
   const auth = await requirePartner();
@@ -27,27 +45,22 @@ export async function GET(
       auth.context.partnerId,
       productCode,
     );
-    const draft = await loadFormDraft(
-      auth.context.tenantId,
-      auth.context.userId,
-      productCode,
-      auth.context.partnerId,
-    );
-    const template = draft
-      ? draft.partner_submission_profile_id &&
-        draft.partner_submission_profile_revision
-        ? await getPartnerTemplateForProductProfileRevision(
+    const draftId = request.nextUrl.searchParams.get("draft_id");
+    if (draftId !== null && !UUID.test(draftId))
+      return NextResponse.json({ error: "That draft id is not valid" }, { status: 400 });
+    const draft = request.nextUrl.searchParams.get("new") === "1"
+      ? null
+      : draftId
+        ? await loadPartnerFormDraftById(auth.context.tenantId, auth.context.userId, auth.context.partnerId, draftId)
+        : await loadFormDraft(
             auth.context.tenantId,
-            draft.partner_submission_profile_id,
-            draft.partner_submission_profile_revision,
+            auth.context.userId,
             productCode,
-          )
-        : await getTenantTemplateForProductVersion(
-            auth.context.tenantId,
-            productCode,
-            draft.definition_version,
-          )
-      : null;
+            auth.context.partnerId,
+          );
+    if (draftId && (!draft || draft.product_code !== productCode))
+      return NextResponse.json({ error: "That draft was not found. It may have been submitted already." }, { status: 404 });
+    const template = draft ? await draftTemplate(auth.context.tenantId, productCode, draft as DraftRow) : null;
     return NextResponse.json(
       { draft, template },
       { headers: { "Cache-Control": "no-store" } },
@@ -61,6 +74,11 @@ export async function GET(
   }
 }
 
+/**
+ * PUT { payload, carrier_id, carrier_state, draft_id }
+ *   draft_id: "<id>"  saves that draft;  draft_id: null  starts a new one and returns its id;
+ *   no draft_id       the one-draft-per-product save used before the draft list.
+ */
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ productCode: string }> },
@@ -79,42 +97,40 @@ export async function PUT(
       auth.context.partnerId,
       productCode,
     );
-    const existingDraft = await loadFormDraft(
-      auth.context.tenantId,
-      auth.context.userId,
-      productCode,
-      auth.context.partnerId,
-    );
-    const template =
-      existingDraft?.partner_submission_profile_id &&
-      existingDraft.partner_submission_profile_revision
-        ? await getPartnerTemplateForProductProfileRevision(
-            auth.context.tenantId,
-            existingDraft.partner_submission_profile_id,
-            existingDraft.partner_submission_profile_revision,
-            productCode,
-          )
-        : existingDraft
-          ? await getTenantTemplateForProductVersion(
-              auth.context.tenantId,
-              productCode,
-              existingDraft.definition_version,
-            )
-          : await getPartnerTemplateForProduct(
-              auth.context.tenantId,
-              auth.context.partnerId,
-              auth.context.userId,
-              productCode,
-            );
-    const profileTemplate = template as typeof template & {
-      partner_submission_profile_id?: string | null;
-      profile_revision?: number | null;
-    };
     const body = (await request.json().catch(() => null)) as {
       payload?: unknown;
       carrier_id?: unknown;
       carrier_state?: unknown;
+      draft_id?: unknown;
     } | null;
+    const slotted = body !== null && Object.prototype.hasOwnProperty.call(body, "draft_id");
+    if (slotted && body?.draft_id !== null && (typeof body?.draft_id !== "string" || !UUID.test(body.draft_id)))
+      return NextResponse.json({ error: "That draft id is not valid" }, { status: 400 });
+    const draftId = slotted && typeof body?.draft_id === "string" ? body.draft_id : null;
+    const existingDraft = slotted
+      ? draftId
+        ? await loadPartnerFormDraftById(auth.context.tenantId, auth.context.userId, auth.context.partnerId, draftId)
+        : null
+      : await loadFormDraft(
+          auth.context.tenantId,
+          auth.context.userId,
+          productCode,
+          auth.context.partnerId,
+        );
+    if (draftId && (!existingDraft || existingDraft.product_code !== productCode))
+      return NextResponse.json({ error: "That draft was not found. It may have been submitted already." }, { status: 404 });
+    const template = existingDraft
+      ? await draftTemplate(auth.context.tenantId, productCode, existingDraft as DraftRow)
+      : await getPartnerTemplateForProduct(
+          auth.context.tenantId,
+          auth.context.partnerId,
+          auth.context.userId,
+          productCode,
+        );
+    const profileTemplate = template as typeof template & {
+      partner_submission_profile_id?: string | null;
+      profile_revision?: number | null;
+    };
     if (
       typeof body?.carrier_id !== "string" ||
       typeof body.carrier_state !== "string"
@@ -129,20 +145,31 @@ export async function PUT(
       body.carrier_id,
       body.carrier_state,
     );
-    const id = await saveFormDraft(
-      auth.context.tenantId,
-      auth.context.userId,
-      productCode,
-      {
-        tenant_template_id: template.tenant_template_id,
-        definition_version: template.assignment.definition_version,
-        partner_submission_profile_id:
-          profileTemplate.partner_submission_profile_id,
-        profile_revision: profileTemplate.profile_revision,
-      },
-      body?.payload,
-      auth.context.partnerId,
-    );
+    const snapshot = {
+      tenant_template_id: template.tenant_template_id,
+      definition_version: template.assignment.definition_version,
+      partner_submission_profile_id:
+        profileTemplate.partner_submission_profile_id,
+      profile_revision: profileTemplate.profile_revision,
+    };
+    const id = slotted
+      ? await savePartnerFormDraftSlot(
+          auth.context.tenantId,
+          auth.context.userId,
+          auth.context.partnerId,
+          productCode,
+          snapshot,
+          body?.payload,
+          draftId,
+        )
+      : await saveFormDraft(
+          auth.context.tenantId,
+          auth.context.userId,
+          productCode,
+          snapshot,
+          body?.payload,
+          auth.context.partnerId,
+        );
     const { error: snapshotError } = await getSupabaseServiceClient()
       .from("form_drafts")
       .update({
@@ -171,6 +198,10 @@ export async function PUT(
     });
     return NextResponse.json({ id });
   } catch (error) {
+    if (error instanceof Error && error.message === "form_draft_limit_reached")
+      return NextResponse.json({ error: "You have 25 drafts open. Submit or discard one before starting another.", code: "form_draft_limit_reached" }, { status: 409 });
+    if (error instanceof Error && error.message === "form_draft_not_found")
+      return NextResponse.json({ error: "That draft was not found. It may have been submitted already." }, { status: 404 });
     const result = partnerProductHttpError(error, "Could not save draft");
     return NextResponse.json(
       { error: result.message },

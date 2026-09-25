@@ -17,6 +17,8 @@ import {
   type TemplateStage,
   type TemplateValidation,
 } from "../templates/constants.ts";
+import { TEMPLATE_SECTION_GROUP_LABELS, sectionAvailability } from "../templates/sectionAvailability.ts";
+import { TEMPLATE_SECTION_GROUPS } from "../templates/constants.ts";
 
 export type TemplateDraft = { name: string; fields: TemplateField[]; stages: TemplateStage[]; form: TemplateFormDefinition };
 export type TemplateChange = { id: string; title: string; sub?: string };
@@ -132,6 +134,12 @@ export function diffTemplateDraft(saved: TemplateDraft, draft: TemplateDraft): T
   for (const section of saved.form.sections) if (!draftSections.has(section.section_key)) changes.push({ id: `section-:${section.section_key}`, title: `Section ${q(section.label)} removed` });
   const sectionOrder = (form: TemplateFormDefinition, other: Map<string, unknown>) => form.sections.map((section) => section.section_key).filter((key) => other.has(key)).join(",");
   if (sectionOrder(saved.form, draftSections) !== sectionOrder(draft.form, savedSections)) changes.push({ id: "section-order", title: "Sections reordered" });
+  // LA-1.4-3: the six section-group switches.
+  const savedAvailability = sectionAvailability(saved.form);
+  const draftAvailability = sectionAvailability(draft.form);
+  for (const group of TEMPLATE_SECTION_GROUPS)
+    if (savedAvailability[group] !== draftAvailability[group])
+      changes.push({ id: `availability:${group}`, title: `${TEMPLATE_SECTION_GROUP_LABELS[group]} sections ${draftAvailability[group] ? "switched on" : "switched off"}`, sub: `Was ${savedAvailability[group] ? "on" : "off"}` });
 
   const savedStages = new Map(saved.stages.map((stage) => [stage.stage_key, stage]));
   const draftStages = new Map(draft.stages.map((stage) => [stage.stage_key, stage]));

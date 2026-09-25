@@ -2,9 +2,19 @@ import "server-only";
 
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { scorecardCsv } from "./format";
-import { vendorReturnCsv } from "./returnFormat";
+import { vendorReturnCsv, type EvidenceContext } from "./returnFormat";
 import { normalizeScorecard } from "./normalize";
-import type { CampaignComparison, VendorReturnClaimDetail, VendorReturnClaim, VendorReturnsReport, VendorScorecardLeadResult, VendorScorecardReport, VendorScorecardVendorRow } from "./types";
+import { checkComparisonPeriods, comparisonErrorText, type ComparisonPeriod, type PeriodProblem } from "./comparePeriods";
+
+/** Two periods the comparison would refuse, with the matched period B could use instead. */
+export class ComparisonPeriodError extends Error {
+  constructor(readonly problem: PeriodProblem, message: string, readonly suggestion: ComparisonPeriod | null) {
+    super(message);
+    this.name = "ComparisonPeriodError";
+  }
+}
+import { SCORECARD_STAGES } from "./types";
+import type { CampaignComparison, ScorecardStage, VendorReturnClaimDetail, VendorReturnClaim, VendorReturnsReport, VendorScorecardLead, VendorScorecardLeadResult, VendorScorecardReport, VendorScorecardVendorRow } from "./types";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -73,9 +83,13 @@ export async function getVendorScorecard(tenantId: string, filters: { from?: unk
   if (persistDays !== null && (!Number.isInteger(persistDays) || persistDays < 1 || persistDays > 730)) throw new Error("Persistency must be a whole number of days from 1 to 730");
   const client = rpcClient();
   const args = { p_tenant_id: tenantId, p_from_date: from, p_to_date: to, p_vendor_id: vendorId, p_campaign_id: campaignId, p_product_code: productCode };
-  const [first, metricsResult] = await Promise.all([
+  // Since 20260925709800 the report carries the undialable and claim figures itself, and the second
+  // RPC beside it (1.8 s for twelve months) is not made at all. Until this process has seen that,
+  // both run in parallel as before, so a page before the migration is no slower than it was.
+  const metricsCall = reportCarriesReturns ? Promise.resolve(null) : client.rpc("vendor_return_metrics", args);
+  const [first, metricsFirst] = await Promise.all([
     client.rpc("tenant_vendor_scorecard_report", { ...args, p_persist_days: persistDays }),
-    client.rpc("vendor_return_metrics", args),
+    metricsCall,
   ]);
   // Before 20260925708200 the report has six arguments. Fall back to it and say so on the page;
   // persistency, test batches and the vendor roll-up need the new one.
@@ -86,9 +100,16 @@ export async function getVendorScorecard(tenantId: string, filters: { from?: unk
     reportResult = await client.rpc("tenant_vendor_scorecard_report", args);
   }
   if (reportResult.error) throw new Error(`Could not load vendor scorecard: ${reportResult.error.message}`);
+  const carries = Boolean(reportResult.data && typeof reportResult.data === "object" && (reportResult.data as { returns_included?: unknown }).returns_included === true);
+  reportCarriesReturns = carries;
+  if (carries) return normalizeScorecard(reportResult.data, new Map(), readOnly, upgraded);
+  const metricsResult = metricsFirst ?? await client.rpc("vendor_return_metrics", args);
   if (metricsResult.error) throw new Error(`Could not load vendor return metrics: ${metricsResult.error.message}`);
   return normalizeScorecard(reportResult.data, scorecardMetrics(metricsResult.data), readOnly, upgraded);
 }
+
+/** Whether the live report already includes the returns figures (20260925709800), as last seen. */
+let reportCarriesReturns = false;
 
 /**
  * THE per-vendor cost per issued policy, for /app/vendors. One definition: the scorecard report's
@@ -101,18 +122,67 @@ export async function getVendorCostPerPolicy(tenantId: string, filters: { from?:
   return { available: report.upgraded, from: report.from, to: report.to, persistDays: report.persist_days, rows: report.vendor_rows };
 }
 
-export async function getVendorScorecardLeads(tenantId: string, filters: { from: unknown; to: unknown; vendorId: unknown; campaignId?: unknown; productCode?: unknown }) {
+export const DRILL_PAGE_SIZE = 100;
+const SLOT = /^[a-z][a-z_]{0,39}$/;
+
+/**
+ * The rows behind any scorecard figure (LA-2.17-7): a stage of any scope — all campaigns, a vendor
+ * or a campaign — or one attempt number or slot of the curves, paged, with the total and the sums
+ * of the whole selection so the rows reconcile with the figure clicked. tenant_vendor_scorecard_drill
+ * (20260925709800) counts exactly what the report counts.
+ *
+ * Before that migration: the old drill, which only answers a vendor's (or campaign's) leads, at most
+ * 500, and cannot filter by stage. It is asked for one row more than it returns so the page can say
+ * the list is cut off, rather than showing 500 rows as if they were all.
+ */
+export async function getVendorScorecardLeads(tenantId: string, filters: { from: unknown; to: unknown; vendorId?: unknown; campaignId?: unknown; productCode?: unknown; stage?: unknown; attemptNumber?: unknown; slot?: unknown; persistDays?: unknown; offset?: unknown; limit?: unknown }): Promise<VendorScorecardLeadResult> {
   const from = assertScorecardDate(filters.from, "From date");
   const to = assertScorecardDate(filters.to, "To date");
   if (from > to) throw new Error("From date must be on or before To date");
   const vendorId = optionalScorecardUuid(filters.vendorId, "vendor");
-  if (!vendorId) throw new Error("Choose a vendor to drill into");
   const campaignId = optionalScorecardUuid(filters.campaignId, "campaign");
   const productCode = optionalProduct(filters.productCode);
-  const { data, error } = await rpcClient().rpc("tenant_vendor_scorecard_leads", { p_tenant_id: tenantId, p_from_date: from, p_to_date: to, p_vendor_id: vendorId, p_campaign_id: campaignId, p_product_code: productCode, p_limit: 500 });
-  if (error) throw new Error(`Could not load scorecard leads: ${error.message}`);
-  if (!data || typeof data !== "object" || Array.isArray(data)) throw new Error("The scorecard drill-down was invalid");
-  return data as VendorScorecardLeadResult;
+  const stage = filters.stage == null || filters.stage === "" ? "received" : String(filters.stage);
+  if (!(SCORECARD_STAGES as readonly string[]).includes(stage)) throw new Error("Choose a figure to open");
+  const attemptNumber = filters.attemptNumber == null || filters.attemptNumber === "" ? null : Number(filters.attemptNumber);
+  if (attemptNumber !== null && (!Number.isInteger(attemptNumber) || attemptNumber < 1 || attemptNumber > 100)) throw new Error("Invalid attempt number");
+  const slot = filters.slot == null || filters.slot === "" ? null : String(filters.slot);
+  if (slot !== null && !SLOT.test(slot)) throw new Error("Invalid slot");
+  const persistDays = filters.persistDays == null || filters.persistDays === "" ? null : Number(filters.persistDays);
+  if (persistDays !== null && (!Number.isInteger(persistDays) || persistDays < 1 || persistDays > 730)) throw new Error("Persistency must be a whole number of days from 1 to 730");
+  const offset = filters.offset == null || filters.offset === "" ? 0 : Number(filters.offset);
+  if (!Number.isInteger(offset) || offset < 0) throw new Error("Invalid page");
+  const limit = filters.limit == null || filters.limit === "" ? DRILL_PAGE_SIZE : Number(filters.limit);
+  if (!Number.isInteger(limit) || limit < 1 || limit > 500) throw new Error("Invalid page size");
+
+  const client = rpcClient();
+  const { data, error } = await client.rpc("tenant_vendor_scorecard_drill", {
+    p_tenant_id: tenantId, p_from_date: from, p_to_date: to, p_vendor_id: vendorId, p_campaign_id: campaignId, p_product_code: productCode,
+    p_stage: stage, p_attempt_number: attemptNumber, p_slot: slot, p_persist_days: persistDays, p_limit: limit, p_offset: offset,
+  });
+  if (!error) {
+    if (!data || typeof data !== "object" || Array.isArray(data)) throw new Error("The scorecard drill-down was invalid");
+    const body = data as Record<string, unknown>;
+    return {
+      rows: (Array.isArray(body.rows) ? body.rows : []) as VendorScorecardLead[],
+      stage: stage as ScorecardStage,
+      total: Number(body.total ?? 0),
+      offset: Number(body.offset ?? offset),
+      limit: Number(body.limit ?? limit),
+      has_more: body.has_more === true,
+      sums: (body.sums ?? null) as VendorScorecardLeadResult["sums"],
+      drillReady: true,
+    };
+  }
+  if (!isMissingFunction(error as { message: string; code?: string })) throw new Error(`Could not load scorecard leads: ${error.message}`);
+
+  // Before 20260925709800.
+  if (stage !== "received" || attemptNumber !== null || slot !== null || offset > 0) throw new Error("Opening this figure needs a database update that has not been applied yet.");
+  if (!vendorId) throw new Error("Opening every campaign's leads at once needs a database update that has not been applied yet. Open one vendor or campaign.");
+  const old = await client.rpc("tenant_vendor_scorecard_leads", { p_tenant_id: tenantId, p_from_date: from, p_to_date: to, p_vendor_id: vendorId, p_campaign_id: campaignId, p_product_code: productCode, p_limit: 500 });
+  if (old.error) throw new Error(`Could not load scorecard leads: ${old.error.message}`);
+  const rows = ((old.data as { rows?: unknown } | null)?.rows ?? []) as VendorScorecardLead[];
+  return { rows, stage: "received", total: null, offset: 0, limit: 500, has_more: rows.length >= 500, sums: null, drillReady: false };
 }
 
 export async function getCampaignComparison(tenantId: string, filters: { campaignAId: unknown; campaignBId: unknown; fromA: unknown; toA: unknown; fromB: unknown; toB: unknown; metric: unknown }) {
@@ -123,11 +193,14 @@ export async function getCampaignComparison(tenantId: string, filters: { campaig
   const toA = assertScorecardDate(filters.toA, "Campaign A to date");
   const fromB = assertScorecardDate(filters.fromB, "Campaign B from date");
   const toB = assertScorecardDate(filters.toB, "Campaign B to date");
-  if (fromA > toA || fromB > toB) throw new Error("Each comparison period must have a valid date range");
+  // The database's matched-period rules, checked first so the refusal is a sentence with the
+  // matched period offered, not a raw code (LA-2.18-2).
+  const periods = checkComparisonPeriods({ from: fromA, to: toA }, { from: fromB, to: toB }, isoDay(new Date()));
+  if (!periods.ok) throw new ComparisonPeriodError(periods.problem, periods.message, periods.suggestion);
   const metric = filters.metric === "conversion_rate" || filters.metric === "cost_per_issued" || filters.metric === "contact_rate" ? filters.metric : null;
-  if (!metric) throw new Error("Choose a comparison metric");
+  if (!metric) throw new Error("Choose what to compare: contact rate, issued conversion or cost per issued policy.");
   const { data, error } = await rpcClient().rpc("tenant_campaign_comparison", { p_tenant_id: tenantId, p_campaign_a_id: campaignAId, p_campaign_b_id: campaignBId, p_from_a: fromA, p_to_a: toA, p_from_b: fromB, p_to_b: toB, p_metric: metric });
-  if (error) throw new Error(`Could not compare campaigns: ${error.message}`);
+  if (error) throw new Error(comparisonErrorText(error.message) ?? `Could not compare campaigns: ${error.message}`);
   if (!data || typeof data !== "object" || Array.isArray(data)) throw new Error("The campaign comparison was invalid");
   return data as CampaignComparison;
 }
@@ -216,6 +289,33 @@ export async function getVendorReturnClaimDetail(tenantId: string, claimId: unkn
   if (error) throw new Error(`Could not load claim evidence: ${error.message}`);
   if (!data || typeof data !== "object" || Array.isArray(data) || !(data as { claim?: unknown }).claim) throw new Error("The claim evidence was invalid");
   return data as VendorReturnClaimDetail;
+}
+
+/**
+ * The evidence summary's context: the claim's campaign and vendor by name and its period (from
+ * describeClaims, the page's own definition), and the unit price each row is claimed at — the
+ * campaign's purchased rate, spend ÷ records purchased, which create_combined_vendor_return_claim
+ * prices rows at. Best effort: a label that cannot be read is left blank rather than failing the export.
+ */
+export async function vendorReturnEvidenceContext(tenantId: string, claim: VendorReturnClaim): Promise<EvidenceContext> {
+  const db = getSupabaseServiceClient() as unknown as Loose;
+  const first = (result: { data: unknown; error: unknown }) => (result.error ? null : ((result.data as Array<Record<string, unknown>> | null) ?? [])[0] ?? null);
+  const [described, campaign, vendor] = await Promise.all([
+    describeClaims(tenantId, [claim]).then((rows) => rows[0] ?? claim, () => claim),
+    Promise.resolve(db.from("tenant_campaigns").select("total_spend_cents, records_purchased").eq("tenant_id", tenantId).eq("id", claim.campaign_id)).then(first, () => null),
+    Promise.resolve(db.from("tenant_lead_vendors").select("return_window_days").eq("tenant_id", tenantId).eq("id", claim.vendor_id)).then(first, () => null),
+  ]);
+  const spend = Number(campaign?.total_spend_cents ?? 0);
+  const records = Number(campaign?.records_purchased ?? 0);
+  const windowDays = vendor?.return_window_days == null ? null : Number(vendor.return_window_days);
+  return {
+    campaignName: described.campaign_name ?? null,
+    vendorName: described.vendor_name ?? null,
+    unitPriceCents: records > 0 ? spend / records : null,
+    periodFrom: described.period_from ?? null,
+    periodTo: described.period_to ?? null,
+    returnWindowDays: windowDays ?? null,
+  };
 }
 
 export { scorecardCsv, vendorReturnCsv };

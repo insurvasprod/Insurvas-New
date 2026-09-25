@@ -8,7 +8,7 @@ import { ErrorState, LoadingRows } from "@/components/ui/page-states";
 import { StatTile } from "@/components/ui/stat";
 import { StatusChip } from "@/components/ui/status-chip";
 import { sectionForPath } from "@/lib/menu/definition";
-import type { VendorScorecardLead, VendorScorecardReport, VendorScorecardRow, VendorScorecardVendorRow } from "@/lib/vendorScorecard/types";
+import type { ScorecardStage, VendorScorecardLeadResult, VendorScorecardReport, VendorScorecardRow, VendorScorecardVendorRow } from "@/lib/vendorScorecard/types";
 import { CampaignComparisonWorkspace } from "./campaign-comparison-workspace";
 
 const PAGE_SIZE = 25;
@@ -54,6 +54,17 @@ type Grain = "vendor" | "campaign";
 type Sort = "cost" | "spend";
 function queryFor(value: Scope) { const params = new URLSearchParams({ from: value.from, to: value.to }); if (value.vendorId) params.set("vendor_id", value.vendorId); if (value.campaignId) params.set("campaign_id", value.campaignId); if (value.productCode) params.set("product_code", value.productCode); if (value.persist) params.set("persist_days", String(PERSIST_DAYS)); return params.toString(); }
 
+/**
+ * What a click on a figure opens (LA-2.17-7): the leads behind it, in the report's own scope. The
+ * key identifies the figure so a second click closes it.
+ */
+type DrillSpec = { key: string; title: string; params: Record<string, string> };
+const DRILL_PAGE = 100;
+const STAGE_NOUN: Record<ScorecardStage, string> = {
+  received: "leads received", dialable: "dialable leads", undialable: "undialable leads", dialed: "leads dialled",
+  contacted: "leads contacted", quoted: "leads quoted", applied: "leads with an application", issued: "leads with an issued policy",
+};
+
 /** One table line, whether it is a campaign or a vendor roll-up. */
 type Line = {
   key: string;
@@ -65,6 +76,10 @@ type Line = {
   records: number;
   leads: number;
   dialable: number;
+  dialed: number | null;
+  quoted: number | null;
+  costPerContact: number | null;
+  contacted: number;
   contact: number | null;
   undialableRate: number | null;
   apps: number;
@@ -79,10 +94,10 @@ type Line = {
 };
 
 function campaignLine(row: VendorScorecardRow): Line {
-  return { key: row.campaign_id, label: `${row.vendor_name} · ${row.campaign_name}`, vendorId: row.vendor_id, vendorName: row.vendor_name, row, costPerRecord: row.cost_per_record_cents, records: row.records_purchased, leads: row.leads_received, dialable: row.dialable_leads, contact: row.contact_rate_percent, undialableRate: row.undialable_rate_percent, apps: row.applications, issued: row.issued_policies, netSpend: row.net_spend_cents, cpi: row.effective_cost_per_issued_policy_cents, claimAcceptance: row.claim_acceptance_rate_percent, warnings: row.attribution_warnings, isTest: row.is_test_batch, small: row.small_sample, rank: row.cost_rank };
+  return { key: row.campaign_id, label: `${row.vendor_name} · ${row.campaign_name}`, vendorId: row.vendor_id, vendorName: row.vendor_name, row, costPerRecord: row.cost_per_record_cents, records: row.records_purchased, leads: row.leads_received, dialable: row.dialable_leads, dialed: row.dialed_leads, quoted: row.quoted_leads, costPerContact: row.effective_cost_per_contact_cents, contacted: row.contacted_leads, contact: row.contact_rate_percent, undialableRate: row.undialable_rate_percent, apps: row.applications, issued: row.issued_policies, netSpend: row.net_spend_cents, cpi: row.effective_cost_per_issued_policy_cents, claimAcceptance: row.claim_acceptance_rate_percent, warnings: row.attribution_warnings, isTest: row.is_test_batch, small: row.small_sample, rank: row.cost_rank };
 }
 function vendorLine(row: VendorScorecardVendorRow): Line {
-  return { key: row.vendor_id, label: row.vendor_name, vendorId: row.vendor_id, vendorName: row.vendor_name, row: null, costPerRecord: row.cost_per_record_cents, records: row.records_purchased, leads: row.leads_received, dialable: row.dialable_leads, contact: row.contact_rate_percent, undialableRate: row.undialable_rate_percent, apps: row.applications, issued: row.issued_policies, netSpend: row.net_spend_cents, cpi: row.effective_cost_per_issued_policy_cents, claimAcceptance: row.claim_acceptance_rate_percent, warnings: row.attribution_warnings, isTest: row.is_test_batch, small: row.small_sample, rank: row.cost_rank };
+  return { key: row.vendor_id, label: row.vendor_name, vendorId: row.vendor_id, vendorName: row.vendor_name, row: null, costPerRecord: row.cost_per_record_cents, records: row.records_purchased, leads: row.leads_received, dialable: row.dialable_leads, dialed: row.dialed_leads, quoted: row.quoted_leads, costPerContact: row.effective_cost_per_contact_cents, contacted: row.contacted_leads, contact: row.contact_rate_percent, undialableRate: row.undialable_rate_percent, apps: row.applications, issued: row.issued_policies, netSpend: row.net_spend_cents, cpi: row.effective_cost_per_issued_policy_cents, claimAcceptance: row.claim_acceptance_rate_percent, warnings: row.attribution_warnings, isTest: row.is_test_batch, small: row.small_sample, rank: row.cost_rank };
 }
 
 /**
@@ -164,15 +179,19 @@ function useDismiss(open: boolean, close: () => void) {
  * computed reading of the table, a persistency toggle, and speed-to-lead and consent cards read
  * from the same views /app/campaigns reads.
  */
-export function TrueCpaWorkspace() {
-  const [draft, setDraft] = useState<Scope>(() => ({ from: defaultFrom(), to: new Date().toISOString().slice(0, 10), vendorId: "", campaignId: "", productCode: "", persist: false }));
+export function TrueCpaWorkspace({ initialReport = null }: { initialReport?: VendorScorecardReport | null } = {}) {
+  // The page renders the default period's report on the server (LA-2.17-8), so the first paint has
+  // the figures and no second round trip follows the shell. Its period is the one the server used.
+  const [draft, setDraft] = useState<Scope>(() => ({ from: initialReport?.from ?? defaultFrom(), to: initialReport?.to ?? new Date().toISOString().slice(0, 10), vendorId: "", campaignId: "", productCode: "", persist: false }));
   const [applied, setApplied] = useState(draft);
-  const [report, setReport] = useState<VendorScorecardReport | null>(null);
-  const [selected, setSelected] = useState<VendorScorecardRow | null>(null);
-  const [leads, setLeads] = useState<VendorScorecardLead[]>([]);
+  const [report, setReport] = useState<VendorScorecardReport | null>(initialReport);
+  const [drillSpec, setDrillSpec] = useState<DrillSpec | null>(null);
+  const [drillResult, setDrillResult] = useState<VendorScorecardLeadResult | null>(null);
+  const [drillError, setDrillError] = useState<string | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!initialReport);
   const [error, setError] = useState<string | null>(null);
+  const served = useRef(initialReport ? queryFor(draft) : null);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(0);
   const [grain, setGrain] = useState<Grain>("vendor");
@@ -185,6 +204,10 @@ export function TrueCpaWorkspace() {
   const query = useMemo(() => queryFor(applied), [applied]);
 
   useEffect(() => {
+    // The server already rendered this exact scope: no second fetch for it.
+    // (Not cleared on the skip, so a development double-mount skips twice rather than refetching.)
+    if (served.current === query) return;
+    served.current = null;
     let active = true;
     void (async () => {
       await Promise.resolve();
@@ -195,7 +218,7 @@ export function TrueCpaWorkspace() {
         const body = await response.json().catch(() => null);
         if (!active) return;
         if (!response.ok) throw new Error(body?.error ?? "Could not load the scorecard");
-        setReport(body); setSelected(null); setLeads([]); setPage(0);
+        setReport(body); setDrillSpec(null); setDrillResult(null); setPage(0);
       } catch (cause) {
         if (active) setError(cause instanceof Error ? cause.message : "Could not load the scorecard");
       } finally {
@@ -205,20 +228,54 @@ export function TrueCpaWorkspace() {
     return () => { active = false; };
   }, [query]);
 
-  async function drill(row: VendorScorecardRow) {
-    if (selected?.campaign_id === row.campaign_id) { setSelected(null); setLeads([]); return; }
-    setSelected(row); setLeads([]); setDetailLoading(true);
-    const params = new URLSearchParams({ from: applied.from, to: applied.to, vendor_id: row.vendor_id, campaign_id: row.campaign_id });
+  /** The report's own scope as drill parameters: the applied period and filters. */
+  function scopeParams(): Record<string, string> {
+    const params: Record<string, string> = { from: applied.from, to: applied.to };
+    if (applied.vendorId) params.vendor_id = applied.vendorId;
+    if (applied.campaignId) params.campaign_id = applied.campaignId;
+    if (applied.productCode) params.product_code = applied.productCode;
+    if (applied.persist) params.persist_days = String(PERSIST_DAYS);
+    return params;
+  }
+
+  async function loadDrill(spec: DrillSpec, offset: number) {
+    setDetailLoading(true); setDrillError(null);
+    const params = new URLSearchParams({ ...scopeParams(), ...spec.params, offset: String(offset), limit: String(DRILL_PAGE) });
     try {
       const response = await fetch(`/api/app/true-cpa/leads?${params}`, { cache: "no-store" });
       const body = await response.json().catch(() => null);
-      if (!response.ok) throw new Error(body?.error ?? "Could not load lead detail");
-      setLeads(body?.rows ?? []);
+      if (!response.ok) throw new Error(body?.error ?? "Could not load the leads behind this figure");
+      setDrillResult(body as VendorScorecardLeadResult);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not load lead detail");
+      setDrillResult(null);
+      setDrillError(cause instanceof Error ? cause.message : "Could not load the leads behind this figure");
     } finally {
       setDetailLoading(false);
     }
+  }
+
+  /** Open the leads behind a figure; the same figure again closes them. */
+  function openDrill(spec: DrillSpec) {
+    if (drillSpec?.key === spec.key) { setDrillSpec(null); setDrillResult(null); setDrillError(null); return; }
+    setDrillSpec(spec); setDrillResult(null);
+    void loadDrill(spec, 0);
+    requestAnimationFrame(() => document.getElementById("cpa-leads-heading")?.scrollIntoView({ behavior: "smooth", block: "nearest" }));
+  }
+
+  /** A line's figure: its campaign (or vendor) and a stage. */
+  function lineDrill(line: Line, stage: ScorecardStage): DrillSpec {
+    const params: Record<string, string> = { stage, vendor_id: line.vendorId };
+    if (line.row) params.campaign_id = line.row.campaign_id;
+    return { key: `${line.row ? "campaign" : "vendor"}:${line.key}:${stage}`, title: `${STAGE_NOUN[stage]} · ${line.label}`, params };
+  }
+
+  /** A headline figure, over everything the report is scoped to. */
+  function totalDrill(stage: ScorecardStage): DrillSpec {
+    return { key: `total:${stage}`, title: `${STAGE_NOUN[stage]} · everything in this report`, params: { stage } };
+  }
+
+  function drill(row: VendorScorecardRow) {
+    openDrill(lineDrill(campaignLine(row), "received"));
   }
 
   /** A vendor line opens that vendor's campaigns: the filter is applied, the view switches. */
@@ -268,12 +325,44 @@ export function TrueCpaWorkspace() {
     />
 
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
-      <StatTile label="Net spend" value={loading ? "…" : dollars(totals?.net_spend_cents)} footnote={longRange(applied.from, applied.to)} />
-      <StatTile label="Leads received" value={loading ? "…" : number(totals?.leads_received)} footnote={totals && totals.leads_received ? `${number(totals.dialable_leads)} dialable` : "after suppression"} />
-      <StatTile label="Applications" value={loading ? "…" : number(totals?.applications)} footnote={share(totals?.applications, totals?.leads_received, "of leads")} reserveFootnote />
-      <StatTile label="Issued policies" value={loading ? "…" : number(totals?.issued_policies)} valueTone={totals?.issued_policies ? "good" : undefined} footnote={persistOn ? `in force after ${report?.persist_days} days${totals?.policies_not_yet_measurable ? ` · ${number(totals.policies_not_yet_measurable)} too recent to judge` : ""}` : share(totals?.issued_policies, totals?.applications, "of applications")} reserveFootnote />
-      <StatTile label="True CPA" value={loading ? "…" : dollars(totals?.effective_cost_per_issued_policy_cents)} valueTone={totals?.effective_cost_per_issued_policy_cents != null ? "primary" : undefined} footnote={persistOn ? "per persisting policy" : "per issued policy"} />
+      <StatTile label="Net spend" value={loading ? "…" : dollars(totals?.net_spend_cents)} footnote={longRange(applied.from, applied.to)} action={<RowsLink label="the leads this spend bought" onClick={() => openDrill(totalDrill("received"))} />} />
+      <StatTile label="Leads received" value={loading ? "…" : number(totals?.leads_received)} footnote={totals && totals.leads_received ? `${number(totals.dialable_leads)} dialable` : "after suppression"} action={<RowsLink label="the leads received" onClick={() => openDrill(totalDrill("received"))} />} />
+      <StatTile label="Applications" value={loading ? "…" : number(totals?.applications)} footnote={share(totals?.applications, totals?.leads_received, "of leads")} reserveFootnote action={<RowsLink label="the leads with an application" onClick={() => openDrill(totalDrill("applied"))} />} />
+      <StatTile label="Issued policies" value={loading ? "…" : number(totals?.issued_policies)} valueTone={totals?.issued_policies ? "good" : undefined} footnote={persistOn ? `in force after ${report?.persist_days} days${totals?.policies_not_yet_measurable ? ` · ${number(totals.policies_not_yet_measurable)} too recent to judge` : ""}` : share(totals?.issued_policies, totals?.applications, "of applications")} reserveFootnote action={<RowsLink label="the leads with an issued policy" onClick={() => openDrill(totalDrill("issued"))} />} />
+      <StatTile label="True CPA" value={loading ? "…" : dollars(totals?.effective_cost_per_issued_policy_cents)} valueTone={totals?.effective_cost_per_issued_policy_cents != null ? "primary" : undefined} footnote={persistOn ? "per persisting policy" : "per issued policy"} action={<RowsLink label="the policies behind it" onClick={() => openDrill(totalDrill("issued"))} />} />
     </div>
+
+    {/* The funnel (LA-2.17-2): bought, dialable, dialled, contacted, quoted, applied, issued, each
+        with its cost where the spec asks for one (a dash with none, never $0), and each opening
+        its rows. Dialled and quoted need 20260925709800; until then they say so. */}
+    {totals && <section className="overflow-hidden rounded-xl border border-border bg-card" aria-labelledby="cpa-funnel-heading">
+      <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-border bg-[var(--surface-alt)] px-4 py-3">
+        <h2 id="cpa-funnel-heading" className="text-sm font-semibold leading-normal tracking-[-0.02em] text-foreground">Funnel</h2>
+        <p className="text-xs leading-normal text-muted-foreground">Leads received in the period, and what became of them in it. Select a stage for its leads.</p>
+      </div>
+      <ol className="m-0 grid list-none grid-cols-2 gap-px bg-[var(--border)] p-0 sm:grid-cols-4 xl:grid-cols-7">
+        {[
+          { key: "bought", label: "Bought", value: totals.records_purchased, note: "records purchased, lifetime", cost: null as number | null, costLabel: "", stage: null as ScorecardStage | null },
+          { key: "dialable", label: "Dialable", value: totals.dialable_leads as number | null, note: `of ${number(totals.leads_received)} received`, cost: totals.effective_cost_per_lead_cents, costLabel: "per lead", stage: "dialable" as ScorecardStage },
+          { key: "dialed", label: "Dialled", value: totals.dialed_leads, note: "leads, not attempts", cost: null, costLabel: "", stage: "dialed" as ScorecardStage },
+          { key: "contacted", label: "Contacted", value: totals.contacted_leads, note: share(totals.contacted_leads, totals.dialed_leads ?? undefined, "of dialled") ?? "leads reached", cost: totals.effective_cost_per_contact_cents, costLabel: "per contact", stage: "contacted" as ScorecardStage },
+          { key: "quoted", label: "Quoted", value: totals.quoted_leads, note: "quote recorded or application", cost: null, costLabel: "", stage: "quoted" as ScorecardStage },
+          { key: "applied", label: "Applied", value: totals.applied_leads ?? totals.applications, note: `${number(totals.applications)} application${totals.applications === 1 ? "" : "s"}`, cost: totals.effective_cost_per_application_cents, costLabel: "per application", stage: "applied" as ScorecardStage },
+          { key: "issued", label: "Issued", value: totals.issued_policies, note: "policies", cost: totals.effective_cost_per_issued_policy_cents, costLabel: "per issued policy", stage: "issued" as ScorecardStage },
+        ].map((step) => {
+          const pendingStage = step.value == null;
+          const canOpen = step.stage !== null && !pendingStage && (report?.funnel || step.stage === "received");
+          return <li key={step.key} className="flex flex-col gap-0.5 bg-card px-4 py-3">
+            <span className="text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] text-muted-foreground">{step.label}</span>
+            {canOpen
+              ? <button type="button" className="w-fit text-left text-lg font-semibold tabular-nums text-foreground hover:underline" aria-label={`${number(step.value)} ${step.label.toLowerCase()}: show the leads`} onClick={() => openDrill(totalDrill(step.stage as ScorecardStage))}>{number(step.value)}</button>
+              : <span className="text-lg font-semibold tabular-nums text-foreground">{number(step.value)}</span>}
+            <span className="text-xs leading-normal text-muted-foreground">{pendingStage ? "needs a database update" : step.note}</span>
+            {step.costLabel && <span className="text-xs leading-normal tabular-nums text-[var(--body)]">{dollars(step.cost)} {step.costLabel}</span>}
+          </li>;
+        })}
+      </ol>
+    </section>}
 
     <div className="relative z-30 flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card p-3">
       <div className="relative" ref={rangeRef}>
@@ -342,12 +431,15 @@ export function TrueCpaWorkspace() {
         : loading && !report ? <LoadingRows rows={4} columns={6} />
         : <>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1160px] table-fixed border-collapse text-left">
+            <table className="w-full min-w-[1400px] table-fixed border-collapse text-left">
               <thead><tr>
                 <th scope="col" className={th}>{effectiveGrain === "vendor" ? "Vendor" : <>Vendor &amp; campaign</>}</th>
                 <th scope="col" className={`${th} w-[80px] text-right`}>Leads</th>
                 <th scope="col" className={`${th} w-[80px] text-right`}>Dialable</th>
+                <th scope="col" className={`${th} w-[80px] text-right`}>Dialled</th>
                 <th scope="col" className={`${th} w-[80px] text-right`}>Contact</th>
+                <th scope="col" className={`${th} w-[100px] text-right`}>Cost / contact</th>
+                <th scope="col" className={`${th} w-[76px] text-right`}>Quoted</th>
                 <th scope="col" className={`${th} w-[110px] text-right`}>Undialable rate<span className="block text-xs font-normal normal-case tracking-normal">Low is good</span></th>
                 <th scope="col" className={`${th} w-[64px] text-right`}>Apps</th>
                 <th scope="col" className={`${th} w-[70px] text-right`}>Issued</th>
@@ -358,9 +450,17 @@ export function TrueCpaWorkspace() {
               </tr></thead>
               <tbody>
                 {shown.map((line) => {
-                  const open = Boolean(line.row) && selected?.campaign_id === line.row?.campaign_id;
+                  const open = Boolean(drillSpec?.key.startsWith(`${line.row ? "campaign" : "vendor"}:${line.key}:`));
                   const tone = open ? "bg-[var(--soft-orange-surface)]" : line.key === tint.best ? "bg-[var(--success-surface)]" : line.key === tint.worst ? "bg-[var(--error-surface)]" : "";
-                  const activate = () => { if (line.row) void drill(line.row); else openVendor(line.vendorId); };
+                  const activate = () => { if (line.row) drill(line.row); else openVendor(line.vendorId); };
+                  // Every figure in the line opens its own rows. Before 20260925709800 only a
+                  // campaign's leads can be listed, so the other figures stay plain text.
+                  const figure = (value: number | null, stage: ScorecardStage, text = number(value)) => {
+                    const can = value != null && value > 0 && (report?.funnel || (stage === "received" && Boolean(line.row)));
+                    return can
+                      ? <button type="button" className="tabular-nums hover:underline" aria-label={`${text} ${STAGE_NOUN[stage]} in ${line.label}: show the leads`} onClick={(event) => { event.stopPropagation(); openDrill(lineDrill(line, stage)); }}>{text}</button>
+                      : text;
+                  };
                   return <tr key={line.key} className={`m-row cursor-pointer ${tone}`} onClick={activate}>
                     <td className={td}>
                       <button type="button" aria-expanded={line.row ? open : undefined} className="text-left text-sm tracking-[-0.02em] text-[var(--body)] hover:underline" onClick={(event) => { event.stopPropagation(); activate(); }}>{line.label}</button>
@@ -372,14 +472,17 @@ export function TrueCpaWorkspace() {
                       </span>
                       <span className="block text-xs leading-normal text-muted-foreground tabular-nums">{line.costPerRecord != null ? `${dollars(line.costPerRecord)} / record · ` : ""}{plural(line.records, "record")} bought</span>
                     </td>
-                    <td className={`${td} text-right tabular-nums`}>{number(line.leads)}</td>
-                    <td className={`${td} text-right tabular-nums`}>{number(line.dialable)}</td>
-                    <td className={`${td} text-right tabular-nums`}>{percent(line.contact)}</td>
-                    <td className={`${td} text-right tabular-nums`}>{percent(line.undialableRate)}</td>
-                    <td className={`${td} text-right tabular-nums`}>{number(line.apps)}</td>
-                    <td className={`${td} text-right tabular-nums`}>{number(line.issued)}</td>
-                    <td className={`${td} text-right tabular-nums`}>{dollars(line.netSpend)}</td>
-                    <td className={`${td} text-right font-semibold tabular-nums ${line.key === tint.best ? "text-[var(--success-ink)]" : line.key === tint.worst ? "text-[var(--error-ink)]" : line.isTest ? "text-muted-foreground" : "text-foreground"}`}>{dollars(line.cpi)}</td>
+                    <td className={`${td} text-right tabular-nums`}>{figure(line.leads, "received")}</td>
+                    <td className={`${td} text-right tabular-nums`}>{figure(line.dialable, "dialable")}</td>
+                    <td className={`${td} text-right tabular-nums`}>{figure(line.dialed, "dialed")}</td>
+                    <td className={`${td} text-right tabular-nums`}>{figure(line.contacted, "contacted", percent(line.contact))}</td>
+                    <td className={`${td} text-right tabular-nums`}>{dollars(line.costPerContact)}</td>
+                    <td className={`${td} text-right tabular-nums`}>{figure(line.quoted, "quoted")}</td>
+                    <td className={`${td} text-right tabular-nums`}>{figure(line.undialableRate == null ? null : Math.max(0, line.leads - line.dialable), "undialable", percent(line.undialableRate))}</td>
+                    <td className={`${td} text-right tabular-nums`}>{figure(line.apps, "applied")}</td>
+                    <td className={`${td} text-right tabular-nums`}>{figure(line.issued, "issued")}</td>
+                    <td className={`${td} text-right tabular-nums`}>{figure(line.netSpend == null ? null : line.leads, "received", dollars(line.netSpend))}</td>
+                    <td className={`${td} text-right font-semibold tabular-nums ${line.key === tint.best ? "text-[var(--success-ink)]" : line.key === tint.worst ? "text-[var(--error-ink)]" : line.isTest ? "text-muted-foreground" : "text-foreground"}`}>{figure(line.cpi == null ? null : line.issued, "issued", dollars(line.cpi))}</td>
                     <td className={`${td} text-right tabular-nums`}>{percent(line.claimAcceptance)}</td>
                     <td className={td}>{line.warnings ? <StatusChip tone="warning">{line.warnings} to review</StatusChip> : <StatusChip tone="good">Linked</StatusChip>}</td>
                   </tr>;
@@ -408,24 +511,49 @@ export function TrueCpaWorkspace() {
         </>}
     </section>
 
-    {selected && <section className="overflow-hidden rounded-xl border border-border bg-card" aria-labelledby="cpa-leads-heading">
+    {drillSpec && <section className="overflow-hidden rounded-xl border border-border bg-card" aria-labelledby="cpa-leads-heading">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-[var(--surface-alt)] px-4 py-3">
-        <h2 id="cpa-leads-heading" className="text-sm font-semibold leading-normal tracking-[-0.02em] text-foreground">Leads behind {selected.vendor_name} &middot; {selected.campaign_name}</h2>
-        <span className="text-xs text-muted-foreground">Operational counts only — no phone, SSN, banking or policy number.</span>
+        <h2 id="cpa-leads-heading" className="text-sm font-semibold leading-normal tracking-[-0.02em] text-foreground">
+          <span className="first-letter:uppercase">{drillSpec.title}</span>
+          {drillResult?.total != null && <span className="ml-2 font-normal text-muted-foreground tabular-nums">{plural(drillResult.total, "lead")}</span>}
+        </h2>
+        <span className="flex items-center gap-3">
+          <span className="text-xs text-muted-foreground">Operational counts only — no phone, SSN, banking or policy number.</span>
+          <Button type="button" variant="ghost" className="h-8 px-3" onClick={() => { setDrillSpec(null); setDrillResult(null); setDrillError(null); }}>Close</Button>
+        </span>
       </div>
-      {detailLoading ? <LoadingRows rows={3} columns={6} /> : leads.length === 0 ? <p className="px-4 py-6 text-sm text-muted-foreground">No leads matched this campaign in the selected period.</p> : <div className="overflow-x-auto"><table className="w-full min-w-[760px] border-collapse text-left">
-        <thead><tr><th scope="col" className={th}>Lead</th><th scope="col" className={th}>Product</th><th scope="col" className={`${th} text-right`}>Attempts</th><th scope="col" className={`${th} text-right`}>Contacts</th><th scope="col" className={`${th} text-right`}>Applications</th><th scope="col" className={`${th} text-right`}>Issued</th><th scope="col" className={th}>Attribution</th><th scope="col" className={th}><span className="sr-only">Open</span></th></tr></thead>
-        <tbody>{leads.map((lead) => <tr key={lead.lead_id} className="m-row">
-          <td className={`${td} tabular-nums`}>{lead.lead_date}</td>
+      {/* The whole selection's sums, so the rows reconcile with the figure that was clicked. */}
+      {drillResult?.sums && <p className="border-b border-border px-4 py-2.5 text-xs leading-normal text-muted-foreground tabular-nums">
+        All {plural(drillResult.sums.leads, "lead")} here: {plural(drillResult.sums.attempts, "attempt")} in the period · {number(drillResult.sums.dialed_leads)} dialled · {number(drillResult.sums.contacted_leads)} contacted · {number(drillResult.sums.quoted_leads)} quoted · {plural(drillResult.sums.applications, "application")} · {plural(drillResult.sums.issued_policies, "issued policy", "issued policies")}
+      </p>}
+      {drillResult && !drillResult.drillReady && <p className="border-b border-border bg-[var(--warning-surface)] px-4 py-2.5 text-xs leading-normal text-[var(--warning-ink)]">
+        {drillResult.has_more ? "Only the newest 500 leads are listed, so this is not every lead the figure counts. " : ""}Attempts and contacts here are all time, not the period. A database update that has not been applied yet lists every lead, by stage, for the period.
+      </p>}
+      {detailLoading ? <LoadingRows rows={3} columns={6} />
+        : drillError ? <p className="px-4 py-6 text-sm text-[var(--error-ink)]" role="alert">{drillError}</p>
+        : !drillResult || drillResult.rows.length === 0 ? <p className="px-4 py-6 text-sm text-muted-foreground">No leads match this figure in the selected period.</p>
+        : <><div className="overflow-x-auto"><table className="w-full min-w-[860px] border-collapse text-left">
+        <thead><tr><th scope="col" className={th}>Lead</th><th scope="col" className={th}>Campaign</th><th scope="col" className={th}>Product</th><th scope="col" className={`${th} text-right`}>Attempts</th><th scope="col" className={`${th} text-right`}>Contacts</th>{drillResult.drillReady && <th scope="col" className={th}>Quoted</th>}<th scope="col" className={`${th} text-right`}>Applications</th><th scope="col" className={`${th} text-right`}>Issued</th><th scope="col" className={th}>Attribution</th><th scope="col" className={th}><span className="sr-only">Open</span></th></tr></thead>
+        <tbody>{drillResult.rows.map((lead) => <tr key={lead.lead_id} className="m-row">
+          <td className={`${td} tabular-nums`}>{lead.lead_date}{drillResult.drillReady && lead.dialable === false && <span className="ml-1.5"><StatusChip tone="neutral" dot={false}>Undialable</StatusChip></span>}</td>
+          <td className={td}>{lead.campaign_name}</td>
           <td className={td}>{lead.product_line.replaceAll("_", " ")}</td>
           <td className={`${td} text-right tabular-nums`}>{lead.attempts}</td>
           <td className={`${td} text-right tabular-nums`}>{lead.contacts}</td>
+          {drillResult.drillReady && <td className={td}>{lead.quoted ? "Yes" : "—"}</td>}
           <td className={`${td} text-right tabular-nums`}>{lead.applications}</td>
           <td className={`${td} text-right tabular-nums`}>{lead.issued_policies}</td>
           <td className={td}>{lead.attribution_status === "linked" ? <StatusChip tone="good">Linked</StatusChip> : <StatusChip tone="warning">Review</StatusChip>}</td>
           <td className={td}><a className="inline-flex items-center gap-1 text-sm font-semibold text-[var(--accent-ink)] hover:underline" href={`/app/leads/${lead.lead_id}`}><ExternalLink aria-hidden="true" className="size-3.5" />Open lead</a></td>
         </tr>)}</tbody>
-      </table></div>}
+      </table></div>
+      {drillResult.drillReady && (drillResult.offset > 0 || drillResult.has_more) && <div className="flex flex-wrap items-center justify-between gap-4 border-t border-border bg-[var(--canvas)] px-4 py-3 text-xs leading-normal text-muted-foreground">
+        <span className="tabular-nums">Showing {(drillResult.offset + 1).toLocaleString()}–{(drillResult.offset + drillResult.rows.length).toLocaleString()} of {number(drillResult.total)}</span>
+        <span className="flex gap-2">
+          <Button type="button" variant="outline" className="h-8 border-[var(--border-strong)] px-4" disabled={drillResult.offset === 0 || detailLoading} onClick={() => void loadDrill(drillSpec, Math.max(0, drillResult.offset - drillResult.limit))}>Previous</Button>
+          <Button type="button" variant="outline" className="h-8 border-[var(--border-strong)] px-4" disabled={!drillResult.has_more || detailLoading} onClick={() => void loadDrill(drillSpec, drillResult.offset + drillResult.limit)}>Next</Button>
+        </span>
+      </div>}</>}
     </section>}
 
     <div className="rounded-xl border border-border border-l-[3px] border-l-[var(--info)] bg-[var(--info-surface)] px-4 py-3.5">
@@ -435,15 +563,17 @@ export function TrueCpaWorkspace() {
 
     {report && <div className="grid gap-6 xl:grid-cols-2">
       {[
-        { title: "Contact rate by slot", lede: "Feeds dialing decisions without exposing talk time.", items: report.contact_rate_by_slot.map((item) => ({ key: item.slot, label: item.slot.replaceAll("_", " "), rate: item.rate_percent, contacts: item.contacts, attempts: item.attempts, share: null as number | null })) },
-        { title: "Attempts-to-contact curve", lede: "Where the ceiling of seven attempts is paying off: each attempt's contact rate, and its share of all contacts.", items: report.attempts_to_contact.map((item) => ({ key: String(item.attempt_number), label: `Attempt ${item.attempt_number}`, rate: item.rate_percent, contacts: item.contacts, attempts: item.attempts, share: item.share_of_contacts_percent })) },
+        { title: "Contact rate by slot", lede: "Feeds dialing decisions without exposing talk time.", items: report.contact_rate_by_slot.map((item) => ({ key: item.slot, label: item.slot.replaceAll("_", " "), rate: item.rate_percent, contacts: item.contacts, attempts: item.attempts, share: null as number | null, spec: { key: `slot:${item.slot}`, title: `leads dialled in the ${item.slot.replaceAll("_", " ")} slot`, params: { stage: "received", slot: item.slot } } as DrillSpec })) },
+        { title: "Attempts-to-contact curve", lede: "Where the ceiling of seven attempts is paying off: each attempt's contact rate, and its share of all contacts.", items: report.attempts_to_contact.map((item) => ({ key: String(item.attempt_number), label: `Attempt ${item.attempt_number}`, rate: item.rate_percent, contacts: item.contacts, attempts: item.attempts, share: item.share_of_contacts_percent, spec: { key: `attempt:${item.attempt_number}`, title: `leads with an attempt ${item.attempt_number} outcome`, params: { stage: "received", attempt_number: String(item.attempt_number) } } as DrillSpec })) },
       ].map((card) => <section key={card.title} className="overflow-hidden rounded-xl border border-border bg-card">
         <div className="border-b border-border bg-[var(--surface-alt)] px-4 py-3">
           <h2 className="text-sm font-semibold leading-normal tracking-[-0.02em] text-foreground">{card.title}</h2>
           <p className="text-xs leading-normal text-muted-foreground">{card.lede}</p>
         </div>
         {card.items.length ? card.items.map((item, index) => <div key={item.key} className={`flex items-center gap-3 px-4 py-2.5 text-sm ${index ? "border-t border-border" : ""}`}>
-          <span className="w-[120px] shrink-0 capitalize text-[var(--body)]">{item.label}</span>
+          {report.funnel && item.attempts > 0
+            ? <button type="button" className="w-[120px] shrink-0 text-left capitalize text-[var(--body)] hover:underline" aria-label={`${item.label}: show the leads`} onClick={() => openDrill(item.spec)}>{item.label}</button>
+            : <span className="w-[120px] shrink-0 capitalize text-[var(--body)]">{item.label}</span>}
           <span className="h-1.5 flex-grow overflow-hidden rounded-full bg-[var(--surface-alt)]"><span className="block h-full rounded-full bg-[var(--primary)]" style={{ width: `${Math.min(100, item.rate ?? 0)}%` }} /></span>
           <span className="w-[200px] shrink-0 text-right tabular-nums"><strong className="font-semibold text-foreground">{percent(item.rate)}</strong> <span className="text-xs text-muted-foreground">({item.contacts}/{item.attempts}){item.share != null ? ` · ${item.share}% of contacts` : ""}</span></span>
         </div>) : <p className="px-4 py-6 text-sm text-muted-foreground">No completed dispositions in this period.</p>}
@@ -490,4 +620,9 @@ export function TrueCpaWorkspace() {
 
     <CampaignComparisonWorkspace rows={report?.rows ?? []} defaultFrom={applied.from} defaultTo={applied.to} />
   </div>;
+}
+
+/** A headline figure's way into its rows (StatTile's action slot). */
+function RowsLink({ label, onClick }: { label: string; onClick: () => void }) {
+  return <button type="button" className="text-xs font-semibold text-foreground hover:underline" aria-label={`Show ${label}`} onClick={onClick}>Rows</button>;
 }

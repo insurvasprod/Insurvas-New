@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { getVendorReturnClaimDetail, updateVendorReturnClaim, vendorReturnCsv } from "@/lib/vendorScorecard/service";
+import { getVendorReturnClaimDetail, updateVendorReturnClaim, vendorReturnCsv, vendorReturnEvidenceContext } from "@/lib/vendorScorecard/service";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 
 type Context = { params: Promise<{ id: string }> };
@@ -11,7 +11,11 @@ export async function GET(request: NextRequest, { params }: Context) {
   try {
     const { id } = await params;
     const detail = await getVendorReturnClaimDetail(auth.context.tenantId, id);
-    if (request.nextUrl.searchParams.get("format") === "csv") return new NextResponse(vendorReturnCsv(detail), { headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": `attachment; filename=vendor-return-${id}.csv`, "Cache-Control": "no-store" } });
+    if (request.nextUrl.searchParams.get("format") === "csv") {
+      // The summary a vendor can use: names, the unit price and the period, not only ids (LA-2.19-4).
+      const context = await vendorReturnEvidenceContext(auth.context.tenantId, detail.claim);
+      return new NextResponse(vendorReturnCsv(detail, context), { headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": `attachment; filename=vendor-return-${id}.csv`, "Cache-Control": "no-store" } });
+    }
     return NextResponse.json(detail, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Could not load claim evidence" }, { status: 400 });

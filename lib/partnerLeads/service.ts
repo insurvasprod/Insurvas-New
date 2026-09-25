@@ -5,6 +5,7 @@ import type { PartnerLeadDetail, PartnerLeadFacets, PartnerLeadFilters, PartnerL
 import type { PartnerRole } from "@/lib/partnerAuth/roles";
 import { maskSensitiveValues } from "@/lib/partnerLeads/mask";
 import { CONVERTED_WINDOW_MS, HELD_STATUSES, NOBODY_CLAIMED_LABEL, SALE_DISPOSITIONS, nobodyClaimed, partnerLane, type PartnerLaneCounts } from "./lanes";
+import { countersFromLanes, startOfTodayIn } from "./counters";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -157,8 +158,8 @@ function mapRows(data: Awaited<ReturnType<typeof loadPartnerData>>, filters: Par
 
 /**
  * When the longest-waiting open submission was queued — "Still open 19 · oldest 6 days" on the
- * partner overview. Open means what the pipeline counter means (partner_lead_pipeline_page):
- * any queue item not completed or dropped, scoped to one closer when the reader is a partner user.
+ * partner overview. Open means what the Still open counter means (counters.ts):
+ * the board's open lanes (unclaimed, or held by a closer), scoped to one closer for a partner user.
  * A separate read rather than a new field on that database function, which this environment
  * cannot migrate. Null when nothing is open or the read fails: a missing age is better than a
  * wrong one, and the count beside it still stands.
@@ -245,13 +246,44 @@ async function partnerLaneFigures(
   };
 }
 
+/**
+ * Submissions whose lead was created since `since` (00:00 in the partner's timezone), under the
+ * page's scope. The read model counts by the database's UTC date, which is not "since 00:00 your
+ * time" for any partner west of Greenwich in the evening. Null on a failed read: the caller keeps
+ * the read model's figure. A stage or outcome filter narrows it the way the table is narrowed.
+ */
+async function submittedSince(
+  db: ReturnType<typeof getSupabaseServiceClient>,
+  tenantId: string,
+  partnerId: string,
+  closerId: string | null,
+  filters: PartnerLeadFilters,
+  since: Date,
+): Promise<number | null> {
+  let query = db
+    .from("lead_queue")
+    .select("id, agent_leads!inner(created_at, created_by)", { count: "exact", head: true })
+    .eq("tenant_id", tenantId)
+    .eq("partner_id", partnerId)
+    .gte("agent_leads.created_at", since.toISOString());
+  if (closerId) query = query.eq("agent_leads.created_by", closerId);
+  if (filters.product) query = query.eq("product_line", filters.product);
+  if (filters.stageId) query = query.eq("stage_id", filters.stageId);
+  if (filters.outcome) query = query.eq("disposition", filters.outcome);
+  if (filters.dateFrom) query = query.gte("queued_at", filters.dateFrom);
+  if (filters.dateTo) query = query.lt("queued_at", new Date(Date.parse(filters.dateTo) + 86_400_000).toISOString().slice(0, 10));
+  const { count, error } = await query;
+  if (error) { console.error(`[partner-pipeline] submitted-today count failed: ${error.message}`); return null; }
+  return count ?? 0;
+}
+
 async function oldestOpenQueuedAt(db: ReturnType<typeof getSupabaseServiceClient>, tenantId: string, partnerId: string, closerId: string | null): Promise<string | null> {
   let query = db
     .from("lead_queue")
     .select("queued_at, agent_leads!inner(created_by)")
     .eq("tenant_id", tenantId)
     .eq("partner_id", partnerId)
-    .not("status", "in", "(completed,dropped)")
+    .in("status", ["unclaimed", ...HELD_STATUSES])
     .order("queued_at", { ascending: true })
     .limit(1);
   if (closerId) query = query.eq("agent_leads.created_by", closerId);
@@ -349,10 +381,16 @@ export async function listPartnerLeads(tenantId: string, partnerId: string, filt
   // stage filter narrows the still-open count, and an "oldest" from outside that filter would sit
   // under a number it does not describe.
   const unfiltered = !filters.dateFrom && !filters.dateTo && !filters.product && !filters.stageId && !filters.outcome;
-  const [oldestOpenAt, lanes] = await Promise.all([
+  const [oldestOpenAt, lanes, submittedToday] = await Promise.all([
     unfiltered ? oldestOpenQueuedAt(db, tenantId, partnerId, effectiveCloserId) : Promise.resolve(null),
     partnerLaneFigures(db, tenantId, partnerId, effectiveCloserId, filters),
+    submittedSince(db, tenantId, partnerId, effectiveCloserId, filters, startOfTodayIn(timezone)),
   ]);
+  // LA-1.17-4: the four counters in the board's lanes (counters.ts). With a stage or outcome filter
+  // the lanes are withheld, and the read model's own counters, which honour those filters, stand.
+  const counters = lanes.counts
+    ? countersFromLanes(lanes.counts, submittedToday ?? counter("submittedToday"))
+    : { submittedToday: submittedToday ?? counter("submittedToday"), claimed: counter("claimed"), converted: counter("converted"), stillOpen: counter("stillOpen") };
   const now = Date.now();
   const told = await partnerToldIds(db, tenantId, partnerId, hydratedRows.map((row) => row.workItemId));
   const lanedRows = hydratedRows.map((row) => ({
@@ -364,7 +402,7 @@ export async function listPartnerLeads(tenantId: string, partnerId: string, filt
     rows: lanedRows,
     stages,
     facets: { closers, products, outcomes },
-    counters: { submittedToday: counter("submittedToday"), claimed: counter("claimed"), converted: counter("converted"), stillOpen: counter("stillOpen") },
+    counters,
     oldestOpenAt,
     laneCounts: lanes.counts,
     total,

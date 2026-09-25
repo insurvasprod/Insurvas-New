@@ -1225,7 +1225,11 @@ function PreviewControl({ field }: { field: TemplateField }) {
           : field.validation?.placeholder ??
             (field.type === "ssn"
               ? "###-##-####"
-              : field.type === "currency"
+              : field.type === "bank_routing"
+                ? "9-digit routing number"
+                : field.type === "bank_account"
+                  ? "Account number"
+                  : field.type === "currency"
                 ? "$0.00"
                 : field.type === "number"
                   ? "0"
@@ -1247,6 +1251,8 @@ export const partnerFormStudioPreviewTypes = [
   "phone",
   "email",
   "ssn",
+  "bank_routing",
+  "bank_account",
   "boolean",
   "single_select",
   "multi_select",

@@ -204,12 +204,17 @@ const MOVE_MESSAGES: Record<string, string> = {
   disposition_not_mapped: "That disposition has no stage to move the lead to. Map it to a stage first.",
   lead_not_found: "That lead is not in your workspace.",
   invalid_move_source: "That is not a screen a lead can be moved from.",
+  // 20260925711300 · the database's own guard behind CALL_PATH_ONLY.callback.
+  callback_needs_time: "A callback needs a time in the customer's timezone. Book it from the lead or the dialer.",
 };
 
 /**
  * Move one lead by applying a disposition. The caller has already checked the role; this checks
  * that the outcome can be applied here at all (not a callback or do-not-call, which need the call
- * path) and then makes the move in one write.
+ * path) and then makes the move in one write. Since 20260925711300 that write also applies the
+ * outcome's effect to an outbound lead — closed, rested, or back on the cadence — exactly as the
+ * dialer would, so a board "Not interested" takes the lead out of the queue (LA-1.9, move =
+ * disposition). Inbound partner leads keep Module 1's behaviour.
  */
 export async function moveLeadWithDisposition(input: { tenantId: string; leadId: string; dispositionKey: string; actorId: string; source: "board" | "table" | "list" | "lead_detail" }): Promise<MoveResult> {
   const client = db();

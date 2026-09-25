@@ -385,7 +385,7 @@ export function LeadWorkspace() {
             leads={visibleLeads}
             // Resolved through the cross-pipeline stage index: in the All view there is no active
             // board, and a lead's stage belongs to whichever pipeline it is in.
-            stageName={(stageId) => { const entry = stageIndex.get(stageId); return { name: entry && !entry.stage.is_archived ? entry.stage.name : "Unmapped", color: entry?.stage.color ?? "var(--muted-foreground)", pipeline: entry?.pipelineName ?? "" }; }}
+            stageName={(stageId) => { const entry = stageIndex.get(stageId); return { name: entry ? (entry.stage.is_archived ? `${entry.stage.name} (archived)` : entry.stage.name) : "Unmapped", color: entry?.stage.color ?? "var(--muted-foreground)", pipeline: entry?.pipelineName ?? "" }; }}
             context={context}
             now={now}
             money={money}

@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import type { CampaignComparison, ComparisonMetricKey, VendorScorecardRow } from "@/lib/vendorScorecard/types";
 import { Callout } from "@/components/app/settings/primitives";
 import type { CadenceCaveat } from "@/lib/cadence/history";
+import { checkComparisonPeriods, periodDays, periodLabel, type ComparisonPeriod } from "@/lib/vendorScorecard/comparePeriods";
 
 /** The comparison plus the cadence caveat the compare route adds (lib/cadence/history.ts). */
 type ComparisonWithCadence = CampaignComparison & { cadence?: CadenceCaveat };
@@ -44,13 +45,37 @@ export function CampaignComparisonWorkspace({ rows, defaultFrom, defaultTo }: { 
   const [result, setResult] = useState<ComparisonWithCadence | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [suggestion, setSuggestion] = useState<ComparisonPeriod | null>(null);
+  // Checked as the dates change, by the same rule the database applies, so a mismatch is explained
+  // and the matched period offered before anyone presses Compare.
+  const today = new Date().toISOString().slice(0, 10);
+  const check = checkComparisonPeriods({ from: fromA, to: toA }, { from: fromB, to: toB }, today);
+  const offer = !check.ok ? check.suggestion : suggestion;
 
-  async function compare(event: React.FormEvent) {
-    event.preventDefault(); setLoading(true); setError(null);
-    const params = new URLSearchParams({ campaign_a_id: campaignA, campaign_b_id: campaignB, from_a: fromA, to_a: toA, from_b: fromB, to_b: toB, metric });
-    try { const response = await fetch(`/api/app/true-cpa/compare?${params}`, { cache: "no-store" }); const body = await response.json(); if (!response.ok) throw new Error(body.error ?? "Could not compare campaigns"); setResult(body); }
+  async function run(periodB: ComparisonPeriod) {
+    setLoading(true); setError(null); setSuggestion(null);
+    const params = new URLSearchParams({ campaign_a_id: campaignA, campaign_b_id: campaignB, from_a: fromA, to_a: toA, from_b: periodB.from, to_b: periodB.to, metric });
+    try {
+      const response = await fetch(`/api/app/true-cpa/compare?${params}`, { cache: "no-store" });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) { setSuggestion(body?.suggestion ?? null); throw new Error(body?.error ?? "Could not compare campaigns"); }
+      setResult(body);
+    }
     catch (cause) { setError(cause instanceof Error ? cause.message : "Could not compare campaigns"); }
     finally { setLoading(false); }
+  }
+
+  function compare(event: React.FormEvent) {
+    event.preventDefault();
+    if (!check.ok) { setError(check.message); return; }
+    void run({ from: fromB, to: toB });
+  }
+
+  /** Take the matched period for B and compare with it — the fix, not only the refusal. */
+  function takeMatched(period: ComparisonPeriod) {
+    setFromB(period.from); setToB(period.to);
+    if (campaignA && campaignB) void run(period);
+    else setError(null);
   }
 
   return <Card><CardHeader><CardTitle className="text-base">Compare campaigns honestly</CardTitle><CardDescription>Match the number of days and starting weekday before deciding whether a difference is real. No automatic winner or budget shift is applied.</CardDescription></CardHeader><CardContent className="space-y-4">
@@ -62,7 +87,12 @@ export function CampaignComparisonWorkspace({ rows, defaultFrom, defaultTo }: { 
       <fieldset className="rounded-md border p-3 md:col-span-2"><legend className="px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Campaign A period</legend><div className="grid grid-cols-2 gap-3"><Input aria-label="Campaign A from" type="date" value={fromA} onChange={(event) => setFromA(event.target.value)} /><Input aria-label="Campaign A to" type="date" value={toA} onChange={(event) => setToA(event.target.value)} /></div></fieldset>
       <fieldset className="rounded-md border p-3 md:col-span-2"><legend className="px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Campaign B period</legend><div className="grid grid-cols-2 gap-3"><Input aria-label="Campaign B from" type="date" value={fromB} onChange={(event) => setFromB(event.target.value)} /><Input aria-label="Campaign B to" type="date" value={toB} onChange={(event) => setToB(event.target.value)} /></div></fieldset>
     </form>
+    {!check.ok && check.problem !== "order" && !error && <Callout tone="info" title="These periods are not matched yet">{check.message}</Callout>}
     {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+    {offer && <div className="flex flex-wrap items-center gap-3 rounded-md border border-border bg-[var(--surface-alt)] p-3 text-sm">
+      <span>Matched period for B: <strong className="tabular-nums">{periodLabel(offer)}</strong> &middot; {periodDays(offer)} days, starting on the same weekday as A.</span>
+      <Button type="button" variant="outline" size="sm" disabled={loading} onClick={() => takeMatched(offer)}>{campaignA && campaignB ? "Compare with this period" : "Use this period"}</Button>
+    </div>}
     {!rows.length && <p className="text-sm text-muted-foreground">Load at least two campaign rows to compare.</p>}
     {result && <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border bg-muted/20 p-4"><div><p className="text-sm font-semibold">{result.confidence.statement}</p>{result.confidence.size_warning && <p className="mt-1 text-sm text-[var(--warning-ink)]">{result.confidence.size_warning}</p>}<p className="mt-1 text-xs text-muted-foreground">{result.matched_periods.days} matched days · {result.confidence.sample_a} observations in A · {result.confidence.sample_b} in B</p></div><Badge variant={result.confidence.level === "strong" ? "secondary" : result.confidence.level === "insufficient" ? "destructive" : "outline"}>{result.confidence.level.replaceAll("_", " ")}</Badge></div>

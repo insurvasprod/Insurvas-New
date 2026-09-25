@@ -144,6 +144,8 @@ function normaliseRow(raw: RawRow, partners: Map<string, string>, agents: Map<st
     draft_date: str(raw.draft_date),
     worked_by: workedBy,
     agent_name: str(raw.worked_by_name) ?? (workedBy ? agents.get(workedBy) ?? "Unknown agent" : "Unassigned"),
+    buffer_agent: str(raw.buffer_agent),
+    buffer_agent_name: str(raw.buffer_agent_name) ?? (str(raw.buffer_agent) ? agents.get(String(raw.buffer_agent)) ?? null : null),
     manual_entry: raw.manual_entry === true,
     created_at: str(raw.created_at) ?? "",
     updated_at: str(raw.updated_at) ?? "",
@@ -440,9 +442,11 @@ export function csvForDealFlow(rows: DealFlowRow[]) {
   const headers = [
     "date", "partner", "agent", "insured_name", "phone", "product_line", "carrier", "product_type", "monthly_premium_cents", "face_amount_cents", "draft_date", "status", "call_result", "notes", "initial_quote", "manual_entry",
     "lead_id", "short_id", "campaign", "vendor", "state", "stage", "stage_type", "source", "disposition", "disposition_at", "disposition_by", "annualised_premium_cents", "issued_at",
+    "buffer_agent", "tracking_id",
   ];
   return [headers, ...rows.map((row) => [
     row.local_date, row.partner_name, row.agent_name, row.insured_name, row.phone, row.product_line, row.carrier, row.product_type, row.monthly_premium_cents, row.face_amount_cents, row.draft_date, row.status, row.call_result, row.notes, row.initial_quote, row.manual_entry,
     row.lead_id, shortLeadId(row.lead_id), row.campaign_name, row.vendor_name, row.customer_state, row.stage_name, row.stage_type, row.source, row.call_result_label ?? row.call_result, row.disposition_at, row.disposition_by_name, row.monthly_premium_cents == null ? null : row.monthly_premium_cents * 12, row.issued_at,
+    row.buffer_agent_name, row.tracking_id,
   ])].map((line) => line.map(cell).join(",")).join("\r\n") + "\r\n";
 }
