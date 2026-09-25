@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { createHash, randomBytes } from "node:crypto";
 
 import { createClient } from "@supabase/supabase-js";
-import bcrypt from "bcryptjs";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -12,6 +11,7 @@ const supabase = createClient(url, key, { auth: { persistSession: false, autoRef
 const email = `sa51-${Date.now()}-${randomBytes(3).toString("hex")}@example.com`;
 let userId;
 let tenantId;
+let duplicateAuthUserId;
 
 function tokenHash(token) {
   return createHash("sha256").update(token).digest("hex");
@@ -25,6 +25,10 @@ async function cleanup() {
   await supabase.from("tenant_users").delete().eq("tenant_id", tenantId);
   await supabase.from("users").delete().eq("id", userId);
   await supabase.from("tenants").delete().eq("id", tenantId);
+  // The profile row is written by the on_auth_user_created bridge, so the Auth identity has to go
+  // too or the address stays taken and the next run collides.
+  await supabase.auth.admin.deleteUser(userId).catch(() => {});
+  if (duplicateAuthUserId) await supabase.auth.admin.deleteUser(duplicateAuthUserId).catch(() => {});
 }
 
 try {
@@ -47,10 +51,20 @@ try {
   const cycle = prices.price_monthly_cents != null ? "monthly" : prices.price_quarterly_cents != null ? "quarterly" : "yearly";
 
   const token = randomBytes(32).toString("base64url");
-  const { data: created, error: signupError } = await supabase.rpc("self_serve_signup", {
+  // Supabase Auth is the credential authority for this plane (LA-0.2), so the identity is created
+  // first and the password never reaches public.users. The old call sent a bcrypt hash to
+  // self_serve_signup, which then could not satisfy users_id_fkey and failed 23502 every time.
+  const authUser = await supabase.auth.admin.createUser({
+    email,
+    password: "correct horse battery staple",
+    email_confirm: true,
+    user_metadata: { name: "SA 5.1 Verification", full_name: "SA 5.1 Verification" },
+  });
+  if (authUser.error) throw authUser.error;
+  const { data: created, error: signupError } = await supabase.rpc("self_serve_signup_with_auth", {
+    p_auth_user_id: authUser.data.user.id,
     p_name: "SA 5.1 Verification",
     p_email: email,
-    p_password_hash: await bcrypt.hash("correct horse battery staple", 12),
     p_phone: "+1 555 555 0199",
     p_plan_id: plan.id,
     p_billing_cycle: cycle,
@@ -72,18 +86,32 @@ try {
   assert.equal(member.role, "owner");
   assert.deepEqual(selection, { plan_id: plan.id, billing_cycle: cycle });
 
-  const duplicateToken = randomBytes(32).toString("base64url");
-  const { error: duplicateError } = await supabase.rpc("self_serve_signup", {
+  // Under the Auth path the duplicate is caught one layer earlier than it used to be. The password
+  // no longer lives in public.users, so the address is claimed in auth.users and Supabase rejects a
+  // second identity for it -- case-insensitively, because it normalises the address. Asserting the
+  // RPC raised 23505 would now be asserting the wrong layer: signup never reaches it.
+  const duplicateAuth = await supabase.auth.admin.createUser({
+    email: email.toUpperCase(),
+    password: "another secure password",
+    email_confirm: true,
+  });
+  if (!duplicateAuth.error) {
+    duplicateAuthUserId = duplicateAuth.data.user?.id;
+    assert.fail("case-variant duplicate email must be refused by Auth");
+  }
+
+  // And the database still refuses it independently, so the guarantee does not rest on Auth alone.
+  const { error: duplicateRpcError } = await supabase.rpc("self_serve_signup_with_auth", {
+    p_auth_user_id: userId,
     p_name: "Duplicate",
-    p_email: email.toUpperCase(),
-    p_password_hash: await bcrypt.hash("another secure password", 12),
+    p_email: email,
     p_phone: "+1 555 555 0200",
     p_plan_id: plan.id,
     p_billing_cycle: cycle,
-    p_token_hash: tokenHash(duplicateToken),
+    p_token_hash: tokenHash(randomBytes(32).toString("base64url")),
     p_expires_at: new Date(Date.now() + 86_400_000).toISOString(),
   });
-  assert.equal(duplicateError?.code, "23505", "case-variant duplicate email must fail");
+  assert.equal(duplicateRpcError?.code, "23505", "a second workspace for the same identity must fail");
 
   const { data: matchingUsers } = await supabase.from("users").select("id").ilike("email", email);
   assert.equal(matchingUsers.length, 1, "duplicate failure creates no second user");

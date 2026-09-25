@@ -1,38 +1,230 @@
 "use client";
 
-import { useCallback, useState, type FormEvent } from "react";
-import { MoreHorizontal, Plus, ShieldAlert } from "lucide-react";
-import { toast } from "sonner";
+import { useCallback, useMemo, useState, type FormEvent } from "react";
+import { MoreHorizontal } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { AdminPageHeader } from "@/components/admin/page-header";
+import { BoardTableFooter } from "@/components/admin/board-table-footer";
+import { Field, Pill, SettingsMeter, SettingsTableCard, btn, control, st } from "@/components/app/settings/primitives";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { CREDIT_METER_KEYS, CREDIT_METER_LABELS, type CreditMeterKey, type CreditPack, type CreditTenant, type MeterPricing, type UsageMonitorRow } from "@/lib/creditsLimits/constants";
-import { tableHeaderRow, tableHeadCell, tableShell } from "./table-styles";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  CREDIT_METER_KEYS,
+  CREDIT_METER_LABELS,
+  type CreditMeterKey,
+  type CreditPack,
+  type CreditsLimitsData,
+  type DefaultLimitRow,
+  type MeterPricing,
+} from "@/lib/creditsLimits/constants";
+import { buildMonitorEntries, furthestOver, tenantsOverCount, tenantsOverLabel, type LimitState, type MonitorEntry } from "@/lib/creditsLimits/present";
+import { notify } from "@/lib/notify";
+import { cn } from "@/lib/utils";
 
-type Props = { initialPacks: CreditPack[]; initialPricing: MeterPricing[]; initialMonitor: UsageMonitorRow[]; initialTenants: CreditTenant[] };
+const PAGE_SIZE = 25;
 const money = (cents: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
-const quantity = (value: number | null) => value === null ? "Unlimited" : value.toLocaleString("en-US");
+const count = (value: number) => value.toLocaleString("en-US");
 
-type PackForm = { name: string; meter_key: CreditMeterKey; quantity: string; price_cents: string; is_active: boolean };
-const emptyPack: PackForm = { name: "", meter_key: "tcpa_checks", quantity: "5000", price_cents: "4500", is_active: true };
+const FIGURE_TONE: Record<LimitState, string> = {
+  over: "text-[var(--error-ink)]",
+  near: "text-[var(--warning-ink)]",
+  ok: "text-[var(--success-ink)]",
+};
+const METER_TONE: Record<LimitState, "error" | "warning" | "success"> = { over: "error", near: "warning", ok: "success" };
 
-export function CreditLimitsPanel({ initialPacks, initialPricing, initialMonitor, initialTenants }: Props) {
-  const [packs, setPacks] = useState(initialPacks);
-  const [pricing, setPricing] = useState(initialPricing);
-  const [monitor, setMonitor] = useState(initialMonitor);
-  const [tenants] = useState(initialTenants);
-  const [over80, setOver80] = useState(false);
-  const [packForm, setPackForm] = useState<PackForm>(emptyPack);
-  const [editingPack, setEditingPack] = useState<CreditPack | null>(null);
-  const [grantOpen, setGrantOpen] = useState(false);
-  const [purchasePack, setPurchasePack] = useState<CreditPack | null>(null);
+/** Compact inputs for the pricing table's cells; the dialogs use the boards' 44px `control`. */
+const cellInput =
+  "ml-auto box-border block h-8 w-28 rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] px-2.5 text-right text-[14px] leading-[1.43] tabular-nums text-[var(--ink)] outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]";
+
+type PackForm = { name: string; meter_key: CreditMeterKey; quantity: string; price_cents: string };
+const emptyPack: PackForm = { name: "", meter_key: "tcpa_checks", quantity: "5000", price_cents: "4500" };
+
+type GrantForm = { tenant_id: string; meter_key: CreditMeterKey; quantity: string; reason: string };
+
+function newRequestId() {
+  return typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : undefined;
+}
+
+export function CreditLimitsPanel({ initial }: { initial: CreditsLimitsData }) {
+  const [data, setData] = useState(initial);
+  const { packs, pricing, monitor, seats, defaultLimits, tenants, warnPercent } = data;
+  const warn = warnPercent / 100;
+
+  const [overOnly, setOverOnly] = useState(false);
+  const [page, setPage] = useState(1);
   const [busy, setBusy] = useState<string | null>(null);
+
+  // Pack create / edit dialog.
+  const [packDialog, setPackDialog] = useState<{ pack: CreditPack | null } | null>(null);
+  const [packForm, setPackForm] = useState<PackForm>(emptyPack);
+  const [packError, setPackError] = useState<string | null>(null);
+
+  // Grant dialog. The request id is the grant's idempotency key: kept across retries of one grant, so
+  // a retry after a failure can never grant twice (the route answers with the committed grant).
+  const [grantOpen, setGrantOpen] = useState(false);
+  const [grant, setGrant] = useState<GrantForm>({ tenant_id: tenants[0]?.id ?? "", meter_key: "tcpa_checks", quantity: "1000", reason: "" });
+  const [grantRequestId, setGrantRequestId] = useState<string | undefined>(undefined);
+  const [grantError, setGrantError] = useState<string | null>(null);
+
+  // Purchase (add a pack to an invoice) dialog.
+  const [purchasePack, setPurchasePack] = useState<CreditPack | null>(null);
+  const [purchase, setPurchase] = useState({ tenant_id: tenants[0]?.id ?? "", quantity: "1", reason: "" });
+  const [purchaseError, setPurchaseError] = useState<string | null>(null);
+
   // Unsaved pricing edits, keyed by meter. Empty means nothing is dirty and the save bar is gone.
   const [draft, setDraft] = useState<Record<string, { sell: string; included: string }>>({});
+
+  const entries = useMemo(() => buildMonitorEntries(monitor, seats, warn), [monitor, seats, warn]);
+  const visible = useMemo(() => (overOnly ? entries.filter((entry) => entry.state !== "ok") : entries), [entries, overOnly]);
+  const overCount = tenantsOverCount(entries);
+  const top = furthestOver(entries);
+  const pages = Math.max(1, Math.ceil(visible.length / PAGE_SIZE));
+  const currentPage = Math.min(page, pages);
+  const pageRows = visible.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+
+  const refresh = useCallback(async () => {
+    const response = await fetch("/api/admin/credits-limits");
+    if (!response.ok) {
+      notify.block("Could not refresh credits and limits");
+      return;
+    }
+    setData((await response.json()) as CreditsLimitsData);
+  }, []);
+
+  /* ── packs ─────────────────────────────────────────────────────────── */
+
+  function openPackDialog(pack: CreditPack | null) {
+    setPackError(null);
+    setPackForm(pack ? { name: pack.name, meter_key: pack.meter_key, quantity: String(pack.quantity), price_cents: String(pack.price_cents) } : emptyPack);
+    setPackDialog({ pack });
+  }
+
+  async function submitPack(event: FormEvent) {
+    event.preventDefault();
+    const editing = packDialog?.pack ?? null;
+    setBusy("pack");
+    setPackError(null);
+    const body = { ...packForm, quantity: Number(packForm.quantity), price_cents: Number(packForm.price_cents) };
+    const response = await fetch(editing ? `/api/admin/credits-limits/packs/${editing.id}` : "/api/admin/credits-limits", {
+      method: editing ? "PATCH" : "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const result = await response.json().catch(() => null);
+    setBusy(null);
+    if (!response.ok) {
+      setPackError(result?.error ?? "Could not save credit pack");
+      return;
+    }
+    notify.done(editing ? "Credit pack updated" : "Credit pack created");
+    setPackDialog(null);
+    void refresh();
+  }
+
+  async function setPackActive(pack: CreditPack, isActive: boolean) {
+    setBusy(pack.id);
+    const response = await fetch(`/api/admin/credits-limits/packs/${pack.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ is_active: isActive }),
+    });
+    const result = await response.json().catch(() => null);
+    setBusy(null);
+    if (!response.ok) {
+      notify.block(result?.error ?? (isActive ? "Could not restore pack" : "Could not archive pack"));
+      return;
+    }
+    notify.done(`${pack.name} ${isActive ? "restored" : "archived"}`);
+    void refresh();
+  }
+
+  /* ── grants ────────────────────────────────────────────────────────── */
+
+  function openGrant(prefill?: { tenantId: string; meter: CreditMeterKey }) {
+    setGrantError(null);
+    setGrant((current) => ({
+      ...current,
+      tenant_id: prefill?.tenantId ?? current.tenant_id ?? tenants[0]?.id ?? "",
+      meter_key: prefill?.meter ?? current.meter_key,
+      reason: "",
+    }));
+    setGrantRequestId(newRequestId());
+    setGrantOpen(true);
+  }
+
+  function editGrant(patch: Partial<GrantForm>) {
+    // Changing what is granted makes it a different request; retrying the same one keeps its id.
+    setGrant((current) => ({ ...current, ...patch }));
+    setGrantRequestId(newRequestId());
+  }
+
+  async function submitGrant(event: FormEvent) {
+    event.preventDefault();
+    setBusy("grant");
+    setGrantError(null);
+    const response = await fetch("/api/admin/credits-limits/grants", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...grant, quantity: Number(grant.quantity), request_id: grantRequestId }),
+    });
+    const result = await response.json().catch(() => null);
+    setBusy(null);
+    if (!response.ok) {
+      // The request id is kept, so pressing Grant again retries THIS grant and cannot make a second.
+      setGrantError(result?.error ?? "Could not grant credits");
+      if (result?.granted) void refresh();
+      return;
+    }
+    notify.done(result?.replayed ? "These credits were already granted" : "Credits granted");
+    if (result?.warning) notify.warn(result.warning);
+    setGrantOpen(false);
+    setGrantRequestId(undefined);
+    void refresh();
+  }
+
+  /* ── purchases ─────────────────────────────────────────────────────── */
+
+  function openPurchase(pack: CreditPack) {
+    setPurchaseError(null);
+    setPurchase((current) => ({ ...current, quantity: "1", reason: "" }));
+    setPurchasePack(pack);
+  }
+
+  async function submitPurchase(event: FormEvent) {
+    event.preventDefault();
+    if (!purchasePack) return;
+    setBusy("purchase");
+    setPurchaseError(null);
+    const response = await fetch(`/api/admin/credits-limits/packs/${purchasePack.id}/purchase`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...purchase, quantity: Number(purchase.quantity) }),
+    });
+    const result = await response.json().catch(() => null);
+    setBusy(null);
+    if (!response.ok) {
+      if (result?.purchased) {
+        // Committed: close the dialog so it cannot be submitted a second time, and say so loudly.
+        notify.fail(result.error);
+        setPurchasePack(null);
+        void refresh();
+        return;
+      }
+      setPurchaseError(result?.error ?? "Could not add pack to invoice");
+      return;
+    }
+    notify.done(`Added ${purchasePack.name} to invoice ${result.number}; the credits are granted`);
+    setPurchasePack(null);
+    void refresh();
+  }
+
+  /* ── pricing ───────────────────────────────────────────────────────── */
 
   const draftFor = (row: MeterPricing) =>
     draft[row.meter_key] ?? { sell: String(row.sell_cents), included: row.default_included === null ? "" : String(row.default_included) };
@@ -46,48 +238,18 @@ export function CreditLimitsPanel({ initialPacks, initialPricing, initialMonitor
     setDraft((d) => ({ ...d, [row.meter_key]: { ...draftFor(row), ...patch } }));
   const dirtyRows = pricing.filter((row) => isDirty(row));
 
-  const [grant, setGrant] = useState({ tenant_id: initialTenants[0]?.id ?? "", meter_key: "tcpa_checks" as CreditMeterKey, quantity: "1000", reason: "" });
-  const [purchase, setPurchase] = useState({ tenant_id: initialTenants[0]?.id ?? "", quantity: "1", reason: "" });
-
-  const refresh = useCallback(async (filter = over80) => {
-    const response = await fetch(`/api/admin/credits-limits${filter ? "?over80=true" : ""}`);
-    if (!response.ok) { toast.error("Could not refresh credits and limits"); return; }
-    const next = await response.json();
-    setPacks(next.packs); setPricing(next.pricing); setMonitor(next.monitor);
-  }, [over80]);
-
-  async function submitPack(event: FormEvent) {
-    event.preventDefault(); setBusy("pack");
-    const body = { ...packForm, quantity: Number(packForm.quantity), price_cents: Number(packForm.price_cents) };
-    const response = await fetch(editingPack ? `/api/admin/credits-limits/packs/${editingPack.id}` : "/api/admin/credits-limits", { method: editingPack ? "PATCH" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-    const result = await response.json().catch(() => null); setBusy(null);
-    if (!response.ok) { toast.error(result?.error ?? "Could not save credit pack"); return; }
-    toast.success(editingPack ? "Credit pack updated" : "Credit pack created"); setEditingPack(null); setPackForm(emptyPack); refresh(false);
-  }
-
-  async function archivePack(pack: CreditPack) {
-    setBusy(pack.id);
-    const response = await fetch(`/api/admin/credits-limits/packs/${pack.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ is_active: false }) });
-    const result = await response.json().catch(() => null); setBusy(null);
-    if (!response.ok) { toast.error(result?.error ?? "Could not archive pack"); return; }
-    toast.success(`${pack.name} archived`); refresh(false);
-  }
-
   /**
    * Saves every edited row in one action.
    *
    * There used to be a Save button on each row — five stacked buttons on first load, which made a
-   * read-only screen look like a form that had already gone wrong. Edits now collect in `draft`
-   * and one bar commits them.
+   * read-only screen look like a form that had already gone wrong. Edits collect in `draft` and one
+   * bar commits them.
    */
   async function savePricing() {
-    const dirty = pricing.filter((row) => isDirty(row));
-    if (dirty.length === 0) return;
-
+    if (dirtyRows.length === 0) return;
     setBusy("pricing");
     const failures: string[] = [];
-
-    for (const row of dirty) {
+    for (const row of dirtyRows) {
       const edit = draft[row.meter_key];
       const includedRaw = (edit?.included ?? "").trim();
       const response = await fetch("/api/admin/credits-limits/pricing", {
@@ -104,162 +266,483 @@ export function CreditLimitsPanel({ initialPacks, initialPricing, initialMonitor
         failures.push(`${CREDIT_METER_LABELS[row.meter_key]}: ${result?.error ?? "could not save"}`);
       }
     }
-
     setBusy(null);
     if (failures.length > 0) {
-      // The draft is kept on a partial failure — discarding what somebody typed because one of
-      // five rows was refused is how people lose work.
-      toast.error(failures.join(" · "));
+      // The draft is kept on a partial failure — discarding what somebody typed because one of five
+      // rows was refused is how people lose work.
+      notify.fail(failures.join(" · "));
       return;
     }
+    notify.done(dirtyRows.length === 1 ? "Pricing saved" : `${dirtyRows.length} meters saved`);
     setDraft({});
-    toast.success(dirty.length === 1 ? "Pricing saved" : `${dirty.length} meters saved`);
-    refresh(false);
+    void refresh();
   }
 
-  async function submitGrant(event: FormEvent) {
-    event.preventDefault(); setBusy("grant");
-    const response = await fetch("/api/admin/credits-limits/grants", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...grant, quantity: Number(grant.quantity) }) });
-    const result = await response.json().catch(() => null); setBusy(null);
-    if (!response.ok) { toast.error(result?.error ?? "Could not grant credits"); return; }
-    toast.success("Credits granted and usage monitor refreshed"); setGrantOpen(false); setGrant((current) => ({ ...current, reason: "" })); refresh(over80);
-  }
+  /* ── render ────────────────────────────────────────────────────────── */
 
-  async function submitPurchase(event: FormEvent) {
-    event.preventDefault(); if (!purchasePack) return; setBusy("purchase");
-    const response = await fetch(`/api/admin/credits-limits/packs/${purchasePack.id}/purchase`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...purchase, quantity: Number(purchase.quantity) }) });
-    const result = await response.json().catch(() => null); setBusy(null);
-    if (!response.ok) { toast.error(result?.error ?? "Could not add pack to invoice"); return; }
-    toast.success(`Added ${purchasePack.name} to invoice ${result.number}`); setPurchasePack(null); setPurchase((current) => ({ ...current, reason: "" }));
-  }
+  return (
+    <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
+      <AdminPageHeader
+        title="Credits & limits"
+        subtitle="Who is about to exceed a limit, and the packs and defaults behind it."
+        actions={
+          <button type="button" onClick={() => openPackDialog(null)} className={btn("primary", "h-11")}>
+            Add a credit pack
+          </button>
+        }
+      />
 
-  const warningCount = monitor.filter((row) => row.alert_level === "warning").length;
-  const exhaustedCount = monitor.filter((row) => row.alert_level === "exhausted").length;
-
-  return <div className="space-y-6">
-    {(warningCount > 0 || exhaustedCount > 0) && <div role="alert" className={`flex items-start gap-3 rounded-lg border-2 p-4 text-sm ${exhaustedCount ? "border-[var(--color-danger)]/50 bg-[var(--color-danger)]/5 text-[var(--color-danger)]" : "border-[var(--color-warning)]/50 bg-[var(--color-warning)]/5 text-[var(--color-warning)]"}`}><ShieldAlert className="mt-0.5 size-5 shrink-0" /><div><p className="font-bold">Usage alerts: {exhaustedCount} exhausted · {warningCount} above 80%</p><p className="mt-1">Rows at 80% are warnings; rows at 100% have reached their included allowance.</p></div></div>}
-
-    <Card>
-      <CardHeader>
-        <CardTitle>Meter pricing</CardTitle>
-        <p className="mt-1 text-sm text-muted-foreground">
-          What a unit costs us, what we charge, and the resulting margin. These defaults apply only where a plan sets no
-          allowance of its own &mdash; plan allowances always win.
-        </p>
-      </CardHeader>
-      <CardContent>
-        <div className={tableShell}>
-          <Table>
-            <TableHeader>
-              <TableRow className={tableHeaderRow}>
-                <TableHead className={tableHeadCell}>Meter</TableHead>
-                <TableHead className={`${tableHeadCell} text-right`}>Vendor cost</TableHead>
-                <TableHead className={`${tableHeadCell} text-right`}>Sell price</TableHead>
-                <TableHead className={`${tableHeadCell} text-right`}>Margin</TableHead>
-                <TableHead className={`${tableHeadCell} text-right`}>Default included</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {pricing.map((row) => {
-                const edit = draftFor(row);
-                const sell = Number(edit.sell) || 0;
-                // Three states, not two. An unpriced meter is UNSET, not wrong — showing it in red
-                // meant the screen opened with every row in an error state, which teaches people to
-                // ignore red. Only a real price at or below cost is a warning.
-                const unpriced = sell === 0;
-                const belowCost = !unpriced && sell <= row.cost_cents;
-                const margin = row.cost_cents > 0 && !unpriced ? Math.round(((sell - row.cost_cents) / row.cost_cents) * 100) : null;
-
-                return (
-                  <TableRow key={row.meter_key} className={belowCost ? "bg-[var(--color-warning)]/5" : undefined}>
-                    <TableCell>
-                      <div className="font-medium">{CREDIT_METER_LABELS[row.meter_key]}</div>
-                      <div className="font-mono text-xs text-muted-foreground">{row.meter_key}</div>
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {money(row.cost_cents)}
-                      <span className="block text-xs text-muted-foreground">
-                        {row.cost_source === "compliance_vendor" ? "From vendor" : "Set here"}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <Input
-                        type="number"
-                        min="0"
-                        value={edit.sell}
-                        aria-label={`${row.meter_key} sell price in cents`}
-                        aria-invalid={belowCost}
-                        onChange={(event) => editRow(row, { sell: event.target.value })}
-                        className={`ml-auto w-28 text-right tabular-nums ${belowCost ? "border-[var(--color-warning)]" : ""}`}
-                      />
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {unpriced ? (
-                        <span className="text-sm text-muted-foreground">Not priced</span>
-                      ) : (
-                        <>
-                          <span className={`font-semibold tabular-nums ${belowCost ? "text-[var(--color-warning)]" : "text-[var(--color-success)]"}`}>
-                            {margin === null ? "—" : `${margin > 0 ? "+" : ""}${margin}%`}
-                          </span>
-                          {belowCost && <span className="block text-xs text-[var(--color-warning)]">At or below cost</span>}
-                        </>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <Input
-                        type="number"
-                        min="0"
-                        value={edit.included}
-                        placeholder="Unlimited"
-                        aria-label={`${row.meter_key} default included`}
-                        onChange={(event) => editRow(row, { included: event.target.value })}
-                        className="ml-auto w-28 text-right tabular-nums"
-                      />
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
+      {/* Usage monitor */}
+      <section className="flex min-w-0 flex-col overflow-hidden rounded-[12px] border border-[var(--border)] bg-[var(--surface)]">
+        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[var(--border)] bg-[var(--surface-alt)] px-4 py-3">
+          <h2 className="m-0 text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">Usage monitor</h2>
+          <span className="flex flex-wrap items-center gap-2.5">
+            <button
+              type="button"
+              onClick={() => {
+                setOverOnly((value) => !value);
+                setPage(1);
+              }}
+              aria-pressed={overOnly}
+              className={btn("secondary", overOnly ? "border-[var(--primary)] bg-[var(--brand-50)] text-[var(--accent-ink)]" : undefined)}
+            >
+              Over {warnPercent}%
+            </button>
+            <Pill tone={overCount > 0 ? "error" : "success"} dot>
+              {tenantsOverLabel(overCount)}
+            </Pill>
+          </span>
         </div>
-        <p className="mt-3 text-xs text-muted-foreground">
-          Margin updates as you type. A price at or below vendor cost is flagged but never blocked &mdash; selling a meter
-          at cost is sometimes deliberate.
-        </p>
-      </CardContent>
-    </Card>
 
-    <Card><CardHeader className="flex flex-row items-center justify-between gap-3"><div><CardTitle>Credit packs</CardTitle><p className="mt-1 text-sm text-muted-foreground">Create reusable packs, then add one to a tenant invoice when support or billing needs it.</p></div><Button size="sm" onClick={() => { setEditingPack(null); setPackForm(emptyPack); }}>{/* keeps the action visible to keyboard users */}<Plus className="mr-1 size-4" />New pack</Button></CardHeader><CardContent><form onSubmit={submitPack} className="mb-5 grid gap-3 rounded-lg border bg-muted/20 p-4 md:grid-cols-[1.4fr_1fr_0.7fr_0.7fr_auto] md:items-end"><label className="space-y-1 text-sm"><span className="font-medium">Name</span><Input required value={packForm.name} onChange={(event) => setPackForm({ ...packForm, name: event.target.value })} placeholder="5,000 TCPA checks" /></label><label className="space-y-1 text-sm"><span className="font-medium">Meter</span><select className="flex h-9 w-full rounded-md border bg-background px-3 text-sm" value={packForm.meter_key} onChange={(event) => setPackForm({ ...packForm, meter_key: event.target.value as CreditMeterKey })}>{CREDIT_METER_KEYS.map((key) => <option key={key} value={key}>{CREDIT_METER_LABELS[key]}</option>)}</select></label><label className="space-y-1 text-sm"><span className="font-medium">Quantity</span><Input required type="number" min="1" value={packForm.quantity} onChange={(event) => setPackForm({ ...packForm, quantity: event.target.value })} /></label><label className="space-y-1 text-sm"><span className="font-medium">Price (cents)</span><Input required type="number" min="0" value={packForm.price_cents} onChange={(event) => setPackForm({ ...packForm, price_cents: event.target.value })} /></label><Button type="submit" disabled={busy === "pack"}>{busy === "pack" ? "Saving…" : editingPack ? "Update pack" : "Create pack"}</Button></form><div className={tableShell}><Table><TableHeader><TableRow className={tableHeaderRow}><TableHead className={tableHeadCell}>Pack</TableHead><TableHead className={tableHeadCell}>Quantity</TableHead><TableHead className={tableHeadCell}>Price</TableHead><TableHead className={tableHeadCell}>Status</TableHead><TableHead className={`${tableHeadCell} w-20`} /></TableRow></TableHeader><TableBody>{packs.map((pack) => <TableRow key={pack.id} className={!pack.is_active ? "opacity-60" : undefined}><TableCell className="font-medium">{pack.name}<span className="block text-xs text-muted-foreground">{CREDIT_METER_LABELS[pack.meter_key]}</span></TableCell><TableCell>{pack.quantity.toLocaleString("en-US")}</TableCell><TableCell>{money(pack.price_cents)}</TableCell><TableCell><Badge variant="outline">{pack.is_active ? "Active" : "Archived"}</Badge></TableCell><TableCell>{pack.is_active && <div className="flex items-center"><Button variant="ghost" size="icon-sm" onClick={() => { setEditingPack(pack); setPackForm({ name: pack.name, meter_key: pack.meter_key, quantity: String(pack.quantity), price_cents: String(pack.price_cents), is_active: pack.is_active }); }} title={`Edit ${pack.name}`}><MoreHorizontal /><span className="sr-only">Edit {pack.name}</span></Button><Button size="sm" variant="outline" onClick={() => setPurchasePack(pack)}>Invoice</Button><Button size="sm" variant="ghost" onClick={() => archivePack(pack)} disabled={busy === pack.id}>Archive</Button></div>}</TableCell></TableRow>)}</TableBody></Table></div></CardContent></Card>
-
-    <Card><CardHeader className="flex flex-row items-center justify-between gap-3"><div><CardTitle>Cross-tenant usage</CardTitle><p className="mt-1 text-sm text-muted-foreground">One server-side query returns tenant × meter, ordered by consumption.</p></div><div className="flex items-center gap-2"><label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={over80} onChange={(event) => { setOver80(event.target.checked); refresh(event.target.checked); }} /> Over 80%</label><Button size="sm" variant="outline" onClick={() => setGrantOpen(true)}>Grant credits</Button></div></CardHeader><CardContent><div className={tableShell}><Table><TableHeader><TableRow className={tableHeaderRow}><TableHead className={tableHeadCell}>Tenant</TableHead><TableHead className={tableHeadCell}>Meter</TableHead><TableHead className={tableHeadCell}>Used</TableHead><TableHead className={tableHeadCell}>Included</TableHead><TableHead className={tableHeadCell}>Consumed</TableHead><TableHead className={tableHeadCell}>State</TableHead></TableRow></TableHeader><TableBody>{monitor.length === 0 && <TableRow><TableCell colSpan={6} className="h-20 text-center text-sm text-muted-foreground">No usage rows match this filter.</TableCell></TableRow>}{monitor.map((row) => <TableRow key={`${row.tenant_id}-${row.meter_key}`}><TableCell className="font-medium">{row.tenant_name}<span className="block text-xs text-muted-foreground">{row.tenant_status}</span></TableCell><TableCell>{row.meter_label}</TableCell><TableCell>{row.used_qty.toLocaleString("en-US")}</TableCell><TableCell>{quantity(row.included_qty)}{row.grant_qty > 0 && <span className="block text-xs text-[var(--color-success)]">+{row.grant_qty.toLocaleString("en-US")} granted</span>}</TableCell><TableCell>{row.percent_used === null ? "—" : `${row.percent_used}%`}</TableCell><TableCell><Badge variant="outline" className={row.alert_level === "exhausted" ? "border-[var(--color-danger)] text-[var(--color-danger)]" : row.alert_level === "warning" ? "border-[var(--color-warning)] text-[var(--color-warning)]" : ""}>{row.alert_level}</Badge></TableCell></TableRow>)}</TableBody></Table></div></CardContent></Card>
-
-    <Dialog open={grantOpen} onOpenChange={setGrantOpen}><DialogContent><DialogHeader><DialogTitle>Grant credits</DialogTitle><DialogDescription>Credits add to this tenant&apos;s current-period allowance immediately. A reason is required and recorded in the audit log.</DialogDescription></DialogHeader><form onSubmit={submitGrant} className="space-y-4"><label className="space-y-1 text-sm"><span className="font-medium">Tenant</span><select required className="flex h-9 w-full rounded-md border bg-background px-3 text-sm" value={grant.tenant_id} onChange={(event) => setGrant({ ...grant, tenant_id: event.target.value })}>{tenants.map((tenant) => <option key={tenant.id} value={tenant.id}>{tenant.name}</option>)}</select></label><div className="grid gap-4 sm:grid-cols-2"><label className="space-y-1 text-sm"><span className="font-medium">Meter</span><select className="flex h-9 w-full rounded-md border bg-background px-3 text-sm" value={grant.meter_key} onChange={(event) => setGrant({ ...grant, meter_key: event.target.value as CreditMeterKey })}>{CREDIT_METER_KEYS.map((key) => <option key={key} value={key}>{CREDIT_METER_LABELS[key]}</option>)}</select></label><label className="space-y-1 text-sm"><span className="font-medium">Quantity</span><Input required type="number" min="1" value={grant.quantity} onChange={(event) => setGrant({ ...grant, quantity: event.target.value })} /></label></div><label className="space-y-1 text-sm"><span className="font-medium">Reason</span><Input required minLength={5} maxLength={500} value={grant.reason} onChange={(event) => setGrant({ ...grant, reason: event.target.value })} placeholder="Goodwill for an outage" /></label><DialogFooter><Button type="button" variant="outline" onClick={() => setGrantOpen(false)}>Cancel</Button><Button type="submit" disabled={busy === "grant"}>{busy === "grant" ? "Granting…" : "Grant credits"}</Button></DialogFooter></form></DialogContent></Dialog>
-
-    <Dialog open={purchasePack !== null} onOpenChange={(open) => { if (!open) setPurchasePack(null); }}><DialogContent><DialogHeader><DialogTitle>Add {purchasePack?.name ?? "credit pack"} to invoice</DialogTitle><DialogDescription>This uses the existing custom-invoice path. It creates an invoice line for the selected tenant; credits should be granted separately after payment is confirmed.</DialogDescription></DialogHeader><form onSubmit={submitPurchase} className="space-y-4"><label className="space-y-1 text-sm"><span className="font-medium">Tenant</span><select required className="flex h-9 w-full rounded-md border bg-background px-3 text-sm" value={purchase.tenant_id} onChange={(event) => setPurchase({ ...purchase, tenant_id: event.target.value })}>{tenants.map((tenant) => <option key={tenant.id} value={tenant.id}>{tenant.name}</option>)}</select></label><label className="space-y-1 text-sm"><span className="font-medium">Pack quantity</span><Input required type="number" min="1" max="1000" value={purchase.quantity} onChange={(event) => setPurchase({ ...purchase, quantity: event.target.value })} /></label><label className="space-y-1 text-sm"><span className="font-medium">Reason</span><Input required minLength={5} maxLength={500} value={purchase.reason} onChange={(event) => setPurchase({ ...purchase, reason: event.target.value })} placeholder="Customer requested a top-up" /></label><DialogFooter><Button type="button" variant="outline" onClick={() => setPurchasePack(null)}>Cancel</Button><Button type="submit" disabled={busy === "purchase"}>{busy === "purchase" ? "Adding…" : "Add to invoice"}</Button></DialogFooter></form></DialogContent></Dialog>
-    {/* One save bar for the pricing table, present only while something is dirty. Fixed to the
-        bottom so it stays reachable on a long page without following you up it. */}
-    {dirtyRows.length > 0 && (
-      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-card shadow-[0_-4px_16px_rgba(0,32,64,0.06)] lg:left-60">
-        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-8 py-3.5">
-          <p className="text-sm">
-            <span className="font-semibold">
-              {dirtyRows.length === 1 ? "1 unsaved change" : `${dirtyRows.length} unsaved changes`}
-            </span>
-            <span className="text-muted-foreground">
-              {" · "}
-              {dirtyRows.map((row) => CREDIT_METER_LABELS[row.meter_key]).join(", ")}
-            </span>
+        {pageRows.length === 0 ? (
+          <p className="m-0 px-4 py-6 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">
+            {overOnly
+              ? `No tenant is at or above ${warnPercent}% of a limit.`
+              : "No tenant has a finite limit to watch. Unlimited meters are not listed."}
           </p>
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" onClick={() => setDraft({})} disabled={busy === "pricing"}>
-              Discard
-            </Button>
-            <Button onClick={savePricing} disabled={busy === "pricing"}>
-              {busy === "pricing" ? "Saving…" : "Save changes"}
-            </Button>
+        ) : (
+          <ul className="m-0 list-none p-0">
+            {pageRows.map((entry) => (
+              <MonitorRow key={entry.key} entry={entry} onGrant={openGrant} />
+            ))}
+          </ul>
+        )}
+
+        <div className="border-t border-[var(--border)] bg-[var(--canvas)] px-4 py-3 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--body)]">
+          Sorted by proximity to limit.{" "}
+          {top && (
+            <>
+              {top.tenantName} is <strong>{count(top.over)} over</strong> on {top.label}.{" "}
+            </>
+          )}
+          Granting credits always records a reason.
+        </div>
+        {visible.length > PAGE_SIZE && (
+          <BoardTableFooter
+            page={currentPage}
+            pageSize={PAGE_SIZE}
+            total={visible.length}
+            itemLabel={visible.length === 1 ? "limit" : "limits"}
+            order="nearest the limit first"
+            onPageChange={setPage}
+          />
+        )}
+      </section>
+
+      <div className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1fr)_560px]">
+        {/* Credit packs */}
+        <SettingsTableCard title="Credit packs">
+          <table className={st.table}>
+            <thead>
+              <tr className={st.headRow}>
+                <th scope="col" className={st.th}>Pack</th>
+                <th scope="col" className={cn(st.th, "w-[150px]")}>Meter</th>
+                <th scope="col" className={cn(st.th, "w-[100px]")}>Quantity</th>
+                <th scope="col" className={cn(st.th, "w-[100px]")}>Price</th>
+                <th scope="col" className={cn(st.th, "w-12")}><span className="sr-only">Actions</span></th>
+              </tr>
+            </thead>
+            <tbody className="m-seq">
+              {packs.length === 0 && (
+                <tr>
+                  <td colSpan={5} className={cn(st.td, "text-[var(--muted)]")}>No credit packs yet. Add one to sell a top-up.</td>
+                </tr>
+              )}
+              {packs.map((pack) => (
+                <tr key={pack.id} className={cn("m-row", !pack.is_active && "text-[var(--muted)]")}>
+                  <td className={st.td}>
+                    <span className="inline-flex flex-wrap items-center gap-2">
+                      {pack.name}
+                      {!pack.is_active && <Pill>Archived</Pill>}
+                    </span>
+                  </td>
+                  <td className={st.td}>{CREDIT_METER_LABELS[pack.meter_key] ?? pack.meter_key}</td>
+                  <td className={cn(st.td, "tabular-nums")}>{count(pack.quantity)}</td>
+                  <td className={cn(st.td, "tabular-nums")}>{money(pack.price_cents)}</td>
+                  <td className={cn(st.td, "py-1 text-right")}>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button
+                          type="button"
+                          aria-label={`Actions for ${pack.name}`}
+                          disabled={busy === pack.id}
+                          className={btn("row", "w-8 px-0")}
+                        >
+                          <MoreHorizontal aria-hidden className="size-4" />
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-56">
+                        <DropdownMenuItem onSelect={() => openPackDialog(pack)}>Edit pack</DropdownMenuItem>
+                        {pack.is_active && (
+                          <DropdownMenuItem disabled={pack.price_cents <= 0} onSelect={() => openPurchase(pack)}>
+                            {pack.price_cents <= 0 ? "Add to invoice (free packs need none)" : "Add to an invoice"}
+                          </DropdownMenuItem>
+                        )}
+                        <DropdownMenuSeparator />
+                        {pack.is_active ? (
+                          <DropdownMenuItem onSelect={() => void setPackActive(pack, false)}>Archive</DropdownMenuItem>
+                        ) : (
+                          <DropdownMenuItem onSelect={() => void setPackActive(pack, true)}>Restore</DropdownMenuItem>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </SettingsTableCard>
+
+        {/* Default limits */}
+        <SettingsTableCard title="Default limits">
+          {defaultLimits.plans.length === 0 ? (
+            <p className="m-0 px-4 py-6 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">No current plans.</p>
+          ) : (
+            <table className={st.table}>
+              <thead>
+                <tr className={st.headRow}>
+                  <th scope="col" className={st.th}>Meter</th>
+                  {defaultLimits.plans.map((plan) => (
+                    <th key={plan.id} scope="col" title={`${plan.code} v${plan.version}`} className={cn(st.th, "w-[110px]")}>
+                      {plan.name}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="m-seq">
+                {defaultLimits.rows.map((row) => (
+                  <DefaultLimitsRow key={row.key} row={row} planIds={defaultLimits.plans.map((plan) => plan.id)} />
+                ))}
+              </tbody>
+            </table>
+          )}
+        </SettingsTableCard>
+      </div>
+
+      <div className="rounded-[12px] border border-[var(--border)] border-l-[3px] border-l-[var(--info)] bg-[var(--info-surface)] px-4 py-3.5 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--body)]">
+        <strong className="font-semibold">Unlimited</strong> is a real value, not a blank, and no usage bar is ever drawn without its limit beside it.
+      </div>
+
+      {/* Meter pricing — kept from the previous screen, below the board's blocks. */}
+      <SettingsTableCard title="Meter pricing">
+        <table className={st.table}>
+          <thead>
+            <tr className={st.headRow}>
+              <th scope="col" className={st.th}>Meter</th>
+              <th scope="col" className={cn(st.th, "text-right")}>Vendor cost</th>
+              <th scope="col" className={cn(st.th, "text-right")}>Sell price (cents)</th>
+              <th scope="col" className={cn(st.th, "text-right")}>Margin</th>
+              <th scope="col" className={cn(st.th, "text-right")}>Platform default</th>
+            </tr>
+          </thead>
+          <tbody className="m-seq">
+            {pricing.map((row) => {
+              const edit = draftFor(row);
+              const sell = Number(edit.sell) || 0;
+              // Three states, not two. An unpriced meter is UNSET, not wrong — showing it in red meant
+              // the screen opened with every row in an error state, which teaches people to ignore red.
+              // Only a real price at or below cost is a warning.
+              const unpriced = sell === 0;
+              const belowCost = !unpriced && sell <= row.cost_cents;
+              const margin = row.cost_cents > 0 && !unpriced ? Math.round(((sell - row.cost_cents) / row.cost_cents) * 100) : null;
+              return (
+                <tr key={row.meter_key} className={cn("m-row", belowCost && "bg-[var(--warning-surface)]")}>
+                  <td className={st.td}>
+                    <span className={st.strong}>{CREDIT_METER_LABELS[row.meter_key]}</span>
+                    <span className={cn(st.sub, "font-mono")}>{row.meter_key}</span>
+                  </td>
+                  <td className={cn(st.td, st.num)}>
+                    {money(row.cost_cents)}
+                    <span className={st.sub}>{row.cost_source === "compliance_vendor" ? "From vendor" : "Set here"}</span>
+                  </td>
+                  <td className={st.td}>
+                    <input
+                      type="number"
+                      min="0"
+                      value={edit.sell}
+                      aria-label={`${CREDIT_METER_LABELS[row.meter_key]} sell price in cents`}
+                      aria-invalid={belowCost}
+                      onChange={(event) => editRow(row, { sell: event.target.value })}
+                      className={cn(cellInput, belowCost && "border-[var(--warning)]")}
+                    />
+                  </td>
+                  <td className={cn(st.td, "text-right")}>
+                    {unpriced ? (
+                      <span className="text-[var(--muted)]">Not priced</span>
+                    ) : (
+                      <>
+                        <span className={cn("font-semibold tabular-nums", belowCost ? "text-[var(--warning-ink)]" : "text-[var(--success-ink)]")}>
+                          {margin === null ? "—" : `${margin > 0 ? "+" : ""}${margin}%`}
+                        </span>
+                        {belowCost && <span className={cn(st.sub, "text-[var(--warning-ink)]")}>At or below cost</span>}
+                      </>
+                    )}
+                  </td>
+                  <td className={st.td}>
+                    <input
+                      type="number"
+                      min="0"
+                      value={edit.included}
+                      placeholder="Unlimited"
+                      aria-label={`${CREDIT_METER_LABELS[row.meter_key]} platform default allowance`}
+                      onChange={(event) => editRow(row, { included: event.target.value })}
+                      className={cellInput}
+                    />
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        <div className="border-t border-[var(--border)] bg-[var(--canvas)] px-4 py-3 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--body)]">
+          What a unit costs us, what we charge, and the resulting margin; margin updates as you type. A price at or below vendor
+          cost is flagged but never blocked — selling a meter at cost is sometimes deliberate. The platform default applies only
+          where a plan sets no allowance of its own; plan allowances always win. Empty means unlimited.
+        </div>
+      </SettingsTableCard>
+
+      {/* Pack create / edit */}
+      <Dialog open={packDialog !== null} onOpenChange={(open) => !open && setPackDialog(null)}>
+        <DialogContent>
+          <form onSubmit={submitPack} className="space-y-4">
+            <DialogHeader>
+              <DialogTitle>{packDialog?.pack ? `Edit ${packDialog.pack.name}` : "Add a credit pack"}</DialogTitle>
+              <DialogDescription>
+                A reusable pack. Adding it to a tenant&apos;s invoice bills them and grants its credits at once.
+              </DialogDescription>
+            </DialogHeader>
+            <Field label="Name" htmlFor="pack-name" required>
+              <input id="pack-name" required maxLength={160} value={packForm.name} onChange={(event) => setPackForm({ ...packForm, name: event.target.value })} placeholder="5,000 TCPA checks" className={control} />
+            </Field>
+            <Field label="Meter" htmlFor="pack-meter">
+              <select id="pack-meter" value={packForm.meter_key} onChange={(event) => setPackForm({ ...packForm, meter_key: event.target.value as CreditMeterKey })} className={control}>
+                {CREDIT_METER_KEYS.map((key) => (
+                  <option key={key} value={key}>{CREDIT_METER_LABELS[key]}</option>
+                ))}
+              </select>
+            </Field>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Quantity" htmlFor="pack-quantity" required>
+                <input id="pack-quantity" required type="number" min="1" value={packForm.quantity} onChange={(event) => setPackForm({ ...packForm, quantity: event.target.value })} className={control} />
+              </Field>
+              <Field label="Price (cents)" htmlFor="pack-price" required hint={Number.isFinite(Number(packForm.price_cents)) ? money(Number(packForm.price_cents)) : undefined}>
+                <input id="pack-price" required type="number" min="0" value={packForm.price_cents} onChange={(event) => setPackForm({ ...packForm, price_cents: event.target.value })} className={control} />
+              </Field>
+            </div>
+            {packError && <p role="alert" className="m-0 text-[14px] leading-[1.5] text-[var(--error-ink)]">{packError}</p>}
+            <DialogFooter>
+              <button type="button" onClick={() => setPackDialog(null)} className={btn("ghost")}>Cancel</button>
+              <button type="submit" disabled={busy === "pack"} className={btn("primary")}>
+                {busy === "pack" ? "Saving…" : packDialog?.pack ? "Save pack" : "Create pack"}
+              </button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Grant credits */}
+      <Dialog open={grantOpen} onOpenChange={setGrantOpen}>
+        <DialogContent>
+          <form onSubmit={submitGrant} className="space-y-4">
+            <DialogHeader>
+              <DialogTitle>Grant credits</DialogTitle>
+              <DialogDescription>
+                Credits add to this tenant&apos;s allowance immediately and count for the current billing period only: they end
+                when the period rolls over. A reason is required and recorded in the audit log.
+              </DialogDescription>
+            </DialogHeader>
+            <Field label="Tenant" htmlFor="grant-tenant" required>
+              <select id="grant-tenant" required value={grant.tenant_id} onChange={(event) => editGrant({ tenant_id: event.target.value })} className={control}>
+                {tenants.map((tenant) => (
+                  <option key={tenant.id} value={tenant.id}>{tenant.name}</option>
+                ))}
+              </select>
+            </Field>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Meter" htmlFor="grant-meter">
+                <select id="grant-meter" value={grant.meter_key} onChange={(event) => editGrant({ meter_key: event.target.value as CreditMeterKey })} className={control}>
+                  {CREDIT_METER_KEYS.map((key) => (
+                    <option key={key} value={key}>{CREDIT_METER_LABELS[key]}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Quantity" htmlFor="grant-quantity" required>
+                <input id="grant-quantity" required type="number" min="1" value={grant.quantity} onChange={(event) => editGrant({ quantity: event.target.value })} className={control} />
+              </Field>
+            </div>
+            <Field label="Reason" htmlFor="grant-reason" required>
+              <input id="grant-reason" required minLength={5} maxLength={500} value={grant.reason} onChange={(event) => setGrant({ ...grant, reason: event.target.value })} placeholder="Goodwill for an outage" className={control} />
+            </Field>
+            {grantError && <p role="alert" className="m-0 text-[14px] leading-[1.5] text-[var(--error-ink)]">{grantError}</p>}
+            <DialogFooter>
+              <button type="button" onClick={() => setGrantOpen(false)} className={btn("ghost")}>Cancel</button>
+              <button type="submit" disabled={busy === "grant"} className={btn("primary")}>
+                {busy === "grant" ? "Granting…" : "Grant credits"}
+              </button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add a pack to an invoice */}
+      <Dialog open={purchasePack !== null} onOpenChange={(open) => !open && setPurchasePack(null)}>
+        <DialogContent>
+          <form onSubmit={submitPurchase} className="space-y-4">
+            <DialogHeader>
+              <DialogTitle>Add {purchasePack?.name ?? "credit pack"} to an invoice</DialogTitle>
+              <DialogDescription>
+                Creates an invoice for the selected tenant through the custom-invoice path and grants the pack&apos;s credits in the
+                same step, before the invoice is paid. Like any grant, the credits count for the current billing period only.
+              </DialogDescription>
+            </DialogHeader>
+            <Field label="Tenant" htmlFor="purchase-tenant" required>
+              <select id="purchase-tenant" required value={purchase.tenant_id} onChange={(event) => setPurchase({ ...purchase, tenant_id: event.target.value })} className={control}>
+                {tenants.map((tenant) => (
+                  <option key={tenant.id} value={tenant.id}>{tenant.name}</option>
+                ))}
+              </select>
+            </Field>
+            <Field
+              label="Number of packs"
+              htmlFor="purchase-quantity"
+              required
+              hint={purchasePack ? `${count(purchasePack.quantity * (Number(purchase.quantity) || 0))} ${CREDIT_METER_LABELS[purchasePack.meter_key] ?? purchasePack.meter_key} · ${money(purchasePack.price_cents * (Number(purchase.quantity) || 0))}` : undefined}
+            >
+              <input id="purchase-quantity" required type="number" min="1" max="1000" value={purchase.quantity} onChange={(event) => setPurchase({ ...purchase, quantity: event.target.value })} className={control} />
+            </Field>
+            <Field label="Reason" htmlFor="purchase-reason" required>
+              <input id="purchase-reason" required minLength={5} maxLength={500} value={purchase.reason} onChange={(event) => setPurchase({ ...purchase, reason: event.target.value })} placeholder="Customer requested a top-up" className={control} />
+            </Field>
+            {purchaseError && <p role="alert" className="m-0 text-[14px] leading-[1.5] text-[var(--error-ink)]">{purchaseError}</p>}
+            <DialogFooter>
+              <button type="button" onClick={() => setPurchasePack(null)} className={btn("ghost")}>Cancel</button>
+              <button type="submit" disabled={busy === "purchase"} className={btn("primary")}>
+                {busy === "purchase" ? "Adding…" : "Add to invoice"}
+              </button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* One save bar for the pricing table, present only while something is dirty. Fixed to the
+          bottom so it stays reachable on a long page without following you up it. */}
+      {dirtyRows.length > 0 && (
+        <div className="fixed inset-x-0 bottom-0 z-30 border-t border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow-rest)] lg:left-60">
+          <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-8 py-3.5">
+            <p className="m-0 text-[14px] leading-[1.5]">
+              <span className="font-semibold text-[var(--ink)]">
+                {dirtyRows.length === 1 ? "1 unsaved change" : `${dirtyRows.length} unsaved changes`}
+              </span>
+              <span className="text-[var(--muted)]">
+                {" · "}
+                {dirtyRows.map((row) => CREDIT_METER_LABELS[row.meter_key]).join(", ")}
+              </span>
+            </p>
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={() => setDraft({})} disabled={busy === "pricing"} className={btn("ghost")}>
+                Discard
+              </button>
+              <button type="button" onClick={() => void savePricing()} disabled={busy === "pricing"} className={btn("primary")}>
+                {busy === "pricing" ? "Saving…" : "Save changes"}
+              </button>
+            </div>
           </div>
         </div>
-      </div>
-    )}
-  </div>;
+      )}
+    </div>
+  );
+}
+
+function MonitorRow({ entry, onGrant }: { entry: MonitorEntry; onGrant: (prefill: { tenantId: string; meter: CreditMeterKey }) => void }) {
+  const grantMeter = entry.grantMeter;
+  return (
+    <li className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-[var(--border)] px-4 py-3 first:border-t-0 lg:flex-nowrap">
+      <span className="w-full min-w-0 lg:w-[230px] lg:shrink-0">
+        <span className="block truncate text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">{entry.tenantName}</span>
+        {entry.tenantStatus !== "active" && <span className={st.sub}>{entry.tenantStatus}</span>}
+      </span>
+      <span className="w-[150px] shrink-0 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">{entry.label}</span>
+      <span className="min-w-[120px] flex-1">
+        <SettingsMeter
+          value={entry.used}
+          max={entry.limit}
+          tone={METER_TONE[entry.state]}
+          ariaLabel={`${entry.tenantName}, ${entry.label}: ${count(entry.used)} of ${count(entry.limit)}`}
+        />
+      </span>
+      <span className={cn("w-[150px] shrink-0 text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] tabular-nums", FIGURE_TONE[entry.state])}>
+        {count(entry.used)} / {count(entry.limit)}
+        {entry.addonQty > 0 && <span className={cn(st.sub, "font-normal")}>incl. {count(entry.addonQty)} from add-ons</span>}
+        {entry.grantQty > 0 && <span className={cn(st.sub, "font-normal")}>incl. {count(entry.grantQty)} granted</span>}
+      </span>
+      <span className="flex w-[124px] shrink-0 justify-end">
+        {grantMeter ? (
+          <button type="button" onClick={() => onGrant({ tenantId: entry.tenantId, meter: grantMeter })} className={btn("secondary")}>
+            Grant credits
+          </button>
+        ) : (
+          <span
+            className="text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]"
+            title={entry.kind === "seats" ? "Seats come from the plan; change the plan to raise them." : "Credits cannot be granted on this meter."}
+          >
+            {entry.kind === "seats" ? "Set by the plan" : "Not grantable"}
+          </span>
+        )}
+      </span>
+    </li>
+  );
+}
+
+function limitText(value: number | null) {
+  if (value === null) return "Unlimited";
+  if (value === 0) return "—";
+  return count(value);
+}
+
+function DefaultLimitsRow({ row, planIds }: { row: DefaultLimitRow; planIds: string[] }) {
+  return (
+    <tr className="m-row">
+      <td className={st.td}>{row.label}</td>
+      {planIds.map((planId) => {
+        const cell = row.values[planId];
+        const value = cell?.value ?? null;
+        return (
+          <td
+            key={planId}
+            className={cn(st.td, "tabular-nums")}
+            title={cell?.source === "platform_default" ? "Platform default: this plan sets no allowance of its own" : undefined}
+          >
+            {value === 0 ? (
+              <>
+                <span aria-hidden>—</span>
+                <span className="sr-only">None</span>
+              </>
+            ) : (
+              limitText(value)
+            )}
+          </td>
+        );
+      })}
+    </tr>
+  );
 }

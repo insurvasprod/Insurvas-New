@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { toast } from "sonner";
+import { notify } from "@/lib/notify";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -42,10 +42,10 @@ export function ProductDialog({
     const body = await response.json().catch(() => null);
     setLoading(false);
     if (!response.ok) {
-      toast.error(body?.error ?? "Could not save the product");
+      notify.block(body?.error ?? "Could not save the product");
       return;
     }
-    toast.success(isEdit ? `${name} updated` : `${name} added`);
+    notify.done(isEdit ? `${name} updated` : `${name} added`);
     onSaved();
     onClose();
   }

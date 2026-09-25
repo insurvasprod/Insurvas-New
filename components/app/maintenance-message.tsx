@@ -1,4 +1,5 @@
 import type { MaintenanceStatus } from "@/lib/system/constants";
+import { utcDateTime } from "@/lib/system/adminFormat";
 
 export function MaintenanceMessage({ status }: { status: MaintenanceStatus }) {
   if (status.level === "off") return null;
@@ -17,7 +18,7 @@ export function MaintenanceMessage({ status }: { status: MaintenanceStatus }) {
       </p>
       <p className="mt-1">{status.message}</p>
       {status.scheduledEnd && status.level !== "banner_only" && (
-        <p className="mt-1 text-xs opacity-80">Expected end: {new Date(status.scheduledEnd).toLocaleString()}</p>
+        <p className="mt-1 text-xs opacity-80">Expected end: {utcDateTime(status.scheduledEnd)}</p>
       )}
     </div>
   );

@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
   const supabase = getSupabaseServiceClient();
   let query = supabase
     .from("credit_notes")
-    .select("*, tenants(name), invoices(number)")
+    .select("*, tenants(name), platform_invoices(number)")
     .order("created_at", { ascending: false });
 
   if (request.nextUrl.searchParams.get("pending") === "true") {

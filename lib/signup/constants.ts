@@ -65,3 +65,25 @@ export function deriveRecommendedSetupSteps(profile: SetupProfileInput): string[
 
   return steps;
 }
+
+/**
+ * The onboarding states that mean "this tenant finished setting up".
+ *
+ * There are **two spellings of the same state** in live data, and both are real:
+ *
+ *     complete 383 · completed 197 · ready_for_checkout 5 · pending 1     (586 tenants, 2026-09-22)
+ *
+ * Nothing writes `not_started`, despite two places in the codebase asserting that the column never
+ * advances past it. Collapsing the two spellings is a data migration and a product decision about
+ * which one wins; until then, anything asking "is this tenant done?" has to accept both, because
+ * matching one silently misclassifies the other group.
+ *
+ * That is not hypothetical — it was a live defect. `setupChecklistForState` compared against
+ * `"completed"` alone, so the 383 tenants stored as `"complete"` saw a permanent **0 of 5** setup
+ * checklist on their dashboard, with every step shown as outstanding, long after finishing.
+ */
+export const ONBOARDING_COMPLETE_STATES = ["complete", "completed"] as const;
+
+export function isOnboardingComplete(onboardingState: string | null | undefined): boolean {
+  return (ONBOARDING_COMPLETE_STATES as readonly string[]).includes(onboardingState ?? "");
+}

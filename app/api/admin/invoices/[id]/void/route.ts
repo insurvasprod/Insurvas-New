@@ -24,7 +24,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   const supabase = getSupabaseServiceClient();
   const { data: invoice } = await supabase
-    .from("invoices")
+    .from("platform_invoices")
     .select("id, number, status, tenant_id, total_cents")
     .eq("id", id)
     .maybeSingle<{ id: string; number: string; status: string; tenant_id: string; total_cents: number }>();
@@ -37,7 +37,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   // Voiding changes the status only. The number, the lines and the amounts are untouched — the
   // record of what was billed survives, and the number is never reissued.
   const { error } = await supabase
-    .from("invoices")
+    .from("platform_invoices")
     .update({ status: "void", voided_at: new Date().toISOString(), void_reason: parsed.data.reason })
     .eq("id", id);
 

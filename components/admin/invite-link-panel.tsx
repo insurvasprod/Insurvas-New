@@ -6,8 +6,8 @@ import { Copy, Check, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 /**
- * Shows the raw invite link. This exists because no email transport is wired up yet
- * (SA-4.11 owns that) — until then the admin passes the link on themselves.
+ * Shows a secure, copyable fallback link when an operator needs to share an invitation manually
+ * or email delivery was unavailable.
  */
 export function InviteLinkPanel({ url, expiresAt }: { url: string; expiresAt: string }) {
   const [copied, setCopied] = useState(false);
@@ -27,7 +27,7 @@ export function InviteLinkPanel({ url, expiresAt }: { url: string; expiresAt: st
       <div className="flex items-start gap-2 text-sm">
         <Mail className="mt-0.5 size-4 shrink-0 text-[var(--color-blue)]" />
         <p className="text-muted-foreground">
-          Email delivery isn&apos;t configured yet, so send this link to them yourself. It expires{" "}
+          If the email was not received, send this secure link to them yourself. It expires{" "}
           <span className="font-medium text-foreground">{new Date(expiresAt).toLocaleString()}</span>.
         </p>
       </div>

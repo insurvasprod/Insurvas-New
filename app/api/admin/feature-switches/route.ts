@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import { requireAdminRole } from "@/lib/adminAuth/requireAdminRole";
 import { audit } from "@/lib/audit/log";
-import { fetchAllSwitches, setSwitch } from "@/lib/features/killSwitch";
+import { fetchAllSwitches, fetchSwitchReasons, setSwitch } from "@/lib/features/killSwitch";
 import { SWITCH_STATES, switchRefusalReason, OFF_MESSAGE_MAX } from "@/lib/features/killSwitchRules";
 
 // super_admin only, and narrower than the feature catalog beside it on the same screen.
@@ -68,7 +68,12 @@ export async function PUT(request: NextRequest) {
       request,
     });
 
-    return NextResponse.json({ ok: true, featureSwitch: change.to });
+    // Read back from the audit row just written, so the screen's "Internal:" line shows exactly
+    // what the log holds (and who) rather than an echo of the request. Null if that read failed;
+    // the screen then says the reason could not be read rather than inventing one.
+    const recorded = (await fetchSwitchReasons([feature_key])).get(feature_key) ?? null;
+
+    return NextResponse.json({ ok: true, featureSwitch: change.to, reason: recorded });
   } catch (error) {
     // 23503 = the feature_key does not exist in the catalog. Worth naming, because the most likely
     // cause is a typo or a feature that was renamed rather than archived.

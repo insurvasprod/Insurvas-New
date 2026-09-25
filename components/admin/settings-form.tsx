@@ -1,20 +1,17 @@
 "use client";
 
-import { useState } from "react";
-import { Check, RotateCcw } from "lucide-react";
-import { toast } from "sonner";
+import { useMemo, useState, type KeyboardEvent } from "react";
+import { notify } from "@/lib/notify";
 
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Card, CardContent } from "@/components/ui/card";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Callout, DashedCard, Field, LockIcon, Pill, btn, control } from "@/components/app/settings/primitives";
+import { LoginProtectionPanel } from "@/components/admin/login-protection-panel";
+import { SETTING_DEFS, settingRefusalReason, type SettingDef, type SettingValue } from "@/lib/settings/constants";
 import {
-  settingGroups,
-  settingRefusalReason,
-  type SettingDef,
-  type SettingValue,
-} from "@/lib/settings/constants";
+  LOGIN_PROTECTION_KEYS,
+  LOGIN_PROTECTION_LABELS,
+  isLoginProtectionKey,
+  isLoosenedAbuseControl,
+} from "@/lib/settings/restrictions";
 
 export type SettingState = {
   key: string;
@@ -23,23 +20,50 @@ export type SettingState = {
   updatedAt: string | null;
 };
 
+/** The board's 140×38 store input: right-aligned figures, the strong edge every control carries. */
+const STORE_INPUT =
+  "box-border h-[38px] w-[140px] rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] px-3 text-right text-[16px] leading-[1.5] tracking-[-0.02em] tabular-nums text-[var(--ink)] outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)] aria-[invalid=true]:border-[var(--error)] disabled:cursor-not-allowed disabled:opacity-60";
+
 /**
- * One row per setting, each saving on its own.
+ * The Advanced screen (p-adm-advanced): the raw settings store, the login-protection knobs, and the
+ * warnings for any abuse control that has been loosened.
  *
- * Not a single form with one Save: SA-4.3 requires every section to save independently, and a
- * whole-form submit means one refused value discards three good ones.
+ * Every row still saves on its own. SA-4.3 requires every section to save independently, and a
+ * whole-form submit means one refused value discards three good ones — so a row's Save appears
+ * only once that row is edited, and Enter in its field does the same thing.
+ *
+ * `initial` holds only the keys this viewer may manage (the page filters by role), so a
+ * platform_config session never draws a login-protection control it would be refused on.
  */
-export function SettingsForm({ initial }: { initial: SettingState[] }) {
-  const [live, setLive] = useState<Record<string, SettingValue>>(
-    Object.fromEntries(initial.map((s) => [s.key, s.value])),
+export function SettingsForm({
+  initial,
+  canManageLoginProtection,
+}: {
+  initial: SettingState[];
+  canManageLoginProtection: boolean;
+}) {
+  const initialByKey = useMemo(() => new Map(initial.map((setting) => [setting.key, setting])), [initial]);
+  const defs = useMemo(() => SETTING_DEFS.filter((def) => initialByKey.has(def.key)) as SettingDef[], [initialByKey]);
+  const valueFor = (def: SettingDef): SettingValue => {
+    const value = initialByKey.get(def.key)?.value;
+    // A stale or hand-edited settings response can contain an empty string for a numeric key.
+    // Treat that the same as a missing override so the operator never sees a blank safety limit.
+    return typeof value === "string" && value.trim() === "" ? def.default : value ?? def.default;
+  };
+  const [live, setLive] = useState<Record<string, SettingValue>>(() =>
+    Object.fromEntries(defs.map((def) => [def.key, valueFor(def)])),
   );
-  const [draft, setDraft] = useState<Record<string, string>>(
-    Object.fromEntries(initial.map((s) => [s.key, String(s.value)])),
+  const [draft, setDraft] = useState<Record<string, string>>(() =>
+    Object.fromEntries(defs.map((def) => [def.key, String(valueFor(def))])),
   );
   const [errors, setErrors] = useState<Record<string, string | null>>({});
   const [busy, setBusy] = useState<string | null>(null);
 
-  const overridden = new Set(initial.filter((s) => s.isOverridden).map((s) => s.key));
+  // Read from the live value, not from the props the page rendered with: after a Reset the row is
+  // at its default and must say so, without waiting for a reload. Same rule as getAllSettings —
+  // "overridden" means changed from the coded default, not merely that a row exists.
+  const isOverridden = (def: SettingDef) => String(live[def.key]) !== String(def.default);
+  const isDirty = (def: SettingDef) => draft[def.key] !== String(live[def.key]);
 
   async function save(def: SettingDef, override?: SettingValue) {
     const raw = override ?? draft[def.key];
@@ -59,11 +83,11 @@ export function SettingsForm({ initial }: { initial: SettingState[] }) {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ key: def.key, value: raw }),
-    });
-    const body = await res.json().catch(() => null);
+    }).catch(() => null);
+    const body = res ? await res.json().catch(() => null) : null;
     setBusy(null);
 
-    if (!res.ok) {
+    if (!res || !res.ok) {
       // The typed value stays in the field — a refused save must never discard what was entered.
       setErrors((e) => ({ ...e, [def.key]: body?.error ?? "Could not save this setting." }));
       return;
@@ -71,7 +95,7 @@ export function SettingsForm({ initial }: { initial: SettingState[] }) {
 
     setLive((v) => ({ ...v, [def.key]: body.value }));
     setDraft((d) => ({ ...d, [def.key]: String(body.value) }));
-    toast.success(body.changed ? `${def.label} saved` : `${def.label} is already that`);
+    notify.done(body.changed ? `${def.label} saved` : `${def.label} is already that`);
   }
 
   /**
@@ -79,7 +103,7 @@ export function SettingsForm({ initial }: { initial: SettingState[] }) {
    *
    * It used to only fill the field and leave you to press Save, which read the draft from its
    * render closure — so clicking Default and Save in quick succession saved the OLD value and
-   * reported "already that". A button labelled "Default" should restore the default, not stage it.
+   * reported "already that". A button labelled "Reset" should restore the default, not stage it.
    */
   function reset(def: SettingDef) {
     setDraft((d) => ({ ...d, [def.key]: String(def.default) }));
@@ -87,94 +111,194 @@ export function SettingsForm({ initial }: { initial: SettingState[] }) {
     void save(def, def.default);
   }
 
+  function onFieldKey(def: SettingDef, event: KeyboardEvent<HTMLElement>) {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      if (isDirty(def) && busy !== def.key) void save(def);
+    } else if (event.key === "Escape" && isDirty(def)) {
+      // Back to what is live, so an edit abandoned halfway cannot be saved by a stray Enter later.
+      event.preventDefault();
+      setDraft((d) => ({ ...d, [def.key]: String(live[def.key]) }));
+      setErrors((e) => ({ ...e, [def.key]: null }));
+    }
+  }
+
+  const setValue = (def: SettingDef, value: string) => setDraft((d) => ({ ...d, [def.key]: value }));
+
+  const storeDefs = defs.filter((def) => !isLoginProtectionKey(def.key));
+  const loginDefs = LOGIN_PROTECTION_KEYS.map((key) => defs.find((def) => def.key === key)).filter(
+    (def): def is SettingDef => Boolean(def),
+  );
+  const overriddenCount = storeDefs.filter(isOverridden).length;
+  // Only keys this viewer can see: the page never sends a platform_config session the login knobs.
+  const loosened = defs.filter((def) => isLoosenedAbuseControl(def.key, live[def.key], def.default));
+
+  function rowActions(def: SettingDef) {
+    const saving = busy === def.key;
+    const overridden = isOverridden(def);
+    return (
+      <>
+        {isDirty(def) && (
+          <button type="button" className={btn("primary-sm")} onClick={() => void save(def)} disabled={saving}>
+            {saving ? "Saving…" : "Save"}
+          </button>
+        )}
+        <Pill tone={overridden ? "brand" : "neutral"}>{overridden ? "Overridden" : "Default"}</Pill>
+        {overridden && (
+          <button
+            type="button"
+            className={btn("secondary")}
+            onClick={() => reset(def)}
+            disabled={saving}
+            aria-label={`Reset ${def.key} to its default of ${String(def.default)}`}
+            title={`Restore the default (${String(def.default)})`}
+          >
+            Reset
+          </button>
+        )}
+      </>
+    );
+  }
+
   return (
-    <div className="space-y-6">
-      {settingGroups().map(({ group, defs }) => (
-        <Card key={group}>
-          <CardContent className="space-y-5">
-            <h2 className="text-sm font-bold uppercase tracking-wide text-[var(--color-accent-ink)]">{group}</h2>
+    <div className="flex w-full min-w-0 flex-col gap-6">
+      <section className="flex min-w-0 flex-col overflow-hidden rounded-[12px] border border-[var(--border)] bg-[var(--surface)]">
+        <div className="flex items-center justify-between gap-4 border-b border-[var(--border)] bg-[var(--surface-alt)] px-4 py-3">
+          <h2 className="m-0 text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">Settings store</h2>
+          <span className="flex items-center gap-2.5">
+            <Pill tone={overriddenCount > 0 ? "brand" : "neutral"}>{overriddenCount} overridden</Pill>
+          </span>
+        </div>
 
-            {defs.map((def) => {
-              const dirty = draft[def.key] !== String(live[def.key]);
-              const error = errors[def.key];
-              const errorId = `${def.key}-error`;
+        {storeDefs.map((def, index) => {
+          const error = errors[def.key];
+          const helpId = `${def.key}-help`;
+          const errorId = `${def.key}-error`;
+          return (
+            <div
+              key={def.key}
+              className={`flex flex-wrap items-center gap-4 px-4 py-3 ${index === 0 ? "" : "border-t border-[var(--border)]"}`}
+            >
+              <span className="block w-full min-w-0 sm:w-[300px] sm:shrink-0">
+                <label htmlFor={def.key} className="block font-mono text-[13px] break-all text-[var(--ink)]">
+                  {def.key}
+                </label>
+                <span id={helpId} className="mt-1 block text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">
+                  {def.help}
+                </span>
+                {error && (
+                  <span id={errorId} role="alert" className="mt-1 block text-[12px] leading-[1.5] font-semibold tracking-[-0.01em] text-[var(--error-ink)]">
+                    {error}
+                  </span>
+                )}
+              </span>
 
-              return (
-                <div key={def.key} className="space-y-1.5 border-t border-border pt-4 first:border-t-0 first:pt-0">
-                  <div className="flex flex-wrap items-baseline justify-between gap-2">
-                    <Label htmlFor={def.key}>{def.label}</Label>
-                    <code className="text-[11px] text-muted-foreground">{def.key}</code>
-                  </div>
+              <span className="flex items-center gap-2">
+                {def.type === "select" ? (
+                  <select
+                    id={def.key}
+                    className={`${STORE_INPUT} text-left`}
+                    value={draft[def.key]}
+                    aria-describedby={error ? `${helpId} ${errorId}` : helpId}
+                    onChange={(e) => setValue(def, e.target.value)}
+                    onKeyDown={(e) => onFieldKey(def, e)}
+                  >
+                    {def.options?.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    id={def.key}
+                    type="text"
+                    className={STORE_INPUT}
+                    inputMode={def.type === "number" ? "numeric" : "text"}
+                    value={draft[def.key]}
+                    aria-invalid={Boolean(error)}
+                    aria-describedby={error ? `${helpId} ${errorId}` : helpId}
+                    onChange={(e) => setValue(def, e.target.value)}
+                    onKeyDown={(e) => onFieldKey(def, e)}
+                  />
+                )}
+                {def.unit && <span className="text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">{def.unit}</span>}
+              </span>
 
-                  <div className="flex flex-wrap items-start gap-2">
-                    {def.type === "select" ? (
-                      <Select
-                        value={draft[def.key]}
-                        onValueChange={(v) => setDraft((d) => ({ ...d, [def.key]: v }))}
-                      >
-                        <SelectTrigger id={def.key} className="w-52">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {def.options?.map((o) => (
-                            <SelectItem key={o} value={o}>
-                              {o}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    ) : (
-                      <div className="flex items-center gap-2">
-                        <Input
+              <span className="flex-1" aria-hidden="true" />
+              <span className="flex flex-wrap items-center gap-2.5">{rowActions(def)}</span>
+            </div>
+          );
+        })}
+
+        <div className="border-t border-[var(--border)] bg-[var(--canvas)] px-4 py-3 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--body)]">
+          Every key carries a description — a raw key with no explanation is a trap. An override you cannot undo is a worse one, so
+          each has its own reset.
+        </div>
+      </section>
+
+      <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
+        <div className="flex min-w-0 flex-col gap-6">
+          {canManageLoginProtection && loginDefs.length > 0 ? (
+            <section className="min-w-0 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] p-6">
+              <div>
+                <h2 className="m-0 text-[18px] leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]">Login protection</h2>
+                <p className="mt-1 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">Super admin only.</p>
+              </div>
+              <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {loginDefs.map((def) => {
+                  const key = def.key as (typeof LOGIN_PROTECTION_KEYS)[number];
+                  const error = errors[def.key];
+                  return (
+                    <div key={def.key} className="min-w-0">
+                      <Field label={LOGIN_PROTECTION_LABELS[key]} htmlFor={def.key} hint={def.help} error={error}>
+                        <input
                           id={def.key}
-                          className="w-52"
-                          inputMode={def.type === "number" ? "numeric" : "text"}
+                          type="text"
+                          inputMode="numeric"
+                          className={control}
                           value={draft[def.key]}
                           aria-invalid={Boolean(error)}
-                          aria-describedby={error ? errorId : undefined}
-                          onChange={(e) => setDraft((d) => ({ ...d, [def.key]: e.target.value }))}
+                          onChange={(e) => setValue(def, e.target.value)}
+                          onKeyDown={(e) => onFieldKey(def, e)}
                         />
-                        {def.unit && <span className="text-sm text-muted-foreground">{def.unit}</span>}
+                      </Field>
+                      <div className="mt-2 flex flex-wrap items-center gap-2.5">
+                        <code className="font-mono text-[12px] text-[var(--muted)]">{def.key}</code>
+                        <span className="flex-1" aria-hidden="true" />
+                        {rowActions(def)}
                       </div>
-                    )}
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          ) : (
+            <DashedCard icon={<LockIcon />} title="Login protection is managed by a super admin">
+              Password attempt limits and account lockouts decide how hard anyone can push on sign-in, so only a super admin sees or
+              changes them.
+            </DashedCard>
+          )}
 
-                    <Button size="sm" onClick={() => save(def)} disabled={!dirty || busy === def.key}>
-                      {busy === def.key ? "Saving…" : "Save"}
-                    </Button>
+          {canManageLoginProtection && <LoginProtectionPanel />}
+        </div>
 
-                    {String(live[def.key]) !== String(def.default) && (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => reset(def)}
-                        title={`Restore the default (${def.default})`}
-                      >
-                        <RotateCcw className="size-3.5" />
-                        Default
-                      </Button>
-                    )}
-
-                    {overridden.has(def.key) && !dirty && (
-                      <span className="inline-flex items-center gap-1 text-xs text-[var(--color-success)]">
-                        <Check className="size-3.5" />
-                        Overridden
-                      </span>
-                    )}
-                  </div>
-
-                  <p className="text-xs text-muted-foreground">{def.help}</p>
-
-                  {error && (
-                    <p id={errorId} className="text-xs font-medium text-[var(--color-danger)]">
-                      {error}
-                    </p>
-                  )}
-                </div>
-              );
-            })}
-          </CardContent>
-        </Card>
-      ))}
+        <div className="flex min-w-0 flex-col gap-6">
+          {loosened.length > 0 ? (
+            loosened.map((def) => (
+              <Callout key={def.key} tone="warning" title={`${def.key} is an abuse-control threshold`}>
+                It is set to {Number(live[def.key]).toLocaleString("en-US")}
+                {def.unit ? ` ${def.unit}` : ""}, above its default of {Number(def.default).toLocaleString("en-US")}. A higher value lets
+                one caller do more before protection engages.
+              </Callout>
+            ))
+          ) : (
+            <Callout tone="info" title="Abuse-control thresholds are at their defaults or stricter">
+              When one is raised above its default, a warning here names the key and both values.
+            </Callout>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

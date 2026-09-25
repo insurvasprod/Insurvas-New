@@ -1,13 +1,14 @@
 import { Suspense } from "react";
 
+import { AuthPage } from "@/components/app/auth-card";
 import { SetPasswordForm } from "@/components/app/set-password-form";
 
 export default function SetPasswordPage() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[var(--color-page-bg)] p-4">
+    <AuthPage>
       <Suspense fallback={null}>
         <SetPasswordForm />
       </Suspense>
-    </div>
+    </AuthPage>
   );
 }

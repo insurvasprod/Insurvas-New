@@ -5,7 +5,25 @@
 // creating a single tenant, user or email.
 //
 // Needs the app running. Run with: npm run verify:ratelimit
+//
+// The ceiling is IMPORTED from the application rather than written here as a number. It used to be
+// hard-coded as "the sixth and seventh are refused", which silently became wrong the moment
+// SIGNUP_PER_IP.max moved from 5 to 10 — the suite then failed while the limiter was working
+// perfectly, because seven requests no longer reach a ceiling of ten. A rate-limit verifier that
+// has to be edited whenever the rate limit changes is a verifier that will be edited to match
+// whatever the code does, which is the opposite of a check.
+import { readFileSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";
+
+// Read from source rather than imported: `lib/rateLimit/index.ts` uses `@/` path aliases, which
+// Node cannot resolve outside the bundler. Parsing the literal keeps the single source of truth
+// without dragging the whole module graph into a standalone script.
+function ruleMax(name) {
+  const source = readFileSync(new URL(`../lib/rateLimit/index.ts`, import.meta.url), "utf8");
+  const match = source.match(new RegExp(String.raw`export const ${name}\b[^=]*=[^{]*\{[^}]*max:\s*(\d+)`));
+  if (!match) throw new Error(`could not read ${name}.max from lib/rateLimit/index.ts`);
+  return Number(match[1]);
+}
 
 const BASE = process.env.APP_BASE_URL ?? "http://localhost:3000";
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, {
@@ -66,6 +84,13 @@ try {
 
   console.log("\nThe signup endpoint\n");
 
+  // Reach the plan lookup rather than the earlier legal-validation branch. The public endpoint
+  // intentionally validates current legal versions before account creation, so this QA probe must
+  // submit the same current document ids a real signup form would submit.
+  const legalResponse = await fetch(`${BASE}/api/public/legal`);
+  const legalBody = await legalResponse.json();
+  const acceptedDocumentIds = (legalBody.documents ?? []).map((document) => document.id);
+
   // A plan code that does not exist: counted by the limiter, then refused at the plan lookup, so
   // nothing is ever created.
   const attempt = (n) =>
@@ -79,21 +104,24 @@ try {
         phone: "5551234567",
         planCode: "plan_that_does_not_exist",
         billingCycle: "monthly",
+        acceptedDocumentIds,
       }),
     });
 
+  // max + 2: enough to see the ceiling and to see that it stays closed once crossed.
+  const max = ruleMax("SIGNUP_PER_IP");
   const statuses = [];
-  for (let i = 0; i < 7; i++) statuses.push((await attempt(i)).status);
+  for (let i = 0; i < max + 2; i++) statuses.push((await attempt(i)).status);
 
   check(
-    "the first five are let through to the plan check",
-    statuses.slice(0, 5).every((s) => s === 409),
+    `the first ${max} are let through to the plan check`,
+    statuses.slice(0, max).every((s) => s === 409),
     `got ${statuses.join(", ")} — 409 means the limiter passed it on and the fake plan refused it`,
   );
   check(
-    "the sixth and seventh are refused with 429",
-    statuses[5] === 429 && statuses[6] === 429,
-    `got ${statuses.join(", ")}`,
+    `requests ${max + 1} and ${max + 2} are refused with 429`,
+    statuses[max] === 429 && statuses[max + 1] === 429,
+    `got ${statuses.join(", ")} against SIGNUP_PER_IP.max = ${max}`,
   );
 
   const last = await attempt(99);

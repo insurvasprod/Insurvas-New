@@ -1,96 +1,155 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useId, useState } from "react";
+import { useRouter } from "next/navigation";
 
+import { AdminPageHeader } from "@/components/admin/page-header";
 import { FeatureCatalog } from "@/components/admin/feature-catalog";
+import { FeatureDialog } from "@/components/admin/feature-dialog";
 import { FeatureSwitchesPanel, type SwitchableFeature } from "@/components/admin/feature-switches-panel";
+import { Callout } from "@/components/app/settings/primitives";
 import type { FeatureModuleGroup, FeatureModuleRow } from "@/lib/features/constants";
-import type { FeatureSwitch } from "@/lib/features/killSwitchRules";
+import { switchSummaryTitle, type FeatureSwitch, type SwitchReason } from "@/lib/features/killSwitchRules";
+import { cn } from "@/lib/utils";
+
+/** The board's 44px primary header button. */
+const primary44 =
+  "inline-flex h-11 cursor-pointer items-center justify-center gap-2 rounded-[8px] border border-transparent bg-[var(--primary)] px-4 text-[14px] leading-[1.43] font-semibold tracking-[-0.01em] text-[var(--on-primary)] hover:bg-[var(--accent-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]";
+
+type Tab = "catalog" | "switches";
 
 /**
- * Two genuinely separate jobs on one route, so they get tabs rather than a stack.
+ * The Features page (board p-adm-features): header, the platform-wide headline, and two tabs.
  *
- * Stacked, the kill switches sat below the whole catalog — eight module tables and twenty-seven
- * rows of scrolling before you reached the control you open this page for during an incident.
- * Tabs also stop the page implying the switches are part of editing the catalog: naming a feature
- * and taking it away from every paying customer are not the same kind of act, and they do not even
- * have the same permission.
+ * Two genuinely separate jobs on one route, so they get tabs rather than a stack. Stacked, the kill
+ * switches sat below eight module tables — twenty-seven rows of scrolling before the control you
+ * open this page for during an incident. Tabs also stop the page implying the switches are part of
+ * editing the catalog: naming a feature and taking it away from every paying customer are not the
+ * same kind of act, and they do not have the same permission.
  */
 export function FeaturesSection({
-  groups,
+  groups: initialGroups,
   modules,
   switchable,
   switches,
+  reasons,
+  counts,
   canToggle,
 }: {
   groups: FeatureModuleGroup[];
   modules: FeatureModuleRow[];
   switchable: SwitchableFeature[];
   switches: FeatureSwitch[];
+  reasons: Record<string, SwitchReason>;
+  counts: { off: number; beta: number };
   canToggle: boolean;
 }) {
-  const [tab, setTab] = useState<"catalog" | "switches">("catalog");
-  const offCount = switches.filter((s) => s.state !== "on").length;
+  const router = useRouter();
+  const baseId = useId();
+  // A switch that is not fully on is the reason anyone opens this page during an incident.
+  const [tab, setTab] = useState<Tab>(counts.off + counts.beta > 0 ? "switches" : "catalog");
+  const [groups, setGroups] = useState(initialGroups);
+  const [creating, setCreating] = useState(false);
 
-  const tabs = [
-    { id: "catalog" as const, label: "Catalog", count: switchable.length },
-    // The count is on the tab so an active kill switch is visible without opening it.
-    { id: "switches" as const, label: "Kill switches", count: offCount || null },
+  const refresh = useCallback(async () => {
+    const res = await fetch("/api/admin/features");
+    if (res.ok) {
+      const body = await res.json();
+      setGroups(body.groups);
+    }
+    // The switch list and the override counts are read on the server.
+    router.refresh();
+  }, [router]);
+
+  const title = switchSummaryTitle(counts);
+  const affected = counts.off + counts.beta;
+  const tabs: { id: Tab; label: string }[] = [
+    { id: "catalog", label: "Catalog" },
+    { id: "switches", label: "Switches" },
   ];
 
   return (
-    <div>
-      <div role="tablist" aria-label="Features" className="mb-6 flex gap-1 border-b border-border">
-        {tabs.map((t) => {
-          const active = tab === t.id;
-          return (
-            <button
-              key={t.id}
-              role="tab"
-              type="button"
-              aria-selected={active}
-              onClick={() => setTab(t.id)}
-              className={`-mb-px flex items-center gap-2 border-b-2 px-3.5 py-2.5 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-blue)] ${
-                active
-                  ? "border-[var(--color-blue)] font-semibold text-[var(--color-accent-ink)]"
-                  : "border-transparent text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {t.label}
-              {t.count !== null && (
-                <span
-                  className={`rounded-full px-1.5 py-px text-[11px] font-semibold tabular-nums ${
-                    t.id === "switches" && offCount > 0
-                      ? "bg-[var(--color-danger)]/10 text-[var(--color-danger)]"
-                      : "bg-muted text-muted-foreground"
-                  }`}
-                >
-                  {t.count}
-                </span>
-              )}
-            </button>
-          );
-        })}
+    <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
+      <AdminPageHeader
+        title="Features"
+        subtitle="Everything a subscription can switch on, and the switches that turn one off for everyone."
+        actions={
+          <button type="button" className={primary44} onClick={() => setCreating(true)}>
+            New feature
+          </button>
+        }
+      />
+
+      {title && (
+        <Callout tone="warning" title={title}>
+          Every tenant with {affected === 1 ? "this" : "these"} on their plan, or switched on for them by an override,
+          currently cannot use {affected === 1 ? "it" : "them"}
+          {counts.beta > 0 ? ", apart from the tenants named on a limited switch" : ""}. A kill switch always carries an
+          internal reason &mdash; what the next admin reads &mdash; and can carry a customer notice; without one,
+          agents see the standard &ldquo;temporarily unavailable&rdquo; page.
+        </Callout>
+      )}
+
+      <div>
+        <div role="tablist" aria-label="Features" className="flex gap-6 border-b border-[var(--border)]">
+          {tabs.map((t) => {
+            const active = tab === t.id;
+            return (
+              <button
+                key={t.id}
+                id={`${baseId}-tab-${t.id}`}
+                role="tab"
+                type="button"
+                aria-selected={active}
+                aria-controls={`${baseId}-panel-${t.id}`}
+                tabIndex={active ? 0 : -1}
+                onClick={() => setTab(t.id)}
+                onKeyDown={(event) => {
+                  if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return;
+                  event.preventDefault();
+                  const next = tabs[(tabs.findIndex((x) => x.id === t.id) + 1) % tabs.length];
+                  setTab(next.id);
+                  document.getElementById(`${baseId}-tab-${next.id}`)?.focus();
+                }}
+                className={cn(
+                  "-mb-px h-10 cursor-pointer border-0 border-b-2 bg-transparent px-1 text-[14px] leading-[1.43] font-semibold tracking-[-0.01em] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]",
+                  active
+                    ? "border-[var(--primary)] text-[var(--ink)]"
+                    : "border-transparent text-[var(--muted)] hover:text-[var(--ink)]",
+                )}
+              >
+                {t.label}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
-      {tab === "catalog" ? (
-        <FeatureCatalog initialGroups={groups} modules={modules} />
-      ) : canToggle ? (
-        <div>
-          <p className="mb-4 max-w-[72ch] text-sm text-muted-foreground">
-            Switching a feature off takes it away from every tenant immediately, whatever their plan says.
-            Entitlements are untouched &mdash; nobody loses anything they paid for, and agents see a maintenance
-            notice rather than an upgrade prompt.
-          </p>
-          <FeatureSwitchesPanel features={switchable} initialSwitches={switches} />
-        </div>
-      ) : (
-        // platform_config maintains the catalog but cannot switch a feature off. Saying so beats a
-        // tab that silently does nothing, and the API refuses them regardless.
-        <p className="rounded-lg border border-border bg-card p-4 text-sm text-muted-foreground">
-          Only a super admin can switch a feature off for everyone. You can still edit the catalog.
-        </p>
-      )}
+      <div
+        role="tabpanel"
+        id={`${baseId}-panel-${tab}`}
+        aria-labelledby={`${baseId}-tab-${tab}`}
+        className="flex min-w-0 flex-col"
+      >
+        {tab === "catalog" ? (
+          <FeatureCatalog groups={groups} modules={modules} onRefresh={refresh} />
+        ) : (
+          <FeatureSwitchesPanel
+            features={switchable}
+            initialSwitches={switches}
+            initialReasons={reasons}
+            canToggle={canToggle}
+          />
+        )}
+      </div>
+
+      <FeatureDialog
+        mode="create"
+        open={creating}
+        modules={modules}
+        onClose={() => setCreating(false)}
+        onSaved={refresh}
+      />
     </div>
   );
 }

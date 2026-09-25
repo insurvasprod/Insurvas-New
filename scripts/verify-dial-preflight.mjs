@@ -1,8 +1,28 @@
 // SA-4.8 agent-side compliance consumer verification. Temporary tenant data is removed in finally.
 import { SignJWT } from "jose";
 import { createClient } from "@supabase/supabase-js";
+import { createFixtureUser, deleteFixtureUser } from "./lib/fixtureUser.mjs";
 
 const BASE = process.env.APP_BASE_URL ?? "http://localhost:3000";
+const SUITE_SCRIPT = "verify:dial-preflight";
+
+// Precondition. This suite proves FAIL-CLOSED screening, and `DEMO_SCREENING_MODE` short-circuits the
+// provider so a missing or unreachable one answers cheerfully instead of refusing. Run against a
+// demo-mode server the suite fails on an assertion that reads like a compliance defect and is not
+// one — which is exactly what happened in the 2026-09-18 `verify:all` run, where this counted as one
+// of ten failures for an environment reason nobody could see from the output.
+//
+// Said here, once, instead of left for whoever reads the assertion.
+if (/^(1|true|yes|on)$/i.test(process.env.DEMO_SCREENING_MODE ?? "")) {
+  console.error([
+    "PRECONDITION NOT MET — this suite cannot prove fail-closed screening while DEMO_SCREENING_MODE is on.",
+    "Start a server with it disabled and point the suite at that:",
+    "  PORT=3110 DEMO_SCREENING_MODE=false npm start",
+    `  APP_BASE_URL=http://localhost:3110 npm run ${SUITE_SCRIPT}`,
+  ].join("\n"));
+  process.exit(1);
+}
+
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
 const stamp = Date.now();
 let tenantId = null;
@@ -29,9 +49,10 @@ async function main() {
   const tenant = await supabase.from("tenants").insert({ name: `SA48 dialer ${stamp}`, status: "active" }).select("id").single();
   if (tenant.error) throw new Error(tenant.error.message);
   tenantId = tenant.data.id;
-  const user = await supabase.from("users").insert({ email: `sa48-dialer-${stamp}@insurvas.invalid`, name: "SA-4.8 Dialer", status: "active" }).select("id").single();
-  if (user.error) throw new Error(user.error.message);
-  userId = user.data.id;
+  // public.users.id has no default and carries users_id_fkey to auth.users, so a direct insert
+  // cannot work. createFixtureUser creates the Auth user first and lets the bridge trigger write the
+  // public.users row. See scripts/lib/fixtureUser.mjs.
+  ({ userId } = await createFixtureUser(supabase, { email: `sa48-dialer-${stamp}@invalid.test`, name: "SA-4.8 Dialer" }));
   await supabase.from("tenant_users").insert({ tenant_id: tenantId, user_id: userId, role: "owner" });
   const assigned = await supabase.rpc("admin_assign_subscription", { p_tenant_id: tenantId, p_plan_id: plan.id, p_billing_cycle: "monthly", p_start: new Date().toISOString() });
   if (assigned.error) throw new Error(assigned.error.message);
@@ -54,7 +75,11 @@ async function main() {
   } else {
     const blocked = await api("/api/app/dial/preflight", agentCookie, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ phone: "15551234567" }) });
     const body = await blocked.json();
-    check("missing DNC vendor returns 503 and blocks dialing", blocked.status === 503 && body.code === "dnc_unavailable" && body.blocked === true && body.error.includes("Dialing is blocked platform-wide"));
+    check(
+      "missing DNC vendor returns 503 and blocks dialing",
+      blocked.status === 503 && body.code === "dnc_unavailable" && body.blocked === true && body.error.includes("Dialing is blocked platform-wide"),
+      `status=${blocked.status} body=${JSON.stringify(body)}`,
+    );
   }
 }
 
@@ -63,7 +88,7 @@ try { await main(); } finally {
     await supabase.from("tenant_entitlements").delete().eq("tenant_id", tenantId);
     await supabase.from("subscriptions").delete().eq("tenant_id", tenantId);
     await supabase.from("tenant_users").delete().eq("tenant_id", tenantId);
-    if (userId) await supabase.from("users").delete().eq("id", userId);
+    await deleteFixtureUser(supabase, userId);
     await supabase.from("tenants").delete().eq("id", tenantId);
   }
 }

@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { TriangleAlert } from "lucide-react";
-import { toast } from "sonner";
+import { notify } from "@/lib/notify";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -72,20 +72,21 @@ export function SubscriptionPanel({
 
   async function post(url: string, body: unknown, successMessage: string) {
     setBusy(true);
+    const idempotencyKey = crypto.randomUUID();
     const res = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "Idempotency-Key": idempotencyKey },
       body: JSON.stringify(body),
     });
     const payload = await res.json().catch(() => null);
     setBusy(false);
 
     if (!res.ok) {
-      toast.error(payload?.error ?? "Something went wrong");
+      notify.block(payload?.error ?? "Something went wrong");
       return null;
     }
 
-    toast.success(successMessage);
+    notify.done(successMessage);
     router.refresh();
     return payload;
   }
@@ -95,7 +96,7 @@ export function SubscriptionPanel({
       <>
         <Card>
           <CardContent className="space-y-3">
-            <h2 className="text-sm font-bold uppercase tracking-wide text-[var(--color-accent-ink)]">Subscription</h2>
+            <h2 className="text-lg font-semibold leading-[1.28] tracking-[-0.015em]">Subscription</h2>
             <p className="text-sm text-muted-foreground">
               Nothing sold to this tenant yet — no plan, no allowances, no seat limit.
             </p>
@@ -130,33 +131,38 @@ export function SubscriptionPanel({
     <>
       <Card>
         <CardContent className="space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-sm font-bold uppercase tracking-wide text-[var(--color-accent-ink)]">Subscription</h2>
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div className="min-w-0">
+              <h2 className="text-lg font-semibold leading-[1.28] tracking-[-0.015em]">Subscription</h2>
+              <p className="mt-0.5 text-sm text-muted-foreground">
+                Every control here moves money, so each one confirms with its effective date.
+              </p>
+            </div>
             <Badge variant="outline" className={SUBSCRIPTION_STATUS_BADGE_CLASS[status]}>
               {SUBSCRIPTION_STATUS_LABELS[status]}
             </Badge>
           </div>
 
           {access !== "full" && (
-            <div className="flex items-start gap-2 rounded-md border border-[var(--color-warning)]/30 bg-[var(--color-warning)]/10 p-3 text-sm">
-              <TriangleAlert className="mt-0.5 size-4 shrink-0 text-[var(--color-warning)]" />
+            <div className="flex items-start gap-2 rounded-lg bg-[var(--warning-surface)] p-3.5 text-sm">
+              <TriangleAlert className="mt-0.5 size-4 shrink-0 text-[var(--warning-ink)]" />
               <p>{ACCESS_NOTE[access]}</p>
             </div>
           )}
 
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 text-sm">
             <div>
-              <p className="text-muted-foreground">Plan</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.02em] text-muted-foreground">Plan</p>
               <p className="font-medium">
                 {subscription.plan_name} <span className="text-xs">v{subscription.plan_version}</span>
               </p>
             </div>
             <div>
-              <p className="text-muted-foreground">Billing</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.02em] text-muted-foreground">Billing</p>
               <p className="font-medium">{BILLING_CYCLE_LABELS[subscription.billing_cycle]}</p>
             </div>
             <div>
-              <p className="text-muted-foreground">Period ends</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.02em] text-muted-foreground">Period ends</p>
               <p className="font-medium">
                 {subscription.current_period_end
                   ? new Date(subscription.current_period_end).toLocaleDateString()
@@ -164,7 +170,7 @@ export function SubscriptionPanel({
               </p>
             </div>
             <div>
-              <p className="text-muted-foreground">Trial ends</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.02em] text-muted-foreground">Trial ends</p>
               <p className="font-medium">
                 {subscription.trial_ends_at ? new Date(subscription.trial_ends_at).toLocaleDateString() : "—"}
               </p>
@@ -173,17 +179,21 @@ export function SubscriptionPanel({
 
           {/* A queued change must be visible and dated — SA-2.7 is explicit about labelling it. */}
           {subscription.pending_plan_name && (
-            <p className="rounded-md bg-muted px-3 py-2 text-sm">
-              Moving to <span className="font-medium">{subscription.pending_plan_name}</span> — takes effect{" "}
-              <span className="font-medium">
+            <div className="rounded-lg bg-[var(--warning-surface)] px-4 py-3.5">
+              <div className="text-sm text-[var(--warning-ink)]">
+                Queued change — takes effect{" "}
                 {subscription.current_period_end
                   ? new Date(subscription.current_period_end).toLocaleDateString()
                   : "at period end"}
-              </span>
-            </p>
+              </div>
+              <p className="mt-0.5 text-sm">
+                Moving to <span className="font-medium">{subscription.pending_plan_name}</span>. Nothing is prorated
+                because the change was scheduled rather than applied now.
+              </p>
+            </div>
           )}
           {subscription.cancel_at_period_end && (
-            <p className="rounded-md bg-[var(--color-danger)]/10 px-3 py-2 text-sm text-[var(--color-danger)]">
+            <p className="rounded-lg bg-[var(--error-surface)] px-4 py-3 text-sm text-[var(--error-ink)]">
               Cancelling — ends{" "}
               {subscription.current_period_end
                 ? new Date(subscription.current_period_end).toLocaleDateString()
@@ -277,7 +287,7 @@ export function SubscriptionPanel({
   );
 }
 
-function AssignDialog({
+export function AssignDialog({
   open,
   onClose,
   plans,
@@ -361,7 +371,7 @@ function AssignDialog({
   );
 }
 
-function ChangePlanDialog({
+export function ChangePlanDialog({
   open,
   onClose,
   plans,
@@ -370,6 +380,8 @@ function ChangePlanDialog({
   periodEnd,
   busy,
   onChange,
+  seatLimits,
+  note,
 }: {
   open: boolean;
   onClose: () => void;
@@ -379,6 +391,10 @@ function ChangePlanDialog({
   periodEnd: string | null;
   busy: boolean;
   onChange: (planId: string, applyNow: boolean) => void;
+  /** Seat limit per plan id (null = unlimited). When given, each option says what it allows. */
+  seatLimits?: Record<string, number | null>;
+  /** Extra context above the picker, e.g. why seats are changed by changing plan. */
+  note?: ReactNode;
 }) {
   const [planId, setPlanId] = useState("");
   const [override, setOverride] = useState<boolean | null>(null);
@@ -388,9 +404,32 @@ function ChangePlanDialog({
 
   // Upgrade = costs more on the same cycle -> immediate. Otherwise queued to period end, so the
   // customer keeps what they already paid for. The admin can override either way.
-  const inferredUpgrade = newPrice !== null && currentPrice !== null && newPrice > currentPrice;
+  //
+  // Same price is its own case. It used to fall through to "a downgrade", so moving a tenant to the
+  // next version of their plan at an unchanged price was announced as a downgrade. The timing is
+  // unchanged (it still waits for the period end by default); only the description was wrong.
+  const direction: "upgrade" | "downgrade" | "same" | "unknown" =
+    newPrice === null || currentPrice === null
+      ? "unknown"
+      : newPrice > currentPrice
+        ? "upgrade"
+        : newPrice < currentPrice
+          ? "downgrade"
+          : "same";
+  const inferredUpgrade = direction === "upgrade";
   const applyNow = override ?? inferredUpgrade;
   const sellableOnCycle = newPrice !== null;
+  const DIRECTION_LABEL = {
+    upgrade: "an upgrade",
+    downgrade: "a downgrade",
+    same: "the same price",
+    unknown: "no current price to compare against",
+  } as const;
+  const seatsFor = (id: string) => {
+    if (!seatLimits || !(id in seatLimits)) return "";
+    const max = seatLimits[id];
+    return max === null ? " · unlimited seats" : ` · ${max} seat${max === 1 ? "" : "s"}`;
+  };
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
@@ -404,6 +443,7 @@ function ChangePlanDialog({
         </DialogHeader>
 
         <div className="space-y-4 py-4">
+          {note && <div className="text-sm text-muted-foreground">{note}</div>}
           <div className="space-y-1.5">
             <Label htmlFor="change-plan">New plan</Label>
             <Select
@@ -425,6 +465,7 @@ function ChangePlanDialog({
                       {price === null
                         ? ` — not sold ${BILLING_CYCLE_LABELS[cycle].toLowerCase()}`
                         : ` — ${formatCentsAsCurrency(price)}`}
+                      {seatsFor(p.id)}
                     </SelectItem>
                   );
                 })}
@@ -437,7 +478,7 @@ function ChangePlanDialog({
               <p>
                 {formatCentsAsCurrency(currentPrice ?? 0)} → {formatCentsAsCurrency(newPrice)} per{" "}
                 {BILLING_CYCLE_LABELS[cycle].toLowerCase()} —{" "}
-                <span className="font-medium">{inferredUpgrade ? "an upgrade" : "a downgrade"}</span>
+                <span className="font-medium">{DIRECTION_LABEL[direction]}</span>
               </p>
               <p className="text-muted-foreground">
                 {applyNow
@@ -466,7 +507,7 @@ function ChangePlanDialog({
   );
 }
 
-function CancelDialog({
+export function CancelDialog({
   open,
   onClose,
   periodEnd,
@@ -501,7 +542,7 @@ function CancelDialog({
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               placeholder="e.g. Customer moved to a competitor"
-              className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+              className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             />
             <p className="text-xs text-muted-foreground">Required, and recorded in the audit log.</p>
           </div>

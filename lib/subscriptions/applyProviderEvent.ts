@@ -89,7 +89,7 @@ async function recordPayment(
   const supabase = getSupabaseServiceClient();
 
   const { data: invoice } = await supabase
-    .from("invoices")
+    .from("platform_invoices")
     .select("id")
     .eq("provider", "whop")
     .eq("provider_payment_id", chargeId)

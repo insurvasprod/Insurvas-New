@@ -10,6 +10,8 @@ import {
   inviteExpiryFromNow,
 } from "@/lib/users/invitations";
 import { sendInvitationEmail } from "@/lib/email/sendInvitationEmail";
+import { configuredAppOrigin } from "@/lib/urls/origin";
+import { isOnboarded } from "@/lib/adminUsers/credential";
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireAdminRole(["super_admin"]);
@@ -27,31 +29,41 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (!user) {
     return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
-  if (user.password_hash) {
+  // Past the invite once they have a hash OR have joined an agency (lib/adminUsers/credential.ts):
+  // most accounts have no hash, and an invite link would re-run onboarding for a working member.
+  const accepted = await supabase
+    .from("tenant_users")
+    .select("user_id", { count: "exact", head: true })
+    .eq("user_id", id)
+    .not("accepted_at", "is", null);
+  if (accepted.error) return NextResponse.json({ error: "Could not check this user's membership" }, { status: 500 });
+  if (isOnboarded({ hasPassword: Boolean(user.password_hash), acceptedMembership: (accepted.count ?? 0) > 0 })) {
     return NextResponse.json(
-      { error: "This user has already set a password — send a password reset instead" },
+      { error: "This user has already joined their agency — send a password reset instead" },
       { status: 409 },
     );
   }
 
   const token = generateInviteToken();
   const expiresAt = await inviteExpiryFromNow();
+  const origin = configuredAppOrigin("agent");
 
-  // Supersede any prior invitations so an older link can't still be redeemed.
-  await supabase.from("user_invitations").delete().eq("user_id", id).is("accepted_at", null);
-
-  const { error } = await supabase.from("user_invitations").insert({
-    user_id: id,
-    token_hash: hashInviteToken(token),
-    expires_at: expiresAt.toISOString(),
-    created_by: auth.session.sub,
+  const { data: replacement, error } = await supabase.rpc("admin_replace_user_token", {
+    p_user_id: id,
+    p_purpose: "invite",
+    p_token_hash: hashInviteToken(token),
+    p_expires_at: expiresAt.toISOString(),
+    p_created_by: auth.session.sub,
   });
 
   if (error) {
+    if (/PASSWORD_ALREADY_SET|USER_REMOVED/i.test(error.message ?? "")) {
+      return NextResponse.json({ error: "This user is no longer waiting for an invitation" }, { status: 409 });
+    }
     return NextResponse.json({ error: "Could not create invitation" }, { status: 500 });
   }
 
-  const origin = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
+  if (!replacement) return NextResponse.json({ error: "Could not create invitation" }, { status: 500 });
   const inviteUrl = buildInviteUrl(token, origin);
   const { delivered } = await sendInvitationEmail({ to: user.email, name: user.name, inviteUrl, expiresAt });
 

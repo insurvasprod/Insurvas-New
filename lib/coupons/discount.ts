@@ -56,12 +56,33 @@ export function discountCentsFor(amountCents: number, coupon: CouponValue): numb
  * `forever` returns 0. Whop requires promo_duration_months and its documentation never says what
  * value means unlimited, so this was checked against the sandbox rather than assumed: creating a
  * promo with 0 comes back stored as `duration: "forever"`, and 3 comes back as `repeating`.
+ *
+ * `cycle` null is a coupon for ANY billing cycle. Whop still needs one number of months, and a
+ * period is only a fixed number of months once the cycle is known, so the rule is:
+ *
+ *   forever  0 months — the same on every cycle.
+ *   once     1 month  — every cycle's first invoice falls inside the first month, and no cycle's
+ *                       second invoice does, so exactly one invoice is discounted on each of them.
+ *   n periods refused — three periods is 3, 9 or 36 months depending on the cycle, and any single
+ *                       number would short a yearly customer or over-discount a monthly one. A
+ *                       multi-period coupon has to name its cycle.
  */
 export function durationInMonths(
   duration: CouponDuration,
   durationPeriods: number | null,
-  cycle: BillingCycle,
+  cycle: BillingCycle | null,
 ): number {
+  if (cycle === null) {
+    switch (duration) {
+      case "forever":
+        return 0;
+      case "once":
+        return 1;
+      case "n_periods":
+        throw new Error("A coupon for a number of periods needs a billing cycle, because a period is one cycle long");
+    }
+  }
+
   const months = CYCLE_MONTHS[cycle];
   if (!months) throw new Error(`Unknown billing cycle "${cycle}"`);
 
@@ -107,6 +128,23 @@ export function couponRejectionReason(coupon: CouponState, now: Date = new Date(
   }
 
   return null;
+}
+
+export type CouponStatus = "active" | "deactivated" | "expired" | "exhausted";
+
+/**
+ * The one state a coupon is in, for the list's status pill. Same precedence as
+ * couponRejectionReason — deactivated beats expired beats exhausted — so the pill and the reason
+ * the apply RPC gives can never disagree.
+ */
+export function couponStatus(coupon: CouponState, now: Date = new Date()): CouponStatus {
+  if (!coupon.isActive) return "deactivated";
+  if (coupon.expiresAt) {
+    const expiry = coupon.expiresAt instanceof Date ? coupon.expiresAt : new Date(coupon.expiresAt);
+    if (expiry.getTime() <= now.getTime()) return "expired";
+  }
+  if (coupon.maxRedemptions !== null && coupon.redeemedCount >= coupon.maxRedemptions) return "exhausted";
+  return "active";
 }
 
 /** How many periods a freshly applied coupon has left. Null means forever. */

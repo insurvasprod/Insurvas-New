@@ -68,18 +68,28 @@ const { data: invRows } = await supabase.rpc("create_custom_invoice", {
 const invoice = invRows[0];
 
 async function cleanup() {
-  await supabase.from("credit_notes").delete().eq("tenant_id", tenantId);
+  // Credit notes and issued invoices are immutable financial history. Keep the
+  // namespaced rows and deactivate the fixture instead of attempting to delete
+  // them or rewind shared document counters.
   await supabase.from("tenant_credits").delete().eq("tenant_id", tenantId);
-  await supabase.from("invoices").delete().eq("tenant_id", tenantId);
-  await supabase.from("tenants").delete().eq("id", tenantId);
-  await supabase.from("admin_users").delete().eq("id", secondAdmin.id);
+  await supabase.from("tenants").update({ status: "suspended" }).eq("id", tenantId);
+  await supabase.from("admin_users").update({ is_active: false }).eq("id", secondAdmin.id);
+
+  // The counters are deliberately NOT rewound.
+  //
+  // Rewinding a shared sequence is only safe if every row that consumed it is gone, and this
+  // cleanup cannot promise that -- it could not even manage it, until the draft step above. A
+  // counter pointing underneath a number that already exists breaks the next invoice anyone
+  // creates, anywhere in the system; a gap in the sequence costs an explanation. See
+  // supabase/migrations/20260913230000_invoice_counter_repair.sql for what the rewind cost.
   for (const [series, value] of Object.entries(counters)) {
-    if (value === null) {
-      await supabase.from("invoice_counters").delete().eq("series", series).eq("year", YEAR).eq("month", MONTH);
-    } else {
-      await supabase.from("invoice_counters").update({ next_number: value })
-        .eq("series", series).eq("year", YEAR).eq("month", MONTH);
-    }
+    const { data: now } = await supabase
+      .from("invoice_counters").select("next_number")
+      .eq("series", series).eq("year", YEAR).eq("month", MONTH).maybeSingle();
+    const ended = now?.next_number ?? null;
+    check(`the ${series} counter only ever moved forward`,
+      value === null || (ended !== null && ended >= value),
+      `started at ${value}, ended at ${ended}`);
   }
 }
 
@@ -149,7 +159,8 @@ try {
   const otherBody = await otherApprove.json();
 
   const { data: afterApproval } = await supabase
-    .from("credit_notes").select("status, approved_by, failure_reason").eq("id", big.credit_note_id).single();
+    .from("credit_notes").select("status, approved_by, failure_reason, reconciliation_state, reconciliation_attempts")
+    .eq("id", big.credit_note_id).single();
 
   check(
     "a DIFFERENT admin's approval is accepted",
@@ -161,14 +172,15 @@ try {
   // failed provider refund being LEFT in failed rather than rolled back or retried silently.
   check(
     "a refund that cannot be executed is left in `failed` with a reason",
-    afterApproval.status === "failed" && Boolean(afterApproval.failure_reason),
+    afterApproval.status === "failed" && afterApproval.reconciliation_state === "failed" &&
+      afterApproval.reconciliation_attempts === 1 && Boolean(afterApproval.failure_reason),
     JSON.stringify(afterApproval),
   );
 
   console.log("\nThe invoice is never edited\n");
 
   const { data: untouched } = await supabase
-    .from("invoices").select("total_cents, status, number").eq("id", invoice.invoice_id).single();
+    .from("platform_invoices").select("total_cents, status, number").eq("id", invoice.invoice_id).single();
   check(
     "the original invoice is unchanged by the credit note",
     untouched.total_cents === 80000 && untouched.number === invoice.number,
@@ -188,6 +200,22 @@ try {
   const { data: balance } = await supabase
     .from("tenant_credits").select("balance_cents").eq("tenant_id", tenantId).single();
   check("the credit reaches the tenant's balance", balance.balance_cents === 12450, String(balance.balance_cents));
+
+  const { data: creditNote } = await supabase
+    .from("credit_notes")
+    .select("reconciliation_state, reconciled_at")
+    .eq("id", creditBody.id).single();
+  check("a successful credit is marked reconciled", creditNote.reconciliation_state === "reconciled" &&
+    Boolean(creditNote.reconciled_at), JSON.stringify(creditNote));
+
+  // Replaying the local application is safe too: the RPC locks the note and returns the existing
+  // balance without adding the credit again.
+  const { data: replayRows, error: replayError } = await supabase.rpc("apply_credit_note_balance", {
+    p_credit_note_id: creditBody.id,
+  });
+  const replay = Array.isArray(replayRows) ? replayRows[0] : replayRows;
+  check("replaying a succeeded credit does not apply it twice",
+    !replayError && replay?.balance_cents === 12450, replayError?.message ?? JSON.stringify(replay));
 
   const { data: notes } = await supabase
     .from("credit_notes").select("number").eq("tenant_id", tenantId).order("number");

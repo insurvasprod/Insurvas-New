@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 
 import { createClient } from "@supabase/supabase-js";
+import { createFixtureUser, deleteFixtureUser } from "./lib/fixtureUser.mjs";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -10,8 +11,9 @@ if (!url || !key) throw new Error("Missing Supabase service environment");
 const supabase = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
 const stamp = `${Date.now()}-${randomBytes(3).toString("hex")}`;
 const tenantId = randomUUID();
-const userId = randomUUID();
-const otherUserId = randomUUID();
+// Assigned by createFixtureUser rather than generated: users.id must be the Auth user's id.
+let userId = null;
+let otherUserId = null;
 const originalEmail = `token-user-${stamp}@example.test`;
 const occupiedEmail = `token-occupied-${stamp}@example.test`;
 const replacementEmail = `token-new-${stamp}@example.test`;
@@ -28,7 +30,8 @@ function check(label, condition) {
 async function cleanup() {
   await supabase.from("user_invitations").delete().in("user_id", [userId, otherUserId]);
   await supabase.from("tenant_users").delete().eq("tenant_id", tenantId);
-  await supabase.from("users").delete().in("id", [userId, otherUserId]);
+  await deleteFixtureUser(supabase, userId);
+  await deleteFixtureUser(supabase, otherUserId);
   await supabase.from("tenants").delete().eq("id", tenantId);
 }
 
@@ -38,10 +41,11 @@ try {
     .insert({ id: tenantId, name: `Token verification ${stamp}`, status: "active", onboarding_state: "complete" });
   if (tenantError) throw tenantError;
 
-  const { error: usersError } = await supabase.from("users").insert([
-    { id: userId, email: originalEmail, name: "Token User", status: "active" },
-    { id: otherUserId, email: occupiedEmail, name: "Existing Email Owner", status: "active" },
-  ]);
+  // Auth-first: users.id references auth.users, so these two ids come from the Auth user rather
+  // than from randomUUID(). Both are reassigned here for the same reason.
+  ({ userId } = await createFixtureUser(supabase, { email: originalEmail, name: "Token User" }));
+  ({ userId: otherUserId } = await createFixtureUser(supabase, { email: occupiedEmail, name: "Existing Email Owner" }));
+  const usersError = null;
   if (usersError) throw usersError;
 
   const { error: membershipError } = await supabase

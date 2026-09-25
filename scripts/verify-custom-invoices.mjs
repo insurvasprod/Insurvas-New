@@ -22,8 +22,13 @@ function check(label, condition, detail = "") {
 const stamp = Date.now();
 const YEAR = new Date().getUTCFullYear();
 const MONTH = new Date().getUTCMonth() + 1;
+// Scoped to the INV series. invoice_counters is keyed by (series, year, month), and once
+// verify-credit-notes has run there is also a CN row for this month -- at which point a query
+// filtered only by year and month matches two rows and .maybeSingle() returns an error with a
+// null body. The counter then reads as "absent" and the assertion below compares 1 against 0,
+// which is how a real counter drift and a mis-scoped query looked identical.
 const { data: counterBefore } = await supabase
-  .from("invoice_counters").select("next_number").eq("year", YEAR).eq("month", MONTH).maybeSingle();
+  .from("invoice_counters").select("next_number").eq("series", "INV").eq("year", YEAR).eq("month", MONTH).maybeSingle();
 const startingNumber = counterBefore?.next_number ?? null;
 
 const { data: admin } = await supabase
@@ -44,15 +49,15 @@ const { data: sub } = await supabase.from("subscriptions").select("id").eq("tena
 
 async function cleanup() {
   await supabase.from("payments").delete().eq("tenant_id", tenantId);
-  await supabase.from("invoices").delete().eq("tenant_id", tenantId);
   await supabase.from("tenant_entitlements").delete().eq("tenant_id", tenantId);
-  await supabase.from("subscriptions").delete().eq("tenant_id", tenantId);
-  await supabase.from("tenants").delete().eq("id", tenantId);
-  if (startingNumber === null) {
-    await supabase.from("invoice_counters").delete().eq("year", YEAR).eq("month", MONTH);
-  } else {
-    await supabase.from("invoice_counters").update({ next_number: startingNumber }).eq("year", YEAR).eq("month", MONTH);
-  }
+  await supabase.from("subscriptions").update({ status: "cancelled" }).eq("tenant_id", tenantId);
+  // Issued/paid invoices are immutable. Retain this explicitly namespaced billing history and
+  // suspend the fixture tenant rather than deleting the evidence or rewinding invoice numbering.
+  await supabase.from("tenants").update({
+    status: "suspended",
+    suspended_at: new Date().toISOString(),
+    suspension_reason: "Disposable custom-invoice verifier fixture retained for immutable QA evidence",
+  }).eq("id", tenantId);
 }
 
 const custom = (body) =>
@@ -101,7 +106,7 @@ try {
   check("the lines are summed", body.totalCents === 75000, String(body.totalCents));
 
   const { data: inv } = await supabase
-    .from("invoices").select("status, kind, reason, total_cents, created_by").eq("id", body.invoiceId).single();
+    .from("platform_invoices").select("status, kind, reason, total_cents, created_by").eq("id", body.invoiceId).single();
   check("it is born ISSUED, not paid", inv.status === "issued", inv.status);
   check("it is marked as a custom invoice", inv.kind === "custom");
   check("the reason is stored on the invoice", (inv.reason ?? "").includes("migration"));
@@ -110,7 +115,7 @@ try {
   console.log("\nOverdue\n");
 
   await supabase.rpc("mark_overdue_invoices");
-  const { data: afterSweep } = await supabase.from("invoices").select("status").eq("id", body.invoiceId).single();
+  const { data: afterSweep } = await supabase.from("platform_invoices").select("status").eq("id", body.invoiceId).single();
   check(
     "an invoice past its due date becomes overdue",
     afterSweep.status === "overdue",
@@ -130,7 +135,7 @@ try {
   check("the invoice can be settled by bank transfer", paid.status === 200, JSON.stringify(paidBody).slice(0, 160));
   check("it is recorded as settled in full", paidBody.settled === true && paidBody.remainingCents === 0);
 
-  const { data: settled } = await supabase.from("invoices").select("status").eq("id", body.invoiceId).single();
+  const { data: settled } = await supabase.from("platform_invoices").select("status").eq("id", body.invoiceId).single();
   check("the invoice becomes paid", settled.status === "paid", settled.status);
 
   const { data: reactivated } = await supabase.from("subscriptions").select("status").eq("id", sub.id).single();
@@ -159,9 +164,10 @@ try {
   console.log("\nCleaning up…");
   await cleanup();
   const { data: restored } = await supabase
-    .from("invoice_counters").select("next_number").eq("year", YEAR).eq("month", MONTH).maybeSingle();
-  check("the invoice counter is restored", (restored?.next_number ?? null) === startingNumber,
-        `was ${startingNumber}, now ${restored?.next_number ?? null}`);
+    .from("invoice_counters").select("next_number").eq("series", "INV").eq("year", YEAR).eq("month", MONTH).maybeSingle();
+  check("the invoice counter remains ahead of issued verification numbers",
+    (restored?.next_number ?? 0) >= (startingNumber ?? 1) + 2,
+    `started at ${startingNumber ?? 1}, now ${restored?.next_number ?? 0}`);
 }
 
 console.log(failures === 0 ? "\nAll custom invoice checks passed." : `\n${failures} check(s) FAILED.`);

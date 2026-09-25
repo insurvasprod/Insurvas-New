@@ -1,0 +1,362 @@
+# What the SA module needs to be complete
+
+Derived from the 2026-09-11 SA-0.1 – SA-5.5 recheck. Evidence: `task-traceability.md`,
+`supabase-inventory.md`, `security.md`, `../qa/LA-0-BLOCKERS.md`.
+
+Current state: **5 Pass · 7 Partial · 27 Database-misaligned · 1 Browser-unverified · 1 Deferred ·
+1 Cancelled · 1 N/A** out of 43 in-range tasks.
+
+Almost none of this is application code. The code for these tasks largely exists; what is missing is
+the database it was written against. The work below is therefore mostly **authoring schema as
+committed migrations**, not building screens.
+
+---
+
+## Gate 0 — three blockers that gate everything else
+
+Nothing downstream can be verified until these clear.
+
+| # | Item | Why it blocks | Who |
+|---|---|---|---|
+| 0.1 | **Apply `supabase/migrations/20260911120000_auth_user_bridge_name_fix.sql`** | `public.users.name` is `NOT NULL` with no default and `private.handle_new_auth_user()` never sets it, so every `auth.users` insert raises 23502. No user can be created by signup, invitation, `auth.admin.createUser`, or a fixture. | Needs DDL access. No credential in this repo has it, by design |
+| 0.2 | **Decide and execute the schema provisioning** | The repo cannot build a database from its own migrations (`db:check:deep`: 155 problems; `0000_baseline.sql` contributes 59 of them by referencing `payments`, `subscriptions`, `plans`, `provider_settings`, `usage_events`, `legal_documents` in indexes and views it never creates). Option (b) — provision from migrations — was chosen, which means the schema below must be **authored, not dumped**. `npm run db:dump` cannot help: it was generated from a database that already lacked these objects | Engineering |
+| 0.3 | **Create `support_agent` and `billing_admin` fixtures** | `admin_users` holds 2 × `super_admin`, 1 × `platform_config`. Two of the four admin roles have never been exercised against the live authorization matrix. Blocked by 0.1 | Engineering, after 0.1 |
+
+---
+
+## SA-0 — Foundation
+
+| Task | Needs |
+|---|---|
+| SA-0.1 | **Exercise mandatory TOTP end to end** (sessions were minted, never logged in through). Verify session expiry. Complete the role matrix once 0.3 lands |
+| SA-0.2 | **`create_tenant_with_owner`** — absent, so no tenant can be provisioned |
+| SA-0.3 | ✅ **Pass.** No work |
+| SA-0.4 | Backlog by plan. Fold the hardening items from `security.md` into it |
+
+---
+
+## SA-1 — User administration (5 tasks, all blocked on the same objects)
+
+**View/table:** ~~`admin_user_list`~~ · ~~`user_invitations`~~ · ~~`users.suspended_at` /
+`users.suspension_reason`~~
+
+**Functions:** `admin_create_user` · `admin_update_user_with_email_change` ·
+~~`admin_set_user_status`~~ · ~~`admin_replace_user_token`~~ · ~~`admin_user_stats`~~ ·
+~~`admin_login_activity_stats`~~
+
+**Done 2026-09-11:** `20260911141000_sa_1_user_administration.sql`. The `admin_user_list`
+definition already existed in `20260903340000_sa_1_1_admin_users_live_plan.sql` and could never be
+applied because it joins `subscriptions` and `plans`, which did not exist until SA-2.2 — it is
+repeated in a migration that can now run. Seat enforcement on re-activation uses SA-2.5's
+`plan_limits` and raises the `seat_limit_reached:<used>:<max>` the routes already parse.
+
+### Two functions need an architectural decision first
+
+`admin_create_user` and `admin_update_user_with_email_change` **cannot be written as SQL-only
+transactions any more.** `public.users.id` has no default and carries `users_id_fkey` to
+`auth.users`, because LA-0 made Supabase Auth the credential authority for the tenant plane:
+
+- a function that inserts a brand-new `public.users` row has nothing to point at; and
+- creating the `auth.users` row from SQL means hand-writing `encrypted_password` and an
+  `auth.identities` row, which breaks quietly on the next Auth upgrade.
+
+The same applies to an email change: the address lives in `auth.users` too, so a SQL-only update
+leaves the two halves disagreeing about who the user is.
+
+**Options**, in the order I would rank them:
+
+1. **Move creation into the route.** `app/api/admin/users/route.ts` calls
+   `auth.admin.createUser()`, then a narrower `admin_attach_user_to_tenant(...)` does the tenant,
+   role, seat check and invitation in one transaction. Loses single-statement atomicity across the
+   auth boundary — the compensating action is deleting the auth user if the attach fails.
+2. **Keep the RPC signature and add `p_user_id`**, with the route creating the auth user first.
+   Smallest change to the SQL, same atomicity caveat.
+3. **Drop `users_id_fkey`** and let the tenant plane own its own user rows. Cleanest SQL, but
+   reopens the question LA-0 already answered and would need the login path revisited.
+
+Same class of decision as the tenant-versus-organizations question in `database.md`, and it should
+be taken with that one.
+
+Note the database already contains `admin_create_user_projection`, `admin_set_user_state`,
+`admin_update_user_profile` and `platform_login_activity_summary` — the organizations-era
+equivalents, which the app does not call. Reconcile rather than duplicate where the shape fits.
+
+| Task | Unblocked by |
+|---|---|
+| SA-1.1 Users list, search & counts | `admin_user_list`, `admin_user_stats` |
+| SA-1.2 Create user | `admin_create_user` + gate 0.1 |
+| SA-1.3 Edit user & change role | `admin_update_user_with_email_change` |
+| SA-1.4 User state lifecycle | `admin_set_user_status` |
+| SA-1.5 Login activity | `admin_login_activity_stats` (capture path already works — 40 live events) |
+
+---
+
+## SA-2 — Subscription management (8 tasks) ← **start here**
+
+The deepest dependency in the whole product, and the one that unblocks the most. Completing it also
+gives `tenant_entitlements` the producer it currently lacks, which resolves LA-0.1 criterion 5 as a
+side effect.
+
+**Tables:** ~~`features`~~ · ~~`feature_modules`~~ · ~~`plans`~~ · ~~`plan_features`~~ ·
+~~`plan_limits`~~ · ~~`plan_prices`~~ · `plan_available_addons` · ~~`plan_meters`~~ ·
+`plan_product_access` · `addons` · `addon_features` · `addon_meters` · ~~`meters`~~ ·
+`meter_pricing` · ~~`subscriptions`~~ · `subscription_addons` · `subscription_coupons` ·
+~~`usage_events`~~ · ~~`usage_totals`~~
+
+**View:** ~~`admin_plan_list`~~
+
+**Correction:** an earlier draft of this list named a **`plan_versions`** table. There is no such
+table and nothing in the codebase references one. Versioning lives on `plans` itself as
+`(code, version)` rows — `fetchPlanVersions()` selects every row sharing a code and
+`admin_plan_list` collapses them to the latest per code.
+
+**Done 2026-09-11** (struck through above), four migrations:
+
+| Migration | Covers |
+|---|---|
+| `20260911130000_sa_2_1_feature_catalog.sql` | `feature_modules`, `features`, 9-module / 28-feature seed |
+| `20260911131000_sa_2_2_plans.sql` | `plan_type` enum, `plans`, `admin_plan_list` view, `subscriptions` table |
+| `20260911132000_sa_2_3_plan_features.sql` | `plan_features` + the three reviewed v1 plans and their 47 feature grants |
+| `20260911133000_sa_2_4_plan_prices.sql` | `plan_prices` |
+| `20260911134000_sa_2_8_entitlement_engine.sql` | `refresh_tenant_entitlement` rewritten to compute from subscription + plan + features; `entitlement_access_for_status`; `admin_assign_subscription` (assign only) |
+| `20260911135000_sa_2_5_limits_and_meters.sql` | `meters`, `plan_meters`, `plan_limits`, `usage_events`, `usage_totals`; `check_meter_capacity`, `record_usage`, `rebuild_usage_totals`, `tenant_current_plan`, `tenant_current_period_start`, `tenant_seats_used`; meter seed; entitlement extended with real limits and meters |
+
+| `20260911136000_sa_2_6_addons.sql` | `addons`, `addon_features`, `addon_meters`, `plan_available_addons`, `subscription_addons`; `admin_attach_addon`, `admin_detach_addon_for_subscription`; entitlement extended to union add-on features and stack add-on credits |
+| `20260911137000_sa_2_7_subscription_lifecycle.sql` | `admin_change_subscription_plan`, `admin_cancel_subscription`, `admin_set_subscription_pause_state` |
+
+**SA-2 is complete** — all eight tasks have migrations, and all six SA-2 migrations have been
+applied to the live project. `npm run verify:entitlements` passes every check, including the
+suspended-is-read-only and cancelled-is-empty cases that failed before.
+
+`tenant_seats_used` from SA-2.5 also closes LA-0.2 criterion 6's missing function.
+
+Two business inputs are still open and are the only things left on SA-2's own scope: **plan
+prices** (monthly / quarterly / yearly cents, setup fee, trial days per plan) and **meter
+allowances** per plan. Neither is pinned anywhere, and both are read by enforcement, so neither
+was guessed.
+
+**SA-2.8 is the one that makes the rest observable.** `refresh_tenant_entitlement` already
+existed, but the LA-0 bridge defined it as a pass-through to `la0_default_entitlement()` — a fixed
+feature list that never reads a subscription. That is the whole reason every tenant reports
+`access: full` regardless of status, and why `verify:entitlements` fails "access is read_only" and
+"access is none". The cache now has a producer. Tenants with no subscription still get the bridge
+default, so the six existing LA-0 tenants are unaffected.
+
+`subscriptions` is the table only — `admin_plan_list` cannot count subscribers without it; its
+operations remain SA-2.7.
+
+**The three v1 plans are `basic`, `pro` and `advance`, seeded at version 1, `individual`.** Those
+codes are not a guess: `scripts/verify-entitlements.mjs` queries `plans` for exactly them at
+`version = 1` and pins their feature sets (5 / 16 / 26). `lib/features/planSeed.test.mjs` keeps the
+migration and the verifier in step without a database.
+
+**No prices are seeded.** The plan codes are pinned by the verifier; the amounts are not pinned
+anywhere, and SA-2.2 says names and contents are set by the business. Inventing figures that
+checkout would later charge against is not a safe default — **this is the one open input needed to
+finish SA-2.4.**
+
+All four parse (`db:check`); **none has been applied** — that still needs gate 0.1/0.2.
+
+**Functions:** `admin_update_plan` · `admin_create_plan_version` · `admin_save_plan_version` ·
+`admin_save_plan_limits` · `admin_assign_subscription` · `admin_change_subscription_plan` ·
+`admin_cancel_subscription` · `admin_set_subscription_pause_state` · `admin_attach_addon` ·
+`admin_detach_addon_for_subscription` · `check_meter_capacity` · `record_usage` ·
+`rebuild_usage_totals` · `admin_usage_monitor` · `tenant_current_plan` ·
+`tenant_current_period_start` · `tenant_seats_used`
+
+| Task | Specific need |
+|---|---|
+| SA-2.1 Feature catalog | `features`, `feature_modules`. **Also fix the silent-empty route** — `/api/admin/features` returns `200 {groups: []}` with the table absent, so a broken catalog reads as an empty one |
+| SA-2.2 Plan CRUD + plan type | `plans`, `plan_versions`, `admin_plan_list`, `admin_update_plan` |
+| SA-2.3 Feature picker | `plan_features` |
+| SA-2.4 Pricing & billing cycle | `plan_prices` — integer cents only |
+| SA-2.5 Limits & metered credits | `plan_limits`, `meters`, `meter_pricing`, `usage_events`, `usage_totals`, `check_meter_capacity`, `record_usage` |
+| SA-2.6 Add-ons | `addons`, `addon_features`, `addon_meters`, `plan_available_addons`, `subscription_addons` |
+| SA-2.7 Assign / change / cancel subscription | `subscriptions` + the four `admin_*_subscription` functions |
+| SA-2.8 Entitlement engine | The rebuild that writes `tenant_entitlements` from plan + subscription. The cache and its consumers already work; only the producer is missing |
+
+---
+
+## SA-3 — Billing & payments (9 tasks, 1 cancelled)
+
+> ### ⛔ SA-3 is blocked on a table-name collision, not on effort
+>
+> Surveyed 2026-09-11. `public.invoices` and `public.invoice_lines` **already exist — as the
+> organizations-era CRM's tables**, and their shape is incompatible with SA-3's in every way that
+> matters:
+>
+> | | Live table | What this application queries |
+> |---|---|---|
+> | Scope | `organization_id` | `tenant_id` |
+> | Identifier | `invoice_number` | `number` |
+> | Money | `total_amount numeric(12,2)` | `subtotal_cents`, `discount_cents`, `tax_cents`, `total_cents` |
+> | Shape | approval workflow (`submitted_by`, `approved_by`, `rejection_reason`) | SaaS billing (`kind`, `subscription_id`, `provider_*`, `reconciliation`) |
+>
+> `total_amount numeric(12,2)` also violates an SA-00 locked decision outright: *"Money is integer
+> cents. Never floats, never decimals."*
+>
+> Proven against the live database:
+>
+> ```
+> app-shaped select   : ERROR column invoices.number does not exist
+> legacy-shaped select: OK 0 rows
+> ```
+>
+> **And the application does not notice.** `lib/invoices/queries.ts:46` reads
+> `const { data } = await query.returns<Raw[]>()` — the error is destructured away, never checked.
+> So `/api/admin/invoices` answers `200` with `invoices: []`. The invoice screen will report "no
+> invoices" forever, including after real invoices exist, because it is querying columns the table
+> does not have and silently swallowing the failure. This is the same silent-empty pattern already
+> recorded for `/api/admin/features`, in its worst form — and it is worth fixing on its own merits
+> whichever way the collision is resolved.
+>
+> ### ✅ Resolved 2026-09-11 — option 1, rename the SaaS tables
+>
+> `invoices` → **`platform_invoices`**, `invoice_lines` → **`platform_invoice_lines`**, across 20
+> files plus the two declarations in `database.types.ts` and the two PostgREST embeds in the
+> credit-notes surfaces. Created by `20260911143000_sa_3_platform_invoices.sql`. The names are
+> honest: these are the *platform's* invoices, billed to a tenant for a subscription, not the
+> agency's invoices to its own customers.
+>
+> **The swallowed error is fixed too**, in three places — `lib/invoices/queries.ts`,
+> `lib/offers/queries.ts` and `lib/subscriptions/queries.ts` all destructured only `data`. The
+> invoices route now returns a 500 naming the cause instead of `200` with an empty list.
+>
+> **Carried forward:** four historical migrations (`0017_period_billing.sql`,
+> `20260831062000_…`, `20260903240000_…`, `20260903300000_…`) still name `public.invoices` inside
+> function and trigger bodies. None of those functions exists in the database, so nothing is broken
+> today — but they must be superseded to target `platform_invoices` before they are applied, or
+> they would aim at the CRM's table. SA-3.2's billing functions are the natural place to do it.
+>
+> The options considered were:
+>
+> 1. **Rename the SaaS tables** — `platform_invoices`, `platform_payments`, and so on. No risk to
+>    the live CRM. Costs a rename across `lib/invoices/*`, `lib/credits/*`, the admin routes and
+>    `database.types.ts`.
+> 2. **Separate schemas** — put the SaaS billing tables in their own schema. Cleanest conceptually,
+>    but PostgREST exposes `public` by default, so it needs a config change and every call site
+>    updated.
+> 3. **Move the legacy CRM's tables aside.** Smallest code change, largest blast radius: it edits a
+>    live product this repository does not own.
+>
+> I would take option 1. It is the only one that touches nothing outside this repository, and the
+> names are honest — these *are* the platform's invoices, not the agency's.
+>
+> Note this is the tenant-versus-organizations question from `database.md` arriving with teeth.
+> Every remaining SA-3 table (`payments`, `coupons`, `credit_notes`, `webhook_events`,
+> `whop_plans`, `provider_settings`) is absent and uncollided, so once the naming is settled the
+> rest is ordinary work.
+
+**Tables:** `payments` · `coupons` · `subscription_coupons` · `credit_notes` · `webhook_events` ·
+`whop_plans` · `provider_settings`
+(`invoices` already exists, 0 rows.)
+
+**Functions:** `create_invoice_for_payment` · `create_invoice_for_payment_with_coupon` ·
+`create_custom_invoice` · `bill_subscription_period` · `advance_billing_periods` ·
+`mark_overdue_invoices` · `admin_settle_invoice_manually` · `admin_apply_coupon` ·
+`consume_coupon_period` · `request_credit_note` · `claim_credit_note_refund` ·
+`finish_credit_note_refund` · `fail_credit_note_refund` · `mark_credit_note_provider_pending` ·
+`apply_credit_note_balance` · `compute_metrics_for_date`
+
+| Task | Specific need |
+|---|---|
+| SA-3.1 Payment provider adapter | Partial — sandbox status endpoint works, secrets fingerprinted. Exercise the adapter itself |
+| SA-3.2 Invoice generation | `create_invoice_for_payment_with_coupon`, `bill_subscription_period` |
+| SA-3.3 Invoice screens | Browser-unverified only. Verify the populated state once an invoice can exist |
+| SA-3.4 Record payment → auto-activate | `payments` |
+| SA-3.5 Dunning ladder | **Cancelled in Notion.** No work |
+| SA-3.6 Discounts & coupons | `coupons`, `subscription_coupons`, `admin_apply_coupon`, `consume_coupon_period` |
+| SA-3.7 Custom / manual invoice | `create_custom_invoice` |
+| SA-3.8 Refunds & credit notes | `credit_notes` + all six credit-note functions. Keep the ">$500 needs a second approver, never self-approve" rule |
+| SA-3.9 Revenue dashboard | `compute_metrics_for_date`; depends on `subscriptions` and `payments` |
+
+Invariants to honour: issued invoices immutable (corrections are credit notes); money in integer
+cents; financial records survive a deletion request (anonymised, not purged).
+
+---
+
+## SA-4 — Configuration (12 tasks, 4 already passing)
+
+**Tables:** `template_fields` · `tenant_products` · `tenant_credits` · `credit_packs` ·
+`compliance_vendors` · `email_log` · `form_drafts` · `stage_dispositions`
+
+**Functions:** `admin_save_template` · `admin_duplicate_template` · `admin_apply_tenant_template` ·
+`admin_update_tenant_template` · `apply_auto_offer_to_subscription` · `purchase_credit_pack` ·
+`adjust_tenant_credit` · `prune_email_log` · `set_tenant_product` · `set_partner_product_approval`
+
+| Task | Specific need |
+|---|---|
+| SA-4.1 Settings store | **Database-misaligned** — `public.settings` is live with 4 stored defaults while the typed registry exposes 7 keys. `/api/admin/settings` safely supplies 3 coded defaults; `20260914182000_sa_4_1_settings_registry_completion.sql` seeds them without overwriting overrides, but promotion and persistence proof remain open |
+| SA-4.2 Provider config screen | Partial — exercise the failure simulator |
+| SA-4.3 Configuration Center hub | Partial — several linked sections are themselves 500 (offers, credits, compliance) |
+| SA-4.4 Offers & promotion rules | Offers backing tables, `apply_auto_offer_to_subscription` |
+| SA-4.5 Product catalog | ✅ **Pass.** No work |
+| SA-4.6 Product templates | `template_fields`, `admin_save_template`, `admin_duplicate_template` — template currently readable but not editable |
+| SA-4.7 Agent template selection | `admin_apply_tenant_template`, `admin_update_tenant_template`. Templates are **copied, not linked** |
+| SA-4.8 Compliance vendor sources | `compliance_vendors`. Keep "all vendors off ⇒ dialing blocked, no exceptions" |
+| SA-4.9 Credit packs & usage monitor | `credit_packs`, `tenant_credits`, `purchase_credit_pack`, `adjust_tenant_credit` |
+| SA-4.10 Kill switches | ✅ **Pass.** No work |
+| SA-4.11 Email configuration | `email_log`, `prune_email_log`. Do not enable real sending during QA |
+| SA-4.12 Maintenance & announcements | ✅ **Pass.** No work |
+
+---
+
+## SA-5 — Signup & trial (4 tasks)
+
+**Tables:** `checkout_sessions` · `signup_selections` · `business_profiles` · `legal_documents` ·
+`legal_acceptances` · `trial_reminders`
+**View:** `current_legal_documents`
+
+**Functions:** `self_serve_signup` · `self_serve_signup_with_subscription` · `claim_rate_limit` ·
+`complete_signup_email_verification` · `refresh_signup_verification` ·
+`save_signup_business_profile` · `create_subscription_from_checkout` · `extend_trial` ·
+`publish_legal_document` · `clear_reacceptance_requirement` · `record_legal_acceptance` ·
+`outstanding_legal_documents`
+
+| Task | Specific need |
+|---|---|
+| SA-5.1 Pricing page & self-serve signup | The three signup functions + gate 0.1. Keep "login must not reveal whether an email exists" |
+| SA-5.2 Hosted checkout & trial start | `checkout_sessions`, `signup_selections`, `create_subscription_from_checkout`. Card required at signup, charged on day 15; checkout hosted by the provider — no card field in this codebase |
+| SA-5.3 Trial management | `trial_reminders`, `extend_trial` |
+| SA-5.4 Terms & privacy acceptance | `legal_documents`, `legal_acceptances`, `current_legal_documents` |
+| SA-5.5 | **N/A — does not exist.** M5 is SA-5.1–5.4 |
+
+---
+
+## SA-6 — Ops & safety (out of the requested range, all `Planned`)
+
+SA-6.1 background job monitor · SA-6.2 rate limiting (`claim_rate_limit` is already called by
+signup and absent) · SA-6.3 data export & account deletion.
+
+The SA-00 plan flags one resequencing worth taking: **SA-6.1 guards work that goes live in M3.**
+Invoicing and dunning are cron jobs; a silent failure means nobody is billed and nobody notices for
+a month. Consider pulling it next to SA-3.2.
+
+---
+
+## Cross-cutting fixes (independent of the schema work)
+
+| # | Item | Source |
+|---|---|---|
+| C1 | **Review and revoke the 6 `PUBLIC`-executable `SECURITY DEFINER` functions** — `initialize_verification_items`, `update_verification_progress`, `set_partner_user_status`, `update_partner_status`, `outbound_enforce_agent_campaign`, `validate_outbound_provenance`. All have fixed `search_path`; four are state mutations and need an ownership check | `security.md` |
+| C2 | **Stop swallowing error causes.** `/api/admin/users`, `/plans`, `/subscriptions`, `/offers` return only `"Could not load X"`. `credits-limits` and `compliance-vendors` name the real cause — match them | matrix probe |
+| C3 | **Fix the silent-empty features route** — a missing catalog must not render as an empty one | matrix probe |
+| C4 | **Mobile: the fixed bottom-left user badge overlaps content** — covered "Admins by role" on the dashboard and the "Catalog" row in the open drawer at 375×812 | browser |
+| C5 | **Pin the zero-grant invariant** with a test that fails if any `public` table gains an `anon`/`authenticated` grant while it has no policy. 54 tables are currently closed only because no grant exists | `security.md` |
+| C6 | **Move `btree_gist` and `pg_trgm` out of `public`** at the next rebuild | `security.md` |
+| C7 | **Keep `npm run verify:rpc-contract` green.** It is the guard that would have caught all of this: 131 RPCs called, 27 present | `supabase-inventory.md` |
+
+---
+
+## Suggested order
+
+1. Gate 0.1 — apply the auth trigger migration
+2. Gate 0.2 — decide how the schema gets provisioned, then author **SA-2** first
+3. Gate 0.3 + C1 — role fixtures and the definer lockdown
+4. SA-1 → SA-3 → SA-4 remainder → SA-5
+5. C2–C7 alongside, none of them blocking
+6. Re-run `verify:rpc-contract`, `qa:sa-matrix`, `qa:inventory`, `npm test`, and rewrite
+   `task-traceability.md` from the new evidence
+
+Sequencing note: SA-2 before SA-1. SA-1's screens are cheaper, but SA-2 is what unblocks the
+entitlement producer, the agent app's plan enforcement, and every M3 task.

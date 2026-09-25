@@ -22,22 +22,15 @@ const OPTIONS = [
 export function ThemeToggle({ tone = "default" }: { tone?: "default" | "onBrand" }) {
   const { theme, setTheme } = useTheme();
 
-  // The agent and admin shells put this on a navy sidebar, where the normal border and muted
-  // foreground tokens are invisible.
-  const shell =
-    tone === "onBrand"
-      ? "border-white/15 bg-white/5"
-      : "border-border bg-card";
+  // `onBrand` existed for the navy sidebars, which needed white-on-dark utilities because the
+  // border and muted tokens were invisible there. Both rails are light surfaces now, so the tokens
+  // are correct everywhere and both tones resolve the same way. The prop stays so the two shells
+  // that pass it keep working; it is removed when they are next touched.
+  void tone;
 
-  const idle =
-    tone === "onBrand"
-      ? "text-white/60 hover:text-white hover:bg-white/10"
-      : "text-muted-foreground hover:text-foreground hover:bg-muted";
-
-  const active =
-    tone === "onBrand"
-      ? "bg-white/20 text-white"
-      : "bg-muted text-foreground";
+  const shell = "border-border bg-card";
+  const idle = "text-muted-foreground hover:text-foreground hover:bg-muted";
+  const active = "bg-muted text-foreground";
 
   return (
     <div
@@ -56,7 +49,7 @@ export function ThemeToggle({ tone = "default" }: { tone?: "default" | "onBrand"
             aria-label={label}
             title={label}
             onClick={() => setTheme(value)}
-            className={`flex flex-1 items-center justify-center rounded px-2 py-1 transition-colors focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--color-blue)] ${
+            className={`flex flex-1 items-center justify-center rounded px-2 py-1 transition-colors focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--ring-color)] ${
               selected ? active : idle
             }`}
           >

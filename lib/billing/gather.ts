@@ -31,7 +31,9 @@ import {
   type MeterPrice,
   type AttachedAddonForBilling,
   type PendingChargeForBilling,
+  type OverageWaiver,
 } from "./lines.ts";
+import { sendInvoiceForCollection } from "./collect.ts";
 import type { BillingCycle } from "@/lib/money";
 import type { InvoiceLineKind } from "@/lib/invoices/constants";
 
@@ -66,6 +68,14 @@ export type PeriodBillingOutcome = {
   alreadyBilled: boolean;
   /** Add-ons on a cycle this period does not bill; reported rather than silently dropped. */
   skippedAddons: string[];
+  /** Overage forgiven by a billing admin's waiver. */
+  waivedCents: number;
+  /** Waivers that matched no overage this period and were deliberately left unspent. */
+  unusedWaivers: string[];
+  /** The hosted page the customer can pay on, when the provider gave us one. */
+  payOnlineUrl: string | null;
+  /** Set when the invoice exists but could not be sent for online payment. Never fatal. */
+  collectionWarning: string | null;
   error: string | null;
 };
 
@@ -171,9 +181,20 @@ async function fetchUsage(supabase: Db, tenantId: string, periodStart: string): 
   const { data, error } = await supabase.rpc("admin_usage_monitor", { p_over_80: false });
   if (error) throw new Error(error.message);
 
+  // Timestamps compared as instants, not as strings.
+  //
+  // Both sides are ISO-ish text, and `2026-06-10T12:00:00.000Z` and `2026-06-10 12:00:00+00` are
+  // the same moment written two ways — PostgREST returns one shape, a caller that built the date
+  // in JavaScript has the other. A string comparison between them is false, and the failure is
+  // silent in the worst direction: every meter drops out of the filter, the invoice carries no
+  // overage line, and the run reports a clean success having charged nobody for their usage.
+  const wantMs = Date.parse(periodStart);
+
   return (data ?? [])
     .filter((row: { tenant_id: string; period_start: string | null }) =>
-      row.tenant_id === tenantId && row.period_start === periodStart)
+      row.tenant_id === tenantId
+      && row.period_start !== null
+      && Date.parse(row.period_start) === wantMs)
     .map((row: {
       meter_key: string; meter_label: string; unit: string;
       used_qty: number; included_qty: number | null; hard_cap: boolean;
@@ -191,6 +212,31 @@ async function fetchMeterPricing(supabase: Db): Promise<MeterPrice[]> {
   const { data, error } = await supabase.from("meter_pricing").select("meter_key, sell_cents");
   if (error) throw new Error(error.message);
   return (data ?? []).map((r) => ({ meterKey: r.meter_key as string, sellCents: r.sell_cents as number }));
+}
+
+/**
+ * Waivers a billing admin granted for this subscription and this period.
+ *
+ * Only unconsumed ones, and only for the exact period being billed. Both filters are the feature's
+ * safety: a waiver is a one-off forgiveness of a specific month's overage, and a query that
+ * dropped either filter would turn it into a standing discount nobody remembers granting.
+ */
+async function fetchWaivers(supabase: Db, subscriptionId: string, periodStart: string): Promise<OverageWaiver[]> {
+  const { data, error } = await supabase
+    .from("billing_waivers")
+    .select("id, meter_key, max_cents, reason")
+    .eq("subscription_id", subscriptionId)
+    .eq("period_start", periodStart)
+    .is("consumed_at", null);
+
+  if (error) throw new Error(error.message);
+
+  return (data ?? []).map((row: { id: string; meter_key: string; max_cents: number | null; reason: string }) => ({
+    id: row.id,
+    meterKey: row.meter_key,
+    maxCents: row.max_cents === null ? null : Number(row.max_cents),
+    reason: row.reason,
+  }));
 }
 
 async function fetchCreditBalance(supabase: Db, tenantId: string): Promise<number> {
@@ -224,12 +270,13 @@ export async function billSubscriptionPeriod(
   };
 
   try {
-    const [pending, addons, usage, pricing, creditBalanceCents] = await Promise.all([
+    const [pending, addons, usage, pricing, creditBalanceCents, waivers] = await Promise.all([
       fetchPendingCharges(supabase, subscription.id),
       fetchAttachedAddons(supabase, subscription.id),
       fetchUsage(supabase, subscription.tenant_id, subscription.current_period_start),
       fetchMeterPricing(supabase),
       fetchCreditBalance(supabase, subscription.tenant_id),
+      fetchWaivers(supabase, subscription.id, subscription.current_period_start),
     ]);
 
     const assembled = assemblePeriodInvoice({
@@ -239,6 +286,7 @@ export async function billSubscriptionPeriod(
       usage,
       pricing,
       creditBalanceCents,
+      waivers,
     });
 
     const periodLabel = new Date(subscription.current_period_start).toISOString().slice(0, 10);
@@ -254,10 +302,31 @@ export async function billSubscriptionPeriod(
       p_credit_cents: assembled.creditAppliedCents,
       p_due_at: dueAt,
       p_created_by: options?.createdBy ?? null,
+      // Only the waivers actually spent. One that matched no overage stays unconsumed and waits
+      // for the period it was meant for.
+      p_waiver_ids: assembled.waiverIds,
     });
 
     if (error) throw new Error(error.message);
     const row = Array.isArray(data) ? data[0] : data;
+
+    // Raising the invoice and collecting it are two acts, and only the first is transactional.
+    // The invoice is committed by the time we get here; sending it is best effort on top, and a
+    // provider that is down costs a pay-online link rather than a bill.
+    //
+    // Skipped for an already-billed period: that invoice was sent when it was first raised, and
+    // sending it again would give the customer a second pay page for one debt.
+    let collection = { payOnlineUrl: null as string | null, warning: null as string | null };
+    if (row?.invoice_id && !row?.already_billed && (row?.total_cents ?? 0) > 0) {
+      const sent = await sendInvoiceForCollection(supabase, {
+        invoiceId: row.invoice_id,
+        tenantId: subscription.tenant_id,
+        amountCents: row.total_cents,
+        description: `Usage and add-ons for the period beginning ${periodLabel}`,
+        dueAt,
+      });
+      collection = { payOnlineUrl: sent.payOnlineUrl, warning: sent.warning };
+    }
 
     return {
       ...base,
@@ -269,6 +338,10 @@ export async function billSubscriptionPeriod(
       creditAppliedCents: row?.already_billed ? 0 : assembled.creditAppliedCents,
       alreadyBilled: Boolean(row?.already_billed),
       skippedAddons: assembled.skippedAddons.map((a) => a.name),
+      waivedCents: row?.already_billed ? 0 : assembled.waivedCents,
+      unusedWaivers: assembled.unusedWaivers.map((w) => w.meterKey),
+      payOnlineUrl: collection.payOnlineUrl,
+      collectionWarning: collection.warning,
       error: null,
     };
   } catch (error) {
@@ -283,6 +356,10 @@ export async function billSubscriptionPeriod(
       creditAppliedCents: 0,
       alreadyBilled: false,
       skippedAddons: [],
+      waivedCents: 0,
+      unusedWaivers: [],
+      payOnlineUrl: null,
+      collectionWarning: null,
       error: error instanceof Error ? error.message : String(error),
     };
   }

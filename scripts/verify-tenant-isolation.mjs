@@ -4,7 +4,7 @@
 // Run with: npm run verify:tenant-isolation
 import { createClient } from "@supabase/supabase-js";
 import { Pool } from "pg";
-import bcrypt from "bcryptjs";
+import { createFixtureUser, deleteFixtureUser } from "./lib/fixtureUser.mjs";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -30,16 +30,16 @@ function check(label, condition) {
 
 async function provision(suffix) {
   const email = `isolation-test-${suffix}-${Date.now()}@insurvas.test`;
-  const passwordHash = await bcrypt.hash("VerifyIsolation123", 12);
-  const { data, error } = await supabase.rpc("create_tenant_with_owner", {
-    p_tenant_name: `Isolation Test ${suffix.toUpperCase()}`,
-    p_owner_name: `Owner ${suffix.toUpperCase()}`,
-    p_owner_email: email,
-    p_owner_password_hash: passwordHash,
-  });
-  if (error) throw new Error(`Could not provision tenant ${suffix}: ${error.message}`);
-  const row = Array.isArray(data) ? data[0] : data;
-  return { tenantId: row.tenant_id, userId: row.user_id, email };
+  const { data: tenant, error: tenantError } = await supabase
+    .from("tenants")
+    .insert({ name: `Isolation Test ${suffix.toUpperCase()}`, status: "active" })
+    .select("id")
+    .single();
+  if (tenantError || !tenant) throw new Error(`Could not provision tenant ${suffix}: ${tenantError?.message ?? "tenant missing"}`);
+  const fixture = await createFixtureUser(supabase, { email, name: `Owner ${suffix.toUpperCase()}`, password: "VerifyIsolation123" });
+  const { error: membershipError } = await supabase.from("tenant_users").insert({ tenant_id: tenant.id, user_id: fixture.userId, role: "owner", accepted_at: new Date().toISOString() });
+  if (membershipError) throw new Error(`Could not provision membership ${suffix}: ${membershipError.message}`);
+  return { tenantId: tenant.id, userId: fixture.userId, authUserId: fixture.authUserId, email };
 }
 
 async function queryAsTenant(tenantId, sql) {
@@ -57,7 +57,7 @@ async function queryAsTenant(tenantId, sql) {
 
 async function cleanup(ids) {
   await supabase.from("tenant_users").delete().in("tenant_id", ids.tenantIds);
-  await supabase.from("users").delete().in("id", ids.userIds);
+  for (const userId of ids.userIds) await deleteFixtureUser(supabase, userId);
   await supabase.from("tenants").delete().in("id", ids.tenantIds);
 }
 

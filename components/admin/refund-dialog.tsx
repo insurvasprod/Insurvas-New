@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { toast } from "sonner";
+import { notify } from "@/lib/notify";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -62,20 +62,20 @@ export function RefundDialog({
     setBusy(false);
 
     if (!res.ok) {
-      toast.error(body?.error ?? "Could not raise the credit note");
+      notify.block(body?.error ?? "Could not raise the credit note");
       return;
     }
 
-    if (body.awaitingApproval) toast.warning(body.message);
-    else toast.success(body.message);
+    if (body.awaitingApproval) notify.warn(body.message);
+    else notify.done(body.message);
     setOpen(false);
     router.refresh();
   }
 
   return (
     <>
-      <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
-        Refund or credit
+      <Button variant="outline" className="h-10 w-full border-[var(--border-strong)]" onClick={() => setOpen(true)}>
+        Raise a credit note
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>

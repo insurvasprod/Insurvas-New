@@ -4,7 +4,7 @@
 // Whop hosts checkout and raises charges itself, so we never originate one. That absence is the
 // honest shape of a hosted-checkout provider, not a gap.
 
-import { WhopClient, centsToWhopAmount, extractCheckoutUrl, idempotencyKey, whopAmountToCents } from "./client.ts";
+import { WhopApiError, WhopClient, centsToWhopAmount, extractCheckoutUrl, idempotencyKey, whopAmountToCents } from "./client.ts";
 import { ProviderUnsupportedError } from "../types.ts";
 import type {
   CheckoutSession,
@@ -21,6 +21,9 @@ export const BILLING_PERIOD_DAYS: Record<string, number> = {
   quarterly: 90,
   yearly: 365,
 };
+
+/** A staff action waits this long for Whop before failing closed. */
+const PROMO_TIMEOUT_MS = 10_000;
 
 type WhopPlanResponse = Record<string, unknown> & { id?: string; product_id?: string };
 type WhopPaymentResponse = { status?: string };
@@ -103,6 +106,18 @@ export class WhopProvider implements PaymentProvider {
         return { status: "failed" };
       default:
         return { status: "unknown" };
+    }
+  }
+
+  /** A deliberately missing payment proves reachability and authentication without moving money. */
+  async testConnection(): Promise<void> {
+    try {
+      await this.client.request("GET", "/payments/pmt_connection_test_does_not_exist", undefined, undefined, {
+        okStatuses: [404],
+      });
+    } catch (error) {
+      if (error instanceof WhopApiError && error.status === 404) return;
+      throw error;
     }
   }
 
@@ -302,6 +317,40 @@ export class WhopProvider implements PaymentProvider {
     }
 
     return { promoCodeId: response.id, code: input.code };
+  }
+
+  /**
+   * Switches a promo code off so it can no longer be redeemed at checkout (coupon deactivation).
+   *
+   * `POST /promo_codes/{id}/deactivate`, from Whop's Current API reference (the same /api/v1 base
+   * this client uses), which documents an Idempotency-Key header and a 200 carrying the promo code
+   * with its `status`. Existing memberships keep a discount they already have. NOT yet exercised
+   * against the sandbox — the first real call's response is in provider_calls.
+   *
+   * The key is derived from the promo id alone: deactivating is the same request however often it is
+   * retried, so a retry after a timeout must reuse the key rather than look like a new operation.
+   */
+  async deactivatePromoCode(promoCodeId: string): Promise<{ status: string | null }> {
+    const response = await this.client.request<Record<string, unknown> | null>(
+      "POST",
+      `/promo_codes/${encodeURIComponent(promoCodeId)}/deactivate`,
+      undefined,
+      idempotencyKey(`promo_deactivate_${promoCodeId}`, {}),
+      { timeoutMs: PROMO_TIMEOUT_MS },
+    );
+    return { status: typeof response?.status === "string" ? response.status : null };
+  }
+
+  /** `GET /promo_codes/{id}` — where a promo code stands: `active`, `inactive` or `archived`. */
+  async getPromoCodeStatus(promoCodeId: string): Promise<string | null> {
+    const response = await this.client.request<Record<string, unknown> | null>(
+      "GET",
+      `/promo_codes/${encodeURIComponent(promoCodeId)}`,
+      undefined,
+      undefined,
+      { timeoutMs: PROMO_TIMEOUT_MS },
+    );
+    return typeof response?.status === "string" ? response.status : null;
   }
 
   /**

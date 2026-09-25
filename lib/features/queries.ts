@@ -30,16 +30,30 @@ export async function fetchFeatureCatalog(
 
   if (!options.includeArchived) request = request.eq("is_archived", false);
 
-  const [modules, { data: features }] = await Promise.all([fetchModules(), request]);
+  const [{ data: modules }, { data: features }, { data: planReferences }, { data: addonReferences }] = await Promise.all([
+    supabase.from("feature_modules").select("key, label, sort_order").order("sort_order"),
+    request,
+    supabase.from("plan_features").select("feature_key"),
+    supabase.from("addon_features").select("feature_key"),
+  ]);
+
+  const planCounts = new Map<string, number>();
+  for (const row of planReferences ?? []) planCounts.set(row.feature_key, (planCounts.get(row.feature_key) ?? 0) + 1);
+  const addonCounts = new Map<string, number>();
+  for (const row of addonReferences ?? []) addonCounts.set(row.feature_key, (addonCounts.get(row.feature_key) ?? 0) + 1);
 
   const byModule = new Map<string, FeatureRow[]>();
-  for (const feature of (features ?? []) as FeatureRow[]) {
+  for (const feature of (features ?? []) as Omit<FeatureRow, "plan_reference_count" | "addon_reference_count">[]) {
     const list = byModule.get(feature.module) ?? [];
-    list.push(feature);
+    list.push({
+      ...feature,
+      plan_reference_count: planCounts.get(feature.feature_key) ?? 0,
+      addon_reference_count: addonCounts.get(feature.feature_key) ?? 0,
+    });
     byModule.set(feature.module, list);
   }
 
-  return modules.map((module) => ({ module, features: byModule.get(module.key) ?? [] }));
+  return (modules ?? []).map((module) => ({ module, features: byModule.get(module.key) ?? [] }));
 }
 
 /**
@@ -52,4 +66,39 @@ export function fetchFeaturesForPicker(): Promise<FeatureModuleGroup[]> {
 
 export async function fetchFeatureModules(): Promise<FeatureModuleRow[]> {
   return fetchModules();
+}
+
+const OVERRIDE_PAGE = 1000;
+
+/**
+ * How many tenants have a per-tenant override on each feature (tenant_feature_overrides,
+ * 20260924344000) — either direction, since both are a deviation from the plan and a kill switch
+ * beats both. Features with none are absent from the map.
+ *
+ * Paged, because PostgREST caps a response at its max-rows setting and a silently truncated count
+ * would be a wrong number on screen. If the table is not there (or cannot be read) the map is empty
+ * and the page simply shows no counts — this is information, never a control.
+ */
+export async function fetchOverrideCounts(): Promise<Map<string, number>> {
+  const supabase = getSupabaseServiceClient();
+  // The table is newer than the generated database types.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const client = supabase as unknown as { from: (table: string) => any };
+  const counts = new Map<string, number>();
+
+  for (let from = 0; ; from += OVERRIDE_PAGE) {
+    const { data, error } = (await client
+      .from("tenant_feature_overrides")
+      .select("feature_key, tenant_id")
+      .order("feature_key")
+      .order("tenant_id")
+      .range(from, from + OVERRIDE_PAGE - 1)) as { data: { feature_key: string }[] | null; error: { message?: string } | null };
+
+    if (error) {
+      console.error("[features] could not count tenant overrides", error);
+      return new Map();
+    }
+    for (const row of data ?? []) counts.set(row.feature_key, (counts.get(row.feature_key) ?? 0) + 1);
+    if (!data || data.length < OVERRIDE_PAGE) return counts;
+  }
 }

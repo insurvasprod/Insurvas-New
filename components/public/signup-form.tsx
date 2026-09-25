@@ -3,10 +3,9 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, LoaderCircle, LockKeyhole } from "lucide-react";
+import { LoaderCircle, LockKeyhole } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -35,6 +34,14 @@ export function SignupForm({ initialPlanCode, initialCycle }: Props) {
   const [legalDocs, setLegalDocs] = useState<LegalDoc[]>([]);
   // Unticked, and initialised unticked — never derived from anything that could arrive true.
   const [accepted, setAccepted] = useState(false);
+  // The password fields stay uncontrolled (the form posts FormData, and a failed submit keeps every
+  // value); this only mirrors whether the two agree, read from the form as the second one changes.
+  const [confirmState, setConfirmState] = useState<"empty" | "match" | "differs">("empty");
+  const matchState = (form: HTMLFormElement): "empty" | "match" | "differs" => {
+    const data = new FormData(form);
+    const confirm = String(data.get("confirmPassword") ?? "");
+    return confirm ? (confirm === String(data.get("password") ?? "") ? "match" : "differs") : "empty";
+  };
 
   useEffect(() => {
     fetch("/api/public/legal", { cache: "no-store" })
@@ -82,6 +89,10 @@ export function SignupForm({ initialPlanCode, initialCycle }: Props) {
     }
 
     const form = new FormData(event.currentTarget);
+    if (form.get("password") !== form.get("confirmPassword")) {
+      setError("The two passwords do not match");
+      return;
+    }
     setSubmitting(true);
     const response = await fetch("/api/public/signup", {
       method: "POST",
@@ -120,137 +131,199 @@ export function SignupForm({ initialPlanCode, initialCycle }: Props) {
   const priceCents = selectedPrice ? parseDollarsToCents(selectedPrice) : null;
 
   return (
-    <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">
-      <Card className="bg-white shadow-[0_18px_50px_rgba(0,64,127,0.10)]">
-        <CardHeader>
-          <p className="text-sm font-bold uppercase tracking-[0.18em] text-[var(--brand-600)]">Create account</p>
-          <CardTitle className="text-3xl font-extrabold tracking-tight">Start your Insurvas workspace</CardTitle>
-          <p className="text-sm text-[var(--color-text-muted)]">Four details now. Business setup comes after email verification.</p>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-5">
-            <div className="grid gap-5 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label htmlFor="fullName">Full name</Label>
-                <Input id="fullName" name="fullName" autoComplete="name" minLength={2} maxLength={120} required />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="email">Work email</Label>
-                <Input id="email" name="email" type="email" autoComplete="email" required />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="password">Password</Label>
-                <Input
-                  id="password"
-                  name="password"
-                  type="password"
-                  autoComplete="new-password"
-                  minLength={12}
-                  required
-                />
-                <p className="text-xs text-[var(--color-text-muted)]">At least 12 characters</p>
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="phone">Mobile phone</Label>
-                <Input id="phone" name="phone" type="tel" autoComplete="tel" minLength={7} maxLength={40} required />
-              </div>
-            </div>
+    <div className="flex flex-col gap-12 lg:flex-row lg:gap-12">
+      <div className="min-w-0 flex-1">
+        <h1 className="text-[32px] font-semibold leading-[1.13] tracking-[-0.025em] text-foreground">
+          Create your workspace
+        </h1>
+        <p className="mb-7 mt-2.5 max-w-[620px] text-base leading-normal tracking-[-0.02em] text-muted-foreground">
+          Your account comes first; you name your agency on the next step and pay only at checkout. If anything goes
+          wrong, everything you typed stays on the page.
+        </p>
 
-            {legalDocs.length > 0 && (
-              <div className="space-y-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-page-bg)] p-4">
-                <label className="flex cursor-pointer items-start gap-3 text-sm">
-                  <input
-                    type="checkbox"
-                    name="acceptTerms"
-                    checked={accepted}
-                    onChange={(event) => setAccepted(event.target.checked)}
-                    className="mt-0.5 size-4 shrink-0 accent-[var(--brand-600)]"
-                  />
-                  <span>
-                    I have read and agree to the{" "}
-                    {legalDocs.map((doc, index) => (
-                      <span key={doc.id}>
-                        {index > 0 && (index === legalDocs.length - 1 ? " and " : ", ")}
-                        <Link
-                          href={`/legal/${doc.doc_type}?v=${doc.version}`}
-                          target="_blank"
-                          className="font-bold text-[var(--brand-600)] underline"
-                        >
-                          {doc.title}
-                        </Link>{" "}
-                        <span className="text-[var(--color-text-muted)]">(v{doc.version})</span>
-                      </span>
-                    ))}
-                    .
-                  </span>
-                </label>
-                {legalDocs.some((doc) => doc.is_draft) && (
-                  <p className="pl-7 text-xs text-[var(--color-warning)]">
-                    These documents are drafts and have not been reviewed by a lawyer.
-                  </p>
-                )}
-              </div>
-            )}
-
-            {error && (
-              <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-[var(--color-danger)]">
-                {error}
-              </div>
-            )}
-
-            <Button type="submit" size="lg" className="w-full" disabled={submitting || loadingPlans || !selectedPrice || !accepted}>
-              {submitting ? <LoaderCircle className="animate-spin" /> : <LockKeyhole />}
-              {submitting ? "Creating account…" : "Create account"}
-            </Button>
-            <p className="text-center text-xs text-[var(--color-text-muted)]">
-              Already have an account? <Link href="/app/login" className="font-bold text-[var(--brand-600)]">Sign in</Link>
-            </p>
-          </form>
-        </CardContent>
-      </Card>
-
-      <aside className="space-y-4 lg:sticky lg:top-6">
-        <Card className="overflow-hidden bg-white">
-          <div className="bg-[var(--brand-700)] px-6 py-4 text-sm font-extrabold uppercase tracking-wide text-white">
-            Selected plan
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="fullName">
+              Full name <span className="text-[var(--error)]">*</span>
+            </Label>
+            <Input id="fullName" name="fullName" autoComplete="name" minLength={2} maxLength={120} required />
           </div>
-          <CardContent className="pt-1">
-            {loadingPlans ? (
-              <div className="flex h-40 items-center justify-center"><LoaderCircle className="animate-spin" /></div>
-            ) : selectedPlan ? (
-              <div className="space-y-5">
-                <div>
-                  <div className="flex items-start justify-between gap-3">
-                    <h2 className="text-xl font-extrabold">{selectedPlan.name}</h2>
-                    <Link href="/pricing" className="text-sm font-bold text-[var(--brand-600)] hover:underline">Change</Link>
-                  </div>
-                  <p className="mt-1 text-sm text-[var(--color-text-muted)]">
-                    {priceCents == null ? "Cycle unavailable" : `${formatCentsAsCurrency(priceCents)} / ${cycle}`}
-                  </p>
-                  <p className="mt-2 text-sm font-bold text-[var(--color-success)]">
-                    {selectedPlan.trial_days}-day trial
-                  </p>
-                </div>
 
-                <div className="space-y-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="email">
+              Work email <span className="text-[var(--error)]">*</span>
+            </Label>
+            <Input id="email" name="email" type="email" autoComplete="email" required />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="phone">
+              Mobile phone <span className="text-[var(--error)]">*</span>
+            </Label>
+            <Input id="phone" name="phone" type="tel" autoComplete="tel" minLength={7} maxLength={40} required />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="password">
+              Password <span className="text-[var(--error)]">*</span>
+            </Label>
+            <Input
+              id="password"
+              name="password"
+              type="password"
+              autoComplete="new-password"
+              minLength={12}
+              required
+              onChange={(event) => setConfirmState(event.currentTarget.form ? matchState(event.currentTarget.form) : "empty")}
+            />
+            <p className="text-xs leading-normal tracking-[-0.01em] text-muted-foreground">At least 12 characters.</p>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="confirmPassword">
+              Confirm password <span className="text-[var(--error)]">*</span>
+            </Label>
+            <Input
+              id="confirmPassword"
+              name="confirmPassword"
+              type="password"
+              autoComplete="new-password"
+              minLength={12}
+              required
+              aria-describedby="confirm-note"
+              onChange={(event) => setConfirmState(event.currentTarget.form ? matchState(event.currentTarget.form) : "empty")}
+            />
+            <p id="confirm-note" className="text-xs leading-normal tracking-[-0.01em] text-muted-foreground" aria-live="polite">
+              {confirmState === "match" ? "Matches." : confirmState === "differs" ? "Does not match yet." : " "}
+            </p>
+          </div>
+
+          {legalDocs.length > 0 && (
+            <div className="space-y-2 rounded-lg bg-[var(--surface-alt)] p-4">
+              <label className="flex cursor-pointer items-start gap-2.5 text-sm leading-normal tracking-[-0.02em] text-[var(--body)]">
+                <input
+                  type="checkbox"
+                  name="acceptTerms"
+                  checked={accepted}
+                  onChange={(event) => setAccepted(event.target.checked)}
+                  className="mt-0.5 size-4 shrink-0 accent-[var(--primary)]"
+                />
+                <span>
+                  I agree to the{" "}
+                  {legalDocs.map((doc, index) => (
+                    <span key={doc.id}>
+                      {index > 0 && (index === legalDocs.length - 1 ? " and the " : ", ")}
+                      <Link
+                        href={`/legal/${doc.doc_type}?v=${doc.version}`}
+                        target="_blank"
+                        className="font-semibold text-foreground"
+                      >
+                        {doc.title} v{doc.version}
+                      </Link>
+                    </span>
+                  ))}
+                  . Acceptance is recorded against the version shown, and each link resolves to that version.
+                </span>
+              </label>
+              {legalDocs.some((doc) => doc.is_draft) && (
+                <p className="pl-[26px] text-xs text-[var(--warning-ink)]">
+                  These documents are drafts and have not been reviewed by a lawyer.
+                </p>
+              )}
+            </div>
+          )}
+
+          {error && (
+            <div
+              role="alert"
+              className="rounded-lg border border-[color-mix(in_srgb,var(--error)_24%,transparent)] bg-[var(--error-surface)] px-4 py-3 text-sm text-[var(--error-ink)]"
+            >
+              {error}
+            </div>
+          )}
+
+          <Button
+            type="submit"
+            className="h-12 w-full"
+            disabled={submitting || loadingPlans || !selectedPrice || !accepted}
+          >
+            {submitting ? <LoaderCircle className="animate-spin" /> : <LockKeyhole />}
+            {submitting ? "Creating workspace…" : "Create workspace and continue"}
+          </Button>
+
+          <p className="text-center text-xs leading-normal tracking-[-0.01em] text-muted-foreground">
+            No card is taken here. Payment happens on the provider&rsquo;s hosted page after checkout.
+          </p>
+          <p className="text-center text-xs leading-normal tracking-[-0.01em] text-muted-foreground">
+            Already have an account?{" "}
+            <Link href="/app/login" className="font-semibold text-foreground">
+              Sign in
+            </Link>
+          </p>
+        </form>
+      </div>
+
+      <aside className="w-full shrink-0 lg:sticky lg:top-6 lg:w-[340px]">
+        <div className="rounded-xl border border-border bg-card p-6">
+          <h2 className="text-lg font-semibold leading-[1.28] tracking-[-0.015em] text-foreground">Order summary</h2>
+
+          {loadingPlans ? (
+            <div className="flex h-40 items-center justify-center">
+              <LoaderCircle className="animate-spin" />
+            </div>
+          ) : selectedPlan ? (
+            <>
+              <dl className="mt-4 grid gap-4">
+                {[
+                  { term: "Plan", value: selectedPlan.name },
+                  { term: "Cycle", value: BILLING_CYCLE_LABELS[cycle] },
+                  {
+                    term: "Price",
+                    value: priceCents == null ? "Cycle unavailable" : formatCentsAsCurrency(priceCents),
+                  },
+                  { term: "Trial", value: selectedPlan.trial_days > 0 ? `${selectedPlan.trial_days} days` : "No trial" },
+                  // Nothing is charged on this page. With a trial, checkout charges nothing either;
+                  // without one, checkout charges the first period.
+                  {
+                    term: "Due at checkout",
+                    value: selectedPlan.trial_days > 0 ? formatCentsAsCurrency(0) : priceCents == null ? "—" : formatCentsAsCurrency(priceCents),
+                  },
+                ].map((row) => (
+                  <div key={row.term}>
+                    <dt className="text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] text-muted-foreground">
+                      {row.term}
+                    </dt>
+                    <dd className="mt-1 text-sm font-semibold leading-normal tracking-[-0.02em] tabular-nums text-foreground">
+                      {row.value}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+
+              <div className="mt-5 space-y-4 border-t border-border pt-5">
+                <div className="space-y-1.5">
                   <Label htmlFor="plan">Plan</Label>
                   <select
                     id="plan"
                     value={planCode}
                     onChange={(event) => selectPlan(event.target.value)}
-                    className="h-10 w-full rounded-md border border-[var(--color-border)] bg-white px-3 text-sm"
+                    className="h-10 w-full rounded-md border border-[var(--border-strong)] bg-card px-3 text-sm"
                   >
-                    {plans.map((plan) => <option key={plan.code} value={plan.code}>{plan.name}</option>)}
+                    {plans.map((plan) => (
+                      <option key={plan.code} value={plan.code}>
+                        {plan.name}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   <Label htmlFor="cycle">Billing cycle</Label>
                   <select
                     id="cycle"
                     value={cycle}
                     onChange={(event) => setCycle(event.target.value as BillingCycle)}
-                    className="h-10 w-full rounded-md border border-[var(--color-border)] bg-white px-3 text-sm"
+                    className="h-10 w-full rounded-md border border-[var(--border-strong)] bg-card px-3 text-sm"
                   >
                     {BILLING_CYCLES.map((item) => (
                       <option key={item} value={item} disabled={!publicPriceForCycle(selectedPlan, item)}>
@@ -260,16 +333,16 @@ export function SignupForm({ initialPlanCode, initialCycle }: Props) {
                   </select>
                 </div>
               </div>
-            ) : (
-              <p className="py-8 text-sm text-[var(--color-text-muted)]">No public plan is available.</p>
-            )}
-          </CardContent>
-        </Card>
 
-        <div className="space-y-3 rounded-xl border bg-[var(--brand-50)] p-5 text-sm">
-          {["No sales call required", "Email verification protects your account", "Card collected securely at checkout"].map((item) => (
-            <div key={item} className="flex gap-2"><CheckCircle2 className="mt-0.5 size-4 shrink-0 text-[var(--color-success)]" />{item}</div>
-          ))}
+              <p className="mt-4 text-xs leading-normal tracking-[-0.01em] text-muted-foreground">
+                {initialPlanCode && selectedPlan.code === initialPlanCode ? "The plan you picked on " : "Compare every plan on "}
+                <Link href="/pricing" className="font-semibold text-foreground">the pricing page</Link>
+                {initialPlanCode && selectedPlan.code === initialPlanCode ? ". Change it here if you like." : "."}
+              </p>
+            </>
+          ) : (
+            <p className="py-8 text-sm text-muted-foreground">No public plan is available.</p>
+          )}
         </div>
       </aside>
     </div>

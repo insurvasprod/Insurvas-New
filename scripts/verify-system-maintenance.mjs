@@ -3,12 +3,12 @@
 // Run with the development server running on NEXT_PUBLIC_APP_URL (default http://localhost:3000).
 // The script provisions one tenant, cleans it up, and leaves audit rows intact as evidence.
 import { createClient } from "@supabase/supabase-js";
+import { createFixtureUser, deleteFixtureUser } from "./lib/fixtureUser.mjs";
 import { SignJWT } from "jose";
-import { hash } from "bcryptjs";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const app = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+const app = process.env.APP_BASE_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 if (!supabaseUrl || !serviceKey) throw new Error("Missing Supabase environment variables");
 for (const key of ["ADMIN_SESSION_SECRET", "TENANT_SESSION_SECRET"]) if (!process.env[key]) throw new Error(`Missing ${key}`);
 
@@ -18,6 +18,10 @@ let tenantId;
 let userId;
 let announcementIds = [];
 let failures = 0;
+// The maintenance route requires a reason (5–500 chars) on every change, and the typed phrase
+// whenever the new level is locked.
+const REASON = "Automated maintenance verification run";
+const LOCK_PHRASE = "lock every workspace";
 
 function check(label, condition, detail = "") {
   if (condition) console.log(`  ok   ${label}`);
@@ -39,8 +43,21 @@ async function request(path, options = {}, cookie) {
 const json = (value) => ({ "content-type": "application/json", body: JSON.stringify(value) });
 
 try {
-  const { data: plan, error: planError } = await sb.from("admin_plan_list").select("id, code, plan_type").eq("is_archived", false).order("sort_order").limit(1).maybeSingle();
-  if (planError || !plan) throw new Error(planError?.message || "No active plan exists");
+  // A named plan, not "whichever sorts first".
+  //
+  // This picked the first unarchived plan by sort_order, and disposable fixture plans created by
+  // other suites carry sort_order 0 -- ahead of Basic. When one of those was picked, this suite
+  // died on `cycle_not_offered`, because a fixture plan has no plan_prices row and therefore
+  // offers no billing cycle at all. That reads like a product defect in subscription assignment
+  // and is nothing of the kind. verify-addon-meters and verify-manual-settlement already name
+  // their plan for the same reason.
+  const { data: plan, error: planError } = await sb
+    .from("admin_plan_list")
+    .select("id, code, plan_type")
+    .eq("code", "basic")
+    .eq("is_archived", false)
+    .maybeSingle();
+  if (planError || !plan) throw new Error(planError?.message || "The basic plan does not exist");
   const { data: admin, error: adminError } = await sb.from("admin_users").select("id").eq("role", "super_admin").eq("is_active", true).limit(1).maybeSingle();
   if (adminError || !admin) throw new Error(adminError?.message || "No active super admin exists");
   const { data: support } = await sb.from("admin_users").select("id").eq("role", "support_agent").eq("is_active", true).limit(1).maybeSingle();
@@ -48,9 +65,16 @@ try {
 
   const email = `system-verify-${stamp}@verify.invalid`;
   const password = "SystemVerify-Password-123!";
-  const created = await sb.rpc("create_tenant_with_owner", { p_tenant_name: `System verify ${stamp}`, p_owner_name: "System Verify", p_owner_email: email, p_owner_password_hash: await hash(password, 12) });
-  if (created.error) throw new Error(created.error.message);
-  ({ tenant_id: tenantId, user_id: userId } = Array.isArray(created.data) ? created.data[0] : created.data);
+  // create_tenant_with_owner is the legacy provisioning RPC: it inserts a public.users row with no
+  // id, which users_id_fkey has made impossible since SA-1.2 moved credentials to Supabase Auth.
+  // verify-kill-switches already carries this same fallback. The RPC itself is still wired into
+  // POST /api/admin/tenants and is broken there too -- see the backlog.
+  ({ userId } = await createFixtureUser(sb, { email: `system-verify-${stamp}@invalid.test`, name: "System Verify" }));
+  const madeTenant = await sb.from("tenants").insert({ name: `System verify ${stamp}`, status: "active", onboarding_state: "completed" }).select("id").single();
+  if (madeTenant.error) throw new Error(madeTenant.error.message);
+  tenantId = madeTenant.data.id;
+  const membership = await sb.from("tenant_users").insert({ tenant_id: tenantId, user_id: userId, role: "owner", accepted_at: new Date().toISOString() });
+  if (membership.error) throw new Error(membership.error.message);
   const subscription = await sb.rpc("admin_assign_subscription", { p_tenant_id: tenantId, p_plan_id: plan.id, p_billing_cycle: "monthly", p_start: new Date().toISOString() });
   if (subscription.error) throw new Error(subscription.error.message);
   const entitlement = await sb.rpc("refresh_tenant_entitlement", { p_tenant_id: tenantId });
@@ -67,15 +91,15 @@ try {
   check("platform_config system read is allowed", platformCookie ? (await request("/api/admin/system", {}, platformCookie)).status === 200 : true, platformCookie ? "" : "no fixture role");
 
   console.log("Maintenance levels");
-  await request("/api/admin/system/maintenance", { method: "PATCH", ...json({ level: "off" }) }, adminCookie);
+  await request("/api/admin/system/maintenance", { method: "PATCH", ...json({ level: "off", reason: REASON }) }, adminCookie);
   check("normal tenant read works", (await request("/api/app/policies", {}, tenantCookie)).status === 200);
-  const readOnly = await request("/api/admin/system/maintenance", { method: "PATCH", ...json({ level: "read_only", message: "Deploy in progress — changes are paused." }) }, adminCookie);
+  const readOnly = await request("/api/admin/system/maintenance", { method: "PATCH", ...json({ level: "read_only", message: "Deploy in progress — changes are paused.", reason: REASON }) }, adminCookie);
   check("read_only saves", readOnly.status === 200);
   check("read_only still allows reads", (await request("/api/app/policies", {}, tenantCookie)).status === 200);
   const write = await request("/api/app/policies", { method: "POST" }, tenantCookie);
   check("read_only write returns a clear non-500 response", write.status === 503 && write.body.code === "maintenance_read_only" && write.body.error.includes("Deploy in progress"), JSON.stringify(write.body));
 
-  const locked = await request("/api/admin/system/maintenance", { method: "PATCH", ...json({ level: "locked", message: "Scheduled platform maintenance." }) }, adminCookie);
+  const locked = await request("/api/admin/system/maintenance", { method: "PATCH", ...json({ level: "locked", message: "Scheduled platform maintenance.", reason: REASON, confirmPhrase: LOCK_PHRASE }) }, adminCookie);
   check("locked saves", locked.status === 200);
   check("locked blocks tenant reads with maintenance code", (await request("/api/app/policies", {}, tenantCookie)).status === 503);
   const loginBlocked = await request("/api/app/auth/login", { method: "POST", ...json({ email, password }) });
@@ -85,16 +109,25 @@ try {
   console.log("Scheduled window");
   const futureStart = new Date(Date.now() + 60_000).toISOString();
   const futureEnd = new Date(Date.now() + 120_000).toISOString();
-  await request("/api/admin/system/maintenance", { method: "PATCH", ...json({ level: "read_only", message: "Upcoming maintenance.", scheduled_start: futureStart, scheduled_end: futureEnd }) }, adminCookie);
+  await request("/api/admin/system/maintenance", { method: "PATCH", ...json({ level: "read_only", message: "Upcoming maintenance.", scheduled_start: futureStart, scheduled_end: futureEnd, reason: REASON }) }, adminCookie);
   const publicSchedule = await request("/api/maintenance");
   check("future schedule is banner_only before start", publicSchedule.status === 200 && publicSchedule.body.level === "banner_only");
-  check("future schedule keeps writes available", (await request("/api/app/policies", { method: "POST" }, tenantCookie)).status === 201);
+  // "Available" means MAINTENANCE is not blocking it — not that this particular request succeeds.
+  // The probe POSTs no body, so the handler answers 400 from schema validation, and it always did;
+  // asserting 201 tested the policies route's payload rules rather than the maintenance gate. The
+  // gate runs inside `requireFeatureRole`, BEFORE the body is parsed (which is why the read_only
+  // check above sees a clean 503), so a validation error is itself the proof that the request got
+  // through the gate.
+  const notBlocked = (response) => response.status !== 503 || response.body?.code !== "maintenance_read_only";
+  const duringSchedule = await request("/api/app/policies", { method: "POST" }, tenantCookie);
+  check("future schedule keeps writes available", notBlocked(duringSchedule), `got ${duringSchedule.status} ${JSON.stringify(duringSchedule.body)}`);
   const pastStart = new Date(Date.now() - 120_000).toISOString();
   const pastEnd = new Date(Date.now() + 60_000).toISOString();
-  await request("/api/admin/system/maintenance", { method: "PATCH", ...json({ level: "read_only", message: "Maintenance is live.", scheduled_start: pastStart, scheduled_end: pastEnd }) }, adminCookie);
+  await request("/api/admin/system/maintenance", { method: "PATCH", ...json({ level: "read_only", message: "Maintenance is live.", scheduled_start: pastStart, scheduled_end: pastEnd, reason: REASON }) }, adminCookie);
   check("active schedule applies its configured level", (await request("/api/app/policies", { method: "POST" }, tenantCookie)).status === 503);
-  await request("/api/admin/system/maintenance", { method: "PATCH", ...json({ level: "off" }) }, adminCookie);
-  check("turning maintenance off restores writes", (await request("/api/app/policies", { method: "POST" }, tenantCookie)).status === 201);
+  await request("/api/admin/system/maintenance", { method: "PATCH", ...json({ level: "off", reason: REASON }) }, adminCookie);
+  const afterOff = await request("/api/app/policies", { method: "POST" }, tenantCookie);
+  check("turning maintenance off restores writes", notBlocked(afterOff), `got ${afterOff.status} ${JSON.stringify(afterOff.body)}`);
 
   console.log("Announcements");
   const now = new Date(Date.now() - 60_000).toISOString();
@@ -132,14 +165,14 @@ try {
   const admin = await sb.from("admin_users").select("id").eq("role", "super_admin").eq("is_active", true).limit(1).maybeSingle();
   if (admin.data) {
     const adminCookie = `insurvas_admin_session=${await sign(process.env.ADMIN_SESSION_SECRET, { sub: admin.data.id, role: "super_admin", stage: "authenticated" })}`;
-    await request("/api/admin/system/maintenance", { method: "PATCH", ...json({ level: "off" }) }, adminCookie);
+    await request("/api/admin/system/maintenance", { method: "PATCH", ...json({ level: "off", reason: REASON }) }, adminCookie);
   }
   for (const id of announcementIds) await sb.from("announcements").delete().eq("id", id);
   if (tenantId) {
     await sb.from("subscriptions").delete().eq("tenant_id", tenantId);
     await sb.from("tenant_entitlements").delete().eq("tenant_id", tenantId);
     await sb.from("tenant_users").delete().eq("tenant_id", tenantId);
-    await sb.from("users").delete().eq("id", userId);
+    await deleteFixtureUser(sb, userId);
     await sb.from("tenants").delete().eq("id", tenantId);
   }
 }

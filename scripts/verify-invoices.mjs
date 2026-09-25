@@ -22,8 +22,13 @@ const YEAR = now.getUTCFullYear();
 const MONTH = now.getUTCMonth() + 1;
 const stamp = Date.now();
 
+// Scoped to the INV series. invoice_counters is keyed by (series, year, month), and once
+// verify-credit-notes has run there is also a CN row for this month -- at which point a query
+// filtered only by year and month matches two rows and .maybeSingle() returns an error with a
+// null body. The counter then reads as "absent" and the assertion below compares 1 against 0,
+// which is how a real counter drift and a mis-scoped query looked identical.
 const { data: before } = await supabase
-  .from("invoice_counters").select("next_number").eq("year", YEAR).eq("month", MONTH).maybeSingle();
+  .from("invoice_counters").select("next_number").eq("series", "INV").eq("year", YEAR).eq("month", MONTH).maybeSingle();
 const counterBefore = before?.next_number ?? null;
 
 const { data: tenant } = await supabase
@@ -63,8 +68,8 @@ try {
     `${a.number} then ${b.number}`,
   );
 
-  const { data: lines } = await supabase.from("invoice_lines").select("amount_cents").eq("invoice_id", a.invoice_id);
-  const { data: inv } = await supabase.from("invoices").select("total_cents, status").eq("id", a.invoice_id).single();
+  const { data: lines } = await supabase.from("platform_invoice_lines").select("amount_cents").eq("invoice_id", a.invoice_id);
+  const { data: inv } = await supabase.from("platform_invoices").select("total_cents, status").eq("id", a.invoice_id).single();
   check(
     "lines sum exactly to the total",
     lines.reduce((s, l) => s + l.amount_cents, 0) === inv.total_cents,
@@ -74,35 +79,35 @@ try {
 
   console.log("\nImmutability (as the app's own service-role client)\n");
 
-  const { error: editTotal } = await supabase.from("invoices").update({ total_cents: 1 }).eq("id", a.invoice_id);
+  const { error: editTotal } = await supabase.from("platform_invoices").update({ total_cents: 1 }).eq("id", a.invoice_id);
   check("the app CANNOT rewrite an issued invoice's total", editTotal !== null,
         "corrections must be credit notes, never edits");
 
-  const { error: voidIt } = await supabase.from("invoices")
+  const { error: voidIt } = await supabase.from("platform_invoices")
     .update({ status: "void", voided_at: new Date().toISOString(), void_reason: "verification" })
     .eq("id", b.invoice_id);
   check("voiding IS allowed", voidIt === null, voidIt?.message ?? "");
 
-  const { error: editLine } = await supabase.from("invoice_lines").update({ amount_cents: 1 }).eq("invoice_id", a.invoice_id);
+  const { error: editLine } = await supabase.from("platform_invoice_lines").update({ amount_cents: 1 }).eq("invoice_id", a.invoice_id);
   check("the app CANNOT edit a line", editLine !== null);
 
-  const { error: dropLine } = await supabase.from("invoice_lines").delete().eq("invoice_id", a.invoice_id);
+  const { error: dropLine } = await supabase.from("platform_invoice_lines").delete().eq("invoice_id", a.invoice_id);
   check("the app CANNOT delete a line", dropLine !== null);
 } finally {
   console.log("\nCleaning up…");
-  await supabase.from("invoices").delete().eq("tenant_id", tenantId);
-  await supabase.from("tenants").delete().eq("id", tenantId);
-
-  // Put the counter back, so verifying never leaves a hole in the real sequence.
-  if (counterBefore === null) {
-    await supabase.from("invoice_counters").delete().eq("year", YEAR).eq("month", MONTH);
-  } else {
-    await supabase.from("invoice_counters").update({ next_number: counterBefore }).eq("year", YEAR).eq("month", MONTH);
-  }
+  // Issued/paid/void invoices are immutable. Retain these explicitly namespaced records as audit
+  // evidence and deactivate the fixture tenant rather than deleting billing history or rewinding
+  // the shared invoice counter (which would make the next real number collide).
+  await supabase.from("tenants").update({
+    status: "suspended",
+    suspended_at: new Date().toISOString(),
+    suspension_reason: "Disposable invoice verifier fixture retained for immutable QA evidence",
+  }).eq("id", tenantId);
   const { data: after } = await supabase
-    .from("invoice_counters").select("next_number").eq("year", YEAR).eq("month", MONTH).maybeSingle();
-  check("the invoice counter is restored", (after?.next_number ?? null) === counterBefore,
-        `was ${counterBefore}, now ${after?.next_number ?? null}`);
+    .from("invoice_counters").select("next_number").eq("series", "INV").eq("year", YEAR).eq("month", MONTH).maybeSingle();
+  check("the invoice counter remains ahead of issued verification numbers",
+    (after?.next_number ?? 0) >= (counterBefore ?? 1) + 2,
+    `started at ${counterBefore ?? 1}, now ${after?.next_number ?? 0}`);
 }
 
 console.log(failures === 0 ? "\nAll invoice checks passed." : `\n${failures} check(s) FAILED.`);

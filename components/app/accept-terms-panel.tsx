@@ -3,10 +3,9 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { LoaderCircle, ScrollText } from "lucide-react";
+import { LoaderCircle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { LegalDocumentBody } from "@/components/public/legal-document-body";
 
 export type OutstandingDoc = {
@@ -21,11 +20,26 @@ export type OutstandingDoc = {
   previousVersion: number | null;
 };
 
+/**
+ * "1 October 2026". Effective dates are calendar dates, so they are read in UTC — local time would
+ * move a date-only value to the previous day for anyone west of Greenwich.
+ */
+function effective(date: string) {
+  return new Date(date).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
+}
+
+/**
+ * One card, as the board draws it: what the document is, what changed, the full text, and the
+ * acceptance — so the person never has to scroll between cards to find the button that unlocks
+ * the product. Several outstanding documents share the card, one section each.
+ */
 export function AcceptTermsPanel({ documents }: { documents: OutstandingDoc[] }) {
   const router = useRouter();
   const [accepted, setAccepted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const single = documents.length === 1 ? documents[0] : null;
 
   async function submit() {
     setSubmitting(true);
@@ -49,116 +63,103 @@ export function AcceptTermsPanel({ documents }: { documents: OutstandingDoc[] })
   }
 
   return (
-    <div className="space-y-6">
-      <Card className="bg-white">
-        <CardHeader>
-          <p className="flex items-center gap-2 text-sm font-bold uppercase tracking-[0.18em] text-[var(--brand-600)]">
-            <ScrollText className="size-4" />
-            {documents.length === 1 ? "An updated document" : "Updated documents"}
-          </p>
-          <CardTitle className="text-2xl font-extrabold tracking-tight">
-            Please review before continuing
-          </CardTitle>
-          <p className="text-sm text-[var(--color-text-muted)]">
-            {documents.length === 1
-              ? "We have published a new version of this document."
-              : "We have published new versions of these documents."}{" "}
-            You need to accept {documents.length === 1 ? "it" : "them"} to keep using Insurvas.
-          </p>
-        </CardHeader>
-      </Card>
+    <div className="m-in rounded-lg border border-border bg-card p-6 sm:p-10">
+      <h1 className="mt-2 text-center text-[32px] font-semibold leading-[1.13] tracking-[-0.025em] text-foreground">
+        {single ? `${single.title} — version ${single.version}` : "Updated terms"}
+      </h1>
+      <p className="mt-2.5 text-center text-base leading-normal tracking-[-0.02em] text-muted-foreground">
+        {single
+          ? `Effective ${effective(single.effectiveDate)}. The product is blocked until this is accepted.`
+          : `${documents.length} documents have new versions. The product is blocked until they are accepted.`}
+      </p>
 
       {documents.map((doc) => (
-        <Card key={doc.id} className="bg-white">
-          <CardHeader>
-            <CardTitle className="text-lg font-bold">
-              {doc.title} <span className="font-normal text-[var(--color-text-muted)]">v{doc.version}</span>
-            </CardTitle>
-            <p className="text-xs text-[var(--color-text-muted)]">
-              Effective {new Date(doc.effectiveDate).toLocaleDateString()}
-            </p>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {doc.isDraft && (
-              <div className="rounded-lg border border-[var(--color-warning)]/40 bg-[var(--color-warning)]/10 p-3 text-sm">
-                <span className="font-bold">This is a draft</span> and has not been reviewed by a lawyer.
-              </div>
-            )}
+        <section key={doc.id} className="mt-6">
+          {!single && (
+            <header className="mb-3">
+              <h2 className="text-lg font-semibold leading-[1.28] tracking-[-0.015em] text-foreground">
+                {doc.title} — version {doc.version}
+              </h2>
+              <p className="text-xs leading-normal text-muted-foreground">Effective {effective(doc.effectiveDate)}</p>
+            </header>
+          )}
 
-            {/* "They can read what changed" — a plain-language summary, because a diff of legal
-                prose tells a reader nothing. Absent rather than faked when nobody wrote one. */}
-            {doc.changeSummary ? (
-              <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-page-bg)] p-3 text-sm">
-                <p className="font-bold">What changed</p>
-                <p className="mt-1">{doc.changeSummary}</p>
-                {doc.previousVersion && (
-                  <Link
-                    href={`/legal/${doc.docType}?v=${doc.previousVersion}`}
-                    target="_blank"
-                    className="mt-2 inline-block font-bold text-[var(--brand-600)] underline"
-                  >
-                    Read version {doc.previousVersion}
-                  </Link>
-                )}
-              </div>
-            ) : (
-              doc.previousVersion && (
-                <p className="text-sm text-[var(--color-text-muted)]">
-                  No summary of changes was recorded.{" "}
-                  <Link
-                    href={`/legal/${doc.docType}?v=${doc.previousVersion}`}
-                    target="_blank"
-                    className="font-bold text-[var(--brand-600)] underline"
-                  >
-                    Read version {doc.previousVersion}
-                  </Link>{" "}
-                  to compare.
-                </p>
-              )
-            )}
-
-            <div className="max-h-96 overflow-y-auto rounded-lg border border-[var(--color-border)] p-4">
-              <LegalDocumentBody content={doc.content} />
-            </div>
-          </CardContent>
-        </Card>
-      ))}
-
-      <Card className="bg-white">
-        <CardContent className="space-y-4">
-          <label className="flex cursor-pointer items-start gap-3 text-sm">
-            <input
-              type="checkbox"
-              checked={accepted}
-              onChange={(event) => setAccepted(event.target.checked)}
-              className="mt-0.5 size-4 shrink-0 accent-[var(--brand-600)]"
-            />
-            <span>
-              I have read and agree to{" "}
-              {documents.map((doc, index) => (
-                <span key={doc.id}>
-                  {index > 0 && (index === documents.length - 1 ? " and " : ", ")}
-                  <span className="font-bold">
-                    {doc.title} v{doc.version}
-                  </span>
-                </span>
-              ))}
-              .
-            </span>
-          </label>
-
-          {error && (
-            <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-[var(--color-danger)]">
-              {error}
+          {doc.isDraft && (
+            <div className="mb-4 rounded-lg border border-border border-l-[3px] border-l-[var(--warning)] bg-[var(--warning-surface)] px-4 py-3.5 text-sm leading-normal tracking-[-0.02em] text-[var(--body)]">
+              <span className="font-semibold text-[var(--warning-ink)]">This is a draft</span> and has not been reviewed by a lawyer.
             </div>
           )}
 
-          <Button size="lg" className="w-full" disabled={!accepted || submitting} onClick={submit}>
-            {submitting && <LoaderCircle className="animate-spin" />}
-            {submitting ? "Recording…" : "Accept and continue"}
-          </Button>
-        </CardContent>
-      </Card>
+          {/* A plain-language summary, because a diff of legal prose tells a reader nothing. Absent
+              rather than faked when nobody wrote one — the previous version is still offered. */}
+          {doc.changeSummary ? (
+            <div className="rounded-lg border border-border border-l-[3px] border-l-[var(--info)] bg-[var(--info-surface)] px-4 py-3.5 text-sm leading-normal tracking-[-0.02em]">
+              <p className="font-semibold text-[var(--info-ink)]">What changed in version {doc.version}</p>
+              <p className="mt-1.5 text-[var(--body)]">
+                {doc.changeSummary}
+                {doc.previousVersion && (
+                  <>
+                    {" "}
+                    <Link href={`/legal/${doc.docType}?v=${doc.previousVersion}`} target="_blank" className="font-semibold text-foreground underline underline-offset-2">
+                      Read version {doc.previousVersion}
+                    </Link>
+                    .
+                  </>
+                )}
+              </p>
+            </div>
+          ) : (
+            doc.previousVersion && (
+              <p className="text-sm leading-normal tracking-[-0.02em] text-muted-foreground">
+                No summary of changes was recorded.{" "}
+                <Link href={`/legal/${doc.docType}?v=${doc.previousVersion}`} target="_blank" className="font-semibold text-foreground underline underline-offset-2">
+                  Read version {doc.previousVersion}
+                </Link>{" "}
+                to compare.
+              </p>
+            )
+          )}
+
+          <div className="mt-5 max-h-[280px] overflow-y-auto rounded-md border border-border bg-card p-5">
+            <LegalDocumentBody content={doc.content} />
+          </div>
+        </section>
+      ))}
+
+      {error && (
+        <div role="alert" className="mt-5 rounded-lg border border-[color-mix(in_srgb,var(--error)_24%,transparent)] bg-[var(--error-surface)] px-4 py-3 text-sm text-[var(--error-ink)]">
+          {error}
+        </div>
+      )}
+
+      <div className="mt-5 flex flex-col gap-4 rounded-md bg-[var(--surface-alt)] p-4 sm:flex-row sm:items-center sm:justify-between">
+        <label className="flex cursor-pointer items-start gap-2.5 text-sm leading-normal tracking-[-0.02em] text-[var(--body)]">
+          <input
+            type="checkbox"
+            checked={accepted}
+            onChange={(event) => setAccepted(event.target.checked)}
+            className="mt-0.5 size-4 shrink-0 accent-[var(--primary)]"
+          />
+          <span>
+            I have read and agree to{" "}
+            {documents.map((doc, index) => (
+              <span key={doc.id}>
+                {index > 0 && (index === documents.length - 1 ? " and " : ", ")}
+                {single ? `version ${doc.version}` : `${doc.title} v${doc.version}`}
+              </span>
+            ))}
+          </span>
+        </label>
+
+        <Button size="lg" className="shrink-0" disabled={!accepted || submitting} onClick={submit}>
+          {submitting && <LoaderCircle className="animate-spin" />}
+          {submitting ? "Recording…" : "Accept and continue"}
+        </Button>
+      </div>
+
+      <p className="mt-3.5 text-center text-xs leading-normal tracking-[-0.01em] text-muted-foreground">
+        Your acceptance, the timestamp and the version are recorded.
+      </p>
     </div>
   );
 }

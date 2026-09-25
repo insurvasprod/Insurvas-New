@@ -17,6 +17,13 @@ export const templateFieldSchema = z.object({
   is_required: z.boolean().default(false),
   options,
   sort_order: z.number().int().min(0).max(9999),
+  help_text: z.string().trim().max(500).nullable().optional(),
+  validation: z.object({
+    min: z.number().finite().optional(), max: z.number().finite().optional(),
+    min_length: z.number().int().min(0).max(10000).optional(), max_length: z.number().int().min(0).max(10000).optional(),
+    pattern: z.string().max(200).optional(), age_min: z.number().int().min(0).max(130).optional(), age_max: z.number().int().min(0).max(130).optional(),
+    digit_length: z.number().int().min(1).max(40).optional(), format_mask: z.string().max(80).optional(), placeholder: z.string().max(120).optional(),
+  }).default({}),
 });
 
 export const templateStageSchema = z.object({
@@ -34,6 +41,7 @@ const formFieldSchema = z.object({
     .object({ field_key: key, equals: z.string().trim().max(120) })
     .nullable()
     .default(null),
+  conditional_on: z.object({ field_key: key, equals: z.string().trim().max(120) }).nullable().optional(),
 });
 
 const formSectionSchema = z.object({

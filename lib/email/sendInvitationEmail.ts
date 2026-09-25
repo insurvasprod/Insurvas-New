@@ -38,6 +38,25 @@ export async function sendInvitationEmail(params: {
   return { delivered: result.delivered };
 }
 
+export async function sendExistingPartnerInvitationEmail(params: {
+  to: string;
+  name: string;
+  inviteUrl: string;
+  expiresAt: Date;
+  userId?: string | null;
+  tenantId?: string | null;
+}): Promise<{ delivered: boolean }> {
+  const rendered = invitationEmail({ ...params, existingAccount: true });
+  const result = await sendEmail({
+    to: params.to,
+    ...rendered,
+    templateKey: "user.invitation",
+    userId: params.userId,
+    tenantId: params.tenantId,
+  });
+  return { delivered: result.delivered };
+}
+
 /** SA-1.3's "send password reset link". */
 export async function sendPasswordResetEmail(params: {
   to: string;

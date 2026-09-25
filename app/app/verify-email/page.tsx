@@ -1,6 +1,11 @@
+import { AuthPage } from "@/components/app/auth-card";
 import { VerifyEmailPanel } from "@/components/app/verify-email-panel";
-import { OnboardingFrame } from "@/components/public/onboarding-frame";
+import { EMAIL_VERIFICATION_TTL_HOURS } from "@/lib/signup/verification";
 
 export default function VerifyEmailPage() {
-  return <OnboardingFrame><VerifyEmailPanel /></OnboardingFrame>;
+  return (
+    <AuthPage>
+      <VerifyEmailPanel ttlHours={EMAIL_VERIFICATION_TTL_HOURS} />
+    </AuthPage>
+  );
 }

@@ -173,7 +173,7 @@ export async function settleMidPeriodPlanChange(input: {
     providerWarning = "No provider membership is known, so the old plan was not stopped from renewing.";
   } else {
     try {
-      const provider = buildProvider("whop");
+      const provider = buildProvider("whop", { tenantId: subscription.tenant_id });
       if (provider instanceof WhopProvider) {
         await provider.setCancelAtPeriodEnd(subscription.whop_membership_id, true);
       }

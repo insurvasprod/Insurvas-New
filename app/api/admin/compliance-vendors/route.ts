@@ -3,13 +3,14 @@ import { NextResponse, type NextRequest } from "next/server";
 import { requireAdminRole } from "@/lib/adminAuth/requireAdminRole";
 import { audit } from "@/lib/audit/log";
 import { CAN_MANAGE_COMPLIANCE_VENDORS } from "@/lib/compliance/permissions";
-import { createComplianceVendor, listComplianceVendors } from "@/lib/compliance/service";
+import { createComplianceVendor, getComplianceRegistry } from "@/lib/compliance/service";
 import { createComplianceVendorSchema } from "@/lib/compliance/schemas";
 
 export async function GET() {
   const auth = await requireAdminRole(CAN_MANAGE_COMPLIANCE_VENDORS);
   if (auth instanceof NextResponse) return auth;
-  try { return NextResponse.json({ vendors: await listComplianceVendors() }); }
+  // `vendors` keeps its shape for existing callers; `dialing` is the real gate's DNC verdict.
+  try { return NextResponse.json(await getComplianceRegistry()); }
   catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Could not load vendors" }, { status: 500 }); }
 }
 

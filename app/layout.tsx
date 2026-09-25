@@ -4,8 +4,8 @@ import { Toaster } from "@/components/ui/sonner";
 import { ThemeProvider } from "@/components/theme-provider";
 
 export const metadata: Metadata = {
-  title: "Insurvas · Super Admin",
-  description: "Insurvas platform administration",
+  title: "Insurvas",
+  description: "Insurvas insurance operations workspace",
 };
 
 export default function RootLayout({

@@ -138,10 +138,19 @@ jobs:
         if: steps.env.outputs.configured == 'true'
         run: npm run verify:all
 
-      # verify:switches:multi is the odd one out: it proves a kill switch reaches a SECOND process
-      # within the 30s cache TTL, so it needs two servers rather than a database connection. It is
-      # the only suite that can prove the cache does not strand one instance on a stale answer.
-      - name: Cross-process kill switch propagation
+      # Three checks that need a RUNNING SERVER rather than only a database connection, so they
+      # share one build and one pair of servers.
+      #
+      # verify:switches:multi proves a kill switch reaches a SECOND process within the 30s cache
+      # TTL — the only suite that can show the cache does not strand one instance on a stale answer.
+      #
+      # The two admin matrices probe every admin route and screen as every admin role. They were
+      # outside CI until now, which by this file's own rule at the top means they produced evidence
+      # about one laptop on one afternoon. qa:sa-dynamic is the one that covers the 35 `[id]` routes
+      # — the mutation surface, and where "a support_agent gets 403 from the API, not just a hidden
+      # button" is either true or not. Both probe with random UUIDs and create only clearly
+      # namespaced admin fixtures, which they deactivate in a `finally`.
+      - name: Server-backed suites (kill switch propagation, admin route matrices)
         if: steps.env.outputs.configured == 'true'
         run: |
           npm run build
@@ -156,6 +165,16 @@ jobs:
             done
           done
           npm run verify:switches:multi
+          APP_BASE_URL=http://127.0.0.1:3200 npm run qa:sa-matrix
+          APP_BASE_URL=http://127.0.0.1:3200 npm run qa:sa-dynamic
         env:
           KILL_SWITCH_APP_A: http://127.0.0.1:3200
           KILL_SWITCH_APP_B: http://127.0.0.1:3201
+
+      # A leftover active QA admin is a live god-mode account. Twenty-one scripts create these and
+      # most clean up; on 2026-09-21 the ones that had not left five active `super_admin` rows
+      # sitting in the database for ten days. This fails the build rather than sweeping silently,
+      # because the sweep belongs to whoever leaked it.
+      - name: No QA admin fixture left active
+        if: steps.env.outputs.configured == 'true'
+        run: npm run qa:admin-fixtures:check

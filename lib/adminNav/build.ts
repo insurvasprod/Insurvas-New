@@ -9,7 +9,7 @@ import {
   canAccessConfigurationSection,
   type ConfigurationSectionSlug,
 } from "../configuration/sections.ts";
-import { group, link, type SidebarIconKey, type SidebarNode } from "./types.ts";
+import { group, isLinkActive, link, type SidebarIconKey, type SidebarNode } from "./types.ts";
 
 /**
  * The admin sidebar, grouped.
@@ -60,6 +60,7 @@ export function buildAdminNav(role: AdminRole): SidebarNode[] {
     ]),
 
     ...group("billing", "Billing", "billing", [
+      invoices ? link("/admin/billing", "Billing workspace", "billing") : null,
       subscriptions ? link("/admin/subscriptions", "Subscriptions", "subscriptions") : null,
       subscriptions ? link("/admin/trials", "Trials", "trials") : null,
       // SA-3.3: a support_agent cannot open invoice screens at all, so no link is rendered for
@@ -93,6 +94,7 @@ export function buildAdminNav(role: AdminRole): SidebarNode[] {
       // with. Catalog already means "the things we offer", so they belong here rather than with
       // the platform plumbing.
       section("products", "/admin/products", "Products", "products"),
+      section("carriers", "/admin/carriers", "Carriers", "carriers"),
       section("templates", "/admin/templates", "Templates", "templates"),
     ]),
 
@@ -103,6 +105,7 @@ export function buildAdminNav(role: AdminRole): SidebarNode[] {
 
     ...group("platform", "Platform", "platform", [
       section("compliance-sources", "/admin/compliance-sources", "Compliance", "compliance"),
+      section("state-disclosures", "/admin/state-disclosures", "Disclosures", "compliance"),
       section("email", "/admin/email", "Mail Setup", "email"),
       section("system", "/admin/system", "Maintenance", "system"),
       section("advanced", "/admin/advanced", "Advanced", "advanced"),
@@ -111,4 +114,27 @@ export function buildAdminNav(role: AdminRole): SidebarNode[] {
       link("/admin/legal", "Legal", "legal"),
     ]),
   ];
+}
+
+/**
+ * The eyebrow an admin page shows above its title.
+ *
+ * Derived from the nav rather than typed on each page, for the reason `sectionForPath` gives on the
+ * tenant side: this file already assigns every destination a section, so it is the answer, and two
+ * dozen hand-written taxonomies would disagree with it within a month.
+ *
+ * The role is the SUPER ADMIN's deliberately — this asks "what section is this screen in", which is
+ * a fact about the product, not about the reader. Passing the caller's role would make a page's own
+ * eyebrow disappear for the roles that reach it through a shorter menu.
+ */
+export function adminSectionForPath(pathname: string): string | null {
+  let best: { href: string; label: string } | null = null;
+  for (const node of buildAdminNav("super_admin")) {
+    if (node.kind !== "group") continue;
+    for (const item of node.links) {
+      if (!isLinkActive(item.href, pathname)) continue;
+      if (!best || item.href.length > best.href.length) best = { href: item.href, label: node.label };
+    }
+  }
+  return best?.label ?? null;
 }

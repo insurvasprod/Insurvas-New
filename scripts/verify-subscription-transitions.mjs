@@ -6,6 +6,7 @@
 //
 // Drives the real admin route with a minted session. Everything is removed. Run: npm run verify:transitions
 import { SignJWT } from "jose";
+import { randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 
 const BASE = process.env.APP_BASE_URL ?? "http://localhost:3000";
@@ -16,6 +17,8 @@ const check = (l, c, d = "") => { console.log(c ? `  ok   ${l}` : `  FAIL ${l}${
 
 const stamp = Date.now();
 const tenants = [];
+const subscriptionIds = [];
+let archivedPlanId = null;
 
 const { data: admin } = await supabase.from("admin_users").select("id").eq("role", "super_admin").eq("is_active", true).limit(1).single();
 const cookie = `insurvas_admin_session=${await new SignJWT({ role: "super_admin", stage: "authenticated" })
@@ -32,11 +35,12 @@ async function subscriptionIn(status) {
     started_at: new Date().toISOString(), current_period_start: new Date().toISOString(),
     current_period_end: new Date(Date.now() + 30 * 86400000).toISOString(),
   }).select("id").single();
+  subscriptionIds.push(sub.id);
   return sub.id;
 }
 
 const act = (id, action, extra = {}) => fetch(`${BASE}/api/admin/subscriptions/${id}`, {
-  method: "POST", headers: { "content-type": "application/json", cookie },
+  method: "POST", headers: { "content-type": "application/json", "Idempotency-Key": randomUUID(), cookie },
   body: JSON.stringify({ action, ...extra }),
 });
 
@@ -74,11 +78,24 @@ try {
 
   const again = await act(active, "resume");
   check("resuming an already-active subscription is refused", again.status === 409, `HTTP ${again.status}`);
+
+  const archived = await supabase.from("plans").insert({ code: `m25_archived_${stamp}`, version: 1, name: "Archived QA plan", plan_type: "individual", is_public: false, is_archived: true, sort_order: 999 }).select("id").single();
+  archivedPlanId = archived.data?.id ?? null;
+  await supabase.from("plan_prices").insert({ plan_id: archivedPlanId, price_monthly_cents: 1000, currency: "USD", trial_days: 0 });
+  const assignment = await supabase.rpc("admin_assign_subscription", { p_tenant_id: tenants[0], p_plan_id: archivedPlanId, p_billing_cycle: "monthly", p_start: new Date().toISOString() });
+  check("archived plans cannot be assigned by API", Boolean(assignment.error) && /plan_archived/i.test(assignment.error.message));
+  const change = await supabase.rpc("admin_change_subscription_plan", { p_subscription_id: active, p_new_plan_id: archivedPlanId, p_apply_now: true });
+  check("archived plans cannot be selected by change-plan API", Boolean(change.error) && /plan_archived/i.test(change.error.message));
 } finally {
+  await supabase.from("subscription_mutation_requests").delete().in("resource_id", subscriptionIds);
   for (const id of tenants) {
     await supabase.from("tenant_entitlements").delete().eq("tenant_id", id);
     await supabase.from("subscriptions").delete().eq("tenant_id", id);
     await supabase.from("tenants").delete().eq("id", id);
+  }
+  if (archivedPlanId) {
+    await supabase.from("plan_prices").delete().eq("plan_id", archivedPlanId);
+    await supabase.from("plans").delete().eq("id", archivedPlanId);
   }
   await supabase.from("audit_log").delete().eq("actor_id", admin.id).in("action", ["subscription.paused", "subscription.resumed"]);
 }

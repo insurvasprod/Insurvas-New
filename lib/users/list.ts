@@ -91,11 +91,18 @@ export async function fetchUserStats(): Promise<UserStats> {
   return (row ?? { total: 0, active: 0, inactive: 0, suspended: 0, signed_up_this_month: 0 }) as UserStats;
 }
 
-/** Distinct plan codes actually in use, for the plan filter's options. Empty until SA-2 ships plans. */
+/** Distinct live subscription plan codes, for the plan filter's options. */
 export async function fetchPlanCodes(): Promise<string[]> {
   const supabase = getSupabaseServiceClient();
-  const { data } = await supabase.from("tenants").select("plan_code").not("plan_code", "is", null);
+  // One round trip: the plan code is embedded through subscriptions_plan_id_fkey (verified live)
+  // instead of collecting plan ids here and asking plans for them in a second query.
+  const { data, error } = await supabase
+    .from("subscriptions")
+    .select("plan:plans!subscriptions_plan_id_fkey(code)")
+    .neq("status", "cancelled")
+    .returns<{ plan: { code: string | null } | null }[]>();
+  if (error) throw new Error(`Could not load plan filter options: ${error.message}`);
 
-  const codes = new Set((data ?? []).map((row) => row.plan_code).filter((c): c is string => Boolean(c)));
+  const codes = new Set((data ?? []).map((row) => row.plan?.code).filter((c): c is string => Boolean(c)));
   return [...codes].sort();
 }

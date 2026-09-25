@@ -21,12 +21,12 @@ const stamp = Date.now();
 const tenantIds = [];
 const couponIds = [];
 
-// This script creates an invoice, which consumes a number. Without restoring the counter it would
-// leave a hole in the live sequence — breaking the very no-gaps guarantee SA-3.2 exists to give.
+// This script creates immutable platform invoices. The counter must therefore move forward with
+// the retained verification history; rewinding it would make the next invoice collide.
 const YEAR = new Date().getUTCFullYear();
 const MONTH = new Date().getUTCMonth() + 1;
 const { data: counterBefore } = await supabase
-  .from("invoice_counters").select("next_number").eq("year", YEAR).eq("month", MONTH).maybeSingle();
+  .from("invoice_counters").select("next_number").eq("series", "INV").eq("year", YEAR).eq("month", MONTH).maybeSingle();
 const startingNumber = counterBefore?.next_number ?? null;
 
 async function makeSubscription(label) {
@@ -62,23 +62,18 @@ async function makeCoupon(overrides = {}) {
 
 async function cleanup() {
   for (const id of tenantIds) {
-    await supabase.from("invoices").delete().eq("tenant_id", id);
     await supabase.from("tenant_entitlements").delete().eq("tenant_id", id);
-    await supabase.from("subscriptions").delete().eq("tenant_id", id);
-    await supabase.from("tenants").delete().eq("id", id);
+    await supabase.from("subscriptions").update({ status: "cancelled" }).eq("tenant_id", id);
+    await supabase.from("tenants").update({
+      status: "suspended",
+      suspended_at: new Date().toISOString(),
+      suspension_reason: "Disposable coupon verifier fixture retained for immutable QA evidence",
+    }).eq("id", id);
   }
   await supabase.from("coupons").delete().in("id", couponIds);
-
-  if (startingNumber === null) {
-    await supabase.from("invoice_counters").delete().eq("year", YEAR).eq("month", MONTH);
-  } else {
-    await supabase.from("invoice_counters").update({ next_number: startingNumber }).eq("year", YEAR).eq("month", MONTH);
-  }
-  const { data: restored } = await supabase
-    .from("invoice_counters").select("next_number").eq("year", YEAR).eq("month", MONTH).maybeSingle();
-  check("the invoice counter is restored, leaving no gap in the live sequence",
-        (restored?.next_number ?? null) === startingNumber,
-        `was ${startingNumber}, now ${restored?.next_number ?? null}`);
+  const { data: currentCounter } = await supabase
+    .from("invoice_counters").select("next_number").eq("series", "INV").eq("year", YEAR).eq("month", MONTH).maybeSingle();
+  console.log(`  retained immutable verification invoices; counter is ${currentCounter?.next_number ?? "unavailable"} (started at ${startingNumber ?? "new"})`);
 }
 
 try {
@@ -150,6 +145,21 @@ try {
   });
   check("an expired coupon is rejected", r4.data === "expired", String(r4.data));
 
+  console.log("\nPlan and billing-cycle restrictions\n");
+  const planMismatch = await makeSubscription("PlanMismatch");
+  const planRestricted = await makeCoupon({ restricted_to_plan_ids: ["00000000-0000-0000-0000-000000000001"] });
+  const planResult = await supabase.rpc("admin_apply_coupon", {
+    p_subscription_id: planMismatch.subscriptionId, p_coupon_id: planRestricted, p_applied_by: null,
+  });
+  check("the RPC rejects a coupon restricted to another plan", planResult.data === "plan_restricted", String(planResult.data));
+
+  const cycleMismatch = await makeSubscription("CycleMismatch");
+  const cycleRestricted = await makeCoupon({ billing_cycle: "yearly" });
+  const cycleResult = await supabase.rpc("admin_apply_coupon", {
+    p_subscription_id: cycleMismatch.subscriptionId, p_coupon_id: cycleRestricted, p_applied_by: null,
+  });
+  check("the RPC rejects a coupon restricted to another billing cycle", cycleResult.data === "billing_cycle_restricted", String(cycleResult.data));
+
   console.log("\nDiscount on the invoice\n");
 
   const f = await makeSubscription("F");
@@ -157,6 +167,35 @@ try {
   await supabase.rpc("admin_apply_coupon", {
     p_subscription_id: f.subscriptionId, p_coupon_id: halfOff, p_applied_by: null,
   });
+
+  console.log("\nAtomic invoice and coupon consumption\n");
+  const atomic = await makeSubscription("Atomic");
+  const atomicCoupon = await makeCoupon({ max_redemptions: null, duration: "n_periods", duration_periods: 3, billing_cycle: "monthly" });
+  await supabase.rpc("admin_apply_coupon", {
+    p_subscription_id: atomic.subscriptionId, p_coupon_id: atomicCoupon, p_applied_by: null,
+  });
+  const { data: atomicBefore } = await supabase.from("subscription_coupons")
+    .select("periods_remaining").eq("subscription_id", atomic.subscriptionId).single();
+  const atomicInvoiceArgs = {
+    p_tenant_id: atomic.tenantId,
+    p_subscription_id: atomic.subscriptionId,
+    p_provider: "whop",
+    p_provider_payment_id: `pay_atomic_coupon_${stamp}`,
+    p_provider_total_cents: 24900,
+    p_period_start: new Date().toISOString(),
+    p_period_end: new Date().toISOString(),
+    p_paid_at: new Date().toISOString(),
+    p_lines: [{ kind: "plan", label: "Plan B monthly", quantity: 1, unit_cents: 24900, amount_cents: 24900 }],
+    p_consume_coupon: true,
+  };
+  const { data: atomicRows, error: atomicError } = await supabase.rpc("create_invoice_for_payment_with_coupon", atomicInvoiceArgs);
+  const { data: atomicAfter } = await supabase.from("subscription_coupons")
+    .select("periods_remaining").eq("subscription_id", atomic.subscriptionId).single();
+  check("one atomic RPC creates the invoice and consumes exactly one coupon period", !atomicError && atomicRows?.[0]?.created === true && atomicBefore?.periods_remaining === 3 && atomicAfter?.periods_remaining === 2, atomicError?.message ?? JSON.stringify({ atomicBefore, atomicAfter }));
+  const { data: atomicReplay } = await supabase.rpc("create_invoice_for_payment_with_coupon", atomicInvoiceArgs);
+  const { data: atomicReplayState } = await supabase.from("subscription_coupons")
+    .select("periods_remaining").eq("subscription_id", atomic.subscriptionId).single();
+  check("an invoice replay does not consume a second coupon period", atomicReplay?.[0]?.created === false && atomicReplayState?.periods_remaining === 2, JSON.stringify(atomicReplayState));
 
   // Plan B is $249; 50% off means the provider charges $124.50 and our lines must say the same.
   const { data: invoiceRows } = await supabase.rpc("create_invoice_for_payment", {
@@ -176,7 +215,7 @@ try {
   const invoice = invoiceRows[0];
 
   const { data: inv } = await supabase
-    .from("invoices").select("subtotal_cents, discount_cents, tax_cents, total_cents, reconciliation")
+    .from("platform_invoices").select("subtotal_cents, discount_cents, tax_cents, total_cents, reconciliation")
     .eq("id", invoice.invoice_id).single();
 
   check("the discount is a separate line, not folded into the plan price",

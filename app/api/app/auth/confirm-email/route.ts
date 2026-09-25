@@ -39,7 +39,15 @@ export async function GET(request: NextRequest) {
   const change = await findValidChange(token);
   if (!change) return NextResponse.json(INVALID, { status: 400 });
 
-  return NextResponse.json({ valid: true, newEmail: change.new_email });
+  // The address being replaced, so the page can show that it "still works until you confirm".
+  // Read-only, and only for the holder of a valid, unexpired, unused token sent to the new inbox.
+  const { data: user } = await getSupabaseServiceClient()
+    .from("users")
+    .select("email")
+    .eq("id", change.user_id)
+    .maybeSingle<{ email: string | null }>();
+
+  return NextResponse.json({ valid: true, newEmail: change.new_email, currentEmail: user?.email ?? null });
 }
 
 export async function POST(request: NextRequest) {

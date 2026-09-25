@@ -81,9 +81,183 @@ async function cleanup() {
       // Best effort — cleanup must not mask a real failure above.
     }
   }
+  // A draft this run created (DPA only) is not evidence and is removed. A draft that existed before
+  // the run is never touched: verifyDrafts skips itself when it finds one.
+  if (made.dpaDraft) {
+    await supabase.from("legal_document_drafts").delete().eq("doc_type", "dpa");
+  }
   await supabase.from("audit_log").delete().eq("actor_id", billingAdmin.id);
   await supabase.from("admin_users").delete().eq("id", billingAdmin.id);
   await clearSignupRateLimits();
+}
+
+/**
+ * Unpublished drafts (20260924363000), on the DPA only — like everything else this script
+ * publishes, so the live Terms and Privacy Policy are never touched.
+ *
+ * What it proves: only a super_admin can save, discard or publish a draft; a saved draft is
+ * invisible to every customer surface and blocks nobody; publishing is refused when someone
+ * published in between or the draft changed since it was loaded; a successful publish allocates
+ * exactly the version the admin was shown and removes the draft.
+ *
+ * The draft it publishes is marked NOT material, so no real user is interrupted even for the moment
+ * between publishing and cleanup.
+ */
+async function verifyDrafts(user) {
+  console.log("\nUnpublished drafts (DPA only)\n");
+
+  const probe = await supabase.from("legal_document_drafts").select("doc_type, updated_at").eq("doc_type", "dpa");
+  if (probe.error) {
+    console.log(`  skip drafts — legal_document_drafts is not available (${probe.error.code ?? probe.error.message})`);
+    return;
+  }
+  if ((probe.data ?? []).length > 0) {
+    console.log("  skip drafts — a real DPA draft already exists and this script never overwrites one");
+    return;
+  }
+
+  const marker = `DRAFT-ONLY-${stamp}`;
+  const draftText = `${LONG_TEXT}\n## 3. Draft section\n\nThis sentence carries ${marker} and must never reach a customer before it is published.\n`;
+  const draftBody = {
+    action: "save_draft", docType: "dpa", title: "Data Processing Agreement", content: draftText,
+    effectiveDate: "2026-09-04", changeSummary: "Verification draft.", requiresReacceptance: false,
+    expectedUpdatedAt: null,
+  };
+
+  const { data: owedBefore } = user?.id
+    ? await supabase.rpc("outstanding_legal_documents", { p_user_id: user.id })
+    : { data: null };
+
+  const refusedSave = await post("/api/admin/legal", billingCookie, draftBody);
+  check("a billing_admin cannot save a draft", refusedSave.status === 403, String(refusedSave.status));
+
+  const saved = await post("/api/admin/legal", adminCookie, draftBody);
+  const savedBody = await saved.json();
+  check("a super_admin can save a draft", saved.status === 200 && savedBody.draft?.doc_type === "dpa",
+        JSON.stringify(savedBody).slice(0, 200));
+  if (saved.status !== 200) return;
+  made.dpaDraft = true;
+  const savedAt = savedBody.draft.updated_at;
+
+  const twiceNew = await post("/api/admin/legal", adminCookie, draftBody);
+  check("starting a second draft over an existing one is refused, not overwritten", twiceNew.status === 409,
+        String(twiceNew.status));
+
+  const staleSave = await post("/api/admin/legal", adminCookie, {
+    ...draftBody, content: `${draftText}\nlost edit`, expectedUpdatedAt: "2000-01-01T00:00:00.000Z",
+  });
+  check("saving over a draft someone else changed is refused", staleSave.status === 409, String(staleSave.status));
+
+  const { data: stillDraft } = await supabase.from("legal_document_drafts").select("content").eq("doc_type", "dpa").single();
+  check("and the refused save changed nothing", stillDraft?.content === draftText, "a stale editor overwrote the draft");
+
+  // Invisible to customers: the public listing, the public page, and the acceptance gate.
+  const listedNow = await fetch(`${BASE}/api/public/legal`).then((r) => r.text());
+  check("the public legal listing does not show the draft", !listedNow.includes(marker) && !listedNow.includes("Verification draft."),
+        "a draft reached /api/public/legal");
+
+  const pageNow = await fetch(`${BASE}/legal/dpa`).then((r) => r.text());
+  check("/legal/dpa does not serve the draft text", !pageNow.includes(marker), "a draft reached the public page");
+
+  if (user?.id) {
+    const { data: owedNow } = await supabase.rpc("outstanding_legal_documents", { p_user_id: user.id });
+    check("a draft blocks nobody", JSON.stringify(owedNow ?? []) === JSON.stringify(owedBefore ?? []),
+          `before ${JSON.stringify(owedBefore)} after ${JSON.stringify(owedNow)}`);
+  }
+
+  const { count: leaked } = await supabase
+    .from("legal_documents").select("id", { count: "exact", head: true }).like("content", `%${marker}%`);
+  check("saving a draft wrote nothing customers read from", leaked === 0, `${leaked} legal_documents row(s) carry the draft text`);
+
+  const { data: dpaNow } = await supabase
+    .from("legal_documents").select("version").eq("doc_type", "dpa").order("version", { ascending: false }).limit(1);
+  const expected = (dpaNow?.[0]?.version ?? 0) + 1;
+
+  // Who may publish, and the two races publishing refuses.
+  const refusedPublish = await post("/api/admin/legal", billingCookie, {
+    action: "publish_draft", docType: "dpa", expectedVersion: expected, expectedUpdatedAt: savedAt,
+  });
+  check("a billing_admin cannot publish a draft", refusedPublish.status === 403, String(refusedPublish.status));
+
+  const wrongVersion = await post("/api/admin/legal", adminCookie, {
+    action: "publish_draft", docType: "dpa", expectedVersion: expected + 1, expectedUpdatedAt: savedAt,
+  });
+  check("publishing as a version number that is not next is refused", wrongVersion.status === 409, String(wrongVersion.status));
+
+  const staleDraft = await post("/api/admin/legal", adminCookie, {
+    action: "publish_draft", docType: "dpa", expectedVersion: expected, expectedUpdatedAt: "2000-01-01T00:00:00.000Z",
+  });
+  check("publishing a draft that changed since it was loaded is refused", staleDraft.status === 409, String(staleDraft.status));
+
+  // Someone publishes directly while the draft's editor is open: the draft's "Publish version N" is now wrong.
+  const inBetween = await post("/api/admin/legal", adminCookie, {
+    action: "publish", docType: "dpa", title: "Data Processing Agreement", content: LONG_TEXT,
+    effectiveDate: "2026-09-04", requiresReacceptance: false,
+  });
+  const inBetweenBody = await inBetween.json();
+  if (inBetweenBody.id) made.documents.push(inBetweenBody.id);
+
+  const raced = await post("/api/admin/legal", adminCookie, {
+    action: "publish_draft", docType: "dpa", expectedVersion: expected, expectedUpdatedAt: savedAt,
+  });
+  const racedBody = await raced.json();
+  check("publishing is refused when someone published in between", raced.status === 409, `${raced.status} ${racedBody.error ?? ""}`);
+
+  const { data: afterRefusals } = await supabase.from("legal_document_drafts").select("doc_type").eq("doc_type", "dpa");
+  check("every refused publish left the draft in place", (afterRefusals ?? []).length === 1, JSON.stringify(afterRefusals));
+
+  const published = await post("/api/admin/legal", adminCookie, {
+    action: "publish_draft", docType: "dpa", expectedVersion: expected + 1, expectedUpdatedAt: savedAt,
+  });
+  const publishedBody = await published.json();
+  check("a super_admin can publish the saved draft as the version shown", published.status === 200 && publishedBody.version === expected + 1,
+        JSON.stringify(publishedBody).slice(0, 200));
+  if (publishedBody.id) made.documents.push(publishedBody.id);
+
+  if (published.status === 200) {
+    const { data: row } = await supabase
+      .from("legal_documents").select("content, requires_reacceptance, is_draft").eq("id", publishedBody.id).single();
+    check("the published text is exactly the saved draft", row?.content === draftText, "publish did not send the saved text");
+    check("and it kept the draft's material flag (not material)", row?.requires_reacceptance === false, JSON.stringify(row));
+    check("and it is not labelled unreviewed text", row?.is_draft === false, JSON.stringify(row));
+
+    const { data: gone } = await supabase.from("legal_document_drafts").select("doc_type").eq("doc_type", "dpa");
+    check("publishing removed the draft", (gone ?? []).length === 0, JSON.stringify(gone));
+    if ((gone ?? []).length === 0) made.dpaDraft = false;
+
+    const pageAfter = await fetch(`${BASE}/legal/dpa`).then((r) => r.text());
+    check("once published, /legal/dpa serves it", pageAfter.includes(marker), "the published draft is not being served");
+  }
+
+  // Discarding.
+  const second = await post("/api/admin/legal", adminCookie, { ...draftBody, content: `${LONG_TEXT}\nsecond draft` });
+  const secondBody = await second.json();
+  if (second.status === 200) made.dpaDraft = true;
+  const secondAt = secondBody.draft?.updated_at;
+
+  const refusedDiscard = await post("/api/admin/legal", billingCookie, { action: "discard_draft", docType: "dpa", expectedUpdatedAt: secondAt });
+  check("a billing_admin cannot discard a draft", refusedDiscard.status === 403, String(refusedDiscard.status));
+
+  const staleDiscard = await post("/api/admin/legal", adminCookie, {
+    action: "discard_draft", docType: "dpa", expectedUpdatedAt: "2000-01-01T00:00:00.000Z",
+  });
+  check("discarding a draft that changed since it was loaded is refused", staleDiscard.status === 409, String(staleDiscard.status));
+
+  const discarded = await post("/api/admin/legal", adminCookie, { action: "discard_draft", docType: "dpa", expectedUpdatedAt: secondAt });
+  check("a super_admin can discard a draft", discarded.status === 200, String(discarded.status));
+  const { data: afterDiscard } = await supabase.from("legal_document_drafts").select("doc_type").eq("doc_type", "dpa");
+  check("and it is gone", (afterDiscard ?? []).length === 0, JSON.stringify(afterDiscard));
+  if ((afterDiscard ?? []).length === 0) made.dpaDraft = false;
+
+  const { data: draftAudit } = await supabase
+    .from("audit_log").select("action")
+    .in("action", ["legal_document.draft_saved", "legal_document.draft_discarded"])
+    .eq("actor_id", superAdmin.id)
+    .order("ts", { ascending: false }).limit(10);
+  check("saving and discarding drafts are audit-logged",
+        (draftAudit ?? []).some((r) => r.action === "legal_document.draft_saved") &&
+          (draftAudit ?? []).some((r) => r.action === "legal_document.draft_discarded"),
+        JSON.stringify(draftAudit));
 }
 
 /** The bucket column is `bucket_key`; only signup buckets are touched. */
@@ -169,20 +343,27 @@ try {
         JSON.stringify(records.map((r) => ({ t: r.doc_type, v: r.version }))));
   check("each stores which document row, so the text is recoverable",
         records.every((r) => r.document_id), "document_id is what makes the record evidence");
-  check("the IP is captured", records.every((r) => r.ip !== null), JSON.stringify(records.map((r) => r.ip)));
+  check("the IP is captured", records.length > 0 && records.every((r) => r.ip !== null), JSON.stringify({ count: records.length, ips: records.map((r) => r.ip) }));
   check("the context says it happened at signup",
         records.every((r) => r.context === "signup"), JSON.stringify(records.map((r) => r.context)));
 
   console.log("\nAcceptance records are append-only\n");
 
-  const { error: updateError } = await supabase
-    .from("legal_acceptances").update({ accepted_at: new Date(0).toISOString() }).eq("id", records[0].id);
-  check("no admin can back-date an acceptance", updateError !== null,
-        "the UPDATE succeeded — the record could be rewritten");
+  // Keep a failed provisioning contract from turning the verifier into an unrelated TypeError.
+  // The acceptance-count assertion above remains the authoritative failure; these mutation checks
+  // are meaningful only when at least one acceptance row exists.
+  if (records[0]) {
+    const { error: updateError } = await supabase
+      .from("legal_acceptances").update({ accepted_at: new Date(0).toISOString() }).eq("id", records[0].id);
+    check("no admin can back-date an acceptance", updateError !== null,
+          "the UPDATE succeeded — the record could be rewritten");
 
-  const { error: deleteError } = await supabase
-    .from("legal_acceptances").delete().eq("id", records[0].id);
-  check("no admin can delete one either", deleteError !== null, "the DELETE succeeded");
+    const { error: deleteError } = await supabase
+      .from("legal_acceptances").delete().eq("id", records[0].id);
+    check("no admin can delete one either", deleteError !== null, "the DELETE succeeded");
+  } else {
+    console.log("  skip append-only row mutations — signup produced no acceptance row");
+  }
 
   const { error: docUpdateError } = await supabase
     .from("legal_documents").update({ content: "rewritten" }).eq("id", tos.id);
@@ -232,10 +413,14 @@ try {
         `got v${publishedBody.version}, expected v${expectedVersion}`);
   made.documents.push(publishedBody.id);
 
-  const { data: outstanding } = await supabase.rpc("outstanding_legal_documents", { p_user_id: user.id });
-  check("the existing user now owes the new version", outstanding.length === 1, `${outstanding.length} owed`);
-  check("and only the new version — accepting v1 discharged v1",
-        outstanding[0]?.version === publishedBody.version, `owes v${outstanding[0]?.version}`);
+  // Re-acceptance is dependent on the initial signup acceptance having produced both rows. Keep a
+  // missing live batch RPC as one root-cause failure instead of reporting every downstream check
+  // as if the acceptance gate itself were independently broken.
+  if (records.length === 2) {
+    const { data: outstanding } = await supabase.rpc("outstanding_legal_documents", { p_user_id: user.id });
+    check("the existing user now owes the new version", outstanding.length === 1, `${outstanding.length} owed`);
+    check("and only the new version — accepting v1 discharged v1",
+          outstanding[0]?.version === publishedBody.version, `owes v${outstanding[0]?.version}`);
 
   // The signup-state gate runs first by design — an unverified user is sent to verify their email
   // before anything else, and terms are not the most urgent thing to put in front of them. So the
@@ -290,6 +475,9 @@ try {
     .from("legal_acceptances").select("id").eq("user_id", user.id).eq("document_id", publishedBody.id);
   check("accepting twice records one agreement, not two",
         twice.status === 200 && afterTwice.length === 1, `${afterTwice.length} rows`);
+  } else {
+    console.log("  skip re-acceptance workflow — initial signup acceptance batch was not recorded");
+  }
 
   console.log("\nThe old text survives\n");
 
@@ -360,6 +548,8 @@ try {
     .from("legal_documents").select("content").eq("id", mistakeBody.id).single();
   check("the escape hatch removed the interruption, not the document",
         stillThere.content === LONG_TEXT.trim(), "clearing must never alter or delete the text");
+
+  await verifyDrafts(user);
 
   console.log("\nThe audit trail\n");
 

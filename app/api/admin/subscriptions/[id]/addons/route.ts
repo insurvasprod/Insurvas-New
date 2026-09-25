@@ -109,7 +109,8 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
   if (!subscription) return NextResponse.json({ error: "Subscription not found" }, { status: 404 });
 
   // Soft detach — the row survives so a past invoice can still explain what was charged.
-  const { data: detached, error } = await supabase.rpc("admin_detach_addon", {
+  const { data: detached, error } = await supabase.rpc("admin_detach_addon_for_subscription", {
+    p_subscription_id: id,
     p_subscription_addon_id: parsed.data.subscription_addon_id,
   });
 

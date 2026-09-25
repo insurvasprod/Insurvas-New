@@ -18,13 +18,17 @@ import type { PaymentProvider } from "./types";
  * The only place a provider code maps to a class. Adding real Stripe is one line here plus the new
  * class — no billing code is touched, which is the acceptance criterion this file exists to meet.
  */
-export function buildProvider(code: ProviderCode, options: { simulate?: SimulatedOutcome } = {}): PaymentProvider {
+export function buildProvider(
+  code: ProviderCode,
+  options: { simulate?: SimulatedOutcome; tenantId?: string | null } = {},
+): PaymentProvider {
   switch (code) {
     case "whop":
       return new WhopProvider(
         new WhopClient({
           apiKey: process.env.WHOP_API_KEY ?? "",
           baseUrl: process.env.WHOP_API_BASE_URL ?? "https://api.whop.com/api/v1",
+          tenantId: options.tenantId,
         }),
       );
     case "dummy_stripe":
@@ -83,7 +87,7 @@ export async function getPaymentProviderForTenant(tenantId: string): Promise<Res
 
   const code = record && isProviderCode(record.provider) ? record.provider : await getPlatformDefaultProviderCode();
 
-  const inner = buildProvider(code, { simulate: record?.simulate_outcome });
+  const inner = buildProvider(code, { simulate: record?.simulate_outcome, tenantId });
 
   // Whop logs itself, inside WhopClient.request (SA-4.2) — every call reaches provider_calls no
   // matter which of the many call sites made it, including the Whop-specific methods that are not

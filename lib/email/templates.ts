@@ -15,6 +15,10 @@ export const EMAIL_TEMPLATE_KEYS = [
   "user.email_verification",
   "user.email_change_confirmation",
   "subscription.trial_ending",
+  "agent.expiry_warning",
+  "callback.reminder",
+  "appointment.reminder",
+  "lead.sla_escalation",
 ] as const;
 
 export type EmailTemplateKey = (typeof EMAIL_TEMPLATE_KEYS)[number];
@@ -67,8 +71,24 @@ export function invitationEmail(facts: {
   name: string;
   inviteUrl: string;
   expiresAt: Date;
+  existingAccount?: boolean;
 }): RenderedEmail {
   const expiry = expiryLine(facts.expiresAt);
+  if (facts.existingAccount) {
+    return {
+      subject: "You have been invited to a partner workspace in Insurvas",
+      html: layout(
+        `Partner workspace access for ${escapeHtml(facts.name)}`,
+        `<p>Your existing Insurvas account has been invited to a partner workspace. Sign in with your current password to accept access.</p>` +
+          button(facts.inviteUrl, "Accept partner access") +
+          `<p>${expiry} If you were not expecting this, you can ignore it.</p>`,
+      ),
+      text:
+        `Hello ${facts.name}.\n\n` +
+        `Your existing Insurvas account has been invited to a partner workspace. Accept access here and sign in with your current password:\n${facts.inviteUrl}\n\n` +
+        `${expiry} If you were not expecting this, you can ignore it.\n`,
+    };
+  }
   return {
     subject: "You have been invited to Insurvas",
     html: layout(
@@ -148,5 +168,46 @@ export function emailChangeConfirmationEmail(facts: {
       `Hi ${facts.name},\n\nThis address was given as the new sign-in email for an Insurvas account. ` +
       `Confirm it here:\n${facts.confirmUrl}\n\n` +
       `${expiry} Until you confirm, the old address keeps working and nothing changes.\n`,
+  };
+}
+
+export function appointmentExpiryWarningEmail(facts: {
+  name: string;
+  label: string;
+  days: number;
+  expiresAt: string;
+  settingsUrl: string;
+}): RenderedEmail {
+  return {
+    subject: `${facts.label} expires in ${facts.days} days`,
+    html: layout(
+      `${escapeHtml(facts.label)} needs attention`,
+      `<p>Hi ${escapeHtml(facts.name)},</p><p>Your ${escapeHtml(facts.label)} expires in ${facts.days} days, on ${escapeHtml(facts.expiresAt)}. Renew it before that date so you can keep writing business where you are appointed.</p>${button(facts.settingsUrl, "Review your appointment vault")}`,
+    ),
+    text: `Hi ${facts.name},\n\nYour ${facts.label} expires in ${facts.days} days, on ${facts.expiresAt}. Renew it before that date so you can keep writing business where you are appointed.\n\nReview your appointment vault: ${facts.settingsUrl}\n`,
+  };
+}
+
+export function callbackReminderEmail(facts: { name: string; customerName: string; customerTime: string; customerTimezone: string; note: string | null; callbacksUrl: string }): RenderedEmail {
+  return {
+    subject: `Callback reminder: ${facts.customerName}`,
+    html: layout("Callback reminder", `<p>Hi ${escapeHtml(facts.name)},</p><p>You have a callback with <strong>${escapeHtml(facts.customerName)}</strong> at <strong>${escapeHtml(facts.customerTime)}</strong> (${escapeHtml(facts.customerTimezone)}).</p>${facts.note ? `<p>Note: ${escapeHtml(facts.note)}</p>` : ""}${button(facts.callbacksUrl, "Open callback calendar")}`),
+    text: `Hi ${facts.name},\n\nYou have a callback with ${facts.customerName} at ${facts.customerTime} (${facts.customerTimezone}).${facts.note ? `\nNote: ${facts.note}` : ""}\n\nOpen callback calendar: ${facts.callbacksUrl}\n`,
+  };
+}
+
+export function appointmentReminderEmail(facts: { name: string; customerName: string; customerTime: string; customerTimezone: string; agentTime: string; agentTimezone: string; note: string | null; leadUrl: string }): RenderedEmail {
+  return {
+    subject: `Appointment reminder: ${facts.customerName}`,
+    html: layout("Appointment reminder", `<p>Hi ${escapeHtml(facts.name)},</p><p>You have an appointment with <strong>${escapeHtml(facts.customerName)}</strong> at <strong>${escapeHtml(facts.agentTime)}</strong> (${escapeHtml(facts.agentTimezone)}).</p><p>The customer's recorded local time is <strong>${escapeHtml(facts.customerTime)}</strong> (${escapeHtml(facts.customerTimezone)}).</p>${facts.note ? `<p>Notes: ${escapeHtml(facts.note)}</p>` : ""}${button(facts.leadUrl, "Open lead")}`),
+    text: `Hi ${facts.name},\n\nYou have an appointment with ${facts.customerName} at ${facts.agentTime} (${facts.agentTimezone}).\nThe customer's recorded local time is ${facts.customerTime} (${facts.customerTimezone}).${facts.note ? `\nNotes: ${facts.note}` : ""}\n\nOpen lead: ${facts.leadUrl}\n`,
+  };
+}
+
+export function slaEscalationEmail(facts: { name: string; customerName: string; partnerName: string; leadUrl: string }): RenderedEmail {
+  return {
+    subject: `Unclaimed lead needs attention: ${facts.customerName}`,
+    html: layout("Unclaimed lead needs attention", `<p>Hi ${escapeHtml(facts.name)},</p><p><strong>${escapeHtml(facts.customerName)}</strong> from ${escapeHtml(facts.partnerName)} has passed the response threshold and is still unclaimed.</p>${button(facts.leadUrl, "Open lead")}`),
+    text: `Hi ${facts.name},\n\n${facts.customerName} from ${facts.partnerName} has passed the response threshold and is still unclaimed.\n\nOpen lead: ${facts.leadUrl}\n`,
   };
 }

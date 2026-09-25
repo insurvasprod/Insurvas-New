@@ -28,18 +28,20 @@ async function decorateOffers(rows: RawOffer[]): Promise<OfferRow[]> {
   const subscriptionIds = [...new Set((applications ?? []).map((row) => row.subscription_id))];
   const invoices: Invoice[] = [];
   if (subscriptionIds.length > 0) {
-    const { data } = await supabase
-      .from("invoices")
+    const { data, error } = await supabase
+      .from("platform_invoices")
       .select("id, subscription_id")
       .in("subscription_id", subscriptionIds)
       .returns<Invoice[]>();
+    // A swallowed error here would silently under-report how much an offer has actually cost.
+    if (error) throw new Error(`Could not load offer invoices: ${error.message}`);
     invoices.push(...(data ?? []));
   }
 
   const invoiceIds = invoices.map((invoice) => invoice.id);
   const { data: lines } = invoiceIds.length
     ? await supabase
-        .from("invoice_lines")
+        .from("platform_invoice_lines")
         .select("invoice_id, amount_cents, label")
         .eq("kind", "discount")
         .in("invoice_id", invoiceIds)
@@ -61,7 +63,10 @@ async function decorateOffers(rows: RawOffer[]): Promise<OfferRow[]> {
     if (!couponIdsForSubscription) continue;
     const offer = rows.find((row) => couponIdsForSubscription.has(row.coupon_id) && line.label === `Coupon ${row.coupon?.code ?? ""}`);
     if (!offer) continue;
-    discountByCoupon.set(offer.coupon_id, (discountByCoupon.get(offer.coupon_id) ?? 0) + line.amount_cents);
+    // Discount lines are stored as negative amounts (platform_invoice_lines' check: amount_cents <= 0
+    // for discount and credit), so the discount GIVEN is the magnitude. Summing the raw values
+    // reported every offer's cost as a negative number.
+    discountByCoupon.set(offer.coupon_id, (discountByCoupon.get(offer.coupon_id) ?? 0) + Math.abs(line.amount_cents));
   }
 
   return rows.map((row) => ({

@@ -25,13 +25,42 @@ export type Entitlement = {
   computed_at: string;
   features: string[];
   meters: Record<string, EntitlementMeter>;
-  limits: { max_seats: number | null };
+  /** Nullable capacities are data from the cached entitlement; null means unlimited. */
+  limits: {
+    max_seats: number | null;
+    max_publishers: number | null;
+    max_marketing_partners: number | null;
+    max_affiliates: number | null;
+    max_buffer_seats: number | null;
+    max_partner_users: number | null;
+    max_setter_seats?: number | null;
+    max_active_campaigns?: number | null;
+    /** Kept for old seeded snapshots until they are rebuilt. */
+    max_partners?: number | null;
+  };
   period_start?: string;
+  /**
+   * Features the plan (or an add-on) grants that staff switched off for this tenant alone
+   * (tenant_feature_overrides, 20260924344000). Already removed from `features`; listed here so the
+   * agent app says "not available on your account" instead of offering an upgrade for something the
+   * tenant already pays for. Absent on snapshots built before that migration.
+   */
+  disabled_features?: string[];
+  /** Set by the 20260924344000 engine: meter allowances already include the period's credit grants. */
+  credit_grants_included?: boolean;
 };
 
 export function hasFeature(entitlement: Entitlement, featureKey: string): boolean {
   return entitlement.features.includes(featureKey);
 }
+
+/** Granted by the plan, switched off for this one tenant by staff — not an upgrade case. */
+export function isDisabledForTenant(entitlement: Entitlement, featureKey: string): boolean {
+  return !hasFeature(entitlement, featureKey) && (entitlement.disabled_features ?? []).includes(featureKey);
+}
+
+/** The neutral words for a feature switched off for one tenant. No upgrade, no blame. */
+export const DISABLED_FOR_TENANT_MESSAGE = "This feature is not available on your account.";
 
 /** Read-only tenants can still SEE everything their plan grants — they just can't act. */
 export function canWrite(entitlement: Entitlement): boolean {
@@ -46,5 +75,14 @@ export const EMPTY_ENTITLEMENT: Omit<Entitlement, "tenant_id"> = {
   computed_at: new Date(0).toISOString(),
   features: [],
   meters: {},
-  limits: { max_seats: null },
+  limits: {
+    max_seats: null,
+    max_publishers: null,
+    max_marketing_partners: null,
+    max_affiliates: null,
+    max_buffer_seats: null,
+    max_partner_users: null,
+    max_setter_seats: null,
+    max_active_campaigns: null,
+  },
 };

@@ -18,8 +18,11 @@
  *   npm run bill:periods -- --dry  report what would be billed, change nothing
  *   npm run bill:periods -- --no-advance   bill only, leave the periods alone
  *
- * This is what SA-6.1 should schedule. Until then it is manual — and per the doc, a job that
- * silently never runs looks identical to a healthy one, so it prints loudly either way.
+ * This is also scheduled now, daily, at /api/cron/period-billing — see lib/billing/job.ts and the
+ * heartbeat at /api/internal/period-billing. The cron bills and deliberately does NOT advance the
+ * periods; this command does both, in the right order, in one process where that order can be
+ * guaranteed. Keep running it for a rollover; use the cron to make sure nobody goes unbilled while
+ * nobody is looking.
  */
 import { createClient } from "@supabase/supabase-js";
 
@@ -58,6 +61,7 @@ console.log(`${due.length} subscription(s) with a period that has ended.${dryRun
 let invoiced = 0;
 let totalCents = 0;
 let creditSpent = 0;
+let waived = 0;
 let skipped = 0;
 let failed = 0;
 
@@ -102,10 +106,27 @@ for (const subscription of due) {
     invoiced++;
     totalCents += outcome.totalCents;
     creditSpent += outcome.creditAppliedCents;
+    waived += outcome.waivedCents;
   }
 
   if (outcome.creditAppliedCents > 0) {
     console.log(`      ${money(outcome.creditAppliedCents)} of account credit applied`);
+  }
+  if (outcome.waivedCents > 0) {
+    console.log(`      ${money(outcome.waivedCents)} of overage waived by a billing admin`);
+  }
+  // A waiver that matched no overage is left unspent for the period it was meant for. Said out
+  // loud, because the alternative reading -- "the waiver was ignored" -- is the one an operator
+  // will assume when the line does not appear.
+  for (const meterKey of outcome.unusedWaivers) {
+    console.log(`      ! the waiver for "${meterKey}" matched no overage this period and was left unspent`);
+  }
+  if (outcome.payOnlineUrl) {
+    console.log(`      sent for online payment`);
+  } else if (outcome.collectionWarning) {
+    // Not a failure: the invoice exists and can be settled by transfer. But an invoice nobody has
+    // been asked to pay is worth a line of its own.
+    console.log(`      ! not sent for online payment — ${outcome.collectionWarning}`);
   }
   // Reported rather than silently dropped: an add-on billed on a different cycle is a real
   // configuration people will hit, and it must not look like the add-on is free.
@@ -115,7 +136,7 @@ for (const subscription of due) {
 }
 
 console.log("");
-console.log(`${invoiced} invoice(s) raised, ${money(totalCents)} total, ${money(creditSpent)} of credit applied.`);
+console.log(`${invoiced} invoice(s) raised, ${money(totalCents)} total, ${money(creditSpent)} of credit applied, ${money(waived)} waived.`);
 if (skipped) console.log(`${skipped} had nothing to bill or were already billed.`);
 if (failed) console.log(`${failed} failed — see above.`);
 
@@ -140,13 +161,18 @@ process.exitCode = failed > 0 ? 1 : 0;
 /** Everything billSubscriptionPeriod does except the write. */
 async function previewOnly(subscription) {
   try {
-    const [pending, addons, usage, pricing, credit] = await Promise.all([
+    const [pending, addons, usage, pricing, credit, waivers] = await Promise.all([
       supabase.from("pending_charges").select("id, kind, label, quantity, included_qty, unit_cents, amount_cents")
         .eq("subscription_id", subscription.id).is("billed_at", null),
       supabase.from("subscription_addons").select("addon_id").eq("subscription_id", subscription.id).is("detached_at", null),
       supabase.rpc("admin_usage_monitor", { p_over_80: false }),
       supabase.from("meter_pricing").select("meter_key, sell_cents"),
       supabase.from("tenant_credits").select("balance_cents").eq("tenant_id", subscription.tenant_id).maybeSingle(),
+      // Waivers too, or --dry would quote a customer a figure the real run would not charge, which
+      // is the one thing a preview must never do.
+      supabase.from("billing_waivers").select("id, meter_key, max_cents, reason")
+        .eq("subscription_id", subscription.id).eq("period_start", subscription.current_period_start)
+        .is("consumed_at", null),
     ]);
 
     const addonIds = (addons.data ?? []).map((a) => a.addon_id);
@@ -173,6 +199,11 @@ async function previewOnly(subscription) {
         })),
       pricing: (pricing.data ?? []).map((p) => ({ meterKey: p.meter_key, sellCents: p.sell_cents })),
       creditBalanceCents: credit.data?.balance_cents ?? 0,
+      waivers: (waivers.data ?? []).map((w) => ({
+        id: w.id, meterKey: w.meter_key,
+        maxCents: w.max_cents === null ? null : Number(w.max_cents),
+        reason: w.reason,
+      })),
     });
   } catch (error) {
     return { error: error instanceof Error ? error.message : String(error), lines: [], totalCents: 0, creditAppliedCents: 0 };

@@ -28,6 +28,7 @@ export const SIDEBAR_ICONS = [
   "payments",
   "offers",
   "products",
+  "carriers",
   "templates",
   "compliance",
   "limits",

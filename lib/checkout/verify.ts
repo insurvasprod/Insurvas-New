@@ -49,7 +49,7 @@ export async function verifyCheckoutWithProvider(input: {
 
   let provider;
   try {
-    provider = buildProvider("whop");
+    provider = buildProvider("whop", { tenantId: input.tenantId });
   } catch (error) {
     return { confirmed: false, reason: `provider unavailable: ${asMessage(error)}` };
   }

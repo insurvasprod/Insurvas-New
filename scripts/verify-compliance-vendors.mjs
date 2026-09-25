@@ -66,7 +66,7 @@ async function main() {
     check("list response masks credentials as presence only", listed.status === 200 && listedBody.vendors.every((v) => !("credentials" in v) && !("credentials_enc" in v) && typeof v.credentials_present === "boolean"));
     check("enabled vendor is available immediately", listedBody.vendors.some((v) => v.id === vendorIds[0] && v.is_enabled));
     const stored = await supabase.from("compliance_vendors").select("credentials_enc").in("id", vendorIds);
-    check("stored credentials are ciphertext, not plaintext", stored.data?.every((row) => row.credentials_enc && !row.credentials_enc.includes("secret-")) === true);
+    check("stored credentials are ciphertext, not plaintext", (stored.data?.length ?? 0) > 0 && stored.data.every((row) => row.credentials_enc && !row.credentials_enc.includes("secret-")));
 
     console.log("Last DNC protection and audit trail");
     const disableFirst = await api(`/api/admin/compliance-vendors/${vendorIds[0]}`, platformCookie, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ is_enabled: false }) });
@@ -88,7 +88,16 @@ async function main() {
     check("create, enable/disable and credential changes are audited", actions.includes("compliance_vendor.created") && actions.includes("compliance_vendor.updated"));
     check("audit metadata does not contain credential values", !JSON.stringify(audits.data ?? []).includes("secret-"));
 
-    console.log("Provider call logging");
+    console.log("Provider call logging and health status");
+    // Make both registered DNC vendors fail through the real connection-test route. The list
+    // endpoint must then expose them as unavailable even though their enabled flags are true.
+    await supabase.from("compliance_vendors").update({ is_enabled: true, endpoint: "https://127.0.0.1:1" }).in("id", vendorIds);
+    const failedHealthTests = await Promise.all(vendorIds.map((id) => api(`/api/admin/compliance-vendors/${id}/test-connection`, platformCookie, { method: "POST" })));
+    const unavailableList = await api("/api/admin/compliance-vendors", platformCookie);
+    const unavailableBody = await unavailableList.json();
+    check("enabled but unreachable DNC vendors are marked unavailable", failedHealthTests.every((response) => response.status === 200) && unavailableList.status === 200 && unavailableBody.vendors.filter((v) => vendorIds.includes(v.id)).every((v) => v.available === false));
+    await supabase.from("compliance_vendors").update({ endpoint: "https://example.com" }).in("id", vendorIds);
+
     const test = await api(`/api/admin/compliance-vendors/${vendorIds[0]}/test-connection`, platformCookie, { method: "POST" });
     const testBody = await test.json();
     check("connection test returns a categorized result", test.status === 200 && typeof testBody.category === "string");
@@ -100,7 +109,7 @@ async function main() {
     const concurrentTests = await Promise.all([1, 2].map(() => api(`/api/admin/compliance-vendors/${vendorIds[0]}/test-connection`, platformCookie, { method: "POST" })));
     const concurrentCalls = await supabase.from("provider_calls").select("id").eq("provider", `compliance_vendor:${vendorIds[0]}`).eq("method", "test_connection");
     check("concurrent connection tests remain separately logged", concurrentTests.every((response) => response.status === 200) && (concurrentCalls.data ?? []).length >= 3);
-    check("two-vendor fallback behavior is covered by deterministic service tests", true, "runOrderedFallback is exercised by lib/compliance/fallback.test.mjs; the agent route now consumes the same service");
+    check("ordered fallback behavior is covered by deterministic service tests", true, "runOrderedFallback is exercised by lib/compliance/fallback.test.mjs; registered-vendor screening fallback is covered by verify-screening.mjs");
   } finally { await cleanup(); }
   if (failures) return 1;
   console.log("\nAll live compliance registry checks passed."); return 0;

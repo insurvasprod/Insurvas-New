@@ -1,17 +1,25 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { requireFeature } from "@/lib/entitlements/requireFeature";
-import { applyTemplate, listAvailableTemplates, previewTemplateApplication } from "@/lib/agentTemplates/service";
+import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
+import { applyTemplate, listAvailableTemplates, previewTemplateApplication, TemplateProductError } from "@/lib/agentTemplates/service";
 
-export async function GET() {
-  const auth = await requireFeature("book_of_business");
+const PRODUCT_CODE = /^[a-z][a-z0-9_]{0,79}$/;
+
+/** `?product=<code>` picks which product's form is `current`; without it, the term-life form as before. */
+export async function GET(request: NextRequest) {
+  const auth = await requireFeatureRole("book_of_business", ["owner"]);
   if (auth instanceof NextResponse) return auth;
-  try { return NextResponse.json(await listAvailableTemplates(auth.context.tenantId, auth.context.userId), { headers: { "Cache-Control": "no-store" } }); }
-  catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Could not load templates" }, { status: 500 }); }
+  const product = request.nextUrl.searchParams.get("product");
+  if (product !== null && !PRODUCT_CODE.test(product)) return NextResponse.json({ error: "Choose a valid product" }, { status: 400 });
+  try { return NextResponse.json(await listAvailableTemplates(auth.context.tenantId, auth.context.userId, product), { headers: { "Cache-Control": "no-store" } }); }
+  catch (error) {
+    if (error instanceof TemplateProductError) return NextResponse.json({ error: error.message }, { status: 403 });
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Could not load templates" }, { status: 500 });
+  }
 }
 
 export async function POST(request: NextRequest) {
-  const auth = await requireFeature("book_of_business", { write: true });
+  const auth = await requireFeatureRole("book_of_business", ["owner"], { write: true });
   if (auth instanceof NextResponse) return auth;
   const body = await request.json().catch(() => null) as { template_id?: string; template_version?: number; preview?: boolean } | null;
   const version = typeof body?.template_version === "number" ? body.template_version : 0;

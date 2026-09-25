@@ -4,6 +4,8 @@ import { z } from "zod";
 import { resolveSignupContext } from "@/lib/signup/context";
 import { checkCoupon } from "@/lib/checkout/start";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
+import { couponSummary } from "@/lib/checkout/couponSummary";
+import type { BillingCycle } from "@/lib/money";
 
 const schema = z.object({ code: z.string().trim().min(1).max(40) });
 
@@ -24,6 +26,9 @@ const schema = z.object({ code: z.string().trim().min(1).max(40) });
 export async function POST(request: NextRequest) {
   const context = await resolveSignupContext();
   if (!context) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  if (context.role !== "owner") {
+    return NextResponse.json({ error: "Only the tenant owner can manage billing" }, { status: 403 });
+  }
 
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Enter a code" }, { status: 400 });
@@ -31,9 +36,9 @@ export async function POST(request: NextRequest) {
   const supabase = getSupabaseServiceClient();
   const { data: selection } = await supabase
     .from("signup_selections")
-    .select("plan_id")
+    .select("plan_id, billing_cycle")
     .eq("tenant_id", context.tenantId)
-    .maybeSingle<{ plan_id: string }>();
+    .maybeSingle<{ plan_id: string; billing_cycle: BillingCycle }>();
 
   if (!selection) return NextResponse.json({ error: "No plan selected" }, { status: 409 });
 
@@ -43,6 +48,9 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({
     ok: true,
     code: result.code,
+    // What the code is worth on THIS plan's cycle — "20% off the first three months" — so the
+    // buyer knows what to expect on the payment page. It describes the discount; it applies nothing.
+    summary: couponSummary(result.terms, selection.billing_cycle),
     // Explicit rather than implied, so a future caller cannot read `ok: true` as "discounted".
     mustEnterAtCheckout: true,
     instruction: `Enter ${result.code} on the payment page to get your discount.`,

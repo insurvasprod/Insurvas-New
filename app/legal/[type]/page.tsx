@@ -1,10 +1,15 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 
+import { SiteFooter } from "@/components/public/site-footer";
 import { SiteHeader } from "@/components/public/site-header";
 import { LegalDocumentBody } from "@/components/public/legal-document-body";
 import { fetchDocument } from "@/lib/legal/queries";
 import { LEGAL_DOC_TYPES, type LegalDocType } from "@/lib/legal/constants";
+
+/** "2 April 2026", in UTC so an effective date never shifts a day with the reader's timezone. */
+const LONG = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
+const longDate = (iso: string) => LONG.format(new Date(iso));
 
 type Params = { params: Promise<{ type: string }>; searchParams: Promise<{ v?: string }> };
 
@@ -47,33 +52,48 @@ export default async function LegalPage({ params, searchParams }: Params) {
   return (
     <div className="min-h-screen bg-[var(--color-page-bg)]">
       <SiteHeader />
-      <main className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
-        <div className="rounded-xl bg-white p-8 shadow-[0_18px_50px_rgba(0,64,127,0.10)]">
-          <p className="text-sm font-bold uppercase tracking-[0.18em] text-[var(--brand-600)]">
-            Version {doc.version} · effective {new Date(doc.effective_date).toLocaleDateString()}
-          </p>
-
+      <main className="m-stagger flex justify-center px-4 py-12 sm:px-6 lg:px-16">
+        <div className="w-full max-w-[780px]">
           {doc.is_draft && (
-            <div className="mt-4 rounded-lg border border-[var(--color-warning)]/40 bg-[var(--color-warning)]/10 p-4 text-sm">
-              <span className="font-bold">This is a draft.</span> It has not been reviewed by a lawyer
-              and is not final.
+            <div className="rounded-xl border border-border border-l-[3px] border-l-[var(--warning)] bg-[var(--warning-surface)] px-4 py-3.5">
+              <div className="text-sm font-semibold leading-normal tracking-[-0.02em] text-[var(--body)]">
+                This is a draft
+              </div>
+              <p className="mt-1.5 text-sm leading-normal tracking-[-0.02em] text-[var(--body)]">
+                It has not been reviewed by a lawyer and is not final.
+              </p>
             </div>
           )}
 
           {isSuperseded && (
-            <div className="mt-4 rounded-lg border border-[var(--color-border)] bg-[var(--color-page-bg)] p-4 text-sm">
-              This version has been superseded by version {current!.version}. It is kept because
-              people accepted it, and what they accepted is what it says here.{" "}
-              <a href={`/legal/${doc.doc_type}`} className="font-bold text-[var(--brand-600)] underline">
-                Read the current version
-              </a>
-              .
+            <div className="mt-4 rounded-xl border border-border border-l-[3px] border-l-[var(--muted)] bg-[var(--surface-alt)] px-4 py-3.5 first:mt-0">
+              <div className="text-sm font-semibold leading-normal tracking-[-0.02em] text-[var(--body)]">
+                You are reading version {doc.version}, which has been superseded
+              </div>
+              <p className="mt-1.5 text-sm leading-normal tracking-[-0.02em] text-[var(--body)]">
+                Version {current!.version} took effect on {longDate(current!.effective_date)}. This text stays here because people accepted it, and what they
+                accepted is what it says.{" "}
+                <a href={`/legal/${doc.doc_type}`} className="font-semibold text-foreground underline-offset-4 hover:underline">
+                  Read the current version
+                </a>
+                .
+              </p>
             </div>
           )}
 
-          <LegalDocumentBody content={doc.content} className="mt-6" />
+          <div className="mt-6 rounded-xl border border-border bg-card p-6 first:mt-0 sm:p-10">
+            <div className="text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] text-[var(--accent-ink)]">
+              Version {doc.version} · effective {longDate(doc.effective_date)}
+            </div>
+            <h1 className="mt-2.5 text-[32px] font-semibold leading-[1.13] tracking-[-0.025em] text-foreground">
+              {doc.title}
+            </h1>
+
+            <LegalDocumentBody content={doc.content} title={doc.title} className="mt-6" />
+          </div>
         </div>
       </main>
+      <SiteFooter />
     </div>
   );
 }

@@ -62,6 +62,8 @@ npm run dev
 - **Tenant scope comes only from the session**, never from a request parameter.
 - **The audit log is append-only at the database level.** `UPDATE`, `DELETE` and `TRUNCATE` are
   revoked from every role the app connects as, including `service_role`.
-- **Email isn't wired up yet.** `lib/email/sendInvitationEmail.ts` logs and returns
-  `delivered: false`; the admin UI shows a copyable link instead. SA-4.11 replaces those function
-  bodies — no callers change.
+- **Email uses the shared guarded transport.** `lib/email/sendInvitationEmail.ts` and the other
+  lifecycle senders record every attempt through `lib/email/transport.ts`. External delivery is
+  disabled unless `EMAIL_DELIVERY_MODE=smtp` is explicitly set, and reserved QA recipients such
+  as `.test`, `.example`, `.invalid`, and `localhost` are refused even in SMTP mode. When delivery
+  is disabled or unavailable, the admin UI shows a copyable link instead.

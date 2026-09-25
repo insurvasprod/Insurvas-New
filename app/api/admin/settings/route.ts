@@ -5,6 +5,7 @@ import { audit } from "@/lib/audit/log";
 import { CAN_MANAGE_SETTINGS } from "@/lib/settings/permissions";
 import { getAllSettings, setSetting } from "@/lib/settings/queries";
 import { isSettingKey, settingDef, coerceSettingValue, settingRefusalReason } from "@/lib/settings/constants";
+import { canManageSettingKey } from "@/lib/settings/restrictions";
 
 export async function GET() {
   const auth = await requireAdminRole(CAN_MANAGE_SETTINGS);
@@ -13,7 +14,8 @@ export async function GET() {
   try {
     const settings = await getAllSettings();
     return NextResponse.json({
-      settings: settings.map((s) => ({
+      // Login-protection keys are super admin only; other settings roles are not sent them.
+      settings: settings.filter((s) => canManageSettingKey(auth.session.role, s.def.key)).map((s) => ({
         key: s.def.key,
         value: s.value,
         isOverridden: s.isOverridden,
@@ -44,6 +46,13 @@ export async function PATCH(request: NextRequest) {
     // Naming the key back is safe — these are not secrets, and "unknown setting" with no name is
     // a support ticket rather than a fix.
     return NextResponse.json({ error: `Unknown setting: ${String(key)}` }, { status: 400 });
+  }
+
+  // The route admits every settings role; the login-protection knobs narrow that to super admins.
+  // Enforced here, not only by hiding the card, so a platform_config session cannot loosen sign-in
+  // protection with a hand-written request.
+  if (!canManageSettingKey(auth.session.role, key)) {
+    return NextResponse.json({ error: "Only a super admin can change login protection.", key }, { status: 403 });
   }
 
   const def = settingDef(key)!;

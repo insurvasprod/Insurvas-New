@@ -35,6 +35,27 @@ export async function checkMeterCapacity(
   return row as unknown as CapacityCheck;
 }
 
+/** Atomically checks and records one hard-capped meter event under a tenant/key lock. */
+export async function consumeMeterCapacity(params: {
+  tenantId: string;
+  meterKey: string;
+  qty: number;
+  idempotencyKey: string;
+  ref?: string;
+}): Promise<CapacityCheck> {
+  const supabase = getSupabaseServiceClient() as unknown as { rpc(name: string, args: Record<string, unknown>): Promise<{ data: unknown; error: { message: string } | null }> };
+  const { data, error } = await supabase.rpc("consume_meter_capacity", {
+    p_tenant_id: params.tenantId,
+    p_meter_key: params.meterKey,
+    p_qty: params.qty,
+    p_idempotency_key: params.idempotencyKey,
+    p_ref: params.ref ?? null,
+  });
+  if (error) throw new Error(`Atomic capacity check failed for ${params.meterKey}: ${error.message}`);
+  const row = Array.isArray(data) ? data[0] : data;
+  return row as unknown as CapacityCheck;
+}
+
 export type UsageRecord = {
   recorded: boolean;
   new_total: number;

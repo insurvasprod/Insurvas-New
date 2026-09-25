@@ -1,0 +1,4 @@
+phone,first_name,last_name,state,email,notes,lead_id,product
+205-233-6651,Demo,Alice,FL,demo.alice@example.test,Demo row only,external-101,term_life
+205-233-6652,Demo,Ben,TX,,Optional email omitted,external-102,term_life
+205-233-6653,Demo,Casey,AZ,demo.casey@example.test,Demo row only,external-103,term_life

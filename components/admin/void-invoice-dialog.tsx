@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { toast } from "sonner";
+import { notify } from "@/lib/notify";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -33,11 +33,11 @@ export function VoidInvoiceDialog({
 
   if (refusalReason) {
     return (
-      <div className="text-right">
-        <Button variant="outline" size="sm" disabled>
+      <div>
+        <Button variant="outline" className="h-10 w-full border-[var(--border-strong)]" disabled>
           Void invoice
         </Button>
-        <p className="mt-1.5 max-w-xs text-xs text-muted-foreground">{refusalReason}</p>
+        <p className="mt-1.5 text-xs leading-normal text-muted-foreground">{refusalReason}</p>
       </div>
     );
   }
@@ -53,18 +53,18 @@ export function VoidInvoiceDialog({
     setBusy(false);
 
     if (!res.ok) {
-      toast.error(body?.error ?? "Could not void the invoice");
+      notify.block(body?.error ?? "Could not void the invoice");
       return;
     }
 
-    toast.success(`${number} voided`);
+    notify.done(`${number} voided`);
     setOpen(false);
     router.refresh();
   }
 
   return (
     <>
-      <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
+      <Button variant="outline" className="h-10 w-full border-[var(--border-strong)]" onClick={() => setOpen(true)}>
         Void invoice
       </Button>
 

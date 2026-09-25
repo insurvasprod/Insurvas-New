@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { toast } from "sonner";
+import { notify } from "@/lib/notify";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -90,11 +90,11 @@ export function PlanDialog({
     setLoading(false);
 
     if (!res.ok) {
-      toast.error(body?.error ?? "Could not save the plan");
+      notify.block(body?.error ?? "Could not save the plan");
       return;
     }
 
-    toast.success(isEdit ? `${name} updated` : `${name} created`);
+    notify.done(isEdit ? `${name} updated` : `${name} created`);
     onSaved();
     onClose();
   }
@@ -187,7 +187,7 @@ export function PlanDialog({
                   <SelectItem value="public">Public</SelectItem>
                 </SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground">Public plans appear on the pricing page (SA-5.1).</p>
+              <p className="text-xs text-muted-foreground">Public plans appear on the pricing page.</p>
             </div>
           </div>
 

@@ -1,0 +1,123 @@
+/*
+ * The landing page's motion. Module-scoped so it never leaks into the product, and kept out of
+ * app/globals.css, which several sessions edit at once. Every animation here is decorative; the
+ * reduced-motion block at the end stops all of it.
+ */
+
+/* ── Hero: a perspective floor of grid lines that scrolls toward the viewer ── */
+.floor {
+  position: absolute;
+  inset: auto -40% -10% -40%;
+  height: 70%;
+  transform: perspective(700px) rotateX(64deg);
+  transform-origin: 50% 100%;
+  background-image:
+    linear-gradient(to right, color-mix(in srgb, var(--primary) 34%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in srgb, var(--primary) 34%, transparent) 1px, transparent 1px);
+  background-size: 56px 56px;
+  animation: floor-run 3.2s linear infinite;
+  mask-image: linear-gradient(to top, black 10%, transparent 85%);
+  -webkit-mask-image: linear-gradient(to top, black 10%, transparent 85%);
+  pointer-events: none;
+}
+@keyframes floor-run { from { background-position: 0 0; } to { background-position: 0 56px; } }
+
+/* Slow drifting glow behind the stage */
+.aurora {
+  position: absolute;
+  width: 900px;
+  height: 900px;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--primary) 30%, transparent), transparent 70%);
+  filter: blur(20px);
+  animation: aurora 14s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+@keyframes aurora {
+  0% { transform: translate3d(-8%, -6%, 0) scale(1); }
+  50% { transform: translate3d(6%, 4%, 0) scale(1.12); }
+  100% { transform: translate3d(-2%, 8%, 0) scale(0.96); }
+}
+
+/* Floating satellite cards around the hero window, each on its own rhythm */
+.float { animation: float 7s ease-in-out infinite; }
+.floatSlow { animation: float 9s ease-in-out infinite; animation-delay: -3s; }
+.floatAlt { animation: float 8s ease-in-out infinite; animation-delay: -5s; }
+@keyframes float {
+  0%, 100% { translate: 0 0; }
+  50% { translate: 0 -14px; }
+}
+
+/* The live dot */
+.pulse { animation: pulse 2s cubic-bezier(.16,1,.3,1) infinite; }
+@keyframes pulse {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--primary) 55%, transparent); }
+  70% { box-shadow: 0 0 0 10px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+/* A scanning bar that sweeps the screening checks, one after another */
+.scan { position: relative; overflow: hidden; }
+.scan::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 30%, color-mix(in srgb, var(--primary) 18%, transparent) 50%, transparent 70%);
+  transform: translateX(-100%);
+  animation: scan 3.6s cubic-bezier(.65,0,.35,1) infinite;
+}
+@keyframes scan { 0% { transform: translateX(-100%); } 55%, 100% { transform: translateX(100%); } }
+
+/* The CTA orb: two counter-rotating conic rings seen at an angle */
+.orb {
+  position: absolute;
+  width: 560px;
+  height: 560px;
+  border-radius: 50%;
+  transform: perspective(900px) rotateX(68deg);
+  pointer-events: none;
+}
+.orb::before, .orb::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  background: conic-gradient(from 0deg, transparent 0 60%, var(--primary) 75%, transparent 90%) border-box;
+  -webkit-mask: linear-gradient(#000 0 0) padding-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: spin 6s linear infinite;
+}
+.orb::after { inset: 60px; animation-duration: 9s; animation-direction: reverse; opacity: .7; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* A lead dot travelling along the journey rail */
+.rail { position: relative; }
+.railFill { transform-origin: top; transition: transform 200ms linear; }
+
+/* Tour window flip between tabs */
+.flipIn { animation: flip-in 700ms cubic-bezier(.16,1,.3,1) both; }
+@keyframes flip-in {
+  from { opacity: 0; transform: rotateY(-24deg) rotateX(6deg) translateZ(-120px) scale(.96); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Tab progress bar while the tour autoplays */
+.progress { transform-origin: left; animation: progress linear forwards; }
+@keyframes progress { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+
+/* Marquee of product truths */
+.marquee { display: flex; width: max-content; animation: marquee 38s linear infinite; }
+.marquee:hover { animation-play-state: paused; }
+@keyframes marquee { to { transform: translateX(-50%); } }
+
+/* Bars in the mini charts grow in once */
+.grow { transform-origin: bottom; animation: grow 900ms cubic-bezier(.16,1,.3,1) both; }
+@keyframes grow { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .floor, .aurora, .float, .floatSlow, .floatAlt, .pulse, .scan::after, .orb::before, .orb::after,
+  .flipIn, .progress, .marquee, .grow { animation: none !important; }
+  .progress { transform: scaleX(1); }
+}

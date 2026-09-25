@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { toast } from "sonner";
+import { notify } from "@/lib/notify";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -68,11 +68,11 @@ export function PaymentProviderPanel({
     setBusy(false);
 
     if (!res.ok) {
-      toast.error(body?.error ?? "Could not set the payment provider");
+      notify.block(body?.error ?? "Could not set the payment provider");
       return;
     }
 
-    toast.success("Payment provider saved");
+    notify.done("Payment provider saved");
     router.refresh();
   }
 
@@ -87,11 +87,11 @@ export function PaymentProviderPanel({
     setBusy(false);
 
     if (!res.ok) {
-      toast.error(body?.error ?? "Could not update the simulator");
+      notify.block(body?.error ?? "Could not update the simulator");
       return;
     }
 
-    toast.success(
+    notify.done(
       outcome === "success" ? "Simulator cleared — charges succeed" : `Charges will now ${SIMULATED_OUTCOME_LABELS[outcome].toLowerCase()}`,
     );
     router.refresh();
@@ -103,7 +103,7 @@ export function PaymentProviderPanel({
     <Card>
       <CardContent className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-sm font-bold uppercase tracking-wide text-[var(--color-accent-ink)]">Payment provider</h2>
+          <h2 className="text-lg font-semibold leading-[1.28] tracking-[-0.015em]">Payment provider</h2>
           {!record && platformDefault && (
             <span className="text-sm text-muted-foreground">
               Using the platform default ({platformDefault})
@@ -163,7 +163,7 @@ export function PaymentProviderPanel({
               {armed && (
                 <Badge
                   variant="outline"
-                  className="border-transparent bg-[var(--color-warning)]/10 text-[10px] text-[var(--color-warning)]"
+                  className="border-transparent bg-[var(--color-warning)]/10 text-xs text-[var(--color-warning)]"
                 >
                   Armed
                 </Badge>

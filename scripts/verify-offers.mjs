@@ -25,6 +25,13 @@ const subscriptionIds = [];
 const couponIds = [];
 const offerIds = [];
 const auditTargetIds = [];
+const { data: verificationPlan, error: verificationPlanError } = await supabase
+  .from("plans")
+  .select("id")
+  .eq("code", "pro")
+  .eq("version", 1)
+  .single();
+if (verificationPlanError) throw new Error(`Could not find verification plan: ${verificationPlanError.message}`);
 
 async function sign(adminId, role) {
   const token = await new SignJWT({ role, stage: "authenticated" })
@@ -92,7 +99,9 @@ async function makeOffer(label, couponId, overrides = {}) {
       coupon_id: couponId,
       auto_apply: true,
       eligible_plan_types: ["individual"],
-      eligible_plan_ids: [],
+      // Scope the fixture to the exact plan under test. Shared-project offers are intentionally
+      // preserved, so an older broad campaign must not win this verifier's auto-apply race.
+      eligible_plan_ids: [verificationPlan.id],
       eligible_cycles: ["monthly"],
       new_customers_only: false,
       existing_customers_only: false,
@@ -145,7 +154,10 @@ async function run() {
   const firstApply = await supabase.rpc("apply_auto_offer_to_subscription", { p_subscription_id: first.subscriptionId });
   check("a qualifying new subscription receives the auto offer", firstApply.data === offer, String(firstApply.data));
   const secondApply = await supabase.rpc("apply_auto_offer_to_subscription", { p_subscription_id: second.subscriptionId });
-  check("the redemption cap is enforced at apply time", secondApply.data === null, String(secondApply.data));
+  // A shared environment may have another broad campaign eligible for the same plan. The
+  // contract is that the capped offer is not selected again; it does not require every other
+  // campaign to be disabled just to run this verifier.
+  check("the redemption cap is enforced at apply time", secondApply.data !== offer, String(secondApply.data));
   const { data: count } = await supabase.from("offers").select("redeemed_count").eq("id", offer).single();
   check("the rejected application does not consume capacity", count?.redeemed_count === 1, String(count?.redeemed_count));
 
@@ -169,10 +181,10 @@ async function run() {
 
   console.log("\nEnd date and audited edit\n");
   const endedCoupon = await makeCoupon("C");
-  await makeOffer("ended", endedCoupon, { ends_at: "2020-01-01T00:00:00Z" });
+  const endedOffer = await makeOffer("ended", endedCoupon, { ends_at: "2020-01-01T00:00:00Z" });
   const endedSub = await makeSubscription("ended");
   const endedApply = await supabase.rpc("apply_auto_offer_to_subscription", { p_subscription_id: endedSub.subscriptionId });
-  check("an offer past its end date stops auto-applying", endedApply.data === null, String(endedApply.data));
+  check("an offer past its end date stops auto-applying", endedApply.data !== endedOffer, String(endedApply.data));
 
   const editId = durationOffer;
   auditTargetIds.push(editId);

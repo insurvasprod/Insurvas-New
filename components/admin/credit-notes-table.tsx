@@ -1,16 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { toast } from "sonner";
+import { notify } from "@/lib/notify";
 
-import { Button } from "@/components/ui/button";
+import { BoardTableFooter } from "@/components/admin/board-table-footer";
 import { EmptyState } from "@/components/admin/empty-state";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { StatusChip, type StatusTone } from "@/components/admin/status-chip";
+import { fullDate } from "@/components/admin/tenant-record/billing-format";
 import { formatCentsAsCurrency } from "@/lib/money";
 import { CREDIT_REASON_LABELS, type CreditReason } from "@/lib/credits/rules";
-import { tableHeaderRow, tableHeadCell, tableShell } from "./table-styles";
-import { StatusChip, type StatusTone } from "@/components/admin/status-chip";
+import { cn } from "@/lib/utils";
 
 export type CreditNoteRow = {
   id: string;
@@ -22,8 +23,10 @@ export type CreditNoteRow = {
   reason_text: string | null;
   requested_by: string | null;
   created_at: string;
+  reconciliation_state?: string;
+  last_reconciliation_error?: string | null;
   tenants: { name: string } | null;
-  invoices: { number: string } | null;
+  invoice: { id: string; number: string } | null;
 };
 
 /** Money that failed is danger; money still waiting on a human is warning. */
@@ -35,99 +38,119 @@ const CREDIT_NOTE_TONE: Record<string, StatusTone> = {
   failed: "danger",
   rejected: "neutral",
 };
+const STATUS_LABEL: Record<string, string> = {
+  pending_approval: "Pending approval",
+  approved: "Approved",
+  processing: "Processing",
+  succeeded: "Succeeded",
+  failed: "Failed at provider",
+  rejected: "Rejected",
+};
+/** The local ledger's side of a refund, after the provider has answered. */
+const RECONCILIATION: Record<string, { label: string; tone: StatusTone }> = {
+  pending: { label: "Not started", tone: "neutral" },
+  provider_pending: { label: "Awaiting reconciliation", tone: "warning" },
+  reconciled: { label: "Reconciled", tone: "good" },
+  failed: { label: "Reconciliation failed", tone: "danger" },
+};
 
+const PAGE = 25;
+const th = "px-3 py-2 text-left text-[12px] leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]";
+const td = "border-t border-[var(--border)] px-3 py-2 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--body)]";
+const rowButton = "inline-flex h-8 items-center rounded-[8px] border px-3 text-[14px] font-semibold whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-50";
 
-export function CreditNotesTable({
-  notes,
-  currentAdminId,
-}: {
-  notes: CreditNoteRow[];
-  currentAdminId: string;
-}) {
+/**
+ * The refunds & credits table (p-adm-credit-notes): every credit note, what it was raised against,
+ * where the money stands and where our ledger stands. Approve and Retry reconciliation stay on the
+ * row that needs them — the board's table shows state, and the actions are this screen's reason to
+ * exist.
+ */
+export function CreditNotesTable({ notes, currentAdminId }: { notes: CreditNoteRow[]; currentAdminId: string }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const pages = Math.max(1, Math.ceil(notes.length / PAGE));
+  const current = Math.min(page, pages);
+  const shown = useMemo(() => notes.slice((current - 1) * PAGE, current * PAGE), [notes, current]);
 
-  async function approve(note: CreditNoteRow) {
+  async function act(note: CreditNoteRow, action: "approve" | "reconcile") {
     setBusy(note.id);
-    const res = await fetch(`/api/admin/credit-notes/${note.id}/approve`, { method: "POST" });
+    const res = await fetch(`/api/admin/credit-notes/${note.id}/${action}`, { method: "POST" });
     const body = await res.json().catch(() => null);
     setBusy(null);
-
     if (!res.ok) {
-      toast.error(body?.error ?? "Could not approve");
+      notify.block(body?.error ?? (action === "approve" ? "Could not approve" : "Could not reconcile"));
       return;
     }
-
-    toast.success(body.message ?? `${note.number} approved`);
+    notify.done(body?.message ?? `${note.number} ${action === "approve" ? "approved" : "reconciled"}`);
     router.refresh();
   }
 
   return (
-    <div className={tableShell}>
-      <Table>
-        <TableHeader>
-          <TableRow className={tableHeaderRow}>
-            <TableHead className={tableHeadCell}>Number</TableHead>
-            <TableHead className={tableHeadCell}>Tenant</TableHead>
-            <TableHead className={tableHeadCell}>Type</TableHead>
-            <TableHead className={tableHeadCell}>Amount</TableHead>
-            <TableHead className={tableHeadCell}>Reason</TableHead>
-            <TableHead className={tableHeadCell}>Status</TableHead>
-            <TableHead className={tableHeadCell}></TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {notes.length === 0 ? (
-            <TableRow>
-              <TableCell colSpan={7} className="p-0">
-                <EmptyState
-                  title="No refunds or credits yet"
-                  hint="Raised from an invoice when money needs to go back or be written off. Every one needs a reason, and anything above the approval threshold needs a second approver."
-                />
-              </TableCell>
-            </TableRow>
-          ) : (
-            notes.map((note) => {
+    <div className="relative min-w-0 overflow-hidden rounded-[12px] border border-[var(--border)] bg-[var(--surface)]">
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[920px] border-collapse">
+          <thead>
+            <tr className="bg-[var(--surface-alt)]">
+              <th scope="col" className={cn(th, "w-[170px]")}>Credit note</th>
+              <th scope="col" className={th}>Tenant</th>
+              <th scope="col" className={cn(th, "w-[170px]")}>Against</th>
+              <th scope="col" className={cn(th, "w-[120px] text-right")}>Amount</th>
+              <th scope="col" className={cn(th, "w-[170px]")}>Status</th>
+              <th scope="col" className={cn(th, "w-[200px]")}>Reconciliation</th>
+              <th scope="col" className={cn(th, "w-[190px] text-right")}><span className="sr-only">Action</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            {notes.length === 0 ? (
+              <tr>
+                <td colSpan={7} className="p-0">
+                  <EmptyState title="No refunds or credits yet" hint="Raised from an invoice when money needs to go back or be written off. Every one needs a reason, and anything above the approval threshold needs a second approver." />
+                </td>
+              </tr>
+            ) : shown.map((note) => {
               const isOwn = note.requested_by === currentAdminId;
               const pending = note.status === "pending_approval";
-
+              const reconciliation = RECONCILIATION[note.reconciliation_state ?? "pending"] ?? { label: note.reconciliation_state ?? "—", tone: "neutral" as StatusTone };
+              const providerPending = note.reconciliation_state === "provider_pending";
               return (
-                <TableRow key={note.id}>
-                  <TableCell className="font-mono font-medium">{note.number}</TableCell>
-                  <TableCell>{note.tenants?.name ?? "—"}</TableCell>
-                  <TableCell className="capitalize">{note.type}</TableCell>
-                  <TableCell className="font-medium">{formatCentsAsCurrency(note.amount_cents)}</TableCell>
-                  <TableCell className="text-sm">
-                    {CREDIT_REASON_LABELS[note.reason_code]}
-                    {note.reason_text && (
-                      <span className="block text-xs text-muted-foreground">{note.reason_text}</span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <StatusChip tone={CREDIT_NOTE_TONE[note.status] ?? "neutral"} dot>
-                      {note.status.replace("_", " ")}
-                    </StatusChip>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {pending &&
-                      (isOwn ? (
-                        // Shown rather than hidden: the person waiting needs to know WHY they
-                        // cannot act, not merely find no button.
-                        <span className="text-xs text-muted-foreground">
-                          You raised this — a second admin must approve
-                        </span>
+                <tr key={note.id} className="align-top hover:bg-[color-mix(in_srgb,var(--primary),transparent_95%)]">
+                  <td className={td}>
+                    <span className="font-semibold text-[var(--ink)] tabular-nums">{note.number}</span>
+                    <span className="block text-[12px] text-[var(--muted)]"><span className="capitalize">{note.type}</span> · {fullDate(note.created_at)}</span>
+                  </td>
+                  <td className={td}>
+                    {note.tenants?.name ?? "—"}
+                    <span className="block text-[12px] text-[var(--muted)]">{CREDIT_REASON_LABELS[note.reason_code]}{note.reason_text ? ` — ${note.reason_text}` : ""}</span>
+                  </td>
+                  <td className={cn(td, "tabular-nums")}>
+                    {note.invoice ? <Link href={`/admin/invoices/${note.invoice.id}`} className="font-semibold text-[var(--ink)] hover:underline">{note.invoice.number}</Link> : <span className="text-[var(--muted)]">No invoice</span>}
+                  </td>
+                  <td className={cn(td, "text-right font-semibold text-[var(--ink)] tabular-nums")}>{formatCentsAsCurrency(note.amount_cents)}</td>
+                  <td className={td}><StatusChip tone={CREDIT_NOTE_TONE[note.status] ?? "neutral"} dot>{STATUS_LABEL[note.status] ?? note.status.replace(/_/g, " ")}</StatusChip></td>
+                  <td className={td}>
+                    <StatusChip tone={reconciliation.tone}>{reconciliation.label}</StatusChip>
+                    {note.last_reconciliation_error && note.reconciliation_state !== "reconciled" && <span className="mt-1 block max-w-[220px] text-[12px] text-[var(--muted)]">{note.last_reconciliation_error}</span>}
+                  </td>
+                  <td className={cn(td, "text-right")}>
+                    {providerPending ? (
+                      <button type="button" className={cn(rowButton, "border-[var(--border-strong)] bg-[var(--surface)] text-[var(--ink)] hover:bg-[var(--surface-alt)]")} disabled={busy === note.id} onClick={() => void act(note, "reconcile")}>Retry reconciliation</button>
+                    ) : pending ? (
+                      isOwn ? (
+                        // Shown rather than hidden: the person waiting needs to know WHY they cannot act.
+                        <span className="text-[12px] text-[var(--muted)]">You raised this — a second admin must approve</span>
                       ) : (
-                        <Button size="sm" disabled={busy === note.id} onClick={() => approve(note)}>
-                          Approve
-                        </Button>
-                      ))}
-                  </TableCell>
-                </TableRow>
+                        <button type="button" className={cn(rowButton, "border-transparent bg-[var(--primary)] text-[var(--on-primary)] hover:bg-[var(--accent-hover)]")} disabled={busy === note.id} onClick={() => void act(note, "approve")}>Approve</button>
+                      )
+                    ) : null}
+                  </td>
+                </tr>
               );
-            })
-          )}
-        </TableBody>
-      </Table>
+            })}
+          </tbody>
+        </table>
+      </div>
+      {notes.length > 0 && <BoardTableFooter page={current} pageSize={PAGE} total={notes.length} itemLabel={notes.length === 1 ? "credit note" : "credit notes"} order="newest first" onPageChange={setPage} />}
     </div>
   );
 }

@@ -22,9 +22,20 @@ export type RateLimitRule = {
  * limit stops the same address being used to send someone repeated verification mail from our
  * domain, which costs sending reputation regardless of how many IPs it comes from.
  */
-export const SIGNUP_PER_IP: RateLimitRule = { name: "signup_ip", max: 5, windowSeconds: 3600 };
+export const SIGNUP_PER_IP: RateLimitRule = { name: "signup_ip", max: 10, windowSeconds: 3600 };
 export const SIGNUP_PER_EMAIL: RateLimitRule = { name: "signup_email", max: 3, windowSeconds: 3600 };
 export const VERIFICATION_RESEND: RateLimitRule = { name: "verify_resend", max: 5, windowSeconds: 3600 };
+
+/**
+ * LA-2.5 · a vendor posting real-time leads.
+ *
+ * Deliberately generous, and per KEY rather than per IP. A ping-post vendor sending 300 leads an
+ * hour is doing exactly what they are paid to do; the criterion is "rate-limited without dropping
+ * legitimate posts", so the ceiling has to sit well above a busy hour rather than at a cautious
+ * one. Keyed on the vendor's own key so one vendor's burst cannot throttle another's, which an
+ * IP-based limit would do the moment two vendors shared a platform.
+ */
+export const LEAD_POST_PER_KEY: RateLimitRule = { name: "lead_post_key", max: 600, windowSeconds: 3600 };
 
 /**
  * The caller's IP, from the proxy headers Vercel sets.

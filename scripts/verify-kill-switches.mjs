@@ -10,10 +10,11 @@
 // after itself — the same shape as verify-tenant-isolation.
 import { createClient } from "@supabase/supabase-js";
 import { SignJWT } from "jose";
+import { createFixtureUser, deleteFixtureUser } from "./lib/fixtureUser.mjs";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const APP = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+const APP = process.env.APP_BASE_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
 if (!url || !serviceKey) {
   console.error("Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY in .env.local");
@@ -51,37 +52,73 @@ const email = `kill-switch-${stamp}@verify.invalid`;
 
 console.log("Provisioning a throwaway tenant…");
 
-const { data: plan } = await sb
+// The probe below is `/api/app/policies`, which is guarded by `book_of_business`. So the plan is
+// chosen BY that feature rather than by sort order: "the first unarchived plan" is whatever
+// happens to sort first, and a disposable fixture plan left behind by another suite sorts at 0 —
+// ahead of Basic. This suite has already failed once that way, reporting "Plan pbv_1789272807076
+// grants no features, so there is nothing to switch off", which reads like a product problem and
+// is not one.
+const FEATURE = "book_of_business";
+
+const { data: grantRows, error: grantError } = await sb
+  .from("plan_features")
+  .select("plan_id")
+  .eq("feature_key", FEATURE);
+if (grantError) {
+  console.error(`Could not read plan features: ${grantError.message}`);
+  process.exit(1);
+}
+
+const { data: candidates, error: planError } = await sb
   .from("admin_plan_list")
   .select("id, code")
   .eq("is_archived", false)
-  .order("sort_order")
-  .limit(1)
-  .maybeSingle();
+  .in("id", (grantRows ?? []).map((row) => row.plan_id))
+  .order("sort_order");
+if (planError) {
+  console.error(`Could not read plans: ${planError.message}`);
+  process.exit(1);
+}
 
+const plan = candidates?.[0];
 if (!plan) {
-  console.error("No unarchived plan exists to subscribe a test tenant to.");
+  console.error(`No unarchived plan grants ${FEATURE}, so there is nothing to switch off.`);
   process.exit(1);
 }
 
-const { data: granted } = await sb.from("plan_features").select("feature_key").eq("plan_id", plan.id);
-const FEATURE = granted?.[0]?.feature_key;
-if (!FEATURE) {
-  console.error(`Plan ${plan.code} grants no features, so there is nothing to switch off.`);
+// The owner is created in Supabase Auth and attached here.
+//
+// This used to call create_tenant_with_owner and fall back when it errored. That RPC inserts a
+// public.users row with no id, which users_id_fkey has made impossible since SA-1.2, so the
+// fallback ran every single time — and the diagnosis sat in a comment here while
+// POST /api/admin/tenants went on calling the same broken function in production (backlog 193).
+// The route is fixed; trying the broken path first buys nothing.
+const { data: tenant, error: tenantError } = await sb
+  .from("tenants")
+  .insert({ name: `Kill switch verify ${stamp}`, status: "active", onboarding_state: "completed" })
+  .select("id")
+  .single();
+if (tenantError) {
+  console.error("Could not create the test tenant:", tenantError.message);
   process.exit(1);
 }
 
-const { data: created, error: createError } = await sb.rpc("create_tenant_with_owner", {
-  p_tenant_name: `Kill switch verify ${stamp}`,
-  p_owner_name: "Kill Switch Verify",
-  p_owner_email: email,
-  p_owner_password_hash: "$2b$12$verifyverifyverifyverifyverifyverifyverifyverifyverifyverify",
+const fixture = await createFixtureUser(sb, { email, name: "Kill Switch Verify" });
+const membership = await sb.from("tenant_users").insert({
+  tenant_id: tenant.id,
+  user_id: fixture.userId,
+  role: "owner",
+  accepted_at: new Date().toISOString(),
 });
-if (createError) {
-  console.error("Could not create the test tenant:", createError.message);
+if (membership.error) {
+  await deleteFixtureUser(sb, fixture.userId);
+  await sb.from("tenants").delete().eq("id", tenant.id);
+  console.error("Could not create the test membership:", membership.error.message);
   process.exit(1);
 }
-const { tenant_id: tenantId, user_id: userId } = Array.isArray(created) ? created[0] : created;
+
+const tenantId = tenant.id;
+const userId = fixture.userId;
 
 const { error: subError } = await sb.rpc("admin_assign_subscription", {
   p_tenant_id: tenantId,
@@ -194,7 +231,7 @@ try {
   await sb.from("subscriptions").delete().eq("tenant_id", tenantId);
   await sb.from("tenant_entitlements").delete().eq("tenant_id", tenantId);
   await sb.from("tenant_users").delete().eq("tenant_id", tenantId);
-  await sb.from("users").delete().eq("id", userId);
+  await deleteFixtureUser(sb, userId);
   await sb.from("tenants").delete().eq("id", tenantId);
   console.log("  test tenant removed; the switch row is gone, so the feature is on again");
 }

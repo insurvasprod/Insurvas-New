@@ -10,9 +10,11 @@ import "server-only";
 import { getProviderStatus } from "@/lib/payments/status";
 import { fetchOffers } from "@/lib/offers/queries";
 import { fetchProducts } from "@/lib/products/queries";
+import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { fetchTemplates } from "@/lib/templates/queries";
 import { listComplianceVendors, getDncDialingStatus } from "@/lib/compliance/service";
 import { listMeterPricing, listUsageMonitor } from "@/lib/creditsLimits/service";
+import { coverage, listStateDisclosures } from "@/lib/stateDisclosures/service";
 import { fetchAllSwitches } from "@/lib/features/killSwitch";
 import { fetchFeatureCatalog } from "@/lib/features/queries";
 import { getAllSettings } from "@/lib/settings/queries";
@@ -48,7 +50,7 @@ function plural(n: number, one: string, many = `${one}s`): string {
 }
 
 export async function getConfigurationOverview(): Promise<ConfigurationOverview> {
-  const [payments, offers, products, templates, compliance, credits, features, settings] = await Promise.all([
+  const [payments, offers, products, carriers, templates, compliance, disclosures, credits, features, settings] = await Promise.all([
     safe(async () => {
       const status = await getProviderStatus();
       if (status.mode === "unknown") {
@@ -79,6 +81,12 @@ export async function getConfigurationOverview(): Promise<ConfigurationOverview>
     }),
 
     safe(async () => {
+      const { data, error } = await getSupabaseServiceClient().from("carriers").select("id").eq("is_active", true);
+      if (error) throw error;
+      return { tone: data.length === 0 ? "attention" : "neutral", badge: null, detail: plural(data.length, "carrier") + " available." };
+    }),
+
+    safe(async () => {
       const all = await fetchTemplates({ includeArchived: false });
       return {
         tone: all.length === 0 ? "attention" : "neutral",
@@ -96,6 +104,31 @@ export async function getConfigurationOverview(): Promise<ConfigurationOverview>
         tone: blocked ? "attention" : enabled > 0 ? "good" : "neutral",
         badge: blocked ? "Dialing blocked" : enabled > 0 ? `${enabled} live` : null,
         detail: blocked ? "No DNC vendor is reachable, so nobody can dial." : "DNC scrub healthy — dialing allowed.",
+      };
+    }),
+
+    safe(async () => {
+      const published = await listStateDisclosures();
+      const byProduct = coverage(published);
+      // A disclosure table can be full of rows and still leave dialing blocked, because the dialer
+      // matches one exact (state, product) pair. The attention case is therefore "some product is
+      // short of states", not "the table is empty" — the second hides the first once anything at
+      // all has been published.
+      const short = byProduct.filter((entry) => entry.missing.length > 0);
+      if (byProduct.length === 0) {
+        return {
+          tone: "attention",
+          badge: "None published",
+          detail: "No disclosure is in force, so outbound dialing is blocked everywhere.",
+        };
+      }
+      return {
+        tone: short.length > 0 ? "attention" : "good",
+        badge: short.length > 0 ? `${plural(short.length, "product")} incomplete` : "Nationwide",
+        detail:
+          short.length > 0
+            ? `${short[0].product_code} is missing ${plural(short[0].missing.length, "state")}, so dialing is blocked there.`
+            : `${plural(byProduct.length, "product")} covered in every state.`,
       };
     }),
 
@@ -141,8 +174,10 @@ export async function getConfigurationOverview(): Promise<ConfigurationOverview>
     payments,
     offers,
     products,
+    carriers,
     templates,
     "compliance-sources": compliance,
+    "state-disclosures": disclosures,
     "credits-limits": credits,
     features,
     // SA-4.11 and SA-4.12 are not built. Saying so is more useful than an empty card that looks

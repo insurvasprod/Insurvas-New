@@ -17,26 +17,30 @@ function Inline({ text }: { text: string }) {
   );
 }
 
-export function LegalDocumentBody({ content, className }: { content: string; className?: string }) {
-  const blocks = parseLegalMarkdown(content);
+export function LegalDocumentBody({ content, className, title }: { content: string; className?: string; title?: string }) {
+  const parsed = parseLegalMarkdown(content);
+  // Stored documents often open with their own title as a heading. A page that already shows the
+  // title as its h1 passes it here, so the words do not appear twice (and the page keeps one h1).
+  const first = parsed[0];
+  const blocks = title && first?.kind === "heading" && first.text.trim().toLowerCase() === title.trim().toLowerCase() ? parsed.slice(1) : parsed;
 
   return (
-    <div className={`space-y-4 text-sm leading-relaxed text-[var(--color-text)] ${className ?? ""}`}>
+    <div className={`max-w-[68ch] text-base leading-normal tracking-[-0.02em] text-[var(--body)] ${className ?? ""}`}>
       {blocks.map((block, index) => {
         if (block.kind === "heading") {
           return block.level === 1 ? (
-            <h1 key={index} className="text-2xl font-extrabold tracking-tight">
+            <h1 key={index} className="mb-3 mt-7 text-2xl font-semibold leading-[1.21] tracking-[-0.02em] text-foreground">
               <Inline text={block.text} />
             </h1>
           ) : (
-            <h2 key={index} className="pt-2 text-lg font-bold tracking-tight">
+            <h2 key={index} className="mb-3 mt-7 text-2xl font-semibold leading-[1.21] tracking-[-0.02em] text-foreground">
               <Inline text={block.text} />
             </h2>
           );
         }
         if (block.kind === "list") {
           return (
-            <ul key={index} className="list-disc space-y-1.5 pl-5">
+            <ul key={index} className="my-4 list-disc space-y-1.5 pl-5">
               {block.items.map((item, itemIndex) => (
                 <li key={itemIndex}>
                   <Inline text={item} />
@@ -46,7 +50,7 @@ export function LegalDocumentBody({ content, className }: { content: string; cla
           );
         }
         return (
-          <p key={index}>
+          <p key={index} className="my-4">
             <Inline text={block.text} />
           </p>
         );

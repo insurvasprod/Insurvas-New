@@ -21,10 +21,11 @@ function getSecret(): Uint8Array {
 export type TenantSessionPayload = {
   sub: string; // user id
   tenantId: string;
+  sessionVersion?: number;
 };
 
-export async function signTenantSessionToken(userId: string, tenantId: string): Promise<string> {
-  return new SignJWT({ tenantId })
+export async function signTenantSessionToken(userId: string, tenantId: string, sessionVersion = 0): Promise<string> {
+  return new SignJWT({ tenantId, sessionVersion })
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(userId)
     .setIssuedAt()
@@ -47,5 +48,8 @@ export const tenantSessionCookieOptions = {
   secure: process.env.NODE_ENV === "production",
   sameSite: "lax" as const,
   path: "/",
+  // Host-only by default keeps app.insurvas.com isolated from admin.insurvas.com. Set this only
+  // when the deployment explicitly uses another agent host; never share the admin cookie domain.
+  domain: process.env.AGENT_COOKIE_DOMAIN || undefined,
   maxAge: SESSION_TTL_SECONDS,
 };

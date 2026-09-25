@@ -1,0 +1,39 @@
+import { redirect } from "next/navigation";
+
+import { AlertCentre } from "@/components/app/alert-centre";
+import { ErrorState } from "@/components/ui/page-states";
+import { PageHeader } from "@/components/ui/page-header";
+import { listAlertCentre } from "@/lib/agentAlerts/service";
+import { resolveTenantContext } from "@/lib/tenantAuth/requireTenant";
+
+/**
+ * The alert centre — where the alerts panel's "Open the alert centre" leads.
+ *
+ * Every workspace alert of the last week: the open ones with the action that resolves them, and
+ * the resolved ones with what resolved them. No "mark as read" anywhere on the page, for the same
+ * reason the panel has none: an alert clears when it is fixed.
+ */
+export default async function AlertCentrePage() {
+  const context = await resolveTenantContext();
+  if (!context) redirect("/app/login");
+
+  let centre: Awaited<ReturnType<typeof listAlertCentre>> | null = null;
+  try {
+    centre = await listAlertCentre(context.tenantId, context.userId);
+  } catch {
+    centre = null;
+  }
+
+  return (
+    <div className="flex flex-col gap-6">
+      <PageHeader
+        eyebrow="Workspace"
+        title="Alert centre"
+        description="What is wrong with the queue right now, and what happened to everything raised this week. Alerts clear when the work is claimed, not when they are read."
+      />
+      {centre
+        ? <AlertCentre open={centre.open} resolved={centre.resolved} canClaim={context.role === "owner" || context.role === "producer" || context.role === "assistant"} />
+        : <ErrorState detail="The alert centre could not read the queue, so it cannot say which alerts are open. Nothing has changed; reload the page to try again." />}
+    </div>
+  );
+}

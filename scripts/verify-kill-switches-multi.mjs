@@ -11,6 +11,7 @@
 // processes are a Vercel deployment.
 import { createClient } from "@supabase/supabase-js";
 import { SignJWT } from "jose";
+import { createFixtureUser, deleteFixtureUser } from "./lib/fixtureUser.mjs";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -83,30 +84,54 @@ async function waitForStatus(app, cookie, expected, timeoutMs) {
 
 try {
   console.log(`Testing ${APP_A} and ${APP_B} as independent processes…`);
-  const { data: plan, error: planError } = await sb
+  // The plan is chosen BY the feature this suite toggles, and the feature is the one that actually
+  // guards the probe. Both used to be "whichever sorts first": the plan came from `order(sort_order)
+  // .limit(1)`, which a disposable fixture plan left by another suite wins at sort_order 0, and the
+  // feature came from `granted[0]`, which is not necessarily the one /api/app/policies is gated on.
+  // The single-process variant already carried a comment about the second half; this is both.
+  featureKey = "book_of_business";
+
+  const { data: grantRows, error: grantedError } = await sb
+    .from("plan_features")
+    .select("plan_id")
+    .eq("feature_key", featureKey);
+  if (grantedError) throw new Error(grantedError.message);
+
+  const { data: candidates, error: planError } = await sb
     .from("admin_plan_list")
     .select("id, code")
     .eq("is_archived", false)
-    .order("sort_order")
-    .limit(1)
-    .maybeSingle();
-  if (planError || !plan) throw new Error(planError?.message || "No active plan exists");
+    .in("id", (grantRows ?? []).map((row) => row.plan_id))
+    .order("sort_order");
+  if (planError) throw new Error(planError.message);
 
-  const { data: granted, error: grantedError } = await sb
-    .from("plan_features")
-    .select("feature_key")
-    .eq("plan_id", plan.id);
-  if (grantedError || !granted?.[0]) throw new Error(grantedError?.message || "Plan grants no features");
-  featureKey = granted[0].feature_key;
+  const plan = candidates?.[0];
+  if (!plan) throw new Error(`No unarchived plan grants ${featureKey}`);
 
-  const { data: created, error: createError } = await sb.rpc("create_tenant_with_owner", {
-    p_tenant_name: `Kill switch multi verify ${stamp}`,
-    p_owner_name: "Kill Switch Multi Verify",
-    p_owner_email: email,
-    p_owner_password_hash: "$2b$12$verifyverifyverifyverifyverifyverifyverifyverifyverifyverify",
+  // Auth-first, like everything else that creates a user.
+  //
+  // This called create_tenant_with_owner and threw on error. That RPC inserts a public.users row
+  // with no id, which users_id_fkey has made impossible since SA-1.2 — so this suite could not get
+  // past its own fixture, and nobody noticed because it is deliberately excluded from verify:all
+  // (it needs two servers). An excluded suite that cannot run is indistinguishable from one that
+  // is merely not being run.
+  const { data: tenant, error: tenantError } = await sb
+    .from("tenants")
+    .insert({ name: `Kill switch multi verify ${stamp}`, status: "active", onboarding_state: "completed" })
+    .select("id")
+    .single();
+  if (tenantError) throw new Error(tenantError.message);
+  tenantId = tenant.id;
+
+  ({ userId } = await createFixtureUser(sb, { email, name: "Kill Switch Multi Verify" }));
+
+  const { error: membershipError } = await sb.from("tenant_users").insert({
+    tenant_id: tenantId,
+    user_id: userId,
+    role: "owner",
+    accepted_at: new Date().toISOString(),
   });
-  if (createError) throw new Error(createError.message);
-  ({ tenant_id: tenantId, user_id: userId } = Array.isArray(created) ? created[0] : created);
+  if (membershipError) throw new Error(membershipError.message);
 
   const { error: subscriptionError } = await sb.rpc("admin_assign_subscription", {
     p_tenant_id: tenantId,
@@ -160,9 +185,11 @@ try {
     await sb.from("subscriptions").delete().eq("tenant_id", tenantId);
     await sb.from("tenant_entitlements").delete().eq("tenant_id", tenantId);
     await sb.from("tenant_users").delete().eq("tenant_id", tenantId);
-    await sb.from("users").delete().eq("id", userId);
     await sb.from("tenants").delete().eq("id", tenantId);
   }
+  // deleteFixtureUser, not a delete on public.users. Removing only the public row leaves the
+  // auth.users identity behind, and that orphan holds the email address against the next run.
+  if (userId) await deleteFixtureUser(sb, userId);
 }
 
 console.log(failures === 0 ? "\nAll multi-process kill-switch checks passed." : `\n${failures} check(s) FAILED.`);

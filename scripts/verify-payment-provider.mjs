@@ -49,21 +49,8 @@ if (tenantError) {
 
 const tenantId = tenant.id;
 
-// Whop is now the only provider in the registry, but two are needed to prove that switching a
-// tenant between providers keeps exactly one default. This adds a throwaway second one and
-// removes it again, rather than weakening the check to fit the registry.
-const SECOND_PROVIDER = `zz_test_${stamp}`;
-await supabase.from("provider_settings").insert({
-  provider: SECOND_PROVIDER,
-  display_label: "Test provider",
-  is_enabled: true,
-  is_default: false,
-  sort_order: 99,
-});
-
 async function cleanup() {
   await supabase.from("payment_providers").delete().eq("tenant_id", tenantId);
-  await supabase.from("provider_settings").delete().eq("provider", SECOND_PROVIDER);
   await supabase.from("provider_calls").delete().eq("tenant_id", tenantId);
   await supabase.from("payment_providers").delete().eq("tenant_id", tenantId);
   await supabase.from("tenants").delete().eq("id", tenantId);
@@ -81,6 +68,11 @@ try {
   check("exactly one platform default provider", defaults.length === 1, `found ${defaults.length}`);
   check("the default provider is enabled", defaults[0]?.is_enabled === true);
   check("the default provider is whop", defaults[0]?.provider === "whop", `got ${defaults[0]?.provider}`);
+  check(
+    "Whop is the only registered platform provider",
+    settings?.length === 1 && settings[0]?.provider === "whop",
+    `found ${(settings ?? []).map((s) => s.provider).join(", ")}`,
+  );
 
   // --- Assigning and switching ----------------------------------------------
   console.log("\nAssigning a provider\n");
@@ -98,28 +90,9 @@ try {
   });
   check("an unknown provider is refused by the foreign key", badProvider !== null);
 
-  const { error: badOutcome } = await supabase
-    .from("payment_providers")
-    .update({ simulate_outcome: "explode" })
-    .eq("tenant_id", tenantId);
-  check("an invalid simulate_outcome is refused by the check constraint", badOutcome !== null);
-
-  // The route stands the old default down before raising the new one; doing it the other way round
-  // must be impossible, or a tenant could end up with two "default" payment methods.
-  const { error: twoDefaults } = await supabase.from("payment_providers").insert({
-    tenant_id: tenantId,
-    provider: SECOND_PROVIDER,
-    is_default: true,
-  });
-  check("a second default for the same tenant is refused", twoDefaults !== null);
-
-  await supabase.from("payment_providers").update({ is_default: false }).eq("tenant_id", tenantId);
-  const { error: switchError } = await supabase.from("payment_providers").insert({
-    tenant_id: tenantId,
-    provider: SECOND_PROVIDER,
-    is_default: true,
-  });
-  check("switching provider works once the old default is stood down", switchError === null);
+  // The Whop-only decision deliberately removes provider switching and the failure simulator from
+  // this verification. The tenant row is retained only because existing invoice and webhook code
+  // uses it to remember Whop's customer identifier.
 
   // --- The call log ----------------------------------------------------------
   console.log("\nProvider call log (as the app's own service-role client)\n");
@@ -225,7 +198,7 @@ try {
     .eq("idempotency_key", `cascade_${stamp}`);
   check(
     "the call log survives the tenant it belonged to",
-    (orphanCalls ?? []).every((c) => c.tenant_id === null),
+    (orphanCalls ?? []).length > 0 && (orphanCalls ?? []).every((c) => c.tenant_id === null),
     "provider calls must outlive the tenant — they are the record of money we tried to move",
   );
 } finally {
