@@ -66,16 +66,28 @@ export async function verifyPending2faToken(token: string): Promise<AdminPending
   }
 }
 
+/**
+ * The admin session cookie has no maxAge/expires, so it is a browser-session cookie and ends when
+ * the browser closes (user decision). The 12h limit is the token's own `exp`, which
+ * verifyAdminSessionToken enforces on every request whether or not the browser keeps the cookie.
+ * (A browser set to restore the previous session can bring session cookies back; the 12h limit
+ * holds regardless.)
+ */
 export const sessionCookieOptions = {
   httpOnly: true as const,
   secure: process.env.NODE_ENV === "production",
   sameSite: "lax" as const,
   path: "/",
   domain: process.env.ADMIN_COOKIE_DOMAIN || undefined,
-  maxAge: SESSION_TTL_SECONDS,
 };
 
 export const pending2faCookieOptions = {
   ...sessionCookieOptions,
   maxAge: PENDING_2FA_TTL_SECONDS,
+};
+
+/** Options that remove either admin cookie. Carries the same domain/path, or a domain cookie survives. */
+export const clearedAdminCookieOptions = {
+  ...sessionCookieOptions,
+  maxAge: 0,
 };

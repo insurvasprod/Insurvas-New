@@ -8,6 +8,13 @@ import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { audit } from "@/lib/audit/log";
 import { rebuildEntitlement } from "@/lib/entitlements/rebuild";
 import { settleMidPeriodPlanChange } from "@/lib/billing/planChange";
+import type { Json } from "@/lib/supabase/database.types";
+import {
+  claimSubscriptionMutation,
+  completeSubscriptionMutation,
+  normalizeIdempotencyKey,
+  type SubscriptionMutationOperation,
+} from "@/lib/subscriptions/idempotency";
 
 const actionSchema = z.object({ action: z.enum(["change_plan", "cancel", "pause", "resume"]) });
 
@@ -16,6 +23,10 @@ const actionSchema = z.object({ action: z.enum(["change_plan", "cancel", "pause"
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireAdminRole(CAN_MANAGE_SUBSCRIPTIONS);
   if (auth instanceof NextResponse) return auth;
+
+  const idempotency = normalizeIdempotencyKey(request.headers.get("Idempotency-Key"));
+  if (idempotency.error) return NextResponse.json({ error: idempotency.error }, { status: 400 });
+  if (!idempotency.key) return NextResponse.json({ error: "Idempotency-Key is required" }, { status: 400 });
 
   const { id } = await params;
   const body = await request.json().catch(() => null);
@@ -37,11 +48,37 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({ error: "Subscription not found" }, { status: 404 });
   }
 
+  const operationByAction: Record<string, SubscriptionMutationOperation> = {
+    change_plan: "subscription.change_plan",
+    cancel: "subscription.cancel",
+    pause: "subscription.pause",
+    resume: "subscription.resume",
+  };
+  const claim = await claimSubscriptionMutation({
+    actorId: auth.session.sub,
+    idempotencyKey: idempotency.key,
+    operation: operationByAction[actionParsed.data.action],
+    resourceId: id,
+    requestBody: body,
+  });
+  if (claim.kind === "replay") {
+    return NextResponse.json(claim.body, {
+      status: claim.status,
+      headers: { "Idempotency-Key": idempotency.key, "Idempotency-Replayed": "true" },
+    });
+  }
+  if (claim.kind === "conflict") return NextResponse.json({ error: claim.message }, { status: 409 });
+
+  const finish = async (responseBody: Json, status: number, outcome: "succeeded" | "failed") => {
+    await completeSubscriptionMutation(claim.id, outcome, status, responseBody);
+    return NextResponse.json(responseBody, { status, headers: { "Idempotency-Key": idempotency.key! } });
+  };
+
   switch (actionParsed.data.action) {
     case "change_plan": {
       const parsed = changePlanSchema.safeParse(body);
       if (!parsed.success) {
-        return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid input" }, { status: 400 });
+        return finish({ error: parsed.error.issues[0]?.message ?? "Invalid input" }, 400, "failed");
       }
 
       const { data, error } = await supabase.rpc("admin_change_subscription_plan", {
@@ -52,15 +89,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
       if (error) {
         if (/plan_archived|plan_not_found/.test(error.message ?? "")) {
-          return NextResponse.json({ error: "That plan is not available for new subscriptions" }, { status: 409 });
+          return finish({ error: "That plan is not available for new subscriptions" }, 409, "failed");
         }
         if (error.message?.includes("cycle_not_offered")) {
-          return NextResponse.json(
-            { error: "That plan isn't sold on this subscription's billing cycle" },
-            { status: 400 },
-          );
+          return finish({ error: "That plan isn't sold on this subscription's billing cycle" }, 400, "failed");
         }
-        return NextResponse.json({ error: "Could not change the plan" }, { status: 500 });
+        return finish({ error: "Could not change the plan" }, 500, "failed");
       }
 
       const result = Array.isArray(data) ? data[0] : data;
@@ -111,26 +145,30 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         request,
       });
 
-      return NextResponse.json({
-        appliedNow: result.applied_now,
-        effectiveAt: result.effective_at,
-        proration: proration
-          ? {
-              netCents: proration.netCents,
-              creditCents: proration.creditCents,
-              chargeCents: proration.chargeCents,
-              remainingDays: proration.remainingDays,
-              note: proration.note,
-              warning: proration.providerWarning,
-            }
-          : null,
-      });
+      return finish(
+        {
+          appliedNow: result.applied_now,
+          effectiveAt: result.effective_at,
+          proration: proration
+            ? {
+                netCents: proration.netCents,
+                creditCents: proration.creditCents,
+                chargeCents: proration.chargeCents,
+                remainingDays: proration.remainingDays,
+                note: proration.note,
+                warning: proration.providerWarning,
+              }
+            : null,
+        },
+        200,
+        "succeeded",
+      );
     }
 
     case "cancel": {
       const parsed = cancelSubscriptionSchema.safeParse(body);
       if (!parsed.success) {
-        return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "A reason is required" }, { status: 400 });
+        return finish({ error: parsed.error.issues[0]?.message ?? "A reason is required" }, 400, "failed");
       }
 
       const { data, error } = await supabase.rpc("admin_cancel_subscription", {
@@ -141,9 +179,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
       if (error) {
         if (/subscription_state_not_cancellable|plan_archived|plan_not_found/.test(error.message ?? "")) {
-          return NextResponse.json({ error: "That subscription cannot be cancelled in its current state" }, { status: 409 });
+          return finish({ error: "That subscription cannot be cancelled in its current state" }, 409, "failed");
         }
-        return NextResponse.json({ error: "Could not cancel the subscription" }, { status: 500 });
+        return finish({ error: "Could not cancel the subscription" }, 500, "failed");
       }
 
       const result = Array.isArray(data) ? data[0] : data;
@@ -165,7 +203,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         request,
       });
 
-      return NextResponse.json({ cancelledNow: result.cancelled_now, effectiveAt: result.effective_at });
+      return finish({ cancelledNow: result.cancelled_now, effectiveAt: result.effective_at }, 200, "succeeded");
     }
 
     case "pause":
@@ -176,7 +214,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       if (pausing) {
         const parsed = pauseSubscriptionSchema.safeParse(body);
         if (!parsed.success) {
-          return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "A reason is required" }, { status: 400 });
+          return finish({ error: parsed.error.issues[0]?.message ?? "A reason is required" }, 400, "failed");
         }
         reason = parsed.data.reason;
       }
@@ -194,9 +232,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         // check_violation is the guard refusing an invalid transition — a 409 with the reason,
         // not a 500, because nothing went wrong on our side.
         if (error.code === "23514" || /cannot be paused|can be resumed/.test(error.message)) {
-          return NextResponse.json({ error: error.message }, { status: 409 });
+          return finish({ error: error.message }, 409, "failed");
         }
-        return NextResponse.json({ error: `Could not ${pausing ? "pause" : "resume"} the subscription` }, { status: 500 });
+        return finish({ error: `Could not ${pausing ? "pause" : "resume"} the subscription` }, 500, "failed");
       }
 
       // Pausing drops the tenant to read-only, so the entitlement must change immediately.
@@ -212,7 +250,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         request,
       });
 
-      return NextResponse.json({ ok: true });
+      return finish({ ok: true }, 200, "succeeded");
     }
   }
 }

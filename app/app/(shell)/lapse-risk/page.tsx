@@ -1,12 +1,19 @@
 import { guardPage } from "@/lib/entitlements/guardPage";
-import { Card, CardContent } from "@/components/ui/card";
+import { sectionForPath } from "@/lib/menu/definition";
+import { getLapseRisk, LAPSE_SCHEMA_PENDING_MESSAGE } from "@/lib/lapseRisk/service";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
+import { LapseRiskBoard } from "@/components/app/lapse-risk-board";
+import { LapseRiskEmpty } from "@/components/app/lapse-risk-empty";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 
 /**
  * Gated on `chargeback_radar`, which only plan_c grants — so this is the page that demonstrates
  * the route guard doing something. A plan_a tenant pasting this URL gets an upgrade prompt
- * rather than a broken screen.
+ * rather than a broken screen, and while the feature is switched off platform-wide every tenant
+ * gets the platform notice instead (guard.killed), before anything below is read.
+ *
+ * A policy is listed only while it carries an open lapse signal — the reason is the risk
+ * (lib/lapseRisk/model.ts). With none, the board's own empty state, unchanged.
  */
 export default async function LapseRiskPage() {
   const guard = await guardPage("chargeback_radar");
@@ -16,7 +23,7 @@ export default async function LapseRiskPage() {
       <FeatureGateNotice
         guard={guard}
         featureLabel="Lapse risk"
-        description="Predictive scoring that flags policies likely to lapse before they do."
+        description="Policies with a recorded reason to lapse, and the commission each lapse would cost."
       />
     );
   }
@@ -25,23 +32,12 @@ export default async function LapseRiskPage() {
     return <RoleGateNotice featureLabel="Lapse risk" detail="Only owners and producers can view retention risk and commission exposure." />;
   }
 
-  return (
-    <div className="mx-auto max-w-3xl space-y-4">
-      <div>
-        <h1 className="text-2xl font-semibold leading-[1.21] tracking-[-0.02em]">Lapse risk</h1>
-        <p className="mt-1 text-sm font-medium text-muted-foreground">
-          Policies most likely to lapse in the next 30 days.
-        </p>
-      </div>
-      <Card>
-        <CardContent className="space-y-2 py-8 text-center">
-          <p className="text-sm font-medium">Nothing at risk right now</p>
-          <p className="mx-auto max-w-[46ch] text-sm text-muted-foreground">
-            Policies scored as likely to lapse in the next 30 days will appear here, most urgent
-            first.
-          </p>
-        </CardContent>
-      </Card>
-    </div>
-  );
+  const eyebrow = sectionForPath("/app/lapse-risk") ?? undefined;
+  const view = await getLapseRisk(guard.context);
+
+  if (view.policies.length === 0) {
+    return <LapseRiskEmpty eyebrow={eyebrow} notice={view.storage === "pending" ? LAPSE_SCHEMA_PENDING_MESSAGE : undefined} />;
+  }
+
+  return <LapseRiskBoard eyebrow={eyebrow} policies={view.policies} totals={view.totals} readOnly={guard.entitlement.access === "read_only"} />;
 }

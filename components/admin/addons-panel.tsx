@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { X } from "lucide-react";
-import { toast } from "sonner";
+import { notify } from "@/lib/notify";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -61,11 +61,11 @@ export function AddonsPanel({
     setBusy(false);
 
     if (!res.ok) {
-      toast.error(body?.error ?? "Could not attach the add-on");
+      notify.block(body?.error ?? "Could not attach the add-on");
       return;
     }
 
-    toast.success(`${selectedAddon.name} attached`);
+    notify.done(`${selectedAddon.name} attached`);
     setSelected("");
     router.refresh();
   }
@@ -81,11 +81,11 @@ export function AddonsPanel({
     setBusy(false);
 
     if (!res.ok) {
-      toast.error(body?.error ?? "Could not detach the add-on");
+      notify.block(body?.error ?? "Could not detach the add-on");
       return;
     }
 
-    toast.success(`${item.name} detached`);
+    notify.done(`${item.name} detached`);
     router.refresh();
   }
 
@@ -118,7 +118,7 @@ export function AddonsPanel({
                   {item.availability_overridden && (
                     <Badge
                       variant="outline"
-                      className="border-transparent bg-[var(--color-warning)]/10 text-[10px] text-[var(--color-warning)]"
+                      className="border-transparent bg-[var(--color-warning)]/10 text-xs text-[var(--color-warning)]"
                       title="Attached despite not being offered by this plan"
                     >
                       Off-plan

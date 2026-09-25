@@ -5,7 +5,9 @@ import type { Json } from "@/lib/supabase/database.types";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { postPartnerSystemCard } from "@/lib/partnerChat/service";
 import { runExistingCustomerPreflight } from "@/lib/existingCustomerPreflight/service";
+import { linkLeadsToContacts } from "@/lib/contacts/leadLink";
 import { notifyTenantAgents } from "@/lib/agentAlerts/service";
+import { intakeLocalDate } from "@/lib/dealFlow/localDate";
 
 type IntakeLead = {
   id: string;
@@ -24,6 +26,8 @@ type IntakeActor = {
   lead: IntakeLead;
   affiliateLinkId?: string | null;
   affiliateCampaign?: string | null;
+  /** Development-only integration-test seam; the HTTP route never enables this in production. */
+  failureInjection?: "work_item";
   request: Request;
 };
 
@@ -39,7 +43,7 @@ export async function writePartnerIntakeArtifacts(input: IntakeActor): Promise<v
   const phone = textValue(["phone", "phone_number"]);
   const quote = textValue(["initial_quote", "quote"]);
   const trackingId = textValue(["tracking_id", "affiliate_tracking_id"]);
-  const localDate = new Intl.DateTimeFormat("en-CA", { timeZone: input.partnerTimezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+  const localDate = intakeLocalDate(input.partnerTimezone);
   const supabase = getSupabaseServiceClient();
   const attribution = input.affiliateLinkId ? { affiliate_link_id: input.affiliateLinkId, affiliate_campaign: input.affiliateCampaign ?? null } : {};
   const failures: Array<{ step: "preflight" | "work_item" | "deal_flow" | "notification"; error: string }> = [];
@@ -54,15 +58,21 @@ export async function writePartnerIntakeArtifacts(input: IntakeActor): Promise<v
     failures.push({ step: "preflight", error: message });
   }
 
-  const queue = await supabase.from("lead_queue").insert({
-    tenant_id: input.tenantId,
-    lead_id: input.lead.id,
-    partner_id: input.partnerId,
-    product_line: input.lead.product_line,
-    pipeline_id: input.lead.pipeline_id,
-    stage_id: input.lead.stage_id,
-    ...attribution,
-  });
+  // Link the lead to the contact it confidently is (the contact auto-merge test). Best effort: it
+  // never throws, never creates a contact, and does nothing before migration 20260924326100.
+  await linkLeadsToContacts(input.tenantId, [{ id: input.lead.id, values: input.lead.values }]);
+
+  const queue = input.failureInjection === "work_item"
+    ? { error: { code: "test_injected_failure", message: "Test-injected work-item failure" } }
+    : await supabase.from("lead_queue").insert({
+      tenant_id: input.tenantId,
+      lead_id: input.lead.id,
+      partner_id: input.partnerId,
+      product_line: input.lead.product_line,
+      pipeline_id: input.lead.pipeline_id,
+      stage_id: input.lead.stage_id,
+      ...attribution,
+    });
   if (queue.error && queue.error.code !== "23505") failures.push({ step: "work_item", error: queue.error.message });
 
   const deal = await supabase.from("deal_flow").upsert({

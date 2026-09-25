@@ -1,0 +1,86 @@
+/*
+ * The admin console's accent: blue (user decision 1), from the admin boards (#0070cc family).
+ *
+ * TOKEN OVERRIDES ONLY. Every admin screen already paints with the design system's tokens, so
+ * re-pointing them here re-colours the whole console — buttons, focus rings, the rail, chips,
+ * links — without touching one component. The agent and partner planes keep the orange: this file
+ * only applies while an admin page is on screen.
+ *
+ * Why `:root:has(.admin-plane)` and not `.admin-plane { … }`: the alias tokens in globals.css
+ * (`--color-blue: var(--primary)`, and the Tailwind theme that reads them) are computed on :root.
+ * Overriding --primary on a descendant would leave every alias still orange. Overriding on :root
+ * itself recomputes them, and it also reaches dialogs and menus, which portal to <body> — outside
+ * any admin wrapper. `.admin-plane` is on the wrapper app/admin/layout.tsx renders.
+ *
+ * Specificity: `:root:not(.dark):has(.admin-plane)` (0,3,0) and `:root.dark:has(.admin-plane)`
+ * (0,3,0) both beat globals.css's `:root` and `.dark` (0,1,0), so the order the two files load in
+ * does not matter. Dark mode is the `.dark` class on <html>, the same guard globals.css uses.
+ *
+ * Contrast (WCAG, measured):
+ *   light  white on --primary #0070cc 5.0:1 · --accent-ink #005ba8 on white 6.9:1, on --brand-50 6.0:1
+ *          --ring-color #0070cc on white 5.0:1, on --surface-alt 4.0:1 (>= 3:1 for a ring)
+ *          --border-strong #78838f on white 3.9:1, on --surface-alt 3.1:1 (>= 3:1 for a control edge)
+ *          --muted text on --canvas 5.6:1, on --surface-alt 5.1:1
+ *          --nav-muted #9db0c6 on --nav-bg #00284f 6.7:1 · --accent-ink on the rail's active chip 6.0:1
+ *   dark   --on-primary #0b1a2b on --primary #4da3ff 6.7:1, on hover #74b6ff 8.3:1
+ *          --accent-ink #7cbcff on --surface 8.7:1, on --surface-alt 7.8:1, on --brand-50 7.4:1
+ *          --ring-color #4da3ff on --canvas 7.4:1
+ */
+
+/* Light: the accent, and the board's cooler neutrals (canvas, rules, the header band). */
+:root:not(.dark):has(.admin-plane) {
+  --primary:        #0070cc;
+  --accent-hover:   #005ba8;
+  --accent-pressed: #004a8a;
+  /* Ink on orange was the right glyph; on this blue it measures 3.6:1. White is 5.0:1. */
+  --on-primary:     #ffffff;
+  --accent-ink:     #005ba8;
+  --ring-color:     #0070cc;
+
+  /* The "soft" accent ground: the rail's active chip, action chips, selected rows. */
+  --soft-orange-surface: #e6f1fb;
+
+  --brand-50:  #e6f1fb;
+  --brand-100: #cce3f7;
+  --brand-200: #99c6ef;
+  --brand-300: #66a9e6;
+  --brand-400: #338dde;
+  --brand-500: #0070cc;
+  --brand-600: #005ba8;
+
+  --canvas:        #eef2f7;
+  --surface-alt:   #dfe6ef;
+  --border:        #ccd6e2;
+  --border-strong: #78838f;
+
+  /* The rail. Same in both themes, as globals.css keeps its own rail. */
+  --nav-bg:    #00284f;
+  --nav-line:  #0b3a6b;
+  --nav-ink:   #e8eef6;
+  --nav-muted: #9db0c6;
+}
+
+/* Dark: the accent only. The dark neutrals stay as globals.css defines them. */
+:root.dark:has(.admin-plane) {
+  --primary:        #4da3ff;
+  --accent-hover:   #74b6ff;
+  --accent-pressed: #3a8fe6;
+  --on-primary:     #0b1a2b;
+  --accent-ink:     #7cbcff;
+  --ring-color:     #4da3ff;
+
+  --soft-orange-surface: #102a47;
+
+  --brand-50:  #102a47;
+  --brand-100: #13304d;
+  --brand-200: #1a4570;
+  --brand-300: #22609c;
+  --brand-400: #3a8fe6;
+  --brand-500: #4da3ff;
+  --brand-600: #74b6ff;
+
+  --nav-bg:    #00284f;
+  --nav-line:  #0b3a6b;
+  --nav-ink:   #e8eef6;
+  --nav-muted: #9db0c6;
+}

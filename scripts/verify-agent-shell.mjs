@@ -14,6 +14,7 @@ const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.
 const stamp = Date.now();
 let tenantId = null;
 let userId = null;
+let authUserId = null;
 let failures = 0;
 
 function check(label, condition, detail = "") {
@@ -76,6 +77,7 @@ async function cleanup() {
   await supabase.from("subscriptions").delete().eq("tenant_id", tenantId);
   await supabase.from("tenant_users").delete().eq("tenant_id", tenantId);
   if (userId) await supabase.from("users").delete().eq("id", userId);
+  if (authUserId) await supabase.auth.admin.deleteUser(authUserId);
   await supabase.from("tenants").delete().eq("id", tenantId);
 }
 
@@ -85,12 +87,24 @@ try {
   if (tenantError) throw new Error(tenantError.message);
   tenantId = tenant.id;
 
-  const { data: user, error: userError } = await supabase
+  // The compatibility users table is intentionally keyed to auth.users and has no UUID default.
+  // Create the fixture through the supported Auth admin path so the bridge trigger creates the
+  // matching public row, then activate it for the signed-session checks.
+  const fixtureEmail = `la01-shell-${stamp}@insurvas.invalid`;
+  const { data: authUser, error: authUserError } = await supabase.auth.admin.createUser({
+    email: fixtureEmail,
+    password: `LA-0.1-qa-${stamp}-Strong!`,
+    email_confirm: true,
+    user_metadata: { name: "LA-0.1 Shell", full_name: "LA-0.1 Shell", display_name: "LA-0.1 Shell" },
+  });
+  if (authUserError || !authUser.user) throw new Error(authUserError?.message ?? "Could not create auth fixture");
+  authUserId = authUser.user.id;
+  userId = authUser.user.id;
+  const { error: activateUserError } = await supabase
     .from("users")
-    .insert({ email: `la01-shell-${stamp}@insurvas.invalid`, name: "LA-0.1 Shell", status: "active" })
-    .select("id").single();
-  if (userError) throw new Error(userError.message);
-  userId = user.id;
+    .update({ name: "LA-0.1 Shell", full_name: "LA-0.1 Shell", display_name: "LA-0.1 Shell", status: "active", active: true })
+    .eq("id", userId);
+  if (activateUserError) throw new Error(activateUserError.message);
 
   const { error: membershipError } = await supabase
     .from("tenant_users").insert({ tenant_id: tenantId, user_id: userId, role: "owner" });
@@ -113,6 +127,14 @@ try {
   );
   check("unentitled inbound URL is not rendered as a navigation link", !inboundHtml.includes('href="/app/inbound"'));
 
+  const inboundReadApi = await api("/api/app/inbound?status=unclaimed", cookie);
+  const inboundReadBody = await inboundReadApi.json();
+  check(
+    "unentitled inbound read API returns 403",
+    inboundReadApi.status === 403 && inboundReadBody.code === "feature_not_entitled",
+    `status ${inboundReadApi.status}; code ${inboundReadBody.code ?? "-"}`,
+  );
+
   const inboundApi = await api("/api/app/inbound/transfer", cookie, { method: "POST" });
   const inboundBody = await inboundApi.json();
   check("unentitled inbound API returns 403", inboundApi.status === 403 && inboundBody.code === "feature_not_entitled");
@@ -125,6 +147,13 @@ try {
     "the same session sees inbound after a plan change",
     entitledPage.status === 200 && entitledHtml.includes('href="/app/inbound"'),
     `status ${entitledPage.status}; location ${entitledPage.headers.get("location") ?? "-"}; body markers: ${["Inbound transfers", 'href="/app/inbound"', "on the way"].filter((marker) => entitledHtml.includes(marker)).join(", ") || "none"}`,
+  );
+  const entitledReadApi = await api("/api/app/inbound?status=unclaimed", cookie);
+  const entitledReadBody = await entitledReadApi.json();
+  check(
+    "the entitled inbound read API returns 200",
+    entitledReadApi.status === 200 && entitledReadBody.readOnly === false,
+    `status ${entitledReadApi.status}; readOnly ${entitledReadBody.readOnly ?? "-"}`,
   );
   const entitledApi = await api("/api/app/inbound/transfer", cookie, { method: "POST" });
   check("the entitled inbound API passes authorization", entitledApi.status === 501, `expected frame placeholder 501, got ${entitledApi.status}`);
@@ -160,6 +189,9 @@ try {
   const read = await api("/api/app/policies", cookie);
   const readBody = await read.json();
   check("suspended tenant can still read its book", read.status === 200 && readBody.readOnly === true);
+  const suspendedInbound = await api("/api/app/inbound?status=unclaimed", cookie);
+  const suspendedInboundBody = await suspendedInbound.json();
+  check("suspended tenant can still read inbound data", suspendedInbound.status === 200 && suspendedInboundBody.readOnly === true);
   const write = await api("/api/app/policies", cookie, { method: "POST" });
   const writeBody = await write.json();
   check("suspended tenant cannot create new work", write.status === 403 && writeBody.code === "read_only");

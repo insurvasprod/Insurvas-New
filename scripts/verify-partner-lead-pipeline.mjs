@@ -2,12 +2,18 @@
 import { randomUUID } from "node:crypto";
 import { SignJWT } from "jose";
 import { createClient } from "@supabase/supabase-js";
+import { createFixtureUser, deleteFixtureUser, deleteLa1FixtureRowsInBatches, deleteLa1FixtureTenant } from "./lib/fixtureUser.mjs";
 
 const BASE = process.env.APP_BASE_URL ?? "http://localhost:3000";
 const db = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
+// LA-1.17 criterion 3 is "the board reflects a disposition within seconds of the agent recording it".
+// That is a propagation guarantee, so it needs a subscriber rather than a re-read: polling the API
+// would prove the database has the row, not that the partner's open board was told.
+const realtimeAvailable = Boolean(process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY);
+const openRealtime = () => createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY, { auth: { persistSession: false } });
 const stamp = Date.now();
 const tenantId = randomUUID(); const otherTenantId = randomUUID(); const partnerId = randomUUID(); const otherPartnerId = randomUUID();
-const ownerId = randomUUID(); const partnerUserId = randomUUID(); const otherPartnerUserId = randomUUID(); const tenantTemplateId = randomUUID(); const pipelineId = randomUUID(); const stageOpenId = randomUUID(); const stageWonId = randomUUID(); const leadId = randomUUID(); const secondLeadId = randomUUID(); const firstQueueId = randomUUID(); const secondQueueId = randomUUID();
+let ownerId = null; let partnerUserId = null; let otherPartnerUserId = null; const tenantTemplateId = randomUUID(); const pipelineId = randomUUID(); const stageOpenId = randomUUID(); const stageWonId = randomUUID(); const leadId = randomUUID(); const secondLeadId = randomUUID(); const firstQueueId = randomUUID(); const secondQueueId = randomUUID();
 let failures = 0;
 const check = (label, ok, detail = "") => { if (ok) console.log(`  ok   ${label}`); else { console.log(`  FAIL ${label}${detail ? ` — ${detail}` : ""}`); failures += 1; } };
 async function partnerCookie(userId, currentPartner = partnerId, currentTenant = tenantId, expired = false) { const secret = process.env.PARTNER_SESSION_SECRET || `insurvas-partner:${process.env.TENANT_SESSION_SECRET}`; return `insurvas_partner_session=${await new SignJWT({ tenantId: currentTenant, partnerId: currentPartner }).setProtectedHeader({ alg: "HS256" }).setSubject(userId).setIssuedAt().setExpirationTime(expired ? Math.floor(Date.now() / 1000) - 1 : "10m").sign(new TextEncoder().encode(secret))}`; }
@@ -15,7 +21,7 @@ async function api(path, cookie, options = {}) { return fetch(`${BASE}${path}`, 
 async function body(response) { return response.json().catch(() => ({})); }
 async function cleanup() {
   for (const id of [tenantId, otherTenantId]) {
-    await db.from("partner_messages").delete().eq("tenant_id", id); await db.from("lead_queue").delete().eq("tenant_id", id); await db.from("deal_flow").delete().eq("tenant_id", id); await db.from("agent_leads").delete().eq("tenant_id", id); await db.from("partner_users").delete().eq("tenant_id", id); await db.from("partner_channels").delete().eq("tenant_id", id); await db.from("tenant_templates").delete().eq("tenant_id", id); await db.from("tenant_users").delete().eq("tenant_id", id); await db.from("pipelines").delete().eq("tenant_id", id); await db.from("partners").delete().eq("tenant_id", id); await db.from("audit_log").delete().in("actor_id", [ownerId, partnerUserId, otherPartnerUserId]); await db.from("users").delete().in("id", [ownerId, partnerUserId, otherPartnerUserId]); await db.from("tenants").delete().eq("id", id);
+    await db.from("partner_messages").delete().eq("tenant_id", id); await deleteLa1FixtureRowsInBatches(db, "lead_queue", id); await deleteLa1FixtureRowsInBatches(db, "deal_flow", id); await deleteLa1FixtureRowsInBatches(db, "agent_leads", id); await db.from("partner_users").delete().eq("tenant_id", id); await db.from("partner_channels").delete().eq("tenant_id", id); await db.from("tenant_templates").delete().eq("tenant_id", id); await db.from("tenant_users").delete().eq("tenant_id", id); await db.from("tenant_pipelines").delete().eq("tenant_id", id); await db.from("partners").delete().eq("tenant_id", id); await db.from("audit_log").delete().in("actor_id", [ownerId, partnerUserId, otherPartnerUserId]); await deleteLa1FixtureTenant(db, id); for (const id of [ownerId, partnerUserId, otherPartnerUserId]) await deleteFixtureUser(db, id);
   }
 }
 async function insertChunks(table, rows, size = 500) { for (let index = 0; index < rows.length; index += size) { const result = await db.from(table).insert(rows.slice(index, index + size)); if (result.error) throw new Error(`${table}: ${result.error.message}`); } }
@@ -24,19 +30,21 @@ async function main() {
   if (!process.env.TENANT_SESSION_SECRET) throw new Error("TENANT_SESSION_SECRET is required");
   await cleanup();
   const tenant = await db.from("tenants").insert([{ id: tenantId, name: `LA-1.17 pipeline QA ${stamp}`, status: "active", onboarding_state: "completed" }, { id: otherTenantId, name: `LA-1.17 other ${stamp}`, status: "active", onboarding_state: "completed" }]); if (tenant.error) throw new Error(tenant.error.message);
-  const users = await db.from("users").insert([{ id: ownerId, email: `la117-owner-${stamp}@invalid.test`, name: "Pipeline owner", password_hash: "verification-only", status: "active" }, { id: partnerUserId, email: `la117-partner-${stamp}@invalid.test`, name: "Pipeline closer", password_hash: "verification-only", status: "active" }, { id: otherPartnerUserId, email: `la117-other-${stamp}@invalid.test`, name: "Other closer", password_hash: "verification-only", status: "active" }]); if (users.error) throw new Error(users.error.message);
+  ({ userId: ownerId } = await createFixtureUser(db, { email: `la117-owner-${stamp}@invalid.test`, name: "Pipeline owner" }));
+  ({ userId: partnerUserId } = await createFixtureUser(db, { email: `la117-partner-${stamp}@invalid.test`, name: "Pipeline closer" }));
+  ({ userId: otherPartnerUserId } = await createFixtureUser(db, { email: `la117-other-${stamp}@invalid.test`, name: "Other closer" }));
   const memberships = await db.from("tenant_users").insert({ tenant_id: tenantId, user_id: ownerId, role: "owner" }); if (memberships.error) throw new Error(memberships.error.message);
-  const partners = await db.from("partners").insert([{ id: partnerId, tenant_id: tenantId, name: "Pipeline Partner", partner_type: "publisher", status: "active", country: "US", timezone: "America/Phoenix" }, { id: otherPartnerId, tenant_id: otherTenantId, name: "Other Partner", partner_type: "publisher", status: "active", country: "US", timezone: "America/Phoenix" }]); if (partners.error) throw new Error(partners.error.message);
+  const partners = await db.from("partners").insert([{ slug: `fx-${Math.random().toString(36).slice(2, 10)}`, id: partnerId, tenant_id: tenantId, name: "Pipeline Partner", partner_type: "publisher", status: "active", country: "US", timezone: "America/Phoenix" }, { slug: `fx-${Math.random().toString(36).slice(2, 10)}`, id: otherPartnerId, tenant_id: otherTenantId, name: "Other Partner", partner_type: "publisher", status: "active", country: "US", timezone: "America/Phoenix" }]); if (partners.error) throw new Error(partners.error.message);
   const partnerMembership = await db.from("partner_users").insert([{ id: randomUUID(), tenant_id: tenantId, partner_id: partnerId, user_id: partnerUserId, role: "partner_user", status: "active", accepted_at: new Date().toISOString() }, { id: randomUUID(), tenant_id: otherTenantId, partner_id: otherPartnerId, user_id: otherPartnerUserId, role: "partner_user", status: "active", accepted_at: new Date().toISOString() }]); if (partnerMembership.error) throw new Error(partnerMembership.error.message);
-  const existingPipeline = await db.from("pipelines").select("id").eq("tenant_id", tenantId).eq("partner_type", "publisher").eq("is_default", true).maybeSingle();
+  const existingPipeline = await db.from("tenant_pipelines").select("id").eq("tenant_id", tenantId).eq("partner_type", "publisher").eq("is_default", true).maybeSingle();
   let testPipelineId = existingPipeline.data?.id ?? pipelineId;
   if (!testPipelineId) throw new Error("pipeline dependency missing");
-  if (!existingPipeline.data) { const pipeline = await db.from("pipelines").insert({ id: pipelineId, tenant_id: tenantId, name: "QA Publisher Pipeline", partner_type: "publisher", is_default: true }); if (pipeline.error) throw new Error(pipeline.error.message); }
-  const existingStages = await db.from("pipeline_stages").select("id, name, stage_type").eq("pipeline_id", testPipelineId).eq("is_archived", false).order("position");
+  if (!existingPipeline.data) { const pipeline = await db.from("tenant_pipelines").insert({ slug: `fx-${Math.random().toString(36).slice(2, 10)}`, id: pipelineId, tenant_id: tenantId, name: "QA Publisher Pipeline", partner_type: "publisher", is_default: true }); if (pipeline.error) throw new Error(pipeline.error.message); }
+  const existingStages = await db.from("tenant_pipeline_stages").select("id, name, stage_type").eq("pipeline_id", testPipelineId).eq("is_archived", false).order("position");
   if (existingStages.error) throw new Error(existingStages.error.message);
   let testOpenStageId = existingStages.data?.find((stage) => stage.stage_type === "open")?.id;
   let testWonStageId = existingStages.data?.find((stage) => stage.stage_type === "won")?.id;
-  if (!testOpenStageId || !testWonStageId) { const stages = await db.from("pipeline_stages").insert([{ id: stageOpenId, pipeline_id: testPipelineId, name: `QA New Transfer ${stamp}`, position: 0, stage_type: "open", color: "#2563EB" }, { id: stageWonId, pipeline_id: testPipelineId, name: `QA Submitted ${stamp}`, position: 1, stage_type: "won", color: "#16A34A" }]); if (stages.error) throw new Error(stages.error.message); testOpenStageId = stageOpenId; testWonStageId = stageWonId; }
+  if (!testOpenStageId || !testWonStageId) { const stages = await db.from("tenant_pipeline_stages").insert([{ id: stageOpenId, pipeline_id: testPipelineId, name: `QA New Transfer ${stamp}`, position: 0, stage_type: "open", color: "#2563EB" }, { id: stageWonId, pipeline_id: testPipelineId, name: `QA Submitted ${stamp}`, position: 1, stage_type: "won", color: "#16A34A" }]); if (stages.error) throw new Error(stages.error.message); testOpenStageId = stageOpenId; testWonStageId = stageWonId; }
   const template = await db.from("tenant_templates").select("id, template_id, template_version, definition_version, product_code").eq("tenant_id", tenantId).limit(1).maybeSingle();
   let templateData = template.data;
   if (!templateData) {
@@ -47,6 +55,67 @@ async function main() {
   }
   const leads = await db.from("agent_leads").insert([{ id: leadId, tenant_id: tenantId, tenant_template_id: templateData.id, template_id: templateData.template_id, template_version: templateData.template_version, definition_version: templateData.definition_version, product_line: templateData.product_code, partner_id: partnerId, pipeline_id: testPipelineId, stage_id: testOpenStageId, values: { full_name: "Masked Pipeline Prospect", ssn: "123456789", routing_number: "111111111", policy_number: "POL-PRIVATE", phone: "6025550101" }, created_by: partnerUserId }, { id: secondLeadId, tenant_id: tenantId, tenant_template_id: templateData.id, template_id: templateData.template_id, template_version: templateData.template_version, definition_version: templateData.definition_version, product_line: templateData.product_code, partner_id: partnerId, pipeline_id: testPipelineId, stage_id: testWonStageId, values: { full_name: "Converted Pipeline Prospect", phone: "6025550102" }, created_by: partnerUserId }]); if (leads.error) throw new Error(leads.error.message);
   const queues = await db.from("lead_queue").insert([{ id: firstQueueId, tenant_id: tenantId, lead_id: leadId, partner_id: partnerId, product_line: templateData.product_code, pipeline_id: testPipelineId, stage_id: testOpenStageId, status: "unclaimed" }, { id: secondQueueId, tenant_id: tenantId, lead_id: secondLeadId, partner_id: partnerId, product_line: templateData.product_code, pipeline_id: testPipelineId, stage_id: testWonStageId, status: "completed", disposition: "application_submitted", disposition_at: new Date().toISOString(), disposition_by: ownerId }]); if (queues.error) throw new Error(queues.error.message);
+
+  // LA-1.17 criterion 3: "the board reflects a disposition within seconds of the agent recording it".
+  // A propagation guarantee needs a subscriber, not a re-read -- polling the API would prove the
+  // database holds the row, not that the partner's open board was told.
+  //
+  // Placed here, immediately after the queue rows exist and before any of the suite's API work, for
+  // a reason worth keeping (backlog 184). Subscribe and write must stay adjacent, and both must
+  // happen before the bulk work. The assertion still requires a real event; the bounded retry below
+  // only gives a transient Realtime socket delivery miss one fresh subscription/write attempt.
+  if (realtimeAvailable) {
+    const observeLeadChange = async (disposition) => {
+      const realtime = openRealtime();
+      // Latch the successful subscribe instead of tracking the latest status. subscribe() keeps
+      // calling back for the channel's whole life, and removeChannel() delivers a final CLOSED.
+      let everSubscribed = false;
+      let subscribeStatus = "not_started";
+      let subscribeError = null;
+      let leadChangeReceived = false;
+      let leadChangeAt = 0;
+      const channel = realtime.channel(`partner-pipeline:${partnerId}`).on("broadcast", { event: "lead_changed" }, (payload) => {
+        if (payload.payload?.partner_id === partnerId) { leadChangeReceived = true; leadChangeAt = Date.now(); }
+      });
+      await new Promise((resolve) => {
+        let settled = false;
+        const finish = () => { if (!settled) { settled = true; clearTimeout(timeout); resolve(); } };
+        const timeout = setTimeout(finish, 8000);
+        channel.subscribe((status, err) => {
+          subscribeStatus = status;
+          if (status === "SUBSCRIBED") { everSubscribed = true; finish(); }
+          if (err) subscribeError = err.message ?? String(err);
+        });
+      });
+      const startedAt = Date.now();
+      // A real disposition write, not a touch of updated_at: the criterion is about what the agent does.
+      const dispositionWrite = everSubscribed
+        ? await db.from("lead_queue").update({ disposition, disposition_at: new Date().toISOString() }).eq("id", firstQueueId).select("id, partner_id")
+        : { data: [], error: { message: "subscription did not become ready" } };
+      const deadline = Date.now() + 5000;
+      while (!leadChangeReceived && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 100));
+      const passed = everSubscribed && leadChangeReceived && leadChangeAt - startedAt < 3000;
+      const detail = leadChangeReceived
+        ? `${leadChangeAt - startedAt}ms (${subscribeStatus})`
+        : JSON.stringify({ event: "none", subscribed: everSubscribed, subscribeStatus, subscribeError, updatedRows: dispositionWrite.data?.length ?? 0, rowPartner: dispositionWrite.data?.[0]?.partner_id, expectedPartner: partnerId, writeError: dispositionWrite.error?.message ?? null });
+      await realtime.removeChannel(channel).catch(() => {});
+      await realtime.realtime.disconnect();
+      return { passed, detail, everSubscribed };
+    };
+    let observation = await observeLeadChange("not_interested");
+    if (!observation.passed) {
+      // Realtime delivery is advisory and can lose a single socket attempt under shared-project
+      // load. A fresh subscription plus a second real disposition write keeps this a propagation
+      // assertion while avoiding a false red result from one transient connection.
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      observation = await observeLeadChange("voicemail");
+    }
+    check("a disposition reaches the partner board within seconds", observation.passed, observation.detail);
+    // Put the row back so the checks below see the state they were written against.
+    await db.from("lead_queue").update({ disposition: null, disposition_at: null }).eq("id", firstQueueId);
+  } else {
+    check("a disposition reaches the partner board within seconds", false, "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY is not set, so no subscriber could be opened");
+  }
   const deal = await db.from("deal_flow").insert({ tenant_id: tenantId, lead_id: secondLeadId, partner_id: partnerId, product_line: templateData.product_code, pipeline_id: testPipelineId, stage_id: testWonStageId, insured_name: "Converted Pipeline Prospect", local_date: new Date().toISOString().slice(0, 10), status: "completed", call_result: "application_submitted", notes: "Outcome note visible to partner", disposition_at: new Date().toISOString(), disposition_by: ownerId }); if (deal.error) throw new Error(deal.error.message);
   try {
     const session = await partnerCookie(partnerUserId);

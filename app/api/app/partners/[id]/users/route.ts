@@ -1,8 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { audit } from "@/lib/audit/log";
-import { buildPartnerInviteUrl, generateInviteToken, hashInviteToken, inviteExpiryFromNow } from "@/lib/users/invitations";
-import { sendInvitationEmail } from "@/lib/email/sendInvitationEmail";
+import { buildExistingPartnerInviteUrl, buildPartnerInviteUrl, generateInviteToken, hashInviteToken, inviteExpiryFromNow } from "@/lib/users/invitations";
+import { sendExistingPartnerInvitationEmail, sendInvitationEmail } from "@/lib/email/sendInvitationEmail";
 import { configuredAppOrigin } from "@/lib/urls/origin";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import { partnerUserInviteSchema } from "@/lib/partnerAuth/schemas";
@@ -44,13 +44,17 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const origin = configuredAppOrigin("partner");
   try {
     const result = await invitePartnerUser({ tenantId: auth.context.tenantId, partnerId, ...parsed.data, tokenHash: hashInviteToken(token), expiresAt: expiresAt.toISOString(), maxPartnerUsers: auth.entitlement.limits.max_partner_users });
-    const inviteUrl = buildPartnerInviteUrl(token, origin);
-    const { delivered } = await sendInvitationEmail({ to: result.email, name: result.name, inviteUrl, expiresAt, userId: result.user_id, tenantId: result.tenant_id });
+    const inviteUrl = result.has_existing_password ? buildExistingPartnerInviteUrl(token, origin) : buildPartnerInviteUrl(token, origin);
+    const { delivered } = result.has_existing_password
+      ? await sendExistingPartnerInvitationEmail({ to: result.email, name: result.name, inviteUrl, expiresAt, userId: result.user_id, tenantId: result.tenant_id })
+      : await sendInvitationEmail({ to: result.email, name: result.name, inviteUrl, expiresAt, userId: result.user_id, tenantId: result.tenant_id });
     await audit({ actorType: "tenant", actorId: auth.context.userId, action: "tenant.partner_user_invited", targetType: "partner_user", targetId: result.user_id, metadata: { partnerId, email: result.email, role: result.role, delivered, actorPlane: "agent" }, request });
-    return NextResponse.json({ ok: true, user: { id: result.user_id, name: result.name, email: result.email, role: result.role }, invite: { url: inviteUrl, expiresAt: expiresAt.toISOString(), delivered } }, { status: 201 });
+    return NextResponse.json({ ok: true, user: { id: result.user_id, name: result.name, email: result.email, role: result.role }, invite: { url: inviteUrl, expiresAt: expiresAt.toISOString(), delivered, mode: result.has_existing_password ? "existing_account" : "set_password" } }, { status: 201 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Could not invite partner user";
-    if (message.includes("partner_user_email_exists") || message.includes("duplicate key")) return NextResponse.json({ error: "This email is already registered" }, { status: 409 });
+    // The RPC raises `email_exists` (older versions `partner_user_email_exists`); both are a 409.
+    if (message.includes("email_exists") || message.includes("duplicate key")) return NextResponse.json({ error: "This email already has partner access or a pending invitation" }, { status: 409 });
+    if (message.includes("account_not_active")) return NextResponse.json({ error: "This account is not active and cannot be invited" }, { status: 409 });
     if (message.includes("partner_not_found")) return NextResponse.json({ error: "Partner not found" }, { status: 404 });
     const limit = message.match(/max_partner_users:(\d+):(\d+)/);
     if (limit) return NextResponse.json({ error: `Your plan has reached max_partner_users (${limit[1]} of ${limit[2]}). Upgrade to invite another partner user.`, code: "limit_reached", limitKey: "max_partner_users", usage: Number(limit[1]), limit: Number(limit[2]), upgrade: true }, { status: 403 });

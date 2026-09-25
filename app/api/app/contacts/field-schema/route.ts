@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { audit } from "@/lib/audit/log";
 import { fieldSchema } from "@/lib/contacts/schemas";
-import { saveFieldSchema, getContactWorkspace } from "@/lib/contacts/service";
+import { fieldSchemaForTenant, saveFieldSchema } from "@/lib/contacts/service";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 
 const CONTACT_ROLES = ["owner", "producer", "assistant"] as const;
@@ -10,7 +10,7 @@ const CONTACT_ROLES = ["owner", "producer", "assistant"] as const;
 export async function GET() {
   const auth = await requireFeatureRole("duplicate_detection", CONTACT_ROLES);
   if (auth instanceof NextResponse) return auth;
-  try { return NextResponse.json({ fieldSchema: (await getContactWorkspace(auth.context.tenantId, auth.context.userId)).fieldSchema }); }
+  try { return NextResponse.json({ fieldSchema: await fieldSchemaForTenant(auth.context.tenantId, auth.context.userId) }); }
   catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Could not load field schema" }, { status: 500 }); }
 }
 

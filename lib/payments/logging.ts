@@ -190,5 +190,11 @@ export function withCallLogging(inner: PaymentProvider, ctx: LogContext): Paymen
       );
   }
 
+  const testConnection = inner.testConnection?.bind(inner);
+  if (testConnection) {
+    wrapped.testConnection = () =>
+      run("testConnection", {}, testConnection, () => ({ status: "ok", response: { reachable: true } }));
+  }
+
   return wrapped;
 }

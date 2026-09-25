@@ -2,13 +2,14 @@
 import { randomUUID } from "node:crypto";
 import { SignJWT } from "jose";
 import { createClient } from "@supabase/supabase-js";
+import { createFixtureUser, deleteFixtureUser } from "./lib/fixtureUser.mjs";
 
 const BASE = process.env.APP_BASE_URL ?? "http://localhost:3000";
 const db = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
 const realtime = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ? createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY, { auth: { persistSession: false } }) : null;
 const stamp = Date.now();
 const tenantId = randomUUID(); const otherTenantId = randomUUID();
-const ownerId = randomUUID(); const assistantId = randomUUID(); const bookkeeperId = randomUUID(); const otherOwnerId = randomUUID();
+let ownerId = null; let assistantId = null; let bookkeeperId = null; let otherOwnerId = null;
 const leadId = randomUUID(); const queueId = randomUUID();
 let failures = 0;
 const check = (label, ok, detail = "") => { if (ok) console.log(`  ok   ${label}`); else { console.log(`  FAIL ${label}${detail ? ` — ${detail}` : ""}`); failures++; } };
@@ -26,7 +27,7 @@ async function cleanup() {
     await db.from("audit_log").delete().in("actor_id", [ownerId, assistantId, bookkeeperId, otherOwnerId]);
     await db.from("tenant_entitlements").delete().eq("tenant_id", id);
     await db.from("tenant_users").delete().eq("tenant_id", id);
-    await db.from("users").delete().in("id", [ownerId, assistantId, bookkeeperId, otherOwnerId]);
+    for (const id of [ownerId, assistantId, bookkeeperId, otherOwnerId]) await deleteFixtureUser(db, id);
     await db.from("tenants").delete().eq("id", id);
   }
 }
@@ -39,13 +40,10 @@ async function main() {
     { id: otherTenantId, name: `LA-1.15 Other ${stamp}`, status: "active", onboarding_state: "completed" },
   ]);
   if (tenants.error) throw new Error(tenants.error.message);
-  const users = await db.from("users").insert([
-    { id: ownerId, email: `la115-owner-${stamp}@invalid.test`, name: "Floor Owner", password_hash: "verification-only", status: "active" },
-    { id: assistantId, email: `la115-assistant-${stamp}@invalid.test`, name: "Floor Assistant", password_hash: "verification-only", status: "active" },
-    { id: bookkeeperId, email: `la115-bookkeeper-${stamp}@invalid.test`, name: "Floor Bookkeeper", password_hash: "verification-only", status: "active" },
-    { id: otherOwnerId, email: `la115-other-${stamp}@invalid.test`, name: "Other Owner", password_hash: "verification-only", status: "active" },
-  ]);
-  if (users.error) throw new Error(users.error.message);
+  ({ userId: ownerId } = await createFixtureUser(db, { email: `la115-owner-${stamp}@invalid.test`, name: "Floor Owner" }));
+  ({ userId: assistantId } = await createFixtureUser(db, { email: `la115-assistant-${stamp}@invalid.test`, name: "Floor Assistant" }));
+  ({ userId: bookkeeperId } = await createFixtureUser(db, { email: `la115-bookkeeper-${stamp}@invalid.test`, name: "Floor Bookkeeper" }));
+  ({ userId: otherOwnerId } = await createFixtureUser(db, { email: `la115-other-${stamp}@invalid.test`, name: "Other Owner" }));
   const members = await db.from("tenant_users").insert([
     { tenant_id: tenantId, user_id: ownerId, role: "owner" }, { tenant_id: tenantId, user_id: assistantId, role: "assistant" }, { tenant_id: tenantId, user_id: bookkeeperId, role: "bookkeeper" }, { tenant_id: otherTenantId, user_id: otherOwnerId, role: "owner" },
   ]);
@@ -53,23 +51,23 @@ async function main() {
   const grants = { tenant_id: tenantId, entitlement: { tenant_id: tenantId, plan_code: "qa", plan_version: 1, status: "active", access: "full", computed_at: new Date().toISOString(), features: ["inbound_transfers"], meters: {}, limits: {} } };
   const otherGrant = { tenant_id: otherTenantId, entitlement: { tenant_id: otherTenantId, plan_code: "qa", plan_version: 1, status: "active", access: "full", computed_at: new Date().toISOString(), features: ["inbound_transfers"], meters: {}, limits: {} } };
   const entitlements = await db.from("tenant_entitlements").insert([grants, otherGrant]); if (entitlements.error) throw new Error(entitlements.error.message);
-  const pipeline = await db.from("pipelines").select("id").eq("tenant_id", tenantId).eq("partner_type", "publisher").eq("is_default", true).single();
-  const stage = await db.from("pipeline_stages").select("id").eq("pipeline_id", pipeline.data.id).eq("is_archived", false).order("position").limit(1).single();
+  const pipeline = await db.from("tenant_pipelines").select("id").eq("tenant_id", tenantId).eq("partner_type", "publisher").eq("is_default", true).single();
+  const stage = await db.from("tenant_pipeline_stages").select("id").eq("pipeline_id", pipeline.data.id).eq("is_archived", false).order("position").limit(1).single();
   const template = await db.from("templates").select("id").eq("product_code", "term_life").eq("is_active", true).limit(1).single();
   if (pipeline.error || stage.error || template.error) throw new Error(pipeline.error?.message ?? stage.error?.message ?? template.error?.message ?? "Fixture dependency missing");
   const lead = await db.from("agent_leads").insert({ id: leadId, tenant_id: tenantId, template_id: template.data.id, template_version: 1, product_line: "term_life", pipeline_id: pipeline.data.id, stage_id: stage.data.id, values: { full_name: "Floor Prospect", age: 67, state: "AZ" }, created_by: ownerId, submission_id: randomUUID() }); if (lead.error) throw new Error(lead.error.message);
   const queue = await db.from("lead_queue").insert({ id: queueId, tenant_id: tenantId, lead_id: leadId, product_line: "term_life", pipeline_id: pipeline.data.id, stage_id: stage.data.id, queued_at: new Date(Date.now() - 150_000).toISOString() }); if (queue.error) throw new Error(queue.error.message);
   const owner = await cookie(ownerId); const bookkeeper = await cookie(bookkeeperId); const other = await cookie(otherOwnerId, otherTenantId); const expired = await cookie(ownerId, tenantId, true);
   try {
-    const emptyTenantId = randomUUID(); const emptyUserId = randomUUID();
+    const emptyTenantId = randomUUID(); let emptyUserId = null;
     await db.from("tenants").insert({ id: emptyTenantId, name: `LA-1.15 Empty ${stamp}`, status: "active", onboarding_state: "completed" });
-    await db.from("users").insert({ id: emptyUserId, email: `la115-empty-${stamp}@invalid.test`, name: "Empty Floor", password_hash: "verification-only", status: "active" });
+    ({ userId: emptyUserId } = await createFixtureUser(db, { email: `la115-empty-${stamp}@invalid.test`, name: "Empty Floor" }));
     await db.from("tenant_users").insert({ tenant_id: emptyTenantId, user_id: emptyUserId, role: "owner" });
     await db.from("tenant_entitlements").insert({ tenant_id: emptyTenantId, entitlement: { tenant_id: emptyTenantId, plan_code: "qa", plan_version: 1, status: "active", access: "full", computed_at: new Date().toISOString(), features: ["inbound_transfers"], meters: {}, limits: {} } });
     const emptyCookie = await cookie(emptyUserId, emptyTenantId);
     const empty = await api("/api/app/agent-floor", emptyCookie); const emptyBody = await empty.json();
     check("brand-new tenant renders an empty floor", empty.status === 200 && emptyBody.waiting?.length === 0 && emptyBody.onCalls?.length === 0, `status ${empty.status}`);
-    await db.from("tenant_entitlements").delete().eq("tenant_id", emptyTenantId); await db.from("tenant_users").delete().eq("tenant_id", emptyTenantId); await db.from("users").delete().eq("id", emptyUserId); await db.from("tenants").delete().eq("id", emptyTenantId);
+    await db.from("tenant_entitlements").delete().eq("tenant_id", emptyTenantId); await db.from("tenant_users").delete().eq("tenant_id", emptyTenantId); await deleteFixtureUser(db, emptyUserId); await db.from("tenants").delete().eq("id", emptyTenantId);
 
     const floor = await api(`/api/app/agent-floor?tenant_id=${otherTenantId}`, owner); const floorBody = await floor.json();
     check("floor is tenant-scoped from session, not request parameters", floor.status === 200 && floorBody.waiting?.some((item) => item.id === queueId) && !JSON.stringify(floorBody).includes(otherTenantId));

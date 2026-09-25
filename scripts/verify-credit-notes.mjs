@@ -68,18 +68,28 @@ const { data: invRows } = await supabase.rpc("create_custom_invoice", {
 const invoice = invRows[0];
 
 async function cleanup() {
-  await supabase.from("credit_notes").delete().eq("tenant_id", tenantId);
+  // Credit notes and issued invoices are immutable financial history. Keep the
+  // namespaced rows and deactivate the fixture instead of attempting to delete
+  // them or rewind shared document counters.
   await supabase.from("tenant_credits").delete().eq("tenant_id", tenantId);
-  await supabase.from("platform_invoices").delete().eq("tenant_id", tenantId);
-  await supabase.from("tenants").delete().eq("id", tenantId);
-  await supabase.from("admin_users").delete().eq("id", secondAdmin.id);
+  await supabase.from("tenants").update({ status: "suspended" }).eq("id", tenantId);
+  await supabase.from("admin_users").update({ is_active: false }).eq("id", secondAdmin.id);
+
+  // The counters are deliberately NOT rewound.
+  //
+  // Rewinding a shared sequence is only safe if every row that consumed it is gone, and this
+  // cleanup cannot promise that -- it could not even manage it, until the draft step above. A
+  // counter pointing underneath a number that already exists breaks the next invoice anyone
+  // creates, anywhere in the system; a gap in the sequence costs an explanation. See
+  // supabase/migrations/20260913230000_invoice_counter_repair.sql for what the rewind cost.
   for (const [series, value] of Object.entries(counters)) {
-    if (value === null) {
-      await supabase.from("invoice_counters").delete().eq("series", series).eq("year", YEAR).eq("month", MONTH);
-    } else {
-      await supabase.from("invoice_counters").update({ next_number: value })
-        .eq("series", series).eq("year", YEAR).eq("month", MONTH);
-    }
+    const { data: now } = await supabase
+      .from("invoice_counters").select("next_number")
+      .eq("series", series).eq("year", YEAR).eq("month", MONTH).maybeSingle();
+    const ended = now?.next_number ?? null;
+    check(`the ${series} counter only ever moved forward`,
+      value === null || (ended !== null && ended >= value),
+      `started at ${value}, ended at ${ended}`);
   }
 }
 

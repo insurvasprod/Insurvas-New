@@ -24,9 +24,21 @@ export const TEMPLATE_FIELD_TYPE_LABELS: Record<TemplateFieldType, string> = {
   phone: "Phone",
   email: "Email",
   ssn: "SSN",
-  boolean: "Boolean",
-  single_select: "Single select",
-  multi_select: "Multi-select",
+  // The form templates board calls a pick-one field a "Choice". Only the labels changed: the stored
+  // type values (boolean, single_select, multi_select) are untouched.
+  boolean: "Yes / no choice",
+  single_select: "Choice",
+  multi_select: "Multiple choice",
+};
+
+/**
+ * The Type column of Settings → Form templates, in the board's words: a yes/no question is a choice
+ * too ("Tobacco in 12 months · Choice"). The pickers keep the longer labels above, so the two kinds
+ * of choice can still be told apart when one is being picked.
+ */
+export const TEMPLATE_FIELD_TYPE_TABLE_LABELS: Record<TemplateFieldType, string> = {
+  ...TEMPLATE_FIELD_TYPE_LABELS,
+  boolean: "Choice",
 };
 
 export const TEMPLATE_STAGE_TYPES = ["open", "won", "lost"] as const;
@@ -49,6 +61,17 @@ export type TemplateField = {
   validation?: TemplateValidation;
 };
 
+/**
+ * Phone is a governed screening field. Older tenant template revisions may have
+ * retained the canonical `phone` key while carrying the legacy text type, so
+ * callers must recognize the key as well as the current catalog type.
+ */
+export function isPhoneTemplateField(
+  field: Pick<TemplateField, "field_key" | "type">,
+) {
+  return field.type === "phone" || ["phone", "phone_number"].includes(field.field_key);
+}
+
 export type TemplateValidation = {
   min?: number;
   max?: number;
@@ -57,6 +80,9 @@ export type TemplateValidation = {
   pattern?: string;
   age_min?: number;
   age_max?: number;
+  digit_length?: number;
+  format_mask?: string;
+  placeholder?: string;
 };
 
 export type TemplateStage = {

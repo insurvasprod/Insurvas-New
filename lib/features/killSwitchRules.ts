@@ -75,6 +75,53 @@ export function killSwitchNotice(featureSwitch: FeatureSwitch | undefined): stri
   return featureSwitch.off_message?.trim() || null;
 }
 
+/**
+ * What an agent reads on a killed page when the admin left no message. It has to match the fallback
+ * in components/app/feature-gate-notice.tsx word for word, because the admin screen quotes it as
+ * "what the customer sees" — killSwitchRules.test.mjs reads that file and fails if they drift.
+ */
+export const STANDARD_KILL_NOTICE = "We've switched this off for everyone while we work on it. Nothing you need to do.";
+
+/**
+ * The internal half of a switch: the reason given with its most recent change. Not stored on the
+ * switch — it is the `reason` of the latest feature.switch_changed audit row, which is required by
+ * the API, so every change made through the screen has one.
+ */
+export type SwitchReason = {
+  reason: string | null;
+  /** ISO timestamp of that change. */
+  changedAt: string;
+  /** "22 Sep 2026 08:40:55 UTC", formatted on the server so hydration cannot differ. */
+  changedAtUtc: string;
+  changedBy: string | null;
+};
+
+/**
+ * "Off for everyone" and "named tenants only" counted apart. Beta is not off: the named tenants can
+ * still use it, so one number for both made the headline claim more than was true.
+ */
+export function switchCounts(switches: Iterable<Pick<FeatureSwitch, "state">>): { off: number; beta: number } {
+  let off = 0;
+  let beta = 0;
+  for (const s of switches) {
+    if (s.state === "off") off += 1;
+    else if (s.state === "beta") beta += 1;
+  }
+  return { off, beta };
+}
+
+const featureCount = (n: number) => (n === 1 ? "1 feature" : `${n} features`);
+
+/** The Features page's headline, or null when every feature is fully on. */
+export function switchSummaryTitle({ off, beta }: { off: number; beta: number }): string | null {
+  if (off > 0 && beta > 0) {
+    return `${featureCount(off)} ${off === 1 ? "is" : "are"} off for everyone, ${beta} limited to named tenants`;
+  }
+  if (off > 0) return `${featureCount(off)} ${off === 1 ? "is" : "are"} switched off platform-wide`;
+  if (beta > 0) return `${featureCount(beta)} ${beta === 1 ? "is" : "are"} limited to named tenants`;
+  return null;
+}
+
 export const OFF_MESSAGE_MAX = 300;
 
 /** Why a submitted switch was refused, in words an admin can act on. */

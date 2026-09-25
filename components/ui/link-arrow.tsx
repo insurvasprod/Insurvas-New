@@ -1,4 +1,5 @@
 import * as React from "react"
+import { Slot } from "radix-ui"
 
 import { cn } from "@/lib/utils"
 
@@ -15,10 +16,16 @@ import { cn } from "@/lib/utils"
 function LinkArrow({
   className,
   children,
+  asChild = false,
   ...props
-}: React.ComponentProps<"a">) {
+}: React.ComponentProps<"a"> & {
+  /** Render as the child element — a `next/link`, so the arrow keeps soft navigation. */
+  asChild?: boolean
+}) {
+  const Comp = asChild ? Slot.Root : "a"
+
   return (
-    <a
+    <Comp
       data-slot="link-arrow"
       className={cn(
         "group inline-flex items-center gap-2 text-sm font-semibold tracking-[-0.01em] text-foreground no-underline",
@@ -27,7 +34,9 @@ function LinkArrow({
       )}
       {...props}
     >
-      {children}
+      {/* Slot takes exactly one child, and the arrow is a second one. Slottable marks which child
+          Slot merges onto, so `asChild` keeps the arrow instead of throwing on render. */}
+      {asChild ? <Slot.Slottable>{children}</Slot.Slottable> : children}
       <svg
         viewBox="0 0 24 24"
         fill="none"
@@ -40,7 +49,7 @@ function LinkArrow({
       >
         <path d="M5 12h14m0 0-6-6m6 6-6 6" />
       </svg>
-    </a>
+    </Comp>
   )
 }
 

@@ -35,4 +35,10 @@ export const mergeSchema = z.object({
   kept_id: z.string().uuid("Choose a valid kept contact"),
   merged_id: z.string().uuid("Choose a valid merged contact"),
   field_choices: z.record(z.string(), z.enum(["kept", "merged"])),
+  review_id: z.string().uuid("Choose a valid review").nullable().optional(),
 }).strict().refine((value) => value.kept_id !== value.merged_id, { message: "Choose two different contacts" });
+
+export const reviewActionSchema = z.object({
+  review_id: z.string().uuid("Choose a valid review"),
+  action: z.literal("dismiss"),
+}).strict();

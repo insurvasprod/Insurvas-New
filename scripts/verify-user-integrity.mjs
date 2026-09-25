@@ -2,6 +2,7 @@
 import assert from "node:assert/strict";
 import { SignJWT } from "jose";
 import { createClient } from "@supabase/supabase-js";
+import { createFixtureUser, deleteFixtureUser } from "./lib/fixtureUser.mjs";
 
 const BASE = process.env.APP_BASE_URL ?? "http://localhost:3000";
 const db = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
@@ -20,17 +21,17 @@ async function cleanup() {
     await db.from("tenant_users").delete().eq("tenant_id", tenantId);
     await db.from("tenants").delete().eq("id", tenantId);
   }
-  if (userIds.length) { await db.from("user_invitations").delete().in("user_id", userIds); await db.from("users").delete().in("id", userIds); }
+  if (userIds.length) await db.from("user_invitations").delete().in("user_id", userIds);
+  for (const userId of [...new Set(userIds)]) await deleteFixtureUser(db, userId);
 }
 
 try {
-  const tenantId = crypto.randomUUID(); const userId = crypto.randomUUID(); const invitedId = crypto.randomUUID();
+  const tenantId = crypto.randomUUID();
+  const owner = await createFixtureUser(db, { email: `m1-owner-${stamp}@invalid.test`, name: "Integrity Owner" });
+  const invited = await createFixtureUser(db, { email: `m1-invited-${stamp}@invalid.test`, name: "Invited User" });
+  const userId = owner.userId; const invitedId = invited.userId;
   tenantIds.push(tenantId); userIds.push(userId, invitedId);
   await db.from("tenants").insert({ id: tenantId, name: `M1 integrity ${stamp}`, status: "active" });
-  await db.from("users").insert([
-    { id: userId, name: "Integrity Owner", email: `m1-owner-${stamp}@invalid.test`, status: "active" },
-    { id: invitedId, name: "Invited User", email: `m1-invited-${stamp}@invalid.test`, status: "active" },
-  ]);
   await db.from("tenant_users").insert([
     { tenant_id: tenantId, user_id: userId, role: "owner", accepted_at: new Date().toISOString() },
     { tenant_id: tenantId, user_id: invitedId, role: "producer", accepted_at: null },
@@ -54,8 +55,8 @@ try {
   const repeat = await api(`/api/admin/users/${userId}/activate`, json({}));
   check("repeating the same lifecycle action is refused", repeat.status === 409, await repeat.clone().text());
 
-  const clashId = crypto.randomUUID(); userIds.push(clashId);
-  await db.from("users").insert({ id: clashId, name: "Email Clash", email: `m1-clash-${stamp}@invalid.test`, status: "active" });
+  const clash = await createFixtureUser(db, { email: `m1-clash-${stamp}@invalid.test`, name: "Email Clash" });
+  const clashId = clash.userId; userIds.push(clashId);
   const atomic = await db.rpc("admin_update_user_with_email_change", { p_user_id: userId, p_name: "Should Not Commit", p_phone: null, p_role: "owner", p_requested_email: `m1-clash-${stamp}@invalid.test`, p_token_hash: `atomic-${stamp}`, p_expires_at: new Date(Date.now() + 3600000).toISOString(), p_created_by: admin.id });
   const unchanged = await db.from("users").select("name").eq("id", userId).single();
   check("duplicate email rejects the whole user edit", Boolean(atomic.error) && /EMAIL_ALREADY_REGISTERED/i.test(atomic.error.message));
@@ -69,22 +70,49 @@ try {
   check("token replacement rolls back when the new token cannot be inserted", Boolean(replacement.error));
   check("the old invitation remains valid after replacement failure", oldInvitation.data?.accepted_at === null);
 
-  const seatTenant = crypto.randomUUID(); const seatOwnerId = crypto.randomUUID(); const inactiveId = crypto.randomUUID(); const plan = await db.from("plans").select("id").eq("code", "basic").order("version", { ascending: false }).limit(1).single();
+  const seatTenant = crypto.randomUUID();
+  const seatOwner = await createFixtureUser(db, { email: `m1-seat-owner-${stamp}@invalid.test`, name: "Seat Owner" });
+  const inactive = await createFixtureUser(db, { email: `m1-seat-${stamp}@invalid.test`, name: "Inactive Seat", status: "inactive" });
+  const seatOwnerId = seatOwner.userId; const inactiveId = inactive.userId;
+  const plan = await db.from("plans").select("id").eq("code", "basic").order("version", { ascending: false }).limit(1).single();
   tenantIds.push(seatTenant); userIds.push(seatOwnerId, inactiveId);
   await db.from("tenants").insert({ id: seatTenant, name: `M1 seat ${stamp}`, status: "active" });
   await db.from("subscriptions").insert({ tenant_id: seatTenant, plan_id: plan.data.id, status: "active", billing_cycle: "monthly", started_at: new Date().toISOString(), current_period_start: new Date().toISOString(), current_period_end: new Date(Date.now() + 2592000000).toISOString() });
-  await db.from("users").insert({ id: seatOwnerId, name: "Seat Owner", email: `m1-seat-owner-${stamp}@invalid.test`, status: "active" });
   await db.from("tenant_users").insert({ tenant_id: seatTenant, user_id: seatOwnerId, role: "owner", accepted_at: new Date().toISOString() });
-  await db.from("users").insert({ id: inactiveId, name: "Inactive Seat", email: `m1-seat-${stamp}@invalid.test`, status: "inactive" });
   await db.from("tenant_users").insert({ tenant_id: seatTenant, user_id: inactiveId, role: "producer", accepted_at: new Date().toISOString() });
   const seatCheck = await db.rpc("admin_set_user_status", { p_user_id: inactiveId, p_status: "active", p_reason: null });
   check("reactivation enforces the plan seat limit in SQL", Boolean(seatCheck.error) && /seat_limit_reached/i.test(seatCheck.error.message), seatCheck.error?.message ?? "no error");
+  // The one seat rule (20260924346000): active, suspended and unaccepted invites hold a seat;
+  // inactive / deactivated and deleted do not. The basic plan above allows one seat, which the owner holds.
+  const seatsHeld = await db.rpc("tenant_seats_used", { p_tenant_id: seatTenant });
+  check("an inactive member holds no seat and the active owner holds one", seatsHeld.data === 1, seatsHeld.error?.message ?? `got ${seatsHeld.data}`);
+  const suspendSeat = await db.rpc("admin_set_user_status", { p_user_id: inactiveId, p_status: "suspended", p_reason: "QA one seat rule" });
+  check("inactive -> suspended takes a seat, so it is refused at the limit too", Boolean(suspendSeat.error) && /seat_limit_reached/i.test(suspendSeat.error.message), suspendSeat.error?.message ?? "no error");
+  const pending = await createFixtureUser(db, { email: `m1-seat-invited-${stamp}@invalid.test`, name: "Invited Seat", status: "invited" });
+  userIds.push(pending.userId);
+  await db.from("tenant_users").insert({ tenant_id: seatTenant, user_id: pending.userId, role: "producer", accepted_at: null });
+  const seatsWithInvite = await db.rpc("tenant_seats_used", { p_tenant_id: seatTenant });
+  check("an unaccepted invite holds a seat from the moment it is sent", seatsWithInvite.data === 2, seatsWithInvite.error?.message ?? `got ${seatsWithInvite.data}`);
 
-  const first = await db.rpc("admin_create_user", { p_name: "First Member", p_email: `m1-first-${stamp}@invalid.test`, p_phone: null, p_tenant_id: null, p_new_tenant_name: `M1 first ${stamp}`, p_role: "producer", p_token_hash: `first-${stamp}`, p_expires_at: new Date(Date.now() + 3600000).toISOString(), p_created_by: admin.id });
-  const firstRow = Array.isArray(first.data) ? first.data[0] : first.data;
-  if (firstRow?.tenant_id) { tenantIds.push(firstRow.tenant_id); userIds.push(firstRow.user_id); }
-  const firstRole = firstRow ? await db.from("tenant_users").select("role").eq("tenant_id", firstRow.tenant_id).eq("user_id", firstRow.user_id).single() : { data: null };
-  check("the first member is forced to owner even if producer was requested", !first.error && firstRole.data?.role === "owner", first.error?.message ?? firstRole.error?.message ?? "");
+  // Exercise the current Auth-first HTTP boundary. This is the route users actually take, and it
+  // applies the first-member owner invariant while the matching SQL migration awaits DDL authority.
+  const firstPlan = await db.from("plans").select("id").eq("is_archived", false).order("version", { ascending: false }).limit(1).single();
+  assert.equal(firstPlan.error, null, firstPlan.error?.message);
+  const firstResponse = await api("/api/admin/users", json({ name: "First Member", email: `m1-first-${stamp}@invalid.test`, phone: "", newTenantName: `M1 first ${stamp}`, planId: firstPlan.data.id, role: "producer" }));
+  const firstBody = await firstResponse.json().catch(() => ({}));
+  if (firstBody.user?.id) userIds.push(firstBody.user.id);
+  if (firstBody.tenantId) tenantIds.push(firstBody.tenantId);
+  const firstRole = firstBody.tenantId && firstBody.user?.id
+    ? await db.from("tenant_users").select("role").eq("tenant_id", firstBody.tenantId).eq("user_id", firstBody.user.id).single()
+    : { data: null, error: null };
+  const firstProvisioningAvailable = firstResponse.status === 201;
+  check("the plan-aware new-tenant provisioning contract is live", firstProvisioningAvailable, firstBody.code ?? firstBody.error ?? `HTTP ${firstResponse.status}`);
+  check("the first member is forced to owner even if producer was requested", !firstProvisioningAvailable || firstRole.data?.role === "owner", firstRole.error?.message ?? "");
+  const firstSubscription = firstProvisioningAvailable && firstBody.tenantId
+    ? await db.from("subscriptions").select("id, plan_id, status, billing_cycle").eq("tenant_id", firstBody.tenantId).maybeSingle()
+    : { data: null, error: null };
+  check("a new tenant receives the selected initial plan", !firstProvisioningAvailable || firstSubscription.data?.plan_id === firstPlan.data.id, firstSubscription.error?.message ?? "");
+  check("the initial subscription uses the monthly billing cycle", !firstProvisioningAvailable || firstSubscription.data?.billing_cycle === "monthly", firstSubscription.error?.message ?? "");
 } finally { await cleanup(); }
 
 console.log(failures === 0 ? "\nAll user integrity checks passed." : `\n${failures} check(s) failed.`);

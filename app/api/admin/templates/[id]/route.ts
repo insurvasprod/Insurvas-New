@@ -6,6 +6,7 @@ import { CAN_MANAGE_TEMPLATES } from "@/lib/templates/permissions";
 import { fetchTemplates } from "@/lib/templates/queries";
 import { updateTemplateSchema } from "@/lib/templates/schemas";
 import { saveTemplate } from "@/lib/templates/service";
+import { fetchTemplatePublishedAt } from "@/lib/templates/usage";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -18,10 +19,16 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   if (body && Object.keys(body).length === 1 && typeof body.is_active === "boolean") {
     const { data: before } = await getSupabaseServiceClient().from("templates").select("id, name, is_active").eq("id", id).maybeSingle();
     if (!before) return NextResponse.json({ error: "Template not found" }, { status: 404 });
+    // A template never offered before (published_at null, once 20260925504000 is applied) is a draft:
+    // making it active is its first publication, not a restore. Before the migration every inactive
+    // template was once active, so this stays "restored" exactly as it always was.
+    const publication = before.is_active || !body.is_active ? null : await fetchTemplatePublishedAt(id).catch(() => null);
+    const firstPublication = publication !== null && publication.supported && publication.publishedAt === null;
     const { data: updated, error } = await getSupabaseServiceClient().from("templates").update({ is_active: body.is_active }).eq("id", id).select("id, name, is_active, version").single();
     if (error) return NextResponse.json({ error: "Could not update the template" }, { status: 500 });
     if (before.is_active !== body.is_active) {
-      await audit({ actorId: auth.session.sub, action: body.is_active ? "template.restored" : "template.archived", targetType: "template", targetId: id, metadata: { name: before.name }, request });
+      const action = body.is_active ? (firstPublication ? "template.published" : "template.restored") : "template.archived";
+      await audit({ actorId: auth.session.sub, action, targetType: "template", targetId: id, metadata: { name: before.name, version: updated.version }, request });
     }
     return NextResponse.json({ template: updated });
   }

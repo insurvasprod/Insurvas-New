@@ -31,21 +31,31 @@ const tenantIds = [tenantWithData, differentTenant];
 const connection = new pg.Client({ connectionString: tenantUrl, ssl: { rejectUnauthorized: false } });
 await connection.connect();
 
+// rows.every() is true for an empty result, so every assertion below passes when the connection
+// returns nothing at all -- a broken fixture would read as perfect isolation. An empty result IS a
+// legitimate outcome per table (the tenant may own no rows there), so the guard belongs at the run
+// level: the tenant that is supposed to have data must actually have been seen to have some.
+let rowsSeenForTenantWithData = 0;
+
 try {
   for (const tenantId of tenantIds) {
     await connection.query("begin");
     await connection.query("select set_config('app.tenant_id', $1, true)", [tenantId]);
     for (const table of tables) {
       const result = await connection.query(`select tenant_id from public.${table}`);
+      if (tenantId === tenantWithData) rowsSeenForTenantWithData += result.rows.length;
       check(`${table} exposes only tenant ${tenantId}`, result.rows.every((row) => row.tenant_id === tenantId), `${result.rows.length} rows returned`);
     }
     const carriers = await connection.query("select is_active from public.carriers");
-    check(`carriers exposes only active reference rows`, carriers.rows.every((row) => row.is_active === true), `${carriers.rows.length} rows returned`);
+    // Carriers are reference data and are never legitimately empty, so this one can require rows.
+    check(`carriers exposes only active reference rows`, carriers.rows.length > 0 && carriers.rows.every((row) => row.is_active === true), `${carriers.rows.length} rows returned`);
     await connection.query("rollback");
   }
 } finally {
   await connection.end();
 }
+
+check("the isolation check actually saw data", rowsSeenForTenantWithData > 0, `${rowsSeenForTenantWithData} rows visible to the tenant that owns data — zero means the assertions above proved nothing`);
 
 if (process.exitCode) process.exit(1);
 console.log(`All LA-0 tenant RLS checks passed for ${tenantIds.length} tenant session(s).`);

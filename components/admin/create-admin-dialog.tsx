@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { Plus } from "lucide-react";
-import { toast } from "sonner";
+import { useRouter } from "next/navigation";
+import { notify } from "@/lib/notify";
 
+import { btn } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -32,7 +33,13 @@ type Enrollment = {
 
 const EMPTY_FORM = { email: "", name: "", role: "support_agent" as AdminRole, password: "" };
 
-export function CreateAdminDialog({ onCreated }: { onCreated: () => void }) {
+/**
+ * The header's "Create admin" (board p-adm-admins): a 44px primary button and the create → enrol
+ * two-step dialog. With no `onCreated`, the page re-renders on the server so the new row, the tiles
+ * and the callout all include the new account.
+ */
+export function CreateAdminDialog({ onCreated }: { onCreated?: () => void }) {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [loading, setLoading] = useState(false);
@@ -62,21 +69,21 @@ export function CreateAdminDialog({ onCreated }: { onCreated: () => void }) {
     setLoading(false);
 
     if (!res.ok) {
-      toast.error(body?.error ?? "Could not create admin");
+      notify.block(body?.error ?? "Could not create admin");
       return;
     }
 
-    toast.success(`${body.admin.email} created`);
+    notify.done(`${body.admin.email} created`);
     setEnrollment({ email: body.admin.email, totpUri: body.totpUri, qrDataUrl: body.qrDataUrl });
-    onCreated();
+    if (onCreated) onCreated();
+    else router.refresh();
   }
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <Button size="sm" onClick={() => setOpen(true)}>
-        <Plus />
-        New admin
-      </Button>
+      <button type="button" onClick={() => setOpen(true)} className={btn("primary", "h-11")}>
+        Create admin
+      </button>
       <DialogContent>
         {enrollment ? (
           <>
@@ -95,7 +102,7 @@ export function CreateAdminDialog({ onCreated }: { onCreated: () => void }) {
                 height={180}
                 // Stays white in dark mode on purpose: a QR code needs a light quiet zone, and a
                 // scanner reading it off a dark card is a support ticket nobody enjoys.
-                className="rounded-md border border-border bg-white p-2"
+                className="rounded-md border border-border bg-card p-2"
               />
               <p className="w-full break-all rounded-md bg-muted px-3 py-2 text-center text-xs text-muted-foreground">
                 {enrollment.totpUri}

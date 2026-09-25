@@ -33,11 +33,12 @@ const { data: plan } = await supabase
 
 async function cleanup() {
   await supabase.from("payments").delete().eq("tenant_id", tenantId);
-  await supabase.from("platform_invoices").delete().eq("tenant_id", tenantId);
+  // Issued invoices are immutable financial history. Keep this namespaced
+  // verification history and deactivate the fixture instead of deleting it.
   await supabase.from("webhook_events").delete().like("event_id", `msg_ev_${stamp}%`);
   await supabase.from("tenant_entitlements").delete().eq("tenant_id", tenantId);
-  await supabase.from("subscriptions").delete().eq("tenant_id", tenantId);
-  await supabase.from("tenants").delete().eq("id", tenantId);
+  await supabase.from("subscriptions").update({ status: "cancelled" }).eq("tenant_id", tenantId);
+  await supabase.from("tenants").update({ status: "suspended" }).eq("id", tenantId);
 }
 
 /** Seconds of offset from a fixed base, so event ordering is explicit rather than incidental. */

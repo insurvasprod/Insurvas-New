@@ -1,12 +1,13 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { VERIFICATION_RESEND, claim, retryAfterSeconds } from "@/lib/rateLimit";
+import { claim, retryAfterSeconds, type RateLimitRule } from "@/lib/rateLimit";
 
 import { sendVerificationEmail } from "@/lib/email/sendVerificationEmail";
 import { resolveSignupContext } from "@/lib/signup/context";
 import { verificationActionSchema } from "@/lib/signup/schemas";
 import { buildVerificationUrl, createEmailVerification } from "@/lib/signup/verification";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
+import { getSetting } from "@/lib/settings/queries";
 
 export async function POST(request: NextRequest) {
   const context = await resolveSignupContext();
@@ -24,7 +25,12 @@ export async function POST(request: NextRequest) {
   // The SQL side already enforces a 60-second cooldown, but `change_email` sends to an ARBITRARY
   // address — so without an hourly cap an authenticated account is a mail relay pointed at anyone,
   // at roughly sixty messages an hour from our sending domain.
-  const limited = await claim(VERIFICATION_RESEND, context.userId);
+  const verificationRule: RateLimitRule = {
+    name: "verify_resend",
+    max: await getSetting<number>("security.verification_resend_per_hour"),
+    windowSeconds: 3600,
+  };
+  const limited = await claim(verificationRule, context.userId);
   if (!limited.allowed) {
     return NextResponse.json(
       { error: "Too many verification emails requested. Please try again later." },
@@ -54,6 +60,17 @@ export async function POST(request: NextRequest) {
 
   const refreshed = data?.[0];
   if (!refreshed) return NextResponse.json({ error: "Could not create a new verification link" }, { status: 500 });
+
+  // refresh_signup_verification corrects public.users only. Sign-in goes through Auth, so without
+  // this the corrected address could never log in (found 2026-09-25). Confirmed in Auth for the same
+  // reason signup does it: our own token, sent below, is the verification.
+  if (parsed.data.action === "change_email") {
+    const { error: authError } = await supabase.auth.admin.updateUserById(context.userId, { email: refreshed.email, email_confirm: true });
+    if (authError) {
+      console.error("Could not move the sign-in email to the corrected address", authError.status, authError.message);
+      return NextResponse.json({ error: "Your email was updated, but signing in with it is not set up yet. Try again shortly." }, { status: 500 });
+    }
+  }
 
   const delivery = await sendVerificationEmail({
     email: refreshed.email,

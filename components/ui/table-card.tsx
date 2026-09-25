@@ -32,9 +32,15 @@ export function TableCard({
   const hasHeading = Boolean(title || description || action);
 
   return (
-    <section className={cn("overflow-hidden rounded-lg border border-border bg-card", className)}>
+    <section
+      className={cn(
+        "overflow-hidden rounded-lg border border-border bg-card",
+        "shadow-[0_1px_2px_rgba(16,20,26,.05)] dark:shadow-[0_1px_2px_rgba(0,0,0,.55)]",
+        className
+      )}
+    >
       {hasHeading && (
-        <div className="flex flex-wrap items-start justify-between gap-3 px-5 py-4">
+        <div className="flex flex-wrap items-start justify-between gap-3 px-4 py-4">
           <div className="min-w-0">
             {title && <h2 className="text-lg font-semibold leading-[1.28] tracking-[-0.015em]">{title}</h2>}
             {description && <p className="mt-0.5 text-sm text-muted-foreground">{description}</p>}
@@ -44,7 +50,7 @@ export function TableCard({
       )}
 
       {toolbar && (
-        <div className="flex flex-wrap items-center gap-2 border-t border-border bg-muted px-5 py-3">
+        <div className="flex flex-wrap items-center gap-2 border-t border-border bg-[var(--surface-alt)] px-4 py-3">
           {toolbar}
         </div>
       )}
@@ -52,7 +58,9 @@ export function TableCard({
       <div className="overflow-x-auto">{children}</div>
 
       {footer && (
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-5 py-3 text-sm text-muted-foreground">
+        /* The footer sits on the page grey, not the card white: it is the card's plinth, and a
+           white strip under a white table is a row nobody can tell from the last one. */
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border bg-[var(--canvas)] px-4 py-2.5 text-xs text-muted-foreground">
           {footer}
         </div>
       )}

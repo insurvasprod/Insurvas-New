@@ -22,7 +22,7 @@ const supabase = createClient(url, serviceKey, { auth: { persistSession: false }
 const EXPECTED_FEATURES = {
   basic: ["appointment_vault", "book_of_business", "commission_ledger", "discrepancy_report", "statement_ingestion"],
   pro: ["applications", "appointment_vault", "book_of_business", "callback_calendar", "commission_ledger", "consent_locker", "daily_deal_flow", "discrepancy_report", "draft_date_optimizer", "duplicate_detection", "inbound_transfers", "lead_import", "outbound_dialing", "quoting", "statement_ingestion", "tcpa_checker"],
-  advance: ["applications", "appointment_vault", "book_of_business", "callback_calendar", "chargeback_radar", "cohort_persistency", "commission_ledger", "consent_locker", "daily_deal_flow", "discrepancy_report", "draft_date_optimizer", "duplicate_detection", "inbound_transfers", "lead_import", "litigation_packet", "outbound_dialing", "payment_repair", "payout_runs", "profit_and_loss", "publisher_records", "quoting", "statement_ingestion", "tax_summaries", "tcpa_checker", "true_cpa", "winback"],
+  advance: ["applications", "appointment_vault", "book_of_business", "callback_calendar", "chargeback_radar", "cohort_persistency", "commission_ledger", "consent_locker", "daily_deal_flow", "discrepancy_report", "draft_date_optimizer", "duplicate_detection", "inbound_transfers", "lead_import", "litigation_packet", "outbound_dialing", "partner_quality", "payment_repair", "payout_runs", "profit_and_loss", "publisher_records", "quoting", "statement_ingestion", "tax_summaries", "tcpa_checker", "true_cpa", "winback"],
 };
 
 let failures = 0;

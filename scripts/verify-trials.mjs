@@ -9,6 +9,7 @@
 // Needs the app running. Everything created is removed. Run: npm run verify:trials
 import { SignJWT } from "jose";
 import { createClient } from "@supabase/supabase-js";
+import { createFixtureUser, deleteFixtureUser } from "./lib/fixtureUser.mjs";
 
 import { dueReminders, reminderBody, dueAtFor } from "../lib/trials/reminders.ts";
 
@@ -54,16 +55,11 @@ const { data: plan } = await supabase
 
 /** A trialing tenant with an owner, optionally one who has signed in. */
 async function makeTrial(label, { daysLeft, hasLoggedIn }) {
-  const { data: user } = await supabase
-    .from("users")
-    .insert({
-      email: `trial_${label}_${stamp}@insurvas.test`,
-      name: `Trial ${label}`,
-      password_hash: "x",
-      status: "active",
-      last_login_at: hasLoggedIn ? new Date().toISOString() : null,
-    })
-    .select("id").single();
+  // Auth-first, for the same reason as verify-checkout. last_login_at is set afterwards because the
+  // bridge trigger owns the initial row.
+  const { userId } = await createFixtureUser(supabase, { email: `trial_${label}_${stamp}@invalid.test`, name: `Trial ${label}` });
+  if (hasLoggedIn) await supabase.from("users").update({ last_login_at: new Date().toISOString() }).eq("id", userId);
+  const user = { id: userId };
 
   const { data: tenant } = await supabase
     .from("tenants").insert({ name: `Trial ${label} ${stamp}`, status: "active" }).select("id").single();
@@ -99,7 +95,7 @@ async function cleanup() {
     await supabase.from("tenant_users").delete().eq("tenant_id", id);
     await supabase.from("tenants").delete().eq("id", id);
   }
-  for (const id of made.users) await supabase.from("users").delete().eq("id", id);
+  for (const id of made.users) await deleteFixtureUser(supabase, id);
   for (const id of made.admins) {
     await supabase.from("audit_log").delete().eq("actor_id", id);
     await supabase.from("admin_users").delete().eq("id", id);

@@ -51,6 +51,30 @@ type SmtpConfig = {
 };
 
 /**
+ * External mail must be an explicit opt-in. The local rebuild has real SMTP credentials in some
+ * developer environments, but its QA fixtures intentionally use reserved domains. Credentials
+ * alone must never turn a local test run into a real delivery run.
+ */
+export function emailDeliveryMode(): "disabled" | "smtp" {
+  return process.env.EMAIL_DELIVERY_MODE?.trim().toLowerCase() === "smtp" ? "smtp" : "disabled";
+}
+
+/** RFC-reserved and local-only domains must never receive application mail. */
+export function isReservedTestRecipient(address: string): boolean {
+  const domain = address.trim().toLowerCase().split("@").pop() ?? "";
+  return domain === "localhost"
+    || domain.endsWith(".localhost")
+    || domain === "example.com"
+    || domain === "example.org"
+    || domain === "example.net"
+    || domain === "example"
+    || domain.endsWith(".example")
+    || domain === "invalid"
+    || domain.endsWith(".invalid")
+    || domain.endsWith(".test");
+}
+
+/**
  * Reads SMTP configuration, or explains what is missing.
  *
  * Returns the missing variable names rather than a bare null: "email is not configured" sends
@@ -87,13 +111,15 @@ function readConfig(): { ok: true; config: SmtpConfig } | { ok: false; missing: 
 }
 
 export function emailIsConfigured(): boolean {
-  return readConfig().ok;
+  return emailDeliveryMode() === "smtp" && readConfig().ok;
 }
 
 /** Missing variable names, for the admin screen and the test-send script. */
 export function emailConfigProblems(): string[] {
   const result = readConfig();
-  return result.ok ? [] : result.missing;
+  const problems = result.ok ? [] : result.missing;
+  if (emailDeliveryMode() !== "smtp") problems.push("EMAIL_DELIVERY_MODE=smtp");
+  return problems;
 }
 
 // One pooled transporter per process. Creating a connection per email is what makes SMTP slow in
@@ -162,6 +188,20 @@ async function record(input: SendEmailInput, row: {
  * makes the failure visible instead of silent, which is the part that was missing before.
  */
 export async function sendEmail(input: SendEmailInput): Promise<EmailDelivery> {
+  if (emailDeliveryMode() !== "smtp") {
+    const reason = "email_delivery_disabled";
+    console.info(`[email] ${input.templateKey} recorded but not sent — ${reason}`);
+    await record(input, { status: "skipped", failureReason: reason });
+    return { delivered: false, reason };
+  }
+
+  if (isReservedTestRecipient(input.to)) {
+    const reason = "reserved_test_recipient";
+    console.info(`[email] ${input.templateKey} recorded but not sent — ${reason}`);
+    await record(input, { status: "skipped", failureReason: reason });
+    return { delivered: false, reason };
+  }
+
   const configured = readConfig();
 
   if (!configured.ok) {
@@ -197,6 +237,10 @@ export async function sendEmail(input: SendEmailInput): Promise<EmailDelivery> {
 
 /** Proves the credentials and the connection without sending anything. */
 export async function verifyEmailConnection(): Promise<{ ok: boolean; error?: string }> {
+  if (emailDeliveryMode() !== "smtp") {
+    return { ok: false, error: "Email delivery is disabled. Set EMAIL_DELIVERY_MODE=smtp only when external delivery is intended." };
+  }
+
   const configured = readConfig();
   if (!configured.ok) return { ok: false, error: `Not configured: ${configured.missing.join(", ")}` };
 

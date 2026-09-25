@@ -23,6 +23,8 @@ export type PlanLimits = {
   max_affiliates: number | null;
   max_buffer_seats: number | null;
   max_partner_users: number | null;
+  max_setter_seats: number | null;
+  max_active_campaigns: number | null;
 };
 
 export type TenantUsageRow = {

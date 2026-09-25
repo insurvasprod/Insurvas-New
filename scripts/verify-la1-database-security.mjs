@@ -1,4 +1,3 @@
-import assert from "node:assert/strict";
 import pg from "pg";
 
 const { Client } = pg;
@@ -9,6 +8,10 @@ const client = new Client({ connectionString: databaseUrl, ssl: { rejectUnauthor
 
 try {
   await client.connect();
+  const failures = [];
+  const check = (condition, message) => {
+    if (!condition) failures.push(message);
+  };
 
   const grants = await client.query(`
     select p.proname,
@@ -24,14 +27,14 @@ try {
     order by p.proname
   `);
 
-  assert.equal(grants.rowCount, 3, "all three hardened LA functions must exist");
+  check(grants.rowCount === 3, `all three hardened LA functions must exist (found ${grants.rowCount})`);
   for (const row of grants.rows) {
-    assert.equal(row.anon_execute, false, `${row.proname} must deny anon execute`);
-    assert.equal(row.authenticated_execute, false, `${row.proname} must deny authenticated execute`);
-    assert.equal(row.tenant_app_execute, false, `${row.proname} must deny tenant_app execute`);
+    check(row.anon_execute === false, `${row.proname} must deny anon execute`);
+    check(row.authenticated_execute === false, `${row.proname} must deny authenticated execute`);
+    check(row.tenant_app_execute === false, `${row.proname} must deny tenant_app execute`);
   }
-  assert.equal(grants.rows.find((row) => row.proname === "save_form_draft")?.service_execute, true);
-  assert.match(grants.rows.find((row) => row.proname === "render_disposition_note")?.config ?? "", /search_path=pg_catalog/);
+  check(grants.rows.find((row) => row.proname === "save_form_draft")?.service_execute === true, "save_form_draft must be executable by service_role");
+  check(/search_path=pg_catalog/.test(grants.rows.find((row) => row.proname === "render_disposition_note")?.config ?? ""), "render_disposition_note must pin search_path=pg_catalog");
 
   const policies = await client.query(`
     select policyname, coalesce(qual, '') as qual, coalesce(with_check, '') as with_check
@@ -40,12 +43,18 @@ try {
       and policyname in ('partners_tenant_read', 'partner_terms_tenant_read', 'partner_users_tenant_read', 'affiliate_links_tenant_scoped')
     order by policyname
   `);
-  assert.equal(policies.rowCount, 4, "all four tenant policies must exist");
+  check(policies.rowCount === 4, `all four tenant policies must exist (found ${policies.rowCount})`);
   for (const policy of policies.rows) {
-    assert.match(`${policy.qual} ${policy.with_check}`, /SELECT current_setting/i, `${policy.policyname} must initplan tenant context once`);
+    check(/SELECT current_setting/i.test(`${policy.qual} ${policy.with_check}`), `${policy.policyname} must initplan tenant context once`);
   }
 
-  console.log("PASS LA-1 database security grants and tenant policy initplans");
+  if (failures.length > 0) {
+    console.error(`FAIL LA-1 database security (${failures.length} finding${failures.length === 1 ? "" : "s"})`);
+    for (const failure of failures) console.error(`- ${failure}`);
+    process.exitCode = 1;
+  } else {
+    console.log("PASS LA-1 database security grants and tenant policy initplans");
+  }
 } finally {
   await client.end().catch(() => undefined);
 }

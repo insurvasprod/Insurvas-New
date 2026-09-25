@@ -9,6 +9,12 @@ import { audit } from "@/lib/audit/log";
 import { rebuildEntitlement } from "@/lib/entitlements/rebuild";
 import { applyAutoOffer } from "@/lib/offers/service";
 import type { SubscriptionStatus } from "@/lib/subscriptions/access";
+import type { Json } from "@/lib/supabase/database.types";
+import {
+  claimSubscriptionMutation,
+  completeSubscriptionMutation,
+  normalizeIdempotencyKey,
+} from "@/lib/subscriptions/idempotency";
 
 export async function GET(request: NextRequest) {
   const auth = await requireAdminRole(CAN_MANAGE_SUBSCRIPTIONS);
@@ -33,6 +39,10 @@ export async function POST(request: NextRequest) {
   const auth = await requireAdminRole(CAN_MANAGE_SUBSCRIPTIONS);
   if (auth instanceof NextResponse) return auth;
 
+  const idempotency = normalizeIdempotencyKey(request.headers.get("Idempotency-Key"));
+  if (idempotency.error) return NextResponse.json({ error: idempotency.error }, { status: 400 });
+  if (!idempotency.key) return NextResponse.json({ error: "Idempotency-Key is required" }, { status: 400 });
+
   const body = await request.json().catch(() => null);
   const parsed = assignSubscriptionSchema.safeParse(body);
   if (!parsed.success) {
@@ -41,6 +51,25 @@ export async function POST(request: NextRequest) {
 
   const { tenant_id, plan_id, billing_cycle, start_at } = parsed.data;
   const supabase = getSupabaseServiceClient();
+
+  const claim = await claimSubscriptionMutation({
+    actorId: auth.session.sub,
+    idempotencyKey: idempotency.key,
+    operation: "subscription.assign",
+    requestBody: parsed.data,
+  });
+  if (claim.kind === "replay") {
+    return NextResponse.json(claim.body, {
+      status: claim.status,
+      headers: { "Idempotency-Key": idempotency.key, "Idempotency-Replayed": "true" },
+    });
+  }
+  if (claim.kind === "conflict") return NextResponse.json({ error: claim.message }, { status: 409 });
+
+  const finish = async (responseBody: Json, status: number, outcome: "succeeded" | "failed") => {
+    await completeSubscriptionMutation(claim.id, outcome, status, responseBody);
+    return NextResponse.json(responseBody, { status, headers: { "Idempotency-Key": idempotency.key! } });
+  };
 
   const { data: subscriptionId, error } = await supabase.rpc("admin_assign_subscription", {
     p_tenant_id: tenant_id,
@@ -51,15 +80,16 @@ export async function POST(request: NextRequest) {
 
   if (error) {
     if (error.message?.includes("already_subscribed")) {
-      return NextResponse.json(
+      return finish(
         { error: "This tenant already has a live subscription — change their plan instead" },
-        { status: 409 },
+        409,
+        "failed",
       );
     }
     if (error.message?.includes("cycle_not_offered")) {
-      return NextResponse.json({ error: "That plan isn't sold on that billing cycle" }, { status: 400 });
+      return finish({ error: "That plan isn't sold on that billing cycle" }, 400, "failed");
     }
-    return NextResponse.json({ error: "Could not assign the subscription" }, { status: 500 });
+    return finish({ error: "Could not assign the subscription" }, 500, "failed");
   }
 
   // Awaited before responding, so the agent's next page load already reflects it (SA-2.7).
@@ -86,5 +116,5 @@ export async function POST(request: NextRequest) {
     request,
   });
 
-  return NextResponse.json({ subscriptionId }, { status: 201 });
+  return finish({ subscriptionId }, 201, "succeeded");
 }

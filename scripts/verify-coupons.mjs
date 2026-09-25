@@ -21,12 +21,12 @@ const stamp = Date.now();
 const tenantIds = [];
 const couponIds = [];
 
-// This script creates an invoice, which consumes a number. Without restoring the counter it would
-// leave a hole in the live sequence — breaking the very no-gaps guarantee SA-3.2 exists to give.
+// This script creates immutable platform invoices. The counter must therefore move forward with
+// the retained verification history; rewinding it would make the next invoice collide.
 const YEAR = new Date().getUTCFullYear();
 const MONTH = new Date().getUTCMonth() + 1;
 const { data: counterBefore } = await supabase
-  .from("invoice_counters").select("next_number").eq("year", YEAR).eq("month", MONTH).maybeSingle();
+  .from("invoice_counters").select("next_number").eq("series", "INV").eq("year", YEAR).eq("month", MONTH).maybeSingle();
 const startingNumber = counterBefore?.next_number ?? null;
 
 async function makeSubscription(label) {
@@ -62,23 +62,18 @@ async function makeCoupon(overrides = {}) {
 
 async function cleanup() {
   for (const id of tenantIds) {
-    await supabase.from("platform_invoices").delete().eq("tenant_id", id);
     await supabase.from("tenant_entitlements").delete().eq("tenant_id", id);
-    await supabase.from("subscriptions").delete().eq("tenant_id", id);
-    await supabase.from("tenants").delete().eq("id", id);
+    await supabase.from("subscriptions").update({ status: "cancelled" }).eq("tenant_id", id);
+    await supabase.from("tenants").update({
+      status: "suspended",
+      suspended_at: new Date().toISOString(),
+      suspension_reason: "Disposable coupon verifier fixture retained for immutable QA evidence",
+    }).eq("id", id);
   }
   await supabase.from("coupons").delete().in("id", couponIds);
-
-  if (startingNumber === null) {
-    await supabase.from("invoice_counters").delete().eq("year", YEAR).eq("month", MONTH);
-  } else {
-    await supabase.from("invoice_counters").update({ next_number: startingNumber }).eq("year", YEAR).eq("month", MONTH);
-  }
-  const { data: restored } = await supabase
-    .from("invoice_counters").select("next_number").eq("year", YEAR).eq("month", MONTH).maybeSingle();
-  check("the invoice counter is restored, leaving no gap in the live sequence",
-        (restored?.next_number ?? null) === startingNumber,
-        `was ${startingNumber}, now ${restored?.next_number ?? null}`);
+  const { data: currentCounter } = await supabase
+    .from("invoice_counters").select("next_number").eq("series", "INV").eq("year", YEAR).eq("month", MONTH).maybeSingle();
+  console.log(`  retained immutable verification invoices; counter is ${currentCounter?.next_number ?? "unavailable"} (started at ${startingNumber ?? "new"})`);
 }
 
 try {

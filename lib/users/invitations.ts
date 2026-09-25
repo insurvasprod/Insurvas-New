@@ -44,6 +44,10 @@ export function buildPartnerInviteUrl(token: string, origin: string): string {
   return `${origin}/partner/set-password?token=${encodeURIComponent(token)}`;
 }
 
+export function buildExistingPartnerInviteUrl(token: string, origin: string): string {
+  return `${origin}/partner/accept-invite?token=${encodeURIComponent(token)}`;
+}
+
 /** Password resets land on the same screen as invites — both end in "choose a password". */
 export function buildPasswordResetUrl(token: string, origin: string): string {
   return buildInviteUrl(token, origin);

@@ -1,5 +1,6 @@
 // LA-0.5 · Run daily. Warnings are derived from the current expiry date, so renewal naturally
-// stops the old warning and creates a new schedule. email_log.dedupe_key prevents repeat sends.
+// stops the old warning and creates a new schedule. A record warns every day inside the 90-day window;
+// the dedupe key carries the band (90/60/30), so email_log.dedupe_key still sends one per band.
 import { createClient } from "@supabase/supabase-js";
 
 import { dueExpiryWarnings } from "../lib/appointments/warnings.ts";
@@ -35,9 +36,9 @@ for (const { warning, owner } of candidates) {
   const dedupeKey = `appointment-expiry-${warning.source}-${warning.sourceId}-${warning.expiresAt}-${warning.days}-${owner.user_id}`;
   if (sentKeys.has(dedupeKey)) continue;
   const user = owner.users;
-  console.log(`${warning.label} for ${user.email} — ${warning.days} days remaining`);
+  console.log(`${warning.label} for ${user.email} — ${warning.daysLeft} days remaining (${warning.days}-day band)`);
   if (dryRun) continue;
-  const delivery = await sendExpiryWarning({ to: user.email, userId: user.id, tenantId: owner.tenant_id, name: user.name ?? "there", label: warning.label, days: warning.days, expiresAt: warning.expiresAt, settingsUrl: `${appUrl}/app/settings`, dedupeKey });
+  const delivery = await sendExpiryWarning({ to: user.email, userId: user.id, tenantId: owner.tenant_id, name: user.name ?? "there", label: warning.label, days: warning.daysLeft, expiresAt: warning.expiresAt, settingsUrl: `${appUrl}/app/settings`, dedupeKey });
   console.log(`  ${delivery.delivered ? "delivered" : `not delivered: ${delivery.reason}`}`);
   sent++;
 }

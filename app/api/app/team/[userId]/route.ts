@@ -35,6 +35,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       return NextResponse.json({ error: "This is the tenant's only owner. Promote another owner before changing this role.", code: "last_owner" }, { status: 409 });
     }
     if (error.message?.includes("member_not_found")) return NextResponse.json({ error: "That teammate is not in this workspace" }, { status: 404 });
+    const setters = error.message?.match(/max_setter_seats:(\d+):(\d+)/);
+    if (setters) return NextResponse.json({ error: `Your plan has reached setter seats (${setters[1]} of ${setters[2]}). Upgrade to change another teammate into a setter.`, code: "limit_reached", limitKey: "max_setter_seats", usage: Number(setters[1]), limit: Number(setters[2]), upgrade: true }, { status: 403 });
     return NextResponse.json({ error: "Could not change this teammate's role" }, { status: 500 });
   }
 

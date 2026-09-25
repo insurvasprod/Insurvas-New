@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 
 import { getAdminSession } from "./requireAdminRole";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
@@ -14,6 +15,11 @@ export type CurrentAdmin = {
 
 /** For use in Server Components/layouts. Returns null if there is no valid, active admin session. */
 export async function getCurrentAdmin(): Promise<CurrentAdmin | null> {
+  return readCurrentAdmin();
+}
+
+// Memoised for one request: the admin layout and the page beneath it both resolve the admin.
+const readCurrentAdmin = cache(async (): Promise<CurrentAdmin | null> => {
   const session = await getAdminSession();
   if (!session) return null;
 
@@ -27,4 +33,4 @@ export async function getCurrentAdmin(): Promise<CurrentAdmin | null> {
   if (!admin || !admin.is_active) return null;
 
   return admin;
-}
+});

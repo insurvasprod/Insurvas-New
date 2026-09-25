@@ -10,6 +10,12 @@
  *   npm run verify:period-billing
  */
 import { createClient } from "@supabase/supabase-js";
+import { createFixtureUser, deleteFixtureUser } from "./lib/fixtureUser.mjs";
+// The real assembler, not a re-implementation of it. Everything below the waiver section goes
+// through the same billSubscriptionPeriod the scheduled job calls, which is also what proves that
+// module still loads under plain Node -- a `@/` value import anywhere in its graph would break
+// `npm run bill:periods` and nothing else would notice.
+import { billSubscriptionPeriod } from "../lib/billing/gather.ts";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -35,6 +41,7 @@ function ensure(label, condition, detail) {
 }
 
 let tenantId = null;
+let ownerId = null;
 let subscriptionId = null;
 let planId = null;
 let addonId = null;
@@ -43,25 +50,55 @@ const invoiceIds = [];
 async function cleanup() {
   console.log("\nCleaning up…");
   if (subscriptionId) {
+    await sb.from("billing_waivers").delete().eq("subscription_id", subscriptionId);
     await sb.from("period_billing_runs").delete().eq("subscription_id", subscriptionId);
     await sb.from("pending_charges").delete().eq("subscription_id", subscriptionId);
     await sb.from("subscription_addons").delete().eq("subscription_id", subscriptionId);
   }
   for (const id of invoiceIds) {
+    // Draft first: prevent_issued_invoice_mutation refuses to delete an issued invoice, and a
+    // cleanup that silently fails is what left orphan rows above the invoice counter before.
+    await sb.from("platform_invoices").update({ status: "draft" }).eq("id", id);
     await sb.from("platform_invoice_lines").delete().eq("invoice_id", id);
-    await sb.from("platform_invoices").delete().eq("id", id);
+    const { error } = await sb.from("platform_invoices").delete().eq("id", id);
+    if (error) console.error(`  cleanup: invoice ${id} was not removed -- ${error.message}`);
   }
   if (tenantId) {
-    await sb.from("platform_invoices").delete().eq("tenant_id", tenantId);
+    await sb.from("tenant_users").delete().eq("tenant_id", tenantId);
     await sb.from("usage_totals").delete().eq("tenant_id", tenantId);
     await sb.from("tenant_credits").delete().eq("tenant_id", tenantId);
-    await sb.from("tenants").delete().eq("id", tenantId);
+    // Platform invoices are immutable after issue. Retain this namespaced history and deactivate
+    // the fixture instead of attempting to delete billing evidence.
+    await sb.from("tenants").update({
+      status: "suspended",
+      suspended_at: new Date().toISOString(),
+      suspension_reason: "Disposable period-billing fixture retained for immutable QA evidence",
+    }).eq("id", tenantId);
+    if (subscriptionId) {
+      await sb.from("subscriptions").update({ status: "cancelled" }).eq("id", subscriptionId);
+    }
   }
+  // Removes the auth.users row as well; deleting only public.users would leave an orphan whose
+  // email collides with the next run.
+  await deleteFixtureUser(sb, ownerId);
   if (addonId) await sb.from("addons").delete().eq("id", addonId);
   if (planId) {
     await sb.from("plan_meters").delete().eq("plan_id", planId);
     await sb.from("plan_prices").delete().eq("plan_id", planId);
-    await sb.from("plans").delete().eq("id", planId);
+    const { error: planError } = await sb.from("plans").delete().eq("id", planId);
+    if (planError) {
+      // The tenant above is retained rather than deleted, because its platform invoices are
+      // immutable -- so its cancelled subscription still references this plan and the delete is
+      // refused. Archive it instead.
+      //
+      // This matters beyond tidiness. A fixture plan carries sort_order 0, so while it stays
+      // unarchived it sorts ahead of Basic, and every suite that picks "the first unarchived plan"
+      // gets a plan with no features and no prices. That is what made verify-kill-switches report
+      // "grants no features" and verify-system-maintenance die on `cycle_not_offered`. Both now
+      // name their plan, and this stops leaving the trap in the first place.
+      const { error: archiveError } = await sb.from("plans").update({ is_archived: true }).eq("id", planId);
+      if (archiveError) console.error(`  cleanup: plan ${planId} neither removed nor archived -- ${archiveError.message}`);
+    }
   }
 }
 
@@ -103,14 +140,19 @@ try {
   }
   await sb.from("plan_meters").insert({ plan_id: planId, meter_key: meterKey, included_qty: 100, hard_cap: false });
 
-  const { data: created, error: tenantError } = await sb.rpc("create_tenant_with_owner", {
-    p_tenant_name: `Period billing verify ${stamp}`,
-    p_owner_name: "Period Billing Verify",
-    p_owner_email: `period-billing-${stamp}@example.test`,
-    p_owner_password_hash: "$2b$12$verifyverifyverifyverifyverifyverifyverifyverifyverifyverify",
-  });
+  // create_tenant_with_owner is the legacy provisioning RPC: it inserts a public.users row with no
+  // id, which users_id_fkey has made impossible since SA-1.2 moved credentials to Supabase Auth.
+  // verify-kill-switches already carries this same fallback. The RPC itself is still wired into
+  // POST /api/admin/tenants and is broken there too -- see the backlog.
+  ({ userId: ownerId } = await createFixtureUser(sb, { email: `period-billing-${stamp}@invalid.test`, name: "Period Billing Verify" }));
+  const { data: madeTenant, error: tenantError } = await sb
+    .from("tenants")
+    .insert({ name: `Period billing verify ${stamp}`, status: "active", onboarding_state: "completed" })
+    .select("id").single();
   if (tenantError) throw new Error(`tenant: ${tenantError.message}`);
-  ({ tenant_id: tenantId } = Array.isArray(created) ? created[0] : created);
+  tenantId = madeTenant.id;
+  const { error: membershipError } = await sb.from("tenant_users").insert({ tenant_id: tenantId, user_id: ownerId, role: "owner", accepted_at: new Date().toISOString() });
+  if (membershipError) throw new Error(`membership: ${membershipError.message}`);
 
   // A period that ended yesterday, so the run considers it.
   const periodStart = new Date(Date.now() - 31 * 86_400_000).toISOString();
@@ -270,6 +312,122 @@ try {
     .single();
   ensure("but the run is still recorded, so it is not re-examined forever",
     Boolean(ledger?.note), "no ledger row was written for the empty period");
+
+  // ── waivers, through the real assembler ────────────────────────────────────
+  //
+  // Everything above calls the RPC with lines built by hand, which proves the database half. This
+  // section calls billSubscriptionPeriod, so the assembler, the waiver query, the RPC and the
+  // collection attempt are all exercised as one path — the same one the scheduled job runs.
+  console.log("\nA period with an overage waiver…");
+
+  const waivedStart = new Date(Date.now() - 95 * 86_400_000).toISOString();
+  const waivedEnd = new Date(Date.now() - 65 * 86_400_000).toISOString();
+
+  await sb.from("subscriptions")
+    .update({ current_period_start: waivedStart, current_period_end: waivedEnd })
+    .eq("id", subscriptionId);
+  await sb.from("usage_totals").insert({ tenant_id: tenantId, meter_key: meterKey, period_start: waivedStart, used_qty: 180 });
+
+  const { error: waiverError } = await sb.from("billing_waivers").insert({
+    tenant_id: tenantId,
+    subscription_id: subscriptionId,
+    meter_key: meterKey,
+    period_start: waivedStart,
+    max_cents: null,
+    reason: "Verification: outage during the period",
+  });
+  if (waiverError) throw new Error(`waiver: ${waiverError.message}`);
+
+  // A second waiver naming a meter with no overage. It must survive untouched — a waiver burned
+  // against nothing is a forgiveness the customer never received and can never use again.
+  const { error: idleError } = await sb.from("billing_waivers").insert({
+    tenant_id: tenantId,
+    subscription_id: subscriptionId,
+    meter_key: `${meterKey}_absent_${stamp}`,
+    period_start: waivedStart,
+    max_cents: 500,
+    reason: "Verification: waiver for a meter with no usage",
+  });
+  if (idleError) throw new Error(`idle waiver: ${idleError.message}`);
+
+  const outcome = await billSubscriptionPeriod(sb, {
+    id: subscriptionId,
+    tenant_id: tenantId,
+    tenant_name: "Period billing verify",
+    billing_cycle: "monthly",
+    current_period_start: waivedStart,
+    current_period_end: waivedEnd,
+    status: "active",
+  });
+
+  if (outcome.error) throw new Error(`waived run: ${outcome.error}`);
+  if (outcome.invoiceId) invoiceIds.push(outcome.invoiceId);
+
+  const expectedWaived = 80 * sellCents;
+
+  check("the run reports the overage as waived", outcome.waivedCents, expectedWaived);
+  ensure("the add-on is still billed — a waiver reaches the overage and nothing else",
+    outcome.totalCents === 1500,
+    `expected the 1500 add-on to remain, got ${outcome.totalCents}`);
+
+  const { data: waivedLines } = await sb
+    .from("platform_invoice_lines").select("kind, amount_cents, label").eq("invoice_id", outcome.invoiceId);
+  const waivedKinds = (waivedLines ?? []).map((l) => l.kind).sort();
+  check("the overage appears AND is discounted, rather than being quietly removed",
+    waivedKinds, ["addon", "discount", "overage"]);
+
+  const discountLine = (waivedLines ?? []).find((l) => l.kind === "discount");
+  ensure("the waiver line says why it was granted",
+    Boolean(discountLine?.label?.includes("outage during the period")),
+    `the discount line reads "${discountLine?.label}"`);
+  ensure("the waiver is stored as a negative amount, so the lines sum to the total",
+    Number(discountLine?.amount_cents) === -expectedWaived,
+    `expected ${-expectedWaived}, got ${discountLine?.amount_cents}`);
+
+  const { data: lineSum } = await sb
+    .from("platform_invoice_lines").select("amount_cents").eq("invoice_id", outcome.invoiceId);
+  const summed = (lineSum ?? []).reduce((total, l) => total + Number(l.amount_cents), 0);
+  check("the invoice lines add up to what the invoice asks for", summed, outcome.totalCents);
+
+  // ── the waiver is spent, once, and only the matching one ───────────────────
+  const { data: spent } = await sb
+    .from("billing_waivers").select("id, meter_key, consumed_at, invoice_id")
+    .eq("subscription_id", subscriptionId).eq("period_start", waivedStart);
+
+  const applied = (spent ?? []).find((w) => w.meter_key === meterKey);
+  const untouched = (spent ?? []).find((w) => w.id !== applied?.id && w.meter_key !== meterKey);
+
+  ensure("the applied waiver is marked consumed", Boolean(applied?.consumed_at), "consumed_at is null");
+  check("it records the invoice it was spent on", applied?.invoice_id, outcome.invoiceId);
+  ensure("a waiver matching no overage is left unspent for the period it was meant for",
+    untouched !== undefined && untouched.consumed_at === null,
+    `consumed_at is ${untouched?.consumed_at}`);
+  check("the run reports it rather than dropping it silently", outcome.unusedWaivers.length, 1);
+
+  // ── the invoice was offered for collection ─────────────────────────────────
+  //
+  // This fixture tenant has no payment provider, so the only honest outcome is a warning. That is
+  // the assertion worth making: before backlog 27 was fixed there was no attempt at all, and no
+  // warning either — the invoice was simply raised and never sent, which looks identical to
+  // success from every angle except the bank.
+  ensure("collection was attempted and its outcome recorded",
+    outcome.payOnlineUrl !== null || outcome.collectionWarning !== null,
+    "neither a pay-online link nor a warning came back, so nothing tried to collect this invoice");
+  ensure("a tenant with no payment provider is reported as such, not silently skipped",
+    Boolean(outcome.collectionWarning?.includes("provider customer")),
+    `the warning read "${outcome.collectionWarning}"`);
+
+  // ── billing it again spends nothing twice ──────────────────────────────────
+  const repeatOutcome = await billSubscriptionPeriod(sb, {
+    id: subscriptionId, tenant_id: tenantId, tenant_name: "Period billing verify",
+    billing_cycle: "monthly", current_period_start: waivedStart, current_period_end: waivedEnd,
+    status: "active",
+  });
+  check("a repeat run finds the period already billed", repeatOutcome.alreadyBilled, true);
+  check("and reports no further waiver spend", repeatOutcome.waivedCents, 0);
+  ensure("and does not send a second pay page for one debt",
+    repeatOutcome.payOnlineUrl === null && repeatOutcome.collectionWarning === null,
+    "the repeat run tried to collect again");
 
   console.log("");
   if (failures === 0) {

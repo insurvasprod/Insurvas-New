@@ -1,8 +1,10 @@
 import "server-only";
+import { cache } from "react";
 
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { getTenantSession } from "@/lib/tenantAuth/requireTenant";
 import { isTenantRole, type TenantRole } from "@/lib/tenantAuth/roles";
+import { isTenantSuspended } from "@/lib/tenants/suspension";
 
 export type SignupContext = {
   userId: string;
@@ -16,6 +18,12 @@ export type SignupContext = {
 };
 
 export async function resolveSignupContext(): Promise<SignupContext | null> {
+  return readSignupContext();
+}
+
+// Memoised for the one request, like resolveTenantContext: the shell and the onboarding pages both
+// ask, and each ask was three database reads.
+const readSignupContext = cache(async (): Promise<SignupContext | null> => {
   const session = await getTenantSession();
   if (!session) return null;
 
@@ -32,6 +40,9 @@ export async function resolveSignupContext(): Promise<SignupContext | null> {
   ]);
 
   if (!user || !tenant || !membership || !isTenantRole(membership.role)) return null;
+  // A suspended agency has no signup to finish either: checkout and onboarding refuse the session
+  // the same way the product does (decision 4).
+  if (isTenantSuspended(tenant.status)) return null;
   return {
     userId: session.sub,
     tenantId: session.tenantId,
@@ -42,7 +53,7 @@ export async function resolveSignupContext(): Promise<SignupContext | null> {
     onboardingState: tenant.onboarding_state,
     role: membership.role,
   };
-}
+});
 
 export function signupDestination(context: Pick<SignupContext, "userStatus" | "onboardingState">): string | null {
   if (context.userStatus === "pending_verification") return "/app/verify-email";

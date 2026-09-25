@@ -49,7 +49,7 @@ export function ThemeToggle({ tone = "default" }: { tone?: "default" | "onBrand"
             aria-label={label}
             title={label}
             onClick={() => setTheme(value)}
-            className={`flex flex-1 items-center justify-center rounded px-2 py-1 transition-colors focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--primary)] ${
+            className={`flex flex-1 items-center justify-center rounded px-2 py-1 transition-colors focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--ring-color)] ${
               selected ? active : idle
             }`}
           >

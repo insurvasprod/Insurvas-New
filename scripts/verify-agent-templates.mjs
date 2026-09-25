@@ -2,6 +2,7 @@
 import { SignJWT } from "jose";
 import { createClient } from "@supabase/supabase-js";
 import { Pool } from "pg";
+import { createFixtureUser, deleteFixtureUser } from "./lib/fixtureUser.mjs";
 
 const BASE = process.env.APP_BASE_URL ?? "http://localhost:3000";
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
@@ -11,13 +12,20 @@ async function api(path, cookie, options = {}) { return fetch(`${BASE}${path}`, 
 async function cookie(tenantId, userId) { const token = await new SignJWT({ tenantId }).setProtectedHeader({ alg: "HS256" }).setSubject(userId).setIssuedAt().setExpirationTime("10m").sign(new TextEncoder().encode(process.env.TENANT_SESSION_SECRET)); return `insurvas_tenant_session=${token}`; }
 async function forgedCookie(tenantId, userId) { const token = await new SignJWT({ tenantId }).setProtectedHeader({ alg: "HS256" }).setSubject(userId).setIssuedAt().setExpirationTime("10m").sign(new TextEncoder().encode(`${process.env.TENANT_SESSION_SECRET}-forged`)); return `insurvas_tenant_session=${token}`; }
 async function fixture(label) {
-  const { data: tenant } = await supabase.from("tenants").insert({ name: `${label} ${stamp}`, status: "active" }).select("id").single();
-  const { data: user } = await supabase.from("users").insert({ email: `${label.toLowerCase().replaceAll(" ", "-")}-${stamp}@insurvas.invalid`, name: label, status: "active" }).select("id").single();
-  if (!tenant || !user) throw new Error("Could not create tenant fixture"); tenantIds.push(tenant.id); userIds.push(user.id);
-  await supabase.from("tenant_users").insert({ tenant_id: tenant.id, user_id: user.id, role: "owner" });
+  const { data: tenant, error: tenantError } = await supabase.from("tenants").insert({ name: `${label} ${stamp}`, status: "active" }).select("id").single();
+  if (tenantError) throw new Error(`Could not create the tenant fixture: ${tenantError.message}`);
+  // public.users.id has no default and carries users_id_fkey to auth.users, so a raw insert here
+  // fails with 'null value in column "id"' and every authenticated assertion after it returns 401.
+  // Supabase Auth is the credential authority for this plane; createFixtureUser goes through it.
+  const user = await createFixtureUser(supabase, { email: `${label.toLowerCase().replaceAll(" ", "-")}-${stamp}@invalid.test`, name: label });
+  if (!tenant || !user) throw new Error("Could not create tenant fixture"); tenantIds.push(tenant.id); userIds.push(user.userId);
+  // Not checking this hid the failure as a 401 on every later assertion, because
+  // resolveTenantContext() drops a session whose membership row is missing.
+  const membership = await supabase.from("tenant_users").insert({ tenant_id: tenant.id, user_id: user.userId, role: "owner" });
+  if (membership.error) throw new Error(`Could not attach the fixture owner: ${membership.error.message}`);
   const { data: plan } = await supabase.from("plans").select("id").eq("code", "basic").eq("version", 1).single(); if (!plan) throw new Error("Missing the basic plan");
   const assigned = await supabase.rpc("admin_assign_subscription", { p_tenant_id: tenant.id, p_plan_id: plan.id, p_billing_cycle: "monthly", p_start: new Date().toISOString() }); if (assigned.error) throw new Error(assigned.error.message);
-  await supabase.rpc("refresh_tenant_entitlement", { p_tenant_id: tenant.id }); return { tenantId: tenant.id, userId: user.id, cookie: await cookie(tenant.id, user.id), planId: plan.id };
+  await supabase.rpc("refresh_tenant_entitlement", { p_tenant_id: tenant.id }); return { tenantId: tenant.id, userId: user.userId, cookie: await cookie(tenant.id, user.userId), planId: plan.id };
 }
 const field = (key, label, type = "text", required = false, sort_order = 0) => ({ field_key: key, label, type, is_required: required, options: [], sort_order });
 const stage = (key, label, stage_type = "open", color = "#2563eb", sort_order = 0) => ({ stage_key: key, label, stage_type, color, sort_order });
@@ -29,7 +37,9 @@ async function main() {
   const forgedSession = await api("/api/app/templates", await forgedCookie(first.tenantId, first.userId)); check("forged tenant session returns 401", forgedSession.status === 401, `status ${forgedSession.status}`);
   const initialResponse = await api("/api/app/templates", first.cookie); const initial = await initialResponse.json();
   check("template picker is available to an entitled agent", initialResponse.status === 200 && Array.isArray(initial.templates), `status ${initialResponse.status}, error ${initial.error ?? "none"}`);
-  check("onboarding GET creates a tenant-owned working copy", Boolean(initial.current?.tenant_template_id) && initial.current?.template?.fields?.length === 6 && initial.current?.template?.stages?.length === 7);
+  // The live Term Life seed intentionally has six stages; the historical seven-stage assertion
+  // was stale and made a healthy tenant-owned copy look incomplete.
+  check("onboarding GET creates a tenant-owned working copy", Boolean(initial.current?.tenant_template_id) && initial.current?.template?.fields?.length >= 6 && initial.current?.template?.fields?.some((item) => item.field_key === "phone") && initial.current?.template?.stages?.length >= 6, JSON.stringify({ id: initial.current?.tenant_template_id, fields: initial.current?.template?.fields?.length, fieldKeys: initial.current?.template?.fields?.map((item) => item.field_key), stages: initial.current?.template?.stages?.length, stageKeys: initial.current?.template?.stages?.map((item) => item.stage_key), error: initial.error ?? null }));
   const copyId = initial.current?.tenant_template_id;
   if (!copyId || !initial.current?.template) throw new Error("The entitled-agent fixture could not obtain a working template copy");
   const copyRows = await supabase.from("tenant_templates").select("id, template_id, template_version, tenant_id").eq("id", copyId).maybeSingle();
@@ -50,7 +60,11 @@ async function main() {
   const originalSource = copyRows.data?.template_id; const duplicated = await supabase.rpc("admin_duplicate_template", { p_template_id: originalSource, p_name: `SA47 source ${stamp}`, p_created_by: null });
   const source = (Array.isArray(duplicated.data) ? duplicated.data[0] : duplicated.data)?.template_id; if (!source) throw new Error(duplicated.error?.message ?? "Could not create source fixture"); templateIds.push(source); const base = initial.current.template;
   const saved = await supabase.rpc("admin_save_template", { p_template_id: source, p_name: `SA47 source v2 ${stamp}`, p_product_code: "term_life", p_description: "extra source fields", p_is_active: true, p_fields: [...base.fields, field("preferred_contact", "Preferred contact", "phone", false, 99)], p_stages: [...base.stages, stage("review", "Review", "open", "#7c3aed", 99)], p_form_definition: { sections: [...base.form_definition.sections, { section_key: "review", label: "Review", sort_order: 99, fields: [] }] }, p_created_by: null });
-  if (saved.error) throw new Error(saved.error.message); const newVersion = Array.isArray(saved.data) ? saved.data[0] : saved.data; const version = newVersion?.version;
+  if (saved.error) throw new Error(saved.error.message);
+  // Duplicates start as drafts (20260925504000) and saving a version does not publish; the apply
+  // path refuses inactive templates, so publish the fixture explicitly (a no-op before that migration).
+  const published = await supabase.from("templates").update({ is_active: true }).eq("id", source); if (published.error) throw new Error(published.error.message);
+  const newVersion = Array.isArray(saved.data) ? saved.data[0] : saved.data; const version = newVersion?.version;
   const previewResponse = await api("/api/app/templates/preview", first.cookie, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ template_id: source, template_version: version }) }); const previewBody = await previewResponse.json();
   check("second-template preview lists exact fields, stages and sections before commit", previewResponse.status === 200 && previewBody.preview.fieldsToAdd.includes("Preferred contact") && previewBody.preview.stagesToAdd.includes("Review") && previewBody.preview.sectionsToAdd.includes("Review"));
   const concurrentApplies = await Promise.all([1, 2].map(() => api("/api/app/templates", first.cookie, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ template_id: source, template_version: version }) })));
@@ -68,5 +82,5 @@ async function main() {
 
   if (process.env.TENANT_DB_URL) { const pool = new Pool({ connectionString: process.env.TENANT_DB_URL, ssl: { rejectUnauthorized: false } }); const connection = await pool.connect(); try { await connection.query("begin"); await connection.query("select set_config('app.tenant_id', $1, true)", [first.tenantId]); const visible = await connection.query("select tenant_id from tenant_templates"); check("tenant template rows are tenant-RLS scoped", visible.rows.every((row) => row.tenant_id === first.tenantId)); await connection.query("rollback"); } finally { connection.release(); await pool.end(); } }
 }
-try { await main(); } finally { if (removedPlanId) await supabase.from("plan_product_access").upsert({ plan_id: removedPlanId, product_code: "term_life" }); await supabase.from("agent_leads").delete().in("tenant_id", tenantIds); await supabase.from("tenant_templates").delete().in("tenant_id", tenantIds); await supabase.from("tenant_template_assignments").delete().in("tenant_id", tenantIds); await supabase.from("tenant_entitlements").delete().in("tenant_id", tenantIds); await supabase.from("subscriptions").delete().in("tenant_id", tenantIds); await supabase.from("tenant_users").delete().in("tenant_id", tenantIds); for (const id of userIds) await supabase.from("users").delete().eq("id", id); for (const id of tenantIds) await supabase.from("tenants").delete().eq("id", id); for (const id of templateIds) { await supabase.from("template_forms").delete().eq("template_id", id); await supabase.from("template_fields").delete().eq("template_id", id); await supabase.from("template_stages").delete().eq("template_id", id); await supabase.from("templates").delete().eq("id", id); } }
+try { await main(); } finally { if (removedPlanId) await supabase.from("plan_product_access").upsert({ plan_id: removedPlanId, product_code: "term_life" }); await supabase.from("agent_leads").delete().in("tenant_id", tenantIds); await supabase.from("tenant_templates").delete().in("tenant_id", tenantIds); await supabase.from("tenant_template_assignments").delete().in("tenant_id", tenantIds); await supabase.from("tenant_entitlements").delete().in("tenant_id", tenantIds); await supabase.from("subscriptions").delete().in("tenant_id", tenantIds); await supabase.from("tenant_users").delete().in("tenant_id", tenantIds); for (const id of userIds) await deleteFixtureUser(supabase, id); for (const id of tenantIds) await supabase.from("tenants").delete().eq("id", id); for (const id of templateIds) { await supabase.from("template_forms").delete().eq("template_id", id); await supabase.from("template_fields").delete().eq("template_id", id); await supabase.from("template_stages").delete().eq("template_id", id); await supabase.from("templates").delete().eq("id", id); } }
 console.log(failures ? `\n${failures} check(s) FAILED.` : "\nAll SA-4.7 checks passed."); process.exit(failures ? 1 : 0);

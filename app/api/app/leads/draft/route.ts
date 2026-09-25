@@ -2,10 +2,16 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { audit } from "@/lib/audit/log";
 import { deleteFormDraft, getAgentTemplate, loadFormDraft, saveFormDraft } from "@/lib/agentTemplates/service";
-import { requireFeature } from "@/lib/entitlements/requireFeature";
+import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
+
+// LA-2.12. The book of business is the licensed agent's — it carries premiums, quotes and
+// applications, which is the exact list a setter may not see. The setter is excluded by naming the
+// four roles that already had this route rather than by narrowing it to ["owner"], so this change
+// adds one refusal and takes nobody's access away.
+const NOT_SETTER = ["owner", "producer", "assistant", "bookkeeper"] as const;
 
 export async function GET() {
-  const auth = await requireFeature("book_of_business");
+  const auth = await requireFeatureRole("book_of_business", NOT_SETTER);
   if (auth instanceof NextResponse) return auth;
   try {
     const template = await getAgentTemplate(auth.context.tenantId, auth.context.userId);
@@ -15,7 +21,7 @@ export async function GET() {
 }
 
 export async function PUT(request: NextRequest) {
-  const auth = await requireFeature("book_of_business", { write: true });
+  const auth = await requireFeatureRole("book_of_business", NOT_SETTER, { write: true });
   if (auth instanceof NextResponse) return auth;
   const body = await request.json().catch(() => null) as { payload?: unknown } | null;
   try {
@@ -27,7 +33,7 @@ export async function PUT(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  const auth = await requireFeature("book_of_business", { write: true });
+  const auth = await requireFeatureRole("book_of_business", NOT_SETTER, { write: true });
   if (auth instanceof NextResponse) return auth;
   try { const template = await getAgentTemplate(auth.context.tenantId, auth.context.userId); await deleteFormDraft(auth.context.tenantId, auth.context.userId, template.template.product_code); await audit({ actorType: "tenant", actorId: auth.context.userId, action: "tenant.form_draft_cleared", targetType: "form_draft", metadata: { productCode: template.template.product_code }, request }); return NextResponse.json({ cleared: true }); }
   catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Could not clear draft" }, { status: 400 }); }

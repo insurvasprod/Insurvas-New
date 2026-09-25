@@ -286,7 +286,7 @@ cents; financial records survive a deletion request (anonymised, not purged).
 
 | Task | Specific need |
 |---|---|
-| SA-4.1 Settings store | ✅ **Pass** — but **reconcile the table name**: `/api/admin/settings` returns 7 live rows while `public.settings` is absent, so the route reads a differently-named table than `database.types.ts` declares |
+| SA-4.1 Settings store | **Database-misaligned** — `public.settings` is live with 4 stored defaults while the typed registry exposes 7 keys. `/api/admin/settings` safely supplies 3 coded defaults; `20260914182000_sa_4_1_settings_registry_completion.sql` seeds them without overwriting overrides, but promotion and persistence proof remain open |
 | SA-4.2 Provider config screen | Partial — exercise the failure simulator |
 | SA-4.3 Configuration Center hub | Partial — several linked sections are themselves 500 (offers, credits, compliance) |
 | SA-4.4 Offers & promotion rules | Offers backing tables, `apply_auto_offer_to_subscription` |

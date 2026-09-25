@@ -3,17 +3,17 @@
  *
  * Run with: npm run qa:sa-matrix -- --out <file.json>
  *
- * GET only. This script performs no writes, creates no fixtures and mutates no shared record; it
- * exists to answer "which surfaces answer, which refuse, and which break" for the SA-0.1-SA-5.4
- * recheck. Sessions are signed locally with the secrets already in .env.local, exactly as
- * scripts/mint-session.mjs does, so no password is typed and none is printed.
+ * The probes themselves are GET-only. If a required admin role is absent, this script creates a
+ * clearly namespaced verification-only admin row, signs a local session for the matrix, and
+ * deactivates that row in finally; it never sends email or changes business data. This keeps the
+ * matrix fail-closed without requiring a real password-based login for every support role.
  *
  * A 500 here almost always means the route reached the database and the table it wanted is not
  * there. That distinction — refused (401/403) versus broken (5xx) — is the whole point.
  */
 import { createClient } from "@supabase/supabase-js";
 import { SignJWT } from "jose";
-import { readdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import process from "node:process";
 
@@ -23,6 +23,8 @@ const outPath = outArg > -1 ? process.argv[outArg + 1] : null;
 
 const ADMIN_ROLES = ["super_admin", "support_agent", "billing_admin", "platform_config"];
 const TENANT_ROLES = ["owner", "assistant"]; // owner + a deliberately restricted member
+const stamp = Date.now();
+const temporaryAdmins = [];
 
 const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, {
   auth: { persistSession: false, autoRefreshToken: false },
@@ -37,20 +39,47 @@ const sign = (secret, claims) =>
     .sign(new TextEncoder().encode(secret));
 
 async function adminCookie(role) {
-  const { data } = await sb
+  const { data, error: readError } = await sb
     .from("admin_users")
     .select("id, role")
     .eq("role", role)
     .eq("is_active", true)
     .limit(1)
     .maybeSingle();
-  if (!data) return { role, cookie: null, reason: `no active admin_users row with role ${role}` };
+  if (readError) throw new Error(`cannot read admin_users for ${role}: ${readError.message}`);
+
+  let admin = data;
+  if (!admin) {
+    const { data: created, error: createError } = await sb
+      .from("admin_users")
+      .insert({
+        email: `qa-sa-matrix-${role}-${stamp}@insurvas.invalid`,
+        name: `QA matrix ${role}`,
+        role,
+        password_hash: "verification-only",
+        totp_secret: "verification-only",
+        is_active: true,
+      })
+      .select("id, role")
+      .single();
+    if (createError) throw new Error(`cannot create temporary ${role} admin: ${createError.message}`);
+    admin = created;
+    temporaryAdmins.push(created.id);
+  }
+
   const token = await sign(process.env.ADMIN_SESSION_SECRET, {
-    sub: data.id,
-    role: data.role,
+    sub: admin.id,
+    role: admin.role,
     stage: "authenticated",
   });
   return { role, cookie: `insurvas_admin_session=${token}` };
+}
+
+async function deactivateTemporaryAdmins() {
+  if (!temporaryAdmins.length) return;
+  const { error } = await sb.from("admin_users").update({ is_active: false }).in("id", temporaryAdmins);
+  if (error) throw new Error(`cannot deactivate temporary admin fixtures: ${error.message}`);
+  console.log(`temporary admin fixtures deactivated: ${temporaryAdmins.length}`);
 }
 
 async function tenantCookie(role) {
@@ -106,6 +135,7 @@ async function probe(path, cookie) {
     const response = await fetch(`${BASE}${path}`, {
       headers: cookie ? { cookie } : {},
       redirect: "manual",
+      signal: AbortSignal.timeout(5_000),
     });
     return response.status;
   } catch (error) {
@@ -116,6 +146,7 @@ async function probe(path, cookie) {
 const adminApi = routes(join(process.cwd(), "app", "api", "admin"), "/api/admin");
 const adminScreens = screens(join(process.cwd(), "app", "admin"), "/admin");
 
+try {
 const sessions = [];
 for (const role of ADMIN_ROLES) sessions.push(await adminCookie(role));
 for (const role of TENANT_ROLES) sessions.push(await tenantCookie(role));
@@ -131,23 +162,31 @@ const report = {
 };
 
 for (const path of adminApi.static) {
-  const row = { anonymous: await probe(path, null) };
-  for (const s of sessions) row[s.role] = s.cookie ? await probe(path, s.cookie) : "no-session";
-  report.api[path] = row;
+  const statuses = await Promise.all([
+    probe(path, null),
+    ...sessions.map((s) => (s.cookie ? probe(path, s.cookie) : Promise.resolve("no-session"))),
+  ]);
+  report.api[path] = Object.fromEntries(["anonymous", ...sessions.map((s) => s.role)].map((role, index) => [role, statuses[index]]));
 }
 
 for (const path of adminScreens) {
-  const row = { anonymous: await probe(path, null) };
-  for (const s of sessions) row[s.role] = s.cookie ? await probe(path, s.cookie) : "no-session";
-  report.screens[path] = row;
+  const statuses = await Promise.all([
+    probe(path, null),
+    ...sessions.map((s) => (s.cookie ? probe(path, s.cookie) : Promise.resolve("no-session"))),
+  ]);
+  report.screens[path] = Object.fromEntries(["anonymous", ...sessions.map((s) => s.role)].map((role, index) => [role, statuses[index]]));
 }
 
 // A quick roll-up, because 100 rows of status codes is not a finding.
 const flatten = (group) => Object.entries(group).flatMap(([path, row]) => Object.entries(row).map(([role, status]) => ({ path, role, status })));
 const all = [...flatten(report.api), ...flatten(report.screens)];
+const PUBLIC_ADMIN_PATHS = new Set(["/admin/login"]);
 report.summary = {
   server_errors: all.filter((r) => typeof r.status === "number" && r.status >= 500),
-  anonymous_leaks: all.filter((r) => r.role === "anonymous" && r.status === 200),
+  anonymous_leaks: all.filter((r) => r.role === "anonymous" && r.status === 200 && !PUBLIC_ADMIN_PATHS.has(r.path)),
+  transport_errors: all.filter((r) => typeof r.status === "string" && r.status.startsWith("ERR ")),
+  missing_sessions: report.sessions.filter((s) => !s.available),
+  public_paths: [...PUBLIC_ADMIN_PATHS],
   ok_counts: Object.fromEntries(
     ["anonymous", ...ADMIN_ROLES, ...TENANT_ROLES].map((role) => [
       role,
@@ -158,6 +197,7 @@ report.summary = {
 
 const json = JSON.stringify(report, null, 2);
 if (outPath) {
+  mkdirSync(join(process.cwd(), outPath, ".."), { recursive: true });
   writeFileSync(outPath, json);
   console.log(`Wrote ${outPath}`);
 } else {
@@ -168,4 +208,21 @@ console.log(`\nsessions: ${report.sessions.map((s) => `${s.role}=${s.available ?
 console.log(`probed: ${adminApi.static.length} API routes + ${adminScreens.length} screens (${adminApi.dynamic.length} dynamic API routes skipped)`);
 console.log(`200s by role: ${JSON.stringify(report.summary.ok_counts)}`);
 console.log(`server errors (5xx): ${report.summary.server_errors.length}`);
+console.log(`transport errors: ${report.summary.transport_errors.length}`);
+console.log(`missing required sessions: ${report.summary.missing_sessions.length}`);
 console.log(`anonymous 200s (should be 0 on protected paths): ${report.summary.anonymous_leaks.length}`);
+
+// A matrix that cannot reach the local app or cannot obtain one of its required role sessions is
+// not evidence of a healthy boundary. Fail closed so CI and the QA ledger cannot record a false
+// green result from an all-ERR or partially exercised run.
+if (report.summary.transport_errors.length > 0 || report.summary.missing_sessions.length > 0) {
+  process.exitCode = 1;
+}
+} finally {
+  try {
+    await deactivateTemporaryAdmins();
+  } catch (error) {
+    console.error(error.message);
+    process.exitCode = 1;
+  }
+}

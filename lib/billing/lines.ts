@@ -29,6 +29,20 @@ export type MeterPrice = {
   sellCents: number;
 };
 
+/**
+ * A billing admin forgiving some or all of one meter's overage for this period.
+ *
+ * `maxCents` null forgives the whole line; a number forgives up to that many cents. The waiver is
+ * matched to an overage line by meter key, so a waiver for a meter that produced no overage costs
+ * nothing and is simply not spent.
+ */
+export type OverageWaiver = {
+  id: string;
+  meterKey: string;
+  maxCents: number | null;
+  reason: string;
+};
+
 export type AttachedAddonForBilling = {
   code: string;
   name: string;
@@ -50,12 +64,18 @@ export type AssembledPeriodInvoice = {
   lines: InvoiceLineInput[];
   /** Everything that is not a discount or a credit. */
   subtotalCents: number;
+  /** Overage forgiven by a billing admin's waiver. */
+  waivedCents: number;
   /** Credit actually spent — never more than the subtotal. */
   creditAppliedCents: number;
-  /** subtotal − credit. Zero or less means no invoice is raised. */
+  /** subtotal − waivers − credit. Zero or less means no invoice is raised. */
   totalCents: number;
   /** Pending charge ids that made it onto the invoice, for the caller to settle. */
   pendingIds: string[];
+  /** Waiver ids actually spent, for the caller to mark consumed. */
+  waiverIds: string[];
+  /** Waivers that matched no overage this period and were left alone. */
+  unusedWaivers: OverageWaiver[];
 };
 
 /**
@@ -72,6 +92,20 @@ export type AssembledPeriodInvoice = {
  *                         as unpriced.
  */
 export function overageLines(usage: MeterUsage[], pricing: MeterPrice[]): InvoiceLineInput[] {
+  return overageLinesByMeter(usage, pricing).map((entry) => entry.line);
+}
+
+/**
+ * The same overage lines, each still paired with the meter it came from.
+ *
+ * An invoice line carries no meter key — it is a document, not a record of our internals — so once
+ * a line is built there is no way back to the meter except by parsing its label, which is not a
+ * thing to do to money. Waivers are matched here, where the pairing still exists.
+ */
+export function overageLinesByMeter(
+  usage: MeterUsage[],
+  pricing: MeterPrice[],
+): Array<{ meterKey: string; line: InvoiceLineInput }> {
   const priceOf = new Map(pricing.map((p) => [p.meterKey, p.sellCents]));
 
   return usage
@@ -83,14 +117,17 @@ export function overageLines(usage: MeterUsage[], pricing: MeterPrice[]): Invoic
     })
     .filter(({ unit }) => unit > 0)
     .map(({ meter, over, unit }) => ({
-      kind: "overage" as const,
-      // The allowance is named in the label as well as carried in included_qty, because the
-      // customer reading the PDF should be able to check the arithmetic without asking us.
-      label: `${meter.label} — ${over.toLocaleString()} ${meter.unit} over the ${(meter.includedQty as number).toLocaleString()} included`,
-      quantity: over,
-      included_qty: meter.includedQty as number,
-      unit_cents: unit,
-      amount_cents: over * unit,
+      meterKey: meter.meterKey,
+      line: {
+        kind: "overage" as const,
+        // The allowance is named in the label as well as carried in included_qty, because the
+        // customer reading the PDF should be able to check the arithmetic without asking us.
+        label: `${meter.label} — ${over.toLocaleString()} ${meter.unit} over the ${(meter.includedQty as number).toLocaleString()} included`,
+        quantity: over,
+        included_qty: meter.includedQty as number,
+        unit_cents: unit,
+        amount_cents: over * unit,
+      },
     }));
 }
 
@@ -146,6 +183,57 @@ export function pendingChargeLines(pending: PendingChargeForBilling[]): InvoiceL
 }
 
 /**
+ * Turn waivers into discount lines against the overage they forgive.
+ *
+ * The overage line stays. A waived overage is shown and then discounted rather than removed,
+ * because "you used 400 over your allowance and we are not charging you for it" is a document we
+ * can still defend a year from now, and an invoice that silently omits the usage is not. The net
+ * is the same either way; the difference is whether anybody can reconstruct what happened.
+ *
+ * A waiver is only ever spent against a line that exists. One naming a meter that produced no
+ * overage this period is left unconsumed and returned in `unused`, so the caller can leave it in
+ * place for the period it was actually meant for rather than burning it silently.
+ */
+export function waiverLines(
+  overage: Array<{ meterKey: string; line: InvoiceLineInput }>,
+  waivers: OverageWaiver[],
+): { lines: InvoiceLineInput[]; spentIds: string[]; unused: OverageWaiver[] } {
+  const lines: InvoiceLineInput[] = [];
+  const spentIds: string[] = [];
+  const unused: OverageWaiver[] = [];
+
+  for (const waiver of waivers) {
+    const line = overage.find((candidate) => candidate.meterKey === waiver.meterKey)?.line;
+    if (!line || line.amount_cents <= 0) {
+      unused.push(waiver);
+      continue;
+    }
+
+    // Clamped to the line. A waiver for more than the overage forgives the overage and no more —
+    // it must never become a discount against the rest of the invoice, which is how a waiver
+    // turns into free add-ons.
+    const forgiven = waiver.maxCents === null
+      ? line.amount_cents
+      : Math.min(waiver.maxCents, line.amount_cents);
+    if (forgiven <= 0) {
+      unused.push(waiver);
+      continue;
+    }
+
+    lines.push({
+      kind: "discount",
+      label: `Waived: ${line.label} — ${waiver.reason}`,
+      quantity: 1,
+      unit_cents: forgiven,
+      amount_cents: forgiven,
+    });
+    spentIds.push(waiver.id);
+  }
+
+  return { lines, spentIds, unused };
+}
+
+/**
  * How much of a credit balance this invoice can absorb.
  *
  * Clamped to the subtotal, deliberately. A credit larger than the bill must not produce a negative
@@ -178,7 +266,8 @@ function isReduction(kind: InvoiceLineKind): boolean {
  *
  * Order is not cosmetic: proration first because it explains a change the customer just made,
  * add-ons next because they are the predictable part, overage after because it is the part that
- * varies, and credit last because it applies to everything above it.
+ * varies, each waiver immediately after the overage it forgives so the pair reads as one
+ * statement, and credit last because it applies to everything above it.
  */
 export function assemblePeriodInvoice(input: {
   pending: PendingChargeForBilling[];
@@ -187,12 +276,21 @@ export function assemblePeriodInvoice(input: {
   usage: MeterUsage[];
   pricing: MeterPrice[];
   creditBalanceCents: number;
+  /** Billing-admin waivers for this subscription and period. Optional; absent means none. */
+  waivers?: OverageWaiver[];
 }): AssembledPeriodInvoice & { skippedAddons: AttachedAddonForBilling[] } {
   const fromPending = pendingChargeLines(input.pending);
   const { lines: fromAddons, skipped } = addonLines(input.addons, input.cycle);
-  const fromOverage = overageLines(input.usage, input.pricing);
+  const overageByMeter = overageLinesByMeter(input.usage, input.pricing);
+  const fromOverage = overageByMeter.map((entry) => entry.line);
 
-  const charges = [...fromPending, ...fromAddons, ...fromOverage];
+  // Waivers are applied to the overage and to nothing else, which is why they are computed from
+  // `overageByMeter` rather than from the assembled list. A waiver that could reach a proration or
+  // an add-on would be a discount with a different name.
+  const { lines: fromWaivers, spentIds: waiverIds, unused: unusedWaivers } =
+    waiverLines(overageByMeter, input.waivers ?? []);
+
+  const charges = [...fromPending, ...fromAddons, ...fromOverage, ...fromWaivers];
 
   // A pending charge may itself be a credit (a downgrade's unused value), so the subtotal has to
   // respect line kind rather than assume everything above the credit line is a charge.
@@ -211,9 +309,12 @@ export function assemblePeriodInvoice(input: {
   return {
     lines: credit ? [...charges, credit] : charges,
     subtotalCents,
+    waivedCents: fromWaivers.reduce((sum, l) => sum + l.amount_cents, 0),
     creditAppliedCents,
     totalCents: netBeforeCredit - creditAppliedCents,
     pendingIds: input.pending.map((p) => p.id),
+    waiverIds,
+    unusedWaivers,
     skippedAddons: skipped,
   };
 }

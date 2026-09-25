@@ -11,6 +11,7 @@ import {
 } from "@/lib/users/invitations";
 import { sendInvitationEmail } from "@/lib/email/sendInvitationEmail";
 import { configuredAppOrigin } from "@/lib/urls/origin";
+import { isOnboarded } from "@/lib/adminUsers/credential";
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireAdminRole(["super_admin"]);
@@ -28,9 +29,17 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (!user) {
     return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
-  if (user.password_hash) {
+  // Past the invite once they have a hash OR have joined an agency (lib/adminUsers/credential.ts):
+  // most accounts have no hash, and an invite link would re-run onboarding for a working member.
+  const accepted = await supabase
+    .from("tenant_users")
+    .select("user_id", { count: "exact", head: true })
+    .eq("user_id", id)
+    .not("accepted_at", "is", null);
+  if (accepted.error) return NextResponse.json({ error: "Could not check this user's membership" }, { status: 500 });
+  if (isOnboarded({ hasPassword: Boolean(user.password_hash), acceptedMembership: (accepted.count ?? 0) > 0 })) {
     return NextResponse.json(
-      { error: "This user has already set a password — send a password reset instead" },
+      { error: "This user has already joined their agency — send a password reset instead" },
       { status: 409 },
     );
   }

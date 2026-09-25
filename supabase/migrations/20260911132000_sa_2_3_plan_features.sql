@@ -109,7 +109,7 @@ select p.id, seed.feature_key
     ('pro',     'statement_ingestion'),
     ('pro',     'tcpa_checker'),
 
-    -- advance (26) — pro plus retention, insight, partners and accounting
+    -- advance (27) — pro plus retention, insight, partner quality, partners and accounting
     ('advance', 'applications'),
     ('advance', 'appointment_vault'),
     ('advance', 'book_of_business'),
@@ -126,6 +126,7 @@ select p.id, seed.feature_key
     ('advance', 'lead_import'),
     ('advance', 'litigation_packet'),
     ('advance', 'outbound_dialing'),
+    ('advance', 'partner_quality'),
     ('advance', 'payment_repair'),
     ('advance', 'payout_runs'),
     ('advance', 'profit_and_loss'),
@@ -140,6 +141,5 @@ select p.id, seed.feature_key
  where p.version = 1
 on conflict do nothing;
 
--- `partner_portal` and `partner_quality` are in the catalog and deliberately in none of these
--- three plans. They are not unsold by accident: leaving them out is what the reviewed v1
--- entitlements say.
+-- `partner_portal` remains an explicit add-on. Partner quality is included in Advance because
+-- the License Agent partner workspace is part of the requested Advance workflow.

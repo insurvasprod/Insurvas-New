@@ -280,28 +280,63 @@ begin
 end;
 $$;
 
-insert into public.stage_dispositions (tenant_id, stage_id, disposition_key)
-select p.tenant_id, s.id, mapping.disposition_key
-from public.pipelines p
-join public.pipeline_stages s on s.pipeline_id = p.id
-join (values
-  ('publisher'::public.partner_type, 'New Transfer', 'new_transfer'),
-  ('publisher'::public.partner_type, 'Needs Callback', 'needs_callback'),
-  ('publisher'::public.partner_type, 'Did Not Qualify', 'did_not_qualify'),
-  ('publisher'::public.partner_type, 'Submitted', 'submitted'),
-  ('marketing'::public.partner_type, 'Form Lead', 'form_lead'),
-  ('marketing'::public.partner_type, 'Call Lead', 'call_lead'),
-  ('marketing'::public.partner_type, 'Pickup - Needs Callback', 'needs_callback'),
-  ('marketing'::public.partner_type, 'Converted', 'converted'),
-  ('affiliate'::public.partner_type, 'Referred', 'referred'),
-  ('affiliate'::public.partner_type, 'Contacted', 'contacted'),
-  ('affiliate'::public.partner_type, 'Qualified', 'qualified'),
-  ('affiliate'::public.partner_type, 'Submitted', 'submitted'),
-  ('affiliate'::public.partner_type, 'Not Interested', 'not_interested')
-) as mapping(partner_type, stage_name, disposition_key)
-  on mapping.partner_type = p.partner_type and mapping.stage_name = s.name
-where p.is_default and not s.is_archived
-on conflict (tenant_id, disposition_key) do nothing;
+-- `pipelines` and `pipeline_stages` are names that may already belong to the organizations-era
+-- CRM. Its stage id is bigint, while this application's stage_dispositions.stage_id is uuid. The
+-- later tenant-table migration moves the application-owned runtime tables to UUID-keyed names;
+-- skip this seed when the name resolves to the CRM table instead of attempting a bigint -> uuid
+-- insert. On a clean database with the declared UUID tables, the seed remains unchanged.
+do $$
+begin
+  if exists (
+    select 1
+    from pg_attribute a
+    where a.attrelid = 'public.pipelines'::regclass
+      and a.attname = 'id'
+      and a.attnum > 0
+      and not a.attisdropped
+      and format_type(a.atttypid, a.atttypmod) = 'uuid'
+  ) and exists (
+    select 1
+    from pg_attribute a
+    where a.attrelid = 'public.pipeline_stages'::regclass
+      and a.attname = 'id'
+      and a.attnum > 0
+      and not a.attisdropped
+      and format_type(a.atttypid, a.atttypmod) = 'uuid'
+  ) and exists (
+    select 1
+    from pg_attribute a
+    where a.attrelid = 'public.stage_dispositions'::regclass
+      and a.attname = 'stage_id'
+      and a.attnum > 0
+      and not a.attisdropped
+      and format_type(a.atttypid, a.atttypmod) = 'uuid'
+  ) then
+    insert into public.stage_dispositions (tenant_id, stage_id, disposition_key)
+    select p.tenant_id, s.id, mapping.disposition_key
+    from public.pipelines p
+    join public.pipeline_stages s on s.pipeline_id = p.id
+    join (values
+      ('publisher'::public.partner_type, 'New Transfer', 'new_transfer'),
+      ('publisher'::public.partner_type, 'Needs Callback', 'needs_callback'),
+      ('publisher'::public.partner_type, 'Did Not Qualify', 'did_not_qualify'),
+      ('publisher'::public.partner_type, 'Submitted', 'submitted'),
+      ('marketing'::public.partner_type, 'Form Lead', 'form_lead'),
+      ('marketing'::public.partner_type, 'Call Lead', 'call_lead'),
+      ('marketing'::public.partner_type, 'Pickup - Needs Callback', 'needs_callback'),
+      ('marketing'::public.partner_type, 'Converted', 'converted'),
+      ('affiliate'::public.partner_type, 'Referred', 'referred'),
+      ('affiliate'::public.partner_type, 'Contacted', 'contacted'),
+      ('affiliate'::public.partner_type, 'Qualified', 'qualified'),
+      ('affiliate'::public.partner_type, 'Submitted', 'submitted'),
+      ('affiliate'::public.partner_type, 'Not Interested', 'not_interested')
+    ) as mapping(partner_type, stage_name, disposition_key)
+      on mapping.partner_type = p.partner_type and mapping.stage_name = s.name
+    where p.is_default and not s.is_archived
+    on conflict (tenant_id, disposition_key) do nothing;
+  end if;
+end;
+$$;
 
 alter table public.pipelines enable row level security;
 alter table public.pipeline_stages enable row level security;

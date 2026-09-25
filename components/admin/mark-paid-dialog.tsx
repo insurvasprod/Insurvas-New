@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { toast } from "sonner";
+import { notify } from "@/lib/notify";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -43,11 +43,11 @@ export function MarkPaidDialog({
     setBusy(false);
 
     if (!res.ok) {
-      toast.error(body?.error ?? "Could not record the payment");
+      notify.block(body?.error ?? "Could not record the payment");
       return;
     }
 
-    toast.success(
+    notify.done(
       body.settled
         ? `${number} marked paid`
         : `Payment recorded — ${formatCents(body.remainingCents)} still outstanding`,
@@ -59,8 +59,8 @@ export function MarkPaidDialog({
 
   return (
     <>
-      <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
-        Record payment
+      <Button variant="outline" className="h-10 w-full border-[var(--border-strong)]" onClick={() => setOpen(true)}>
+        Mark paid
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>

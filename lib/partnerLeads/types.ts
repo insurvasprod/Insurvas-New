@@ -40,6 +40,8 @@ export type PartnerLeadRow = {
   outcomeNote: string | null;
   submittedBy: { id: string | null; name: string };
   status: string;
+  /** New / Claimed / Verification / Converted / closed. Set by the pipeline read; see lanes.ts. */
+  lane?: import("./lanes").PartnerLane;
 };
 
 export type PartnerLeadDetail = PartnerLeadRow & {

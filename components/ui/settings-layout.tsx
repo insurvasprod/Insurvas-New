@@ -65,7 +65,7 @@ export function SettingsLayout({
 
       <div className="min-w-0 space-y-4">{children}</div>
 
-      {rail && <aside className="space-y-4 xl:sticky xl:top-6">{rail}</aside>}
+      {rail && <aside className="space-y-4 xl:sticky xl:top-[calc(var(--top-bar-h)+1.5rem)]">{rail}</aside>}
     </div>
   );
 }

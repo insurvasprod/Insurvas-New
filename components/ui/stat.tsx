@@ -49,13 +49,15 @@ export function DeltaChip({
   return (
     <span
       title={title}
+      // 12px/600 rather than the board's 11px/700: 12px is the smallest text the system allows, and
+      // 400/600 are the only weights the product sets. The tight 1×6 pill is the board's.
       className={cn(
-        "inline-flex w-fit items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5",
-        "text-[11px] font-bold tabular-nums",
+        "inline-flex w-fit items-center gap-0.5 whitespace-nowrap rounded-full px-1.5 py-px",
+        "text-xs font-semibold leading-normal tabular-nums",
         tone
       )}
     >
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="size-2.5" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" className="size-[9px]" aria-hidden="true">
         <path d={path} />
       </svg>
       {Math.abs(value)}
@@ -69,7 +71,18 @@ export function DeltaChip({
 
 /* ── Meter ──────────────────────────────────────────────────────────────────────────────────── */
 
-export type MeterTone = "neutral" | "good" | "info" | "warning" | "danger";
+// `primary` is the one orange bar allowed: progress the reader is actively working through
+// (a setup checklist), never a measurement they merely observe.
+export type MeterTone = "neutral" | "good" | "info" | "warning" | "danger" | "primary";
+
+const VALUE_TONE: Record<MeterTone, string> = {
+  neutral: "text-foreground",
+  good: "text-[var(--success-ink)]",
+  info: "text-[var(--info-ink)]",
+  warning: "text-[var(--warning-ink)]",
+  danger: "text-[var(--error-ink)]",
+  primary: "text-[var(--accent-ink)]",
+};
 
 const METER: Record<MeterTone, string> = {
   neutral: "bg-[var(--muted)]",
@@ -77,6 +90,7 @@ const METER: Record<MeterTone, string> = {
   info: "bg-[var(--info)]",
   warning: "bg-[var(--warning)]",
   danger: "bg-[var(--error)]",
+  primary: "bg-[var(--primary)]",
 };
 
 /**
@@ -107,10 +121,12 @@ export function Meter({
       aria-valuenow={Math.round(pct)}
       aria-valuemin={0}
       aria-valuemax={100}
-      className={cn("block h-1.5 w-full overflow-hidden rounded-full bg-[var(--surface-alt)]", className)}
+      // m-meter grows the fill from the left, once, 280ms after the page settles — so the bar is
+      // read as a value rather than mistaken for a loader.
+      className={cn("m-meter block h-[5px] w-full overflow-hidden rounded-full bg-[var(--surface-alt)]", className)}
     >
       <span
-        className={cn("block h-1.5 rounded-full", METER[tone])}
+        className={cn("block h-[5px] rounded-full", METER[tone])}
         style={{ width: `${pct}%` }}
         aria-hidden="true"
       />
@@ -181,42 +197,80 @@ export function Sparkline({
  */
 export function StatTile({
   label,
+  labelTitle,
   value,
+  valueTone,
+  action,
   unit,
   delta,
   trend,
+  meter,
   footnote,
+  reserveFootnote,
   className,
 }: {
   label: string;
+  /** Hover explanation for a label that needs one. The footnote is still the accessible answer. */
+  labelTitle?: string;
   value: ReactNode;
+  /**
+   * Colour on the figure itself, for a tile whose whole point is that the number is good or bad —
+   * suspended tenants, mismatched invoices. Used sparingly: a strip where every figure is coloured
+   * is a strip where none of them is.
+   */
+  valueTone?: MeterTone;
+  /** A way into the rows behind the figure, drawn beside the footnote. */
+  action?: ReactNode;
+  /**
+   * Hold the footnote line open on a tile that has nothing to say there, so a strip of five tiles
+   * where four have a footnote does not come out with one tile a line shorter than the rest.
+   */
+  reserveFootnote?: boolean;
   unit?: string;
   delta?: { value: number; unit?: string; goodWhen?: "up" | "down" };
   trend?: { points: number[]; tone?: MeterTone };
-  footnote?: string;
+  /** A figure that is a fraction of something — seats used, capacity filled — draws its bar here. */
+  meter?: { value: number; max?: number; tone?: MeterTone; label: string };
+  footnote?: ReactNode;
   className?: string;
 }) {
   return (
     <div
       className={cn(
-        "rounded-lg border border-border bg-card px-4 py-4 shadow-[var(--shadow-rest)]",
+        "rounded-lg border border-border bg-card px-[15px] py-[13px] shadow-[var(--shadow-rest)]",
         className
       )}
     >
-      <div className="text-[11px] font-semibold uppercase tracking-[0.05em] text-muted-foreground">{label}</div>
+      {/* The system's `label` style (12px/600, 0.02em, uppercase), not the board's 10.5px: 12px is
+          the smallest text the system allows, and a label is read before the figure it names. */}
+      <div title={labelTitle} className="text-xs font-semibold leading-[1.33] uppercase tracking-[0.02em] text-muted-foreground">{label}</div>
 
-      <div className="mt-2 flex items-end justify-between gap-3">
-        <span className="text-[2.5rem] font-semibold leading-none tracking-[-0.03em] tabular-nums">
+      {/* 30px, not 40. Five of these sit across a list page above the table they describe; at 40px
+          the strip competes with the rows it is meant to introduce, and a 6-figure count wraps. */}
+      <div className="mt-1.5 flex items-end justify-between gap-3">
+        <span className={cn("text-[30px] font-semibold leading-none tracking-[-0.03em] tabular-nums", valueTone && VALUE_TONE[valueTone])}>
           {value}
-          {unit && <span className="text-[1.375rem] text-muted-foreground">{unit}</span>}
+          {unit && <span className="text-[17px] text-muted-foreground">{unit}</span>}
         </span>
         {trend && <Sparkline points={trend.points} tone={trend.tone} />}
       </div>
 
-      {(delta || footnote) && (
-        <div className="mt-2.5 flex items-center gap-2">
+      {meter && (
+        <Meter
+          className="mt-2"
+          value={meter.value}
+          max={meter.max}
+          tone={meter.tone}
+          label={meter.label}
+        />
+      )}
+
+      {(delta || footnote || action || reserveFootnote) && (
+        <div className="mt-2 flex flex-wrap items-center gap-x-1.5 gap-y-1">
           {delta && <DeltaChip value={delta.value} unit={delta.unit} goodWhen={delta.goodWhen} />}
           {footnote && <span className="text-xs text-muted-foreground">{footnote}</span>}
+          {action && <span className="ml-auto text-xs">{action}</span>}
+          {!delta && !footnote && !action && <span className="text-xs" aria-hidden="true">&nbsp;</span>}
         </div>
       )}
     </div>

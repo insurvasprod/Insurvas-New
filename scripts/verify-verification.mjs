@@ -2,11 +2,12 @@
 import { randomUUID } from "node:crypto";
 import { SignJWT } from "jose";
 import { createClient } from "@supabase/supabase-js";
+import { createFixtureUser, deleteFixtureUser } from "./lib/fixtureUser.mjs";
 
 const BASE = process.env.APP_BASE_URL ?? "http://localhost:3000";
 const db = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
 const stamp = Date.now();
-const tenantId = randomUUID(); const ownerId = randomUUID(); const producerId = randomUUID(); const assistantId = randomUUID(); const partnerId = randomUUID();
+const tenantId = randomUUID(); let ownerId = null; let producerId = null; let assistantId = null; const partnerId = randomUUID();
 let failures = 0; let templateCopyId = null; let leadId = null; let workItemId = null;
 const check = (label, ok, detail = "") => { if (ok) console.log(`  ok   ${label}`); else { console.log(`  FAIL ${label}${detail ? ` — ${detail}` : ""}`); failures++; } };
 const json = (body) => ({ headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
@@ -36,7 +37,7 @@ async function cleanup() {
   if (workItemId) await db.from("partner_messages").delete().eq("work_item_id", workItemId);
   if (leadId) {
     await db.from("active_calls").delete().eq("work_item_id", workItemId);
-    await db.from("verification_sessions").delete().eq("work_item_id", workItemId);
+    await db.from("tenant_verification_sessions").delete().eq("work_item_id", workItemId);
     await db.from("lead_queue").delete().eq("id", workItemId);
     await db.from("agent_leads").delete().eq("id", leadId);
   }
@@ -45,18 +46,16 @@ async function cleanup() {
   await db.from("tenant_entitlements").delete().eq("tenant_id", tenantId);
   await db.from("tenant_users").delete().eq("tenant_id", tenantId);
   await db.from("partners").delete().eq("id", partnerId);
-  await db.from("users").delete().in("id", [ownerId, producerId, assistantId]);
+  for (const id of [ownerId, producerId, assistantId]) await deleteFixtureUser(db, id);
   await db.from("tenants").delete().eq("id", tenantId);
 }
 async function main() {
   if (!process.env.TENANT_SESSION_SECRET) throw new Error("TENANT_SESSION_SECRET is required");
   await cleanup();
   const tenant = await db.from("tenants").insert({ id: tenantId, name: `LA-1.11 QA ${stamp}`, status: "active", onboarding_state: "completed" }); if (tenant.error) throw new Error(tenant.error.message);
-  const users = await db.from("users").insert([
-    { id: ownerId, email: `la111-owner-${stamp}@invalid.test`, name: "LA-1.11 owner", password_hash: "verification-only", status: "active" },
-    { id: producerId, email: `la111-producer-${stamp}@invalid.test`, name: "LA-1.11 producer", password_hash: "verification-only", status: "active" },
-    { id: assistantId, email: `la111-assistant-${stamp}@invalid.test`, name: "LA-1.11 assistant", password_hash: "verification-only", status: "active" },
-  ]); if (users.error) throw new Error(users.error.message);
+  ({ userId: ownerId } = await createFixtureUser(db, { email: `la111-owner-${stamp}@invalid.test`, name: "LA-1.11 owner" }));
+  ({ userId: producerId } = await createFixtureUser(db, { email: `la111-producer-${stamp}@invalid.test`, name: "LA-1.11 producer" }));
+  ({ userId: assistantId } = await createFixtureUser(db, { email: `la111-assistant-${stamp}@invalid.test`, name: "LA-1.11 assistant" }));
   const memberships = await db.from("tenant_users").insert([{ tenant_id: tenantId, user_id: ownerId, role: "owner" }, { tenant_id: tenantId, user_id: producerId, role: "producer" }, { tenant_id: tenantId, user_id: assistantId, role: "assistant" }]); if (memberships.error) throw new Error(memberships.error.message);
   const entitlement = await db.from("tenant_entitlements").insert({ tenant_id: tenantId, entitlement: { tenant_id: tenantId, plan_code: "basic", plan_version: 1, status: "active", access: "full", computed_at: new Date().toISOString(), features: ["inbound_transfers", "book_of_business"], meters: {}, limits: {} } }); if (entitlement.error) throw new Error(entitlement.error.message);
   const ownerCookie = await cookie(ownerId); const producerCookie = await cookie(producerId); const assistantCookie = await cookie(assistantId);
@@ -64,9 +63,9 @@ async function main() {
     const missing = await api(`/api/app/inbound/verification?work_item_id=${randomUUID()}`, ownerCookie); check("missing work item is rejected without a server error", missing.status === 404);
     const templatesResponse = await api("/api/app/templates", ownerCookie); const templatesBody = await templatesResponse.json(); templateCopyId = templatesBody.current?.tenant_template_id; const template = templatesBody.current?.template; check("agent form definition is available for the fixture", templatesResponse.status === 200 && templateCopyId && template?.form_definition?.sections?.length, `status ${templatesResponse.status}, body ${JSON.stringify(templatesBody).slice(0, 400)}`);
     if (!templateCopyId || !template) throw new Error("Fixture could not resolve an agent template");
-    const pipeline = await db.from("pipelines").select("id").eq("tenant_id", tenantId).eq("partner_type", "publisher").eq("is_default", true).single(); const stage = pipeline.data ? await db.from("pipeline_stages").select("id").eq("pipeline_id", pipeline.data.id).eq("is_archived", false).order("position").limit(1).single() : { data: null, error: new Error("missing pipeline") }; if (pipeline.error || stage.error) throw new Error(pipeline.error?.message ?? stage.error?.message ?? "Fixture pipeline dependency missing");
+    const pipeline = await db.from("tenant_pipelines").select("id").eq("tenant_id", tenantId).eq("partner_type", "publisher").eq("is_default", true).single(); const stage = pipeline.data ? await db.from("tenant_pipeline_stages").select("id").eq("pipeline_id", pipeline.data.id).eq("is_archived", false).order("position").limit(1).single() : { data: null, error: new Error("missing pipeline") }; if (pipeline.error || stage.error) throw new Error(pipeline.error?.message ?? stage.error?.message ?? "Fixture pipeline dependency missing");
     const prepared = valuesFor(template); const lead = await db.from("agent_leads").insert({ id: randomUUID(), tenant_id: tenantId, tenant_template_id: templateCopyId, template_id: templatesBody.current.assignment.template_id, template_version: templatesBody.current.assignment.template_version, definition_version: templatesBody.current.assignment.definition_version, product_line: template.product_code, pipeline_id: pipeline.data.id, stage_id: stage.data.id, values: prepared.values, created_by: ownerId, submission_id: randomUUID() }).select("id").single(); if (lead.error) throw new Error(lead.error.message); leadId = lead.data.id;
-    const partner = await db.from("partners").insert({ id: partnerId, tenant_id: tenantId, name: `LA-1.11 Partner ${stamp}`, partner_type: "publisher", status: "active", timezone: "America/Phoenix" }).select("id").single(); if (partner.error) throw new Error(partner.error.message);
+    const partner = await db.from("partners").insert({ slug: `fx-${Math.random().toString(36).slice(2, 10)}`, id: partnerId, tenant_id: tenantId, name: `LA-1.11 Partner ${stamp}`, partner_type: "publisher", status: "active", timezone: "America/Phoenix" }).select("id").single(); if (partner.error) throw new Error(partner.error.message);
     const queue = await db.from("lead_queue").insert({ id: randomUUID(), tenant_id: tenantId, lead_id: leadId, partner_id: partnerId, product_line: template.product_code, pipeline_id: pipeline.data.id, stage_id: stage.data.id, status: "unclaimed" }).select("id").single(); if (queue.error) throw new Error(queue.error.message); workItemId = queue.data.id;
     const race = await Promise.all([api("/api/app/inbound/claim", ownerCookie, { method: "POST", ...json({ work_item_id: workItemId }) }), api("/api/app/inbound/claim", producerCookie, { method: "POST", ...json({ work_item_id: workItemId }) })]); const raceBodies = await Promise.all(race.map((response) => response.json())); const winnerIndex = race.findIndex((response) => response.status === 200); const loserIndex = race.findIndex((response) => response.status === 409); check("two claimants cannot verify one work item at once", winnerIndex >= 0 && loserIndex >= 0 && raceBodies[loserIndex]?.code === "already_claimed"); if (winnerIndex < 0) throw new Error("No claimant won the fixture race");
     const winnerId = winnerIndex === 0 ? ownerId : producerId; const winnerCookie = winnerIndex === 0 ? ownerCookie : producerCookie; const loserId = winnerIndex === 0 ? producerId : ownerId; const loserCookie = winnerIndex === 0 ? producerCookie : ownerCookie;

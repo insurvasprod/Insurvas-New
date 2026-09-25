@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { toast } from "sonner";
+import { notify } from "@/lib/notify";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -23,12 +23,12 @@ export function BillingModePanel({ tenantId, mode }: { tenantId: string; mode: "
     setBusy(false);
 
     if (!res.ok) {
-      toast.error(body?.error ?? "Could not change billing mode");
+      notify.block(body?.error ?? "Could not change billing mode");
       return;
     }
 
-    if (body.warning) toast.warning(body.warning);
-    else toast.success(next === "manual" ? "Switched to manual billing" : "Automatic billing resumed");
+    if (body.warning) notify.warn(body.warning);
+    else notify.done(next === "manual" ? "Switched to manual billing" : "Automatic billing resumed");
     router.refresh();
   }
 

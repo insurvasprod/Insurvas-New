@@ -3,8 +3,8 @@ import "server-only";
 import { getTenantTemplateForProduct } from "@/lib/agentTemplates/service";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { resolveRuntimeStage, partnerTypeForLead } from "@/lib/pipelines/service";
-import type { DealFlowFilterOptions, DealFlowRow, DealFlowStatus, DealFlowSummary } from "./types";
-import { DEAL_FLOW_STATUSES } from "./types";
+import type { DealFlowFilterOptions, DealFlowKpis, DealFlowReport, DealFlowRow, DealFlowSource, DealFlowStageType, DealFlowStatus, DealFlowSummary } from "./types";
+import { DEAL_FLOW_STAGE_TYPES, DEAL_FLOW_STATUSES, shortLeadId } from "./types";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -58,43 +58,339 @@ async function lookups(tenantId: string): Promise<DealFlowFilterOptions> {
   };
 }
 
-export async function listDealFlow(tenantId: string, filters: { fromDate?: string; toDate?: string; partnerId?: string; productLine?: string; agentId?: string; status?: string; page?: number; pageSize?: number }) {
-  const page = Number.isInteger(filters.page) && (filters.page ?? 1) > 0 ? filters.page as number : 1;
-  const pageSize = Math.min(10000, Math.max(1, Number.isInteger(filters.pageSize) ? filters.pageSize as number : 100));
-  const db = getSupabaseServiceClient();
+export type DealFlowListFilters = {
+  fromDate?: string;
+  toDate?: string;
+  partnerId?: string;
+  productLine?: string;
+  agentId?: string;
+  status?: string;
+  stageType?: string;
+  search?: string;
+  focusLeadId?: string;
+  /** null = the page that holds focusLeadId (page 1 when there is no focus). */
+  page?: number | null;
+  pageSize?: number;
+};
+
+type RawRow = Record<string, unknown>;
+type RpcError = { code?: string; message: string } | null;
+/** list_deal_flow_report's new parameters are not in the generated types; called untyped. */
+type UntypedDb = {
+  rpc: (fn: string, args: Record<string, unknown>) => PromiseLike<{ data: unknown; error: RpcError }>;
+  from: (table: string) => {
+    select: (columns: string) => UntypedQuery;
+  };
+};
+type UntypedQuery = PromiseLike<{ data: RawRow[] | null; error: RpcError }> & {
+  eq: (column: string, value: unknown) => UntypedQuery;
+  in: (column: string, values: unknown[]) => UntypedQuery;
+  order: (column: string, options?: { ascending?: boolean }) => UntypedQuery;
+  limit: (count: number) => UntypedQuery;
+};
+
+/** The schema is older than this code: a function, column or table it names is not there yet. */
+const MISSING_SCHEMA = new Set(["PGRST202", "PGRST204", "PGRST205", "42883", "42703", "42P01"]);
+function schemaMissing(error: RpcError) {
+  return !!error && (MISSING_SCHEMA.has(error.code ?? "") || /could not find the function/i.test(error.message));
+}
+
+/** Before migration 20260924320000 the report is read whole (the old function caps at this) and paged here. */
+const LEGACY_CAP = 10000;
+
+const str = (value: unknown) => (typeof value === "string" && value.length > 0 ? value : null);
+const num = (value: unknown) => (typeof value === "number" && Number.isFinite(value) ? value : null);
+const isStageType = (value: unknown): value is DealFlowStageType => DEAL_FLOW_STAGE_TYPES.includes(value as DealFlowStageType);
+const SOURCES: DealFlowSource[] = ["inbound", "outbound", "manual"];
+
+function cleanSearch(value: unknown) {
+  if (typeof value !== "string") return null;
+  const cleaned = value.replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, 120);
+  return cleaned || null;
+}
+
+function normaliseRow(raw: RawRow, partners: Map<string, string>, agents: Map<string, string>): DealFlowRow {
+  const partnerId = str(raw.partner_id);
+  const workedBy = str(raw.worked_by);
+  const dispositionBy = str(raw.disposition_by);
+  const statusValue = DEAL_FLOW_STATUSES.includes(raw.status as DealFlowStatus) ? (raw.status as DealFlowStatus) : "partial";
+  const history = Array.isArray(raw.history)
+    ? (raw.history as unknown[]).flatMap((item) => {
+        if (!item || typeof item !== "object") return [];
+        const entry = item as RawRow;
+        const at = str(entry.at);
+        return at ? [{ at, disposition: str(entry.disposition), label: str(entry.label), by_name: str(entry.by_name) }] : [];
+      })
+    : [];
+  return {
+    id: String(raw.id),
+    lead_id: String(raw.lead_id),
+    partner_id: partnerId,
+    partner_name: str(raw.partner_name) ?? (partnerId ? partners.get(partnerId) ?? "Unknown partner" : "No partner"),
+    submission_id: str(raw.submission_id),
+    product_line: str(raw.product_line) ?? "",
+    insured_name: str(raw.insured_name),
+    phone: str(raw.phone),
+    initial_quote: str(raw.initial_quote),
+    tracking_id: str(raw.tracking_id),
+    local_date: str(raw.local_date) ?? "",
+    status: statusValue,
+    call_result: str(raw.call_result),
+    notes: str(raw.notes),
+    carrier: str(raw.carrier),
+    product_type: str(raw.product_type),
+    monthly_premium_cents: num(raw.monthly_premium_cents),
+    face_amount_cents: num(raw.face_amount_cents),
+    draft_date: str(raw.draft_date),
+    worked_by: workedBy,
+    agent_name: str(raw.worked_by_name) ?? (workedBy ? agents.get(workedBy) ?? "Unknown agent" : "Unassigned"),
+    manual_entry: raw.manual_entry === true,
+    created_at: str(raw.created_at) ?? "",
+    updated_at: str(raw.updated_at) ?? "",
+    campaign_id: str(raw.campaign_id),
+    campaign_name: str(raw.campaign_name),
+    vendor_name: str(raw.vendor_name),
+    source: SOURCES.includes(raw.source as DealFlowSource) ? (raw.source as DealFlowSource) : null,
+    disposition_at: str(raw.disposition_at),
+    disposition_by: dispositionBy,
+    disposition_by_name: str(raw.disposition_by_name) ?? (dispositionBy ? agents.get(dispositionBy) ?? null : null),
+    call_result_label: str(raw.call_result_label),
+    customer_state: str(raw.customer_state),
+    stage_name: str(raw.stage_name),
+    stage_type: isStageType(raw.stage_type) ? raw.stage_type : null,
+    stage_drift: raw.stage_drift === true,
+    issued_at: str(raw.issued_at),
+    history,
+  };
+}
+
+function summaryFrom(raw: unknown, partners: Map<string, string>): DealFlowSummary[] {
+  const map = new Map<string, DealFlowSummary>();
+  for (const item of Array.isArray(raw) ? (raw as RawRow[]) : []) {
+    const partnerId = str(item.partner_id);
+    const total = num(item.total) ?? 0;
+    const key = partnerId ?? "none";
+    const current = map.get(key) ?? { partner_id: partnerId, partner_name: str(item.partner_name) ?? (partnerId ? partners.get(partnerId) ?? "Unknown partner" : "No partner"), total: 0, won: 0, in_progress: 0, lost: 0, completed: 0, partial: 0, dropped: 0 };
+    current.total += total;
+    if (item.status === "completed") current.completed += total;
+    if (item.status === "partial") current.partial += total;
+    if (item.status === "dropped") current.dropped += total;
+    if (item.stage_type === "won") current.won += total;
+    else if (item.stage_type === "lost") current.lost += total;
+    else current.in_progress += total;
+    map.set(key, current);
+  }
+  return [...map.values()].sort((a, b) => b.total - a.total || a.partner_name.localeCompare(b.partner_name));
+}
+
+function kpisFor(rows: DealFlowRow[]): DealFlowKpis {
+  const open = rows.filter((row) => row.stage_type !== "won" && row.stage_type !== "lost");
+  const won = rows.filter((row) => row.stage_type === "won");
+  const oldest = open.reduce<number | null>((min, row) => { const at = Date.parse(row.created_at); return Number.isNaN(at) ? min : min == null ? at : Math.min(min, at); }, null);
+  return {
+    deals_worked: rows.length,
+    won: won.length,
+    won_annualised_cents: won.reduce((sum, row) => sum + (row.monthly_premium_cents ?? 0) * 12, 0),
+    won_unpriced: won.filter((row) => row.monthly_premium_cents == null).length,
+    in_progress: open.length,
+    oldest_in_progress_days: oldest == null ? null : Math.floor((Date.now() - oldest) / 86_400_000),
+    lost: rows.filter((row) => row.stage_type === "lost").length,
+    stage_drift: rows.filter((row) => row.stage_drift).length,
+  };
+}
+
+function kpisFrom(raw: unknown): DealFlowKpis | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const k = raw as RawRow;
+  return {
+    deals_worked: num(k.deals_worked) ?? 0,
+    won: num(k.won) ?? 0,
+    won_annualised_cents: num(k.won_annualised_cents) ?? 0,
+    won_unpriced: num(k.won_unpriced) ?? 0,
+    in_progress: num(k.in_progress) ?? 0,
+    oldest_in_progress_days: num(k.oldest_in_progress_days),
+    lost: num(k.lost) ?? 0,
+    stage_drift: num(k.stage_drift) ?? 0,
+  };
+}
+
+/** The same fields the report searches, for the fallback that searches here. */
+function matchesSearch(row: DealFlowRow, term: string) {
+  const needle = term.toLowerCase();
+  const digits = term.replace(/\D/g, "");
+  const fields = [row.insured_name, row.phone, row.partner_name, row.product_line, row.carrier, row.call_result, row.call_result_label, row.campaign_name, row.vendor_name, row.stage_name, row.customer_state];
+  if (fields.some((value) => value?.toLowerCase().includes(needle))) return true;
+  if (row.lead_id.startsWith(needle)) return true;
+  return digits.length >= 3 && (row.phone ?? "").replace(/\D/g, "").includes(digits);
+}
+
+function optionsFrom(raw: unknown): DealFlowFilterOptions | null {
+  const embedded = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as { partners?: unknown; agents?: unknown }) : null;
+  return embedded && Array.isArray(embedded.partners) && Array.isArray(embedded.agents)
+    ? { partners: embedded.partners as DealFlowFilterOptions["partners"], agents: embedded.agents as DealFlowFilterOptions["agents"] }
+    : null;
+}
+
+async function selectIn(db: UntypedDb, table: string, columns: string, key: string, ids: string[], tenantId: string | null): Promise<RawRow[]> {
+  const unique = [...new Set(ids.filter(Boolean))];
+  const out: RawRow[] = [];
+  for (let i = 0; i < unique.length; i += 200) {
+    let query = db.from(table).select(columns);
+    if (tenantId) query = query.eq("tenant_id", tenantId);
+    const { data, error } = await query.in(key, unique.slice(i, i + 200));
+    // Best effort: a lookup the schema cannot answer yet leaves those fields empty, not the page.
+    if (error) return out;
+    out.push(...(data ?? []));
+  }
+  return out;
+}
+
+/**
+ * Adds, before migration 20260924320000, the fields the new report returns: the lead's current
+ * stage, its state, the campaign, vendor and the disposition label. History and issued policies
+ * are left empty; the page says so.
+ */
+async function enrichLegacyRows(db: UntypedDb, tenantId: string, raws: RawRow[]): Promise<RawRow[]> {
+  if (raws.length === 0) return raws;
+  const [extras, leads, dispositions] = await Promise.all([
+    selectIn(db, "deal_flow", "id, stage_id, campaign_id, vendor_id, source, disposition_at, disposition_by", "id", raws.map((row) => String(row.id)), tenantId),
+    selectIn(db, "agent_leads", "id, stage_id, values", "id", raws.map((row) => String(row.lead_id)), tenantId),
+    db.from("dispositions").select("disposition_key, label").eq("tenant_id", tenantId).then((result) => (result.error ? [] : result.data ?? [])),
+  ]);
+  const extraById = new Map(extras.map((row) => [String(row.id), row]));
+  const leadById = new Map(leads.map((row) => [String(row.id), row]));
+  const stageIds = [...leads.map((row) => str(row.stage_id)), ...extras.map((row) => str(row.stage_id))].filter((id): id is string => !!id);
+  const campaignIds = extras.map((row) => str(row.campaign_id)).filter((id): id is string => !!id);
+  const [stages, campaigns] = await Promise.all([
+    selectIn(db, "tenant_pipeline_stages", "id, name, stage_type", "id", stageIds, null),
+    selectIn(db, "tenant_campaigns", "id, name, vendor_id", "id", campaignIds, tenantId),
+  ]);
+  const campaignById = new Map(campaigns.map((row) => [String(row.id), row]));
+  const vendorIds = [...extras.map((row) => str(row.vendor_id)), ...campaigns.map((row) => str(row.vendor_id))].filter((id): id is string => !!id);
+  const vendors = await selectIn(db, "tenant_lead_vendors", "id, name", "id", vendorIds, tenantId);
+  const stageById = new Map(stages.map((row) => [String(row.id), row]));
+  const vendorById = new Map(vendors.map((row) => [String(row.id), str(row.name)]));
+  const labelByKey = new Map(dispositions.map((row) => [String(row.disposition_key), str(row.label)]));
+  return raws.map((raw) => {
+    const extra = extraById.get(String(raw.id)) ?? {};
+    const lead = leadById.get(String(raw.lead_id));
+    const values = lead?.values && typeof lead.values === "object" ? (lead.values as RawRow) : {};
+    const leadStage = str(lead?.stage_id);
+    const dealStage = str(extra.stage_id);
+    const stage = (leadStage ? stageById.get(leadStage) : undefined) ?? (dealStage ? stageById.get(dealStage) : undefined);
+    const campaign = str(extra.campaign_id) ? campaignById.get(String(extra.campaign_id)) : undefined;
+    const source = str(extra.source);
+    const partnerName = str(raw.partner_name);
+    const vendorName = source === "inbound" && partnerName ? partnerName : (str(extra.vendor_id) ? vendorById.get(String(extra.vendor_id)) : null) ?? (str(campaign?.vendor_id) ? vendorById.get(String(campaign?.vendor_id)) : null) ?? partnerName;
+    const state = [values.state, values.state_code, values.primary_state].map((value) => (typeof value === "string" ? value.trim() : "")).find(Boolean) ?? null;
+    return {
+      ...raw,
+      campaign_id: str(extra.campaign_id),
+      campaign_name: str(campaign?.name),
+      vendor_id: str(extra.vendor_id),
+      vendor_name: vendorName,
+      source,
+      disposition_at: str(extra.disposition_at),
+      disposition_by: str(extra.disposition_by),
+      call_result_label: str(raw.call_result) ? labelByKey.get(String(raw.call_result)) ?? null : null,
+      stage_name: str(stage?.name),
+      stage_type: stage?.stage_type ?? null,
+      stage_drift: !!leadStage && !!dealStage && leadStage !== dealStage,
+      customer_state: state ? state.slice(0, 40) : null,
+    };
+  });
+}
+
+export async function listDealFlow(tenantId: string, filters: DealFlowListFilters): Promise<DealFlowReport> {
+  const requestedPage = filters.page === null ? null : Number.isInteger(filters.page) && (filters.page ?? 1) > 0 ? (filters.page as number) : 1;
+  const pageSize = Math.min(10000, Math.max(1, Number.isInteger(filters.pageSize) ? (filters.pageSize as number) : 100));
+  const service = getSupabaseServiceClient();
+  const db = service as unknown as UntypedDb;
   const fromDate = filters.fromDate ? date(filters.fromDate, "From date") : null;
   const toDate = filters.toDate ? date(filters.toDate, "To date") : null;
   const partnerId = filters.partnerId ? assertUuid(filters.partnerId, "partner") : null;
   const productLine = filters.productLine ? text(filters.productLine, "Product", 120) : null;
   const agentId = filters.agentId ? assertUuid(filters.agentId, "agent") : null;
   const selectedStatus = filters.status ? status(filters.status) : null;
-  const reportResult = await db.rpc("list_deal_flow_report", { p_tenant_id: tenantId, p_from_date: fromDate, p_to_date: toDate, p_partner_id: partnerId, p_product_line: productLine, p_agent_id: agentId, p_status: selectedStatus, p_page: page, p_page_size: pageSize });
-  if (reportResult.error) throw new Error(`Could not load daily deal flow: ${reportResult.error.message}`);
-  const report = (reportResult.data && typeof reportResult.data === "object" && !Array.isArray(reportResult.data) ? reportResult.data : {}) as unknown as { total?: unknown; rows?: unknown; summary?: unknown; options?: unknown };
-  const embeddedOptions = report.options && typeof report.options === "object" && !Array.isArray(report.options) ? report.options as { partners?: unknown; agents?: unknown } : null;
-  const options = embeddedOptions && Array.isArray(embeddedOptions.partners) && Array.isArray(embeddedOptions.agents)
-    ? { partners: embeddedOptions.partners as DealFlowFilterOptions["partners"], agents: embeddedOptions.agents as DealFlowFilterOptions["agents"] }
-    : await lookups(tenantId);
-  const data = Array.isArray(report.rows) ? report.rows : [];
-  const count = typeof report.total === "number" ? report.total : 0;
-  const summaryData = Array.isArray(report.summary) ? report.summary : [];
+  if (filters.stageType && !isStageType(filters.stageType)) throw new Error("Choose a valid status");
+  const stageType = (filters.stageType as DealFlowStageType | undefined) ?? null;
+  const search = cleanSearch(filters.search);
+  // A focus id that is not a uuid is a stale or hand-edited link; it is ignored, not an error.
+  const focusLeadId = typeof filters.focusLeadId === "string" && UUID.test(filters.focusLeadId) ? filters.focusLeadId : null;
+  const page = requestedPage ?? (focusLeadId ? null : 1);
+
+  const next = await db.rpc("list_deal_flow_report", {
+    p_tenant_id: tenantId, p_from_date: fromDate, p_to_date: toDate, p_partner_id: partnerId, p_product_line: productLine,
+    p_agent_id: agentId, p_status: selectedStatus, p_page: page, p_page_size: pageSize,
+    p_search: search, p_stage_type: stageType, p_focus_lead_id: focusLeadId,
+  });
+  if (next.error && !schemaMissing(next.error)) throw new Error(`Could not load daily deal flow: ${next.error.message}`);
+
+  if (!next.error) {
+    const report = (next.data && typeof next.data === "object" && !Array.isArray(next.data) ? next.data : {}) as RawRow;
+    const options = optionsFrom(report.options) ?? (await lookups(tenantId));
+    const partners = new Map(options.partners.map((partner) => [partner.id, partner.name]));
+    const agents = new Map(options.agents.map((agent) => [agent.id, agent.name]));
+    const rows = (Array.isArray(report.rows) ? (report.rows as RawRow[]) : []).map((row) => normaliseRow(row, partners, agents));
+    const total = num(report.total) ?? 0;
+    const focusRaw = report.focus && typeof report.focus === "object" ? (report.focus as RawRow) : null;
+    const focusRow = focusRaw?.row && typeof focusRaw.row === "object" ? normaliseRow(focusRaw.row as RawRow, partners, agents) : null;
+    return {
+      rows,
+      total,
+      page: num(report.page) ?? page ?? 1,
+      pageSize: num(report.page_size) ?? pageSize,
+      kpis: kpisFrom(report.kpis) ?? kpisFor(rows),
+      summary: summaryFrom(report.summary, partners),
+      options,
+      focus: focusLeadId ? { leadId: focusLeadId, position: num(focusRaw?.position), inFilter: focusRaw?.in_filter === true, row: focusRow } : null,
+      schemaPending: false,
+      capped: false,
+    };
+  }
+
+  // Migration 20260924320000 is not applied: read the old report whole and do its new work here.
+  const legacy = await service.rpc("list_deal_flow_report", { p_tenant_id: tenantId, p_from_date: fromDate, p_to_date: toDate, p_partner_id: partnerId, p_product_line: productLine, p_agent_id: agentId, p_status: selectedStatus, p_page: 1, p_page_size: LEGACY_CAP });
+  if (legacy.error) throw new Error(`Could not load daily deal flow: ${legacy.error.message}`);
+  const report = (legacy.data && typeof legacy.data === "object" && !Array.isArray(legacy.data) ? legacy.data : {}) as unknown as RawRow;
+  const options = optionsFrom(report.options) ?? (await lookups(tenantId));
   const partners = new Map(options.partners.map((partner) => [partner.id, partner.name]));
   const agents = new Map(options.agents.map((agent) => [agent.id, agent.name]));
-  const summaryMap = new Map<string, DealFlowSummary>();
-  for (const row of summaryData as unknown as Array<{ partner_id: string | null; status: string; total: number }>) {
-    const key = row.partner_id ?? "none";
-    const current = summaryMap.get(key) ?? { partner_id: row.partner_id, partner_name: row.partner_id ? partners.get(row.partner_id) ?? "Unknown partner" : "No partner", total: 0, completed: 0, partial: 0, dropped: 0 };
-    current.total += row.total;
-    if (row.status === "completed") current.completed += row.total;
-    if (row.status === "partial") current.partial += row.total;
-    if (row.status === "dropped") current.dropped += row.total;
-    summaryMap.set(key, current);
+  const named = (Array.isArray(report.rows) ? (report.rows as RawRow[]) : []).map((row) => ({ ...row, partner_name: str(row.partner_id) ? partners.get(String(row.partner_id)) ?? "Unknown partner" : "No partner" }));
+  const all = (await enrichLegacyRows(db, tenantId, named)).map((row) => normaliseRow(row, partners, agents));
+  const filtered = all.filter((row) => (!stageType || (row.stage_type ?? "open") === stageType) && (!search || matchesSearch(row, search)));
+  const position = focusLeadId ? filtered.findIndex((row) => row.lead_id === focusLeadId) + 1 || null : null;
+  const resolvedPage = page ?? (position ? Math.ceil(position / pageSize) : 1);
+  const rows = filtered.slice((resolvedPage - 1) * pageSize, resolvedPage * pageSize);
+  let focusRow: DealFlowRow | null = null;
+  if (focusLeadId && !position) {
+    const pinned = await getSupabaseServiceClient().from("deal_flow").select(select).eq("tenant_id", tenantId).eq("lead_id", focusLeadId).order("local_date", { ascending: false }).limit(1);
+    const raw = pinned.error ? null : (pinned.data?.[0] as unknown as RawRow | undefined);
+    if (raw) {
+      const withPartner = { ...raw, partner_name: str(raw.partner_id) ? partners.get(String(raw.partner_id)) ?? "Unknown partner" : "No partner" };
+      focusRow = normaliseRow((await enrichLegacyRows(db, tenantId, [withPartner]))[0], partners, agents);
+    }
   }
-  const rows = (data as unknown as Array<Record<string, unknown>>).map((row) => {
-    const item = row as unknown as DealFlowRow;
-    return { ...item, status: status(item.status), partner_name: item.partner_id ? partners.get(item.partner_id) ?? "Unknown partner" : "No partner", agent_name: item.worked_by ? agents.get(item.worked_by) ?? "Unknown agent" : "Unassigned" };
-  });
-  return { rows, total: count ?? 0, page, pageSize, summary: [...summaryMap.values()].sort((a, b) => b.total - a.total || a.partner_name.localeCompare(b.partner_name)), options };
+  const legacySummary = summaryFrom(
+    Object.values(filtered.reduce<Record<string, RawRow>>((acc, row) => {
+      const key = `${row.partner_id ?? "none"}|${row.status}|${row.stage_type ?? "open"}`;
+      acc[key] = { partner_id: row.partner_id, partner_name: row.partner_name, status: row.status, stage_type: row.stage_type ?? "open", total: ((acc[key]?.total as number | undefined) ?? 0) + 1 };
+      return acc;
+    }, {})),
+    partners,
+  );
+  return {
+    rows,
+    total: filtered.length,
+    page: resolvedPage,
+    pageSize,
+    kpis: kpisFor(filtered),
+    summary: legacySummary,
+    options,
+    focus: focusLeadId ? { leadId: focusLeadId, position, inFilter: !!position, row: focusRow } : null,
+    schemaPending: true,
+    capped: (num(report.total) ?? 0) > LEGACY_CAP,
+  };
 }
 
 export async function updateDealFlow(tenantId: string, dealId: string, input: { carrier?: unknown; product_type?: unknown; monthly_premium_cents?: unknown; face_amount_cents?: unknown; draft_date?: unknown; status?: unknown; call_result?: unknown; notes?: unknown; local_date?: unknown }) {
@@ -139,6 +435,14 @@ export async function createManualDeal(tenantId: string, userId: string, input: 
 
 export function csvForDealFlow(rows: DealFlowRow[]) {
   const cell = (value: unknown) => { const raw = String(value ?? ""); const safe = /^[=+\-@]/.test(raw) ? `'${raw}` : raw; return `"${safe.replaceAll('"', '""')}"`; };
-  const headers = ["date", "partner", "agent", "insured_name", "phone", "product_line", "carrier", "product_type", "monthly_premium_cents", "face_amount_cents", "draft_date", "status", "call_result", "notes", "initial_quote", "manual_entry"];
-  return [headers, ...rows.map((row) => [row.local_date, row.partner_name, row.agent_name, row.insured_name, row.phone, row.product_line, row.carrier, row.product_type, row.monthly_premium_cents, row.face_amount_cents, row.draft_date, row.status, row.call_result, row.notes, row.initial_quote, row.manual_entry])].map((line) => line.map(cell).join(",")).join("\r\n") + "\r\n";
+  // The first sixteen columns are the export's original shape and stay in place for the
+  // spreadsheets already reading it; everything the board added is appended after them.
+  const headers = [
+    "date", "partner", "agent", "insured_name", "phone", "product_line", "carrier", "product_type", "monthly_premium_cents", "face_amount_cents", "draft_date", "status", "call_result", "notes", "initial_quote", "manual_entry",
+    "lead_id", "short_id", "campaign", "vendor", "state", "stage", "stage_type", "source", "disposition", "disposition_at", "disposition_by", "annualised_premium_cents", "issued_at",
+  ];
+  return [headers, ...rows.map((row) => [
+    row.local_date, row.partner_name, row.agent_name, row.insured_name, row.phone, row.product_line, row.carrier, row.product_type, row.monthly_premium_cents, row.face_amount_cents, row.draft_date, row.status, row.call_result, row.notes, row.initial_quote, row.manual_entry,
+    row.lead_id, shortLeadId(row.lead_id), row.campaign_name, row.vendor_name, row.customer_state, row.stage_name, row.stage_type, row.source, row.call_result_label ?? row.call_result, row.disposition_at, row.disposition_by_name, row.monthly_premium_cents == null ? null : row.monthly_premium_cents * 12, row.issued_at,
+  ])].map((line) => line.map(cell).join(",")).join("\r\n") + "\r\n";
 }

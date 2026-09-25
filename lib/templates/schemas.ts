@@ -22,6 +22,7 @@ export const templateFieldSchema = z.object({
     min: z.number().finite().optional(), max: z.number().finite().optional(),
     min_length: z.number().int().min(0).max(10000).optional(), max_length: z.number().int().min(0).max(10000).optional(),
     pattern: z.string().max(200).optional(), age_min: z.number().int().min(0).max(130).optional(), age_max: z.number().int().min(0).max(130).optional(),
+    digit_length: z.number().int().min(1).max(40).optional(), format_mask: z.string().max(80).optional(), placeholder: z.string().max(120).optional(),
   }).default({}),
 });
 

@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { Plus } from "lucide-react";
-import { toast } from "sonner";
+import { notify } from "@/lib/notify";
 
+import { btn } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
+import { InviteLinkPanel } from "@/components/admin/invite-link-panel";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -16,17 +17,23 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-const EMPTY_FORM = { tenantName: "", ownerName: "", ownerEmail: "", ownerPassword: "" };
+const EMPTY_FORM = { tenantName: "", ownerName: "", ownerEmail: "" };
+
+type Invite = { url: string; expiresAt: string; delivered: boolean };
 
 export function CreateTenantDialog({ onCreated }: { onCreated: () => void }) {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [loading, setLoading] = useState(false);
+  const [invite, setInvite] = useState<Invite | null>(null);
 
   function handleOpenChange(next: boolean) {
     setOpen(next);
     if (!next) {
-      setTimeout(() => setForm(EMPTY_FORM), 150);
+      setTimeout(() => {
+        setForm(EMPTY_FORM);
+        setInvite(null);
+      }, 150);
     }
   }
 
@@ -43,28 +50,37 @@ export function CreateTenantDialog({ onCreated }: { onCreated: () => void }) {
     setLoading(false);
 
     if (!res.ok) {
-      toast.error(body?.error ?? "Could not create tenant");
+      notify.block(body?.error ?? "Could not create tenant");
       return;
     }
 
-    toast.success(`${body.tenant.name} created`);
-    handleOpenChange(false);
+    // The dialog stays open on success, showing the invite link. Closing it would be right if the
+    // administrator had nothing left to do, but when the mail did not go out the link is the only
+    // way the owner reaches their account, and it is not recoverable once this closes.
+    notify.done(
+      body.invite?.delivered
+        ? `${body.tenant.name} created — the owner has been emailed an invitation`
+        : `${body.tenant.name} created — copy the invitation link below`,
+    );
+    setInvite(body.invite ?? null);
     onCreated();
+    if (!body.invite) handleOpenChange(false);
   }
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <Button size="sm" onClick={() => setOpen(true)}>
-        <Plus />
-        New tenant
-      </Button>
+      {/* The board's header action: 44px primary, "Create tenant" — the same words as the dialog it opens. */}
+      <button type="button" className={btn("primary", "h-11")} onClick={() => setOpen(true)}>
+        Create tenant
+      </button>
       <DialogContent>
         <form onSubmit={handleSubmit}>
           <DialogHeader>
             <DialogTitle>Create tenant</DialogTitle>
             <DialogDescription>
-              Provisions the tenant and its owner account directly — for a sales-closed deal or a
-              migration. Most tenants will arrive through self-serve signup once that exists.
+              Provisions the tenant and invites its owner — for a sales-closed deal or a
+              migration. The owner sets their own password from the invitation; nobody here ever
+              types it.
             </DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-2 gap-4 py-4">
@@ -96,22 +112,28 @@ export function CreateTenantDialog({ onCreated }: { onCreated: () => void }) {
                 onChange={(e) => setForm((f) => ({ ...f, ownerEmail: e.target.value }))}
               />
             </div>
-            <div className="col-span-2 space-y-1.5">
-              <Label htmlFor="owner-password">Temporary password</Label>
-              <Input
-                id="owner-password"
-                type="password"
-                minLength={12}
-                required
-                value={form.ownerPassword}
-                onChange={(e) => setForm((f) => ({ ...f, ownerPassword: e.target.value }))}
-              />
-            </div>
           </div>
+          {invite ? (
+            <div className="space-y-3 pb-2">
+              {!invite.delivered && (
+                <p className="text-sm text-[var(--color-text-muted)]">
+                  The invitation email could not be delivered. Send this link to the owner yourself —
+                  it is the only way into the account, and it is not shown again.
+                </p>
+              )}
+              <InviteLinkPanel url={invite.url} expiresAt={invite.expiresAt} />
+            </div>
+          ) : null}
           <DialogFooter>
-            <Button type="submit" disabled={loading}>
-              {loading ? "Creating…" : "Create tenant"}
-            </Button>
+            {invite ? (
+              <Button type="button" onClick={() => handleOpenChange(false)}>
+                Done
+              </Button>
+            ) : (
+              <Button type="submit" disabled={loading}>
+                {loading ? "Creating…" : "Create tenant"}
+              </Button>
+            )}
           </DialogFooter>
         </form>
       </DialogContent>

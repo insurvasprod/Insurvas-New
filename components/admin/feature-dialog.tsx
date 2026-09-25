@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { toast } from "sonner";
+import { notify } from "@/lib/notify";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -68,11 +68,11 @@ export function FeatureDialog({
     setLoading(false);
 
     if (!res.ok) {
-      toast.error(body?.error ?? "Could not save the feature");
+      notify.block(body?.error ?? "Could not save the feature");
       return;
     }
 
-    toast.success(isEdit ? `${label} updated` : `${label} added`);
+    notify.done(isEdit ? `${label} updated` : `${label} added`);
     onSaved();
     onClose();
     if (!isEdit) {

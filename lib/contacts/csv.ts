@@ -33,13 +33,23 @@ export function parseContactCsv(text: string, schema: FieldSchemaRow[]): Contact
 
 function csvCell(value: unknown) { const text = Array.isArray(value) ? value.join("|") : value === null || value === undefined ? "" : String(value); const safe = /^[=+\-@]/.test(text) ? `'${text}` : text; return `"${safe.replaceAll('"', '""')}"`; }
 
-export function csvForContacts(schema: FieldSchemaRow[], contacts: ContactRow[]) {
-  const fields = schema.filter((field) => field.entity === "contact").sort((a, b) => a.sort_order - b.sort_order);
+/** The export's custom columns, in the order the field schema sorts them. */
+export function csvContactFields(schema: FieldSchemaRow[]) {
+  return schema.filter((field) => field.entity === "contact").sort((a, b) => a.sort_order - b.sort_order);
+}
+
+export function csvHeaderLine(fields: FieldSchemaRow[]) {
   const headers = ["first_name", "last_name", "dob", "primary_phone", "email", "phones", "emails", "state", "address_line1", "city", "postal_code", ...fields.map((field) => `custom_${field.field_key}`)];
-  const lines = [headers.map(csvCell).join(",")];
-  for (const contact of contacts.filter((item) => !item.merged_into_id)) {
-    const primaryEmail = contact.emails.find((item) => item.is_primary)?.email ?? contact.emails[0]?.email ?? "";
-    lines.push([contact.first_name, contact.last_name, contact.dob, contact.primary_phone, primaryEmail, contact.phones.map((item) => item.phone), contact.emails.map((item) => item.email), contact.state, contact.address_line1, contact.city, contact.postal_code, ...fields.map((field) => contact.custom_fields[field.field_key])].map(csvCell).join(","));
-  }
-  return `${lines.join("\r\n")}\r\n`;
+  return `${headers.map(csvCell).join(",")}\r\n`;
+}
+
+/** One contact's line, CRLF-terminated. The export streams these a batch at a time. */
+export function csvContactLine(fields: FieldSchemaRow[], contact: ContactRow) {
+  const primaryEmail = contact.emails.find((item) => item.is_primary)?.email ?? contact.emails[0]?.email ?? "";
+  return `${[contact.first_name, contact.last_name, contact.dob, contact.primary_phone, primaryEmail, contact.phones.map((item) => item.phone), contact.emails.map((item) => item.email), contact.state, contact.address_line1, contact.city, contact.postal_code, ...fields.map((field) => contact.custom_fields[field.field_key])].map(csvCell).join(",")}\r\n`;
+}
+
+export function csvForContacts(schema: FieldSchemaRow[], contacts: ContactRow[]) {
+  const fields = csvContactFields(schema);
+  return csvHeaderLine(fields) + contacts.filter((item) => !item.merged_into_id).map((contact) => csvContactLine(fields, contact)).join("");
 }

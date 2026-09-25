@@ -1,40 +1,43 @@
 "use client";
 
 import { useState } from "react";
-import { CreditCard, ShieldCheck } from "lucide-react";
-import { toast } from "sonner";
+import { notify } from "@/lib/notify";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 
-export function CheckoutStart({ trialDays }: { trialDays: number }) {
+/**
+ * The part of checkout that acts: the coupon card, the button that leaves for the provider, and the
+ * line saying the card never reaches us. The plan, dates and summary around it are the server's.
+ */
+export function CheckoutStart() {
   const [couponCode, setCouponCode] = useState("");
-  const [couponOk, setCouponOk] = useState<string | null>(null);
+  const [valid, setValid] = useState<{ code: string; summary: string | null } | null>(null);
   const [busy, setBusy] = useState(false);
 
   async function applyCoupon() {
     if (!couponCode.trim()) return;
     setBusy(true);
+    // A dropped connection must hand the form back, not leave every control disabled.
     const res = await fetch("/api/app/checkout/coupon", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ code: couponCode.trim() }),
-    });
-    const body = await res.json().catch(() => null);
+    }).catch(() => null);
     setBusy(false);
+    if (!res) { notify.block("Could not reach Insurvas. Check your connection and try again."); return; }
+    const body = await res.json().catch(() => null);
 
     if (!res.ok) {
       // Rejected BEFORE the hosted page opens, which is the acceptance criterion.
-      setCouponOk(null);
-      toast.error(body?.error ?? "That code could not be applied");
+      setValid(null);
+      notify.block(body?.error ?? "That code could not be applied");
       return;
     }
 
-    setCouponOk(body.code);
     // Not "will be applied": Whop's hosted checkout cannot be handed a promo code, so the buyer
     // types it themselves. Saying otherwise promised a discount we could not deliver.
-    toast.success(body.instruction ?? `Enter ${body.code} on the payment page.`);
+    setValid({ code: body.code, summary: body.summary ?? null });
   }
 
   async function start() {
@@ -42,13 +45,14 @@ export function CheckoutStart({ trialDays }: { trialDays: number }) {
     const res = await fetch("/api/app/checkout/start", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ couponCode: couponOk ?? undefined }),
-    });
+      body: JSON.stringify({ couponCode: valid?.code ?? undefined }),
+    }).catch(() => null);
+    if (!res) { setBusy(false); notify.block("Could not reach Insurvas. Check your connection and try again."); return; }
     const body = await res.json().catch(() => null);
 
     if (!res.ok) {
       setBusy(false);
-      toast.error(body?.error ?? "Could not open checkout");
+      notify.block(body?.error ?? "Could not open checkout");
       return;
     }
 
@@ -57,48 +61,57 @@ export function CheckoutStart({ trialDays }: { trialDays: number }) {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="space-y-1.5">
-        <Label htmlFor="coupon">Have a code?</Label>
-        <div className="flex gap-2">
+    <>
+      <div className="rounded-lg border border-border bg-card p-5">
+        <h2 className="text-lg font-semibold leading-[1.28] tracking-[-0.015em] text-foreground">
+          <label htmlFor="coupon">Coupon</label>
+        </h2>
+        <div className="mt-3 flex gap-3">
           <Input
             id="coupon"
             value={couponCode}
             onChange={(e) => {
-              setCouponCode(e.target.value);
-              setCouponOk(null);
+              setCouponCode(e.target.value.toUpperCase());
+              setValid(null);
             }}
-            placeholder="WELCOME50"
-            className="font-mono uppercase"
+            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void applyCoupon(); } }}
+            autoComplete="off"
+            className="h-11 flex-1 border-[var(--border-strong)] px-3 text-base tracking-[-0.02em]"
             disabled={busy}
           />
-          <Button variant="outline" onClick={applyCoupon} disabled={busy || !couponCode.trim()}>
+          <Button variant="outline" onClick={applyCoupon} disabled={busy || !couponCode.trim()} className="h-11 border-[var(--border-strong)] px-4">
             Apply
           </Button>
         </div>
-        {couponOk && (
-          /* The code is shown large and copyable because the buyer has to type it on Whop's page —
-             a hosted checkout configuration cannot be handed a promo code, so this is the only
-             thing standing between them and the discount they were promised. */
-          <div className="rounded-lg border border-[var(--color-success)]/40 bg-[var(--color-success)]/10 p-3 text-sm">
-            <p className="font-medium text-[var(--color-success)]">{couponOk} is valid.</p>
-            <p className="mt-1 text-[var(--color-text-muted)]">
+        {valid && (
+          /* The buyer has to type the code on the provider's page — a hosted checkout cannot be
+             handed a promo code — so the note under the chip is the thing that gets them the
+             discount they were promised. */
+          <>
+            <div className="mt-3">
+              <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-[var(--success-surface)] px-2.5 py-[3px] text-xs font-semibold leading-normal tracking-[-0.01em] text-[var(--success-ink)]">
+                <span className="size-1.5 shrink-0 rounded-full bg-[var(--success)]" aria-hidden="true" />
+                {valid.summary ? `Valid — ${valid.summary}` : `${valid.code} is valid`}
+              </span>
+            </div>
+            <p className="mt-2.5 text-xs leading-normal tracking-[-0.01em] text-muted-foreground">
               Enter it on the payment page to get your discount — it is not applied automatically.
             </p>
-          </div>
+          </>
         )}
       </div>
 
-      <Button size="lg" className="w-full" onClick={start} disabled={busy}>
-        <CreditCard />
+      <Button onClick={start} disabled={busy} className="h-11 w-full px-4">
         Continue to secure checkout
       </Button>
 
-      <p className="flex items-center justify-center gap-1.5 text-xs text-[var(--color-text-muted)]">
-        <ShieldCheck className="size-3.5" />
-        Your card is entered on our payment provider&apos;s page and never touches our servers. Free for{" "}
-        {trialDays} days — cancel any time before then and you are not charged.
+      <p className="flex items-center justify-center gap-2 text-xs leading-normal tracking-[-0.01em] text-muted-foreground">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <rect x="4" y="10" width="16" height="10" rx="2" />
+          <path d="M8 10V7a4 4 0 0 1 8 0v3" />
+        </svg>
+        Card details are entered on the provider’s hosted page and never reach Insurvas.
       </p>
-    </div>
+    </>
   );
 }

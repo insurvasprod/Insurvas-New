@@ -1,17 +1,24 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { audit } from "@/lib/audit/log";
-import { undoContactMerge } from "@/lib/contacts/service";
+import { ContactConflictError, undoContactMerge } from "@/lib/contacts/service";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 
+/**
+ * Restores both original contacts. Refused (409, with the reason) while a later merge that is still
+ * in place involves either contact: that merge has to be undone first, or its data would be lost.
+ */
 export async function POST(request: NextRequest) {
   const auth = await requireFeatureRole("duplicate_detection", ["owner", "producer", "assistant"] as const, { write: true });
   if (auth instanceof NextResponse) return auth;
   const body = await request.json().catch(() => null) as { merge_id?: unknown } | null;
-  if (typeof body?.merge_id !== "string") return NextResponse.json({ error: "Choose a merge to undo" }, { status: 400 });
+  if (typeof body?.merge_id !== "string" || !/^[0-9a-f-]{36}$/i.test(body.merge_id)) return NextResponse.json({ error: "Choose a merge to undo" }, { status: 400 });
   try {
     const mergeId = await undoContactMerge(auth.context.tenantId, body.merge_id);
     await audit({ actorType: "tenant", actorId: auth.context.userId, action: "tenant.contact_merge_undone", targetType: "merge", targetId: mergeId, request });
     return NextResponse.json({ mergeId });
-  } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Could not undo merge" }, { status: 400 }); }
+  } catch (error) {
+    const status = error instanceof ContactConflictError ? 409 : 400;
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Could not undo merge" }, { status });
+  }
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { toast } from "sonner";
+import { notify } from "@/lib/notify";
 
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -46,11 +46,11 @@ export function SuspendUserDialog({
     setLoading(false);
 
     if (!res.ok) {
-      toast.error(body?.error ?? "Could not suspend this user");
+      notify.block(body?.error ?? "Could not suspend this user");
       return;
     }
 
-    toast.success(`${user.email} suspended`);
+    notify.done(`${user.email} suspended`);
     onSuspended();
     onClose();
   }

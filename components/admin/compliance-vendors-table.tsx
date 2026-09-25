@@ -1,90 +1,363 @@
 "use client";
 
-import { useCallback, useState } from "react";
-import { MoreHorizontal, Plug, ShieldAlert } from "lucide-react";
-import { toast } from "sonner";
+import { useCallback, useId, useMemo, useState, useSyncExternalStore, type FormEvent } from "react";
 
-import { Badge } from "@/components/ui/badge";
+import { notify } from "@/lib/notify";
+import { cn } from "@/lib/utils";
+import { AdminPageHeader } from "@/components/admin/page-header";
+import { Callout, Field, KeyValues, Pill, SettingsTableCard, btn, control, st } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { EmptyState } from "@/components/ui/page-states";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { COMPLIANCE_VENDOR_TYPES, COMPLIANCE_VENDOR_TYPE_LABELS, DNC_BLOCK_MESSAGE, type ComplianceVendor, type ComplianceVendorType } from "@/lib/compliance/constants";
-import { tableHeaderRow, tableHeadCell, tableShell } from "./table-styles";
+import { COMPLIANCE_VENDOR_TYPES, COMPLIANCE_VENDOR_TYPE_LABELS, type ComplianceVendor, type ComplianceVendorType } from "@/lib/compliance/constants";
+import {
+  ROLE_HINT,
+  dialingPosture,
+  fullUtc,
+  healthPill,
+  registryFooter,
+  shortUtc,
+  unreachableVendors,
+  vendorRoles,
+  type RegistryDialing,
+} from "@/lib/compliance/registryView";
+
+/**
+ * Compliance (board p-adm-compliance): the dial-gate callout, the vendor registry and its footer
+ * note. The board has no action column, so a row opens the vendor's dialog, which holds every
+ * action the old table carried: test the connection, enable or disable, edit, rotate the credential.
+ */
+
+export type ComplianceRegistry = { vendors: ComplianceVendor[]; dialing: RegistryDialing; readAt: string };
 
 type FormState = {
   name: string; vendor_type: ComplianceVendorType; endpoint: string; credentials: string;
   is_enabled: boolean; priority: string; cost_per_lookup_cents: string;
 };
 
+/** A change the server refused until someone types the vendor's name (409 requiresConfirmation). */
+type PendingConfirmation = { vendorId: string; vendorName: string; body: Record<string, unknown>; message: string; action: string; done: string };
+
 const emptyForm: FormState = { name: "", vendor_type: "dnc_scrub", endpoint: "", credentials: "", is_enabled: false, priority: "0", cost_per_lookup_cents: "0" };
 const money = (cents: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
-const when = (value: string | null) => value ? new Date(value).toLocaleString() : "Never";
 
-export function ComplianceVendorsTable({ initialVendors }: { initialVendors: ComplianceVendor[] }) {
-  const [vendors, setVendors] = useState(initialVendors);
+const subscribeNothing = () => () => {};
+/** False on the server and during hydration, true after: local times are added only then. */
+function useMounted() {
+  return useSyncExternalStore(subscribeNothing, () => true, () => false);
+}
+
+export function ComplianceVendorsTable({ initial }: { initial: ComplianceRegistry }) {
+  const [registry, setRegistry] = useState(initial);
+  const { vendors, dialing } = registry;
+  const nowYear = new Date(registry.readAt).getUTCFullYear();
   const [form, setForm] = useState<FormState>(emptyForm);
-  const [editing, setEditing] = useState<ComplianceVendor | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [testing, setTesting] = useState<string | null>(null);
+  const [toggling, setToggling] = useState<string | null>(null);
+  const [pending, setPending] = useState<PendingConfirmation | null>(null);
+  const mounted = useMounted();
+  const formId = useId();
+
+  const editing = editingId ? vendors.find((vendor) => vendor.id === editingId) ?? null : null;
+  const roles = useMemo(() => vendorRoles(vendors), [vendors]);
+  const unreachable = unreachableVendors(vendors);
+  const posture = dialingPosture(vendors, dialing);
+  const enabledCount = vendors.filter((vendor) => vendor.is_enabled).length;
+  const availableDnc = vendors.filter((vendor) => vendor.vendor_type === "dnc_scrub" && vendor.is_enabled && vendor.available).length;
 
   const refresh = useCallback(async () => {
     const response = await fetch("/api/admin/compliance-vendors");
-    if (response.ok) setVendors((await response.json()).vendors);
+    if (response.ok) setRegistry(await response.json());
   }, []);
 
-  function startCreate() { setEditing(null); setForm(emptyForm); setOpen(true); }
+  /** Title text for a time: UTC always, plus the reader's local time once mounted. */
+  const timeTitle = (iso: string | null) => {
+    const full = fullUtc(iso);
+    if (!full || !iso) return undefined;
+    return mounted ? `${full} · ${new Date(iso).toLocaleString()} your time` : full;
+  };
+
+  function startCreate() { setEditingId(null); setForm(emptyForm); setOpen(true); }
   function startEdit(vendor: ComplianceVendor) {
-    setEditing(vendor);
+    setEditingId(vendor.id);
     setForm({ name: vendor.name, vendor_type: vendor.vendor_type, endpoint: vendor.endpoint, credentials: "", is_enabled: vendor.is_enabled, priority: String(vendor.priority), cost_per_lookup_cents: String(vendor.cost_per_lookup_cents) });
     setOpen(true);
   }
 
-  async function save(event: React.FormEvent) {
-    event.preventDefault(); setBusy(true);
-    const body: Record<string, unknown> = { ...form, priority: Number(form.priority), cost_per_lookup_cents: Number(form.cost_per_lookup_cents) };
-    if (editing && !form.credentials) delete body.credentials;
-    const response = await fetch(editing ? `/api/admin/compliance-vendors/${editing.id}` : "/api/admin/compliance-vendors", { method: editing ? "PATCH" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-    const result = await response.json().catch(() => null); setBusy(false);
-    if (!response.ok) { toast.error(result?.error ?? "Could not save vendor"); return; }
-    toast.success(editing ? "Compliance vendor updated" : "Compliance vendor created"); setOpen(false); refresh();
+  /**
+   * PATCH a vendor. A 409 with requiresConfirmation opens the typed confirmation instead of failing:
+   * the server decides what needs confirming (it re-checks the gate), the browser only collects it.
+   */
+  async function patch(vendor: { id: string; name: string }, body: Record<string, unknown>, labels: { action: string; done: string }): Promise<boolean> {
+    const response = await fetch(`/api/admin/compliance-vendors/${vendor.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const result = await response.json().catch(() => null);
+    if (response.status === 409 && result?.requiresConfirmation) {
+      setPending({ vendorId: vendor.id, vendorName: result.vendorName ?? vendor.name, body, message: result.error, ...labels });
+      return false;
+    }
+    if (!response.ok) { notify.block(result?.error ?? "Could not save vendor"); return false; }
+    notify.done(labels.done);
+    await refresh();
+    return true;
+  }
+
+  async function save(event: FormEvent) {
+    event.preventDefault();
+    const numbers = { priority: Number(form.priority), cost_per_lookup_cents: Number(form.cost_per_lookup_cents) };
+    setBusy(true);
+    if (editing) {
+      // Availability has its own button in this dialog, so Save never flips it by accident.
+      const body: Record<string, unknown> = { name: form.name, vendor_type: form.vendor_type, endpoint: form.endpoint, ...numbers };
+      if (form.credentials) body.credentials = form.credentials;
+      const saved = await patch(editing, body, { action: "Save and block dialing", done: "Compliance vendor updated" });
+      setBusy(false);
+      if (saved) setOpen(false);
+      return;
+    }
+    const response = await fetch("/api/admin/compliance-vendors", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...form, ...numbers }) });
+    const result = await response.json().catch(() => null);
+    setBusy(false);
+    if (!response.ok) { notify.block(result?.error ?? "Could not save vendor"); return; }
+    notify.done("Compliance vendor created"); setOpen(false); refresh();
   }
 
   async function toggle(vendor: ComplianceVendor) {
     const next = !vendor.is_enabled;
-    let confirmed = false;
-    if (!next && vendor.vendor_type === "dnc_scrub" && vendors.filter((item) => item.vendor_type === "dnc_scrub" && item.is_enabled).length === 1) {
-      confirmed = window.confirm(`${DNC_BLOCK_MESSAGE}\n\nDisable ${vendor.name}?`);
-      if (!confirmed) return;
-    }
-    const response = await fetch(`/api/admin/compliance-vendors/${vendor.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ is_enabled: next, ...(confirmed ? { confirm_dnc_block: true } : {}) }) });
-    const result = await response.json().catch(() => null);
-    if (!response.ok) { toast.error(result?.error ?? "Could not change vendor availability"); return; }
-    toast.success(`${vendor.name} ${next ? "enabled" : "disabled"}`); refresh();
+    setToggling(vendor.id);
+    await patch(vendor, { is_enabled: next }, { action: "Disable and block dialing", done: `${vendor.name} ${next ? "enabled" : "disabled"}` });
+    setToggling(null);
   }
 
   async function test(vendor: ComplianceVendor) {
     setTesting(vendor.id);
     const response = await fetch(`/api/admin/compliance-vendors/${vendor.id}/test-connection`, { method: "POST" });
     const result = await response.json().catch(() => null); setTesting(null);
-    if (result?.ok) toast.success(`${vendor.name}: ${result.message}`); else toast.error(`${vendor.name}: ${result?.message ?? "Connection test failed"}`);
+    if (result?.ok) notify.done(`${vendor.name}: ${result.message}`); else notify.fail(`${vendor.name}: ${result?.message ?? "Connection test failed"}`);
     refresh();
   }
 
-  const dncVendors = vendors.filter((vendor) => vendor.vendor_type === "dnc_scrub" && vendor.is_enabled);
-  const activeDnc = dncVendors.length;
-  const availableDnc = dncVendors.filter((vendor) => vendor.available).length;
-  const dialingBlocked = activeDnc === 0 || availableDnc === 0;
-  return <div className="space-y-5">
-    {dialingBlocked && <div role="alert" className="flex items-start gap-3 rounded-lg border-2 border-[var(--color-danger)]/50 bg-[var(--color-danger)]/5 p-4 text-sm text-[var(--color-danger)]"><ShieldAlert className="mt-0.5 size-5 shrink-0" /><div><p className="font-semibold">Dialing is blocked</p><p className="mt-1">{DNC_BLOCK_MESSAGE}</p></div></div>}
-    <div className="flex flex-wrap items-center gap-3"><p className="text-sm text-muted-foreground">{vendors.filter((v) => v.is_enabled).length} enabled · {vendors.length} registered · {availableDnc} DNC available</p><div className="ml-auto"><Button size="sm" onClick={startCreate}>New vendor</Button></div></div>
-    <div className={tableShell}><Table><TableHeader><TableRow className={tableHeaderRow}><TableHead className={tableHeadCell}>Vendor</TableHead><TableHead className={tableHeadCell}>Type</TableHead><TableHead className={tableHeadCell}>Endpoint</TableHead><TableHead className={tableHeadCell}>Health (24h)</TableHead><TableHead className={tableHeadCell}>Cost</TableHead><TableHead className={`${tableHeadCell} w-10`} /></TableRow></TableHeader><TableBody>
-      {vendors.length === 0 && <TableRow><TableCell colSpan={6} className="p-0"><EmptyState title="No vendors registered yet" hint="Dialing stays blocked until a DNC scrub vendor is added." /></TableCell></TableRow>}
-      {vendors.map((vendor) => <TableRow key={vendor.id} className={!vendor.is_enabled ? "opacity-60" : undefined}><TableCell><div className="flex items-center gap-2 font-medium">{vendor.name}<Badge variant="outline" className={vendor.is_enabled ? "border-[var(--color-success)]/40 text-[var(--color-success)]" : "text-muted-foreground"}>{vendor.is_enabled ? "Enabled" : "Disabled"}</Badge>{vendor.is_enabled && !vendor.available && <Badge variant="destructive">Unreachable</Badge>}</div><p className="mt-1 text-xs text-muted-foreground">{vendor.credentials_present ? "Credentials stored" : "Credentials not set"} · Last success: {when(vendor.last_success_at)}</p></TableCell><TableCell>{COMPLIANCE_VENDOR_TYPE_LABELS[vendor.vendor_type]}</TableCell><TableCell className="max-w-[230px] truncate font-mono text-xs">{vendor.endpoint}</TableCell><TableCell><span className={vendor.failures_24h ? "text-[var(--color-danger)]" : "text-[var(--color-success)]"}>{vendor.failure_rate_24h}% failed</span><p className="text-xs text-muted-foreground">{vendor.failures_24h}/{vendor.calls_24h} calls</p></TableCell><TableCell>{money(vendor.cost_per_lookup_cents)}</TableCell><TableCell><div className="flex items-center gap-1"><Button variant="ghost" size="icon-sm" title="Test connection" onClick={() => test(vendor)} disabled={testing === vendor.id}><Plug /></Button><Button variant="ghost" size="icon-sm" title="More actions" onClick={() => startEdit(vendor)}><MoreHorizontal /><span className="sr-only">Edit {vendor.name}</span></Button></div></TableCell></TableRow>)}
-    </TableBody></Table></div>
-    <Dialog open={open} onOpenChange={setOpen}><DialogContent className="max-w-xl"><DialogHeader><DialogTitle>{editing ? `Edit ${editing.name}` : "Register compliance vendor"}</DialogTitle><DialogDescription>Credentials are encrypted before storage and never returned. Use a vendor endpoint that supports HTTPS.</DialogDescription></DialogHeader><form onSubmit={save} className="space-y-4"><div className="grid gap-4 sm:grid-cols-2"><label className="space-y-1 text-sm"><span className="font-medium">Vendor name</span><Input required maxLength={120} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label><label className="space-y-1 text-sm"><span className="font-medium">Vendor type</span><select className="flex h-10 w-full rounded-md border bg-background px-3 text-sm" value={form.vendor_type} onChange={(e) => setForm({ ...form, vendor_type: e.target.value as ComplianceVendorType })}>{COMPLIANCE_VENDOR_TYPES.map((type) => <option key={type} value={type}>{COMPLIANCE_VENDOR_TYPE_LABELS[type]}</option>)}</select></label></div><label className="space-y-1 text-sm"><span className="font-medium">API endpoint</span><Input required type="url" placeholder="https://vendor.example.com/health" value={form.endpoint} onChange={(e) => setForm({ ...form, endpoint: e.target.value })} /></label><label className="space-y-1 text-sm"><span className="font-medium">Credential token {editing && <span className="font-normal text-muted-foreground">(leave blank to keep current)</span>}</span><Input type="password" autoComplete="new-password" value={form.credentials} onChange={(e) => setForm({ ...form, credentials: e.target.value })} /></label><div className="grid gap-4 sm:grid-cols-3"><label className="space-y-1 text-sm"><span className="font-medium">Priority</span><Input required type="number" min="0" value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })} /></label><label className="space-y-1 text-sm"><span className="font-medium">Cost (cents)</span><Input required type="number" min="0" value={form.cost_per_lookup_cents} onChange={(e) => setForm({ ...form, cost_per_lookup_cents: e.target.value })} /></label><label className="flex items-center gap-2 pt-6 text-sm"><input type="checkbox" checked={form.is_enabled} onChange={(e) => setForm({ ...form, is_enabled: e.target.checked })} /> Enabled</label></div><DialogFooter><Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancel</Button><Button type="submit" disabled={busy}>{busy ? "Saving…" : "Save vendor"}</Button></DialogFooter></form></DialogContent></Dialog>
-    <div className="flex flex-wrap gap-2 text-sm">{vendors.map((vendor) => <Button key={vendor.id} variant="outline" size="sm" onClick={() => toggle(vendor)}>{vendor.is_enabled ? `Disable ${vendor.name}` : `Enable ${vendor.name}`}</Button>)}</div>
-  </div>;
+  async function confirmPending(event: FormEvent) {
+    event.preventDefault();
+    if (!pending) return;
+    const response = await fetch(`/api/admin/compliance-vendors/${pending.vendorId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...pending.body, confirm_dnc_block: true }) });
+    const result = await response.json().catch(() => null);
+    if (!response.ok) { notify.block(result?.error ?? "Could not save vendor"); return; }
+    notify.done(pending.done);
+    setPending(null);
+    setOpen(false);
+    refresh();
+  }
+
+  const health = editing ? healthPill(editing) : null;
+
+  return (
+    <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
+      <AdminPageHeader
+        title="Compliance"
+        subtitle="TCPA and Do Not Call vendors, and whether they are actually working."
+        actions={<button type="button" className={btn("primary", "h-11")} onClick={startCreate}>Register a vendor</button>}
+      />
+
+      <Callout tone={posture.tone === "neutral" ? "info" : posture.tone} title={posture.title}>
+        <p className="m-0">
+          {posture.lines.join(" ")}
+          {!dialing.demo && (
+            <>
+              {" "}
+              <strong className="font-semibold">
+                With no available DNC vendor, <code className="font-mono text-[13px]">/api/app/dial/preflight</code> returns 503 and every tenant on the platform is blocked from calling.
+              </strong>{" "}
+              Disabling the last available one asks for a typed confirmation naming that effect.
+            </>
+          )}
+        </p>
+      </Callout>
+
+      <SettingsTableCard
+        title="Vendors"
+        actions={
+          <>
+            <span className="text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)] tabular-nums">
+              {enabledCount} enabled · {vendors.length} registered · {availableDnc} DNC available
+            </span>
+            {unreachable.length > 0 && <Pill tone="error" dot>{unreachable.length} enabled but unreachable</Pill>}
+          </>
+        }
+      >
+        <div className="min-w-0 overflow-x-auto">
+          <table className={cn(st.table, "min-w-[880px] table-fixed")}>
+            <thead>
+              <tr className={st.headRow}>
+                <th scope="col" className={st.th}>Vendor</th>
+                <th scope="col" className={cn(st.th, "w-[160px]")}>Type</th>
+                <th scope="col" className={cn(st.th, "w-[140px]")}>Configured</th>
+                <th scope="col" className={cn(st.th, "w-[240px]")}>Health</th>
+                <th scope="col" className={cn(st.th, "w-[160px]")}>Last checked</th>
+                <th scope="col" className={cn(st.th, "w-[130px]")}>Role</th>
+              </tr>
+            </thead>
+            <tbody className="m-seq">
+              {vendors.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="border-t border-[var(--border)] p-0">
+                    <EmptyState title="No vendors registered yet" hint="Dialing stays blocked until a DNC scrub vendor and a litigator vendor are registered and enabled." />
+                  </td>
+                </tr>
+              )}
+              {vendors.map((vendor) => {
+                const pill = healthPill(vendor);
+                const role = roles.get(vendor.id) ?? "Unused";
+                return (
+                  <tr key={vendor.id} className="m-row cursor-pointer hover:bg-[var(--brand-50)]" onClick={() => startEdit(vendor)}>
+                    <td className={st.td}>
+                      <button
+                        type="button"
+                        aria-haspopup="dialog"
+                        onClick={(event) => { event.stopPropagation(); startEdit(vendor); }}
+                        className="max-w-full cursor-pointer truncate text-left text-[var(--body)] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
+                      >
+                        {vendor.name}
+                      </button>
+                    </td>
+                    <td className={st.td} title={COMPLIANCE_VENDOR_TYPE_LABELS[vendor.vendor_type]}>{vendor.vendor_type}</td>
+                    <td className={st.td}>
+                      {vendor.is_enabled ? <Pill tone="success" dot>Enabled</Pill> : <Pill tone="neutral" dot>Disabled</Pill>}
+                    </td>
+                    <td className={st.td} title={pill.hint}><Pill tone={pill.tone} dot>{pill.label}</Pill></td>
+                    <td className={cn(st.td, "whitespace-nowrap tabular-nums")} title={timeTitle(vendor.last_checked_at) ?? "No lookup or connection test in the last 7 days"}>
+                      {shortUtc(vendor.last_checked_at, nowYear) ?? "—"}
+                    </td>
+                    <td className={st.td} title={ROLE_HINT[role]}>{role}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        <div className="border-t border-[var(--border)] bg-[var(--canvas)] px-4 py-3 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--body)]">
+          {registryFooter(unreachable)}
+        </div>
+      </SettingsTableCard>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{editing ? editing.name : "Register a vendor"}</DialogTitle>
+            <DialogDescription>Credentials are encrypted before storage and never returned. Use a vendor endpoint that supports HTTPS.</DialogDescription>
+          </DialogHeader>
+
+          {editing && health && (
+            <div className="flex flex-col gap-4 rounded-[12px] border border-[var(--border)] p-4">
+              <div className="flex flex-wrap items-center gap-2">
+                {editing.is_enabled ? <Pill tone="success" dot>Enabled</Pill> : <Pill tone="neutral" dot>Disabled</Pill>}
+                <Pill tone={health.tone} dot>{health.label}</Pill>
+                <span className="text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">{roles.get(editing.id) ?? "Unused"} · {ROLE_HINT[roles.get(editing.id) ?? "Unused"]}</span>
+              </div>
+              <KeyValues
+                items={[
+                  { label: "Calls, last 24 hours", value: `${editing.failures_24h} of ${editing.calls_24h} failed (${editing.failure_rate_24h}%)`, tone: editing.failures_24h > 0 ? "error" : undefined },
+                  { label: "Last checked", value: <span title={timeTitle(editing.last_checked_at)}>{fullUtc(editing.last_checked_at) ?? "Not in the last 7 days"}</span> },
+                  { label: "Last success", value: <span title={timeTitle(editing.last_success_at)}>{fullUtc(editing.last_success_at) ?? "Never"}</span> },
+                  { label: "Credentials", value: editing.credentials_present ? "Stored" : "Not set" },
+                  { label: "Cost per lookup", value: money(editing.cost_per_lookup_cents) },
+                  { label: "Priority", value: String(editing.priority) },
+                ]}
+              />
+              <p className="m-0 min-w-0 truncate font-mono text-[12px] text-[var(--muted)]" title={editing.endpoint}>{editing.endpoint}</p>
+              <div className="flex flex-wrap items-center gap-2.5">
+                <button type="button" className={btn("secondary")} onClick={() => test(editing)} disabled={testing === editing.id}>
+                  {testing === editing.id ? "Testing…" : "Test connection"}
+                </button>
+                <button type="button" className={btn("secondary")} onClick={() => toggle(editing)} disabled={toggling === editing.id}>
+                  {editing.is_enabled ? "Disable vendor" : "Enable vendor"}
+                </button>
+              </div>
+            </div>
+          )}
+
+          <form id={formId} onSubmit={save} className="flex flex-col gap-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Vendor name" htmlFor={`${formId}-name`} required>
+                <input id={`${formId}-name`} className={control} required maxLength={120} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+              </Field>
+              <Field label="Vendor type" htmlFor={`${formId}-type`}>
+                <select id={`${formId}-type`} className={control} value={form.vendor_type} onChange={(e) => setForm({ ...form, vendor_type: e.target.value as ComplianceVendorType })}>
+                  {COMPLIANCE_VENDOR_TYPES.map((type) => <option key={type} value={type}>{COMPLIANCE_VENDOR_TYPE_LABELS[type]}</option>)}
+                </select>
+              </Field>
+            </div>
+            <Field label="API endpoint" htmlFor={`${formId}-endpoint`} required>
+              <input id={`${formId}-endpoint`} className={control} required type="url" placeholder="https://vendor.example.com/health" value={form.endpoint} onChange={(e) => setForm({ ...form, endpoint: e.target.value })} />
+            </Field>
+            <Field label={editing ? "Rotate credential token" : "Credential token"} htmlFor={`${formId}-credentials`} hint={editing ? "Leave blank to keep the stored token. The stored token is never shown." : "Sent as a bearer token. Stored encrypted, write-only."}>
+              <input id={`${formId}-credentials`} className={control} type="password" autoComplete="new-password" value={form.credentials} onChange={(e) => setForm({ ...form, credentials: e.target.value })} />
+            </Field>
+            <div className="grid gap-4 sm:grid-cols-3">
+              <Field label="Priority" htmlFor={`${formId}-priority`} required hint="Lower is tried first.">
+                <input id={`${formId}-priority`} className={control} required type="number" min="0" value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })} />
+              </Field>
+              <Field label="Cost (cents)" htmlFor={`${formId}-cost`} required>
+                <input id={`${formId}-cost`} className={control} required type="number" min="0" value={form.cost_per_lookup_cents} onChange={(e) => setForm({ ...form, cost_per_lookup_cents: e.target.value })} />
+              </Field>
+              {!editing && (
+                <label htmlFor={`${formId}-enabled`} className="flex items-center gap-2 pt-8 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--body)]">
+                  <input id={`${formId}-enabled`} type="checkbox" checked={form.is_enabled} onChange={(e) => setForm({ ...form, is_enabled: e.target.checked })} /> Enabled
+                </label>
+              )}
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+              <Button type="submit" disabled={busy}>{busy ? "Saving…" : "Save vendor"}</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <TypedConfirmation pending={pending} onCancel={() => setPending(null)} onConfirm={confirmPending} />
+    </div>
+  );
+}
+
+/**
+ * The typed confirmation for a change that blocks dialing platform-wide. The name, not a fixed
+ * word: a fixed word can be typed from muscle memory on the wrong vendor. The server's 409 stays the
+ * real check — this only collects the intent it asks for.
+ */
+function TypedConfirmation({ pending, onCancel, onConfirm }: { pending: PendingConfirmation | null; onCancel: () => void; onConfirm: (event: FormEvent) => Promise<void> }) {
+  const [typed, setTyped] = useState("");
+  const [sending, setSending] = useState(false);
+  const id = useId();
+  const matches = Boolean(pending) && typed.trim().toLowerCase() === (pending?.vendorName ?? "").trim().toLowerCase();
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    if (!matches) return;
+    setSending(true);
+    await onConfirm(event);
+    setSending(false);
+    setTyped("");
+  }
+
+  return (
+    <Dialog open={pending !== null} onOpenChange={(next) => { if (!next) { setTyped(""); onCancel(); } }}>
+      <DialogContent>
+        <form onSubmit={submit} className="flex flex-col gap-4">
+          <DialogHeader>
+            <DialogTitle>Block dialing platform-wide?</DialogTitle>
+            <DialogDescription>{pending?.message}</DialogDescription>
+          </DialogHeader>
+          <Field label={<>Type <span className="font-mono">{pending?.vendorName}</span> to confirm</>} htmlFor={`${id}-confirm`}>
+            <input id={`${id}-confirm`} className={control} autoComplete="off" value={typed} onChange={(e) => setTyped(e.target.value)} placeholder={pending?.vendorName ?? ""} />
+          </Field>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => { setTyped(""); onCancel(); }}>Cancel</Button>
+            <Button type="submit" variant="destructive" disabled={sending || !matches}>{sending ? "Saving…" : pending?.action ?? "Confirm"}</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
 }

@@ -5,6 +5,8 @@ import { hashPassword } from "@/lib/password";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { signTenantSessionToken, tenantSessionCookieOptions, TENANT_SESSION_COOKIE } from "@/lib/tenantAuth/session";
 import { recordLoginEvent } from "@/lib/loginEvents/record";
+import { getSetting } from "@/lib/settings/queries";
+import { callerIp, retryAfterSeconds, type RateLimitRule } from "@/lib/rateLimit";
 
 const signupSchema = z.object({
   workspaceName: z.string().trim().min(2, "Enter a workspace name").max(160),
@@ -16,16 +18,24 @@ const signupSchema = z.object({
 });
 
 export async function POST(request: NextRequest) {
-  const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
+  const ip = callerIp(request.headers);
+  const signupRule: RateLimitRule = {
+    name: "tenant_signup_ip",
+    max: await getSetting<number>("security.signup_per_ip_per_hour"),
+    windowSeconds: 3600,
+  };
   const supabase = getSupabaseServiceClient();
 
   const { data: allowed, error: rateLimitError } = await supabase.rpc("claim_rate_limit", {
     p_key: `tenant-signup:${ip}`,
-    p_max: 5,
-    p_window_seconds: 3600,
+    p_max: signupRule.max,
+    p_window_seconds: signupRule.windowSeconds,
   });
   if (rateLimitError || allowed === false) {
-    return NextResponse.json({ error: "Too many signup attempts. Please try again later." }, { status: 429 });
+    return NextResponse.json({ error: "Too many signup attempts. Please try again later." }, {
+      status: 429,
+      headers: { "retry-after": String(retryAfterSeconds(signupRule)) },
+    });
   }
 
   const body = await request.json().catch(() => null);

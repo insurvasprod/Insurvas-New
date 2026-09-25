@@ -1,3 +1,5 @@
+import type { NextActionKind, NextActionSetting } from "./nextAction";
+
 export const DISPOSITION_KEY_PATTERN = /^[a-z][a-z0-9_]{1,79}$/;
 export const DO_NOT_CALL_DISPOSITION_KEY = "do_not_call";
 
@@ -16,6 +18,28 @@ export type Disposition = {
   sort_order: number;
   created_at: string;
   updated_at: string;
+  /**
+   * Recorded on the dialer, this outcome closes the lead (true) or returns it to the cadence (false).
+   * Null only before migration 20260924140000 is applied.
+   */
+  ends_call?: boolean | null;
+  /** What the dialer does after the outcome (20260924240200). Absent before that is applied. */
+  next_action?: NextActionKind | null;
+  /** The retry delay or rest period, in minutes; set only for retry and rest. */
+  next_action_minutes?: number | null;
+};
+
+/** The settings screen's view of one outcome: the row, plus what the product does with it. */
+export type DispositionSettingsRow = Disposition & {
+  /** do_not_call and callback_scheduled: the dialer handles them in their own branch. */
+  ends_call_fixed: boolean;
+  /**
+   * What the dialer does next: the stored setting, or — before 20260924240200 — what it does today,
+   * derived from the key and ends_call. Null when neither is known.
+   */
+  next: NextActionSetting | null;
+  /** The stage this outcome moves the lead to (stage_dispositions), if it is mapped. */
+  mapped_stage: { id: string; name: string; stage_type: string; pipeline_id: string; pipeline_name: string } | null;
 };
 
 export type DispositionOption = {

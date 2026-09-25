@@ -66,7 +66,7 @@ async function main() {
     check("list response masks credentials as presence only", listed.status === 200 && listedBody.vendors.every((v) => !("credentials" in v) && !("credentials_enc" in v) && typeof v.credentials_present === "boolean"));
     check("enabled vendor is available immediately", listedBody.vendors.some((v) => v.id === vendorIds[0] && v.is_enabled));
     const stored = await supabase.from("compliance_vendors").select("credentials_enc").in("id", vendorIds);
-    check("stored credentials are ciphertext, not plaintext", stored.data?.every((row) => row.credentials_enc && !row.credentials_enc.includes("secret-")) === true);
+    check("stored credentials are ciphertext, not plaintext", (stored.data?.length ?? 0) > 0 && stored.data.every((row) => row.credentials_enc && !row.credentials_enc.includes("secret-")));
 
     console.log("Last DNC protection and audit trail");
     const disableFirst = await api(`/api/admin/compliance-vendors/${vendorIds[0]}`, platformCookie, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ is_enabled: false }) });

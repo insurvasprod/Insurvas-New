@@ -67,8 +67,66 @@ export type FieldSchemaRow = {
   updated_at: string;
 };
 
+/** One row of the paginated directory: an active contact, its household label and its flags. */
+export type DirectoryRow = ContactRow & {
+  household_state: string | null;
+  /** "Oyelaran, Chicago IL" — surname, city, state. Null when the contact has no household. */
+  household_label: string | null;
+  /** Leads linked to this contact (and to anything merged into it). Null before agent_leads.contact_id exists. */
+  lead_count: number | null;
+  /** In an open review pair. Null when the review queue does not exist yet. */
+  open_review: boolean | null;
+};
+
+export type ContactDirectory = {
+  rows: DirectoryRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+  query: string;
+};
+
+export type DuplicateStats = {
+  contacts: number;
+  /** Null when only the fallback count is available. */
+  households: number | null;
+  pending: number | null;
+  oldestPendingAt: string | null;
+  mergedThisMonth: number | null;
+  undoneThisMonth: number | null;
+  undoableThisMonth: number | null;
+  /** Distinct contacts in an open pair (the directory's "duplicate-suspected" count). */
+  flaggedContacts: number | null;
+  /** The zone "this month" was cut in: the agency's, else UTC. */
+  timezone: string;
+};
+
+export type RecentMerge = {
+  id: string;
+  keptId: string;
+  mergedId: string;
+  keptName: string;
+  mergedName: string;
+  mergedAt: string;
+  reversedAt: string | null;
+  actorName: string | null;
+  source: "manual" | "auto";
+  /** False when undo would be refused: already undone, or a later merge involves either contact. */
+  undoable: boolean;
+};
+
+export type ReviewEvidence = { id: string | null; score: number; confidence: DuplicateMatch["confidence"]; matched_on: string[]; created_at: string | null };
+
+/** The head of the queue: two contacts, older first, and why matching paired them. */
+export type ReviewPair = { review: ReviewEvidence; existing: ContactRow; incoming: ContactRow };
+
+export type ReviewQueue = { ready: boolean; total: number; index: number; pair: ReviewPair | null };
+
 export type ContactWorkspace = {
-  contacts: ContactRow[];
+  directory: ContactDirectory;
+  stats: DuplicateStats;
+  merges: RecentMerge[];
   fieldSchema: FieldSchemaRow[];
-  merges: Array<{ id: string; kept_id: string; merged_id: string; merged_at: string; reversed_at: string | null }>;
+  /** contact_duplicate_reviews exists: matches are kept until someone resolves them. */
+  reviewsReady: boolean;
 };

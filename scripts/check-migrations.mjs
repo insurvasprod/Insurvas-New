@@ -10,6 +10,7 @@
  *   42P01 undefined_table         wrong order, or a typo  <- a real failure
  *   42704 undefined_object        missing type or role    <- a real failure
  *   42501 insufficient_privilege  parsed fine, no rights  <- expected, and what we want
+ *   25006 read_only_sql_transaction  parsed fine, database read-only  <- also expected
  *
  * Every statement runs inside a savepoint that is rolled back immediately, and the whole run is
  * wrapped in one transaction that is rolled back at the end. Nothing is committed, ever.
@@ -32,6 +33,12 @@ const DIR = "supabase/migrations";
 const EXPECTED = new Set([
   "42501", // insufficient_privilege
   "0LP01", // invalid_grant_operation
+  // read_only_sql_transaction. Added because the project now flips into read-only when it is over
+  // its storage quota (backlog 201), and that blocks DDL before privileges are even consulted. It
+  // proves the same thing 42501 does and for the same reason: the statement PARSED. A syntax error
+  // would have been raised first. Without this the checker reports every migration as broken the
+  // moment the database fills up, which is exactly when you least want a false alarm.
+  "25006",
 ]);
 
 /**

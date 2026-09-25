@@ -71,11 +71,18 @@ export type InvoiceTotals = {
  * pieces of arithmetic happening to agree.
  */
 export async function fetchInvoiceTotals(): Promise<InvoiceTotals> {
+  return computeInvoiceTotals(await fetchInvoices());
+}
+
+/**
+ * The arithmetic behind fetchInvoiceTotals, over rows the caller already holds. Pass the UNFILTERED
+ * list: the invoices page reads it once for both the table and the strip rather than twice.
+ */
+export function computeInvoiceTotals(all: InvoiceListRow[]): InvoiceTotals {
   const startOfMonth = new Date();
   startOfMonth.setUTCDate(1);
   startOfMonth.setUTCHours(0, 0, 0, 0);
 
-  const all = await fetchInvoices();
   const thisMonth = all.filter((i) => new Date(i.created_at) >= startOfMonth);
 
   return {

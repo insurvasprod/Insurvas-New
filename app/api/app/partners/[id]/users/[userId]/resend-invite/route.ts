@@ -1,8 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { audit } from "@/lib/audit/log";
-import { buildPartnerInviteUrl, generateInviteToken, hashInviteToken, inviteExpiryFromNow } from "@/lib/users/invitations";
-import { sendInvitationEmail } from "@/lib/email/sendInvitationEmail";
+import { buildExistingPartnerInviteUrl, buildPartnerInviteUrl, generateInviteToken, hashInviteToken, inviteExpiryFromNow } from "@/lib/users/invitations";
+import { sendExistingPartnerInvitationEmail, sendInvitationEmail } from "@/lib/email/sendInvitationEmail";
 import { configuredAppOrigin } from "@/lib/urls/origin";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import { resendPartnerInvite } from "@/lib/partnerUsers/service";
@@ -21,10 +21,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const origin = configuredAppOrigin("partner");
   try {
     const result = await resendPartnerInvite({ tenantId: auth.context.tenantId, partnerId, userId, tokenHash: hashInviteToken(token), expiresAt: expiresAt.toISOString() });
-    const inviteUrl = buildPartnerInviteUrl(token, origin);
-    const { delivered } = await sendInvitationEmail({ to: result.email, name: result.name, inviteUrl, expiresAt, userId: result.user_id, tenantId: auth.context.tenantId });
+    const inviteUrl = result.has_existing_password ? buildExistingPartnerInviteUrl(token, origin) : buildPartnerInviteUrl(token, origin);
+    const { delivered } = result.has_existing_password
+      ? await sendExistingPartnerInvitationEmail({ to: result.email, name: result.name, inviteUrl, expiresAt, userId: result.user_id, tenantId: auth.context.tenantId })
+      : await sendInvitationEmail({ to: result.email, name: result.name, inviteUrl, expiresAt, userId: result.user_id, tenantId: auth.context.tenantId });
     await audit({ actorType: "tenant", actorId: auth.context.userId, action: "tenant.partner_user_invite_resent", targetType: "partner_user", targetId: userId, metadata: { partnerId, delivered, actorPlane: "agent" }, request });
-    return NextResponse.json({ ok: true, invite: { url: inviteUrl, expiresAt: expiresAt.toISOString(), delivered } });
+    return NextResponse.json({ ok: true, invite: { url: inviteUrl, expiresAt: expiresAt.toISOString(), delivered, mode: result.has_existing_password ? "existing_account" : "set_password" } });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Could not resend partner invitation";
     if (message.includes("not_found") || message.includes("not_pending")) return NextResponse.json({ error: "This invitation is no longer pending" }, { status: 409 });

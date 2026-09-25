@@ -1,10 +1,9 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { audit } from "@/lib/audit/log";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
-import { getTransferInbox, postPartnerClaimMessage } from "@/lib/transferInbox/service";
+import { announceTransferClaim } from "@/lib/transferInbox/service";
 
 const bodySchema = z.object({ work_item_id: z.string().uuid() }).strict();
 
@@ -34,22 +33,11 @@ export async function POST(request: Request) {
     }
     if (error.message === "WORK_ITEM_NOT_FOUND") return NextResponse.json({ error: "That transfer is no longer available." }, { status: 404 });
     if (error.message === "ROLE_NOT_ALLOWED") return NextResponse.json({ error: "Your role cannot claim transfers.", code: "role_not_allowed" }, { status: 403 });
+    console.error("[claim] claim_transfer_lead failed", error.code, error.message, error.details);
     return NextResponse.json({ error: "Could not claim this transfer" }, { status: 500 });
   }
 
-  const inbox = await getTransferInbox(auth.context.tenantId, { status: "all" }, auth.context.userId, auth.context.role);
-  const item = inbox.items.find((candidate) => candidate.id === parsed.data.work_item_id);
-  let chatPosted = true;
-  try {
-    const isBuffer = auth.context.role === "assistant";
-    await postPartnerClaimMessage(auth.context.tenantId, parsed.data.work_item_id, auth.context.userId, item?.customer ?? "Customer", isBuffer
-      ? { eventKey: `buffer-claim:${parsed.data.work_item_id}`, message: `${item?.customer ?? "Customer"} is connected to the buffer agent` }
-      : undefined);
-  } catch (chatError) {
-    chatPosted = false;
-    console.error("Partner claim message failed after claim", chatError);
-    await audit({ actorType: "tenant", actorId: auth.context.userId, action: "tenant.transfer_claim_chat_failed", targetType: "lead_queue", targetId: parsed.data.work_item_id, reason: chatError instanceof Error ? chatError.message : "Unknown chat error", request }).catch(() => undefined);
-  }
-  await audit({ actorType: "tenant", actorId: auth.context.userId, action: "tenant.transfer_claimed", targetType: "lead_queue", targetId: parsed.data.work_item_id, metadata: { activeCallId: (data as { active_call_id?: string })?.active_call_id ?? null, verificationSessionId: (data as { verification_session_id?: string })?.verification_session_id ?? null, chatPosted }, request });
+  // Partner card + audit row, shared with Claim next so the two claim paths cannot drift.
+  const { chatPosted } = await announceTransferClaim({ tenantId: auth.context.tenantId, userId: auth.context.userId, role: auth.context.role, workItemId: parsed.data.work_item_id, claim: data, request });
   return NextResponse.json({ claim: data, chatPosted });
 }

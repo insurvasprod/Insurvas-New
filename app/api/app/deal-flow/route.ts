@@ -7,7 +7,10 @@ import { createManualDeal, csvForDealFlow, listDealFlow } from "@/lib/dealFlow/s
 function queryParams(request: NextRequest) {
   const params = request.nextUrl.searchParams;
   const number = (key: string, fallback: number) => { const value = Number(params.get(key)); return Number.isInteger(value) && value > 0 ? value : fallback; };
-  return { fromDate: params.get("from") ?? undefined, toDate: params.get("to") ?? undefined, partnerId: params.get("partner_id") ?? undefined, productLine: params.get("product_line") ?? undefined, agentId: params.get("agent_id") ?? undefined, status: params.get("status") ?? undefined, page: number("page", 1), pageSize: Math.min(10000, number("page_size", 100)) };
+  const focusLeadId = params.get("focus_lead_id") ?? undefined;
+  // With a focus and no explicit page, the report returns the page that holds the focused deal.
+  const page = params.has("page") ? number("page", 1) : focusLeadId ? null : 1;
+  return { fromDate: params.get("from") ?? undefined, toDate: params.get("to") ?? undefined, partnerId: params.get("partner_id") ?? undefined, productLine: params.get("product_line") ?? undefined, agentId: params.get("agent_id") ?? undefined, status: params.get("status") ?? undefined, stageType: params.get("stage_type") ?? undefined, search: params.get("search") ?? undefined, focusLeadId, page, pageSize: Math.min(10000, number("page_size", 100)) };
 }
 
 function errorResponse(error: unknown, fallback: string) { return NextResponse.json({ error: error instanceof Error ? error.message : fallback }, { status: 400 }); }
@@ -18,7 +21,7 @@ export async function GET(request: NextRequest) {
   try {
     const filters = queryParams(request);
     const isCsv = request.nextUrl.searchParams.get("format") === "csv";
-    const result = await listDealFlow(auth.context.tenantId, isCsv ? { ...filters, page: 1, pageSize: 10000 } : filters);
+    const result = await listDealFlow(auth.context.tenantId, isCsv ? { ...filters, focusLeadId: undefined, page: 1, pageSize: 10000 } : filters);
     if (isCsv) return new NextResponse(csvForDealFlow(result.rows), { headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": "attachment; filename=deal-flow.csv", "Cache-Control": "no-store" } });
     return NextResponse.json({ ...result, readOnly: auth.entitlement.access === "read_only" });
   } catch (error) { return errorResponse(error, "Could not load daily deal flow"); }

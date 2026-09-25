@@ -4,6 +4,10 @@ import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { postPartnerSystemCard } from "@/lib/partnerChat/service";
 import { sendEmail } from "@/lib/email/transport";
 import { slaEscalationEmail } from "@/lib/email/templates";
+import { notifyTenantAgents } from "@/lib/agentAlerts/service";
+import { getEntitlement } from "@/lib/entitlements/get";
+import { hasFeature } from "@/lib/entitlements/types";
+import { isSchemaGap } from "@/lib/appointments/schemaGap";
 
 export type QueueSlaSettings = {
   tenant_id: string;
@@ -41,12 +45,21 @@ function customerName(values: unknown) {
 
 async function processEvent(event: SlaEvent) {
   const supabase = db();
-  const [leadResult, ownerResult, partnerResult] = await Promise.all([
+  // The ladder runs in the database every minute (20260924250100) and this runs whenever the app
+  // does, so an escalation or partner notice can be delivered long after its rung fired.
+  const tellsSomeone = event.rung === "escalate" || event.rung === "partner";
+  const [leadResult, ownerResult, partnerResult, queueResult] = await Promise.all([
     supabase.from("agent_leads").select("values, product_line").eq("tenant_id", event.tenant_id).eq("id", event.lead_id).maybeSingle(),
     supabase.from("tenant_users").select("user_id, users!inner(id, name, email, status)").eq("tenant_id", event.tenant_id).eq("role", "owner").not("accepted_at", "is", null),
     event.partner_id ? supabase.from("partners").select("name").eq("tenant_id", event.tenant_id).eq("id", event.partner_id).maybeSingle() : Promise.resolve({ data: null, error: null }),
+    tellsSomeone ? supabase.from("lead_queue").select("status").eq("tenant_id", event.tenant_id).eq("id", event.work_item_id).maybeSingle() : Promise.resolve({ data: null, error: null }),
   ]);
   if (leadResult.error || ownerResult.error || partnerResult.error) throw new Error("Could not resolve SLA notification recipients");
+  if (queueResult.error) throw new Error(`Could not re-read the transfer: ${queueResult.error.message}`);
+  // Claimed or expired since the rung fired: "needs attention" and "nobody claimed it" are no longer
+  // news, so nothing is sent and the event is marked processed. Warn has no side effect; expire's
+  // nurture is wanted however late it runs.
+  if (tellsSomeone && queueResult.data?.status !== "unclaimed") return;
   const lead = leadResult.data;
   const owner = (ownerResult.data ?? []).find((row: { users?: { status?: string } }) => row.users?.status === "active")?.users;
   const partnerName = partnerResult.data?.name ?? "your partner";
@@ -62,6 +75,31 @@ async function processEvent(event: SlaEvent) {
       const delivery = await sendEmail({ ...email, to: owner.email, userId: owner.id, tenantId: event.tenant_id, templateKey: "lead.sla_escalation", dedupeKey: sourceKey });
       if (!delivery.delivered) throw new Error(`Escalation email was not delivered: ${delivery.reason}`);
     }
+  }
+  if (event.rung === "escalate") {
+    // "…and the lead is offered more widely." A new transfer alerts owners and producers; once it
+    // escalates, everyone who can claim one is asked — assistants (buffer agents) included, the
+    // same three roles `claim_transfer_lead` accepts. The owner already has the escalation alert.
+    await notifyTenantAgents({
+      tenantId: event.tenant_id,
+      roles: ["owner", "producer", "assistant"],
+      excludeUserId: owner?.id ?? null,
+      // The same kind as the owner's alert, so each person's "unclaimed escalation" preference applies.
+      kind: "unclaimed_sla_escalation",
+      title: `Still unclaimed: ${name}`,
+      body: `${name} has waited past the escalation time. Anyone free can claim it now.`,
+      link: `/app/leads/${event.lead_id}`,
+      sourceKey: `unclaimed-sla:${event.work_item_id}:offered`,
+    });
+  }
+  if (event.rung === "expire") {
+    // "…and becomes a nurture lead" (20260924230400). Queued for the dialer only where the agency
+    // dials; otherwise the lead is marked nurture and waits for a nurture campaign. Before the
+    // migration there is nothing to call, and the expiry stands as it always did.
+    const entitlement = await getEntitlement(event.tenant_id).catch(() => null);
+    const queue = entitlement ? hasFeature(entitlement, "outbound_dialing") : false;
+    const nurtured = await supabase.rpc("nurture_expired_transfer", { p_tenant_id: event.tenant_id, p_work_item_id: event.work_item_id, p_queue: queue });
+    if (nurtured.error && !isSchemaGap(nurtured.error)) throw new Error(`Could not move the expired lead to nurture: ${nurtured.error.message}`);
   }
   if (event.rung === "partner" && event.partner_id) {
     await postPartnerSystemCard({ tenantId: event.tenant_id, partnerId: event.partner_id, leadId: event.lead_id, workItemId: event.work_item_id, eventKey: `unclaimed-sla:${event.work_item_id}:partner`, cardType: "nobody_claimed", message: `${name} was not claimed before the response window. Our team has been notified.` });
@@ -80,16 +118,16 @@ export async function processUnclaimedSla() {
   for (const event of claimed.data ?? []) {
     try {
       await processEvent(event);
-      const result = await supabase.from("lead_sla_events").update({ processed_at: now, last_error: null }).eq("id", event.id).is("processed_at", null);
+      const result = await supabase.from("tenant_lead_sla_events").update({ processed_at: now, last_error: null }).eq("id", event.id).is("processed_at", null);
       if (result.error) throw new Error(result.error.message);
       processed += 1;
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown SLA side effect failure";
       failures.push({ eventId: event.id, rung: event.rung, error: message });
-      await supabase.from("lead_sla_events").update({ last_error: message }).eq("id", event.id);
+      await supabase.from("tenant_lead_sla_events").update({ last_error: message }).eq("id", event.id);
     }
   }
-  const recent = await supabase.from("lead_sla_events").select("partner_id, rung").gte("occurred_at", new Date(Date.now() - 86_400_000).toISOString()).in("rung", ["escalate", "expire"]);
+  const recent = await supabase.from("tenant_lead_sla_events").select("partner_id, rung").gte("occurred_at", new Date(Date.now() - 86_400_000).toISOString()).in("rung", ["escalate", "expire"]);
   const digest = new Map<string, { escalated: number; expired: number }>();
   for (const row of recent.data ?? []) { const key = row.partner_id ?? "direct"; const item = digest.get(key) ?? { escalated: 0, expired: 0 }; if (row.rung === "escalate") item.escalated += 1; else item.expired += 1; digest.set(key, item); }
   const partnerIds = [...digest.keys()].filter((id) => id !== "direct");
@@ -111,13 +149,19 @@ export async function reopenExpiredLead(params: { tenantId: string; workItemId: 
  * beside the lookup so a hand-crafted cross-tenant lead id cannot be reopened.
  */
 export async function reopenExpiredLeadByLeadId(params: { tenantId: string; leadId: string; actorId: string }) {
+  // A lead can have more than one work item — an expired inbound transfer and the nurture call its
+  // expiry queued (20260924230400), or earlier completed ones — so the expired transfer is chosen
+  // explicitly rather than asked for as "the" row.
   const queue = await db()
     .from("lead_queue")
-    .select("id")
+    .select("id, status, partner_id, queued_at")
     .eq("tenant_id", params.tenantId)
     .eq("lead_id", params.leadId)
-    .maybeSingle();
+    .order("queued_at", { ascending: false })
+    .limit(20);
   if (queue.error) throw new Error(`Could not resolve lead queue item: ${queue.error.message}`);
-  if (!queue.data?.id) throw new Error("WORK_ITEM_NOT_FOUND");
-  return reopenExpiredLead({ tenantId: params.tenantId, workItemId: queue.data.id, actorId: params.actorId });
+  const rows = (queue.data ?? []) as Array<{ id: string; status: string; partner_id: string | null }>;
+  const target = rows.find((row) => row.status === "expired" && row.partner_id) ?? rows.find((row) => row.status === "expired") ?? rows[0];
+  if (!target?.id) throw new Error("WORK_ITEM_NOT_FOUND");
+  return reopenExpiredLead({ tenantId: params.tenantId, workItemId: target.id, actorId: params.actorId });
 }

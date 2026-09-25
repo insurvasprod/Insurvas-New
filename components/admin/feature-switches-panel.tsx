@@ -1,55 +1,97 @@
 "use client";
 
-import { useState } from "react";
-import { CircleCheck, CircleSlash, Users } from "lucide-react";
-import { toast } from "sonner";
+import { useId, useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
+import { notify } from "@/lib/notify";
 
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { Field, Pill, SettingsTableCard, btn, control } from "@/components/app/settings/primitives";
 import {
   SWITCH_STATES,
   SWITCH_STATE_HELP,
   SWITCH_STATE_LABELS,
+  STANDARD_KILL_NOTICE,
   switchRefusalReason,
   OFF_MESSAGE_MAX,
   type FeatureSwitch,
+  type SwitchReason,
   type SwitchState,
 } from "@/lib/features/killSwitchRules";
+import { cn } from "@/lib/utils";
 
 export type SwitchableFeature = {
   featureKey: string;
   label: string;
   module: string;
   moduleLabel: string;
+  isArchived: boolean;
+  /** Tenants with a per-tenant override on this feature (either direction). */
+  overrideCount: number;
 };
 
 type Draft = { state: SwitchState; betaIds: string; offMessage: string; reason: string };
 
-const STATE_ICON: Record<SwitchState, typeof CircleCheck> = {
-  on: CircleCheck,
-  off: CircleSlash,
-  beta: Users,
-};
+/** Switched off first, then named-tenants, then everything that is on — the rows you came for on top. */
+const STATE_RANK: Record<SwitchState, number> = { off: 0, beta: 1, on: 2 };
 
-const STATE_TONE: Record<SwitchState, string> = {
-  on: "text-[var(--color-success)]",
-  off: "text-[var(--color-danger)]",
-  beta: "text-[var(--color-warning)]",
-};
+const REASON_MAX = 500;
+
+function StatusPill({ state }: { state: SwitchState }) {
+  if (state === "off") return <Pill tone="warning" dot>Switched off</Pill>;
+  if (state === "beta") return <Pill tone="warning" dot>Named tenants only</Pill>;
+  return <Pill tone="success" dot>Available</Pill>;
+}
+
+/**
+ * The row's third column: what the customer reads and what the next admin reads. Never an invented
+ * message — with none left, it quotes the standard notice the agent app really shows.
+ */
+function SwitchDetail({ featureSwitch, reason }: { featureSwitch: FeatureSwitch | undefined; reason: SwitchReason | undefined }) {
+  if (!featureSwitch || featureSwitch.state === "on") return <>&mdash;</>;
+
+  const message = featureSwitch.off_message?.trim() || null;
+  const named = featureSwitch.beta_tenant_ids.length;
+  const lead =
+    featureSwitch.state === "beta"
+      ? `On for ${named} named ${named === 1 ? "tenant" : "tenants"} only. Everyone else sees`
+      : "Customer sees";
+  const hover = reason
+    ? `Last changed ${reason.changedAtUtc}${reason.changedBy ? ` by ${reason.changedBy}` : ""}`
+    : undefined;
+
+  return (
+    <>
+      {message ? (
+        <>
+          {lead}: &ldquo;{message}&rdquo;
+        </>
+      ) : (
+        <>
+          {lead} the standard notice: &ldquo;{STANDARD_KILL_NOTICE}&rdquo;
+        </>
+      )}{" "}
+      <span title={hover}>Internal: {reason?.reason ?? "no reason on record."}</span>
+    </>
+  );
+}
 
 export function FeatureSwitchesPanel({
   features,
   initialSwitches,
+  initialReasons,
+  canToggle,
 }: {
   features: SwitchableFeature[];
   initialSwitches: FeatureSwitch[];
+  initialReasons: Record<string, SwitchReason>;
+  /** super_admin only — the PUT route refuses everyone else regardless. */
+  canToggle: boolean;
 }) {
+  const router = useRouter();
+  const ids = { beta: useId(), msg: useId(), why: useId() };
   const [live, setLive] = useState<Record<string, FeatureSwitch>>(
     Object.fromEntries(initialSwitches.map((s) => [s.feature_key, s])),
   );
+  const [reasons, setReasons] = useState<Record<string, SwitchReason>>(initialReasons);
   const [open, setOpen] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -71,7 +113,14 @@ export function FeatureSwitchesPanel({
     });
   }
 
-  async function save(key: string) {
+  function close() {
+    setOpen(null);
+    setDraft(null);
+    setError(null);
+  }
+
+  async function save(event: FormEvent<HTMLFormElement>, key: string) {
+    event.preventDefault();
     if (!draft) return;
 
     const betaTenantIds = draft.betaIds
@@ -94,171 +143,215 @@ export function FeatureSwitchesPanel({
     setBusy(true);
     setError(null);
 
-    const res = await fetch("/api/admin/feature-switches", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        feature_key: key,
-        state: draft.state,
-        beta_tenant_ids: betaTenantIds,
-        off_message: draft.offMessage.trim() || null,
-        reason: draft.reason.trim(),
-      }),
-    });
-    const body = await res.json().catch(() => null);
-    setBusy(false);
+    try {
+      const res = await fetch("/api/admin/feature-switches", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          feature_key: key,
+          state: draft.state,
+          beta_tenant_ids: betaTenantIds,
+          off_message: draft.offMessage.trim() || null,
+          reason: draft.reason.trim(),
+        }),
+      });
+      const body = (await res.json().catch(() => null)) as
+        | { error?: string; featureSwitch?: FeatureSwitch; reason?: SwitchReason | null }
+        | null;
 
-    if (!res.ok) {
-      // The draft stays on screen — a refused save must never discard what was typed.
-      setError(body?.error ?? "Could not save this switch.");
-      return;
+      if (!res.ok || !body?.featureSwitch) {
+        // The draft stays on screen — a refused save must never discard what was typed.
+        setError(body?.error ?? "Could not save this switch.");
+        return;
+      }
+
+      const saved = body.featureSwitch;
+      setLive((v) => ({ ...v, [key]: saved }));
+      setReasons((v) => {
+        const next = { ...v };
+        if (body.reason) next[key] = body.reason;
+        else delete next[key];
+        return next;
+      });
+      close();
+      notify.done(
+        draft.state === "on" ? "Feature switched back on" : `Feature set to "${SWITCH_STATE_LABELS[draft.state]}"`,
+      );
+      // The headline above the tabs is counted on the server.
+      router.refresh();
+    } catch {
+      setError("Could not reach the server. Nothing was changed.");
+    } finally {
+      setBusy(false);
     }
-
-    setLive((v) => ({ ...v, [key]: body.featureSwitch }));
-    setOpen(null);
-    setDraft(null);
-    toast.success(
-      draft.state === "on" ? "Feature switched back on" : `Feature set to "${SWITCH_STATE_LABELS[draft.state]}"`,
-    );
   }
 
-  const byModule = features.reduce<Record<string, { moduleLabel: string; items: SwitchableFeature[] }>>(
-    (acc, f) => {
-      acc[f.module] ??= { moduleLabel: f.moduleLabel, items: [] };
-      acc[f.module].items.push(f);
-      return acc;
-    },
-    {},
-  );
-
-  const killedCount = features.filter((f) => stateOf(f.featureKey) !== "on").length;
+  const rows = features
+    .map((f, index) => ({ f, index, state: stateOf(f.featureKey) }))
+    .sort((a, b) => STATE_RANK[a.state] - STATE_RANK[b.state] || a.index - b.index);
 
   return (
-    <div className="space-y-6">
-      <div
-        className={`rounded-lg border p-4 text-sm ${
-          killedCount > 0
-            ? "border-[var(--color-warning)]/50 bg-[var(--color-warning)]/5"
-            : "border-border bg-card"
-        }`}
-      >
-        {killedCount > 0 ? (
-          <p>
-            <span className="font-semibold">
-              {killedCount} feature{killedCount === 1 ? " is" : "s are"} not fully on.
-            </span>{" "}
-            A switched-off feature is unreachable for every tenant, including those whose plan includes
-            it. Entitlements are unaffected — nobody has lost anything they paid for.
-          </p>
-        ) : (
-          <p className="text-muted-foreground">
-            Every feature is on. Switching one off takes it away from all tenants at once, whatever
-            their plan says — use it for an incident, not for packaging.
-          </p>
+    <SettingsTableCard title="Kill switches" actions={<Pill tone="error">Super admin only</Pill>}>
+      <ul className="m-0 list-none p-0">
+        {rows.length === 0 && (
+          <li className="px-4 py-3 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--body)]">
+            There are no features in the catalog yet, so there is nothing to switch off.
+          </li>
         )}
-      </div>
 
-      {Object.entries(byModule).map(([moduleKey, group]) => (
-        <Card key={moduleKey}>
-          <CardContent className="space-y-1">
-            <h2 className="mb-2 text-lg font-semibold leading-[1.28] tracking-[-0.015em]">
-              {group.moduleLabel}
-            </h2>
+        {rows.map(({ f, state }) => {
+          const isOpen = open === f.featureKey;
+          const notOn = state !== "on";
+          return (
+            <li
+              key={f.featureKey}
+              className={cn("border-t border-[var(--border)] first:border-t-0", notOn && "bg-[var(--warning-surface)]")}
+            >
+              <div className="flex flex-col gap-2 px-4 py-3 md:flex-row md:items-center md:gap-4">
+                <span className="min-w-0 md:w-[210px] md:shrink-0">
+                  <span
+                    title={f.label}
+                    className="block break-words text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]"
+                  >
+                    {f.featureKey}
+                  </span>
+                  {f.isArchived && (
+                    <Pill tone="neutral" className="mt-1">
+                      Archived
+                    </Pill>
+                  )}
+                </span>
 
-            {group.items.map((f) => {
-              const state = stateOf(f.featureKey);
-              const Icon = STATE_ICON[state];
-              const isOpen = open === f.featureKey;
+                <span className="min-w-0 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)] md:w-[150px] md:shrink-0">
+                  {f.moduleLabel}
+                  {f.overrideCount > 0 && (
+                    <span className="block">
+                      {f.overrideCount} tenant {f.overrideCount === 1 ? "override" : "overrides"}
+                    </span>
+                  )}
+                </span>
 
-              return (
-                <div key={f.featureKey} className="border-t border-border py-3 first:border-t-0">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <Icon className={`size-4 shrink-0 ${STATE_TONE[state]}`} />
-                        <span className="font-medium">{f.label}</span>
-                        {state !== "on" && (
-                          <Badge variant="outline" className="text-[10px]">
-                            {SWITCH_STATE_LABELS[state]}
-                          </Badge>
-                        )}
-                      </div>
-                      <code className="text-[11px] text-muted-foreground">{f.featureKey}</code>
-                    </div>
+                <span className="min-w-0 flex-1 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--body)]">
+                  <SwitchDetail featureSwitch={live[f.featureKey]} reason={reasons[f.featureKey]} />
+                </span>
 
-                    <Button variant="ghost" size="sm" onClick={() => (isOpen ? setOpen(null) : edit(f.featureKey))}>
+                <span className="flex shrink-0 items-center gap-2">
+                  <StatusPill state={state} />
+                  {canToggle && (
+                    <button
+                      type="button"
+                      className={btn("row")}
+                      aria-expanded={isOpen}
+                      aria-label={`${isOpen ? "Cancel changing" : "Change"} the kill switch on ${f.featureKey}`}
+                      onClick={() => (isOpen ? close() : edit(f.featureKey))}
+                    >
                       {isOpen ? "Cancel" : "Change"}
-                    </Button>
+                    </button>
+                  )}
+                </span>
+              </div>
+
+              {canToggle && isOpen && draft && (
+                <form
+                  className="flex flex-col gap-3.5 border-t border-[var(--border)] bg-[var(--canvas)] px-4 py-4"
+                  onSubmit={(event) => void save(event, f.featureKey)}
+                  noValidate
+                >
+                  <div>
+                    <div
+                      role="radiogroup"
+                      aria-label={`State of ${f.featureKey}`}
+                      className="flex flex-wrap gap-2"
+                    >
+                      {SWITCH_STATES.map((s) => (
+                        <button
+                          key={s}
+                          type="button"
+                          role="radio"
+                          aria-checked={draft.state === s}
+                          className={btn(draft.state === s ? "primary-sm" : "secondary")}
+                          onClick={() => setDraft({ ...draft, state: s })}
+                        >
+                          {SWITCH_STATE_LABELS[s]}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="mt-1.5 mb-0 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">
+                      {SWITCH_STATE_HELP[draft.state]}
+                    </p>
                   </div>
 
-                  {isOpen && draft && (
-                    <div className="mt-3 space-y-3 rounded-md border border-border bg-[var(--color-page-bg)] p-3">
-                      <div className="flex flex-wrap gap-2">
-                        {SWITCH_STATES.map((s) => (
-                          <Button
-                            key={s}
-                            size="sm"
-                            variant={draft.state === s ? "default" : "outline"}
-                            onClick={() => setDraft({ ...draft, state: s })}
-                          >
-                            {SWITCH_STATE_LABELS[s]}
-                          </Button>
-                        ))}
-                      </div>
-                      <p className="text-xs text-muted-foreground">{SWITCH_STATE_HELP[draft.state]}</p>
-
-                      {draft.state === "beta" && (
-                        <div className="space-y-1">
-                          <Label htmlFor={`beta-${f.featureKey}`}>Tenant IDs, one per line</Label>
-                          <textarea
-                            id={`beta-${f.featureKey}`}
-                            rows={3}
-                            className="w-full rounded-md border border-input bg-background p-2 font-mono text-xs"
-                            value={draft.betaIds}
-                            onChange={(e) => setDraft({ ...draft, betaIds: e.target.value })}
-                          />
-                        </div>
-                      )}
-
-                      {draft.state !== "on" && (
-                        <div className="space-y-1">
-                          <Label htmlFor={`msg-${f.featureKey}`}>Message shown to agents (optional)</Label>
-                          <Input
-                            id={`msg-${f.featureKey}`}
-                            maxLength={OFF_MESSAGE_MAX}
-                            placeholder="Dialing is unavailable while we switch DNC providers."
-                            value={draft.offMessage}
-                            onChange={(e) => setDraft({ ...draft, offMessage: e.target.value })}
-                          />
-                          <p className="text-xs text-muted-foreground">
-                            Leave empty to say nothing beyond &ldquo;temporarily unavailable&rdquo;.
-                          </p>
-                        </div>
-                      )}
-
-                      <div className="space-y-1">
-                        <Label htmlFor={`why-${f.featureKey}`}>Why (required, audit-logged)</Label>
-                        <Input
-                          id={`why-${f.featureKey}`}
-                          placeholder="DNC vendor outage, incident #412"
-                          value={draft.reason}
-                          onChange={(e) => setDraft({ ...draft, reason: e.target.value })}
-                        />
-                      </div>
-
-                      {error && <p className="text-xs font-medium text-[var(--color-danger)]">{error}</p>}
-
-                      <Button size="sm" onClick={() => save(f.featureKey)} disabled={busy}>
-                        {busy ? "Saving…" : "Apply"}
-                      </Button>
-                    </div>
+                  {draft.state === "beta" && (
+                    <Field label="Tenant IDs, one per line" htmlFor={ids.beta} required>
+                      <textarea
+                        id={ids.beta}
+                        rows={3}
+                        className={cn(control, "h-auto min-h-[88px] py-2.5 font-mono")}
+                        value={draft.betaIds}
+                        onChange={(e) => setDraft({ ...draft, betaIds: e.target.value })}
+                      />
+                    </Field>
                   )}
-                </div>
-              );
-            })}
-          </CardContent>
-        </Card>
-      ))}
-    </div>
+
+                  {draft.state !== "on" && (
+                    <Field
+                      label="Message shown to agents"
+                      htmlFor={ids.msg}
+                      hint={<>Optional. Leave it empty and agents see the standard notice: &ldquo;{STANDARD_KILL_NOTICE}&rdquo;</>}
+                    >
+                      <input
+                        id={ids.msg}
+                        className={control}
+                        maxLength={OFF_MESSAGE_MAX}
+                        placeholder="Dialing is unavailable while we switch DNC providers."
+                        value={draft.offMessage}
+                        onChange={(e) => setDraft({ ...draft, offMessage: e.target.value })}
+                      />
+                    </Field>
+                  )}
+
+                  <Field
+                    label="Why"
+                    htmlFor={ids.why}
+                    required
+                    hint="Required. Written to the audit log, and shown on this row as the internal reason."
+                  >
+                    <input
+                      id={ids.why}
+                      className={control}
+                      maxLength={REASON_MAX}
+                      placeholder="DNC vendor outage, incident #412"
+                      value={draft.reason}
+                      onChange={(e) => setDraft({ ...draft, reason: e.target.value })}
+                    />
+                  </Field>
+
+                  {error && (
+                    <p role="alert" className="m-0 text-[12px] leading-[1.5] font-semibold tracking-[-0.01em] text-[var(--error-ink)]">
+                      {error}
+                    </p>
+                  )}
+
+                  <div className="flex flex-wrap gap-2">
+                    <button type="submit" className={btn("primary")} disabled={busy}>
+                      {busy ? "Saving…" : "Apply"}
+                    </button>
+                    <button type="button" className={btn("ghost")} onClick={close} disabled={busy}>
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+
+      <div className="border-t border-[var(--border)] bg-[var(--canvas)] px-4 py-3 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--body)]">
+        Archived features are listed too &mdash; archiving only takes a feature out of the plan picker, and tenants
+        who already have it keep it, so a kill switch on one still takes something away. Naming a feature and taking
+        it away from every tenant do not share a permission: a non-super-admin sees this tab read-only.
+      </div>
+    </SettingsTableCard>
   );
 }

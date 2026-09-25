@@ -14,6 +14,8 @@ export type SubscriptionRow = {
   plan_version: number | null;
   pending_plan_id: string | null;
   pending_plan_name: string | null;
+  /** The queued plan's version, so "Growth v4 → Scale v2" names the exact version being moved to. */
+  pending_plan_version: number | null;
   status: SubscriptionStatus;
   billing_cycle: BillingCycle;
   trial_ends_at: string | null;
@@ -38,26 +40,19 @@ type RawRow = {
   cancel_reason: string | null;
   started_at: string;
   tenants: { name: string } | null;
+  plan: { code: string; name: string; version: number } | null;
+  pending_plan: { name: string; version: number } | null;
 };
 
+// Both plan joins are embedded rather than fetched in a second query. subscriptions has two FKs to
+// plans, so each embed must name its constraint or PostgREST refuses the ambiguous join. Both
+// constraints were checked against the live schema, not just the migrations.
 const COLUMNS =
-  "id, tenant_id, plan_id, pending_plan_id, status, billing_cycle, trial_ends_at, current_period_start, current_period_end, cancel_at_period_end, cancel_reason, started_at, tenants(name)";
+  "id, tenant_id, plan_id, pending_plan_id, status, billing_cycle, trial_ends_at, current_period_start, current_period_end, cancel_at_period_end, cancel_reason, started_at, tenants(name), plan:plans!subscriptions_plan_id_fkey(code, name, version), pending_plan:plans!subscriptions_pending_plan_id_fkey(name, version)";
 
-/** Joins plan names for both the current and any queued plan, in one extra query. */
-async function decorate(rows: RawRow[]): Promise<SubscriptionRow[]> {
-  if (rows.length === 0) return [];
-
-  const supabase = getSupabaseServiceClient();
-  const planIds = [
-    ...new Set(rows.flatMap((r) => [r.plan_id, r.pending_plan_id]).filter((id): id is string => Boolean(id))),
-  ];
-
-  const { data: plans } = await supabase.from("plans").select("id, code, name, version").in("id", planIds);
-  const planById = new Map((plans ?? []).map((p) => [p.id, p]));
-
-  return rows.map((r) => {
-    const plan = planById.get(r.plan_id);
-    const pending = r.pending_plan_id ? planById.get(r.pending_plan_id) : null;
+/** Flattens the embedded plan names for both the current and any queued plan. */
+function decorate(rows: RawRow[]): SubscriptionRow[] {
+  return rows.map(({ plan, pending_plan: pending, ...r }) => {
     return {
       ...r,
       tenant_name: r.tenants?.name ?? null,
@@ -65,6 +60,7 @@ async function decorate(rows: RawRow[]): Promise<SubscriptionRow[]> {
       plan_name: plan?.name ?? null,
       plan_version: plan?.version ?? null,
       pending_plan_name: pending?.name ?? null,
+      pending_plan_version: pending?.version ?? null,
     };
   });
 }
@@ -102,6 +98,6 @@ export async function fetchTenantSubscription(tenantId: string): Promise<Subscri
   // failed query can imitate.
   if (error) throw new Error(`Could not load the tenant subscription: ${error.message}`);
 
-  const decorated = await decorate(data ?? []);
+  const decorated = decorate(data ?? []);
   return decorated[0] ?? null;
 }

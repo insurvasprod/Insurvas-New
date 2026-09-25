@@ -4,6 +4,7 @@
 import { randomUUID } from "node:crypto";
 import { SignJWT } from "jose";
 import { createClient } from "@supabase/supabase-js";
+import { createFixtureUser, deleteFixtureUser } from "./lib/fixtureUser.mjs";
 import pg from "pg";
 
 const BASE = process.env.APP_BASE_URL ?? "http://localhost:3000";
@@ -11,10 +12,10 @@ const db = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABA
 const stamp = Date.now();
 const tenantId = randomUUID();
 const otherTenantId = randomUUID();
-const ownerId = randomUUID();
-const otherOwnerId = randomUUID();
-const producerId = randomUUID();
-const partnerUserId = randomUUID();
+let ownerId = null;
+let otherOwnerId = null;
+let producerId = null;
+let partnerUserId = null;
 const productCode = `qa_product_${stamp}`;
 let partnerId = null;
 let otherPartnerId = null;
@@ -62,7 +63,7 @@ async function cleanup() {
   await db.from("audit_log").delete().in("actor_id", [ownerId, otherOwnerId, producerId]);
   await db.from("tenant_entitlements").delete().in("tenant_id", [tenantId, otherTenantId]);
   await db.from("tenant_users").delete().in("tenant_id", [tenantId, otherTenantId]);
-  await db.from("users").delete().in("id", [ownerId, otherOwnerId, producerId, partnerUserId]);
+  for (const id of [ownerId, otherOwnerId, producerId, partnerUserId]) await deleteFixtureUser(db, id);
   await db.from("tenants").delete().in("id", [tenantId, otherTenantId]);
   if (productId) await db.from("products").delete().eq("id", productId);
 }
@@ -74,13 +75,10 @@ async function main() {
     { id: otherTenantId, name: `LA-1.3 isolation ${stamp}`, status: "active", onboarding_state: "completed" },
   ]);
   if (tenants.error) throw new Error(tenants.error.message);
-  const users = await db.from("users").insert([
-    { id: ownerId, email: `la13-owner-${stamp}@invalid.test`, name: "LA-1.3 owner", password_hash: "verification-only", status: "active" },
-    { id: otherOwnerId, email: `la13-other-${stamp}@invalid.test`, name: "LA-1.3 other owner", password_hash: "verification-only", status: "active" },
-    { id: producerId, email: `la13-producer-${stamp}@invalid.test`, name: "LA-1.3 producer", password_hash: "verification-only", status: "active" },
-    { id: partnerUserId, email: `la13-partner-${stamp}@invalid.test`, name: "LA-1.3 partner user", password_hash: "verification-only", status: "active" },
-  ]);
-  if (users.error) throw new Error(users.error.message);
+  ({ userId: ownerId } = await createFixtureUser(db, { email: `la13-owner-${stamp}@invalid.test`, name: "LA-1.3 owner" }));
+  ({ userId: otherOwnerId } = await createFixtureUser(db, { email: `la13-other-${stamp}@invalid.test`, name: "LA-1.3 other owner" }));
+  ({ userId: producerId } = await createFixtureUser(db, { email: `la13-producer-${stamp}@invalid.test`, name: "LA-1.3 producer" }));
+  ({ userId: partnerUserId } = await createFixtureUser(db, { email: `la13-partner-${stamp}@invalid.test`, name: "LA-1.3 partner user" }));
   const memberships = await db.from("tenant_users").insert([
     { tenant_id: tenantId, user_id: ownerId, role: "owner" },
     { tenant_id: tenantId, user_id: producerId, role: "producer" },
@@ -94,8 +92,8 @@ async function main() {
   ]);
   if (entitlements.error) throw new Error(entitlements.error.message);
   const partners = await db.from("partners").insert([
-    { tenant_id: tenantId, name: `LA-1.3 partner ${stamp}`, partner_type: "publisher", status: "active" },
-    { tenant_id: otherTenantId, name: `LA-1.3 other partner ${stamp}`, partner_type: "publisher", status: "active" },
+    { slug: `fx-${Math.random().toString(36).slice(2, 10)}`, tenant_id: tenantId, name: `LA-1.3 partner ${stamp}`, partner_type: "publisher", status: "active" },
+    { slug: `fx-${Math.random().toString(36).slice(2, 10)}`, tenant_id: otherTenantId, name: `LA-1.3 other partner ${stamp}`, partner_type: "publisher", status: "active" },
   ]).select("id, tenant_id");
   if (partners.error) throw new Error(partners.error.message);
   partnerId = partners.data.find((row) => row.tenant_id === tenantId)?.id ?? null;
@@ -123,7 +121,16 @@ async function main() {
     check("a newly added catalog product appears without a deploy", initialBody.products.some((row) => row.code === productCode && row.is_enabled === false));
 
     const enabled = await api(`/api/app/products/${productCode}`, owner, { method: "PATCH", ...json({ is_enabled: true }) });
-    check("owner can enable a catalog product", enabled.status === 200 && (await enabled.json()).product?.product_code === productCode);
+    const enabledBody = await enabled.clone().json().catch(() => null);
+    check("owner can enable a catalog product", enabled.status === 200 && enabledBody?.product?.product_code === productCode, JSON.stringify({ status: enabled.status, body: enabledBody }));
+    const rejectedSubmissionId = randomUUID();
+    const rejectedSubmission = await api("/api/partner/leads", portal, { method: "POST", ...json({ consent_attested: true, product_code: productCode, submission_id: rejectedSubmissionId, values: {} }) });
+    const rejectedSubmissionBody = await rejectedSubmission.json();
+    const rejectedLead = await db.from("agent_leads").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId).eq("submission_id", rejectedSubmissionId);
+    check("an unapproved product is rejected before any lead write", rejectedSubmission.status === 403 && rejectedSubmissionBody.error === "This partner is not approved for that product" && rejectedLead.count === 0);
+    const rejectedForm = await api(`/api/partner/forms/${productCode}`, portal);
+    const rejectedDraft = await api(`/api/partner/forms/${productCode}/draft`, portal);
+    check("direct form and draft access fail closed with a clear product reason", rejectedForm.status === 403 && rejectedDraft.status === 403 && (await rejectedForm.json()).error === "This partner is not approved for that product" && (await rejectedDraft.json()).error === "This partner is not approved for that product");
     const repeatedEnable = await api(`/api/app/products/${productCode}`, owner, { method: "PATCH", ...json({ is_enabled: true }) });
     const concurrentEnable = await Promise.all([
       api(`/api/app/products/${productCode}`, owner, { method: "PATCH", ...json({ is_enabled: true }) }),
@@ -177,7 +184,7 @@ async function main() {
         await connection.query("begin");
         await connection.query("select set_config('app.tenant_id', $1, true)", [tenantId]);
         const visible = await connection.query("select tenant_id from tenant_products");
-        check("tenant product RLS does not expose another tenant", visible.rows.every((row) => row.tenant_id === tenantId));
+        check("tenant product RLS does not expose another tenant", visible.rows.length > 0 && visible.rows.every((row) => row.tenant_id === tenantId), `${visible.rows.length} row(s) visible`);
         await connection.query("rollback");
       } finally { connection.release(); await pool.end(); }
     }

@@ -45,7 +45,7 @@ export async function fetchPlanVersionEditorData(planId: string): Promise<PlanVe
       )
       .eq("plan_id", planId)
       .maybeSingle<PlanPrices>(),
-    supabase.from("plan_limits").select("max_seats, max_carriers, max_publishers, max_marketing_partners, max_affiliates, max_buffer_seats, max_partner_users").eq("plan_id", planId).maybeSingle<PlanLimits>(),
+    supabase.from("plan_limits").select("max_seats, max_carriers, max_publishers, max_marketing_partners, max_affiliates, max_buffer_seats, max_partner_users, max_setter_seats, max_active_campaigns").eq("plan_id", planId).maybeSingle<PlanLimits>(),
     supabase
       .from("subscriptions")
       .select("id", { count: "exact", head: true })

@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import type { Metadata } from "next";
 
-import { resolveTenantContext } from "@/lib/tenantAuth/requireTenant";
+import { getTenantSession, resolveTenantContext } from "@/lib/tenantAuth/requireTenant";
 import { outstandingDocuments } from "@/lib/legal/acceptance";
 import { fetchDocument } from "@/lib/legal/queries";
 import { AcceptTermsPanel } from "@/components/app/accept-terms-panel";
@@ -15,12 +15,14 @@ export const metadata: Metadata = { title: "Updated terms · Insurvas" };
  * outstanding, so a screen inside it would redirect to itself forever.
  */
 export default async function AcceptTermsPage() {
-  const context = await resolveTenantContext();
+  // Both keyed by the verified session, so fetched together; the context is still checked first.
+  const session = await getTenantSession();
+  if (!session) redirect("/app/login");
+  const [context, outstanding] = await Promise.all([resolveTenantContext(), outstandingDocuments(session.sub)]);
   if (!context) redirect("/app/login");
 
-  const outstanding = await outstandingDocuments(context.userId);
   // Nothing owed — they arrived by typing the URL, or accepted in another tab.
-  if (outstanding.length === 0) redirect("/app");
+  if (outstanding.length === 0) redirect("/app/dashboard");
 
   // The full text is loaded here rather than linked away to, because "accept without reading" is
   // easier to argue with when the words were on the screen.
@@ -44,10 +46,14 @@ export default async function AcceptTermsPage() {
   );
 
   return (
-    <div className="portal-agent min-h-screen bg-[var(--color-page-bg)] py-10">
-      <main className="mx-auto max-w-3xl px-4 sm:px-6">
-        <AcceptTermsPanel documents={documents} />
-      </main>
+    <div className="portal-agent flex min-h-screen items-center justify-center bg-[var(--color-page-bg)] px-4 py-10 sm:p-10">
+      {/* Not a direct `main` child: the shell's `.portal-agent > main` reserves 264px for a sidebar
+          this screen does not have, which pushed the card off centre. */}
+      <div className="w-full max-w-[820px]">
+        <main>
+          <AcceptTermsPanel documents={documents} />
+        </main>
+      </div>
     </div>
   );
 }

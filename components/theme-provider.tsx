@@ -53,8 +53,15 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     const media = window.matchMedia("(prefers-color-scheme: dark)");
     const applyTheme = () => {
       const isDark = theme === "dark" || (theme === "system" && media.matches);
-      document.documentElement.classList.toggle("dark", isDark);
-      document.documentElement.style.colorScheme = isDark ? "dark" : "light";
+      const root = document.documentElement;
+      // The class lands after first paint (see above), and every control carries a 120ms colour
+      // transition — so without this, a dark-mode load visibly fades each button, link and field
+      // from light to dark. Transitions are switched off for the one frame the class changes in.
+      root.classList.add("theme-switching");
+      root.classList.toggle("dark", isDark);
+      root.style.colorScheme = isDark ? "dark" : "light";
+      void root.offsetHeight; // commit the new colours before transitions come back
+      requestAnimationFrame(() => root.classList.remove("theme-switching"));
     };
 
     applyTheme();

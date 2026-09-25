@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { toast } from "sonner";
+import { notify } from "@/lib/notify";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,7 +31,8 @@ export function EditUserDialog({
   onClose,
   onSaved,
 }: {
-  user: UserListRow | null;
+  /** `phone` is the stored number; the save sends the whole form, so it must start from it. */
+  user: (UserListRow & { phone?: string | null }) | null;
   /** Separate from `user` so the row stays rendered while the dialog animates closed. */
   open: boolean;
   onClose: () => void;
@@ -41,7 +42,9 @@ export function EditUserDialog({
   // opening a different user remounts it with fresh initial state — which is why there's no
   // effect here re-seeding the fields (that would be a cascading render).
   const [name, setName] = useState(user?.name ?? "");
-  const [phone, setPhone] = useState("");
+  // Seeded from the row, not "": PATCH sends `p_phone: phone || null`, so an empty field here
+  // wiped the stored number on every save, even one that only changed the name.
+  const [phone, setPhone] = useState(user?.phone ?? "");
   const [email, setEmail] = useState(user?.email ?? "");
   const [role, setRole] = useState<TenantRole>((user?.tenant_role as TenantRole) ?? "producer");
   const [loading, setLoading] = useState(false);
@@ -61,7 +64,7 @@ export function EditUserDialog({
     setLoading(false);
 
     if (!res.ok) {
-      toast.error(body?.error ?? "Could not update user");
+      notify.block(body?.error ?? "Could not update user");
       return;
     }
 
@@ -69,12 +72,12 @@ export function EditUserDialog({
 
     if (body.emailChange) {
       // Keep the dialog open so the admin can hand over the confirmation link.
-      toast.success("Saved — the new email needs confirming");
+      notify.done("Saved — the new email needs confirming");
       setEmailChange(body.emailChange);
       return;
     }
 
-    toast.success(`${name} updated`);
+    notify.done(`${name} updated`);
     onClose();
   }
 

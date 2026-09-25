@@ -1,5 +1,28 @@
 # LA-0 blockers — what is actually wrong, and who can clear it
 
+> ## ⚠️ SUPERSEDED, 2026-09-13 — the root cause described below is fixed
+>
+> This document says 21 of 42 LA-0 acceptance criteria are BLOCKED, and attributes all of them to one
+> cause: `.env.local` pointing at a database that held only 27 of the 131 RPCs the application calls.
+>
+> **That is no longer true.** `verify-rpc-contract`, in the full run of 2026-09-13:
+>
+>     RPCs called by the application : 132
+>     Present in the database        : 132
+>     Missing from the database      : 0
+>
+> The compatibility bridge was extended and the collisions behind it resolved — eight of them, tracked
+> in backlog 182. `LA-0.1-0.6-QA-AUDIT.md` now records **34 PASS** and one split row.
+>
+> What remains true, and is worth keeping: the two-lineage diagnosis. This repository is the tenant-era
+> SaaS and it shares one Postgres schema with the organizations-era CRM. That is still the case, it is
+> still the source of most of this module's defects, and the reading below is the clearest explanation
+> of it written down anywhere. Read it for the diagnosis, not for the counts.
+>
+> **Open LA-0 work is now one item**, not twenty-one: `verify-contacts` fails two checks — secondary
+> phone matching (backlog 190, a fix that exists in the repository and not in the database) and a
+> 20,000-contact search at 529.7ms against a 500ms budget.
+
 Date: 2026-09-11. Companion to `LA-0.1-0.6-QA-AUDIT.md` and `LA-0-NOTION-DELTA.md`.
 
 Read this first. The audit says 21 of 42 acceptance criteria are `BLOCKED`. They are blocked by
@@ -204,3 +227,25 @@ implementation, and the dedupe scoring is sound.
 
 What was missing was the ability to *prove* any of it, because the proof ran against a database
 this application does not fit. That was invisible because nothing checked it. Now something does.
+
+## Current recheck — 2026-09-14
+
+The historical contact statements above are superseded by the current live evidence. The focused
+contact verifier now confirms secondary-phone matching, spouse separation, merge/undo concurrency,
+custom-field CSV round-trip, cross-tenant isolation, role/session guards, and audit rows. The
+aggregate LA-0 run passed five of six suites; its only failure was the 20,000-contact duplicate
+search at 515.5 ms against the 500 ms target. The three performance migrations are confirmed live and
+the latest focused verifier now passes the same benchmark under 500 ms.
+
+The first safe response,
+`supabase/migrations/20260914200000_la_0_6_duplicate_search_performance.sql`, the indexed candidate
+repair `supabase/migrations/20260914210000_la_0_6_indexed_duplicate_candidates.sql`, and the phone
+marker repair `supabase/migrations/20260914220000_la_0_6_dedupe_phone_marker.sql` are now promoted.
+The latest verifier still measures 515.5 ms because it includes the full Supabase PostgREST RPC
+round trip. The latest focused verifier is now green, so the LA-0.6 performance blocker is resolved;
+retain the benchmark as a regression check.
+
+The remaining non-contact LA-0 blockers are unchanged and intentional: controlled dashboard timing
+and checklist re-login persistence, an end-to-end commission-ledger row trace, and provider-backed
+appointment-warning delivery/renewal suppression. These are not replaced with repository-only
+claims.

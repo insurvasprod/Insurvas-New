@@ -4,6 +4,7 @@ import { audit } from "@/lib/audit/log";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import { partnerActionSchema } from "@/lib/partners/schemas";
 import { addPartnerTerm, transitionPartner, updatePartner } from "@/lib/partners/service";
+import { getSupabaseServiceClient } from "@/lib/supabase/service";
 
 const PARTNER_ROLES = ["owner", "bookkeeper"] as const;
 
@@ -24,8 +25,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       await audit({ actorType: "tenant", actorId: auth.context.userId, action: "tenant.partner_term_added", targetType: "partner_term", targetId: term.id, reason: `Effective ${term.effective_from}`, metadata: { partnerId: id, payoutModel: term.payout_model, rateCents: term.rate_cents, ratePctBp: term.rate_pct_bp, effectiveFrom: term.effective_from }, request });
       return NextResponse.json({ term }, { status: 201 });
     }
+    // Read the status being left so the audit row says "from active to paused", not "from current".
+    const { data: previous } = await getSupabaseServiceClient().from("partners").select("status").eq("tenant_id", auth.context.tenantId).eq("id", id).maybeSingle<{ status: string }>();
     const partner = await transitionPartner(auth.context.tenantId, id, parsed.data.next_status, parsed.data.confirmation, auth.entitlement.limits);
-    await audit({ actorType: "tenant", actorId: auth.context.userId, action: "tenant.partner_lifecycle_changed", targetType: "partner", targetId: id, reason: parsed.data.reason, metadata: { from: "current", to: partner.status, revokedPartnerUsers: partner.status === "offboarded" }, request });
+    await audit({ actorType: "tenant", actorId: auth.context.userId, action: "tenant.partner_lifecycle_changed", targetType: "partner", targetId: id, reason: parsed.data.reason, metadata: { from: previous?.status ?? null, to: partner.status, revokedPartnerUsers: partner.status === "offboarded" }, request });
     return NextResponse.json({ partner });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Could not update partner";

@@ -9,7 +9,9 @@ const CONTROL_OR_MARKUP = /[\u0000-\u001f\u007f<>]/;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const PHONE_KEYS = ["phone", "phone_number", "primary_phone"];
 const NAME_KEYS = ["full_name", "name"];
-const OUTCOME_SOLD = /^(sold|issued|approved|won|converted|submitted)$/i;
+// Outcomes are disposition keys (`application_submitted`, from deal_flow.call_result or the queue),
+// not bare words, so match the word at the end of the key as well as on its own.
+const OUTCOME_SOLD = /(^|_)(sold|issued|approved|won|converted|submitted)$/i;
 
 function record(value: unknown): Record<string, unknown> { return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {}; }
 function text(value: unknown, max = 240) {

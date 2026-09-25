@@ -4,7 +4,7 @@ import { getCurrentAdmin } from "@/lib/adminAuth/getCurrentAdmin";
 import { canManagePlans } from "@/lib/plans/permissions";
 import { fetchPlans } from "@/lib/plans/queries";
 import { fetchPricesForPlans } from "@/lib/plans/versionEditor";
-import { AdminPageHeader } from "@/components/admin/page-header";
+import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { PlansTable } from "@/components/admin/plans-table";
 
 export default async function PlansPage() {
@@ -13,17 +13,23 @@ export default async function PlansPage() {
   if (!canManagePlans(admin.role)) redirect("/admin");
 
   const plans = await fetchPlans();
-  const priceMap = await fetchPricesForPlans(plans.map((p) => p.id));
-  // Serialise the Map for the client component.
-  const prices = Object.fromEntries(priceMap);
+  const latestIds = plans.map((p) => p.id);
+  const [priceMap, latestSubs] = await Promise.all([
+    fetchPricesForPlans(latestIds),
+    // Live subscribers on each LATEST version (admin_plan_list counts every version of the code),
+    // so the page can say how many are still on an older one — the same "live" rule as the view.
+    latestIds.length
+      ? getSupabaseServiceClient().from("subscriptions").select("plan_id").in("plan_id", latestIds).neq("status", "cancelled")
+      : Promise.resolve({ data: [] as { plan_id: string }[], error: null }),
+  ]);
+  if (latestSubs.error) throw new Error(`Could not count subscribers per version: ${latestSubs.error.message}`);
+
+  const latestSubscribers: Record<string, number> = {};
+  for (const row of latestSubs.data ?? []) latestSubscribers[row.plan_id] = (latestSubscribers[row.plan_id] ?? 0) + 1;
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
-      <AdminPageHeader
-        title="Plans"
-        subtitle="What the business sells. Pricing lands in SA-2.4 and the feature picker in SA-2.3."
-      />
-      <PlansTable initialPlans={plans} prices={prices} />
+    <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
+      <PlansTable plans={plans} prices={Object.fromEntries(priceMap)} latestSubscribers={latestSubscribers} />
     </div>
   );
 }

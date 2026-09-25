@@ -1,12 +1,18 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { audit } from "@/lib/audit/log";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
-import { listDispositionMappings, removeDispositionMapping, setDispositionMapping } from "@/lib/pipelines/service";
+import { listDispositionCatalog, listDispositionMappings, removeDispositionMapping, setDispositionMapping, unmappedOutcomes } from "@/lib/pipelines/service";
 
 export async function GET() {
   const auth = await requireFeatureRole("book_of_business", ["owner"]);
   if (auth instanceof NextResponse) return auth;
-  try { return NextResponse.json({ mappings: await listDispositionMappings(auth.context.tenantId) }); } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Could not load mappings" }, { status: 500 }); }
+  try {
+    const [mappings, dispositions] = await Promise.all([listDispositionMappings(auth.context.tenantId), listDispositionCatalog(auth.context.tenantId)]);
+    // `dispositions` and `unmapped` are additive: the catalogue for labels, and how many recent
+    // outcomes had no stage to move the lead to.
+    const unmapped = await unmappedOutcomes(auth.context.tenantId, mappings.map((mapping) => mapping.disposition_key));
+    return NextResponse.json({ mappings, dispositions, unmapped });
+  } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Could not load mappings" }, { status: 500 }); }
 }
 
 export async function POST(request: NextRequest) {

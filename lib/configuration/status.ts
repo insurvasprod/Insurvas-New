@@ -14,6 +14,7 @@ import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { fetchTemplates } from "@/lib/templates/queries";
 import { listComplianceVendors, getDncDialingStatus } from "@/lib/compliance/service";
 import { listMeterPricing, listUsageMonitor } from "@/lib/creditsLimits/service";
+import { coverage, listStateDisclosures } from "@/lib/stateDisclosures/service";
 import { fetchAllSwitches } from "@/lib/features/killSwitch";
 import { fetchFeatureCatalog } from "@/lib/features/queries";
 import { getAllSettings } from "@/lib/settings/queries";
@@ -49,7 +50,7 @@ function plural(n: number, one: string, many = `${one}s`): string {
 }
 
 export async function getConfigurationOverview(): Promise<ConfigurationOverview> {
-  const [payments, offers, products, carriers, templates, compliance, credits, features, settings] = await Promise.all([
+  const [payments, offers, products, carriers, templates, compliance, disclosures, credits, features, settings] = await Promise.all([
     safe(async () => {
       const status = await getProviderStatus();
       if (status.mode === "unknown") {
@@ -107,6 +108,31 @@ export async function getConfigurationOverview(): Promise<ConfigurationOverview>
     }),
 
     safe(async () => {
+      const published = await listStateDisclosures();
+      const byProduct = coverage(published);
+      // A disclosure table can be full of rows and still leave dialing blocked, because the dialer
+      // matches one exact (state, product) pair. The attention case is therefore "some product is
+      // short of states", not "the table is empty" — the second hides the first once anything at
+      // all has been published.
+      const short = byProduct.filter((entry) => entry.missing.length > 0);
+      if (byProduct.length === 0) {
+        return {
+          tone: "attention",
+          badge: "None published",
+          detail: "No disclosure is in force, so outbound dialing is blocked everywhere.",
+        };
+      }
+      return {
+        tone: short.length > 0 ? "attention" : "good",
+        badge: short.length > 0 ? `${plural(short.length, "product")} incomplete` : "Nationwide",
+        detail:
+          short.length > 0
+            ? `${short[0].product_code} is missing ${plural(short[0].missing.length, "state")}, so dialing is blocked there.`
+            : `${plural(byProduct.length, "product")} covered in every state.`,
+      };
+    }),
+
+    safe(async () => {
       const [pricing, over80] = await Promise.all([listMeterPricing(), listUsageMonitor(true)]);
       const belowCost = pricing.filter((m) => m.sell_cents > 0 && m.sell_cents <= m.cost_cents).length;
       return {
@@ -151,6 +177,7 @@ export async function getConfigurationOverview(): Promise<ConfigurationOverview>
     carriers,
     templates,
     "compliance-sources": compliance,
+    "state-disclosures": disclosures,
     "credits-limits": credits,
     features,
     // SA-4.11 and SA-4.12 are not built. Saying so is more useful than an empty card that looks

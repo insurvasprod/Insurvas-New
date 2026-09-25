@@ -26,6 +26,8 @@ const savePlanVersionSchema = z.object({
     max_affiliates: capacityField,
     max_buffer_seats: capacityField,
     max_partner_users: capacityField,
+    max_setter_seats: capacityField,
+    max_active_campaigns: capacityField,
   }),
 });
 
@@ -51,7 +53,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     .select("price_monthly_cents, price_quarterly_cents, price_yearly_cents, setup_fee_cents, trial_days")
     .eq("plan_id", id)
     .maybeSingle();
-  const { data: limitsBefore } = await supabase.from("plan_limits").select("max_publishers, max_marketing_partners, max_affiliates, max_buffer_seats, max_partner_users").eq("plan_id", id).maybeSingle();
+  const { data: limitsBefore } = await (supabase as unknown as { from(table: string): { select(columns: string): { eq(column: string, value: string): { maybeSingle(): Promise<{ data: Record<string, unknown> | null }> } } } }).from("plan_limits").select("max_publishers, max_marketing_partners, max_affiliates, max_buffer_seats, max_partner_users, max_setter_seats, max_active_campaigns").eq("plan_id", id).maybeSingle();
 
   const { data, error } = await supabase.rpc("admin_save_plan_version", {
     p_plan_id: id,
@@ -86,6 +88,8 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     p_max_partner_users: parsed.data.limits.max_partner_users,
   });
   if (limitsError) return NextResponse.json({ error: "Could not save plan capacity limits" }, { status: 500 });
+  const { error: outboundLimitsError } = await (supabase as unknown as { from(table: string): { update(values: Record<string, unknown>): { eq(column: string, value: string): Promise<{ error: { message: string } | null }> } } }).from("plan_limits").update({ max_setter_seats: parsed.data.limits.max_setter_seats, max_active_campaigns: parsed.data.limits.max_active_campaigns }).eq("plan_id", result.target_plan_id);
+  if (outboundLimitsError) return NextResponse.json({ error: "Could not save outbound capacity limits" }, { status: 500 });
   if (!result.created_new_version) await rebuildEntitlementsForPlan(result.target_plan_id);
   const featuresAfter = await fetchPlanFeatureKeys(result.target_plan_id);
 
@@ -114,7 +118,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     added.length > 0 || removed.length > 0 || Object.keys(priceChanges).length > 0 || result.created_new_version;
 
   const limitChanges: Record<string, { from: unknown; to: unknown }> = {};
-  for (const key of ["max_publishers", "max_marketing_partners", "max_affiliates", "max_buffer_seats", "max_partner_users"] as const) {
+  for (const key of ["max_publishers", "max_marketing_partners", "max_affiliates", "max_buffer_seats", "max_partner_users", "max_setter_seats", "max_active_campaigns"] as const) {
     const previous = (limitsBefore as Record<string, unknown> | null)?.[key] ?? null;
     const next = parsed.data.limits[key];
     if (previous !== next) limitChanges[key] = { from: previous, to: next };

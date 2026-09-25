@@ -4,6 +4,7 @@ import { audit } from "@/lib/audit/log";
 import { eoPolicySchema } from "@/lib/appointments/schemas";
 import { saveEoPolicy } from "@/lib/appointments/service";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
+import { SchemaPendingError, schemaPendingBody } from "@/lib/appointments/pendingSchema";
 
 export async function POST(request: NextRequest) {
   const auth = await requireFeatureRole("appointment_vault", ["owner"], { write: true });
@@ -14,5 +15,7 @@ export async function POST(request: NextRequest) {
     const row = await saveEoPolicy(auth.context.tenantId, parsed.data);
     await audit({ actorType: "tenant", actorId: auth.context.userId, action: "tenant.eo_policy_saved", targetType: "eo_policy", targetId: row.id, metadata: { carrier: row.carrier, policyNumber: row.policy_number, expiresAt: row.expires_at, coverageAmountCents: row.coverage_amount_cents }, request });
     return NextResponse.json({ eoPolicy: row }, { status: 201 });
-  } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Could not save E&O policy" }, { status: 400 }); }
+  } catch (error) {
+    if (error instanceof SchemaPendingError) return NextResponse.json(schemaPendingBody(), { status: 503 });
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Could not save E&O policy" }, { status: 400 }); }
 }

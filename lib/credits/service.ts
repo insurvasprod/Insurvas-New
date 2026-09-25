@@ -153,10 +153,10 @@ export async function approveCreditNote(
   const refusal = approvalRefusalReason(approverRole, approverId, note.requested_by);
   if (refusal) throw new CreditNoteError(refusal);
 
-  const { error } = await supabase
-    .from("credit_notes")
-    .update({ status: "approved", approved_by: approverId, approved_at: new Date().toISOString() })
-    .eq("id", id);
+  const { error } = await supabase.rpc("approve_credit_note", {
+    p_credit_note_id: id,
+    p_approved_by: approverId,
+  });
 
   // The database check constraint refuses a self-approval too, so this is belt and braces rather
   // than the only guard.

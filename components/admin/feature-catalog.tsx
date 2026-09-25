@@ -1,11 +1,13 @@
 "use client";
 
-import { useCallback, useState } from "react";
-import { MoreHorizontal } from "lucide-react";
-import { toast } from "sonner";
+import { useState } from "react";
+import { MoreHorizontal, Search } from "lucide-react";
+import { notify } from "@/lib/notify";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { EmptyState } from "@/components/ui/page-states";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -24,27 +26,27 @@ import type { FeatureModuleGroup, FeatureModuleRow, FeatureRow } from "@/lib/fea
 import { tableHeaderRow, tableHeadCell, tableShell } from "./table-styles";
 import { FeatureDialog } from "./feature-dialog";
 
+/**
+ * The catalog tab. The groups are owned by FeaturesSection, because "New feature" lives in the page
+ * header (board p-adm-features) and a feature created from the Switches tab has to land here too.
+ */
 export function FeatureCatalog({
-  initialGroups,
+  groups,
   modules,
+  onRefresh,
 }: {
-  initialGroups: FeatureModuleGroup[];
+  groups: FeatureModuleGroup[];
   modules: FeatureModuleRow[];
+  /** Re-reads the catalog (and the switch list beside it) after an edit, archive or restore. */
+  onRefresh: () => void;
 }) {
-  const [groups, setGroups] = useState(initialGroups);
   const [showArchived, setShowArchived] = useState(false);
-  const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<FeatureRow | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [pendingId, setPendingId] = useState<string | null>(null);
-
-  const refresh = useCallback(async () => {
-    const res = await fetch("/api/admin/features");
-    if (res.ok) {
-      const body = await res.json();
-      setGroups(body.groups);
-    }
-  }, []);
+  const [query, setQuery] = useState("");
+  const [moduleFilter, setModuleFilter] = useState("all");
+  const refresh = onRefresh;
 
   async function setArchived(feature: FeatureRow, is_archived: boolean) {
     setPendingId(feature.id);
@@ -57,22 +59,58 @@ export function FeatureCatalog({
 
     if (!res.ok) {
       const body = await res.json().catch(() => null);
-      toast.error(body?.error ?? "Could not update the feature");
+      notify.block(body?.error ?? "Could not update the feature");
       return;
     }
 
-    toast.success(`${feature.label} ${is_archived ? "archived" : "restored"}`);
+    notify.done(`${feature.label} ${is_archived ? "archived" : "restored"}`);
     refresh();
   }
 
   const totalActive = groups.reduce((n, g) => n + g.features.filter((f) => !f.is_archived).length, 0);
   const totalArchived = groups.reduce((n, g) => n + g.features.filter((f) => f.is_archived).length, 0);
+  const normalizedQuery = query.trim().toLowerCase();
+  const filteredGroups = groups
+    .filter((group) => moduleFilter === "all" || group.module.key === moduleFilter)
+    .map((group) => ({
+      ...group,
+      features: group.features.filter((feature) => {
+        if (!normalizedQuery) return true;
+        return [feature.label, feature.feature_key, feature.description ?? ""].some((value) =>
+          value.toLowerCase().includes(normalizedQuery),
+        );
+      }),
+    }))
+    // Keep the intentionally empty Agency section visible in the normal catalog, but do not
+    // make a search result feel broken by rendering eight empty tables around one match.
+    .filter((group) => !normalizedQuery || group.features.length > 0);
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
+        <div className="relative min-w-[16rem] flex-1 sm:max-w-sm">
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            aria-label="Search features"
+            placeholder="Search features or keys"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            className="pl-9"
+          />
+        </div>
+        <label className="sr-only" htmlFor="feature-module-filter">Filter by module</label>
+        <select
+          id="feature-module-filter"
+          aria-label="Filter by module"
+          value={moduleFilter}
+          onChange={(event) => setModuleFilter(event.target.value)}
+          className="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
+        >
+          <option value="all">All modules</option>
+          {modules.map((module) => <option key={module.key} value={module.key}>{module.label}</option>)}
+        </select>
         <p className="text-sm text-muted-foreground">
-          {totalActive} active
+          {filteredGroups.reduce((n, group) => n + group.features.filter((f) => !f.is_archived).length, 0)} shown · {totalActive} active
           {totalArchived > 0 && ` · ${totalArchived} archived`}
         </p>
         {totalArchived > 0 && (
@@ -80,20 +118,15 @@ export function FeatureCatalog({
             {showArchived ? "Hide archived" : "Show archived"}
           </Button>
         )}
-        <div className="ml-auto">
-          <Button size="sm" onClick={() => setCreating(true)}>
-            New feature
-          </Button>
-        </div>
       </div>
 
-      {groups.map((group) => {
+      {filteredGroups.map((group) => {
         const visible = showArchived ? group.features : group.features.filter((f) => !f.is_archived);
 
         return (
           <div key={group.module.key} className="space-y-2">
             <div className="flex items-baseline gap-2">
-              <h2 className="text-sm font-bold uppercase tracking-wide text-[var(--color-accent-ink)]">
+              <h2 className="text-lg font-semibold leading-[1.28] tracking-[-0.015em]">
                 {group.module.label}
               </h2>
               <span className="text-xs text-muted-foreground">{group.module.key}</span>
@@ -106,15 +139,19 @@ export function FeatureCatalog({
                     <TableHead className={tableHeadCell}>Feature</TableHead>
                     <TableHead className={tableHeadCell}>Key</TableHead>
                     <TableHead className={tableHeadCell}>Description</TableHead>
+                    <TableHead className={tableHeadCell}>References</TableHead>
                     <TableHead className={`${tableHeadCell} w-10`} />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {visible.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={4} className="h-16 text-center text-sm text-muted-foreground">
+                      <TableCell colSpan={5} className="p-0">
                         {/* The 'agency' module is seeded deliberately empty. */}
-                        No features in this module yet.
+                        <EmptyState
+                          title="No features in this module yet"
+                          hint="A feature here is what a plan can switch on. Until one exists, nothing in this module can be sold or gated."
+                        />
                       </TableCell>
                     </TableRow>
                   )}
@@ -135,6 +172,11 @@ export function FeatureCatalog({
                       </TableCell>
                       <TableCell className="max-w-[280px] truncate text-muted-foreground">
                         {feature.description ?? "—"}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
+                        <span title={`${feature.plan_reference_count} plan references · ${feature.addon_reference_count} add-on references`}>
+                          {feature.plan_reference_count} plans · {feature.addon_reference_count} add-ons
+                        </span>
                       </TableCell>
                       <TableCell>
                         <DropdownMenu>
@@ -174,13 +216,11 @@ export function FeatureCatalog({
         );
       })}
 
-      <FeatureDialog
-        mode="create"
-        open={creating}
-        modules={modules}
-        onClose={() => setCreating(false)}
-        onSaved={refresh}
-      />
+      {filteredGroups.length === 0 && (
+        <div className="rounded-lg border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
+          No features match the current search and module filter.
+        </div>
+      )}
 
       <FeatureDialog
         key={`edit-${editing?.id ?? "none"}`}

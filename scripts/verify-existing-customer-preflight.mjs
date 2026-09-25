@@ -1,5 +1,6 @@
 // LA-1.24 live contract checks. Run with: npm run verify:existing-customer-preflight
 import { randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import { createClient } from "@supabase/supabase-js";
 
 const db = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
@@ -11,7 +12,9 @@ async function cleanup() {
   await db.from("agent_leads").delete().in("id", leadIds);
   await db.from("partners").delete().in("id", partnerIds);
   await db.from("contact_phones").delete().in("id", [alternatePhoneId]);
-  await db.from("contacts").delete().in("id", [contactId, otherContactId]);
+  // By tenant, not by id: the scale check below inserts 20,000 rows and listing their ids here would
+  // not survive a crash between insert and cleanup.
+  await db.from("contacts").delete().in("tenant_id", [tenantId, otherTenantId]);
   await db.from("tenants").delete().in("id", [tenantId, otherTenantId]);
 }
 async function main() {
@@ -38,7 +41,7 @@ async function main() {
 
     const base = await db.from("agent_leads").select("tenant_id, template_id, template_version, tenant_template_id, definition_version, product_line, pipeline_id, stage_id, created_by").limit(1).maybeSingle();
     if (base.error || !base.data) throw new Error(base.error?.message ?? "No base lead available for lead evidence check");
-    result = await db.from("partners").insert(partnerIds.map((id, index) => ({ id, tenant_id: base.data.tenant_id, name: `LA-1.24 partner ${stamp}-${index}`, partner_type: "publisher", status: "active", country: "US", timezone: "America/Phoenix" })));
+    result = await db.from("partners").insert(partnerIds.map((id, index) => ({ slug: `fx-${Math.random().toString(36).slice(2, 10)}`, id, tenant_id: base.data.tenant_id, name: `LA-1.24 partner ${stamp}-${index}`, partner_type: "publisher", status: "active", country: "US", timezone: "America/Phoenix" })));
     if (result.error) throw new Error(result.error.message);
     result = await db.from("agent_leads").insert(leadIds.map((id, index) => ({ id, tenant_id: base.data.tenant_id, template_id: base.data.template_id, template_version: base.data.template_version, tenant_template_id: base.data.tenant_template_id, definition_version: base.data.definition_version, product_line: base.data.product_line, pipeline_id: base.data.pipeline_id, stage_id: base.data.stage_id, created_by: base.data.created_by, partner_id: partnerIds[index], submission_id: randomUUID(), values: { full_name: "Repeat Customer", date_of_birth: "1959-03-14", phone: `60255500${70 + index}`, outcome: "sold" } })));
     if (result.error) throw new Error(result.error.message);
@@ -53,6 +56,36 @@ async function main() {
     const started = performance.now();
     const timed = await db.rpc("find_existing_customer_preflight", { p_tenant_id: tenantId, p_full_name: "johnsmyth", p_dob: "1959-03-14", p_phone_digits: "4805550102", p_address_search: null, p_exclude_lead_id: null, p_limit: 20 });
     check("pre-flight RPC responds under 500ms", !timed.error && performance.now() - started < 500, `${(performance.now() - started).toFixed(1)}ms ${timed.error?.message ?? ""}`);
+
+    // Criterion 3 is "the check completes in under 500ms AGAINST 20,000 CONTACTS". The timing above
+    // runs against the two fixture rows, which measures a round trip and nothing about the query. The
+    // scale is the criterion -- the task's reason for it is that this runs while a customer is
+    // waiting, and an index that is fine at two rows is exactly the kind of thing that is not fine at
+    // twenty thousand.
+    const bulk = Array.from({ length: 20000 }, (_, index) => ({
+      id: randomUUID(), tenant_id: tenantId,
+      first_name: `Load${index}`, last_name: `Prospect${index}`,
+      dob: "1970-06-15", primary_phone: `9${String(100000000 + index).slice(0, 9)}`,
+      state: "AZ", name_search: `load${index}prospect${index}`, custom_fields: {},
+    }));
+    for (let offset = 0; offset < bulk.length; offset += 1000) {
+      const inserted = await db.from("contacts").insert(bulk.slice(offset, offset + 1000));
+      if (inserted.error) throw new Error(`bulk contact insert failed at ${offset}: ${inserted.error.message}`);
+    }
+    const contactCount = await db.from("contacts").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId);
+    const scaleStarted = performance.now();
+    const atScale = await db.rpc("find_existing_customer_preflight", { p_tenant_id: tenantId, p_full_name: "johnsmyth", p_dob: "1959-03-14", p_phone_digits: "4805550102", p_address_search: null, p_exclude_lead_id: null, p_limit: 20 });
+    const scaleMs = performance.now() - scaleStarted;
+    // Still the right answer, not merely a fast one: a query that got quick by stopping early would
+    // pass a timing check alone.
+    check("the pre-flight check answers in under 500ms against 20,000 contacts", !atScale.error && scaleMs < 500 && (contactCount.count ?? 0) >= 20000 && atScale.data?.some((row) => row.contact_id === contactId), `${scaleMs.toFixed(1)}ms across ${contactCount.count ?? 0} contacts, matched ${atScale.data?.length ?? 0}${atScale.error ? ` — ${atScale.error.message}` : ""}`);
+
+    // Criterion 5 is "the UI states plainly that policy matching is not yet included". The stored
+    // disclaimer asserted above is the record, not the statement -- it proves the payload carries the
+    // caveat, not that anyone reading the screen is told. The workspace renders preflight.policyMatchingNote
+    // unconditionally alongside the result; guard it so it fails the day it is dropped.
+    const workspaceSource = await readFile("components/app/lead-detail-workspace.tsx", "utf8");
+    check("the workspace states plainly that policy matching is not included", /policyMatchingNote/.test(workspaceSource), "the workspace no longer renders the policy-matching caveat");
     const unauthenticated = await fetch(`${process.env.APP_BASE_URL ?? "http://localhost:3000"}/api/app/leads/${randomUUID()}/preflight`, { method: "POST" });
     check("unauthenticated manual re-check is rejected", unauthenticated.status === 401, `status ${unauthenticated.status}`);
   } finally { await cleanup(); }

@@ -17,6 +17,7 @@ export const EMAIL_TEMPLATE_KEYS = [
   "subscription.trial_ending",
   "agent.expiry_warning",
   "callback.reminder",
+  "appointment.reminder",
   "lead.sla_escalation",
 ] as const;
 
@@ -70,8 +71,24 @@ export function invitationEmail(facts: {
   name: string;
   inviteUrl: string;
   expiresAt: Date;
+  existingAccount?: boolean;
 }): RenderedEmail {
   const expiry = expiryLine(facts.expiresAt);
+  if (facts.existingAccount) {
+    return {
+      subject: "You have been invited to a partner workspace in Insurvas",
+      html: layout(
+        `Partner workspace access for ${escapeHtml(facts.name)}`,
+        `<p>Your existing Insurvas account has been invited to a partner workspace. Sign in with your current password to accept access.</p>` +
+          button(facts.inviteUrl, "Accept partner access") +
+          `<p>${expiry} If you were not expecting this, you can ignore it.</p>`,
+      ),
+      text:
+        `Hello ${facts.name}.\n\n` +
+        `Your existing Insurvas account has been invited to a partner workspace. Accept access here and sign in with your current password:\n${facts.inviteUrl}\n\n` +
+        `${expiry} If you were not expecting this, you can ignore it.\n`,
+    };
+  }
   return {
     subject: "You have been invited to Insurvas",
     html: layout(
@@ -176,6 +193,14 @@ export function callbackReminderEmail(facts: { name: string; customerName: strin
     subject: `Callback reminder: ${facts.customerName}`,
     html: layout("Callback reminder", `<p>Hi ${escapeHtml(facts.name)},</p><p>You have a callback with <strong>${escapeHtml(facts.customerName)}</strong> at <strong>${escapeHtml(facts.customerTime)}</strong> (${escapeHtml(facts.customerTimezone)}).</p>${facts.note ? `<p>Note: ${escapeHtml(facts.note)}</p>` : ""}${button(facts.callbacksUrl, "Open callback calendar")}`),
     text: `Hi ${facts.name},\n\nYou have a callback with ${facts.customerName} at ${facts.customerTime} (${facts.customerTimezone}).${facts.note ? `\nNote: ${facts.note}` : ""}\n\nOpen callback calendar: ${facts.callbacksUrl}\n`,
+  };
+}
+
+export function appointmentReminderEmail(facts: { name: string; customerName: string; customerTime: string; customerTimezone: string; agentTime: string; agentTimezone: string; note: string | null; leadUrl: string }): RenderedEmail {
+  return {
+    subject: `Appointment reminder: ${facts.customerName}`,
+    html: layout("Appointment reminder", `<p>Hi ${escapeHtml(facts.name)},</p><p>You have an appointment with <strong>${escapeHtml(facts.customerName)}</strong> at <strong>${escapeHtml(facts.agentTime)}</strong> (${escapeHtml(facts.agentTimezone)}).</p><p>The customer's recorded local time is <strong>${escapeHtml(facts.customerTime)}</strong> (${escapeHtml(facts.customerTimezone)}).</p>${facts.note ? `<p>Notes: ${escapeHtml(facts.note)}</p>` : ""}${button(facts.leadUrl, "Open lead")}`),
+    text: `Hi ${facts.name},\n\nYou have an appointment with ${facts.customerName} at ${facts.agentTime} (${facts.agentTimezone}).\nThe customer's recorded local time is ${facts.customerTime} (${facts.customerTimezone}).${facts.note ? `\nNotes: ${facts.note}` : ""}\n\nOpen lead: ${facts.leadUrl}\n`,
   };
 }
 

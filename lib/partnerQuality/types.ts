@@ -21,6 +21,32 @@ export type PartnerQualityRow = PartnerQualityPeriod & {
   previous: PartnerQualityPeriod;
 };
 
+export type PartnerQualityMember = PartnerQualityPeriod & {
+  id: string;
+  user_id: string;
+  partner_id: string;
+  name: string;
+  email: string;
+  role: "partner_admin" | "partner_user";
+  status: "active" | "revoked";
+  invited_at: string;
+  accepted_at: string | null;
+  deactivated_at: string | null;
+  partner_admin_user_id: string | null;
+  partner_admin_name: string | null;
+  disqualified: number;
+  duplicates: number;
+  previous: PartnerQualityPeriod;
+};
+
+export type PartnerQualityTeamGroup = {
+  partner_id: string;
+  partner_name: string;
+  admins: PartnerQualityMember[];
+  users: PartnerQualityMember[];
+  unassigned: PartnerQualityMember[];
+};
+
 export type PartnerQualityDisposition = { key: string; count: number };
 export type PartnerQualityDispositionBreakdown = { partner_id: string; dispositions: PartnerQualityDisposition[] };
 
@@ -38,6 +64,7 @@ export type PartnerQualityReport = {
   dispositions: PartnerQualityDispositionBreakdown[];
   summary: PartnerQualitySummary;
   previous_summary: PartnerQualitySummary;
+  team: PartnerQualityTeamGroup[];
   readOnly: boolean;
 };
 
@@ -46,6 +73,8 @@ export type PartnerQualityLead = {
   date: string;
   full_name: string;
   phone: string | null;
+  product?: string | null;
+  state?: string | null;
   screening_outcome: string | null;
   disposition: string | null;
   claimed: boolean;

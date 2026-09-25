@@ -64,6 +64,7 @@ export type MaintenanceStatus = {
 
 export type Announcement = {
   id: string;
+  title: string;
   message: string;
   type: AnnouncementType;
   audience: AnnouncementAudience;

@@ -3,12 +3,15 @@ import { randomUUID } from "node:crypto";
 import { SignJWT } from "jose";
 import pg from "pg";
 import { createClient } from "@supabase/supabase-js";
+import { createFixtureUser, deleteFixtureUser } from "./lib/fixtureUser.mjs";
 
 const BASE = process.env.APP_BASE_URL ?? "http://localhost:3000";
 const db = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
 const stamp = Date.now();
 const tenantId = randomUUID(); const otherTenantId = randomUUID();
-const ownerId = randomUUID(); const producerId = randomUUID(); const otherOwnerId = randomUUID(); const portalUserId = randomUUID();
+// Assigned in setup, not generated here: `public.users.id` is FK'd to `auth.users`, so the id has
+// to come back from Supabase Auth rather than being invented. See scripts/lib/fixtureUser.mjs.
+let ownerId = null; let producerId = null; let otherOwnerId = null; let portalUserId = null;
 let failures = 0; let partnerId = null; let otherPartnerId = null; let capacityId = null;
 
 function check(label, condition, detail = "") { if (condition) console.log(`  ok   ${label}`); else { console.log(`  FAIL ${label}${detail ? ` — ${detail}` : ""}`); failures += 1; } }
@@ -28,7 +31,8 @@ async function cleanup() {
     await db.from("audit_log").delete().eq("actor_id", otherOwnerId);
     await db.from("tenant_entitlements").delete().eq("tenant_id", id);
     await db.from("tenant_users").delete().eq("tenant_id", id);
-    await db.from("users").delete().in("id", [ownerId, producerId, otherOwnerId, portalUserId]);
+    // Both halves, in order — the public row references auth.users.
+    for (const id of [ownerId, producerId, otherOwnerId, portalUserId]) await deleteFixtureUser(db, id);
     await db.from("tenants").delete().eq("id", id);
   }
 }
@@ -40,13 +44,10 @@ async function main() {
     { id: otherTenantId, name: `LA-1.1 isolation ${stamp}`, status: "active", onboarding_state: "completed" },
   ]);
   if (tenants.error) throw new Error(tenants.error.message);
-  const users = await db.from("users").insert([
-    { id: ownerId, email: `la11-owner-${stamp}@invalid.test`, name: "LA-1.1 owner", password_hash: "verification-only", status: "active" },
-    { id: producerId, email: `la11-producer-${stamp}@invalid.test`, name: "LA-1.1 producer", password_hash: "verification-only", status: "active" },
-    { id: otherOwnerId, email: `la11-other-${stamp}@invalid.test`, name: "LA-1.1 other owner", password_hash: "verification-only", status: "active" },
-    { id: portalUserId, email: `la11-portal-${stamp}@invalid.test`, name: "LA-1.1 portal user", password_hash: "verification-only", status: "active" },
-  ]);
-  if (users.error) throw new Error(users.error.message);
+  ({ userId: ownerId } = await createFixtureUser(db, { email: `la11-owner-${stamp}@invalid.test`, name: "LA-1.1 owner" }));
+  ({ userId: producerId } = await createFixtureUser(db, { email: `la11-producer-${stamp}@invalid.test`, name: "LA-1.1 producer" }));
+  ({ userId: otherOwnerId } = await createFixtureUser(db, { email: `la11-other-${stamp}@invalid.test`, name: "LA-1.1 other owner" }));
+  ({ userId: portalUserId } = await createFixtureUser(db, { email: `la11-portal-${stamp}@invalid.test`, name: "LA-1.1 portal user" }));
   const memberships = await db.from("tenant_users").insert([
     { tenant_id: tenantId, user_id: ownerId, role: "owner" }, { tenant_id: tenantId, user_id: producerId, role: "producer" }, { tenant_id: otherTenantId, user_id: otherOwnerId, role: "owner" },
   ]);
@@ -85,11 +86,13 @@ async function main() {
     const partnerUser = await db.from("partner_users").insert({ tenant_id: tenantId, partner_id: partnerId, user_id: portalUserId, role: "partner_user", status: "active" });
     if (partnerUser.error) throw new Error(partnerUser.error.message);
     const leadTemplate = await db.from("templates").select("id").eq("product_code", "term_life").eq("is_active", true).limit(1).maybeSingle();
+    let historyLeadCreated = false;
     if (leadTemplate.data) {
-      const pipeline = await db.from("pipelines").select("id").eq("tenant_id", tenantId).eq("partner_type", "marketing").eq("is_default", true).single();
-      const stage = pipeline.data ? await db.from("pipeline_stages").select("id").eq("pipeline_id", pipeline.data.id).eq("name", "Form Lead").single() : { data: null };
+      const pipeline = await db.from("tenant_pipelines").select("id").eq("tenant_id", tenantId).eq("partner_type", "marketing").eq("is_default", true).single();
+      const stage = pipeline.data ? await db.from("tenant_pipeline_stages").select("id").eq("pipeline_id", pipeline.data.id).eq("name", "Form Lead").single() : { data: null };
       const lead = await db.from("agent_leads").insert({ tenant_id: tenantId, template_id: leadTemplate.data.id, template_version: 1, product_line: "term_life", pipeline_id: pipeline.data?.id, stage_id: stage.data?.id, values: { source: "LA-1.1 verification" }, created_by: ownerId, partner_id: partnerId });
       if (lead.error) throw new Error(lead.error.message);
+      historyLeadCreated = true;
     }
     const offboarded = await api(`/api/app/partners/${partnerId}`, owner, { method: "PATCH", ...json({ action: "transition", next_status: "offboarded", reason: "Relationship ended after review", confirmation: "OFFBOARD" }) });
     const offboardedBody = await offboarded.json();
@@ -97,7 +100,25 @@ async function main() {
     const revoked = await db.from("partner_users").select("status, revoked_at").eq("partner_id", partnerId).maybeSingle();
     check("offboarding revokes every partner portal membership", revoked.data?.status === "revoked" && revoked.data?.revoked_at);
     const retained = await db.from("agent_leads").select("id").eq("partner_id", partnerId);
-    check("offboarding preserves lead history", !retained.error && (retained.data?.length ?? 0) <= 1);
+    // LA-1.1 criterion 3: "No partner action ever deletes a lead, a deal-flow row or a message."
+    //
+    // This read `(retained.data?.length ?? 0) <= 1`, which is TRUE when the count is zero — so the
+    // check passed whether the lead survived offboarding or was deleted by it, and a test named
+    // "preserves lead history" could not fail when the history was destroyed. It also could not
+    // tell a surviving lead from one that was never inserted: the insert above is conditional on
+    // finding an active term_life template, and a miss left nothing to preserve and nothing said so.
+    //
+    // Now the setup is asserted before the property is.
+    check(
+      "a lead exists to survive offboarding",
+      historyLeadCreated,
+      "no active term_life template was found, so criterion 3 had nothing to prove",
+    );
+    check(
+      "offboarding preserves lead history",
+      !retained.error && (retained.data?.length ?? 0) === 1,
+      `expected the one seeded lead to survive; found ${retained.data?.length ?? 0}${retained.error ? ` (${retained.error.message})` : ""}`,
+    );
 
     const capacity = await api("/api/app/partners", owner, { method: "POST", ...json(partner("Capacity holder")) }); const capacityBody = await capacity.json(); capacityId = capacityBody.partner?.id;
     check("an active partner occupies a plan-limit slot", capacity.status === 201 && capacityId);
@@ -116,7 +137,7 @@ async function main() {
 
     const ownList = await api("/api/app/partners", owner); const ownBody = await ownList.json();
     const otherList = await api("/api/app/partners", otherOwner); const otherBody = await otherList.json();
-    check("list is tenant-scoped", ownList.status === 200 && ownBody.partners?.every((row) => row.tenant_id === tenantId) && otherList.status === 200 && !otherBody.partners?.some((row) => row.id === partnerId));
+    check("list is tenant-scoped", ownList.status === 200 && (ownBody.partners?.length ?? 0) > 0 && ownBody.partners.every((row) => row.tenant_id === tenantId) && otherList.status === 200 && !otherBody.partners?.some((row) => row.id === partnerId));
     const auditRows = await db.from("audit_log").select("action, reason").eq("actor_id", ownerId).in("action", ["tenant.partner_created", "tenant.partner_updated", "tenant.partner_term_added", "tenant.partner_lifecycle_changed"]);
     check("successful partner writes have audit rows with lifecycle reason", (auditRows.data?.length ?? 0) >= 7 && auditRows.data?.some((row) => row.action === "tenant.partner_lifecycle_changed" && row.reason));
 
@@ -126,7 +147,7 @@ async function main() {
     try {
       await connection.query("begin"); await connection.query("select set_config('app.tenant_id', $1, true)", [tenantId]);
       const scoped = await connection.query("select tenant_id from public.partners");
-      check("direct tenant_app reads cannot cross tenants", scoped.rows.every((row) => row.tenant_id === tenantId));
+      check("direct tenant_app reads cannot cross tenants", scoped.rows.length > 0 && scoped.rows.every((row) => row.tenant_id === tenantId), `${scoped.rows.length} row(s) visible`);
       await connection.query("rollback");
     } finally { await connection.end(); }
   } finally { await cleanup(); }

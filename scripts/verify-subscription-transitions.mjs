@@ -6,6 +6,7 @@
 //
 // Drives the real admin route with a minted session. Everything is removed. Run: npm run verify:transitions
 import { SignJWT } from "jose";
+import { randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 
 const BASE = process.env.APP_BASE_URL ?? "http://localhost:3000";
@@ -16,6 +17,7 @@ const check = (l, c, d = "") => { console.log(c ? `  ok   ${l}` : `  FAIL ${l}${
 
 const stamp = Date.now();
 const tenants = [];
+const subscriptionIds = [];
 let archivedPlanId = null;
 
 const { data: admin } = await supabase.from("admin_users").select("id").eq("role", "super_admin").eq("is_active", true).limit(1).single();
@@ -33,11 +35,12 @@ async function subscriptionIn(status) {
     started_at: new Date().toISOString(), current_period_start: new Date().toISOString(),
     current_period_end: new Date(Date.now() + 30 * 86400000).toISOString(),
   }).select("id").single();
+  subscriptionIds.push(sub.id);
   return sub.id;
 }
 
 const act = (id, action, extra = {}) => fetch(`${BASE}/api/admin/subscriptions/${id}`, {
-  method: "POST", headers: { "content-type": "application/json", cookie },
+  method: "POST", headers: { "content-type": "application/json", "Idempotency-Key": randomUUID(), cookie },
   body: JSON.stringify({ action, ...extra }),
 });
 
@@ -84,6 +87,7 @@ try {
   const change = await supabase.rpc("admin_change_subscription_plan", { p_subscription_id: active, p_new_plan_id: archivedPlanId, p_apply_now: true });
   check("archived plans cannot be selected by change-plan API", Boolean(change.error) && /plan_archived/i.test(change.error.message));
 } finally {
+  await supabase.from("subscription_mutation_requests").delete().in("resource_id", subscriptionIds);
   for (const id of tenants) {
     await supabase.from("tenant_entitlements").delete().eq("tenant_id", id);
     await supabase.from("subscriptions").delete().eq("tenant_id", id);

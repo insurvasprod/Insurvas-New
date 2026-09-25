@@ -7,6 +7,7 @@ const SUITES = [
   ["LA-1.2 partner users", "verify-partner-users.mjs"],
   ["LA-1.3 partner products", "verify-partner-products.mjs"],
   ["LA-1.4 dynamic forms", "verify-dynamic-forms.mjs"],
+  ["LA-1.4 lead CSV import", "verify-lead-import.mjs"],
   ["LA-1.5 TCPA/DNC screening", "verify-screening.mjs"],
   ["LA-1.6 partner submission", "verify-partner-submission.mjs"],
   ["LA-1.7 intake pipeline", "verify-intake-pipeline.mjs"],

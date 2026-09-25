@@ -7,13 +7,12 @@ import {
   BookOpen,
   Brain,
   BriefcaseBusiness,
-  Building2,
   Calculator,
   CalendarCheck,
+  UserRoundCheck,
   CalendarClock,
   CalendarDays,
   ChartNoAxesCombined,
-  Check,
   ChevronDown,
   Circle,
   ClipboardList,
@@ -68,8 +67,8 @@ const MODULE_FEATURES: Record<ModuleId, ReadonlySet<string>> = {
 };
 
 const MODULE_COPY: Record<ModuleId, { label: string }> = {
-  la1: { label: "LA-1 · Inbound operations" },
-  la2: { label: "LA-2 · Outbound acquisition" },
+  la1: { label: "LA-1 Inbound operations" },
+  la2: { label: "LA-2 Outbound acquisition" },
 };
 
 // These destinations are shared by more than one insurance workflow. When the matching module
@@ -80,7 +79,7 @@ const LA2_SHARED_KEYS = new Set(["sell.deal-flow"]);
 
 const MODULE_ITEM_ORDER: Record<ModuleId, string[]> = {
   la1: ["leads.floor", "leads.inbound", "leads.workspace", "sell.callbacks", "leads.partner-chat"],
-  la2: ["leads.dialer", "leads.import", "leads.nurture", "leads.assignments", "sell.deal-flow", "insight.true-cpa", "insight.vendor-returns", "insight.activity"],
+  la2: ["leads.dialer", "leads.import", "leads.lists", "leads.nurture", "leads.assignments", "sell.calendar", "sell.deal-flow", "insight.true-cpa", "insight.vendor-returns", "insight.activity"],
 };
 
 const NAV_LABELS: Record<string, string> = {
@@ -326,7 +325,7 @@ function ModuleSection({
           )}
         </span>
         <span className="portal-agent-module-copy">
-          <span className="portal-agent-module-label">{copy.label}</span>
+          <span className="portal-agent-module-label" title={copy.label}>{copy.label}</span>
           <span className="portal-agent-module-status">{status}</span>
         </span>
         {disabled ? (
@@ -354,37 +353,30 @@ function ModuleSection({
   );
 }
 
-function PlanAccessCard({
-  planName,
-  inboundEnabled,
-  outboundEnabled,
-}: {
-  planName?: string | null;
-  inboundEnabled: boolean;
-  outboundEnabled: boolean;
-}) {
+export type AgentPlanSummary = {
+  /** Display name of the plan, or null when the workspace has none. */
+  name: string | null;
+  /** The plan's seat limit. Null means unlimited, and then no number is shown. */
+  seats: number | null;
+  roleLabel: string;
+  isOwner: boolean;
+};
+
+/**
+ * The rail's last block, as the board draws it: what plan this is, how big, and what you may do in
+ * it. It used to repeat "Inbound enabled / Outbound enabled", which the LA-1 and LA-2 headings
+ * directly above already say.
+ */
+function PlanCard({ plan }: { plan: AgentPlanSummary }) {
+  const size = [plan.name ?? "No plan", plan.seats === null ? null : `${plan.seats} ${plan.seats === 1 ? "seat" : "seats"}`]
+    .filter(Boolean)
+    .join(" · ");
   return (
-    <section className="portal-agent-plan-access" aria-label="Plan access">
-      <div className="portal-agent-plan-access-heading">
-        <ShieldCheck aria-hidden="true" />
-        <strong>Plan access</strong>
-        {planName && <span>{planName} plan</span>}
-      </div>
-      <p className={inboundEnabled ? "is-enabled" : "is-disabled"}>
-        {inboundEnabled ? (
-          <Check aria-hidden="true" />
-        ) : (
-          <LockKeyhole aria-hidden="true" />
-        )}
-        <span>{inboundEnabled ? "Inbound enabled" : "Inbound not included"}</span>
-      </p>
-      <p className={outboundEnabled ? "is-enabled" : "is-disabled"}>
-        {outboundEnabled ? (
-          <Check aria-hidden="true" />
-        ) : (
-          <LockKeyhole aria-hidden="true" />
-        )}
-        <span>{outboundEnabled ? "Outbound enabled" : "Outbound not included"}</span>
+    <section className="portal-agent-plan-card" aria-label="Plan">
+      <p className="portal-agent-plan-card-label">Plan</p>
+      <p className="portal-agent-plan-card-name">{size}</p>
+      <p className="portal-agent-plan-card-role">
+        {plan.roleLabel} · {plan.isOwner ? "full access" : "role-based access"}
       </p>
     </section>
   );
@@ -400,12 +392,10 @@ function PlanAccessCard({
 function NavList({
   menu,
   moduleAccess,
-  planName,
   onNavigate,
 }: {
   menu: MenuSection[];
   moduleAccess?: AgentModuleAccess;
-  planName?: string | null;
   onNavigate?: () => void;
 }) {
   const pathname = usePathname();
@@ -457,8 +447,6 @@ function NavList({
     inbound: inboundEntitled,
     outbound: outboundEntitled,
   };
-  const inboundEnabled = entitlement.inbound && la1Items.length > 0;
-  const outboundEnabled = entitlement.outbound && la2Items.length > 0;
 
   return (
     <nav className="portal-agent-nav" aria-label="Agent workspace navigation">
@@ -487,8 +475,7 @@ function NavList({
         />
       </div>
 
-      <div className="portal-agent-nav-divider" />
-
+      {/* No rule between the modules and Business: the board runs the headings on at an even 8px. */}
       <DisclosureSection
         label="Business"
         icon={BriefcaseBusiness}
@@ -515,12 +502,6 @@ function NavList({
           <NavItemLink item={item} onNavigate={onNavigate} />
         </ul>
       ))}
-
-      <PlanAccessCard
-        planName={planName}
-        inboundEnabled={inboundEnabled}
-        outboundEnabled={outboundEnabled}
-      />
     </nav>
   );
 }
@@ -541,6 +522,7 @@ const ICONS = {
   "file-check": FileCheck,
   "calendar-clock": CalendarClock,
   "calendar-check": CalendarCheck,
+  "user-round-check": UserRoundCheck,
   "clipboard-list": ClipboardList,
   radar: Radar,
   "radio-tower": RadioTower,
@@ -573,15 +555,28 @@ export function AgentSidebar({
   menu,
   footer,
   moduleAccess,
-  planName,
+  plan,
 }: {
   menu: MenuSection[];
   footer?: ReactNode;
   moduleAccess?: AgentModuleAccess;
-  planName?: string | null;
+  plan?: AgentPlanSummary;
 }) {
   const [open, setOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
+
+  // One mark everywhere the product names itself — the phone bar and drawer used a building icon.
+  const brandMark = (
+    <div className="flex items-center gap-2.5">
+      <span
+        aria-hidden="true"
+        className="inline-flex size-[26px] shrink-0 items-center justify-center rounded-lg bg-[var(--primary)] text-xs font-semibold text-[var(--on-primary)]"
+      >
+        I
+      </span>
+      <span className="text-sm font-semibold tracking-[-0.01em]">Insurvas</span>
+    </div>
+  );
 
   return (
     <>
@@ -594,14 +589,11 @@ export function AgentSidebar({
           onClick={() => setOpen(true)}
           aria-label="Open menu"
           aria-expanded={open}
-          className="-ml-1 rounded-md p-1.5 transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)]"
+          className="-ml-1 rounded-md p-1.5 transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
         >
           <Menu className="size-5" aria-hidden="true" />
         </button>
-        <div className="flex items-center gap-2">
-          <Building2 className="size-4" aria-hidden="true" />
-          <span className="font-semibold tracking-tight">Insurvas</span>
-        </div>
+        {brandMark}
       </header>
 
       {open && (
@@ -614,16 +606,13 @@ export function AgentSidebar({
           />
           <div className="portal-agent-sidebar-mobile-drawer absolute inset-y-0 left-0 flex w-80 max-w-[88vw] flex-col overflow-y-auto p-4 text-foreground">
             <div className="min-h-0 flex-1">
-              <div className="portal-agent-sidebar-brand mb-6 px-3">
-                <div className="flex items-center gap-2">
-                  <Building2 className="size-5" aria-hidden="true" />
-                  <span className="font-semibold tracking-tight">Insurvas</span>
-                </div>
+              <div className="portal-agent-sidebar-brand">
+                {brandMark}
                 <button
                   type="button"
                   onClick={() => setOpen(false)}
                   aria-label="Close menu"
-                  className="rounded-md p-1.5 transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)]"
+                  className="portal-agent-sidebar-collapse rounded-md p-1.5 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
                 >
                   <X className="size-5" aria-hidden="true" />
                 </button>
@@ -631,29 +620,27 @@ export function AgentSidebar({
               <NavList
                 menu={menu}
                 moduleAccess={moduleAccess}
-                planName={planName}
                 onNavigate={() => setOpen(false)}
               />
             </div>
-            {footer && <div className="portal-agent-sidebar-footer mt-6 pt-4">{footer}</div>}
+            {plan && <PlanCard plan={plan} />}
+            {footer && <div className="portal-agent-sidebar-footer">{footer}</div>}
           </div>
         </div>
       )}
 
       <aside
         data-print-hide
-        className={`portal-agent-sidebar-desktop hidden shrink-0 flex-col text-foreground md:flex ${collapsed ? "is-collapsed" : ""}`}
+        className={`portal-agent-sidebar-desktop hidden shrink-0 flex-col md:flex ${collapsed ? "is-collapsed" : ""}`}
         data-collapsed={collapsed}
       >
-        <div className="portal-agent-sidebar-scroll min-h-0 flex-1">
-          <div className="portal-agent-sidebar-brand mb-7 px-3">
-            <div className="flex items-center gap-2">
-              <Building2 className="size-5" aria-hidden="true" />
-              <span className="font-semibold tracking-tight">Insurvas</span>
-            </div>
+        {/* The brand block sits OUTSIDE the scroll container: its hairline is the top edge of the
+            rail, and an edge that scrolls away is not an edge. */}
+        <div className="portal-agent-sidebar-brand">
+            {brandMark}
             <button
               type="button"
-              className="portal-agent-sidebar-collapse rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)]"
+              className="portal-agent-sidebar-collapse rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
               onClick={() => setCollapsed((value) => !value)}
               aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
               aria-pressed={collapsed}
@@ -665,10 +652,13 @@ export function AgentSidebar({
                 <PanelLeftClose className="size-4" aria-hidden="true" />
               )}
             </button>
-          </div>
-          <NavList menu={menu} moduleAccess={moduleAccess} planName={planName} />
         </div>
-        {footer && <div className="portal-agent-sidebar-footer mt-4 pt-4">{footer}</div>}
+        <div className="portal-agent-sidebar-scroll min-h-0 flex-1">
+          <NavList menu={menu} moduleAccess={moduleAccess} />
+        </div>
+        {/* Outside the scroll, as drawn: the list grows, the plan stays at the foot of the rail. */}
+        {plan && <PlanCard plan={plan} />}
+        {footer && <div className="portal-agent-sidebar-footer">{footer}</div>}
       </aside>
     </>
   );

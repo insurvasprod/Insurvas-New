@@ -64,11 +64,13 @@ export function accountTone(status: string | null): StatusTone {
     case "invited":
     case "pending":
       return "info";
+    // The boards' person-status colours, used across the staff console: a suspension is an
+    // intervention (red); a deactivated account is simply off (grey).
     case "suspended":
-      return "warning";
+      return "danger";
     case "deactivated":
     case "inactive":
-      return "danger";
+      return "neutral";
     default:
       return "neutral";
   }

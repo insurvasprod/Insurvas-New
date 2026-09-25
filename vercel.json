@@ -3,6 +3,26 @@
     {
       "path": "/api/cron/unclaimed-sla",
       "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/period-billing",
+      "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/cron/calendar-busy",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cron/assignment-rotation",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cron/licence-lapse",
+      "schedule": "5 * * * *"
+    },
+    {
+      "path": "/api/cron/callback-reminders",
+      "schedule": "*/5 * * * *"
     }
   ]
 }

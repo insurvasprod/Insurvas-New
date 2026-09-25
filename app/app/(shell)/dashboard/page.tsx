@@ -7,19 +7,55 @@ import { applyKillSwitches } from "@/lib/features/killSwitchRules";
 import { visibleDashboardTiles } from "@/lib/dashboard/tiles";
 import { setupChecklistForState } from "@/lib/dashboard/checklist";
 import { getDashboardOnboardingState } from "@/lib/dashboard/service";
-import { DashboardTile } from "@/components/app/dashboard-tile";
 import { SetupChecklist } from "@/components/app/setup-checklist";
 import { Card, CardContent } from "@/components/ui/card";
 import { listDueCallbacks } from "@/lib/callbacks/service";
+import { AppointmentCloseOutStrip } from "@/components/app/appointment-close-out-strip";
 import Link from "next/link";
+import { Suspense } from "react";
+import { getWorkspaceTimezone } from "@/lib/agencyProfile/timezone";
+import { getDashboardToday } from "@/lib/dashboard/today";
+import { DashboardOverview, DashboardTodaySkeleton } from "@/components/app/dashboard-today";
+import { DashboardMetrics } from "@/components/app/dashboard-metrics";
+import type { TenantRole } from "@/lib/tenantAuth/roles";
+import type { ReactNode } from "react";
 
 import { LinkArrow } from "@/components/ui/link-arrow";
+import { PageHeader } from "@/components/ui/page-header";
+import { sectionForPath } from "@/lib/menu/definition";
 import { StatusChip } from "@/components/ui/status-chip";
 
 /**
  * The dashboard is a frame for registered module tiles. It does not know how to render a carrier,
  * appointment, retention or money module; those modules register data in `lib/dashboard/tiles`.
  */
+/** "4:30 PM CT" — a time with the zone it is in, as the board's callback rows read. */
+function shortTime(utc: string, timezone: string) {
+  return new Intl.DateTimeFormat("en-US", { timeZone: timezone, hour: "numeric", minute: "2-digit", timeZoneName: "short" }).format(new Date(utc));
+}
+function shortTimeNoZone(utc: string, timezone: string) {
+  return new Intl.DateTimeFormat("en-US", { timeZone: timezone, hour: "numeric", minute: "2-digit" }).format(new Date(utc));
+}
+/** "48 min overdue", "2h 18m overdue" */
+function overdueLabel(utc: string, now: number) {
+  const minutes = Math.max(1, Math.round((now - Date.parse(utc)) / 60_000));
+  if (minutes < 60) return `${minutes} min overdue`;
+  const hours = Math.floor(minutes / 60);
+  return hours < 24 ? `${hours}h ${minutes % 60}m overdue` : `${Math.floor(hours / 24)}d overdue`;
+}
+
+/**
+ * The overview (band, KPI strip, needs, analysis panels), streamed after the page: twenty-odd head
+ * counts and one bounded read are cheap, but not free, and the page's first paint does not wait.
+ */
+async function TodaySection({ tenantId, userId, role, available, aside }: { tenantId: string; userId: string; role: TenantRole; available: string[]; aside?: ReactNode }) {
+  // eslint-disable-next-line react-hooks/purity -- a server render: "today" is as of this request.
+  const serverNow = Date.now();
+  const today = await getDashboardToday({ tenantId, userId, role, available, now: serverNow }).catch(() => null);
+  if (!today) return <>{aside}</>;
+  return <DashboardOverview data={today} serverNow={serverNow} canDial={available.includes("outbound_dialing") && ["owner", "producer", "setter"].includes(role)} aside={aside} />;
+}
+
 export default async function AgentDashboardPage() {
   const context = await resolveTenantContext();
   if (!context) redirect("/app/login");
@@ -44,68 +80,99 @@ export default async function AgentDashboardPage() {
   // respect, which is exactly why the divergence was invisible.
   const callbacksAvailable =
     available.includes("callback_calendar") && ["owner", "producer", "assistant"].includes(context.role);
-  const callbacks = callbacksAvailable ? await listDueCallbacks(context.tenantId) : [];
+  const [callbacks, workspaceZone] = await Promise.all([
+    callbacksAvailable ? listDueCallbacks(context.tenantId) : Promise.resolve([]),
+    callbacksAvailable ? getWorkspaceTimezone(context.tenantId).catch(() => null) : Promise.resolve(null),
+  ]);
+  const agencyZone = workspaceZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+  // eslint-disable-next-line react-hooks/purity -- a server render: "48 min overdue" is as of this request.
+  const now = Date.now();
+  // Same shape as the callbacks gate above, and for the same reason: kill switches are consulted
+  // before the entitlement. The close-out route admits owner and producer, so the strip does too —
+  // recording whether somebody showed is the licensed agent's to do, never the setter being measured
+  // by it.
+  const closeOutAvailable =
+    available.includes("outbound_dialing") && ["owner", "producer"].includes(context.role);
 
+  // A producer has no team to rank, so the callbacks card sits beside the heatmap instead of the
+  // standings; an owner gets it in the bottom row with the setup checklist.
+  const callbacksCard = callbacksAvailable ? (
+    <Card className="portal-dashboard-callbacks m-card h-full">
+      <CardContent className="flex h-full flex-col p-5">
+        <div className="flex items-baseline justify-between gap-3 pb-3">
+          <h2 className="text-sm font-semibold leading-normal tracking-[-0.01em]">Callbacks due today</h2>
+          <LinkArrow href="/app/callbacks" className="shrink-0 text-xs">Open calendar</LinkArrow>
+        </div>
+
+        {callbacks.length > 0 ? (
+          <div className="portal-dashboard-callback-list">
+            {/* Four, deliberately. This is the nudge; the calendar is the list. */}
+            {callbacks.slice(0, 4).map((callback, index) => (
+              <Link
+                key={callback.id}
+                href="/app/callbacks"
+                aria-label={`Open the callback for ${callback.customerName}`}
+                className={`m-row flex items-center gap-3 px-3 py-2 text-inherit no-underline ${index ? "border-t border-border" : ""}`}
+              >
+                <span className="inline-flex size-7 shrink-0 items-center justify-center rounded-full bg-[var(--surface-alt)] text-xs font-semibold" aria-hidden="true">
+                  {callback.customerName.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase()}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-semibold">{callback.customerName}</span>
+                  {/* Their clock first, then yours. An agent who reads only the first half
+                      still calls at a time that is civil where the customer is. */}
+                  <span className="block truncate text-xs tabular-nums text-muted-foreground">
+                    {shortTime(callback.scheduledAtUtc, callback.customerTimezone)} · {shortTimeNoZone(callback.scheduledAtUtc, agencyZone)} yours
+                  </span>
+                </span>
+                <StatusChip tone={callback.isOverdue ? "danger" : "neutral"} dot>
+                  {callback.isOverdue ? overdueLabel(callback.scheduledAtUtc, now) : "Scheduled"}
+                </StatusChip>
+              </Link>
+            ))}
+          </div>
+        ) : (
+          <div className="flex flex-1 flex-col items-center justify-center rounded-md border border-dashed border-border p-5 text-center">
+            <p className="text-sm font-semibold">No callbacks are due today</p>
+            <p className="mt-1 text-xs text-muted-foreground">Scheduled callbacks appear here on the day they are due.</p>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  ) : null;
+  const isOwner = context.role === "owner";
+
+  // m-stagger: the blocks arrive 32ms apart, capped at the eighth, then the rest land together.
   return (
-    <div className="portal-dashboard mx-auto max-w-6xl space-y-8">
-      <div>
-        <h1 className="text-[40px] font-semibold leading-[1.08] tracking-[-0.03em]">Dashboard</h1>
-        <p className="mt-2 text-lg tracking-[-0.02em] text-muted-foreground">Your next steps, in one place.</p>
-      </div>
+    <div className="portal-dashboard m-stagger mx-auto flex w-full max-w-[1400px] flex-col gap-4">
+      <PageHeader
+        size="hero"
+        eyebrow={sectionForPath("/app/dashboard") ?? undefined}
+        title="Dashboard"
+        description="Today's numbers, what needs you, and how the week is going."
+      />
 
-      {context.role === "owner" && <SetupChecklist checklist={checklist} />}
+      {/* Decision 12 puts this here and nowhere else: "anything with no activity goes to pending and
+          appears in a short strip at the top of his dashboard the next morning: three appointments,
+          three buttons each. Ten seconds." It was on Activity & scorecard, which is a screen you go
+          to rather than one you land on — and an appointment nobody closes out drops out of the
+          setter's show rate after three days, so the cost of not seeing it is somebody's pay.
+          `hideWhenEmpty` because most mornings there is nothing, and a card that says so every day
+          is one people stop reading. It stays on Activity as well, where the empty state is a fact
+          worth stating. */}
+      {closeOutAvailable && <AppointmentCloseOutStrip hideWhenEmpty />}
 
-      {callbacksAvailable && (
-        <Card className="portal-dashboard-callbacks">
-          <CardContent className="space-y-5 p-6 sm:p-8">
-            <div className="flex flex-wrap items-end justify-between gap-3">
-              <div>
-                <h2 className="text-2xl font-semibold leading-[1.21] tracking-[-0.02em]">Callbacks due today</h2>
-                <p className="mt-1 text-sm text-muted-foreground">Follow up with these prospects and clients.</p>
-              </div>
-              <LinkArrow href="/app/callbacks">Open calendar</LinkArrow>
-            </div>
+      {/* The lead: the band, the KPI strip, what needs you, then the analysis panels. The owner asked
+          for a metrics dashboard — more numbers, compact, something worth watching — over the
+          board's checklist-first layout. */}
+      <Suspense fallback={<DashboardTodaySkeleton />}>
+        <TodaySection tenantId={context.tenantId} userId={context.userId} role={context.role} available={[...available]} aside={isOwner ? undefined : callbacksCard} />
+      </Suspense>
 
-            {callbacks.length > 0 ? (
-              <div className="portal-dashboard-callback-list">
-                {callbacks.slice(0, 4).map((callback) => (
-                  <div key={callback.id} className="portal-dashboard-callback-row">
-                    <span className="portal-dashboard-avatar" aria-hidden="true">
-                      {callback.customerName.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase()}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold">{callback.customerName}</p>
-                      <p className="mt-0.5 text-xs text-muted-foreground">
-                        {callback.customerTime} ({callback.customerTimezone})
-                      </p>
-                    </div>
-                    <StatusChip tone={callback.isOverdue ? "danger" : "info"} dot>
-                      {callback.isOverdue ? "Overdue" : "Due today"}
-                    </StatusChip>
-                    <Link href="/app/callbacks" className="portal-dashboard-call-action">Call now</Link>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="rounded-md border border-dashed border-border p-6 text-center">
-                <p className="text-sm font-semibold">No callbacks are due today</p>
-                <p className="mt-1 text-xs text-muted-foreground">Scheduled callbacks appear here on the day they are due.</p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
+      {/* The registry's tiles as a metrics grid: every way in the old "Your workspace" grid gave,
+          now led by its live number. */}
       {tiles.length > 0 ? (
-        <section aria-labelledby="dashboard-tiles-heading" className="space-y-3">
-          <div>
-            <h2 id="dashboard-tiles-heading" className="text-2xl font-semibold tracking-[-0.02em]">Your workspace</h2>
-            <p className="mt-1 text-sm text-muted-foreground">Quick access to the tools you use most.</p>
-          </div>
-          <div className="grid gap-4 lg:grid-cols-2">
-            {tiles.map((tile) => <DashboardTile key={tile.key} tile={tile} />)}
-          </div>
-        </section>
+        <DashboardMetrics tiles={tiles} tenantId={context.tenantId} />
       ) : (
         /* Two different empty states, because they have two different causes and two different
            answers. The entitlement genuinely granting nothing is the owner's problem to solve. A
@@ -131,6 +198,15 @@ export default async function AgentDashboardPage() {
             )}
           </CardContent>
         </Card>
+      )}
+
+      {/* The owner's bottom row: callbacks due beside the setup checklist (which hides itself once
+          setup is complete, leaving the callbacks card the full width). */}
+      {isOwner && (callbacksCard || !checklist.complete) && (
+        <div className={`grid gap-4 ${callbacksCard && !checklist.complete ? "xl:grid-cols-2" : ""}`}>
+          {callbacksCard}
+          <SetupChecklist checklist={checklist} />
+        </div>
       )}
     </div>
   );

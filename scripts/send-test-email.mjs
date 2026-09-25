@@ -4,13 +4,18 @@
 // sending, which is what tells you a credential is wrong rather than a mailbox being unreachable.
 // Only then does it send a real message and write the delivery log row.
 //
-// Run: npm run email:test -- you@example.com
-import { verifyEmailConnection, sendEmail, emailConfigProblems } from "../lib/email/transport.ts";
-import { invitationEmail } from "../lib/email/templates.ts";
+// Run only with deliberate external-delivery opt-in: EMAIL_DELIVERY_MODE=smtp npm run email:test -- you@your-domain.com
+import { verifyEmailConnection, sendEmail, emailConfigProblems, isReservedTestRecipient } from "../lib/email/transport.ts";
+import { escapeHtml } from "../lib/email/templates.ts";
 
 const to = process.argv[2];
 if (!to || !to.includes("@")) {
-  console.error("Usage: npm run email:test -- you@example.com");
+  console.error("Usage: EMAIL_DELIVERY_MODE=smtp npm run email:test -- you@your-domain.com");
+  process.exit(1);
+}
+
+if (isReservedTestRecipient(to)) {
+  console.error("Refusing to send to a reserved test address. Use a real mailbox only for an intentional SMTP test.");
   process.exit(1);
 }
 
@@ -45,17 +50,28 @@ if (!connection.ok) {
 console.log("ok");
 
 process.stdout.write(`Sending to ${to}… `);
-const rendered = invitationEmail({
-  name: "Test Recipient",
-  inviteUrl: `${process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"}/app/set-password?token=sample`,
-  expiresAt: new Date(Date.now() + 72 * 3600 * 1000),
-});
+// This is a transport test, not a real invitation. Never put a fake token in an
+// invitation email: recipients will click it and quite correctly see an invalid link.
+const portalUrl = `${process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"}/partner/login`;
+const rendered = {
+  subject: "Insurvas SMTP delivery test",
+  html:
+    `<div style="font-family:Inter,Segoe UI,Arial,sans-serif;color:#1a1b1c;line-height:1.6;max-width:560px">` +
+    `<h2 style="margin:0 0 16px;font-size:20px;font-weight:800;color:#00407f">Insurvas SMTP test</h2>` +
+    `<p>This message confirms that Insurvas can authenticate with SMTP and deliver mail.</p>` +
+    `<p><a href="${escapeHtml(portalUrl)}" style="display:inline-block;background:#00407f;color:#fff;text-decoration:none;padding:12px 20px;border-radius:8px;font-weight:700">Open partner portal</a></p>` +
+    `<p style="font-size:12px;color:#64748b">If the button does not work, paste this into your browser:<br>` +
+    `<span style="word-break:break-all">${escapeHtml(portalUrl)}</span></p>` +
+    `<p style="margin-top:28px;padding-top:16px;border-top:1px solid #e2e8f0;font-size:12px;color:#64748b">Insurvas SMTP configuration test.</p>` +
+    `</div>`,
+  text: `Insurvas SMTP test\n\nThis message confirms that Insurvas can authenticate with SMTP and deliver mail.\n\nOpen the partner portal: ${portalUrl}\n`,
+};
 
 const result = await sendEmail({
   to,
   ...rendered,
   subject: `[test] ${rendered.subject}`,
-  templateKey: "user.invitation",
+  templateKey: "system.smtp_test",
 });
 
 if (!result.delivered) {

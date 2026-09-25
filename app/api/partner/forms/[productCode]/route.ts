@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
-import { getTenantTemplateForProduct } from "@/lib/agentTemplates/service";
+import { getPartnerTemplateForProduct } from "@/lib/agentTemplates/service";
+import { partnerProductHttpError } from "@/lib/partnerProducts/http";
 import { requirePartner } from "@/lib/partnerAuth/requirePartner";
 import { assertPartnerProductApproved } from "@/lib/partnerProducts/service";
 
@@ -10,7 +11,10 @@ export async function GET(_request: Request, { params }: { params: Promise<{ pro
   try {
     const productCode = (await params).productCode;
     await assertPartnerProductApproved(auth.context.tenantId, auth.context.partnerId, productCode);
-    const template = await getTenantTemplateForProduct(auth.context.tenantId, productCode);
+    const template = await getPartnerTemplateForProduct(auth.context.tenantId, auth.context.partnerId, auth.context.userId, productCode);
     return NextResponse.json({ template }, { headers: { "Cache-Control": "no-store" } });
-  } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Could not load partner form" }, { status: 404 }); }
+  } catch (error) {
+    const result = partnerProductHttpError(error, "Could not load partner form");
+    return NextResponse.json({ error: result.message }, { status: result.status });
+  }
 }

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 
-import { createAgentFloorNudge, getAgentFloor, updateAgentPresence } from "@/lib/agentFloor/service";
+import { FloorActionError, createAgentFloorNudge, getAgentFloor, updateAgentPresence } from "@/lib/agentFloor/service";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 
 const roles = ["owner", "producer", "assistant"] as const;
@@ -11,6 +11,7 @@ const bodySchema = z.discriminatedUnion("action", [
   z.object({
     action: z.literal("nudge"),
     work_item_id: z.string().uuid(),
+    // Set = "Ask to pick up" addressed to one agent, which only the owner may send (enforced in the service).
     target_user_id: z.string().uuid().nullable().optional(),
     idempotency_key: z.string().uuid().default(() => randomUUID()),
     message: z.string().trim().min(1).max(240).default("Please pick up the waiting transfer."),
@@ -38,10 +39,10 @@ export async function POST(request: Request) {
     if (parsed.data.action === "presence") {
       return NextResponse.json({ presence: await updateAgentPresence({ tenantId: auth.context.tenantId, userId: auth.context.userId, status: parsed.data.status, request }) });
     }
-    return NextResponse.json({ nudge: await createAgentFloorNudge({ tenantId: auth.context.tenantId, userId: auth.context.userId, workItemId: parsed.data.work_item_id, targetUserId: parsed.data.target_user_id, idempotencyKey: parsed.data.idempotency_key, message: parsed.data.message, request }) });
+    return NextResponse.json({ nudge: await createAgentFloorNudge({ tenantId: auth.context.tenantId, userId: auth.context.userId, role: auth.context.role, workItemId: parsed.data.work_item_id, targetUserId: parsed.data.target_user_id, idempotencyKey: parsed.data.idempotency_key, message: parsed.data.message, request }) });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "The floor action could not be completed.";
-    const status = message.includes("no longer") ? 409 : message.includes("Choose an active") ? 400 : 500;
-    return NextResponse.json({ error: status === 500 ? "The floor action could not be completed." : message }, { status });
+    if (error instanceof FloorActionError) return NextResponse.json({ error: error.message }, { status: error.status });
+    console.error("Agent Floor action failed", error);
+    return NextResponse.json({ error: "The floor action could not be completed." }, { status: 500 });
   }
 }

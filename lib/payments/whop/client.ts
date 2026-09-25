@@ -115,6 +115,11 @@ export class WhopClient {
        * a monitoring screen made worse by the act of monitoring.
        */
       okStatuses?: readonly number[];
+      /**
+       * Give up after this many milliseconds. The abort is recorded as a timeout like any other
+       * network silence. Opt-in, so no existing call changes behaviour.
+       */
+      timeoutMs?: number;
     },
   ): Promise<T> {
     const startedAt = performance.now();
@@ -132,6 +137,7 @@ export class WhopClient {
         method,
         headers,
         body: body === undefined ? undefined : JSON.stringify(body),
+        ...(options?.timeoutMs ? { signal: AbortSignal.timeout(options.timeoutMs) } : {}),
       });
     } catch (error) {
       // The network never answered. Recorded as a timeout so "they said nothing" stays distinct

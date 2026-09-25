@@ -77,8 +77,9 @@ try {
   check("  and no invoice was invented for it", (invoices ?? []).length === 0, `${invoices?.length} invoice(s)`);
 } finally {
   for (const id of tenants) {
-    await supabase.from("platform_invoices").delete().eq("tenant_id", id);
-    await supabase.from("tenants").delete().eq("id", id);
+    // The real-tenant branch may have produced immutable history before a
+    // later processing step failed. Preserve it and deactivate the fixture.
+    await supabase.from("tenants").update({ status: "suspended" }).eq("id", id);
   }
   for (const id of eventIds) await supabase.from("webhook_events").delete().eq("event_id", id);
 }

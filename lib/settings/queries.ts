@@ -156,6 +156,11 @@ export function inviteExpiryHours(): Promise<number> {
   return getSetting<number>("users.invite_expiry_hours");
 }
 
+/** SA-1.4's recovery window: how long a deleted user can be restored before removal is permanent. */
+export function softDeleteDays(): Promise<number> {
+  return getSetting<number>("users.soft_delete_days");
+}
+
 export function refundApprovalThresholdCents(): Promise<number> {
   return getSetting<number>("billing.refund_approval_threshold_cents");
 }

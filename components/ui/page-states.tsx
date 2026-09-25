@@ -60,7 +60,7 @@ export function NoMatches({
         <button
           type="button"
           onClick={onClear}
-          className="mt-1 rounded-md px-2 py-1 text-sm font-medium text-[var(--accent-ink)] transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)]"
+          className="mt-1 rounded-md px-2 py-1 text-sm font-medium text-[var(--accent-ink)] transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
         >
           Clear all filters
         </button>
@@ -110,7 +110,7 @@ export function LoadingRows({ rows = 5, columns = 4 }: { rows?: number; columns?
           {Array.from({ length: columns }).map((_, column) => (
             <span
               key={column}
-              className="h-3 animate-pulse rounded-full bg-muted motion-reduce:animate-none"
+              className="h-3 m-skel rounded-full"
               style={{ width: column === 0 ? "28%" : `${Math.max(10, 22 - column * 3)}%` }}
             />
           ))}

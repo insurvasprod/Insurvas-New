@@ -25,6 +25,11 @@ export type PartnerRow = {
   lead_volume_this_month: number;
   last_submission: string | null;
   active_user_count: number;
+  /** Queue rows the partner sent this month, and how the ones closed this month ended (the tenant's own disposition flags). */
+  transfers_this_month: number;
+  completed_this_month: number;
+  dropped_this_month: number;
+  approved_products: string[];
 };
 
 export type PartnerTermRow = {
@@ -48,6 +53,15 @@ type PartnerInput = {
   notes?: string;
 };
 
+/** Today's date (YYYY-MM-DD) in the given IANA timezone; UTC when the zone is unknown. */
+function partnerLocalDate(timezone: string | null | undefined, now = new Date()): string {
+  try {
+    return new Intl.DateTimeFormat("en-CA", { timeZone: timezone || "UTC", year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
+  } catch {
+    return now.toISOString().slice(0, 10);
+  }
+}
+
 export async function listPartners(tenantId: string): Promise<PartnerRow[]> {
   const supabase = getSupabaseServiceClient();
   const { data: partners, error } = await supabase.from("partners").select("*").eq("tenant_id", tenantId).order("created_at", { ascending: false });
@@ -55,12 +69,17 @@ export async function listPartners(tenantId: string): Promise<PartnerRow[]> {
   const ids = (partners ?? []).map((partner) => partner.id);
   if (ids.length === 0) return [];
 
-  const [terms, users, leads] = await Promise.all([
+  const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
+  const [terms, users, leads, sent, closed, flags, products] = await Promise.all([
     supabase.from("partner_terms").select("*").in("partner_id", ids).order("effective_from", { ascending: false }),
     supabase.from("partner_users").select("partner_id, status").in("partner_id", ids),
-    supabase.from("agent_leads").select("partner_id, created_at").eq("tenant_id", tenantId).in("partner_id", ids).gte("created_at", new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()).order("created_at", { ascending: false }),
+    supabase.from("agent_leads").select("partner_id, created_at").eq("tenant_id", tenantId).in("partner_id", ids).gte("created_at", monthStart).order("created_at", { ascending: false }),
+    supabase.from("lead_queue").select("partner_id").eq("tenant_id", tenantId).in("partner_id", ids).gte("created_at", monthStart).limit(50000),
+    supabase.from("lead_queue").select("partner_id, disposition").eq("tenant_id", tenantId).in("partner_id", ids).not("disposition", "is", null).gte("disposition_at", monthStart).limit(50000),
+    supabase.from("dispositions").select("disposition_key, counts_as_work_completed, closes_as").eq("tenant_id", tenantId),
+    supabase.from("partner_products").select("partner_id, product_code").in("partner_id", ids).order("product_code"),
   ]);
-  const relatedError = [terms, users, leads].find((result) => result.error)?.error;
+  const relatedError = [terms, users, leads, sent, closed, flags, products].find((result) => result.error)?.error;
   if (relatedError) throw new Error(`Could not load partner details: ${relatedError.message}`);
   const termMap = new Map<string, PartnerTermRow[]>();
   for (const term of (terms.data ?? []) as PartnerTermRow[]) termMap.set(term.partner_id, [...(termMap.get(term.partner_id) ?? []), term]);
@@ -68,10 +87,37 @@ export async function listPartners(tenantId: string): Promise<PartnerRow[]> {
   for (const lead of leads.data ?? []) if (lead.partner_id) leadMap.set(lead.partner_id, [...(leadMap.get(lead.partner_id) ?? []), lead.created_at]);
   const activeUsers = new Map<string, number>();
   for (const user of users.data ?? []) if (user.status === "active") activeUsers.set(user.partner_id, (activeUsers.get(user.partner_id) ?? 0) + 1);
+  const bump = (map: Map<string, number>, key: string | null) => { if (key) map.set(key, (map.get(key) ?? 0) + 1); };
+  const flagByKey = new Map((flags.data ?? []).map((row) => [row.disposition_key, row]));
+  const transfers = new Map<string, number>();
+  const completed = new Map<string, number>();
+  const dropped = new Map<string, number>();
+  for (const row of sent.data ?? []) bump(transfers, row.partner_id);
+  for (const row of closed.data ?? []) {
+    const flag = row.disposition ? flagByKey.get(row.disposition) : undefined;
+    if (flag?.counts_as_work_completed) bump(completed, row.partner_id);
+    if (flag?.closes_as === "dropped") bump(dropped, row.partner_id);
+  }
+  const approved = new Map<string, string[]>();
+  for (const row of products.data ?? []) if (row.product_code) approved.set(row.partner_id, [...(approved.get(row.partner_id) ?? []), row.product_code]);
   return (partners ?? []).map((partner) => {
     const partnerTerms = termMap.get(partner.id) ?? [];
     const leadDates = leadMap.get(partner.id) ?? [];
-    return { ...partner, terms: partnerTerms, active_term: partnerTerms[0] ?? null, lead_volume_this_month: leadDates.length, last_submission: leadDates[0] ?? null, active_user_count: activeUsers.get(partner.id) ?? 0 } as PartnerRow;
+    // Terms are newest-first by effective date. A future-dated rate change is scheduled, not active:
+    // the term in force is the newest one whose date has arrived in the partner's own timezone.
+    const today = partnerLocalDate(partner.timezone);
+    return {
+      ...partner,
+      terms: partnerTerms,
+      active_term: partnerTerms.find((term) => term.effective_from <= today) ?? null,
+      lead_volume_this_month: leadDates.length,
+      last_submission: leadDates[0] ?? null,
+      active_user_count: activeUsers.get(partner.id) ?? 0,
+      transfers_this_month: transfers.get(partner.id) ?? 0,
+      completed_this_month: completed.get(partner.id) ?? 0,
+      dropped_this_month: dropped.get(partner.id) ?? 0,
+      approved_products: approved.get(partner.id) ?? [],
+    } as PartnerRow;
   });
 }
 

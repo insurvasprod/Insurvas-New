@@ -14,6 +14,7 @@ import { couponRejectionReason } from "@/lib/coupons/discount";
 import { availableBillingCycles } from "@/lib/money";
 import type { PlanPrices } from "@/lib/money";
 import { TRIAL_DAYS, checkoutReturnUrl } from "./constants";
+import type { CouponTerms } from "./couponSummary";
 import type { BillingCycle } from "@/lib/money";
 
 export class CheckoutError extends Error {}
@@ -25,7 +26,9 @@ export type StartedCheckout = {
   trialDays: number;
 };
 
-export type CouponCheck = { ok: true; couponId: string; code: string } | { ok: false; reason: string };
+export type CouponCheck =
+  | { ok: true; couponId: string; code: string; terms: CouponTerms }
+  | { ok: false; reason: string };
 
 /**
  * Validates a coupon BEFORE checkout opens, against our mirror of Whop's promo codes.
@@ -38,7 +41,7 @@ export async function checkCoupon(code: string, planId: string): Promise<CouponC
   const supabase = getSupabaseServiceClient();
   const { data: coupon } = await supabase
     .from("coupons")
-    .select("id, code, is_active, expires_at, max_redemptions, redeemed_count, restricted_to_plan_ids")
+    .select("id, code, is_active, expires_at, max_redemptions, redeemed_count, restricted_to_plan_ids, discount_type, percent_off, amount_off_cents, duration, duration_periods")
     .eq("code", code.trim().toUpperCase())
     .maybeSingle<{
       id: string;
@@ -48,6 +51,11 @@ export async function checkCoupon(code: string, planId: string): Promise<CouponC
       max_redemptions: number | null;
       redeemed_count: number;
       restricted_to_plan_ids: string[] | null;
+      discount_type: CouponTerms["discountType"];
+      percent_off: number | null;
+      amount_off_cents: number | null;
+      duration: CouponTerms["duration"];
+      duration_periods: number | null;
     }>();
 
   if (!coupon) return { ok: false, reason: "That code was not recognised." };
@@ -64,7 +72,18 @@ export async function checkCoupon(code: string, planId: string): Promise<CouponC
     return { ok: false, reason: "That code does not apply to the plan you have chosen." };
   }
 
-  return { ok: true, couponId: coupon.id, code: coupon.code };
+  return {
+    ok: true,
+    couponId: coupon.id,
+    code: coupon.code,
+    terms: {
+      discountType: coupon.discount_type,
+      percentOff: coupon.percent_off,
+      amountOffCents: coupon.amount_off_cents,
+      duration: coupon.duration,
+      durationPeriods: coupon.duration_periods,
+    },
+  };
 }
 
 /**
@@ -121,6 +140,9 @@ export async function startCheckout(tenantId: string, couponCode?: string): Prom
     .eq("tenant_id", tenantId)
     .eq("status", "open")
     .order("created_at", { ascending: false })
+    // Without it, two open sessions make maybeSingle() error, nothing is reused, and every visit
+    // to checkout opens yet another session.
+    .limit(1)
     .maybeSingle<{ id: string; checkout_url: string; provider_config_id: string }>();
 
   if (open && !couponId) {
@@ -134,16 +156,38 @@ export async function startCheckout(tenantId: string, couponCode?: string): Prom
   const provider = buildProvider("whop", { tenantId });
   if (!(provider instanceof WhopProvider)) throw new CheckoutError("Checkout requires the Whop provider.");
 
-  const session = await provider.createCheckoutSession({
-    providerPlanId: mapping.whopPlanId,
-    tenantId,
-    metadata: {
-      insurvas_plan_id: plan.id,
-      insurvas_billing_cycle: selection.billing_cycle,
-      ...(couponId ? { insurvas_coupon_id: couponId } : {}),
-    },
-    returnUrl: checkoutReturnUrl() ?? undefined,
-  });
+  // `ensureWhopPlan` returns a stored mapping without asking Whop whether it still exists, which is
+  // right on the hot path — one fewer round trip per checkout — but it means a wrong row is believed
+  // forever. When that happens Whop answers `404 This Plan was not found` from
+  // `POST /checkout_configurations`, the route logs a stack and the buyer gets "Could not open
+  // checkout", and nothing anywhere names the actual problem: one bad row in `whop_plans`.
+  //
+  // That is not hypothetical — `scripts/seed-demo-data.mjs` used to seed six invented ids into that
+  // table, so every checkout 404'd and `verify:checkout` had never passed. The seeding is fixed; this
+  // makes the failure diagnosable if a mapping ever goes stale again (a plan deleted in the Whop
+  // dashboard, or a mapping carried between accounts).
+  let session;
+  try {
+    session = await provider.createCheckoutSession({
+      providerPlanId: mapping.whopPlanId,
+      tenantId,
+      metadata: {
+        insurvas_plan_id: plan.id,
+        insurvas_billing_cycle: selection.billing_cycle,
+        ...(couponId ? { insurvas_coupon_id: couponId } : {}),
+      },
+      returnUrl: checkoutReturnUrl() ?? undefined,
+    });
+  } catch (error) {
+    const status = (error as { status?: number } | null)?.status;
+    if (status === 404) {
+      throw new CheckoutError(
+        `The stored Whop plan for ${plan.code} v${plan.version} (${selection.billing_cycle}) no longer exists on Whop ` +
+          `— whop_plans maps it to "${mapping.whopPlanId}". Delete that row so the next checkout recreates the plan.`,
+      );
+    }
+    throw error;
+  }
 
   const { data: row, error } = await supabase
     .from("checkout_sessions")

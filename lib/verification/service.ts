@@ -1,14 +1,14 @@
 import "server-only";
 
 import type { TemplateField, TemplateFormField } from "@/lib/templates/constants";
-import { getTenantTemplateForProductVersion, validateSingleTemplateValue } from "@/lib/agentTemplates/service";
+import { getPartnerTemplateForProductProfileRevision, getTenantTemplateForProductVersion, validateSingleTemplateValue } from "@/lib/agentTemplates/service";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { getClientIp } from "@/lib/request/clientInfo";
 import { fieldVisible, formFieldEntries, requiredVisibleKeys, verificationProgress, visibleKeys, type VerificationState } from "./progress";
 
 type Session = { id: string; tenant_id: string; work_item_id: string; lead_id: string; user_id: string; agent_role: string; status: string; started_at: string; completed_at: string | null; progress_percentage: number; last_actor_id: string | null };
 type Queue = { id: string; tenant_id: string; lead_id: string; status: string; owner_user_id: string | null; product_line: string };
-type Lead = { id: string; product_line: string; definition_version: number; values: Record<string, unknown> };
+type Lead = { id: string; product_line: string; definition_version: number; partner_submission_profile_id: string | null; partner_submission_profile_revision: number | null; carrier_id: string | null; carrier_state: string | null; values: Record<string, unknown> };
 type StoredField = { session_id: string; field_key: string; state: VerificationState; is_required: boolean; is_visible: boolean; old_value: unknown; new_value: unknown; confirmed_at: string | null; actor_id: string | null };
 
 export class VerificationError extends Error {
@@ -24,15 +24,35 @@ async function loadContext(tenantId: string, userId: string, workItemId: string)
   if (!queue.data) throw new VerificationError("work_item_not_found", "That transfer could not be found.");
   if (!["claimed", "buffer_active", "la_active"].includes(queue.data.status) || queue.data.owner_user_id !== userId) throw new VerificationError("verification_owner_required", "Claim this transfer before opening verification.");
 
-  const session = await supabase.from("verification_sessions").select("id, tenant_id, work_item_id, lead_id, user_id, agent_role, status, started_at, completed_at, progress_percentage, last_actor_id").eq("tenant_id", tenantId).eq("work_item_id", workItemId).is("ended_at", null).maybeSingle<Session>();
+  const session = await supabase.from("tenant_verification_sessions").select("id, tenant_id, work_item_id, lead_id, user_id, agent_role, status, started_at, completed_at, progress_percentage, last_actor_id").eq("tenant_id", tenantId).eq("work_item_id", workItemId).is("ended_at", null).maybeSingle<Session>();
   if (session.error) throw new VerificationError("verification_unavailable", session.error.message);
   if (!session.data || session.data.user_id !== userId) throw new VerificationError("verification_owner_required", "This verification session belongs to another agent.");
 
-  const lead = await supabase.from("agent_leads").select("id, product_line, definition_version, values").eq("id", queue.data.lead_id).eq("tenant_id", tenantId).maybeSingle<Lead>();
-  if (lead.error) throw new VerificationError("verification_unavailable", lead.error.message);
-  if (!lead.data) throw new VerificationError("lead_not_found", "The lead for this transfer could not be found.");
-  const templateResult = await getTenantTemplateForProductVersion(tenantId, lead.data.product_line, lead.data.definition_version);
-  return { supabase, queue: queue.data, session: session.data, lead: { ...lead.data, values: jsonRecord(lead.data.values) }, template: templateResult.template };
+  const leadResult = await supabase.from("agent_leads").select("id, product_line, definition_version, partner_submission_profile_id, partner_submission_profile_revision, carrier_id, carrier_state, values").eq("id", queue.data.lead_id).eq("tenant_id", tenantId).maybeSingle<Lead>();
+  let leadData = leadResult.data;
+  let leadError = leadResult.error;
+  if (leadError && /partner_submission_profile_id|schema cache|column .* does not exist/i.test(leadError.message)) {
+    const legacyLead = await supabase.from("agent_leads").select("id, product_line, definition_version, values").eq("id", queue.data.lead_id).eq("tenant_id", tenantId).maybeSingle<{ id: string; product_line: string; definition_version: number; values: Record<string, unknown> }>();
+    leadData = legacyLead.data ? { ...legacyLead.data, partner_submission_profile_id: null, partner_submission_profile_revision: null, carrier_id: null, carrier_state: null } : null;
+    leadError = legacyLead.error;
+  }
+  if (leadError) throw new VerificationError("verification_unavailable", leadError.message);
+  if (!leadData) throw new VerificationError("lead_not_found", "The lead for this transfer could not be found.");
+  type ResolvedTemplate = Awaited<ReturnType<typeof getTenantTemplateForProductVersion>> & { partner_submission_profile_id?: string | null; profile_revision?: number | null; source_template_revision?: number; verification_fields?: Array<{ field_key: string; is_required?: boolean; sort_order?: number }> };
+  const resolved = (leadData.partner_submission_profile_id && leadData.partner_submission_profile_revision
+    ? await getPartnerTemplateForProductProfileRevision(tenantId, leadData.partner_submission_profile_id, leadData.partner_submission_profile_revision, leadData.product_line)
+    : await getTenantTemplateForProductVersion(tenantId, leadData.product_line, leadData.definition_version)) as ResolvedTemplate;
+  // Partner submission profiles intentionally narrow what the partner can
+  // collect. Agent verification is broader: it must use the complete
+  // tenant/product template snapshot saved on the lead, including fields the
+  // partner was not allowed or able to collect. Those fields appear blank and
+  // can be confirmed or corrected during the call.
+  const verificationTemplate = await getTenantTemplateForProductVersion(
+    tenantId,
+    leadData.product_line,
+    leadData.definition_version,
+  );
+  return { supabase, queue: queue.data, session: session.data, lead: { ...leadData, values: jsonRecord(leadData.values) }, template: verificationTemplate.template, profile: { id: resolved.partner_submission_profile_id ?? null, revision: resolved.profile_revision ?? null } };
 }
 
 export async function getVerificationPanel(tenantId: string, userId: string, workItemId: string) {
@@ -50,26 +70,32 @@ export async function getVerificationPanel(tenantId: string, userId: string, wor
     is_required: field.is_required || definition.is_required,
     is_visible: fieldVisible(field, values),
   }));
-  if (initialRows.length) {
+  const existingRows = await context.supabase.from("verification_fields").select("session_id, field_key, state, is_required, is_visible, old_value, new_value, confirmed_at, actor_id").eq("session_id", context.session.id).order("field_key").returns<StoredField[]>();
+  if (existingRows.error) throw new VerificationError("verification_unavailable", existingRows.error.message);
+  if (!existingRows.data?.length && initialRows.length) {
     const { error } = await context.supabase.from("verification_fields").upsert(initialRows, { onConflict: "session_id,field_key", ignoreDuplicates: true });
     if (error) throw new VerificationError("verification_unavailable", error.message);
   }
-  const stored = await context.supabase.from("verification_fields").select("session_id, field_key, state, is_required, is_visible, old_value, new_value, confirmed_at, actor_id").eq("session_id", context.session.id).order("field_key").returns<StoredField[]>();
+  const stored = existingRows.data?.length ? existingRows : await context.supabase.from("verification_fields").select("session_id, field_key, state, is_required, is_visible, old_value, new_value, confirmed_at, actor_id").eq("session_id", context.session.id).order("field_key").returns<StoredField[]>();
   if (stored.error) throw new VerificationError("verification_unavailable", stored.error.message);
   const storedByKey = new Map((stored.data ?? []).map((field) => [field.field_key, field]));
-  const progress = verificationProgress(stored.data ?? [], requiredKeys, visibleFieldKeys);
+  const effectiveRequiredKeys = existingRows.data?.length ? (stored.data ?? []).filter((field) => field.is_required).map((field) => field.field_key) : requiredKeys;
+  const effectiveVisibleKeys = existingRows.data?.length ? (stored.data ?? []).filter((field) => field.is_visible).map((field) => field.field_key) : visibleFieldKeys;
+  const progress = verificationProgress(stored.data ?? [], effectiveRequiredKeys, effectiveVisibleKeys);
   return {
     session: { ...context.session, progress_percentage: progress },
     workItem: { id: context.queue.id, leadId: context.queue.lead_id, productLine: context.queue.product_line },
-    lead: { id: context.lead.id, values },
+    lead: { id: context.lead.id, carrier_id: context.lead.carrier_id, carrier_state: context.lead.carrier_state, values },
     template: context.template,
+    configuration: context.profile,
     sections: entries.map((section) => ({
       section_key: section.section_key,
       label: section.label,
       sort_order: section.sort_order,
       fields: section.fields.map(({ formField, field }) => ({
         ...field,
-        is_required: formField.is_required || field.is_required,
+        is_required: storedByKey.get(field.field_key)?.is_required ?? (formField.is_required || field.is_required),
+        is_visible: storedByKey.get(field.field_key)?.is_visible ?? fieldVisible(formField, values),
         state: storedByKey.get(field.field_key)?.state ?? "outstanding",
         old_value: storedByKey.get(field.field_key)?.old_value ?? null,
         new_value: storedByKey.get(field.field_key)?.new_value ?? null,
