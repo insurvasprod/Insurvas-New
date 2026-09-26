@@ -391,10 +391,15 @@ export function ListView({
       for (const lead of leads) { const key = lead.owner_name ?? (lead.owner_user_id ? "Member" : "Unassigned"); byOwner.set(key, [...(byOwner.get(key) ?? []), lead]); }
       return [...byOwner.entries()].sort(([a], [b]) => (a === "Unassigned" ? -1 : b === "Unassigned" ? 1 : a.localeCompare(b))).map(([name, items]) => ({ id: `owner:${name}`, name, color: name === "Unassigned" ? "var(--error)" : "var(--muted-foreground)", rule: "", terminal: false, items }));
     }
+    // Live stages in order, then any archived stage that still holds leads (LA-1.9-6): archiving a
+    // stage takes it out of the pickers, never its leads off the list.
     return pipelines.flatMap((pipeline) =>
-      pipeline.stages.filter((stage) => !stage.is_archived).sort((a, b) => a.position - b.position).map((stage) => ({
+      [
+        ...pipeline.stages.filter((stage) => !stage.is_archived).sort((a, b) => a.position - b.position),
+        ...pipeline.stages.filter((stage) => stage.is_archived).sort((a, b) => a.position - b.position),
+      ].map((stage) => ({
         id: stage.id,
-        name: pipelines.length > 1 ? `${pipeline.name} · ${stage.name}` : stage.name,
+        name: `${pipelines.length > 1 ? `${pipeline.name} · ${stage.name}` : stage.name}${stage.is_archived ? " (archived)" : ""}`,
         color: stage.color,
         rule: stageMeta(stage, context),
         terminal: stage.stage_type !== "open",

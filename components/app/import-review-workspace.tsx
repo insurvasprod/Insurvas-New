@@ -44,6 +44,8 @@ export type ReviewPlan = {
   licensedStates?: string[] | null;
   /** The file's column that carries the state (normalized header); null when none is mapped. */
   stateHeader?: string | null;
+  /** New leads with no state: imported, never served until a state is added (LA-2.4-8). */
+  noState?: number[] | null;
 };
 
 type Decision = "existing" | "infile" | "dnc" | null;
@@ -126,6 +128,8 @@ export function ImportReviewWorkspace({ plan, csv }: { plan: ReviewPlan; csv: st
   const [committing, setCommitting] = useState(false);
   const [open, setOpen] = useState<ReviewBucket | null>(null);
   const [listing, setListing] = useState<Partial<Record<ReviewBucket, number>>>({});
+  const [noStateShown, setNoStateShown] = useState(0);
+  const noState = plan.noState ?? [];
 
   const counts = plan.buckets;
   const campaignLabel = plan.campaignName ?? "this campaign";
@@ -158,7 +162,7 @@ export function ImportReviewWorkspace({ plan, csv }: { plan: ReviewPlan; csv: st
 
   // The file in this tab, parsed once: when somebody asks to see a list, or to find the rows that are
   // outside the agency's licensed states.
-  const anyListing = Object.keys(listing).length > 0;
+  const anyListing = Object.keys(listing).length > 0 || noStateShown > 0;
   const territory = plan.licensedStates && plan.licensedStates.length > 0 && plan.stateHeader && plan.rows?.ready ? plan.licensedStates : null;
   const parsed = useMemo(() => {
     if (!anyListing && !territory) return null;
@@ -219,13 +223,16 @@ export function ImportReviewWorkspace({ plan, csv }: { plan: ReviewPlan; csv: st
         if (response.status === 409) router.refresh();
         return;
       }
-      const summary = body.summary as { imported: number; attachedToExisting: number; suppressed: number; rejectionsRecorded: number; servable: boolean; campaignStatus: string | null; spendAddedCents: number };
+      const summary = body.summary as { imported: number; attachedToExisting: number; suppressed: number; rejectionsRecorded: number; servable: boolean; campaignStatus: string | null; spendAddedCents: number; certificatesFiled?: number; noState?: number; warning?: string | null };
       const counted =
         `${summary.imported.toLocaleString()} imported`
         + (summary.attachedToExisting ? ` · ${summary.attachedToExisting.toLocaleString()} added to people you already had` : "")
         + (summary.suppressed ? ` · ${summary.suppressed.toLocaleString()} imported and suppressed` : "")
-        + (summary.rejectionsRecorded ? ` · ${summary.rejectionsRecorded.toLocaleString()} recorded for a vendor credit` : "");
-      const spend = summary.spendAddedCents > 0 ? `${formatCents(summary.spendAddedCents)} added to ${campaignLabel}'s spend.` : undefined;
+        + (summary.rejectionsRecorded ? ` · ${summary.rejectionsRecorded.toLocaleString()} recorded for a vendor credit` : "")
+        + (summary.certificatesFiled ? ` · ${summary.certificatesFiled.toLocaleString()} consent certificate${summary.certificatesFiled === 1 ? "" : "s"} filed` : "");
+      // Said after the commit as well as before it: these leads are in, and will not be called yet.
+      const followUps = [summary.noState ? `${summary.noState.toLocaleString()} new lead${summary.noState === 1 ? " has" : "s have"} no state and will not be dialled until one is added.` : null, summary.warning ?? null].filter(Boolean).join(" ");
+      const spend = [summary.spendAddedCents > 0 ? `${formatCents(summary.spendAddedCents)} added to ${campaignLabel}'s spend.` : null, followUps || null].filter(Boolean).join(" ") || undefined;
       if (summary.servable || summary.imported + summary.attachedToExisting === 0) notify.done(counted, spend ? { detail: spend } : undefined);
       else
         notify.warn(counted, {
@@ -427,6 +434,27 @@ export function ImportReviewWorkspace({ plan, csv }: { plan: ReviewPlan; csv: st
       </SettingsTableCard>
 
       <div className="flex min-w-0 flex-col gap-6 lg:w-[400px] lg:shrink-0">
+        {/* LA-2.4-8: flagged before the commit, not discovered on the lead list afterwards. */}
+        {noState.length > 0 && <Callout tone="warning" title={`${noState.length.toLocaleString()} new ${noState.length === 1 ? "lead has" : "leads have"} no state`}>
+          <div className="flex flex-col gap-2">
+            <p className="m-0">No state means no timezone, so the dialer will not call {noState.length === 1 ? "this lead" : "these leads"} until a state is added. {noState.length === 1 ? "It is" : "They are"} still imported, and the lead list shows {noState.length === 1 ? "it" : "them"} as missing a state.</p>
+            <button type="button" className={btn("row", "self-start")} onClick={() => setNoStateShown((shown) => (shown ? 0 : LIST_PAGE))} aria-expanded={noStateShown !== 0}>
+              {noStateShown ? "Hide rows" : "View rows"}
+            </button>
+            {noStateShown > 0 && (parsed
+              ? <div className="min-w-0 overflow-x-auto rounded-[8px] border border-[var(--border)] bg-[var(--surface)]">
+                  <table className={st.table}>
+                    <thead><tr className={st.headRow}><th scope="col" className={st.th}>Row</th>{(parsed[0] ?? []).slice(0, 4).map((header, index) => <th scope="col" key={`${header}-${index}`} className={st.th}>{header}</th>)}</tr></thead>
+                    <tbody>{noState.slice(0, noStateShown).map((rowNumber) => <tr key={rowNumber}>
+                      <td className={cn(st.td, "tabular-nums")}>{rowNumber}</td>
+                      {(parsed[0] ?? []).slice(0, 4).map((_, index) => <td key={index} className={cn(st.td, "whitespace-nowrap")}>{parsed[rowNumber - 1]?.[index] ?? ""}</td>)}
+                    </tr>)}</tbody>
+                  </table>
+                  {noStateShown < noState.length && <button type="button" className={btn("row", "m-2")} onClick={() => setNoStateShown((shown) => shown + LIST_PAGE)}>Show {Math.min(LIST_PAGE, noState.length - noStateShown)} more</button>}
+                </div>
+              : <p className="m-0 text-[12px] text-[var(--error-ink)]">The file in this tab could not be read to list these rows.</p>)}
+          </div>
+        </Callout>}
         {fourSum === plan.totalRows
           ? <Callout tone="info" title="The four counts sum to the file’s row count">
               <span className="tabular-nums">{accepted.toLocaleString()} + {duplicates.toLocaleString()} + {suppressed.toLocaleString()} + {invalid.toLocaleString()} = {plan.totalRows.toLocaleString()}</span>

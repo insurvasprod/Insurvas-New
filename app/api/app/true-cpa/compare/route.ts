@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { comparisonCadenceCaveat } from "@/lib/cadence/historyService";
-import { getCampaignComparison } from "@/lib/vendorScorecard/service";
+import { ComparisonPeriodError, getCampaignComparison } from "@/lib/vendorScorecard/service";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 
 export async function GET(request: NextRequest) {
@@ -30,6 +30,8 @@ export async function GET(request: NextRequest) {
     }));
     return NextResponse.json({ ...comparison, cadence }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
+    // Unmatched periods: said in words, with the matched period B could use instead of a refusal alone.
+    if (error instanceof ComparisonPeriodError) return NextResponse.json({ error: error.message, code: `periods_${error.problem}`, suggestion: error.suggestion }, { status: 400 });
     return NextResponse.json({ error: error instanceof Error ? error.message : "Could not compare campaigns" }, { status: 400 });
   }
 }

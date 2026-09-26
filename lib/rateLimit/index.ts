@@ -29,13 +29,17 @@ export const VERIFICATION_RESEND: RateLimitRule = { name: "verify_resend", max: 
 /**
  * LA-2.5 · a vendor posting real-time leads.
  *
- * Deliberately generous, and per KEY rather than per IP. A ping-post vendor sending 300 leads an
- * hour is doing exactly what they are paid to do; the criterion is "rate-limited without dropping
- * legitimate posts", so the ceiling has to sit well above a busy hour rather than at a cautious
- * one. Keyed on the vendor's own key so one vendor's burst cannot throttle another's, which an
- * IP-based limit would do the moment two vendors shared a platform.
+ * Per KEY rather than per IP, so one vendor's burst cannot throttle another's, which an IP-based
+ * limit would do the moment two vendors shared a platform.
+ *
+ * LA-2.5-2 (2026-09-25): a one-minute window, 60 posts. The old 600 an hour was never reached by a
+ * 100-post burst, so it limited nothing a runaway retry loop would do. Sixty a minute is 3,600 an
+ * hour sustained — six times the old ceiling, far above a busy ping-post vendor (~300 an hour) — and
+ * a burst above one a second gets 429 with retry-after (seconds to the next minute) instead of
+ * being processed. A post over the limit is answered, not dropped: the vendor retries after
+ * retry-after and is accepted.
  */
-export const LEAD_POST_PER_KEY: RateLimitRule = { name: "lead_post_key", max: 600, windowSeconds: 3600 };
+export const LEAD_POST_PER_KEY: RateLimitRule = { name: "lead_post_key", max: 60, windowSeconds: 60 };
 
 /**
  * The caller's IP, from the proxy headers Vercel sets.

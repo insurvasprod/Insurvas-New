@@ -7,6 +7,7 @@ import { configuredAppOrigin } from "@/lib/urls/origin";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import { partnerUserInviteSchema } from "@/lib/partnerAuth/schemas";
 import { invitePartnerUser, listPartnerUsers } from "@/lib/partnerUsers/service";
+import { partnerLimitBody } from "@/lib/partnerLimits/copy";
 
 const OWNER_ROLES = ["owner", "bookkeeper"] as const;
 
@@ -57,7 +58,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (message.includes("account_not_active")) return NextResponse.json({ error: "This account is not active and cannot be invited" }, { status: 409 });
     if (message.includes("partner_not_found")) return NextResponse.json({ error: "Partner not found" }, { status: 404 });
     const limit = message.match(/max_partner_users:(\d+):(\d+)/);
-    if (limit) return NextResponse.json({ error: `Your plan has reached max_partner_users (${limit[1]} of ${limit[2]}). Upgrade to invite another partner user.`, code: "limit_reached", limitKey: "max_partner_users", usage: Number(limit[1]), limit: Number(limit[2]), upgrade: true }, { status: 403 });
+    if (limit) return NextResponse.json(partnerLimitBody("max_partner_users", Number(limit[1]), Number(limit[2]), "invite"), { status: 403 });
     return NextResponse.json({ error: "Could not invite partner user" }, { status: 500 });
   }
 }

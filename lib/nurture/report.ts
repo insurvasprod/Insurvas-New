@@ -32,6 +32,7 @@ import type { RecycleBatch, RecyclePool } from "./contract";
 export type NurtureRun = { at: string; cleared: number; blocked: number; failed: number; pending: number };
 export type NurtureCampaignReport = NurtureCampaign & { eligibleNow: number; lastRun: NurtureRun | null; pool: RecyclePool | null; openBatch: RecycleBatch | null };
 export type RotationSlot = { slot: Slot; state: "failed" | "answered" | "next" | "untried"; note: string };
+export type ConversionSide = { leads: number; policies: number; percent: number | null };
 export type NurtureReport = {
   campaigns: NurtureCampaignReport[];
   totals: { inNurture: number; eligibleNow: number; recycledThisMonth: number; recycledLastMonth: number; blockedThisMonth: number };
@@ -46,6 +47,14 @@ export type NurtureReport = {
   /** False until 20260925706500 is applied: batches cannot be started. */
   batchesReady: boolean;
   contactRate: { recycled: number | null; fresh: number | null } | null;
+  /**
+   * Conversion, recycled against fresh, all time (LA-2.20-6, W3.5): issued policies per 100 leads
+   * worked on each side. Recycled: every cleared reactivation, and the policies issued after one
+   * (the batch report's window). Fresh: every lead dialled at least once, and the policies issued
+   * with no reactivation before them. The two share one definition of a policy (status issued), so
+   * the figures can be read side by side. Null only when the reads fail.
+   */
+  conversion: { recycled: ConversionSide; fresh: ConversionSide } | null;
   cadence: { steps: Array<{ attempt: number; interval: string | null; slot: string | null; offsetMs: number; source: string }>; first72: number; total: number; usingDefaults: boolean } | null;
   rotation: { leadId: string; leadName: string; attempt: number; ceiling: number; slots: RotationSlot[] } | null;
 };
@@ -87,6 +96,47 @@ async function allRows(build: (start: number) => Query, label: string): Promise<
   }
 }
 
+const side = (leads: number, policies: number): ConversionSide => ({ leads, policies, percent: leads > 0 ? Math.round((1000 * policies) / leads) / 10 : null });
+
+/**
+ * Recycled against fresh conversion, all time. A policy is a recycled one when a cleared
+ * reactivation of its lead completed on or before it was issued (the window
+ * tenant_recycle_batch_report counts policies in); every other issued policy is fresh. Read and
+ * never written. Null when a read fails: a missing figure, not a zero.
+ */
+async function conversion(db: Db, tenantId: string): Promise<NurtureReport["conversion"]> {
+  try {
+    const [policies, reactivations, dialled] = await Promise.all([
+      allRows((start) => db.from("tenant_issued_policies").select("id, lead_id, issued_at").eq("tenant_id", tenantId).eq("status", "issued").order("id", { ascending: true }).range(start, start + PAGE - 1), "issued policies"),
+      allRows((start) => db.from("tenant_nurture_reactivations").select("id, lead_id, completed_at").eq("tenant_id", tenantId).eq("status", "cleared").order("id", { ascending: true }).range(start, start + PAGE - 1), "cleared reactivations"),
+      (db.from("agent_leads") as unknown as { select(columns: string, options: { count: "exact"; head: true }): Query })
+        .select("id", { count: "exact", head: true }).eq("tenant_id", tenantId).gt("attempts_made", 0)
+        .then((result) => {
+          const counted = result as unknown as { count: number | null; error: { message: string } | null };
+          if (counted.error) throw new Error(counted.error.message);
+          return counted.count ?? 0;
+        }),
+    ]);
+    const firstClearedAt = new Map<string, string>();
+    for (const row of reactivations) {
+      const at = text(row.completed_at);
+      if (!at) continue;
+      const lead = text(row.lead_id);
+      const current = firstClearedAt.get(lead);
+      if (!current || at < current) firstClearedAt.set(lead, at);
+    }
+    const recycledCount = reactivations.filter((row) => text(row.completed_at)).length;
+    let recycledPolicies = 0;
+    for (const policy of policies) {
+      const cleared = firstClearedAt.get(text(policy.lead_id));
+      if (cleared && Date.parse(cleared) <= Date.parse(text(policy.issued_at))) recycledPolicies += 1;
+    }
+    return { recycled: side(recycledCount, recycledPolicies), fresh: side(dialled, policies.length - recycledPolicies) };
+  } catch {
+    return null;
+  }
+}
+
 function monthStart(offset: number) {
   const now = new Date();
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + offset, 1)).toISOString();
@@ -97,7 +147,7 @@ export async function nurtureReport(tenantId: string, actor: { userId: string; r
   const thisMonth = monthStart(0);
   const lastMonth = monthStart(-1);
 
-  const [campaigns, nurtureLeads, reactivations, performance, cadence, rotationLead, poolResult, batchResult] = await Promise.all([
+  const [campaigns, nurtureLeads, reactivations, performance, cadence, rotationLead, poolResult, batchResult, conversionView] = await Promise.all([
     listNurtureCampaigns(tenantId),
     allRows(
       (start) => db.from("agent_leads").select("id, campaign_id, nurture_entered_at, updated_at, created_at, recycle_count, screening_outcome").eq("tenant_id", tenantId).in("lead_state", ["exhausted", "nurture"]).order("id", { ascending: true }).range(start, start + PAGE - 1),
@@ -113,6 +163,7 @@ export async function nurtureReport(tenantId: string, actor: { userId: string; r
     db.from("agent_leads").select("id, values, attempts_made, next_preferred_slot").eq("tenant_id", tenantId).in("lead_state", ["working", "retry", "nurture"]).gt("attempts_made", 0).lt("attempts_made", DEFAULT_CEILING).order("updated_at", { ascending: false }).limit(1),
     rpcSafe(db, "tenant_recycle_pool", { p_tenant_id: tenantId, p_actor: actor.userId }),
     rpcSafe(db, "tenant_recycle_batch_report", { p_tenant_id: tenantId, p_campaign_id: null, p_limit: 12 }),
+    conversion(db, tenantId),
   ]);
 
   // 20260925706500. A missing function is "not applied yet"; any other failure is an error.
@@ -252,6 +303,7 @@ export async function nurtureReport(tenantId: string, actor: { userId: string; r
       blockedThisMonth,
     },
     contactRate: performanceRows.length ? { recycled: rateOf("recycled"), fresh: rateOf("fresh") } : null,
+    conversion: conversionView,
     cadence: cadenceView,
     rotation,
     pool: poolTotals,

@@ -4,7 +4,7 @@ import { guardPage } from "@/lib/entitlements/guardPage";
 import { sectionForPath } from "@/lib/menu/definition";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
-import { ImportAlreadyImported, ImportReviewBridge } from "@/components/app/import-review-bridge";
+import { ImportAlreadyImported, ImportReviewBridge, ImportScreeningBridge } from "@/components/app/import-review-bridge";
 import { loadImportReview, planBuckets } from "@/lib/agentTemplates/importPreflight";
 import { licensedStates } from "@/lib/leadLists/service";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
@@ -30,7 +30,9 @@ export default async function ImportReviewPage({ params }: { params: Promise<{ b
   const tenantId = guard.context.tenantId;
 
   const { batchId } = await params;
-  const { plan, state } = await loadImportReview(tenantId, batchId);
+  const { plan, state, progress } = await loadImportReview(tenantId, batchId);
+  // LA-2.2-10: the scrub is still running. The screen drives it and reloads into the review.
+  if (state === "screening" && progress) return <ImportScreeningBridge progress={progress} />;
   if (!plan) {
     // An id that was never staged, or is not this tenant's, is genuinely not found. One that was
     // already imported is not — and showing the framework's 404 for it reads as though the import
@@ -86,5 +88,6 @@ export default async function ImportReviewPage({ params }: { params: Promise<{ b
     recordsPurchased: plan.recordsPurchased ?? null,
     licensedStates: territory,
     stateHeader,
+    noState: plan.noState ?? null,
   }} />;
 }

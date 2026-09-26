@@ -1,5 +1,6 @@
 import { parseCsv } from "../contacts/csv.ts";
 import { isPhoneTemplateField, type TemplateField } from "../templates/constants.ts";
+import { captureConsent, consentColumnIndexes, type CapturedConsent } from "../consent/capture.ts";
 
 export { parseCsv };
 
@@ -29,17 +30,66 @@ export const MAX_PREVIEW_PARSE_ROWS = 2_000;
 type ImportStage = { id: string; name: string; is_archived?: boolean };
 
 const TIMEZONE_LABELS: Record<string, string> = {
-  eastern: "America/New_York",
-  central: "America/Chicago",
-  mountain: "America/Denver",
-  "mountain (no dst)": "America/Phoenix",
-  pacific: "America/Los_Angeles",
+  eastern: "America/New_York", "eastern time": "America/New_York", est: "America/New_York", edt: "America/New_York", et: "America/New_York",
+  central: "America/Chicago", "central time": "America/Chicago", cst: "America/Chicago", cdt: "America/Chicago", ct: "America/Chicago",
+  mountain: "America/Denver", "mountain time": "America/Denver", mst: "America/Denver", mdt: "America/Denver", mt: "America/Denver",
+  "mountain (no dst)": "America/Phoenix", arizona: "America/Phoenix",
+  pacific: "America/Los_Angeles", "pacific time": "America/Los_Angeles", pst: "America/Los_Angeles", pdt: "America/Los_Angeles", pt: "America/Los_Angeles",
+  alaska: "America/Anchorage", akst: "America/Anchorage", hawaii: "Pacific/Honolulu", hst: "Pacific/Honolulu",
 };
 
+/**
+ * The two states the documentation names as split between zones, by the first three ZIP digits.
+ *
+ * Florida's panhandle west of the Apalachicola (324, 325: Panama City, Pensacola) keeps Central
+ * time, the rest of the state Eastern. Tennessee is Eastern only in the east (373, 374 Chattanooga;
+ * 376–379 Johnson City and Knoxville); Nashville, Memphis (375, 380, 381), Jackson and Cookeville are
+ * Central. 375 used to sit inside an Eastern 373–379 range, which put Memphis an hour ahead.
+ *
+ * Each range carries its state, so a ZIP that contradicts the row's state is not allowed to move
+ * that lead into a zone its state does not have.
+ */
 const SPLIT_ZONE_ZIP3 = [
-  [320, 323, "America/New_York"], [324, 325, "America/Chicago"], [326, 349, "America/New_York"],
-  [370, 372, "America/Chicago"], [373, 379, "America/New_York"], [380, 385, "America/Chicago"],
+  [320, 323, "FL", "America/New_York"], [324, 325, "FL", "America/Chicago"], [326, 349, "FL", "America/New_York"],
+  [370, 372, "TN", "America/Chicago"], [373, 374, "TN", "America/New_York"], [375, 375, "TN", "America/Chicago"],
+  [376, 379, "TN", "America/New_York"], [380, 385, "TN", "America/Chicago"],
 ] as const;
+
+/** Every zone a label or the state table can produce, so an IANA name in the file is accepted as itself. */
+const KNOWN_ZONES = new Set<string>();
+
+/** USPS codes, the District of Columbia included. */
+export const US_STATE_CODES = [
+  "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "DC", "FL", "GA", "HI", "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD",
+  "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH", "NJ", "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC", "SD",
+  "TN", "TX", "UT", "VT", "VA", "WA", "WV", "WI", "WY",
+] as const;
+
+const STATE_NAMES: Record<string, string> = {
+  alabama: "AL", alaska: "AK", arizona: "AZ", arkansas: "AR", california: "CA", colorado: "CO", connecticut: "CT", delaware: "DE",
+  "district of columbia": "DC", florida: "FL", georgia: "GA", hawaii: "HI", idaho: "ID", illinois: "IL", indiana: "IN", iowa: "IA",
+  kansas: "KS", kentucky: "KY", louisiana: "LA", maine: "ME", maryland: "MD", massachusetts: "MA", michigan: "MI", minnesota: "MN",
+  mississippi: "MS", missouri: "MO", montana: "MT", nebraska: "NE", nevada: "NV", "new hampshire": "NH", "new jersey": "NJ",
+  "new mexico": "NM", "new york": "NY", "north carolina": "NC", "north dakota": "ND", ohio: "OH", oklahoma: "OK", oregon: "OR",
+  pennsylvania: "PA", "rhode island": "RI", "south carolina": "SC", "south dakota": "SD", tennessee: "TN", texas: "TX", utah: "UT",
+  vermont: "VT", virginia: "VA", washington: "WA", "west virginia": "WV", wisconsin: "WI", wyoming: "WY",
+};
+
+/** "tn", " Tennessee ", "TN" → "TN". Anything that is not a US state is returned trimmed and upper-cased, as before. */
+export function normalizeImportState(raw: string): string {
+  const value = raw.trim();
+  return STATE_NAMES[value.toLocaleLowerCase().replace(/\s+/g, " ")] ?? value.toUpperCase();
+}
+
+/** Header spellings that carry a ZIP, compared with everything but letters and digits removed. */
+const ZIP_HEADERS = ["zip", "zipcode", "postalcode", "postcode", "zip5"];
+
+/**
+ * Control characters a spreadsheet can carry invisibly. NUL in particular cannot be stored in a
+ * jsonb value at all, so a single one in a first name used to fail the whole commit with a raw
+ * Postgres error ("unsupported Unicode escape sequence"). Tab, newline and carriage return are kept.
+ */
+const CONTROL_CHARACTERS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g;
 
 const STATE_TIMEZONE: Record<string, string> = {
   AL: "America/Chicago", AK: "America/Anchorage", AR: "America/Chicago", AZ: "America/Phoenix", CA: "America/Los_Angeles", CO: "America/Denver",
@@ -50,7 +100,9 @@ const STATE_TIMEZONE: Record<string, string> = {
   NM: "America/Denver", NV: "America/Los_Angeles", NY: "America/New_York", OH: "America/New_York", OK: "America/Chicago", OR: "America/Los_Angeles",
   PA: "America/New_York", RI: "America/New_York", SC: "America/New_York", SD: "America/Chicago", TN: "America/Chicago", TX: "America/Chicago",
   UT: "America/Denver", VA: "America/New_York", VT: "America/New_York", WA: "America/Los_Angeles", WI: "America/Chicago", WV: "America/New_York", WY: "America/Denver",
+  ID: "America/Boise",
 };
+for (const zone of [...Object.values(TIMEZONE_LABELS), ...Object.values(STATE_TIMEZONE)]) KNOWN_ZONES.add(zone);
 
 export function normalizeImportPhone(raw: unknown): string | null {
   const digits = String(raw ?? "").replace(/\D/g, "");
@@ -158,17 +210,61 @@ export function inferredImportDateOrder(scan: ImportDateScan): ImportDateOrder |
   return scan.invalidDmy < scan.invalidMdy ? "dmy" : "mdy";
 }
 
-export function resolveImportTimezone(label: unknown, zip: unknown, state?: unknown): string | null {
+/**
+ * The zone a split-zone ZIP puts a lead in, or null. A ZIP whose state contradicts the row's state
+ * is ignored rather than trusted: one of the two is wrong, and the state is the one the calling
+ * window already reads.
+ */
+export function splitZoneForZip(zip: unknown, state?: unknown): string | null {
+  // A ZIP that lost its leading zero in a spreadsheet ("3001") is four digits; the split states'
+  // ZIPs all start 3, so a short value is never one of them.
   const digits = String(zip ?? "").replace(/\D/g, "");
-  if (digits.length >= 3) {
-    const zip3 = Number(digits.slice(0, 3));
-    for (const [from, to, zone] of SPLIT_ZONE_ZIP3) if (zip3 >= from && zip3 <= to) return zone;
+  if (digits.length < 5) return null;
+  const zip3 = Number(digits.slice(0, 3));
+  const stateKey = String(state ?? "").trim().toUpperCase();
+  for (const [from, to, zipState, zone] of SPLIT_ZONE_ZIP3) {
+    if (zip3 < from || zip3 > to) continue;
+    return !stateKey || stateKey === zipState ? zone : null;
   }
-  const labelKey = String(label ?? "").trim().toLocaleLowerCase();
-  if (TIMEZONE_LABELS[labelKey]) return TIMEZONE_LABELS[labelKey];
+  return null;
+}
+
+/** A zone named in the file: a label (Eastern, CST, …) or an IANA name this product knows. */
+export function timezoneFromLabel(label: unknown): string | null {
+  const raw = String(label ?? "").trim();
+  if (!raw) return null;
+  if (KNOWN_ZONES.has(raw)) return raw;
+  return TIMEZONE_LABELS[raw.toLocaleLowerCase()] ?? null;
+}
+
+export function resolveImportTimezone(label: unknown, zip: unknown, state?: unknown): string | null {
+  const byZip = splitZoneForZip(zip, state);
+  if (byZip) return byZip;
+  const byLabel = timezoneFromLabel(label);
+  if (byLabel) return byLabel;
   const stateKey = String(state ?? "").trim().toUpperCase();
   if (stateKey === "FL" || stateKey === "TN") return null;
   return STATE_TIMEZONE[stateKey] ?? null;
+}
+
+/**
+ * The zone the dialer should use for this lead INSTEAD of its state's, or null when the state's
+ * own zone is right (LA-2.2-4). Only a split-zone ZIP outranks the state — or, for a Florida or
+ * Tennessee row with no ZIP, a label naming one of that state's two zones. A label never moves a
+ * single-zone state: a vendor's "Eastern" on a Texas row is a wrong label, and trusting it would
+ * dial a Texan at 7am. A zone derived from the state alone is what the dialer already computes, and
+ * storing it would only go stale the day somebody corrects the lead's state.
+ *
+ * Stored on the lead as `agent_leads.dial_timezone` (20260925709600), whether or not the template
+ * has a timezone field.
+ */
+export function importDialTimezone(label: unknown, zip: unknown, state?: unknown): string | null {
+  const byZip = splitZoneForZip(zip, state);
+  if (byZip) return byZip;
+  const stateKey = String(state ?? "").trim().toUpperCase();
+  if (stateKey !== "FL" && stateKey !== "TN") return null;
+  const byLabel = timezoneFromLabel(label);
+  return byLabel === "America/New_York" || byLabel === "America/Chicago" ? byLabel : null;
 }
 
 /**
@@ -179,7 +275,14 @@ export function resolveImportTimezone(label: unknown, zip: unknown, state?: unkn
  */
 export class LeadImportPhoneError extends Error {}
 
-export function normalizeImportValues(values: Record<string, unknown>, rowNumber: number, dateOrder?: ImportDateOrder | null): Record<string, unknown> {
+/**
+ * What a row carries outside its mapped template fields that normalisation still needs: a ZIP or a
+ * timezone column the template has no field for, and whether the template has a timezone field to
+ * fill at all.
+ */
+export type ImportRowContext = { zip?: unknown; timezoneLabel?: unknown; hasTimezoneField?: boolean };
+
+export function normalizeImportValues(values: Record<string, unknown>, rowNumber: number, dateOrder?: ImportDateOrder | null, context?: ImportRowContext): Record<string, unknown> {
   const normalized = { ...values };
   const phoneKey = ["phone", "phone_number", "primary_phone"].find((key) => key in normalized);
   if (phoneKey && normalized[phoneKey] !== undefined && normalized[phoneKey] !== "") {
@@ -193,12 +296,19 @@ export function normalizeImportValues(values: Record<string, unknown>, rowNumber
     if (!date) throw new Error(`Row ${rowNumber}: date of birth must be a valid date`);
     normalized[dobKey] = date;
   }
-  const state = typeof normalized.state === "string" ? normalized.state.trim().toUpperCase() : normalized.state;
+  const state = typeof normalized.state === "string" ? normalizeImportState(normalized.state) : normalized.state;
   if (state) normalized.state = state;
+  const zip = normalized.zip ?? normalized.postal_code ?? context?.zip;
   if ("timezone" in normalized) {
-    const timezone = resolveImportTimezone(normalized.timezone, normalized.zip ?? normalized.postal_code, state);
+    const timezone = resolveImportTimezone(normalized.timezone, zip, state);
     if (!timezone) throw new Error(`Row ${rowNumber}: timezone cannot be resolved from the supplied state and ZIP`);
     normalized.timezone = timezone;
+  } else if (context?.hasTimezoneField) {
+    // The template has a timezone field and this file did not fill it: fill it from what the row
+    // does carry, and leave it empty — not an error — when nothing resolves (Florida or Tennessee
+    // with no ZIP). The ZIP correction applies either way.
+    const timezone = resolveImportTimezone(context.timezoneLabel, zip, state);
+    if (timezone) normalized.timezone = timezone;
   }
   return normalized;
 }
@@ -207,6 +317,10 @@ export type LeadImportRow = {
   rowNumber: number;
   stageId: string;
   values: Record<string, unknown>;
+  /** The zone the dialer uses instead of the state's (a split-zone ZIP, or a zone the file names). */
+  dialTimezone?: string | null;
+  /** The consent certificate the row's columns describe, mapped or not (LA-2.6). */
+  consent?: CapturedConsent | null;
 };
 
 export type LeadImportPreview = {
@@ -310,7 +424,7 @@ export function suggestLeadCsvMappings(headers: string[], fields: TemplateField[
 }
 
 function parseValue(field: TemplateField, raw: string, rowNumber: number): unknown {
-  const value = raw.trim();
+  const value = raw.replace(CONTROL_CHARACTERS, "").trim();
   if (!value) return undefined;
 
   if (["number", "currency"].includes(field.type)) {
@@ -406,6 +520,17 @@ function leadCsvPlan(rows: string[][], fields: TemplateField[], stages: ImportSt
   }
   const stageById = new Map(activeStages.map((stage) => [normalizedHeader(stage.id), stage]));
 
+  // Columns read whether or not they are mapped to a template field. A ZIP or timezone the template
+  // has no field for still decides the lead's calling zone (LA-2.2-4), and a certificate column is
+  // evidence the lead must keep even though no form field holds it (LA-2.6-1). Neither is written
+  // into the lead's values: those stay exactly the template's fields.
+  const hasTimezoneField = fields.some((field) => field.field_key === "timezone");
+  const compactHeaders = headers.map((header) => header.replace(/[^a-z0-9]/g, ""));
+  const rawZipIndex = ZIP_HEADERS.map((alias) => compactHeaders.indexOf(alias)).find((index) => index >= 0) ?? -1;
+  const rawTimezoneIndex = ["timezone", "timezonelabel", "tz", "timezonename"].map((alias) => compactHeaders.indexOf(alias)).find((index) => index >= 0) ?? -1;
+  const consentIndex = consentColumnIndexes(rows[0]);
+  const cell = (values: string[], index: number | undefined) => (index === undefined || index < 0 ? undefined : (values[index] ?? "").replace(CONTROL_CHARACTERS, "").trim() || undefined);
+
   /** Maps one data row, or throws with that row's number. The single definition of a lead row. */
   function mapRow(values: string[], rowNumber: number): LeadImportRow {
     const stageValue = stageIndex >= 0 ? values[stageIndex]?.trim() ?? "" : "";
@@ -430,7 +555,27 @@ function leadCsvPlan(rows: string[][], fields: TemplateField[], stages: ImportSt
       const value = leadValues[requiredField.field_key];
       if (value === undefined || value === null || value === "") throw new Error(`Row ${rowNumber}: ${requiredField.label} is required`);
     }
-    return { rowNumber, stageId: stage.id, values: normalizeImportValues(leadValues, rowNumber, dateOrder) };
+    const rawZip = cell(values, rawZipIndex);
+    const rawLabel = cell(values, rawTimezoneIndex);
+    const label = typeof leadValues.timezone === "string" ? leadValues.timezone : rawLabel;
+    const normalized = normalizeImportValues(leadValues, rowNumber, dateOrder, { zip: rawZip, timezoneLabel: rawLabel, hasTimezoneField });
+    const zip = normalized.zip ?? normalized.postal_code ?? rawZip;
+    const consent = captureConsent({
+      trustedformUrl: cell(values, consentIndex.trustedform_url),
+      jornayaToken: cell(values, consentIndex.jornaya_token),
+      certificateId: cell(values, consentIndex.certificate_id),
+      consentTimestamp: cell(values, consentIndex.consent_timestamp),
+      ip: cell(values, consentIndex.ip),
+      sourceUrl: cell(values, consentIndex.source_url),
+      landingPage: cell(values, consentIndex.landing_page),
+    });
+    return {
+      rowNumber,
+      stageId: stage.id,
+      values: normalized,
+      dialTimezone: importDialTimezone(label, zip, normalized.state),
+      consent,
+    };
   }
 
   const dateColumns = columns.filter((column) => column.field && isImportDateField(column.field));

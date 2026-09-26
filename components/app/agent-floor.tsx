@@ -35,6 +35,7 @@ type Lead = {
   phone?: string | null;
   /** Escalated by the unclaimed-SLA ladder; still unclaimed. */
   escalatedAt?: string | null;
+  status?: string;
 };
 
 type Call = Lead & {
@@ -44,6 +45,8 @@ type Call = Lead & {
   agentRole: string;
   startedAt: string;
   verificationPercent?: number | null;
+  /** The buffer who handed this call over and is still on it. */
+  buffer?: { userId: string; name: string } | null;
 };
 
 type Member = {
@@ -57,6 +60,8 @@ type Member = {
   call?: { workItemId: string; leadId: string; customer: string; partnerName: string | null; startedAt: string } | null;
   lastCall?: { customer: string; endedAt: string } | null;
   languages?: string[];
+  /** A buffer still on a call they handed over. */
+  supporting?: boolean;
 };
 
 type Handoff = {
@@ -100,6 +105,10 @@ export type FloorData = {
   /** The floor read reached its 500-row cap; the newest 500 open transfers are shown. */
   truncated?: boolean;
 };
+
+/** The safety re-read behind realtime (LA-1.15-2): slow while Live, a little faster while the socket is down. */
+const SAFETY_RESYNC_LIVE_MS = 30_000;
+const SAFETY_RESYNC_OFFLINE_MS = 10_000;
 
 /* ── time ──────────────────────────────────────────────────────────────── */
 
@@ -231,6 +240,7 @@ const STATE_ORDER: RosterState[] = ["available", "on_call", "away", "wrap_up", "
 
 function doingLabel(member: Member, state: RosterState, now: number) {
   const since = member.statusChangedAt ? new Date(member.statusChangedAt).getTime() : null;
+  if (state === "on_call" && member.supporting && member.call) return `Supporting ${member.call.customer}`;
   if (state === "on_call") return member.call ? [member.call.customer, member.call.partnerName].filter(Boolean).join(" · ") : "On a call";
   if (state === "away") return member.call ? `Holding ${member.call.customer}` : "Holding a call";
   if (state === "available") {
@@ -364,7 +374,7 @@ function Roster({ members, now, currentUserId, isOwner, canAsk, readOnly, saving
  * Who is talking: one row per OPEN call record, which is a different fact from "claimed a while
  * ago". A record open past four hours is one nobody closed, and the row says so.
  */
-function OnCalls({ calls, now }: { calls: Call[]; now: number }) {
+function OnCalls({ calls, now, currentUserId, isOwner, readOnly, saving, onRelease }: { calls: Call[]; now: number; currentUserId: string; isOwner: boolean; readOnly: boolean; saving: string | null; onRelease: (call: Call, action: "unassign" | "end_buffer") => void }) {
   if (!calls.length) return null;
   const sorted = [...calls].sort((a, b) => new Date(a.startedAt).getTime() - new Date(b.startedAt).getTime());
   return (
@@ -380,11 +390,23 @@ function OnCalls({ calls, now }: { calls: Call[]; now: number }) {
                 <span className={st.sub}>
                   {[call.partnerName, productLineLabel(call.productLine), call.verificationPercent != null ? `verification ${call.verificationPercent}%` : "no verification open"].filter(Boolean).join(" · ")}
                 </span>
+                {call.buffer && <span className={st.sub}>Buffer {call.buffer.name} is still on the call</span>}
               </span>
               <span className={cn("shrink-0 text-right text-[14px] leading-[1.5] font-semibold tabular-nums", stale ? "text-[var(--warning-ink)]" : "text-[var(--success-ink)]")}>
                 {callClock(seconds)}
                 {stale && <span className="block text-[12px] font-normal">never closed</span>}
               </span>
+              {/* Two different acts (LA-1.14-9): the buffer leaving a call the agent keeps, and the agent giving the transfer back. */}
+              {call.buffer && (isOwner || call.buffer.userId === currentUserId || call.agentId === currentUserId) && (
+                <button type="button" className={btn("secondary", "px-3")} disabled={readOnly || saving === `end_buffer:${call.id}`} onClick={() => onRelease(call, "end_buffer")}>
+                  {saving === `end_buffer:${call.id}` ? "Ending…" : "End buffer involvement"}
+                </button>
+              )}
+              {(isOwner || call.agentId === currentUserId) && (
+                <button type="button" className={btn("secondary", "px-3")} disabled={readOnly || saving === `unassign:${call.id}`} onClick={() => onRelease(call, "unassign")}>
+                  {saving === `unassign:${call.id}` ? "Unassigning…" : "Unassign"}
+                </button>
+              )}
               <Link href={`/app/leads/${call.leadId}`} className={btn("secondary", "px-3")}>Open lead</Link>
             </li>
           );
@@ -536,6 +558,8 @@ export function AgentFloor({ currentUserId, readOnly, role }: { currentUserId: s
   const [floor, setFloor] = useState<FloorData | null>(null);
   const floorRef = useRef<FloorData | null>(null);
   const refreshInFlightRef = useRef(false);
+  const refreshPendingRef = useRef(false);
+  const loadRef = useRef<(() => Promise<void>) | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [now, setNow] = useState(() => Date.now());
@@ -548,9 +572,11 @@ export function AgentFloor({ currentUserId, readOnly, role }: { currentUserId: s
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
 
-  const load = useCallback(async ({ initial = false }: { initial?: boolean } = {}) => {
-    if (refreshInFlightRef.current) return;
+  const load = useCallback(async ({ initial = false }: { initial?: boolean } = {}): Promise<void> => {
+    // A change that arrives while a read is out is not dropped: the read runs once more when it lands.
+    if (refreshInFlightRef.current) { refreshPendingRef.current = true; return; }
     refreshInFlightRef.current = true;
+    refreshPendingRef.current = false;
     if (initial || !floorRef.current) setLoading(true);
     try {
       const response = await fetch("/api/app/agent-floor", { cache: "no-store" });
@@ -568,8 +594,10 @@ export function AgentFloor({ currentUserId, readOnly, role }: { currentUserId: s
       setLoading(false);
     } finally {
       refreshInFlightRef.current = false;
+      if (refreshPendingRef.current) { refreshPendingRef.current = false; void loadRef.current?.(); }
     }
   }, []);
+  useEffect(() => { loadRef.current = load; }, [load]);
 
   useEffect(() => {
     // The initial server-backed snapshot intentionally synchronizes React state from the API.
@@ -578,14 +606,19 @@ export function AgentFloor({ currentUserId, readOnly, role }: { currentUserId: s
   }, [load]);
 
   useEffect(() => {
-    // Realtime is the fast path, but the floor must remain correct when a trigger is
-    // unavailable, a browser drops its websocket, or a broadcast is missed. This
-    // bounded refresh matches the inbox fallback and is skipped for hidden tabs.
+    // LA-1.15-2: no polling. Every change to the queue, a call, a handoff, presence or a nudge
+    // broadcasts floor_changed (the table triggers of 20260903130000) and the floor re-reads on it,
+    // on every open floor at once. The only timer left is a slow safety re-read in case a broadcast
+    // is missed: every 30 seconds while Live, every 10 while the socket is down, never while the
+    // tab is hidden. Coming back to the tab re-reads at once.
+    const live = realtimeStatus === "subscribed";
     const timer = window.setInterval(() => {
       if (document.visibilityState === "visible") void load();
-    }, 1000);
-    return () => window.clearInterval(timer);
-  }, [load]);
+    }, live ? SAFETY_RESYNC_LIVE_MS : SAFETY_RESYNC_OFFLINE_MS);
+    const onVisible = () => { if (document.visibilityState === "visible") void load(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => { window.clearInterval(timer); document.removeEventListener("visibilitychange", onVisible); };
+  }, [load, realtimeStatus]);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
@@ -598,7 +631,11 @@ export function AgentFloor({ currentUserId, readOnly, role }: { currentUserId: s
     if (!supabase) { queueMicrotask(() => setRealtimeStatus("unconfigured")); return; }
     const channel = supabase.channel(floor.realtimeTopic)
       .on("broadcast", { event: "floor_changed" }, () => { void load(); })
-      .subscribe((status) => setRealtimeStatus(status.toLowerCase()));
+      .subscribe((status) => {
+        setRealtimeStatus(status.toLowerCase());
+        // Anything that changed while the socket was connecting is read once it is up.
+        if (status === "SUBSCRIBED") void load();
+      });
     return () => { void supabase.removeChannel(channel); };
   }, [floor?.realtimeTopic, load]);
 
@@ -669,6 +706,21 @@ export function AgentFloor({ currentUserId, readOnly, role }: { currentUserId: s
     router.push(`/app/inbound/${body?.handoff?.work_item_id ?? workItemId}/verification`);
   }
 
+  async function release(call: Call, action: "unassign" | "end_buffer", acknowledgeLanguage = false) {
+    if (action === "unassign" && !window.confirm(`Give ${call.customer} back to the queue? Nobody will own the transfer until someone claims it. The verification so far is kept for them.`)) return;
+    setSaving(`${action}:${call.id}`);
+    const response = await fetch("/api/app/inbound/release", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, work_item_id: call.id, ...(acknowledgeLanguage ? { acknowledge_language: true } : {}) }) });
+    const body = await response.json().catch(() => null);
+    setSaving(null);
+    if (response.status === 409 && body?.code === "language_cover_required" && !acknowledgeLanguage) {
+      if (window.confirm(body.error)) void release(call, action, true);
+      return;
+    }
+    if (!response.ok) { notify.block(body?.error ?? "Could not update this transfer."); return; }
+    notify.done(action === "unassign" ? `${call.customer} is back in the queue` : `${call.buffer?.name ?? "The buffer"} has left the call; ${call.agentName} keeps it`);
+    void load();
+  }
+
   const liveLabel = realtimeStatus === "subscribed" ? "Live" : realtimeStatus === "unconfigured" ? "Live unavailable" : "Connecting";
   const updated = lastUpdated ? `${shortDuration(secondsSince(lastUpdated, now))} ago` : "just now";
   const statusDisabled = readOnly || availability === null;
@@ -724,7 +776,7 @@ export function AgentFloor({ currentUserId, readOnly, role }: { currentUserId: s
     <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
       {header}
       {readOnly && <Callout tone="warning" title="This account is suspended and read-only">You can watch the floor, but picking up, nudging, accepting handoffs and changing your status are turned off.</Callout>}
-      {realtimeStatus === "unconfigured" && <Callout tone="info" title="Live updates are unavailable in this browser">The floor still refreshes every second while this tab is open.</Callout>}
+      {realtimeStatus === "unconfigured" && <Callout tone="info" title="Live updates are unavailable in this browser">The floor still refreshes every 10 seconds while this tab is open.</Callout>}
       {floor.truncated && <Callout tone="warning" title="More than 500 transfers are open">The newest 500 are shown; older ones are hidden until the queue is worked down.</Callout>}
       {error && <Callout tone="error" title="The floor could not refresh">{error} What you see may be out of date.</Callout>}
 
@@ -744,7 +796,7 @@ export function AgentFloor({ currentUserId, readOnly, role }: { currentUserId: s
 
       <div className="flex flex-col gap-6 lg:flex-row">
         <div className="flex min-w-0 flex-1 flex-col gap-6">
-          <OnCalls calls={floor.onCalls} now={now} />
+          <OnCalls calls={floor.onCalls} now={now} currentUserId={currentUserId} isOwner={role === "owner"} readOnly={readOnly} saving={saving} onRelease={(call, action) => void release(call, action)} />
           <Roster members={members} now={now} currentUserId={currentUserId} isOwner={role === "owner"} canAsk={Boolean(headOfQueue)} readOnly={readOnly} saving={saving} onAsk={(member) => headOfQueue && void sendNudge(headOfQueue.id, member)} />
         </div>
         <div className="flex min-w-0 flex-col gap-6 lg:w-[460px] lg:shrink-0">

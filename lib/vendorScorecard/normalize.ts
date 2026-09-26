@@ -45,12 +45,32 @@ export function rankByCostPerIssued<T extends { is_test_batch: boolean; effectiv
   return ranks;
 }
 
+/**
+ * Net spend ÷ contacted leads. The report computes it since 20260925709800; before, it is a pure
+ * function of two figures the old report returns, filled here like the rank. Null with no contacts
+ * or no splittable spend: a dash, never $0.
+ */
+function costPerContact(raw: Loose): number | null {
+  if (raw.effective_cost_per_contact_cents !== undefined) return nullableNum(raw.effective_cost_per_contact_cents);
+  const spend = nullableNum(raw.net_spend_cents);
+  const contacted = num(raw.contacted_leads);
+  return spend === null || !contacted ? null : round2(spend / contacted);
+}
+
+/** A funnel count only the 20260925709800 report returns. Null before it, never a guessed zero. */
+function funnelCount(raw: Loose, key: string): number | null {
+  return raw[key] === undefined ? null : num(raw[key]);
+}
+
 function campaignRow(raw: Loose, extra: Loose, upgraded: boolean, smallBelow: number): VendorScorecardRow {
   const leads = num(raw.leads_received);
   const issued = num(raw.issued_policies);
   const total = num(raw.total_spend_cents);
   const records = num(raw.records_purchased);
   const credits = num(raw.credits_received_cents);
+  // Since 20260925709800 the report carries the undialable and claim figures itself, by
+  // vendor_return_metrics' own definitions; before it they come from that RPC beside the report.
+  if (raw.undialable_leads !== undefined) extra = raw;
   const undialable = num(extra.undialable_leads);
   return {
     campaign_id: String(raw.campaign_id),
@@ -67,6 +87,10 @@ function campaignRow(raw: Loose, extra: Loose, upgraded: boolean, smallBelow: nu
     leads_received: leads,
     attempts: num(raw.attempts),
     contacted_leads: num(raw.contacted_leads),
+    dialed_leads: funnelCount(raw, "dialed_leads"),
+    quoted_leads: funnelCount(raw, "quoted_leads"),
+    applied_leads: funnelCount(raw, "applied_leads"),
+    effective_cost_per_contact_cents: costPerContact(raw),
     applications: num(raw.applications),
     issued_policies: issued,
     lapsed_policies: num(raw.lapsed_policies),
@@ -114,6 +138,10 @@ function vendorRow(raw: Loose, campaigns: VendorScorecardRow[]): VendorScorecard
     leads_received: leads,
     attempts: num(raw.attempts),
     contacted_leads: num(raw.contacted_leads),
+    dialed_leads: funnelCount(raw, "dialed_leads"),
+    quoted_leads: funnelCount(raw, "quoted_leads"),
+    applied_leads: funnelCount(raw, "applied_leads"),
+    effective_cost_per_contact_cents: costPerContact(raw),
     applications: num(raw.applications),
     issued_policies: num(raw.issued_policies),
     lapsed_policies: num(raw.lapsed_policies),
@@ -172,6 +200,10 @@ export function normalizeScorecard(value: unknown, metrics: ReturnMetrics, readO
     leads_received: leads,
     attempts: num(t.attempts),
     contacted_leads: num(t.contacted_leads),
+    dialed_leads: funnelCount(t, "dialed_leads"),
+    quoted_leads: funnelCount(t, "quoted_leads"),
+    applied_leads: funnelCount(t, "applied_leads"),
+    effective_cost_per_contact_cents: costPerContact(t),
     applications: num(t.applications),
     issued_policies: num(t.issued_policies),
     lapsed_policies: num(t.lapsed_policies),
@@ -216,5 +248,6 @@ export function normalizeScorecard(value: unknown, metrics: ReturnMetrics, readO
     filters: { vendor_id: (filters.vendor_id as string | null) ?? null, campaign_id: (filters.campaign_id as string | null) ?? null, product_code: (filters.product_code as string | null) ?? null },
     readOnly,
     upgraded,
+    funnel: upgraded && num(report.funnel_version) >= 2,
   };
 }

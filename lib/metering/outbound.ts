@@ -26,6 +26,8 @@ export class OutboundLimitError extends Error {
     public readonly limitKey: OutboundLimitKey,
     public readonly usage: number,
     public readonly limit: number,
+    /** What the refused action asked for; 1 for an invite or an activation. */
+    public readonly requested = 1,
   ) {
     super(`OUTBOUND_LIMIT_REACHED:${limitKey}:${usage}:${limit}`);
     this.name = "OutboundLimitError";
@@ -73,19 +75,34 @@ async function usageFor(tenantId: string, key: OutboundLimitKey) {
   return 0;
 }
 
+/**
+ * Usage and cap for one limit, LIVE. A metered limit is read from check_meter_capacity (qty 0): the
+ * period's usage_totals row and the allowance the database enforces (plan, add-ons, grants), not the
+ * entitlement snapshot's `meters[...].used`, which is only as fresh as the last refresh. The snapshot
+ * quoted 3,650 while the database held 3,661 (LA-2.22-1), so a 403 and a meter disagreed with the
+ * figure that actually refused the import. The two count limits are counted from their rows.
+ */
+async function liveLimit(tenantId: string, key: OutboundLimitKey, entitlement: Awaited<ReturnType<typeof getEntitlement>>) {
+  const meterKey = METER_KEYS[key];
+  if (!meterKey) {
+    const limit = key === "max_setter_seats" ? entitlement.limits.max_setter_seats ?? null : entitlement.limits.max_active_campaigns ?? null;
+    return { usage: await usageFor(tenantId, key), limit, hardCap: true };
+  }
+  const meter = entitlement.meters[meterKey];
+  try {
+    const live = await checkMeterCapacity(tenantId, meterKey, 0);
+    return { usage: Number(live.used ?? 0), limit: live.included ?? null, hardCap: Boolean(live.hard_cap) };
+  } catch {
+    // The capacity RPC failing is not a reason to hide the meter: fall back to the snapshot.
+    return { usage: meter?.used ?? 0, limit: meter?.included ?? null, hardCap: Boolean(meter?.hard_cap) };
+  }
+}
+
 export async function outboundLimitSnapshot(tenantId: string): Promise<OutboundLimitSnapshot[]> {
   const entitlement = await getEntitlement(tenantId);
   const keys: OutboundLimitKey[] = ["max_setter_seats", "max_active_campaigns", "monthly_leads_imported", "dnc_scrub_lookups", "consent_cert_claims"];
   return Promise.all(keys.map(async (key) => {
-    const meterKey = METER_KEYS[key];
-    const meter = meterKey ? entitlement.meters[meterKey] : undefined;
-    const limit = key === "max_setter_seats" ? entitlement.limits.max_setter_seats ?? null
-      : key === "max_active_campaigns" ? entitlement.limits.max_active_campaigns ?? null
-      : meter?.included ?? null;
-    const usage = key === "max_setter_seats" || key === "max_active_campaigns"
-      ? await usageFor(tenantId, key)
-      : meter?.used ?? 0;
-    const hardCap = key.startsWith("max_") || Boolean(meter?.hard_cap);
+    const { usage, limit, hardCap } = await liveLimit(tenantId, key, entitlement);
     return { key, label: LABELS[key], usage, limit, hardCap, allowed: !hardCap || limit === null || usage < limit };
   }));
 }
@@ -95,19 +112,15 @@ export async function assertOutboundLimit(tenantId: string, key: OutboundLimitKe
   if (!Number.isInteger(quantity) || quantity < 1) throw new Error("Outbound limit quantity must be a positive integer");
   const entitlement = await getEntitlement(tenantId);
   const meterKey = METER_KEYS[key];
-  const meter = meterKey ? entitlement.meters[meterKey] : undefined;
-  const limit = key === "max_setter_seats" ? entitlement.limits.max_setter_seats ?? null
-    : key === "max_active_campaigns" ? entitlement.limits.max_active_campaigns ?? null
-    : meter?.included ?? null;
-  const usage = key === "max_setter_seats" || key === "max_active_campaigns" ? await usageFor(tenantId, key) : meter?.used ?? 0;
-  if (limit !== null && usage + quantity > limit) throw new OutboundLimitError(key, usage, limit);
-  // The metering RPC is the atomic catalog-side hard-cap check for metered actions. The cap shown
-  // to the agent still came from the entitlement above; this second check closes stale-cache and
-  // concurrent-request gaps at the database boundary.
-  if (meterKey) {
-    const check = await checkMeterCapacity(tenantId, meterKey, quantity);
-    if (!check.allowed && check.included !== null) throw new OutboundLimitError(key, check.used, check.included);
+  if (!meterKey) {
+    const { usage, limit } = await liveLimit(tenantId, key, entitlement);
+    if (limit !== null && usage + quantity > limit) throw new OutboundLimitError(key, usage, limit, quantity);
+    return;
   }
+  // A metered action is judged by the database's own check, with the quantity asked for: the
+  // atomic catalog-side hard cap, and the same live usage the 403 then quotes.
+  const check = await checkMeterCapacity(tenantId, meterKey, quantity);
+  if (!check.allowed && check.included !== null) throw new OutboundLimitError(key, Number(check.used ?? 0), check.included, quantity);
 }
 
 export async function recordOutboundUsage(tenantId: string, key: OutboundLimitKey, quantity: number, idempotencyKey: string, ref?: string) {
@@ -118,12 +131,20 @@ export async function recordOutboundUsage(tenantId: string, key: OutboundLimitKe
 
 export function outboundLimitResponse(error: unknown) {
   if (!(error instanceof OutboundLimitError)) return null;
+  const n = (value: number) => value.toLocaleString("en-US");
+  const label = LABELS[error.limitKey];
+  // At the cap the sentence names the limit and the usage. Below it (a 1,351-row import with 1,339
+  // left) "has reached" would be untrue, so it says what the request would have taken it to.
+  const message = error.usage >= error.limit
+    ? `Your plan has reached its limit of ${n(error.limit)} ${label} (${n(error.usage)} of ${n(error.limit)} used). Upgrade to continue.`
+    : `Your plan allows ${n(error.limit)} ${label} and ${n(error.usage)} are used, so ${n(error.requested)} more would go over by ${n(error.usage + error.requested - error.limit)}. Upgrade to continue.`;
   return {
-    error: `Your plan has reached ${LABELS[error.limitKey]} (${error.usage.toLocaleString("en-US")} of ${error.limit.toLocaleString("en-US")}). Upgrade to continue.`,
+    error: message,
     code: "limit_reached",
     limitKey: error.limitKey,
     usage: error.usage,
     limit: error.limit,
+    requested: error.requested,
     upgrade: true,
   };
 }

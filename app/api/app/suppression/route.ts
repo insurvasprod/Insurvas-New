@@ -3,6 +3,8 @@ import { z } from "zod";
 
 import { audit } from "@/lib/audit/log";
 import { phoneLists, suppressionOverview } from "@/lib/suppression/overview";
+import { activeExemption } from "@/lib/suppression/exemptions";
+import { listScreeningAudit } from "@/lib/suppression/screeningAudit";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import {
   LIST_TYPES,
@@ -51,8 +53,10 @@ export async function GET(request: NextRequest) {
   if (check) {
     try {
       // The verdict is the dialer's own function; the per-list rows only name where it came from.
-      const [verdict, lists] = await Promise.all([checkPhone(auth.context.tenantId, check), phoneLists(auth.context.tenantId, check)]);
-      return NextResponse.json({ ...verdict, lists, checkedAt: new Date().toISOString() }, {
+      // LA-2.3-3: the exemption clearing federal/state DNC for this number, if one is active, so a
+      // "Yes" beside a listed federal row says why (null before 20260925709700).
+      const [verdict, lists, exemption] = await Promise.all([checkPhone(auth.context.tenantId, check), phoneLists(auth.context.tenantId, check), activeExemption(auth.context.tenantId, check)]);
+      return NextResponse.json({ ...verdict, lists, exemption, checkedAt: new Date().toISOString() }, {
         headers: { "Cache-Control": "no-store" },
       });
     } catch (error) {
@@ -60,6 +64,23 @@ export async function GET(request: NextRequest) {
         { error: error instanceof Error ? error.message : "Could not check that number" },
         { status: 400 },
       );
+    }
+  }
+
+  // `?audit=1`: LA-2.3-9, every screening check (who, when, vendor, raw response, outcome, cached),
+  // newest first. `phone`, `outcome` and `before` (a timestamp, for the next page) narrow it.
+  if (params.get("audit")) {
+    try {
+      const page = await listScreeningAudit({
+        tenantId: auth.context.tenantId,
+        phone: params.get("phone"),
+        outcome: params.get("outcome"),
+        before: params.get("before"),
+        limit: Number(params.get("limit")) || undefined,
+      });
+      return NextResponse.json(page, { headers: { "Cache-Control": "no-store" } });
+    } catch (error) {
+      return NextResponse.json({ error: error instanceof Error ? error.message : "Could not load the screening audit" }, { status: 400 });
     }
   }
 

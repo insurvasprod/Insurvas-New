@@ -153,7 +153,39 @@ export function costPerIssuedBeforeCredit(cost: CampaignCostPerPolicy, creditCen
   return (cost.cost_per_issued_cents * cost.issued_policies + creditCents) / cost.issued_policies;
 }
 
-/** Whole days until an instant, floored like the SQL (a window closing in 20 hours is "closes today"). */
+/** Whole days until an instant, floored. Kept for callers that want elapsed time; the countdown uses calendarDaysLeft. */
 export function daysUntil(iso: string, now = Date.now()): number {
   return Math.max(0, Math.floor((Date.parse(iso) - now) / 86_400_000));
+}
+
+/** "YYYY-MM-DD" of an instant on the wall calendar of `zone` (an IANA name). An unknown zone reads as UTC. */
+export function zonedDay(at: string | number | Date, zone: string | null | undefined): string {
+  const date = at instanceof Date ? at : new Date(at);
+  const format = (timeZone: string) => new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(date);
+  try {
+    return format(zone || "UTC");
+  } catch {
+    return format("UTC");
+  }
+}
+
+/**
+ * Days left on a return window as CALENDAR days in the tenant's zone (LA-2.19-2): a window that
+ * closes at 15:21 tomorrow has one day left, not "closes today" because fewer than 24 hours remain.
+ * 0 means it closes today; never negative. The same arithmetic the SQL uses after 20260925709810:
+ * (closes_at in zone)::date - (now in zone)::date.
+ */
+export function calendarDaysLeft(iso: string, zone: string | null | undefined, now: Date = new Date()): number {
+  const closes = Date.parse(`${zonedDay(iso, zone)}T00:00:00Z`);
+  const today = Date.parse(`${zonedDay(now, zone)}T00:00:00Z`);
+  if (!Number.isFinite(closes) || !Number.isFinite(today)) return 0;
+  return Math.max(0, Math.round((closes - today) / 86_400_000));
+}
+
+/** "Closes today", "Closes tomorrow", "5 days left"; "Window closed" for none. */
+export function closesLabel(days: number | null): string {
+  if (days === null) return "Window closed";
+  if (days === 0) return "Closes today";
+  if (days === 1) return "Closes tomorrow";
+  return `${days} days left`;
 }

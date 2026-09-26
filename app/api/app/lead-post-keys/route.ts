@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import { audit } from "@/lib/audit/log";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
-import { listPostKeys, mintPostKey } from "@/lib/leadPost/keys";
+import { listPostKeys, mintPostKey, PostKeyConflictError } from "@/lib/leadPost/keys";
 import { SchemaPendingError } from "@/lib/leadPost/schemaGap";
 
 /**
@@ -83,6 +83,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ key: minted.key, record: minted.record }, { status: 201 });
   } catch (error) {
     if (error instanceof SchemaPendingError) return NextResponse.json({ error: error.message }, { status: 503 });
+    // One active key per vendor (LA-2.5-2): a second is refused, and the message says to rotate.
+    if (error instanceof PostKeyConflictError) return NextResponse.json({ error: error.message, code: error.code }, { status: 409 });
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Could not create the posting key" },
       { status: 400 },

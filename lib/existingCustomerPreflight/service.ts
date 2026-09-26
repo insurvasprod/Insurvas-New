@@ -4,14 +4,12 @@ import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { normalizePhone, normalizeText } from "@/lib/contacts/normalization";
 import type { Json } from "@/lib/supabase/database.types";
 import type { PreflightMatch, PreflightResult, PreflightStatus } from "./types";
+import { isSoldMatch, soldByPartners } from "./soldBy";
 
 const CONTROL_OR_MARKUP = /[\u0000-\u001f\u007f<>]/;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const PHONE_KEYS = ["phone", "phone_number", "primary_phone"];
 const NAME_KEYS = ["full_name", "name"];
-// Outcomes are disposition keys (`application_submitted`, from deal_flow.call_result or the queue),
-// not bare words, so match the word at the end of the key as well as on its own.
-const OUTCOME_SOLD = /(^|_)(sold|issued|approved|won|converted|submitted)$/i;
 
 function record(value: unknown): Record<string, unknown> { return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {}; }
 function text(value: unknown, max = 240) {
@@ -48,7 +46,7 @@ function mapMatch(row: { lead_id: unknown; contact_id: unknown; submitted_at: un
 
 function statusFor(matches: PreflightMatch[]): PreflightStatus {
   if (!matches.length) return "new_household";
-  if (matches.some((match) => match.sourceType === "lead" && match.outcome && OUTCOME_SOLD.test(match.outcome.trim()))) return "already_customer";
+  if (matches.some(isSoldMatch)) return "already_customer";
   return "spoken_before";
 }
 
@@ -68,7 +66,8 @@ export async function runExistingCustomerPreflight(params: { tenantId: string; l
   if (error) throw new Error(`Could not complete existing-customer pre-flight: ${error.message}`);
   const matches = ((data ?? []) as unknown as Array<Parameters<typeof mapMatch>[0]>).map(mapMatch);
   const status = statusFor(matches);
-  const result: PreflightResult = { status, policyMatchingIncluded: false, policyMatchingNote: "Policy matching is not included yet; this check covers prior leads and contacts only.", checkedAt, matches };
+  const soldBy = soldByPartners(matches);
+  const result: PreflightResult = { status, policyMatchingIncluded: false, policyMatchingNote: "Policy matching is not included yet; this check covers prior leads and contacts only.", checkedAt, matches, soldByPartners: soldBy, soldByMultiplePartners: soldBy.length >= 2 };
   const stored = await getSupabaseServiceClient().from("agent_leads").update({ preflight_status: status, preflight_checked_at: checkedAt, preflight_result: result as unknown as Json }).eq("tenant_id", params.tenantId).eq("id", params.leadId);
   if (stored.error) throw new Error(`Could not store existing-customer pre-flight: ${stored.error.message}`);
   return result;
@@ -87,6 +86,8 @@ export async function loadStoredPreflight(value: unknown): Promise<PreflightResu
         : "Policy matching is not included yet; this check covers prior leads and contacts only.",
     checkedAt: typeof result.checkedAt === "string" ? result.checkedAt : null,
     matches: matches as PreflightMatch[],
+    soldByPartners: soldByPartners(matches as PreflightMatch[]),
+    soldByMultiplePartners: soldByPartners(matches as PreflightMatch[]).length >= 2,
     ...(typeof result.error === "string" ? { error: result.error } : {}),
   };
 }

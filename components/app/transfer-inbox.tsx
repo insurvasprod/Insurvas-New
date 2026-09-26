@@ -19,6 +19,8 @@ import { cn } from "@/lib/utils";
 type Item = {
   id: string;
   leadId: string;
+  /** LA-1.14's five states, as a label ("With a licensed agent"). */
+  phaseLabel?: string;
   customer: string;
   age: string;
   state: string;
@@ -214,7 +216,7 @@ export function TransferInbox({ readOnly, role }: { readOnly: boolean; role: str
   const [extras, setExtras] = useState<Extras | null>(null);
   const [recovering, setRecovering] = useState(false);
 
-  // Lost transfers and today-by-partner change slowly; every 30 seconds, not on the one-second tick.
+  // Lost transfers and today-by-partner change slowly; every 30 seconds, not on every realtime change.
   const loadExtras = useCallback(async () => {
     try {
       const response = await fetch("/api/app/inbound/today", { cache: "no-store" });
@@ -244,7 +246,7 @@ export function TransferInbox({ readOnly, role }: { readOnly: boolean; role: str
     void load();
   }
 
-  // `inFlight` stops the one-second tick from stacking requests when a response is slower than
+  // `inFlight` stops the safety tick from stacking requests when a response is slower than
   // the tick; `latest` drops a response that a newer request (a filter change) has superseded, so
   // a slow answer for the old filter can never overwrite the new one.
   const inFlight = useRef(0);
@@ -285,16 +287,19 @@ export function TransferInbox({ readOnly, role }: { readOnly: boolean; role: str
   // The tick is skipped while a request is still out and while the tab is hidden — realtime below
   // still refreshes on every change, and returning to the tab refreshes at once. The shell's alert
   // feed keeps announcing new transfers to a hidden tab, so nothing is missed.
+  // LA-1.15-2: realtime, not polling. The table triggers broadcast floor_changed on every claim,
+  // call and handoff, and the inbox re-reads on it (below). The only timer is a slow safety re-read
+  // in case a broadcast is missed: every 30 seconds while connected, every 10 while not.
   useEffect(() => {
     void load();
-    const timer = window.setInterval(() => { if (inFlight.current === 0 && document.visibilityState === "visible") void load(); }, 1000);
+    const timer = window.setInterval(() => { if (inFlight.current === 0 && document.visibilityState === "visible") void load(); }, realtime === "connected" ? 30_000 : 10_000);
     const onVisible = () => { if (document.visibilityState === "visible") void load(); };
     document.addEventListener("visibilitychange", onVisible);
     return () => { window.clearInterval(timer); document.removeEventListener("visibilitychange", onVisible); };
-  }, [load]);
+  }, [load, realtime]);
 
   // "Realtime · Connected" is the channel's own status, not a promise: it says Connected only once
-  // the subscription is confirmed, and says so when it drops (the one-second tick keeps going).
+  // the subscription is confirmed, and says so when it drops (the safety re-read then runs every 10 seconds).
   useEffect(() => {
     if (!data?.realtimeTopic) return;
     const supabase = getSupabaseBrowserClient();
@@ -318,6 +323,18 @@ export function TransferInbox({ readOnly, role }: { readOnly: boolean; role: str
 
   function change(next: Partial<Filters>) { setFilters((current) => ({ ...current, ...next })); setPage(1); }
   function resetFilters() { setFilters(DEFAULT_FILTERS); setSearch(""); setPage(1); }
+
+  // LA-1.10-8 / LA-1.14-9: give a transfer back, or put a dropped call back in the queue.
+  async function release(item: Item, action: "unassign" | "requeue") {
+    if (action === "unassign" && !window.confirm(`Give ${item.customer} back to the queue? Nobody will own it until someone claims it. The verification so far is kept.`)) return;
+    setClaiming(item.id);
+    const response = await fetch("/api/app/inbound/release", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, work_item_id: item.id }) });
+    const body = await response.json().catch(() => null);
+    setClaiming(null);
+    if (!response.ok) { notify.block(body?.error ?? "Could not update this transfer"); return; }
+    notify.done(action === "requeue" ? `${item.customer} is back in the queue; whoever claims it picks up the verification where it stopped` : `${item.customer} is back in the queue`);
+    void load();
+  }
 
   async function claim(id: string) {
     setClaiming(id);
@@ -412,7 +429,7 @@ export function TransferInbox({ readOnly, role }: { readOnly: boolean; role: str
   const selected = data.items.find((item) => item.id === selectedId) ?? null;
   const handoffIds = new Set(data.handoffs.map((handoff) => handoff.workItemId));
   const now = data.fetchedAt ? new Date(data.fetchedAt).getTime() : 0;
-  const realtimeText = realtime === "connected" ? "Realtime · Connected" : realtime === "connecting" ? "Realtime · Connecting…" : "Realtime · Disconnected, refreshing every second";
+  const realtimeText = realtime === "connected" ? "Realtime · Connected" : realtime === "connecting" ? "Realtime · Connecting…" : "Realtime · Disconnected, refreshing every 10 seconds";
 
   return (
     <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
@@ -617,6 +634,7 @@ export function TransferInbox({ readOnly, role }: { readOnly: boolean; role: str
         readOnly={readOnly}
         claiming={claiming}
         onClaim={(id) => void claim(id)}
+        onRelease={(item, action) => void release(item, action)}
         onClose={() => setSelectedId("")}
       />
     </div>
@@ -636,7 +654,7 @@ function FilterField({ id, label, children }: { id: string; label: string; child
  * The row's detail, as a drawer: what the old side panel held (facts, screening, preflight,
  * claimed-by) plus the SLA meter that used to sit on every row, and Claim transfer.
  */
-function TransferDrawer({ item, sla, currentUserId, readOnly, claiming, onClaim, onClose }: { item: Item | null; sla: Sla | null; currentUserId?: string; readOnly: boolean; claiming: string | null; onClaim: (id: string) => void; onClose: () => void }) {
+function TransferDrawer({ item, sla, currentUserId, readOnly, claiming, onClaim, onRelease, onClose }: { item: Item | null; sla: Sla | null; currentUserId?: string; readOnly: boolean; claiming: string | null; onClaim: (id: string) => void; onRelease: (item: Item, action: "unassign" | "requeue") => void; onClose: () => void }) {
   const open = item !== null;
   const signal = item ? signalOf(item) : null;
   const wait = item ? waitOf(item) : null;
@@ -726,6 +744,7 @@ function TransferDrawer({ item, sla, currentUserId, readOnly, claiming, onClaim,
                   <KeyValues items={[
                     { label: "Claimed by", value: !item.ownerUserId && !item.ownerName ? "Unclaimed" : mine ? "You" : item.ownerName ?? "Another agent" },
                     { label: "Claimed at", value: clock(item.claimedAt) },
+                    ...(item.phaseLabel ? [{ label: "Transfer state", value: item.phaseLabel }] : []),
                   ]} />
                 </section>
 
@@ -735,6 +754,8 @@ function TransferDrawer({ item, sla, currentUserId, readOnly, claiming, onClaim,
                   ) : (
                     <div className="flex flex-wrap gap-3">
                       {mine && isWithAgent(item.status) && <Link href={`/app/inbound/${item.id}/verification`} className={b.primary44}>Resume verification</Link>}
+                      {item.status === "dropped" && <button type="button" onClick={() => onRelease(item, "requeue")} disabled={readOnly || claiming === item.id} className={b.primary44}>{claiming === item.id ? "Putting back…" : "Put back in the queue"}</button>}
+                      {mine && isWithAgent(item.status) && item.status !== "handed_pending" && <button type="button" onClick={() => onRelease(item, "unassign")} disabled={readOnly || claiming === item.id} className={b.secondary44}>Unassign</button>}
                       <Link href={`/app/leads/${item.leadId}`} className={b.secondary44}>Open lead</Link>
                     </div>
                   )}

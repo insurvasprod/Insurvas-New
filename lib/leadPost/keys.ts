@@ -42,7 +42,38 @@ type Query = {
   maybeSingle<T>(): Promise<Result<T>>;
   then(resolve: (value: Result<Row[]>) => unknown, reject?: (reason: unknown) => unknown): Promise<unknown>;
 };
-type Db = { from(table: string): Query };
+type Db = { from(table: string): Query; rpc(name: string, args: Record<string, unknown>): PromiseLike<Result<unknown>> };
+
+/**
+ * LA-2.5-2 · "One key per vendor, rotatable." A vendor holds ONE active key: minting a second is
+ * refused (409), and so is re-enabling a retired key while another is active. Rotation is the way
+ * to a new key. Migration 20260925709710 adds the unique index that makes this hold under a race,
+ * and rotate_vendor_post_key(), which retires and mints in one transaction.
+ */
+export class PostKeyConflictError extends Error {
+  readonly code = "vendor_has_key";
+  constructor(message: string) {
+    super(message);
+    this.name = "PostKeyConflictError";
+  }
+}
+
+const MISSING_FUNCTION = new Set(["42883", "PGRST202"]);
+const isMissingFunction = (error: { code?: string; message?: string } | null) =>
+  Boolean(error && ((error.code && MISSING_FUNCTION.has(error.code)) || /could not find the function/i.test(error.message ?? "")));
+
+/** The vendor's active key other than `exceptKeyId`, if it holds one. */
+async function activeKeyFor(tenantId: string, vendorId: string, exceptKeyId?: string): Promise<Row | null> {
+  let query = db().from("tenant_vendor_post_keys").select("id, key_prefix").eq("tenant_id", tenantId).eq("vendor_id", vendorId).eq("is_active", true);
+  if (exceptKeyId) query = query.neq("id", exceptKeyId);
+  const result = (await (query as unknown as PromiseLike<Result<Row[]>>)) as Result<Row[]>;
+  if (result.error) throw new Error(`Could not check the vendor's keys: ${result.error.message}`);
+  return result.data?.[0] ?? null;
+}
+
+function oneKeyMessage(vendorName: string, prefix: string) {
+  return `${vendorName || "This vendor"} already has an active posting key (${prefix}…). A vendor holds one key: rotate it to issue a new one, and the old one stops working.`;
+}
 
 function db(): Db {
   return getSupabaseServiceClient() as unknown as Db;
@@ -209,15 +240,21 @@ async function assertVendorCampaign(tenantId: string, vendorId: string, campaign
   if (text(result.data.vendor_id) !== vendorId) throw new Error("That campaign belongs to a different vendor.");
 }
 
-/** The only moment the key exists outside the vendor's hands. */
-export async function mintPostKey(input: {
+type MintInput = {
   tenantId: string;
   userId: string;
   vendorId: string;
   fieldMap: Record<string, string>;
   fieldNotes?: Record<string, string>;
   campaignId?: string | null;
-}): Promise<{ key: string; record: PostKey }> {
+};
+
+/** The only moment the key exists outside the vendor's hands. Refused while the vendor holds one. */
+export async function mintPostKey(input: MintInput): Promise<{ key: string; record: PostKey }> {
+  return insertKey(input, { replacing: false });
+}
+
+async function insertKey(input: MintInput, options: { replacing: boolean }): Promise<{ key: string; record: PostKey }> {
   const client = db();
 
   const vendor = await client
@@ -228,6 +265,10 @@ export async function mintPostKey(input: {
     .maybeSingle<Row>();
   if (vendor.error) throw new Error(`Could not check that vendor: ${vendor.error.message}`);
   if (!vendor.data) throw new Error("That vendor is not on your list.");
+  if (!options.replacing) {
+    const held = await activeKeyFor(input.tenantId, input.vendorId);
+    if (held) throw new PostKeyConflictError(oneKeyMessage(text(vendor.data.name), text(held.key_prefix)));
+  }
   if (input.campaignId) await assertVendorCampaign(input.tenantId, input.vendorId, input.campaignId);
 
   // The field map is the vendor's, not the key's: a new key for a vendor that already has one starts
@@ -268,6 +309,8 @@ export async function mintPostKey(input: {
 
   if (inserted.error) {
     if (isMissingSchema(inserted.error)) throw new SchemaPendingError();
+    // The one-active-key index (20260925709710) caught a mint that raced another.
+    if (inserted.error.code === "23505" && !/key_hash/.test(inserted.error.message)) throw new PostKeyConflictError(oneKeyMessage(text(vendor.data.name), "another"));
     throw new Error(`Could not create the posting key: ${inserted.error.message}`);
   }
   if (!inserted.data) throw new Error("The posting key did not save.");
@@ -276,11 +319,13 @@ export async function mintPostKey(input: {
 }
 
 /**
- * Rotation: a new key for the same vendor, and the old one deactivated.
+ * Rotation: a new key for the same vendor, and every active key it held retired.
  *
- * Deactivating first would give the vendor a window where their posts are rejected. Minting first
- * means both keys work for the instant between the two writes, which is the correct way round —
- * a duplicate lead is recoverable and a rejected one is a lost sale the vendor bills for anyway.
+ * With 20260925709710 applied this is rotate_vendor_post_key(): retire and mint in one
+ * transaction, so there is no instant with no key and no instant with two. Before it, the old
+ * order stands — mint first, then retire — because deactivating first would give the vendor a
+ * window where their posts are rejected, and a duplicate lead is recoverable where a rejected one
+ * is a lost sale the vendor bills for anyway.
  */
 export async function rotatePostKey(input: {
   tenantId: string;
@@ -294,7 +339,27 @@ export async function rotatePostKey(input: {
   if (existing.error) throw new Error(`Could not load that key: ${existing.error.message}`);
   if (!existing.data) throw new Error("That posting key is not yours, or no longer exists.");
 
-  const minted = await mintPostKey({
+  const vendorId = text(existing.data.vendor_id);
+  const fresh = generatePostKey();
+  const atomic = await client.rpc("rotate_vendor_post_key", {
+    p_tenant_id: input.tenantId,
+    p_key_id: input.keyId,
+    p_key_hash: fresh.hash,
+    p_key_prefix: fresh.prefix,
+    p_actor: input.userId,
+  });
+  if (!atomic.error && typeof atomic.data === "string") {
+    const newId = atomic.data;
+    const { result: row } = await selectKeys((columns) =>
+      client.from("tenant_vendor_post_keys").select(columns).eq("tenant_id", input.tenantId).eq("id", newId).maybeSingle<Row>(),
+    );
+    const vendor = await client.from("tenant_lead_vendors").select("name").eq("tenant_id", input.tenantId).eq("id", vendorId).maybeSingle<Row>();
+    if (row.error || !row.data) throw new Error("The key was rotated, but the new key could not be read back. Reload to see it.");
+    return { key: fresh.key, record: { ...toKey(row.data, text(vendor.data?.name)), isActive: true, rotatedAt: null, lastUsedAt: null } };
+  }
+  if (atomic.error && !isMissingFunction(atomic.error)) throw new Error(`Could not rotate the posting key: ${atomic.error.message}`);
+
+  const minted = await insertKey({
     tenantId: input.tenantId,
     userId: input.userId,
     vendorId: text(existing.data.vendor_id),
@@ -304,15 +369,17 @@ export async function rotatePostKey(input: {
     fieldMap: stringMap(existing.data.field_map),
     fieldNotes: stringMap(existing.data.field_notes),
     campaignId: text(existing.data.campaign_id) || null,
-  });
+  }, { replacing: true });
 
-  const retired = await client
+  // Every other active key of the vendor, not only the one named, so the rotation leaves one.
+  const retired = (await (client
     .from("tenant_vendor_post_keys")
     .update({ is_active: false, rotated_at: new Date().toISOString() })
     .eq("tenant_id", input.tenantId)
-    .eq("id", input.keyId)
-    .select("id")
-    .maybeSingle<Row>();
+    .eq("vendor_id", vendorId)
+    .eq("is_active", true)
+    .neq("id", minted.record.id)
+    .select("id") as unknown as PromiseLike<Result<Row[]>>)) as Result<Row[]>;
 
   if (retired.error) {
     // The new key is live and the old one is not retired. Saying so matters: silently reporting
@@ -330,6 +397,17 @@ export async function setPostKeyActive(input: {
   keyId: string;
   isActive: boolean;
 }): Promise<PostKey> {
+  if (input.isActive) {
+    // Re-enabling a retired key while the vendor holds another would give it two.
+    const key = await db().from("tenant_vendor_post_keys").select("id, vendor_id").eq("tenant_id", input.tenantId).eq("id", input.keyId).maybeSingle<Row>();
+    if (key.error) throw new Error(`Could not load that key: ${key.error.message}`);
+    if (!key.data) throw new Error("That posting key is not yours, or no longer exists.");
+    const held = await activeKeyFor(input.tenantId, text(key.data.vendor_id), input.keyId);
+    if (held) {
+      const vendor = await db().from("tenant_lead_vendors").select("name").eq("tenant_id", input.tenantId).eq("id", text(key.data.vendor_id)).maybeSingle<Row>();
+      throw new PostKeyConflictError(oneKeyMessage(text(vendor.data?.name), text(held.key_prefix)));
+    }
+  }
   const result = await db()
     .from("tenant_vendor_post_keys")
     .update({ is_active: input.isActive })
@@ -337,6 +415,7 @@ export async function setPostKeyActive(input: {
     .eq("id", input.keyId)
     .select(BASE_COLUMNS)
     .maybeSingle<Row>();
+  if (result.error?.code === "23505") throw new PostKeyConflictError(oneKeyMessage("", "another"));
   if (result.error) throw new Error(`Could not change that key: ${result.error.message}`);
   if (!result.data) throw new Error("That posting key is not yours, or no longer exists.");
   return toKey(result.data, "");

@@ -4,9 +4,11 @@ import { z } from "zod";
 import { getAgentTemplate } from "@/lib/agentTemplates/service";
 import { recordImportFailure } from "@/lib/agentTemplates/errors";
 import {
+  advancePreflightScreening,
   commitImport,
   ImportConflictError,
   ImportNeedsDatabaseUpdateError,
+  MAX_STEP_NUMBERS,
   preflightImport,
   type ImportDecisions,
 } from "@/lib/agentTemplates/importPreflight";
@@ -26,6 +28,12 @@ import { outboundLimitResponse, recordOutboundUsage } from "@/lib/metering/outbo
  * step ⑧ is a decision made in the light of them.
  */
 const LEAD_IMPORT_ROLES = ["owner", "producer", "assistant"] as const;
+
+/**
+ * LA-2.2-10. Each request screens for at most STEP_BUDGET_MS (20 s) and then hands back; this is the
+ * ceiling a platform may enforce on one request, with room for the plan to be built on the last one.
+ */
+export const maxDuration = 60;
 
 const preflightSchema = z.object({
   csv: z.string().min(1),
@@ -54,6 +62,15 @@ const commitSchema = z.object({
     dnc: z.enum(["exclude", "suppress"]),
   }),
   add_to_campaign_spend: z.boolean().optional(),
+}).strict();
+
+/** PATCH: the review screen's poll, which screens the next slice of a batch's scrub. */
+const stepSchema = z.object({
+  batch_id: z.string().uuid(),
+  // Sent once every number has an answer: the plan is built from the file's rows.
+  csv: z.string().min(1).optional(),
+  // How many numbers this step may screen; the screen sends nothing and gets the default.
+  limit: z.number().int().min(1).max(MAX_STEP_NUMBERS).optional(),
 }).strict();
 
 type LooseQuery = PromiseLike<{ data: unknown; error: { message: string } | null }> & {
@@ -117,7 +134,7 @@ export async function POST(request: NextRequest) {
     if (parsed.data.vendor_id && parsed.data.vendor_id !== campaignRow.vendor_id)
       return NextResponse.json({ error: "The selected vendor does not own this campaign" }, { status: 400 });
 
-    const { batchId, plan } = await preflightImport({
+    const { batchId, plan, progress } = await preflightImport({
       tenantId: result.auth.context.tenantId,
       userId: result.auth.context.userId,
       template: result.template,
@@ -132,11 +149,20 @@ export async function POST(request: NextRequest) {
       dateOrder: parsed.data.date_order ?? null,
     });
 
+    // Still screening: 202, and the review screen carries the job on with PATCH. Nothing is staged.
+    if (!plan)
+      return NextResponse.json(
+        { batchId, state: "screening", progress, campaignId: campaignRow.id },
+        { status: 202, headers: { "Cache-Control": "no-store" } },
+      );
+
     return NextResponse.json(
       {
         batchId,
+        state: "staged",
         counts: plan.counts,
         buckets: plan.buckets,
+        noState: plan.noState?.length ?? 0,
         totalRows: plan.totalRows,
         campaignId: plan.campaignId,
       },
@@ -148,6 +174,42 @@ export async function POST(request: NextRequest) {
     const limit = outboundLimitResponse(error);
     if (limit) return NextResponse.json(limit, { status: 403 });
     const failure = recordImportFailure(error, "preflight stage");
+    return NextResponse.json({ error: failure.message, code: failure.code }, { status: failure.status });
+  }
+}
+
+/**
+ * LA-2.2-10 · one step of a batch's scrub. The progress is the batch row's, so a closed tab, a
+ * refresh or a second tab carries on from the same place; nothing is staged until every number has
+ * an answer and the file has been sent to build the plan from.
+ */
+export async function PATCH(request: NextRequest) {
+  const result = await context();
+  if (result instanceof NextResponse) return result;
+  const parsed = stepSchema.safeParse(await request.json().catch(() => null));
+  if (!parsed.success) return NextResponse.json({ error: "Name the import to carry on checking" }, { status: 400 });
+  try {
+    const step = await advancePreflightScreening({
+      tenantId: result.auth.context.tenantId,
+      userId: result.auth.context.userId,
+      template: result.template,
+      stages: result.stages,
+      batchId: parsed.data.batch_id,
+      csv: parsed.data.csv ?? null,
+      limit: parsed.data.limit,
+    });
+    if (step.state === "missing") return NextResponse.json({ error: "This import is not on file. Upload the file again.", state: "missing" }, { status: 404 });
+    if (step.state === "committed") return NextResponse.json({ state: "committed", batchId: parsed.data.batch_id }, { headers: { "Cache-Control": "no-store" } });
+    if (step.state === "staged")
+      return NextResponse.json(
+        { state: "staged", batchId: parsed.data.batch_id, buckets: step.plan.buckets, totalRows: step.plan.totalRows, noState: step.plan.noState?.length ?? 0 },
+        { headers: { "Cache-Control": "no-store" } },
+      );
+    return NextResponse.json({ state: "screening", progress: step.progress, needsFile: step.needsFile }, { headers: { "Cache-Control": "no-store" } });
+  } catch (error) {
+    const refused = conflict(error);
+    if (refused) return refused;
+    const failure = recordImportFailure(error, "preflight screening step");
     return NextResponse.json({ error: failure.message, code: failure.code }, { status: failure.status });
   }
 }

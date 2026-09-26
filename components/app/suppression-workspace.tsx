@@ -22,6 +22,9 @@ import {
   type SuppressionSource,
 } from "@/lib/suppression/constants";
 import type { PhoneListRow, SuppressionOverview } from "@/lib/suppression/overview";
+import { DNC_EXEMPTION_BASIS_LABELS, type DncExemption } from "@/lib/suppression/exemptionConstants";
+import { TcpaDncExemptions } from "@/components/app/tcpa-dnc-exemptions";
+import { TcpaScreeningAudit } from "@/components/app/tcpa-screening-audit";
 
 type Loaded = {
   entries: SuppressionEntry[];
@@ -30,7 +33,8 @@ type Loaded = {
   canEdit: boolean;
 };
 
-type Check = { phoneDigits: string; suppressed: boolean; listType: string | null; reason: string | null; lists?: PhoneListRow[]; checkedAt?: string };
+type Check = { phoneDigits: string; suppressed: boolean; listType: string | null; reason: string | null; lists?: PhoneListRow[]; checkedAt?: string; exemption?: DncExemption | null };
+const EXEMPTED_LISTS = new Set(["federal_dnc", "state_dnc"]);
 
 const SOURCE_LABELS: Record<string, string> = {
   disposition: "Agent on a call",
@@ -135,8 +139,8 @@ export function SuppressionWorkspace({ eyebrow }: { eyebrow?: string }) {
     return () => { document.removeEventListener("mousedown", onPointer); document.removeEventListener("keydown", onKey); };
   }, [filtersOpen]);
 
-  async function runCheck(event: React.FormEvent) {
-    event.preventDefault();
+  async function runCheck(event?: React.FormEvent) {
+    event?.preventDefault();
     if (!normalizeDigits(lookup)) { notify.block("That is not a ten-digit US phone number."); return; }
     setChecking(true);
     setCheck(null);
@@ -215,6 +219,7 @@ export function SuppressionWorkspace({ eyebrow }: { eyebrow?: string }) {
                 </Note>
               ) : (
                 <Note tone="good" title={`Yes — no list here blocks ${formatPhone(check.phoneDigits)}`}>
+                  {check.exemption && <>Federal and state DNC are cleared by a recorded {DNC_EXEMPTION_BASIS_LABELS[check.exemption.basis].toLowerCase()}{check.exemption.expiresAt ? `, until ${dayMonthYear(check.exemption.expiresAt)}` : ", until revoked"}. </>}
                   The calling window, the state licence and the DNC vendor&rsquo;s live lookup are still checked at the moment of the dial.
                 </Note>
               )}
@@ -223,7 +228,7 @@ export function SuppressionWorkspace({ eyebrow }: { eyebrow?: string }) {
                   <thead><tr><th className={th}>List</th><th className={`${th} w-[160px]`}>Result</th><th className={`${th} w-[170px] text-right`}>Checked</th></tr></thead>
                   <tbody>{check.lists.map((row) => <tr key={row.list} className="m-row">
                     <td className={td}>{LIST_TYPE_LABELS[row.list]}</td>
-                    <td className={td}>{row.listed ? <StatusChip tone="danger" dot={false}>Listed</StatusChip> : <StatusChip tone="good" dot={false}>Clear</StatusChip>}</td>
+                    <td className={td}>{row.listed && check.exemption && EXEMPTED_LISTS.has(row.list) ? <StatusChip tone="info" dot={false}>Listed · exempt</StatusChip> : row.listed ? <StatusChip tone="danger" dot={false}>Listed</StatusChip> : <StatusChip tone="good" dot={false}>Clear</StatusChip>}</td>
                     <td className={`${td} text-right tabular-nums`} title={row.since ? `On this list since ${dayMonthYear(row.since)}` : undefined}>{row.listed && row.since ? `since ${dayMonthYear(row.since)}` : "just now"}</td>
                   </tr>)}</tbody>
                 </table>
@@ -324,6 +329,10 @@ export function SuppressionWorkspace({ eyebrow }: { eyebrow?: string }) {
             </div>
           </>}
       </section>
+
+      {/* LA-2.3-3 and LA-2.3-9: the exemptions that clear federal/state DNC, and every screening check. */}
+      <TcpaDncExemptions onChanged={() => { if (lookup.trim() && check) void runCheck(); }} />
+      <TcpaScreeningAudit />
 
       <Note tone="info" title="Suppression is yours, and it is permanent">
         A number on any list is refused at the dialer. Nothing here removes one: the database refuses deletion and deactivation on purpose, so a mistaken entry takes a support request and a migration to undo. That is the right friction for a do-not-call, and the reason Suppress a number asks you to check the digits first.

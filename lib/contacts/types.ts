@@ -59,7 +59,7 @@ export type FieldSchemaRow = {
   entity: "contact" | "lead" | "policy" | "application";
   field_key: string;
   label: string;
-  type: "text" | "long_text" | "number" | "date" | "single_select" | "multi_select" | "boolean" | "currency" | "phone" | "email" | "ssn";
+  type: "text" | "long_text" | "number" | "date" | "single_select" | "multi_select" | "boolean" | "currency" | "phone" | "email" | "ssn" | "bank_routing" | "bank_account";
   options: string[];
   is_required: boolean;
   sort_order: number;

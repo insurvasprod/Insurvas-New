@@ -47,6 +47,11 @@ export const BOOKING_REFUSALS: Record<string, readonly [number, string]> = {
     422,
     "That time is outside the customer's legal calling window. An appointment is a call, so it has to be inside it.",
   ],
+  // 20260925711200 · the number is on the agency's DNC, a federal/state DNC or a litigator list.
+  APPOINTMENT_NUMBER_SUPPRESSED: [
+    409,
+    "This number is on a do-not-call list, so it cannot be booked. An appointment is a call, and this call would be refused.",
+  ],
   APPOINTMENT_OUTSIDE_AVAILABILITY: [422, "That time is outside the agent's working hours."],
   // 20260925704000 · decided 2026-09-25: an agent with no working hours cannot be booked at all.
   APPOINTMENT_AGENT_HAS_NO_HOURS: [

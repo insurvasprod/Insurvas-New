@@ -64,6 +64,8 @@ export const AGENT_API_POLICIES: AgentApiPolicy[] = [
   { sourceFile: "app/api/app/calendar-connections/callback/route.ts", featureKey: "outbound_dialing", allowedRoles: ["owner", "producer", "assistant"] },
   { sourceFile: "app/api/app/cadence/route.ts", featureKey: "outbound_dialing", allowedRoles: ["owner", "producer", "setter", "assistant"] },
   { sourceFile: "app/api/app/suppression/route.ts", featureKey: "tcpa_checker", allowedRoles: ["owner", "producer", "assistant", "setter"] },
+  // LA-2.3-3: DNC exemptions. Read like the list; record and revoke are owner-only inside the route.
+  { sourceFile: "app/api/app/suppression/exemptions/route.ts", featureKey: "tcpa_checker", allowedRoles: ["owner", "producer", "assistant", "setter"] },
   { sourceFile: "app/api/app/consent/route.ts", featureKey: "consent_locker", allowedRoles: ["owner", "producer", "assistant"] },
   { sourceFile: "app/api/app/calling-windows/route.ts", featureKey: "outbound_dialing", allowedRoles: ["owner", "producer", "setter", "assistant"] },
   { sourceFile: "app/api/app/lead-post-keys/route.ts", featureKey: "lead_import", allowedRoles: ["owner"] },
@@ -89,6 +91,8 @@ export const AGENT_API_POLICIES: AgentApiPolicy[] = [
   // Re-screens every lead in a campaign and bills each screening lookup: owners only.
   { sourceFile: "app/api/app/campaigns/[id]/scrub/route.ts", featureKey: "outbound_dialing", allowedRoles: ["owner"] },
   { sourceFile: "app/api/app/vendors/route.ts", featureKey: "outbound_dialing", allowedRoles: ["owner", "producer"] },
+  // LA-2.5-5: speed to lead per campaign (tenant_campaign_speed_to_lead), the roster's read.
+  { sourceFile: "app/api/app/campaigns/speed-to-lead/route.ts", featureKey: "outbound_dialing", allowedRoles: ["owner", "producer"] },
   // Reads True CPA's figures only when the tenant also has true_cpa (checked inside the route).
   { sourceFile: "app/api/app/vendors/cards/route.ts", featureKey: "outbound_dialing", allowedRoles: ["owner", "producer"] },
   { sourceFile: "app/api/app/compliance/consent/claim/route.ts", featureKey: "lead_import", allowedRoles: ["owner", "producer"] },
@@ -123,6 +127,8 @@ export const AGENT_API_POLICIES: AgentApiPolicy[] = [
   { sourceFile: "app/api/app/inbound/verification/route.ts", featureKey: "inbound_transfers", allowedRoles: ["owner", "producer", "assistant"] },
   { sourceFile: "app/api/app/inbound/verification/reveal/route.ts", featureKey: "inbound_transfers", allowedRoles: ["owner", "producer", "assistant"] },
   { sourceFile: "app/api/app/inbound/handoff/route.ts", featureKey: "inbound_transfers", allowedRoles: ["owner", "producer", "assistant"] },
+  // Unassign, put a dropped call back in the queue, end buffer involvement (20260925709860).
+  { sourceFile: "app/api/app/inbound/release/route.ts", featureKey: "inbound_transfers", allowedRoles: ["owner", "producer", "assistant"] },
   { sourceFile: "app/api/app/inbound/disposition/route.ts", featureKey: "inbound_transfers", allowedRoles: ["owner", "producer"] },
   { sourceFile: "app/api/app/agent-floor/route.ts", featureKey: "inbound_transfers", allowedRoles: ["owner", "producer", "assistant"] },
   { sourceFile: "app/api/app/callbacks/route.ts", featureKey: "callback_calendar", allowedRoles: ["owner", "producer", "assistant"] },

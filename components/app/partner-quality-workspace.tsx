@@ -36,6 +36,11 @@ function TeamMetricButton({ member, metric, value, onClick }: { member: PartnerQ
   return <button type="button" className="portal-quality-team-metric" aria-label={`${member.name}: ${metricLabel(metric)} ${value}; open leads`} onClick={() => onClick(member, metric)}>{value}</button>;
 }
 
+/** The same figure for the prior period, under the current one (LA-1.18 "against previous period"). */
+function Prior({ value, label }: { value: string; label: string }) {
+  return <span className="block text-xs leading-tight text-muted-foreground tabular-nums" aria-label={`${label} in the prior period: ${value}`}>prev {value}</span>;
+}
+
 function SortButton({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) { return <button type="button" className="font-semibold [letter-spacing:inherit] [text-transform:inherit] underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]" onClick={onClick}>{label}{active ? " ↕" : ""}</button>; }
 
 export function PartnerQualityWorkspace() {
@@ -51,8 +56,8 @@ export function PartnerQualityWorkspace() {
   const [drilldownError, setDrilldownError] = useState("");
   const [expandedAdmins, setExpandedAdmins] = useState<Record<string, boolean>>({});
   const [search, setSearch] = useState("");
-  // Partners with no lead in the period are hidden by default: a row of zeros compares nothing.
-  const [hideEmpty, setHideEmpty] = useState(true);
+  // LA-1.18: a partner with no leads in the period shows a zero row by default. Idle is a finding.
+  const [hideEmpty, setHideEmpty] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [page, setPage] = useState(1);
 
@@ -130,7 +135,8 @@ export function PartnerQualityWorkspace() {
   const pages = Math.max(1, Math.ceil(shown.length / PAGE_SIZE));
   const current = Math.min(page, pages);
   const pageRows = shown.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE);
-  const passOf = (row: PartnerQualityRow) => { const flags = row.screening.tcpa + row.screening.dnc + row.screening.invalid; return row.sent ? ((row.sent - flags) / row.sent) * 100 : null; };
+  const passOf = (row: Pick<PartnerQualityRow, "sent" | "screening">) => { const flags = row.screening.tcpa + row.screening.dnc + row.screening.invalid; return row.sent ? ((row.sent - flags) / row.sent) * 100 : null; };
+  const rate = (value: number | null, sent: number) => (sent ? percent(value) : "—");
   const sortLabel = sort.key === "sent" ? "most leads sent" : sort.key === "partner_name" ? "partner name" : sort.key.replaceAll("_", " ");
   const field = "h-10 rounded-lg border border-[var(--border-strong)] bg-card px-3 text-sm font-semibold text-foreground";
   const cell = "rounded px-1 font-normal tabular-nums text-[var(--body)]! underline-offset-4 hover:bg-transparent! hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]";
@@ -169,7 +175,7 @@ export function PartnerQualityWorkspace() {
           <label className="inline-flex items-center gap-2 text-sm"><input type="checkbox" checked={hideEmpty} onChange={(event) => { setHideEmpty(event.target.checked); setPage(1); }} className="size-4 accent-[var(--primary)]" />Only partners who sent a lead in this period</label>
         </div>
       )}
-      <p className="text-xs text-muted-foreground">Leads received {dateText(data.from)} – {dateText(data.to)}, compared with {dateText(data.previous_from)} – {dateText(data.previous_to)}. Reporting calendar: fixed EST (UTC−5).</p>
+      <p className="text-xs text-muted-foreground">Leads received {dateText(data.from)} – {dateText(data.to)}, compared with {dateText(data.previous_from)} – {dateText(data.previous_to)}. The small &ldquo;prev&rdquo; figure under each number is that partner&rsquo;s prior period. Reporting calendar: fixed EST (UTC−5).</p>
     </div>
     {error && <p role="alert" className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">{error}</p>}
 
@@ -182,30 +188,36 @@ export function PartnerQualityWorkspace() {
         </span>
       </>}
     >
-      <table className="portal-lead-table w-full min-w-[860px] text-left text-sm">
+      <table className="portal-lead-table w-full min-w-[1080px] text-left text-sm">
         <thead>
           <tr>
             <th><SortButton label="Partner" active={sort.key === "partner_name"} onClick={() => toggleSort("partner_name")} /></th>
             <th className="w-[100px] text-right"><SortButton label="Sent" active={sort.key === "sent"} onClick={() => toggleSort("sent")} /></th>
+            <th className="w-[100px] text-right"><SortButton label="Claimed" active={sort.key === "claimed"} onClick={() => toggleSort("claimed")} /></th>
             <th className="w-[100px] text-right"><SortButton label="Worked" active={sort.key === "worked"} onClick={() => toggleSort("worked")} /></th>
             <th className="w-[110px] text-right"><SortButton label="Submitted" active={sort.key === "submitted"} onClick={() => toggleSort("submitted")} /></th>
             <th className="w-[130px] text-right">Screening pass</th>
             <th className="w-[110px] text-right"><SortButton label="Duplicates" active={sort.key === "duplicate_rate"} onClick={() => toggleSort("duplicate_rate")} /></th>
             <th className="w-[120px] text-right"><SortButton label="Conversion" active={sort.key === "conversion_rate"} onClick={() => toggleSort("conversion_rate")} /></th>
+            <th className="w-[90px] text-right"><SortButton label="DQ %" active={sort.key === "disqualification_rate"} onClick={() => toggleSort("disqualification_rate")} /></th>
           </tr>
         </thead>
         <tbody className="m-seq">
           {pageRows.map((row, index) => {
             const pass = passOf(row);
+            const prior = row.previous;
+            const priorPass = prior ? passOf(prior) : null;
             return (
               <tr key={row.partner_id} className={cn("m-row", index === 0 && current === 1 && sort.key === "sent" && sort.direction === "desc" && row.sent > 0 && "bg-[var(--soft-orange-surface)]")}>
                 <td><button type="button" className="text-left font-normal text-[var(--body)]! underline-offset-4 hover:bg-transparent! hover:underline" aria-label={`Open all leads sent by ${row.partner_name}`} onClick={() => void openDrilldown(row, "sent")}>{row.partner_name}</button></td>
-                <td className="text-right"><button type="button" className={cell} aria-label={`${row.partner_name}: sent ${row.sent}; open leads`} onClick={() => void openDrilldown(row, "sent")}>{row.sent.toLocaleString()}</button></td>
-                <td className="text-right"><button type="button" className={cell} aria-label={`${row.partner_name}: worked ${row.worked}; open leads`} onClick={() => void openDrilldown(row, "worked")}>{row.worked.toLocaleString()}</button></td>
-                <td className="text-right"><button type="button" className={cell} aria-label={`${row.partner_name}: submitted ${row.submitted}; open leads`} onClick={() => void openDrilldown(row, "submitted")}>{row.submitted.toLocaleString()}</button></td>
-                <td className="text-right tabular-nums" title={`${(row.screening.tcpa + row.screening.dnc + row.screening.invalid).toLocaleString()} of ${row.sent.toLocaleString()} flagged`}>{pass == null ? "—" : `${pass.toFixed(1)}%`}</td>
-                <td className="text-right"><button type="button" className={cell} aria-label={`${row.partner_name}: duplicates ${row.duplicates}; open leads`} onClick={() => void openDrilldown(row, "duplicate")}>{row.duplicates.toLocaleString()}</button></td>
-                <td className="text-right"><button type="button" className={cell} aria-label={`${row.partner_name}: conversion ${percent(row.conversion_rate)}, ${row.submitted} of ${row.sent}; open submitted leads`} onClick={() => void openDrilldown(row, "submitted")}>{row.sent ? percent(row.conversion_rate) : "—"}</button></td>
+                <td className="text-right"><button type="button" className={cell} aria-label={`${row.partner_name}: sent ${row.sent}; open leads`} onClick={() => void openDrilldown(row, "sent")}>{row.sent.toLocaleString()}</button>{prior && <Prior label="Sent" value={prior.sent.toLocaleString()} />}</td>
+                <td className="text-right"><button type="button" className={cell} aria-label={`${row.partner_name}: claimed ${row.claimed}; open leads`} onClick={() => void openDrilldown(row, "claimed")}>{row.claimed.toLocaleString()}</button>{prior && <Prior label="Claimed" value={prior.claimed.toLocaleString()} />}</td>
+                <td className="text-right"><button type="button" className={cell} aria-label={`${row.partner_name}: worked ${row.worked}; open leads`} onClick={() => void openDrilldown(row, "worked")}>{row.worked.toLocaleString()}</button>{prior && <Prior label="Worked" value={prior.worked.toLocaleString()} />}</td>
+                <td className="text-right"><button type="button" className={cell} aria-label={`${row.partner_name}: submitted ${row.submitted}; open leads`} onClick={() => void openDrilldown(row, "submitted")}>{row.submitted.toLocaleString()}</button>{prior && <Prior label="Submitted" value={prior.submitted.toLocaleString()} />}</td>
+                <td className="text-right tabular-nums" title={`${(row.screening.tcpa + row.screening.dnc + row.screening.invalid).toLocaleString()} of ${row.sent.toLocaleString()} flagged`}>{pass == null ? "—" : `${pass.toFixed(1)}%`}{prior && <Prior label="Screening pass" value={priorPass == null ? "—" : `${priorPass.toFixed(1)}%`} />}</td>
+                <td className="text-right"><button type="button" className={cell} aria-label={`${row.partner_name}: duplicates ${row.duplicates}; open leads`} onClick={() => void openDrilldown(row, "duplicate")}>{row.duplicates.toLocaleString()}</button>{prior && <Prior label="Duplicate rate" value={rate(prior.duplicate_rate, prior.sent)} />}</td>
+                <td className="text-right"><button type="button" className={cell} aria-label={`${row.partner_name}: conversion ${percent(row.conversion_rate)}, ${row.submitted} of ${row.sent}; open submitted leads`} onClick={() => void openDrilldown(row, "submitted")}>{row.sent ? percent(row.conversion_rate) : "—"}</button>{prior && <Prior label="Conversion" value={rate(prior.conversion_rate, prior.sent)} />}</td>
+                <td className="text-right"><button type="button" className={cell} aria-label={`${row.partner_name}: disqualification rate ${rate(row.disqualification_rate, row.sent)}, ${row.disqualified} of ${row.sent}; open disqualified leads`} onClick={() => void openDrilldown(row, "disqualified")}>{rate(row.disqualification_rate, row.sent)}</button>{prior && <Prior label="DQ %" value={rate(prior.disqualification_rate, prior.sent)} />}</td>
               </tr>
             );
           })}

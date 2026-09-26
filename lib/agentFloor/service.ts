@@ -6,7 +6,7 @@ import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { postAgentReadyCards } from "@/lib/partnerChat/service";
 import { listDueCallbacks } from "@/lib/callbacks/service";
 import { getQueueSlaSettings } from "@/lib/queueSla/service";
-import { isOpenTransfer } from "@/lib/transferInbox/constants";
+import { isOpenTransfer, type TransferPhase } from "@/lib/transferInbox/constants";
 import { notifyAgentUser, notifyTenantAgents } from "@/lib/agentAlerts/service";
 import { productLineLabel } from "@/lib/format/productLine";
 import { languageFromLeadValues, phoneFromLeadValues } from "./leadFacts";
@@ -33,6 +33,11 @@ export type FloorMember = {
   lastCall: { customer: string; endedAt: string } | null;
   /** Languages recorded on their capacity row (agent_capacity.languages). Empty when none. */
   languages: string[];
+  /**
+   * A buffer still on a call they handed to a licensed agent (LA-1.14-9): `call` is that call and
+   * they read as on a call until they end their involvement. False for everyone else.
+   */
+  supporting: boolean;
 };
 
 export type FloorLead = {
@@ -56,6 +61,9 @@ export type FloorLead = {
   phone: string | null;
   /** When run_unclaimed_sla escalated it (still unclaimed past the escalate threshold). */
   escalatedAt: string | null;
+  /** The stored status, and LA-1.14's five-state reading of it (lib/transferInbox/constants). */
+  status: string;
+  phase: TransferPhase;
 };
 
 export type FloorCall = FloorLead & {
@@ -66,6 +74,11 @@ export type FloorCall = FloorLead & {
   startedAt: string;
   /** The open verification session's progress; null when none is open. */
   verificationPercent: number | null;
+  /**
+   * The buffer who handed this call over and is still on it (LA-1.14-9, 20260925709850). Null when
+   * none is, or before that migration is applied (the floor cannot tell, so it offers nothing).
+   */
+  buffer: { userId: string; name: string } | null;
 };
 
 /** A floor action refused for a reason the person can act on. `status` is the HTTP status. */
@@ -126,7 +139,7 @@ function customerName(values: Record<string, unknown>) {
 }
 
 /**
- * The floor is polled every second, so a lead's values are read once a minute at most. Language and
+ * Every open floor re-reads on each realtime change, so a lead's values are read once a minute at most. Language and
  * phone are read here rather than by list_transfer_inbox, whose definition other work owns.
  */
 async function leadFacts(tenantId: string, leadIds: string[]): Promise<Map<string, LeadFacts>> {
@@ -210,21 +223,26 @@ type FloorExtras = {
   languages: Map<string, string[]>;
   /** verification session → required, visible fields still outstanding. */
   fieldsLeft: Map<string, number>;
+  /** work item → the buffer still involved after a handoff (buffer_ended_at clear). */
+  buffers: Map<string, string>;
 };
 
 /**
  * Four small reads the floor adds for the concept board. Each is independent and a failure (or a
  * column not there yet) leaves its fact empty, never the floor down.
  */
-async function readFloorExtras(tenantId: string, callWorkItems: string[], handoffSessions: string[]): Promise<FloorExtras> {
+async function readFloorExtras(tenantId: string, callWorkItems: string[], handoffSessions: string[], heldWorkItems: string[]): Promise<FloorExtras> {
   const empty = Promise.resolve({ data: [], error: null } as LooseResult);
-  const [progress, escalated, capacity, fields] = await Promise.all([
+  const [progress, escalated, capacity, fields, buffers] = await Promise.all([
     callWorkItems.length ? loose().from("tenant_verification_sessions").select("work_item_id, progress_percentage").eq("tenant_id", tenantId).is("ended_at", null).in("work_item_id", callWorkItems.slice(0, 200)) as Promise<LooseResult> : empty,
     loose().from("lead_queue").select("id, sla_escalated_at").eq("tenant_id", tenantId).eq("status", "unclaimed").not("sla_escalated_at", "is", null).limit(1000) as Promise<LooseResult>,
     loose().from("agent_capacity").select("user_id, languages").eq("tenant_id", tenantId) as Promise<LooseResult>,
     handoffSessions.length ? loose().from("verification_fields").select("session_id").in("session_id", handoffSessions.slice(0, 100)).eq("state", "outstanding").eq("is_required", true).eq("is_visible", true) as Promise<LooseResult> : empty,
+    // Before 20260925709850 there is no buffer_ended_at: the read fails (42703) and no buffer is shown.
+    heldWorkItems.length ? loose().from("lead_queue").select("id, buffer_user_id, buffer_ended_at").eq("tenant_id", tenantId).in("id", heldWorkItems.slice(0, 500)).eq("status", "la_active").not("buffer_user_id", "is", null).is("buffer_ended_at", null) as Promise<LooseResult> : empty,
   ]);
-  const extras: FloorExtras = { progress: new Map(), escalated: new Map(), languages: new Map(), fieldsLeft: new Map() };
+  const extras: FloorExtras = { progress: new Map(), escalated: new Map(), languages: new Map(), fieldsLeft: new Map(), buffers: new Map() };
+  if (!buffers.error) for (const row of (buffers.data ?? []) as Array<{ id: string; buffer_user_id: string }>) extras.buffers.set(row.id, row.buffer_user_id);
   if (!progress.error) for (const row of (progress.data ?? []) as Array<{ work_item_id: string; progress_percentage: number }>) extras.progress.set(row.work_item_id, row.progress_percentage);
   if (!escalated.error) for (const row of (escalated.data ?? []) as Array<{ id: string; sla_escalated_at: string }>) extras.escalated.set(row.id, row.sla_escalated_at);
   if (!capacity.error) for (const row of (capacity.data ?? []) as Array<{ user_id: string; languages: string[] | null }>) extras.languages.set(row.user_id, (row.languages ?? []).filter(Boolean));
@@ -239,7 +257,7 @@ async function readFloorExtras(tenantId: string, callWorkItems: string[], handof
 
 export async function getAgentFloor(tenantId: string, currentUserId: string, currentRole: string) {
   const supabase = getSupabaseServiceClient();
-  // Polled every second by every visible floor tab, and none of these reads depends on another:
+  // Re-read by every open floor on each realtime change, and none of these reads depends on another:
   // they used to run as ~7 sequential round trips, now they are one. Users are embedded in the
   // membership read (tenant_users_user_id_fkey) so the old members -> users hop is gone too.
   // `open`, not `all`: the floor shows what is waiting and what is on a call. `all` also returned
@@ -267,7 +285,7 @@ export async function getAgentFloor(tenantId: string, currentUserId: string, cur
   const openCalls = calls ?? [];
   const [slow, extras] = await Promise.all([
     readSlowFloor(tenantId, openCalls.map((call) => call.id).sort().join(",")),
-    readFloorExtras(tenantId, openCalls.map((call) => call.work_item_id), currentRole === "assistant" ? [] : inbox.handoffs.map((handoff) => handoff.verificationSessionId)),
+    readFloorExtras(tenantId, openCalls.map((call) => call.work_item_id), currentRole === "assistant" ? [] : inbox.handoffs.map((handoff) => handoff.verificationSessionId), inbox.items.filter((item) => item.status === "la_active").map((item) => item.id)),
   ]);
   const byId = new Map(inbox.items.map((item) => [item.id, item]));
   const waitingItems = inbox.items.filter((item) => item.status === "unclaimed");
@@ -283,6 +301,8 @@ export async function getAgentFloor(tenantId: string, currentUserId: string, cur
   );
   const presence = new Map(presenceRows.map((row) => [row.user_id, row]));
   const callByUser = new Map(openCalls.map((call) => [call.user_id, call]));
+  // A buffer still on a call they handed over (LA-1.14-9): the call they are supporting.
+  const supportingByUser = new Map([...extras.buffers.entries()].map(([workItemId, bufferUserId]) => [bufferUserId, workItemId] as const));
   const now = Date.now();
   const members: FloorMember[] = (memberRows.data ?? [])
     .filter((row) => users.has(row.user_id))
@@ -290,7 +310,9 @@ export async function getAgentFloor(tenantId: string, currentUserId: string, cur
       const user = users.get(row.user_id)!;
       const seen = presence.get(row.user_id);
       const stale = isStale(seen?.last_seen_at ?? null, now);
-      const call = callByUser.get(row.user_id);
+      const ownCall = callByUser.get(row.user_id);
+      const supportedItem = ownCall ? undefined : byId.get(supportingByUser.get(row.user_id) ?? "");
+      const call = ownCall ?? (supportedItem ? { work_item_id: supportedItem.id, lead_id: supportedItem.leadId, started_at: supportedItem.claimedAt ?? supportedItem.queuedAt } : undefined);
       const availability: FloorMember["availability"] = call
         ? "on_call"
         : stale ? "offline" : ((seen?.status as AgentAvailability | undefined) ?? "off");
@@ -309,6 +331,7 @@ export async function getAgentFloor(tenantId: string, currentUserId: string, cur
           : null,
         lastCall: last ? { customer: facts.get(last.leadId)?.customer ?? "a customer", endedAt: last.endedAt } : null,
         languages: extras.languages.get(row.user_id) ?? [],
+        supporting: Boolean(supportedItem),
       };
     });
 
@@ -330,13 +353,17 @@ export async function getAgentFloor(tenantId: string, currentUserId: string, cur
     language: facts.get(item.leadId)?.language ?? null,
     phone: facts.get(item.leadId)?.phone ?? null,
     escalatedAt: extras.escalated.get(item.id) ?? null,
+    status: item.status,
+    phase: item.phase,
   });
 
   const onCalls: FloorCall[] = openCalls.flatMap((call) => {
     const item = byId.get(call.work_item_id);
     const user = users.get(call.user_id);
     if (!item || !user) return [];
-    return [{ ...toLead(item), activeCallId: call.id, agentId: call.user_id, agentName: user.name, agentRole: call.agent_role, startedAt: call.started_at, verificationPercent: extras.progress.get(call.work_item_id) ?? null }];
+    const bufferUserId = extras.buffers.get(call.work_item_id);
+    const bufferUser = bufferUserId && bufferUserId !== call.user_id ? users.get(bufferUserId) : undefined;
+    return [{ ...toLead(item), activeCallId: call.id, agentId: call.user_id, agentName: user.name, agentRole: call.agent_role, startedAt: call.started_at, verificationPercent: extras.progress.get(call.work_item_id) ?? null, buffer: bufferUserId && bufferUser ? { userId: bufferUserId, name: bufferUser.name } : null }];
   });
 
   // The inbox bundle RPC already ran list_buffer_handoffs(tenant, currentUserId) for owners and

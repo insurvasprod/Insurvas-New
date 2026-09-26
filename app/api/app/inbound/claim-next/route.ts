@@ -39,7 +39,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ claim, chatPosted });
   } catch (error) {
     if (error instanceof ClaimNextError) {
-      const status = error.code === "no_transfer_waiting" ? 404 : error.code === "role_not_allowed" ? 403 : error.code === "schema_pending" ? 503 : 500;
+      const status = error.code === "no_transfer_waiting" ? 404 : error.code === "role_not_allowed" ? 403 : error.code === "language_not_spoken" ? 409 : error.code === "schema_pending" ? 503 : 500;
       return NextResponse.json({ error: error.message, code: error.code.toUpperCase() }, { status });
     }
     return NextResponse.json({ error: "Could not claim the next transfer." }, { status: 500 });

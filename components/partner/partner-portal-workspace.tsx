@@ -32,6 +32,7 @@ import { PartnerTeamReviewWorkspace } from "@/components/partner/partner-team-re
 import type { PartnerRole } from "@/lib/partnerAuth/roles";
 import { agoLabel } from "@/lib/format/ago";
 import { productLineLabel } from "@/lib/format/productLine";
+import { outstandingSubmitItems } from "@/lib/partnerPortal/submitReadiness";
 import {
   isPhoneTemplateField,
   type TemplateField,
@@ -41,6 +42,14 @@ import {
   pruneHiddenTemplateValues,
   templateFormFieldVisible,
 } from "@/lib/templates/visibility";
+import {
+  BANK_ACCOUNT_MAX_DIGITS,
+  DERIVED_AGE_KEY,
+  ageFromDob,
+  bankFormatError,
+  dobFieldKey,
+} from "@/lib/templates/formats";
+import { effectiveTemplateForm } from "@/lib/templates/sectionAvailability";
 
 type ApprovedProduct = { code: string; name: string; category: string };
 type PartnerMarket = {
@@ -57,6 +66,7 @@ function PartnerField({
   onBlur,
   id,
   labelId,
+  readOnly,
 }: {
   field: TemplateField;
   value: unknown;
@@ -65,6 +75,8 @@ function PartnerField({
   onBlur?: () => void;
   id?: string;
   labelId?: string;
+  /** A derived value (age, from the date of birth) is shown, not typed. */
+  readOnly?: boolean;
 }) {
   if (field.type === "boolean")
     return (
@@ -152,6 +164,9 @@ function PartnerField({
             : "text";
   const updateInput = (raw: string) => {
     if (raw === "") return onChange(undefined);
+    // Routing and account numbers are digits only (LA-1.4-6); the checksum is checked on blur.
+    if (field.type === "bank_routing" || field.type === "bank_account")
+      return onChange(raw.replace(/\D/g, "").slice(0, field.type === "bank_routing" ? 9 : BANK_ACCOUNT_MAX_DIGITS) || undefined);
     if (field.type === "ssn") {
       const digits = raw.replace(/\D/g, "").slice(0, field.validation?.digit_length ?? 9);
       const mask = field.validation?.format_mask ?? "###-##-####";
@@ -176,7 +191,8 @@ function PartnerField({
       aria-label={field.label}
       aria-invalid={Boolean(error)}
       type={inputType}
-      inputMode={field.type === "ssn" ? "numeric" : undefined}
+      inputMode={field.type === "ssn" || field.type === "bank_routing" || field.type === "bank_account" ? "numeric" : undefined}
+      readOnly={readOnly}
       step={
         field.type === "currency"
           ? 1
@@ -197,13 +213,27 @@ function PartnerField({
   );
 }
 
-function PartnerLeadForm({
+/**
+ * The form definition the settings preview hands the partner form (LA-1.4-5): the same renderer the
+ * partner uses, fed the owner's draft instead of the partner API. In preview nothing is fetched or
+ * saved, screening is simulated as clear, and Submit only validates.
+ */
+export type PartnerFormPreviewSource = {
+  template: TemplateRow;
+  tenant_template_id: string;
+  assignment: { definition_version: number };
+};
+
+export function PartnerLeadForm({
   productCode,
   productName,
   partnerStatus,
   agencyName,
   onFormVersion,
   market,
+  draftId: resumeDraftId = null,
+  onDraftChange,
+  preview,
 }: {
   productCode: string;
   productName: string;
@@ -213,6 +243,12 @@ function PartnerLeadForm({
   agencyName?: string | null;
   onFormVersion?: (version: number | null) => void;
   market: PartnerMarket;
+  /** LA-1.6-5: the saved draft this form resumes; null starts a new form. */
+  draftId?: string | null;
+  /** Told the draft's id after each save (null once it has been submitted). */
+  onDraftChange?: (draftId: string | null) => void;
+  /** Settings → Form templates renders this same form from the owner's unsaved draft. */
+  preview?: PartnerFormPreviewSource;
 }) {
   type FormTemplate = {
     template: TemplateRow;
@@ -229,6 +265,10 @@ function PartnerLeadForm({
   type RejectionNotice = { code: string; count: number; script: string };
   const [template, setTemplate] = useState<FormTemplate | null>(null);
   const submissionId = useRef(crypto.randomUUID());
+  // The draft this form writes to. It starts as the resumed draft (or none) and is set by the first
+  // save of a new form, so every later save updates that one draft instead of starting another.
+  const draftIdRef = useRef<string | null>(resumeDraftId);
+  const saveQueue = useRef<Promise<void>>(Promise.resolve());
   const valuesRef = useRef<Record<string, unknown>>({});
   const dirtyRef = useRef(false);
   const [values, setValues] = useState<Record<string, unknown>>({});
@@ -279,15 +319,31 @@ function PartnerLeadForm({
     return () => window.removeEventListener("focus", refresh);
   }, []);
 
+  // Preview: the owner's draft is the form; answers typed so far are kept and pruned against it.
   useEffect(() => {
+    if (!preview) return;
+    // Syncing from a prop the settings page owns: each new draft replaces the form and re-prunes.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setTemplate(preview);
+    onFormVersion?.(preview.assignment.definition_version);
+    const pruned = pruneHiddenTemplateValues(effectiveTemplateForm(preview.template.form_definition, preview.template.fields), valuesRef.current);
+    valuesRef.current = pruned;
+    setValues(pruned);
+    setStatus((current) => (current.startsWith("Loading") ? "Enter a phone number to begin screening" : current));
+  }, [preview, onFormVersion]);
+
+  useEffect(() => {
+    if (preview) return;
     let cancelled = false;
     void Promise.all([
       fetch(`/api/partner/forms/${encodeURIComponent(productCode)}`, {
         cache: "no-store",
       }),
-      fetch(`/api/partner/forms/${encodeURIComponent(productCode)}/draft`, {
-        cache: "no-store",
-      }),
+      // LA-1.6-5: this form's own draft, or none for a new form (never "whichever draft is newest").
+      fetch(
+        `/api/partner/forms/${encodeURIComponent(productCode)}/draft?${draftIdRef.current ? `draft_id=${encodeURIComponent(draftIdRef.current)}` : "new=1"}`,
+        { cache: "no-store" },
+      ),
     ])
       .then(async ([formResponse, draftResponse]) => ({
         form: await formResponse.json().catch(() => null),
@@ -301,6 +357,11 @@ function PartnerLeadForm({
           setStatus(form?.error ?? "This product form is unavailable");
           onFormVersion?.(null);
           return;
+        }
+        // The resumed draft is gone (submitted or discarded elsewhere): carry on as a new form.
+        if (draftIdRef.current && !draftResponse.ok) {
+          draftIdRef.current = null;
+          onDraftChange?.(null);
         }
         // New forms use the current authenticated resolver. A resumed draft uses the immutable
         // profile revision returned by the draft endpoint, so an agent change cannot rewrite an
@@ -353,11 +414,16 @@ function PartnerLeadForm({
     return () => {
       cancelled = true;
     };
-  }, [productCode, formRefresh, onFormVersion]);
+  }, [productCode, formRefresh, onFormVersion, onDraftChange, preview]);
 
   const persistDraft = useCallback(
-    async (payload: Record<string, unknown>, visibleStatus = true) => {
+    (payload: Record<string, unknown>, visibleStatus = true) => {
+    const saveDraftNow = async () => {
       if (!template) return;
+      if (preview) {
+        if (visibleStatus) setStatus("Preview: drafts are not saved");
+        return;
+      }
       setSaving(true);
       try {
         const response = await fetch(
@@ -369,13 +435,22 @@ function PartnerLeadForm({
               payload,
               carrier_id: market.carrier_id,
               carrier_state: market.state,
+              draft_id: draftIdRef.current,
             }),
           },
         );
+        const saved = (await response.json().catch(() => null)) as { id?: string; error?: string } | null;
         if (response.ok) {
           dirtyRef.current = false;
+          if (saved?.id && saved.id !== draftIdRef.current) draftIdRef.current = saved.id;
+          onDraftChange?.(draftIdRef.current);
           setDraftSavedAt(Date.now());
           if (visibleStatus) setStatus("Draft saved");
+        } else if (response.status === 404 && draftIdRef.current) {
+          // The draft was submitted or discarded in another tab: the next save starts a new one.
+          draftIdRef.current = null;
+          onDraftChange?.(null);
+          if (visibleStatus) setStatus(saved?.error ?? "Draft could not be saved");
         } else if (visibleStatus) {
           setStatus("Draft could not be saved");
           notify.fail("Draft could not be saved");
@@ -388,20 +463,26 @@ function PartnerLeadForm({
       } finally {
         setSaving(false);
       }
+    };
+      // Saves run one after another, so a new form's first save hands its draft id to the next
+      // one instead of two overlapping saves each starting a draft.
+      const run = saveQueue.current.then(saveDraftNow);
+      saveQueue.current = run.catch(() => undefined);
+      return run;
     },
-    [template, productCode, market],
+    [template, productCode, market, preview, onDraftChange],
   );
 
   useEffect(() => {
-    if (!template || !dirtyRef.current) return;
+    if (!template || !dirtyRef.current || preview) return;
     const timer = window.setTimeout(() => {
       void persistDraft(valuesRef.current);
     }, 750);
     return () => window.clearTimeout(timer);
-  }, [values, template, productCode, persistDraft]);
+  }, [values, template, productCode, persistDraft, preview]);
 
   useEffect(() => {
-    if (!template) return;
+    if (!template || preview) return;
     const flush = () => {
       if (dirtyRef.current) void persistDraft(valuesRef.current, false);
     };
@@ -419,6 +500,7 @@ function PartnerLeadForm({
             payload: valuesRef.current,
             carrier_id: market.carrier_id,
             carrier_state: market.state,
+            draft_id: draftIdRef.current,
           }),
           keepalive: true,
         },
@@ -432,12 +514,17 @@ function PartnerLeadForm({
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("pagehide", onPageHide);
     };
-  }, [template, productCode, market, persistDraft]);
+  }, [template, productCode, market, persistDraft, preview]);
 
   const fields = template
     ? new Map(template.template.fields.map((field) => [field.field_key, field]))
     : new Map<string, TemplateField>();
-  const sections = template?.template.form_definition.sections ?? [];
+  // The sections of switched-off section groups never show (LA-1.4-3). The partner API already
+  // removes them; the preview's draft form is filtered here by the same function.
+  const sections = template ? effectiveTemplateForm(template.template.form_definition, template.template.fields).sections : [];
+  // Age is derived from the date of birth, never typed (LA-1.4-6).
+  const dobKey = template ? dobFieldKey(template.template.fields) : null;
+  const derivedAge = dobKey ? ageFromDob(values[dobKey]) : null;
   const phoneField = template?.template.fields.find(isPhoneTemplateField);
   function isEmpty(value: unknown) {
     return (
@@ -459,12 +546,14 @@ function PartnerLeadForm({
       return `${field.label} is required`;
     if (isEmpty(value)) return null;
     if (
-      ["text", "long_text", "date", "phone", "email", "ssn"].includes(
+      ["text", "long_text", "date", "phone", "email", "ssn", "bank_routing", "bank_account"].includes(
         field.type,
       ) &&
       typeof value !== "string"
     )
       return `${field.label} must be text`;
+    const bankError = typeof value === "string" ? bankFormatError(field, value) : null;
+    if (bankError) return bankError;
     if (
       ["number", "currency"].includes(field.type) &&
       (typeof value !== "number" ||
@@ -549,6 +638,12 @@ function PartnerLeadForm({
       template?.template.form_definition ?? { sections: [] },
       { ...valuesRef.current, [fieldKey]: value },
     );
+    // A form with its own Age field has it filled from the date of birth (LA-1.4-6).
+    if (fieldKey === dobKey && fields.has(DERIVED_AGE_KEY)) {
+      const age = ageFromDob(value);
+      if (age === null) delete next[DERIVED_AGE_KEY];
+      else next[DERIVED_AGE_KEY] = age;
+    }
     valuesRef.current = next;
     dirtyRef.current = true;
     setValues(next);
@@ -601,6 +696,16 @@ function PartnerLeadForm({
       (lastScreenedPhone.current === phoneValue && screening)
     )
       return;
+    if (preview) {
+      // Nothing is screened from the settings preview: it shows what a clear number opens.
+      lastScreenedPhone.current = phoneValue;
+      const checked = new Date();
+      setScreening({ outcome: "clear", warning: null, phone: phoneValue, checked_at: checked.toISOString() });
+      setScreenedAt(checked.getTime());
+      setFormOpened(true);
+      setStatus("Preview: screening is simulated as clear");
+      return;
+    }
     screeningRequestActive.current = true;
     setScreeningBusy(true);
     setScreeningError(null);
@@ -702,7 +807,7 @@ function PartnerLeadForm({
         )
       : null;
   useEffect(() => {
-    if (!duplicateSignature) return;
+    if (!duplicateSignature || preview) return;
     const controller = new AbortController();
     const timer = window.setTimeout(() => {
       void fetch(
@@ -746,7 +851,7 @@ function PartnerLeadForm({
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [duplicateSignature, productCode]);
+  }, [duplicateSignature, productCode, preview]);
   const duplicateState = !duplicateSignature
     ? "idle"
     : duplicateCheck?.signature === duplicateSignature
@@ -754,7 +859,9 @@ function PartnerLeadForm({
       : "checking";
   // A match found early asks for the reason before submit, not after a refused one. The server
   // still decides (10–1000 characters, stored with the lead).
-  const duplicateFlagged = duplicateMatches.length > 0 || duplicateState === "match";
+  // An internal DQ (the number is already on one of the agency's leads) needs the same reason.
+  const internalDqFlagged = screening?.warning?.code === "internal_dq";
+  const duplicateFlagged = duplicateMatches.length > 0 || duplicateState === "match" || internalDqFlagged;
   const duplicateReasonReady = !duplicateFlagged || duplicateJustification.trim().length >= 10;
   const matchLatest = duplicateState === "match" && duplicateCheck?.signature === duplicateSignature ? duplicateCheck?.latest ?? null : null;
   const fieldsLeft = Math.max(0, requiredFieldCount - completedRequiredFieldCount);
@@ -769,7 +876,19 @@ function PartnerLeadForm({
     Object.keys(requiredErrors).length === 0 &&
     duplicateReasonReady,
   );
+  // LA-1.6-7: what is still keeping Submit disabled, by name, in the order the form asks for it.
+  const outstanding = outstandingSubmitItems({
+    screened: Boolean(screening),
+    dncPending: screening?.warning?.code === "dnc" && !dncAcknowledged,
+    missingRequired: sections
+      .flatMap((section) => section.fields)
+      .filter((item) => requiredErrors[item.field_key])
+      .map((item) => fields.get(item.field_key)?.label ?? item.field_key),
+    duplicateReasonMissing: !duplicateReasonReady,
+    consentGiven,
+  });
   async function saveAndClose() {
+    if (preview) return;
     await persistDraft(valuesRef.current);
     // persistDraft clears the dirty flag only when the server stored the draft.
     if (!dirtyRef.current) router.push("/partner");
@@ -798,6 +917,11 @@ function PartnerLeadForm({
     }
     setFieldErrors({});
     setSubmitError(null);
+    if (preview) {
+      setStatus("Preview: this form would submit. Nothing was sent.");
+      notify.done("Preview: every check passed. Nothing was submitted");
+      return;
+    }
     setSaving(true);
     try {
       const response = await fetch("/api/partner/leads", {
@@ -812,6 +936,7 @@ function PartnerLeadForm({
           screening_warning_acknowledged: dncAcknowledged,
           duplicate_override_justification: duplicateJustification,
           consent_attested: consentGiven,
+          draft_id: draftIdRef.current,
         }),
       });
       const body = await response.json().catch(() => null);
@@ -823,6 +948,9 @@ function PartnerLeadForm({
           setSubmitError(
             "This person may already be in the pipeline. Review the match and add a justification if this is a separate lead.",
           );
+          setStatus("Duplicate review required");
+        } else if (body?.code === "internal_dq_reason_required") {
+          setSubmitError(message);
           setStatus("Duplicate review required");
         } else {
           setRejectionNotice(
@@ -852,6 +980,9 @@ function PartnerLeadForm({
       setConsentGiven(false);
       setFormOpened(false);
       setDraftSavedAt(null);
+      // The submitted draft is deleted server-side; the next form starts a new one.
+      draftIdRef.current = null;
+      onDraftChange?.(null);
       submissionId.current = crypto.randomUUID();
       setSectionIndex(0);
       setStatus(body?.replayed ? "Already submitted" : "Submitted");
@@ -1058,12 +1189,17 @@ function PartnerLeadForm({
           id={fieldId}
           labelId={fieldLabelId}
           field={field}
-          value={values[field.field_key]}
+          value={field.field_key === DERIVED_AGE_KEY && dobKey ? derivedAge ?? undefined : values[field.field_key]}
           error={error}
+          readOnly={field.field_key === DERIVED_AGE_KEY && Boolean(dobKey)}
           onChange={(value) => updateValue(field.field_key, value)}
         />
         {isPhone ? (
           <small>{phoneHint}</small>
+        ) : field.field_key === dobKey && derivedAge !== null ? (
+          <small>Age {derivedAge}{field.help_text ? ` · ${field.help_text}` : ""}</small>
+        ) : field.field_key === DERIVED_AGE_KEY && dobKey ? (
+          <small>Worked out from the date of birth.</small>
         ) : (
           field.help_text && <small>{field.help_text}</small>
         )}
@@ -1215,7 +1351,9 @@ function PartnerLeadForm({
               <p>
                 {duplicateMatches.length > 0
                   ? `${duplicateMatches.length} existing lead${duplicateMatches.length === 1 ? "" : "s"} matched on ${duplicateMatches.flatMap((match) => match.matchedOn).join(", ")}.`
-                  : "The phone and name match an existing lead."}
+                  : duplicateState === "match"
+                    ? "The phone and name match an existing lead."
+                    : "This phone number is already on an existing lead."}
                 {matchLatest?.yours && matchLatest.outcome ? ` Outcome: ${matchLatest.outcome}.` : ""}
                 {" "}To submit anyway, say why. It is required and stored with the lead.
               </p>
@@ -1288,13 +1426,22 @@ function PartnerLeadForm({
               >
                 Save and close
               </Button>
-              <Button type="submit" disabled={saving || !canSubmit}>
+              <Button
+                type="submit"
+                disabled={saving || !canSubmit}
+                aria-describedby={formOpened && !canSubmit && outstanding.length ? `partner-outstanding-${productCode}` : undefined}
+              >
                 {formOpened && fieldsLeft > 0
                   ? `Submit · ${fieldsLeft} ${fieldsLeft === 1 ? "field" : "fields"} left`
                   : "Submit lead"}
               </Button>
             </span>
           </div>
+          {formOpened && !canSubmit && outstanding.length > 0 && (
+            <p id={`partner-outstanding-${productCode}`} className="portal-partner-submit-muted">
+              Still needed to submit: {outstanding.join(", ")}.
+            </p>
+          )}
         </form>
         <aside
           className="portal-partner-submit-panel portal-partner-submit-readiness"
@@ -1378,6 +1525,18 @@ function PartnerLeadForm({
 
 type ChipTone = "success" | "warning" | "neutral";
 
+/** One started form, as GET /api/partner/drafts lists it (LA-1.6-5). */
+type PartnerDraftRow = {
+  id: string;
+  product_code: string;
+  carrier_id: string | null;
+  carrier_state: string | null;
+  label: string | null;
+  phone_last4: string | null;
+  answered: number;
+  updated_at: string;
+};
+
 function ReadinessChip({ tone, children }: { tone: ChipTone; children: ReactNode }) {
   return (
     <span className={`portal-status-chip is-${tone}`}>
@@ -1432,6 +1591,57 @@ function LegacyPartnerPortalWorkspace({
   const [markets, setMarkets] = useState<PartnerMarket[]>([]);
   const [selectedCarrierId, setSelectedCarrierId] = useState("");
   const [selectedState, setSelectedState] = useState("");
+  // LA-1.6-5: every started form, and which one the form below is working on. resumeDraftId picks
+  // what the form loads (and remounts it); activeDraftId only follows its saves.
+  const [drafts, setDrafts] = useState<PartnerDraftRow[]>([]);
+  const [draftsLoadedAt, setDraftsLoadedAt] = useState(0);
+  const [resumeDraftId, setResumeDraftId] = useState<string | null>(null);
+  const [activeDraftId, setActiveDraftId] = useState<string | null>(null);
+  const [formNonce, setFormNonce] = useState(0);
+  const loadDrafts = useCallback(() => {
+    void fetch("/api/partner/drafts", { cache: "no-store" })
+      .then(async (response) => (response.ok ? ((await response.json().catch(() => null)) as { drafts?: PartnerDraftRow[] } | null) : null))
+      .then((body) => {
+        if (!body?.drafts) return;
+        setDrafts(body.drafts);
+        setDraftsLoadedAt(Date.now());
+      })
+      .catch(() => undefined);
+  }, []);
+  useEffect(() => {
+    if (section === "submit") loadDrafts();
+  }, [section, loadDrafts]);
+  const onDraftChange = useCallback((id: string | null) => {
+    setActiveDraftId(id);
+    loadDrafts();
+  }, [loadDrafts]);
+  function startNewForm() {
+    setResumeDraftId(null);
+    setActiveDraftId(null);
+    setFormNonce((value) => value + 1);
+  }
+  function resumeDraft(draft: PartnerDraftRow) {
+    const market = markets.find((item) => item.carrier_id === draft.carrier_id && item.state === draft.carrier_state);
+    setSelectedProduct(draft.product_code);
+    setFormVersion(null);
+    if (market) {
+      setSelectedCarrierId(market.carrier_id);
+      setSelectedState(market.state);
+    }
+    setResumeDraftId(draft.id);
+    setActiveDraftId(draft.id);
+    setFormNonce((value) => value + 1);
+  }
+  async function discardDraft(draft: PartnerDraftRow) {
+    const response = await fetch(`/api/partner/drafts?draft_id=${encodeURIComponent(draft.id)}`, { method: "DELETE" }).catch(() => null);
+    if (!response?.ok) {
+      notify.fail("That draft could not be discarded");
+      return;
+    }
+    notify.win("Draft discarded");
+    if (draft.id === activeDraftId) startNewForm();
+    loadDrafts();
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -1604,6 +1814,8 @@ function LegacyPartnerPortalWorkspace({
                       onChange={(event) => {
                         setSelectedProduct(event.target.value);
                         setFormVersion(null);
+                        setResumeDraftId(null);
+                        setActiveDraftId(null);
                       }}
                     >
                       {approvedProducts.map((product) => (
@@ -1632,6 +1844,8 @@ function LegacyPartnerPortalWorkspace({
                         onChange={(event) => {
                           const carrierId = event.target.value;
                           setSelectedCarrierId(carrierId);
+                          setResumeDraftId(null);
+                          setActiveDraftId(null);
                           setSelectedState(
                             markets.find(
                               (market) => market.carrier_id === carrierId,
@@ -1660,7 +1874,11 @@ function LegacyPartnerPortalWorkspace({
                       <span>Carrier state</span>
                       <select
                         value={selectedState}
-                        onChange={(event) => setSelectedState(event.target.value)}
+                        onChange={(event) => {
+                          setSelectedState(event.target.value);
+                          setResumeDraftId(null);
+                          setActiveDraftId(null);
+                        }}
                         disabled={!selectedCarrierId}
                       >
                         <option value="" disabled>
@@ -1688,9 +1906,75 @@ function LegacyPartnerPortalWorkspace({
                   </div>
                 )}
               </div>
+              {drafts.length > 0 && (
+                <section
+                  className="portal-partner-submit-panel is-roomy"
+                  aria-labelledby="partner-drafts-heading"
+                >
+                  <div className="portal-partner-submit-panel-head">
+                    <h2 id="partner-drafts-heading">Your drafts</h2>
+                    <p>
+                      Every form you have started and not submitted. Resume any
+                      of them where you left off.
+                    </p>
+                  </div>
+                  <ul className="divide-y divide-[var(--border)]">
+                    {drafts.map((draft) => (
+                      <li
+                        key={draft.id}
+                        className="flex flex-wrap items-center justify-between gap-3 py-3"
+                      >
+                        <div className="min-w-0">
+                          <p className="text-[14px] font-medium text-[var(--ink)]">
+                            {draft.label ?? "Customer name not entered yet"}
+                          </p>
+                          <p className="portal-partner-submit-muted">
+                            {productLineLabel(draft.product_code)}
+                            {draft.carrier_state ? ` · ${draft.carrier_state}` : ""}
+                            {draft.phone_last4 ? ` · phone ending ${draft.phone_last4}` : ""}
+                            {` · ${draft.answered} ${draft.answered === 1 ? "answer" : "answers"} · saved ${agoLabel(Date.parse(draft.updated_at), draftsLoadedAt)}`}
+                          </p>
+                        </div>
+                        <span className="flex flex-wrap gap-2">
+                          {draft.id === activeDraftId ? (
+                            <span className="portal-status-chip is-success">
+                              <span aria-hidden="true" />
+                              Open below
+                            </span>
+                          ) : (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => resumeDraft(draft)}
+                            >
+                              Resume
+                            </Button>
+                          )}
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => void discardDraft(draft)}
+                          >
+                            Discard
+                          </Button>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                  <div>
+                    <Button type="button" variant="outline" size="sm" onClick={startNewForm}>
+                      Start a new form
+                    </Button>
+                  </div>
+                </section>
+              )}
               {selectedProduct && selectedCarrierId && selectedState && (
                 <PartnerLeadForm
-                  key={`${selectedProduct}:${selectedCarrierId}:${selectedState}`}
+                  key={`${selectedProduct}:${selectedCarrierId}:${selectedState}:${resumeDraftId ?? "new"}:${formNonce}`}
+                  draftId={resumeDraftId}
+                  onDraftChange={onDraftChange}
                   productCode={selectedProduct}
                   productName={productLineLabel(selectedProduct)}
                   partnerStatus={partnerStatus}

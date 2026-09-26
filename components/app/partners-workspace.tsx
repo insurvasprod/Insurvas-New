@@ -69,6 +69,7 @@ import { sectionForPath } from "@/lib/menu/definition";
 import { productLineLabel } from "@/lib/format/productLine";
 import { worstDropRate } from "@/lib/partners/dropInsight";
 import { PARTNER_LIMIT_KEYS, capacityLabel } from "@/lib/partners/limits";
+import { partnerLimitMessage } from "@/lib/partnerLimits/copy";
 import { cn } from "@/lib/utils";
 
 type Term = {
@@ -224,13 +225,13 @@ function CapacityMetric({
   noun,
   usage,
   limit,
-  draftsCount = true,
+  activeOnly = true,
 }: {
   label: string;
   noun: string;
   usage: number;
   limit: number | null;
-  draftsCount?: boolean;
+  activeOnly?: boolean;
 }) {
   const percent =
     limit == null
@@ -240,8 +241,9 @@ function CapacityMetric({
     <div className="rounded-lg border border-border bg-card px-[15px] py-[13px] shadow-[var(--shadow-rest)]">
       <div className="text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] text-muted-foreground">{label}</div>
       <div className="mt-1.5 text-[30px] font-semibold leading-none tracking-[-0.03em] tabular-nums">{usage}</div>
-      {/* Said before the ceiling is hit, in the same count the server enforces (drafts hold a seat). */}
-      <p className="mt-2 text-xs text-muted-foreground">{capacityLabel(usage, limit, usage === 1 && limit == null ? noun.replace(/s$/, "") : noun)}{draftsCount && limit != null ? " · drafts count" : ""}</p>
+      {/* Said before the ceiling is hit, in the same count the server enforces: only an ACTIVE
+          partner holds a slot (LA-1.19). Drafts, paused and offboarded partners do not. */}
+      <p className="mt-2 text-xs text-muted-foreground">{capacityLabel(usage, limit, usage === 1 && limit == null ? noun.replace(/s$/, "") : noun)}{activeOnly && limit != null ? " · active only" : ""}</p>
       <Meter className="mt-2" value={percent} tone="info" label={`${label} capacity used`} />
     </div>
   );
@@ -556,6 +558,11 @@ export function PartnersWorkspace({
   const selectedLimit = limits[selectedLimitKey];
   const createAtLimit =
     !editing && selectedLimit != null && selectedUsage >= selectedLimit;
+  // With every partner type at its cap there is nothing the dialog could create.
+  const everyTypeAtCap = (["publisher", "marketing", "affiliate"] as const).every((type) => {
+    const cap = limits[PARTNER_LIMIT_KEYS[type]];
+    return cap != null && usage[type === "publisher" ? "publishers" : type === "marketing" ? "marketing" : "affiliates"] >= cap;
+  });
 
   if (loading)
     return (
@@ -633,7 +640,7 @@ export function PartnersWorkspace({
                   middle-click and "Save link as" work, and a large directory does not have to be
                   held in memory first. Same pattern as the deal-flow export. */}
               <Button asChild type="button" variant="outline" className="h-10 px-4"><a href="/api/app/partners/export" download aria-label="Export the partner directory as CSV"><Download className="mr-2 size-4" aria-hidden="true" />Export</a></Button>
-              <Button type="button" onClick={openCreate} disabled={readOnly}>
+              <Button type="button" onClick={openCreate} disabled={readOnly || everyTypeAtCap} title={everyTypeAtCap ? "Your plan's publisher, marketing partner and affiliate limits are all in use. Upgrade your plan to add another partner." : undefined}>
                 <Plus className="mr-1.5 size-4" aria-hidden="true" />
                 Add partner
               </Button>
@@ -666,7 +673,7 @@ export function PartnersWorkspace({
             noun="partner users"
             usage={usage.partnerUsers}
             limit={limits.max_partner_users}
-            draftsCount={false}
+            activeOnly={false}
           />
         </section>
       )}
@@ -1605,9 +1612,7 @@ export function PartnersWorkspace({
                 className="text-sm text-destructive md:col-span-2"
                 role="alert"
               >
-                Your plan has reached <code>{selectedLimitKey}</code> (
-                {selectedUsage} of {selectedLimit}). Upgrade to add another
-                partner.
+                {partnerLimitMessage(selectedLimitKey, selectedUsage, selectedLimit ?? 0, "add")}
               </p>
             )}
             <DialogFooter className="md:col-span-2">

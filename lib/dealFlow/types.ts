@@ -48,6 +48,9 @@ export type DealFlowRow = {
   draft_date: string | null;
   worked_by: string | null;
   agent_name: string;
+  /** LA-1.13-2: the buffer assistant who took the call first (20260925709850). Null when none did, or before that migration. */
+  buffer_agent: string | null;
+  buffer_agent_name: string | null;
   manual_entry: boolean;
   created_at: string;
   updated_at: string;

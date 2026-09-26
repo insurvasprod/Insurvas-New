@@ -35,16 +35,21 @@ import {
   TEMPLATE_FIELD_TYPES,
   TEMPLATE_FIELD_TYPE_LABELS,
   TEMPLATE_FIELD_TYPE_TABLE_LABELS,
+  TEMPLATE_SECTION_GROUPS,
   TEMPLATE_STAGE_TYPES,
   TEMPLATE_STAGE_TYPE_LABELS,
   type TemplateField,
   type TemplateFormDefinition,
   type TemplateFormField,
+  type TemplateRow,
+  type TemplateSectionGroup,
   type TemplateStage,
   type TemplateStageType,
   type TemplateValidation,
 } from "@/lib/templates/constants";
-import { pruneHiddenTemplateValues, templateFormFieldVisible } from "@/lib/templates/visibility";
+import { TEMPLATE_SECTION_GROUP_LABELS, sectionAvailability, sectionAvailabilityError, sectionsByGroup } from "@/lib/templates/sectionAvailability";
+import { BANK_ACCOUNT_MAX_DIGITS, BANK_ACCOUNT_MIN_DIGITS } from "@/lib/templates/formats";
+import { PartnerLeadForm, type PartnerFormPreviewSource } from "@/components/partner/partner-portal-workspace";
 import { countWord, diffTemplateDraft, eligibilityFieldKey, type TemplateDraft } from "@/lib/agentTemplates/draftChanges";
 import { defaultStageColor } from "@/lib/design/tokenColor";
 
@@ -55,7 +60,7 @@ type Preview = { fieldsToAdd: string[]; stagesToAdd: string[]; sectionsToAdd: st
 type DraftState = { draft: TemplateDraft; seen: Record<string, number> };
 type Editing = { kind: "field"; fieldKey: string; sectionKey: string | null } | { kind: "section"; sectionKey: string } | null;
 
-function cloneForm(form: TemplateFormDefinition): TemplateFormDefinition { return { sections: form.sections.map((section) => ({ ...section, fields: section.fields.map((field) => ({ ...field, show_when: field.show_when ? { ...field.show_when } : null, conditional_on: field.conditional_on ? { ...field.conditional_on } : undefined })) })) }; }
+function cloneForm(form: TemplateFormDefinition): TemplateFormDefinition { return { sections: form.sections.map((section) => ({ ...section, fields: section.fields.map((field) => ({ ...field, show_when: field.show_when ? { ...field.show_when } : null, conditional_on: field.conditional_on ? { ...field.conditional_on } : undefined })) })), ...(form.section_availability ? { section_availability: { ...form.section_availability } } : {}) }; }
 
 function draftFrom(current: Current): TemplateDraft {
   return {
@@ -77,40 +82,43 @@ function uniqueKey(base: string, used: Set<string>) {
   return `${base}_${index}`;
 }
 
-/* ── partner preview (the shared visibility contract) ─────────────────── */
+/* ── partner preview: the partner's own form component, fed this draft (LA-1.4-5) ── */
 
-function previewField(field: TemplateField, value: unknown, onChange: (value: unknown) => void) {
-  if (field.type === "boolean") return <select aria-label={field.label} className={small} value={value === undefined ? "" : String(value)} onChange={(event) => onChange(event.target.value === "" ? undefined : event.target.value === "true")}><option value="">Choose…</option><option value="true">Yes</option><option value="false">No</option></select>;
-  if (field.type === "single_select") return <select aria-label={field.label} className={small} value={String(value ?? "")} onChange={(event) => onChange(event.target.value || undefined)}><option value="">Choose…</option>{field.options.map((option) => <option key={option}>{option}</option>)}</select>;
-  if (field.type === "multi_select") return <div className="mt-1.5 flex flex-wrap gap-3 rounded-[8px] border border-[var(--border-strong)] p-2">{field.options.map((option) => <label className="flex items-center gap-1.5 text-[14px]" key={option}><input type="checkbox" checked={Array.isArray(value) && value.includes(option)} onChange={(event) => onChange([...(Array.isArray(value) ? value : []).filter((item) => item !== option), ...(event.target.checked ? [option] : [])])} />{option}</label>)}</div>;
-  if (field.type === "long_text") return <textarea aria-label={field.label} className="mt-1.5 box-border min-h-24 w-full rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] px-3 py-2 text-[14px] text-[var(--ink)]" value={String(value ?? "")} onChange={(event) => onChange(event.target.value || undefined)} />;
-  const inputType = field.type === "number" || field.type === "currency" ? "number" : field.type === "date" ? "date" : field.type === "phone" ? "tel" : field.type === "email" ? "email" : "text";
-  return <input aria-label={field.label} className={small} type={inputType} step={field.type === "currency" ? 1 : field.type === "number" ? "any" : undefined} value={value === undefined ? "" : String(value)} onChange={(event) => { const raw = event.target.value; onChange(raw === "" ? undefined : ["number", "currency"].includes(field.type) ? Number(raw) : raw); }} />;
+const PREVIEW_MARKET = { carrier_id: "", carrier_name: "", state: "" };
+
+function PartnerViewPreview({ source, productCode, productName }: { source: PartnerFormPreviewSource; productCode: string; productName: string }) {
+  return (
+    <SettingsCard title="Partner view preview" sub="The partner submit form, drawn by the same component partners use, from this draft. Phone screening is simulated as clear, and nothing is saved or submitted.">
+      <div className="portal-partner-submit-page">
+        <PartnerLeadForm productCode={productCode} productName={productName} partnerStatus="active" market={PREVIEW_MARKET} preview={source} />
+      </div>
+    </SettingsCard>
+  );
 }
 
-function PartnerFormPreview({ fields, form }: { fields: TemplateField[]; form: TemplateFormDefinition }) {
-  const [values, setValues] = useState<Record<string, unknown>>({});
-  const fieldMap = new Map(fields.map((field) => [field.field_key, field]));
-  function updateValue(fieldKey: string, value: unknown) { setValues((current) => pruneHiddenTemplateValues(form, { ...current, [fieldKey]: value })); }
+/* ── LA-1.4-3: which section groups this product's form offers ─────────── */
+
+function SectionAvailabilityCard({ form, fields, onChange }: { form: TemplateFormDefinition; fields: TemplateField[]; onChange: (group: TemplateSectionGroup, on: boolean) => void }) {
+  const availability = sectionAvailability(form);
+  const governed = sectionsByGroup(form);
+  const problem = sectionAvailabilityError(form, fields);
   return (
-    <SettingsCard title="Partner view preview" sub="The form partners receive, from this draft. Conditional fields hide and show as their controlling answer changes.">
-      <div className="flex flex-col gap-4">
-        {form.sections.map((section) => (
-          <fieldset className="m-0 flex flex-col gap-3 rounded-[12px] border border-[var(--border)] p-4" key={section.section_key}>
-            <legend className="px-1 text-[14px] font-semibold text-[var(--ink)]">{section.label}</legend>
-            {section.fields.map((formField) => {
-              const field = fieldMap.get(formField.field_key);
-              if (!field || !templateFormFieldVisible(formField, values)) return null;
-              return (
-                <div key={formField.field_key}>
-                  <span className="text-[14px] leading-[1.5] font-semibold text-[var(--body)]">{field.label}{(field.is_required || formField.is_required) && <span className="text-[var(--error-ink)]"> *</span>}</span>
-                  {field.help_text && <span className={st.sub}>{field.help_text}</span>}
-                  {previewField(field, values[field.field_key], (value) => updateValue(field.field_key, value))}
-                </div>
-              );
-            })}
-          </fieldset>
-        ))}
+    <SettingsCard title="Form sections" sub="Switch a whole group of sections off for this product. A section belongs to a group by its name; one that matches no group always shows.">
+      <div className="flex flex-col gap-3.5">
+        {TEMPLATE_SECTION_GROUPS.map((group) => {
+          const sections = governed[group];
+          return (
+            <ToggleRow
+              key={group}
+              id={`section-group-${group}`}
+              title={TEMPLATE_SECTION_GROUP_LABELS[group]}
+              help={sections.length ? `On this form: ${sections.map((section) => section.label).join(", ")}` : "No section on this form belongs to this group."}
+              checked={availability[group]}
+              onChange={(on) => onChange(group, on)}
+            />
+          );
+        })}
+        {problem && <Callout tone="error" title="This cannot be committed">{problem}</Callout>}
       </div>
     </SettingsCard>
   );
@@ -170,6 +178,27 @@ export function TemplateSettings() {
   const draft = state?.draft ?? null;
   const changes = useMemo(() => (saved && draft ? diffTemplateDraft(saved, draft) : []), [saved, draft]);
   const dirty = changes.length > 0;
+  // The partner form renders this draft as a partner would receive it (LA-1.4-5).
+  const previewSource = useMemo<PartnerFormPreviewSource | null>(() => {
+    if (!current || !draft) return null;
+    const template: TemplateRow = {
+      id: current.assignment.template_id,
+      name: draft.name,
+      product_code: current.assignment.product_code,
+      product_name: current.template.product_name,
+      version: current.template.version,
+      definition_version: current.template.definition_version,
+      description: current.template.description,
+      is_active: true,
+      created_by: null,
+      created_at: "",
+      updated_at: "",
+      fields: draft.fields,
+      stages: draft.stages,
+      form_definition: draft.form,
+    };
+    return { tenant_template_id: current.tenant_template_id, assignment: { definition_version: current.assignment.definition_version }, template };
+  }, [current, draft]);
 
   /** Every edit goes through here, so the change list learns when each line first appeared. */
   function update(fn: (draft: TemplateDraft) => TemplateDraft) {
@@ -197,7 +226,7 @@ export function TemplateSettings() {
         description: current.template.description,
         fields: draft.fields.map((field, index) => ({ ...field, sort_order: index, validation: field.validation ?? {}, help_text: field.help_text || null })),
         stages: draft.stages.map((stage, index) => ({ ...stage, sort_order: index })),
-        form_definition: { sections: draft.form.sections.map((section, index) => ({ ...section, sort_order: index })) },
+        form_definition: { sections: draft.form.sections.map((section, index) => ({ ...section, sort_order: index })), ...(draft.form.section_availability ? { section_availability: draft.form.section_availability } : {}) },
       }),
     });
     const body = await response.json().catch(() => null);
@@ -511,8 +540,14 @@ export function TemplateSettings() {
         </div>
       </SettingsCard>
 
-      <PartnerFormPreview fields={draft.fields} form={draft.form} />
+      <SectionAvailabilityCard
+        form={draft.form}
+        fields={draft.fields}
+        onChange={(group, on) => update((d) => ({ ...d, form: { ...d.form, section_availability: { ...(d.form.section_availability ?? {}), [group]: on } } }))}
+      />
       </SettingsGrid>
+
+      {previewSource && <PartnerViewPreview source={previewSource} productCode={current.assignment.product_code} productName={current.template.product_name} />}
 
       <SettingsDialog open={Boolean(editingField)} onOpenChange={(open) => { if (!open) setEditing(null); }} title={editingField ? `Edit “${editingField.label}”` : "Edit field"} description="Edits join the draft as you make them. Commit to make them live.">
         {editingField && (
@@ -565,6 +600,8 @@ export function TemplateSettings() {
                 </>
               )}
               {["boolean", "single_select", "multi_select"].includes(editingField.type) && <p className="m-0 text-[14px] text-[var(--muted)]">This type has no validation rules; its options are the rule.</p>}
+              {editingField.type === "bank_routing" && <p className="m-0 text-[14px] text-[var(--muted)]">Always nine digits that pass the bank routing checksum. Stored as the digits alone.</p>}
+              {editingField.type === "bank_account" && <p className="m-0 text-[14px] text-[var(--muted)]">Always {BANK_ACCOUNT_MIN_DIGITS} to {BANK_ACCOUNT_MAX_DIGITS} digits. Stored as the digits alone.</p>}
             </fieldset>
 
             {editingPlacementSection && editingPlacement && (

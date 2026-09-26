@@ -6,6 +6,7 @@ import { notify } from "@/lib/notify";
 
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { CampaignSpeedToLead } from "@/components/app/campaign-speed-to-lead";
 import {
   VENDOR_STATUS_LABEL,
   vendorCampaignWarning,
@@ -183,7 +184,7 @@ export function NewVendorPanel({ onClose, onCreated }: { onClose: () => void; on
 
 /** "3 days left", "closes today". */
 function daysLeft(days: number) {
-  return days <= 0 ? "closes today" : `${plural(days, "day")} left`;
+  return days <= 0 ? "closes today" : days === 1 ? "closes tomorrow" : `${plural(days, "day")} left`;
 }
 
 function TrialLine({ facts, onShowCampaigns, onOrderAnother, orderDisabledReason }: { facts: VendorCardFacts; onShowCampaigns: () => void; onOrderAnother: () => void; orderDisabledReason: string | null }) {
@@ -346,7 +347,8 @@ export function VendorRoster({ vendors, rollup, speed, consent, onChanged, onNew
                   <div><dt>Renews on</dt><dd>{calendarDate(row?.renews_on ?? fact?.renews_on) ?? "—"}</dd></div>
                   <div><dt>Lead type</dt><dd>{LEAD_TYPE[vendor.lead_type] ?? vendor.lead_type}</dd></div>
                 </dl>
-                {row?.terms && <p className="m-0 text-sm text-[var(--body)]"><span className="font-semibold text-foreground">Terms:</span> {row.terms}</p>}
+                <CampaignSpeedToLead vendorId={vendor.vendor_id} />
+                {row?.terms &&<p className="m-0 text-sm text-[var(--body)]"><span className="font-semibold text-foreground">Terms:</span> {row.terms}</p>}
                 {draft && <>
                   <VendorFields draft={draft} onChange={setDraft} idPrefix={`vendor-${vendor.vendor_id}`} allowInactive />
                   {warning && <p className="m-0 text-sm text-[var(--warning-ink)]">{warning}</p>}

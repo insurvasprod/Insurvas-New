@@ -7,10 +7,16 @@ import { listLeadNotes, listTeammates } from "@/lib/leadNotes/service";
 import type { TemplateRow } from "@/lib/templates/constants";
 import type { TenantRole } from "@/lib/tenantAuth/roles";
 import type { PreflightResult } from "@/lib/existingCustomerPreflight/types";
+import { isKnownScreeningVersion } from "@/lib/compliance/screeningCore";
+import { soldByPartners } from "@/lib/existingCustomerPreflight/soldBy";
+import { isWithAgent, transferPhase, TRANSFER_PHASE_LABEL } from "@/lib/transferInbox/constants";
+
+/** The buffer and re-queue facts of 20260925709850. Null before it is applied (42703). */
+type QueueExtra = { buffer_user_id: string | null; buffer_ended_at: string | null; requeued_at: string | null; requeue_count: number | null };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-type LeadRow = { id: string; tenant_id: string; values: unknown; created_by: string | null; created_at: string; updated_at: string; product_line: string; definition_version: number; pipeline_id: string; stage_id: string; screening_outcome: string | null; screening_warning: string | null; screening_checked_at: string | null; preflight_status: string; preflight_checked_at: string | null; preflight_result: unknown };
+type LeadRow = { id: string; tenant_id: string; values: unknown; created_by: string | null; created_at: string; updated_at: string; product_line: string; definition_version: number; pipeline_id: string; stage_id: string; screening_outcome: string | null; screening_warning: string | null; screening_checked_at: string | null; screening_version: number | null; preflight_status: string; preflight_checked_at: string | null; preflight_result: unknown };
 type QueueRow = { id: string; lead_id: string; partner_id: string | null; status: string; claimed_by: string | null; owner_user_id: string | null; owner_role: string | null; claimed_at: string | null; queued_at: string; disposition: string | null; disposition_at: string | null; disposition_by: string | null; pipeline_id: string; stage_id: string; updated_at: string };
 type VerificationSession = { id: string; work_item_id: string; user_id: string; agent_role: string; status: string; started_at: string; completed_at: string | null; progress_percentage: number; last_actor_id: string | null };
 type VerificationField = { session_id: string; field_key: string; state: string; is_required: boolean; is_visible: boolean; old_value: unknown; new_value: unknown; confirmed_at: string | null; actor_id: string | null };
@@ -42,12 +48,15 @@ export async function getLeadWorkspace(tenantId: string, userId: string, role: T
   // Both reads are keyed only by tenant + lead id, so they share one round trip. Nothing is returned
   // until the setter check below has passed.
   const [leadResult, queueResult] = await Promise.all([
-    db.from("agent_leads").select("id, tenant_id, values, created_by, created_at, updated_at, product_line, definition_version, pipeline_id, stage_id, screening_outcome, screening_warning, screening_checked_at, preflight_status, preflight_checked_at, preflight_result").eq("tenant_id", tenantId).eq("id", leadId).maybeSingle<LeadRow>(),
+    db.from("agent_leads").select("id, tenant_id, values, created_by, created_at, updated_at, product_line, definition_version, pipeline_id, stage_id, screening_outcome, screening_warning, screening_checked_at, screening_version, preflight_status, preflight_checked_at, preflight_result").eq("tenant_id", tenantId).eq("id", leadId).maybeSingle<LeadRow>(),
     db.from("lead_queue").select("id, lead_id, partner_id, status, claimed_by, owner_user_id, owner_role, claimed_at, queued_at, disposition, disposition_at, disposition_by, pipeline_id, stage_id, updated_at").eq("tenant_id", tenantId).eq("lead_id", leadId).order("queued_at", { ascending: false }).limit(1).maybeSingle<QueueRow>(),
   ]);
   if (leadResult.error) throw new Error(`Could not load lead: ${leadResult.error.message}`);
   if (!leadResult.data) throw new Error("Lead not found");
-  const lead = leadResult.data;
+  // LA-1.5-10: a screening result from a version this build does not know is not shown as a result.
+  const lead: LeadRow = leadResult.data.screening_version != null && !isKnownScreeningVersion(leadResult.data.screening_version)
+    ? { ...leadResult.data, screening_outcome: "unavailable", screening_warning: `This lead's screening result has an unknown version (v${leadResult.data.screening_version}) and is not trusted. Treat the number as unscreened.` }
+    : leadResult.data;
   if (queueResult.error) throw new Error(`Could not load lead work item: ${queueResult.error.message}`);
   const queue = queueResult.data;
 
@@ -84,7 +93,7 @@ export async function getLeadWorkspace(tenantId: string, userId: string, role: T
 
   // Everything here depends only on the lead and queue rows, so notes, teammates, attempt history
   // and the handoff lists ride in the same round trip instead of trailing it one by one.
-  const [templateResult, stageResult, stagesResult, partnerResult, usersResult, verificationResult, changesResult, auditResult, messagesResult, dispositionsResult, callbackHistoryResult, notes, teammates, attemptHistoryResult, licensedAgents, pendingHandoffs] = await Promise.all([
+  const [templateResult, stageResult, stagesResult, partnerResult, usersResult, verificationResult, changesResult, auditResult, messagesResult, dispositionsResult, callbackHistoryResult, notes, teammates, attemptHistoryResult, licensedAgents, pendingHandoffs, queueExtraResult] = await Promise.all([
     getTenantTemplateForProductVersion(tenantId, lead.product_line, lead.definition_version),
     db.from("tenant_pipeline_stages").select("id, pipeline_id, name, stage_type, color, position, is_archived").eq("id", lead.stage_id).maybeSingle(),
     db.from("tenant_pipeline_stages").select("id, pipeline_id, name, stage_type, color, position, is_archived").eq("pipeline_id", lead.pipeline_id).eq("is_archived", false).order("position"),
@@ -101,11 +110,14 @@ export async function getLeadWorkspace(tenantId: string, userId: string, role: T
     loadAttemptHistory(),
     role === "assistant" && queue ? listLicensedAgents(tenantId, userId) : Promise.resolve([]),
     (role === "owner" || role === "producer") && queue ? listPendingBufferHandoffs(tenantId, userId) : Promise.resolve(null),
+    // Optional: a failure (or the columns not there yet) leaves the buffer and re-queue facts unknown.
+    queue ? (db.from("lead_queue").select("buffer_user_id, buffer_ended_at, requeued_at, requeue_count").eq("tenant_id", tenantId).eq("id", queue.id).maybeSingle() as unknown as Promise<{ data: QueueExtra | null; error: { message: string } | null }>) : Promise.resolve({ data: null, error: null }),
   ]);
+  const queueExtra: QueueExtra | null = queueExtraResult.error ? null : queueExtraResult.data;
   const failure = [stageResult, stagesResult, partnerResult, usersResult, verificationResult, changesResult, auditResult, messagesResult, dispositionsResult, callbackHistoryResult].find((result) => result.error);
   if (failure?.error) throw new Error(`Could not load lead workspace: ${failure.error.message}`);
   const actorIds = new Set<string>();
-  for (const id of [lead.created_by, queue?.claimed_by, queue?.owner_user_id, queue?.disposition_by, verificationResult.data?.user_id, verificationResult.data?.last_actor_id, ...(changesResult.data ?? []).map((change) => change.actor_id), ...(auditResult.data ?? []).map((event) => event.actor_id), ...(messagesResult.data ?? []).map((message) => message.created_by), ...(callbackHistoryResult.data ?? []).map((event) => event.actor_user_id)]) if (id) actorIds.add(id);
+  for (const id of [lead.created_by, queue?.claimed_by, queue?.owner_user_id, queue?.disposition_by, queueExtra?.buffer_user_id, verificationResult.data?.user_id, verificationResult.data?.last_actor_id, ...(changesResult.data ?? []).map((change) => change.actor_id), ...(auditResult.data ?? []).map((event) => event.actor_id), ...(messagesResult.data ?? []).map((message) => message.created_by), ...(callbackHistoryResult.data ?? []).map((event) => event.actor_user_id)]) if (id) actorIds.add(id);
   // Both need only the results above, so they share a round trip. The open call and the quoted
   // premium (LeadWorkspace concept board) ride along; either failing leaves its fact empty.
   const [actors, verificationFields, openCall, quote] = await Promise.all([
@@ -133,6 +145,11 @@ export async function getLeadWorkspace(tenantId: string, userId: string, role: T
   events.sort((a, b) => a.at.localeCompare(b.at));
   const pendingHandoff = pendingHandoffs && queue ? pendingHandoffs.find((handoff) => handoff.workItemId === queue.id) ?? null : null;
   const currentOwner = queue?.owner_user_id === userId;
+  const isOwnerRole = role === "owner";
+  const isTransfer = Boolean(queue?.partner_id);
+  // The buffer still on a call they handed to the licensed agent (LA-1.14-9).
+  const bufferInvolved = Boolean(queueExtra?.buffer_user_id && !queueExtra.buffer_ended_at && queue?.status === "la_active");
+  const soldBy = soldByPartners(((record(lead.preflight_result).matches ?? []) as PreflightResult["matches"]) ?? []);
   return {
     lead: { ...lead, values: record(lead.values) },
     template: templateResult.template as TemplateRow,
@@ -146,8 +163,18 @@ export async function getLeadWorkspace(tenantId: string, userId: string, role: T
     activeCall: !openCall.error && openCall.data ? { startedAt: openCall.data.started_at, agentName: actorNames.get(openCall.data.user_id) ?? null } : null,
     quotedMonthlyCents: !quote.error ? quote.data?.monthly_premium_cents ?? null : null,
     attemptHistory: Array.isArray(attemptHistoryResult.data) ? attemptHistoryResult.data : [],
+    // LA-1.14-6: the stored status, read as the spec's five states.
+    transfer: queue && isTransfer ? {
+      phase: transferPhase(queue.status),
+      phaseLabel: TRANSFER_PHASE_LABEL[transferPhase(queue.status)],
+      buffer: queueExtra?.buffer_user_id ? { id: queueExtra.buffer_user_id, name: actorNames.get(queueExtra.buffer_user_id) ?? "Buffer assistant", onCall: bufferInvolved } : null,
+      requeueCount: queueExtra?.requeue_count ?? 0,
+    } : null,
     preflight: {
       ...(record(lead.preflight_result) as unknown as PreflightResult),
+      // LA-1.24-5: worked out from the matches, so a result stored before the flag existed carries it too.
+      soldByPartners: soldBy,
+      soldByMultiplePartners: soldBy.length >= 2,
       status: lead.preflight_status,
       checkedAt: lead.preflight_checked_at,
       policyMatchingIncluded: false,
@@ -166,6 +193,18 @@ export async function getLeadWorkspace(tenantId: string, userId: string, role: T
     currentUserId: userId,
     licensedAgents,
     pendingHandoff,
-    actions: { canClaim: Boolean(queue && queue.status === "unclaimed"), canHandoff: Boolean(queue && role === "assistant" && currentOwner && ["claimed", "buffer_active"].includes(queue.status)), canAcceptHandoff: Boolean(pendingHandoff), canDisposition: Boolean(queue && currentOwner && ["owner", "producer"].includes(role)), canChangeStage: ["owner", "producer", "assistant"].includes(role) },
+    actions: {
+      canClaim: Boolean(queue && queue.status === "unclaimed"),
+      canHandoff: Boolean(queue && role === "assistant" && currentOwner && ["claimed", "buffer_active"].includes(queue.status)),
+      canAcceptHandoff: Boolean(pendingHandoff),
+      canDisposition: Boolean(queue && currentOwner && ["owner", "producer"].includes(role)),
+      // LA-1.20-4: a stage change is a disposition. Only an owner correcting data moves the stage
+      // directly (PATCH refuses anyone else with move_needs_disposition), so only an owner is offered it.
+      canChangeStage: isOwnerRole,
+      // LA-1.14-9 / LA-1.10-8: give a transfer back, put a dropped call back, end buffer involvement.
+      canUnassign: Boolean(queue && isTransfer && isWithAgent(queue.status) && queue.status !== "handed_pending" && (currentOwner || isOwnerRole)),
+      canRequeue: Boolean(queue && isTransfer && queue.status === "dropped" && (currentOwner || isOwnerRole || queue.disposition_by === userId)),
+      canEndBufferInvolvement: Boolean(queue && bufferInvolved && (isOwnerRole || currentOwner || queueExtra?.buffer_user_id === userId)),
+    },
   };
 }

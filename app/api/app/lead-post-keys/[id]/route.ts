@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import { audit } from "@/lib/audit/log";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
-import { rotatePostKey, setPostKeyActive, setPostKeyCampaign, updatePostKeyFieldMap } from "@/lib/leadPost/keys";
+import { PostKeyConflictError, rotatePostKey, setPostKeyActive, setPostKeyCampaign, updatePostKeyFieldMap } from "@/lib/leadPost/keys";
 import { SchemaPendingError } from "@/lib/leadPost/schemaGap";
 
 const ROLES = ["owner"] as const;
@@ -94,6 +94,8 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     return NextResponse.json({ record });
   } catch (error) {
     if (error instanceof SchemaPendingError) return NextResponse.json({ error: error.message }, { status: 503 });
+    // One active key per vendor (LA-2.5-2): a second is refused, and the message says to rotate.
+    if (error instanceof PostKeyConflictError) return NextResponse.json({ error: error.message, code: error.code }, { status: 409 });
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Could not change that key" },
       { status: 400 },

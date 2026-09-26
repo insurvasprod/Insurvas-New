@@ -48,6 +48,8 @@ function mapError(message: string): BufferHandoffError {
     ACTIVE_CALL_NOT_FOUND: ["active_call_not_found", "The active call is no longer available."],
     WORK_ITEM_NOT_FOUND: ["work_item_not_found", "That transfer was not found."],
     INVALID_HANDOFF_TIMEOUT: ["invalid_input", "The handoff timeout is invalid."],
+    // LA-1.14-10 (20260925709860): neither the licensed agent nor the buffer on the call speaks it.
+    LANGUAGE_NOT_SPOKEN: ["language_not_spoken", "The caller asked for a language this licensed agent does not list, and you do not list it either. Choose an agent who speaks it."],
   };
   const [code, friendly] = messages[message] ?? ["handoff_unavailable", "Could not update this handoff."];
   return new BufferHandoffError(code, friendly);

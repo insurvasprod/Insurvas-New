@@ -2,7 +2,7 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { Bell, Loader2 } from "lucide-react";
+import { Bell, ChevronDown, Loader2 } from "lucide-react";
 
 import { Callout, KeyValues, Pill, SettingsMeter, Timeline, type PillTone } from "@/components/app/settings/primitives";
 import { DispositionWizardDialog } from "@/components/app/disposition-wizard-dialog";
@@ -90,6 +90,18 @@ function FieldEditor({ id, field, value, onChange, disabled, placeholder }: { id
   return <input id={id} className={cn(FLAT, "h-9")} type={htmlType} value={inputValue(value, field.type) as string} placeholder={placeholder} disabled={disabled} autoComplete="off" onChange={(event) => { const raw = event.target.value; onChange(field.type === "number" ? raw === "" ? undefined : Number(raw) : field.type === "currency" ? raw === "" ? undefined : Math.round(Number(raw) * 100) : raw); }} />;
 }
 
+/**
+ * LA-1.11-7: a section is complete when every required field in it is confirmed or corrected (and,
+ * for a section with no required field, when every field is). A complete section folds to its
+ * header, so what is left to ask is what is on screen. An empty section is never "complete".
+ */
+function sectionComplete(fields: Array<{ is_required: boolean; state: VerificationState }>) {
+  if (fields.length === 0) return false;
+  const required = fields.filter((field) => field.is_required);
+  const counted = required.length ? required : fields;
+  return counted.every((field) => field.state !== "outstanding");
+}
+
 function Card({ title, children, className }: { title: string; children: ReactNode; className?: string }) {
   return (
     <section className={cn("min-w-0 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] p-6", className)}>
@@ -116,6 +128,8 @@ export function VerificationPanel({ workItemId, readOnly, canHandoff }: { workIt
   const [showAllHistory, setShowAllHistory] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const [outcomeOpen, setOutcomeOpen] = useState(false);
+  // Sections the agent opened again after they completed. Everything else complete stays folded.
+  const [reopened, setReopened] = useState<Record<string, boolean>>({});
 
   /** Correction drafts start from the stored values, except masked ones: a mask is never a value. */
   const seedDrafts = useCallback((next: Panel) => {
@@ -285,6 +299,9 @@ export function VerificationPanel({ workItemId, readOnly, canHandoff }: { workIt
         ))}
       </section>
 
+      {context?.claim.at && new Date(panel.session.started_at).getTime() < new Date(context.claim.at).getTime() - 5_000 && (
+        <Callout tone="info" title="Picking up where the last call stopped">This verification was started before this claim. Every field confirmed or corrected then is kept below, and the corrected values are already on the application.</Callout>
+      )}
       {readOnly && <Callout tone="info" title="Read-only access">Your account is read-only. You can review this application, but field changes are disabled.</Callout>}
       {error && <Callout tone="error" title="Something went wrong">{error}</Callout>}
 
@@ -314,11 +331,26 @@ export function VerificationPanel({ workItemId, readOnly, canHandoff }: { workIt
               <span className="text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">Application fields</span>
               <Pill tone={requiredDone ? "success" : "brand"}>{progressText}</Pill>
             </div>
-            {panel.sections.map((section, sectionIndex) => (
+            {panel.sections.map((section, sectionIndex) => {
+              const complete = sectionComplete(section.fields);
+              const folded = complete && !reopened[section.section_key];
+              const done = section.fields.filter((field) => field.state !== "outstanding").length;
+              return (
               <Fragment key={section.section_key}>
-                {/* Each template section is a sub-group row inside the one card. */}
-                <div className={cn("bg-[var(--canvas)] px-4 py-2", sectionIndex > 0 && "border-t border-[var(--border)]", label12)}>{section.label}</div>
-                {section.fields.length === 0 && <p className="m-0 border-t border-[var(--border)] px-4 py-3.5 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">No fields apply to this section with the answers so far.</p>}
+                {/* Each template section is a sub-group row inside the one card. A complete one folds (LA-1.11-7). */}
+                {complete ? (
+                  <button type="button" aria-expanded={!folded} aria-controls={`verify-section-${section.section_key}`} onClick={() => setReopened((current) => ({ ...current, [section.section_key]: !current[section.section_key] }))} className={cn("flex w-full cursor-pointer items-center justify-between gap-3 border-0 bg-[var(--canvas)] px-4 py-2 text-left focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--ring-color)]", sectionIndex > 0 && "border-t border-solid border-[var(--border)]", label12)}>
+                    <span>{section.label}</span>
+                    <span className="inline-flex items-center gap-2 normal-case tracking-[-0.01em]">
+                      <Pill tone="success" dot>Complete · {done} of {section.fields.length}</Pill>
+                      <ChevronDown aria-hidden className={cn("size-4 transition-transform", !folded && "rotate-180")} />
+                    </span>
+                  </button>
+                ) : (
+                  <div className={cn("bg-[var(--canvas)] px-4 py-2", sectionIndex > 0 && "border-t border-[var(--border)]", label12)}>{section.label}</div>
+                )}
+                {!folded && section.fields.length === 0 && <p className="m-0 border-t border-[var(--border)] px-4 py-3.5 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">No fields apply to this section with the answers so far.</p>}
+                <div id={`verify-section-${section.section_key}`} hidden={folded}>
                 {section.fields.map((field) => {
                   const key = field.field_key;
                   const isSensitive = sensitive.has(key);
@@ -374,8 +406,10 @@ export function VerificationPanel({ workItemId, readOnly, canHandoff }: { workIt
                     </div>
                   );
                 })}
+                </div>
               </Fragment>
-            ))}
+              );
+            })}
           </section>
         </div>
 

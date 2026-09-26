@@ -328,52 +328,35 @@ export async function resolveRuntimeStage(tenantId: string, stageKey: string, pa
 }
 
 /**
- * Partner submissions have a distinct origin stage. The migration seeds it for new tenants, but
- * this idempotent guard also repairs tenants created while an older migration bundle is deployed.
+ * Where a partner's submission enters (LA-1.9-4): the first open, unarchived stage of the default
+ * pipeline for the partner's type — "New Transfer" for a publisher, "Form Lead" for marketing,
+ * "Referred" for an affiliate in the seeded pipelines, or whatever stage the agency has put first.
+ * Submissions used to land in a lazily created 11th publisher stage, "Partner Submitted"; that stage
+ * is no longer created, and tenants that have one keep it (and the leads already in it) untouched.
+ * The legacy name lookup stays as the fallback for a pipeline whose stages are all closed.
  */
-export async function resolvePartnerSubmissionStage(tenantId: string) {
+export async function resolvePartnerEntryStage(tenantId: string, partnerType: PartnerPipelineType): Promise<{ pipelineId: string; stage: PipelineStage }> {
   const supabase = getSupabaseServiceClient();
   const { data: pipeline, error: pipelineError } = await supabase
     .from("tenant_pipelines")
     .select("id")
     .eq("tenant_id", tenantId)
-    .eq("partner_type", "publisher")
+    .eq("partner_type", partnerType)
     .eq("is_default", true)
     .maybeSingle();
   if (pipelineError || !pipeline) throw new Error("No default pipeline is configured for this partner type");
-  const existing = await supabase
+  const { data: stage, error } = await supabase
     .from("tenant_pipeline_stages")
     .select("id, pipeline_id, name, position, stage_type, color, is_archived, created_at, updated_at")
     .eq("pipeline_id", pipeline.id)
-    .eq("name", "Partner Submitted")
     .eq("is_archived", false)
-    .maybeSingle();
-  if (existing.error) throw new Error(`Could not load partner submission stage: ${existing.error.message}`);
-  if (existing.data) return { pipelineId: pipeline.id, stage: existing.data as PipelineStage };
-  const { data: last } = await supabase
-    .from("tenant_pipeline_stages")
-    .select("position")
-    .eq("pipeline_id", pipeline.id)
-    .order("position", { ascending: false })
+    .eq("stage_type", "open")
+    .order("position")
     .limit(1)
     .maybeSingle();
-  const created = await supabase
-    .from("tenant_pipeline_stages")
-    .insert({ pipeline_id: pipeline.id, name: "Partner Submitted", position: (last?.position ?? -1) + 1, stage_type: "open", color: "#0ea5e9" })
-    .select("id, pipeline_id, name, position, stage_type, color, is_archived, created_at, updated_at")
-    .maybeSingle();
-  if (created.data) return { pipelineId: pipeline.id, stage: created.data as PipelineStage };
-  if (created.error?.code === "23505") {
-    const repaired = await supabase
-      .from("tenant_pipeline_stages")
-      .select("id, pipeline_id, name, position, stage_type, color, is_archived, created_at, updated_at")
-      .eq("pipeline_id", pipeline.id)
-      .eq("name", "Partner Submitted")
-      .eq("is_archived", false)
-      .single();
-    if (repaired.data) return { pipelineId: pipeline.id, stage: repaired.data as PipelineStage };
-  }
-  throw new Error(created.error?.message ?? "Could not create the partner submission stage");
+  if (error) throw new Error(`Could not load the pipeline's entry stage: ${error.message}`);
+  if (stage) return { pipelineId: pipeline.id, stage: stage as PipelineStage };
+  return resolveRuntimeStage(tenantId, "new", partnerType);
 }
 
 const DEFAULT_PUBLISHER_DISPOSITION_STAGES = [

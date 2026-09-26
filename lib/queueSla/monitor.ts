@@ -2,11 +2,14 @@ import "server-only";
 
 import { sendEmail } from "@/lib/email/transport";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
+import { isSchemaGap } from "@/lib/appointments/schemaGap";
 import { heartbeatState, type SlaHeartbeat } from "./heartbeat";
 
 const JOB_TARGET = "unclaimed-sla";
 const SUCCESS_ACTION = "system.unclaimed_sla_run_succeeded";
 const FAILURE_ACTION = "system.unclaimed_sla_run_failed";
+/** 20260925709910: one row per run, from the database job and from this app job. */
+const RUNS_TABLE = "unclaimed_sla_job_runs";
 
 type RunReport = {
   scanned: number;
@@ -33,6 +36,18 @@ export async function recordUnclaimedSlaRun(input: { status: "succeeded" | "fail
     metadata,
   });
   if (result.error) throw new Error(`Could not record unclaimed SLA heartbeat: ${result.error.message}`);
+  // The same run, in the table the database job writes its heartbeat to (20260925709910), so the
+  // alert centre and the heartbeat read one history. Before that table exists this is skipped.
+  const now = new Date().toISOString();
+  const run = await db().from(RUNS_TABLE).insert({
+    source: "app",
+    started_at: now,
+    finished_at: now,
+    ok: input.status === "succeeded",
+    report: metadata,
+    error: input.status === "failed" ? (input.error ?? input.report?.failures[0]?.error ?? "failed").slice(0, 2000) : null,
+  });
+  if (run.error && !isSchemaGap(run.error)) console.error("Unclaimed SLA run row could not be recorded", run.error.message);
 }
 
 export async function getUnclaimedSlaHeartbeat(maxAgeSeconds: number): Promise<SlaHeartbeat> {
@@ -47,7 +62,14 @@ export async function getUnclaimedSlaHeartbeat(maxAgeSeconds: number): Promise<S
     .limit(1)
     .maybeSingle();
   if (result.error) throw new Error(`Could not read unclaimed SLA heartbeat: ${result.error.message}`);
-  const row = result.data ? { action: result.data.action, metadata: result.data.metadata, created_at: result.data.ts } : null;
+  const appRow = result.data ? { action: result.data.action, metadata: result.data.metadata, created_at: result.data.ts } : null;
+  // Since 20260925709910 the database job delivers every side effect but the email, every minute,
+  // and writes its own heartbeat. The newer of the two is the one that says whether the job runs.
+  const database = await db().from(RUNS_TABLE).select("ok, report, error, started_at, finished_at").eq("source", "database").order("started_at", { ascending: false }).limit(1).maybeSingle();
+  if (database.error && !isSchemaGap(database.error)) throw new Error(`Could not read the database SLA heartbeat: ${database.error.message}`);
+  const dbRun = database.data as { ok: boolean; report: unknown; error: string | null; started_at: string; finished_at: string | null } | null;
+  const dbRow = dbRun ? { action: dbRun.ok ? SUCCESS_ACTION : FAILURE_ACTION, metadata: { source: "database", report: dbRun.report, error: dbRun.error }, created_at: dbRun.finished_at ?? dbRun.started_at } : null;
+  const row = [appRow, dbRow].filter((candidate): candidate is NonNullable<typeof candidate> => Boolean(candidate)).sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))[0] ?? null;
   return heartbeatState(row, Date.now(), maxAgeSeconds);
 }
 
