@@ -1,21 +1,22 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, ListFilter } from "lucide-react";
+import { SlidersHorizontal } from "lucide-react";
 
-import { AdminPageHeader } from "@/components/admin/page-header";
 import { EmptyState, NoMatches } from "@/components/admin/empty-state";
 import { BoardTableFooter } from "@/components/admin/board-table-footer";
-import { Callout, Pill, SearchBox, TableToolbar, btn, st, type PillTone } from "@/components/app/settings/primitives";
+import { Pill, st, type PillTone } from "@/components/app/settings/primitives";
+import { Button } from "@/components/ui/button";
+import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
+import { PageHeader } from "@/components/ui/page-header";
+import { TableCard } from "@/components/ui/table-card";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -50,9 +51,6 @@ const STATE_TONE: Record<TemplateState, PillTone> = {
   archived: "neutral",
 };
 
-const toolbarButton =
-  "inline-flex h-10 items-center gap-2 rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] px-3.5 text-[14px] leading-[1.43] font-semibold tracking-[-0.01em] text-[var(--ink)] hover:bg-[var(--surface-alt)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]";
-
 /** "12 Sep 2026" in UTC; hover gives the full UTC time and, after mount, the reader's own time. */
 function UpdatedDate({ iso }: { iso: string }) {
   const ref = useRef<HTMLTimeElement>(null);
@@ -70,13 +68,9 @@ function UpdatedDate({ iso }: { iso: string }) {
   );
 }
 
-function plural(count: number, one: string, many = `${one}s`) {
-  return `${count.toLocaleString("en-US")} ${count === 1 ? one : many}`;
-}
-
 /**
- * The Templates catalog (board p-adm-templates): header, figures, product / search / state filters,
- * the table and the versioning callout. A row click — or the name, for the keyboard — opens the
+ * The Templates catalog (board p-adm-templates): header, figures, and the table with its search /
+ * product / state toolbar. A row click — or the name, for the keyboard — opens the
  * editor, where editing, duplicating, publishing, archiving and restoring live; the open row carries
  * the brand tint, as on the board.
  */
@@ -96,6 +90,7 @@ export function TemplatesTable({
   draftsSupported: boolean;
 }) {
   const router = useRouter();
+  const [refreshing, startRefresh] = useTransition();
   const [editor, setEditor] = useState<{ mode: "create" | "edit"; id?: string } | null>(null);
   const [query, setQuery] = useState("");
   const [productCode, setProductCode] = useState<string>("all");
@@ -119,7 +114,6 @@ export function TemplatesTable({
   const current = Math.min(page, pages);
   const visible = filtered.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE);
   const editing = editor?.mode === "edit" ? templates.find((template) => template.id === editor.id) ?? null : null;
-  const productLabel = productCode === "all" ? "All products" : productOptions.find(([code]) => code === productCode)?.[1] ?? productCode;
 
   function toggleState(state: TemplateState, on: boolean) {
     setStates((currentStates) => (on ? [...currentStates, state] : currentStates.filter((item) => item !== state)));
@@ -135,101 +129,89 @@ export function TemplatesTable({
 
   const openEdit = (template: CatalogTemplate) => setEditor({ mode: "edit", id: template.id });
 
-  const agencyCopies = usage ? Object.values(usage.byTemplate).reduce((sum, item) => sum + item.agencies, 0) : 0;
-  const copiesOnEarlier = usage ? Object.values(usage.byTemplate).reduce((sum, item) => sum + item.agenciesOnEarlierVersion, 0) : 0;
-
   return (
     <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
-      <AdminPageHeader
+      <PageHeader
         title="Templates"
-        subtitle="Lead fields, pipelines and application forms, per product."
         actions={
-          <button type="button" className={btn("primary", "h-11")} onClick={() => setEditor({ mode: "create" })}>
+          <Button type="button" onClick={() => setEditor({ mode: "create" })}>
             New template
-          </button>
+          </Button>
         }
       />
 
       {tiles}
 
-      <TableToolbar>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button type="button" className={toolbarButton} aria-label={`Product: ${productLabel}`}>
-              {productLabel}
-              <ChevronDown aria-hidden className="size-[13px]" strokeWidth={2.4} />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-60">
-            <DropdownMenuRadioGroup
+      <TableCard
+        toolbar={
+          <DataToolbar actions={<RefreshButton onClick={() => startRefresh(() => router.refresh())} refreshing={refreshing} />}>
+            <ToolbarSearch
+              value={query}
+              onChange={(value) => {
+                setQuery(value);
+                setPage(1);
+              }}
+              placeholder="Search templates"
+            />
+            <select
+              aria-label="Product"
+              className={toolbarControl}
               value={productCode}
-              onValueChange={(value) => {
-                setProductCode(value);
+              onChange={(event) => {
+                setProductCode(event.target.value);
                 setPage(1);
               }}
             >
-              <DropdownMenuRadioItem value="all">All products</DropdownMenuRadioItem>
+              <option value="all">All products</option>
               {productOptions.map(([code, name]) => (
-                <DropdownMenuRadioItem key={code} value={code}>
+                <option key={code} value={code}>
                   {name}
-                </DropdownMenuRadioItem>
+                </option>
               ))}
-            </DropdownMenuRadioGroup>
-          </DropdownMenuContent>
-        </DropdownMenu>
-        <SearchBox
-          value={query}
-          onChange={(value) => {
-            setQuery(value);
-            setPage(1);
-          }}
-          placeholder="Search templates"
-          label="Search templates"
-        />
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button type="button" className={toolbarButton}>
-              <ListFilter aria-hidden className="size-[15px]" />
-              Filters
-              {filterCount > 0 && (
-                <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--surface-alt)] px-1.5 text-[12px] leading-[1.5] font-semibold tabular-nums text-[var(--ink)]">
-                  {filterCount}
-                </span>
-              )}
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-60">
-            <DropdownMenuLabel>State</DropdownMenuLabel>
-            {TEMPLATE_STATES.map((state) => (
-              <DropdownMenuCheckboxItem
-                key={state}
-                checked={states.includes(state)}
-                onCheckedChange={(checked) => toggleState(state, checked === true)}
-                onSelect={(event) => event.preventDefault()}
-              >
-                {TEMPLATE_STATE_LABELS[state]}
-                {state === "draft" && !draftsSupported ? " (needs database update)" : ""}
-              </DropdownMenuCheckboxItem>
-            ))}
-            {filterCount > 0 && (
-              <>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onSelect={() => {
-                    setStates([...TEMPLATE_STATES]);
-                    setPage(1);
-                  }}
-                >
-                  Show every state
-                </DropdownMenuItem>
-              </>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
-        <span className="grow" />
-      </TableToolbar>
-
-      <section className="flex min-w-0 flex-col overflow-hidden rounded-[12px] border border-[var(--border)] bg-[var(--surface)]">
+            </select>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button type="button" variant="outline">
+                  <SlidersHorizontal aria-hidden="true" />
+                  Filters
+                  {filterCount > 0 && (
+                    <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-muted px-1.5 text-xs tabular-nums text-foreground">
+                      {filterCount}
+                    </span>
+                  )}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-60">
+                <DropdownMenuLabel>State</DropdownMenuLabel>
+                {TEMPLATE_STATES.map((state) => (
+                  <DropdownMenuCheckboxItem
+                    key={state}
+                    checked={states.includes(state)}
+                    onCheckedChange={(checked) => toggleState(state, checked === true)}
+                    onSelect={(event) => event.preventDefault()}
+                  >
+                    {TEMPLATE_STATE_LABELS[state]}
+                    {state === "draft" && !draftsSupported ? " (needs database update)" : ""}
+                  </DropdownMenuCheckboxItem>
+                ))}
+                {filterCount > 0 && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onSelect={() => {
+                        setStates([...TEMPLATE_STATES]);
+                        setPage(1);
+                      }}
+                    >
+                      Show every state
+                    </DropdownMenuItem>
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </DataToolbar>
+        }
+      >
         <div className="min-w-0 overflow-x-auto">
           <table className={cn(st.table, "min-w-[980px]")}>
             <thead>
@@ -312,7 +294,6 @@ export function TemplatesTable({
             </tbody>
           </table>
         </div>
-        <div className="grow" />
         {templates.length > 0 && (
           <BoardTableFooter
             page={current}
@@ -323,22 +304,7 @@ export function TemplatesTable({
             onPageChange={setPage}
           />
         )}
-      </section>
-
-      <Callout tone="info" title="In-progress work keeps the version it started with">
-        {usage ? (
-          <>
-            {usage.inProgressOnEarlierVersion === 0
-              ? "No in-progress application is on an earlier version right now; any that are stay there."
-              : `${plural(usage.inProgressOnEarlierVersion, "application is", "applications are")} mid-flight on earlier versions and stay there.`}{" "}
-            {copiesOnEarlier > 0 && `${plural(copiesOnEarlier, "agency copy was", "agency copies were")} taken from an earlier template version and keep it (${agencyCopies.toLocaleString("en-US")} in all). `}
-          </>
-        ) : (
-          "In-progress applications could not be counted just now. "
-        )}
-        A published template is never edited in place — saving creates a new version — and removing a lead field the form or a
-        condition still uses names those dependents before it is allowed.
-      </Callout>
+      </TableCard>
 
       {editor && (editor.mode === "create" || editing) && (
         <TemplateEditorDialog

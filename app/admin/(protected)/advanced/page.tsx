@@ -22,7 +22,7 @@ export default async function AdvancedPage() {
           that long after a write (lib/settings/queries.ts CACHE_TTL_MS). */}
       <AdminPageHeader
         title="Advanced"
-        subtitle="Raw platform settings. Changes apply within 30 seconds. There is no staging step."
+        subtitle="Changes apply within 30 seconds, with no staging step."
       />
       <SettingsForm
         initial={settings

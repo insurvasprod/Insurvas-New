@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
-import { cancelCallback, completeCallback, listCallbacks, rescheduleCallback } from "@/lib/callbacks/service";
+import { agentTimezones, cancelCallback, completeCallback, listCallbacks, rescheduleCallback } from "@/lib/callbacks/service";
 import { callbackWindowFacts, type CallbackWindowFacts } from "@/lib/callbacks/windowFacts";
 import { nearestLegalTime } from "@/lib/callbacks/nearest";
 import { recentCallbackRefusals } from "@/lib/callbacks/refusals";
@@ -33,6 +33,11 @@ function errorResponse(error: unknown) {
   const code = message.split(" ")[0];
   if (WINDOW_REFUSALS[code]) {
     return NextResponse.json({ error: WINDOW_REFUSALS[code], code: code === "CALLBACK_NO_STATE" ? "no_state" : "outside_calling_window" }, { status: 422 });
+  }
+  // 20260925711600: a colleague's callback is theirs — the assignee, whoever booked it, an owner or an
+  // assistant may change it; another producer may not.
+  if (code === "CALLBACK_NOT_YOURS") {
+    return NextResponse.json({ error: "Only the agent this callback is assigned to, the person who booked it, an owner or an assistant can change it.", code: "callback_not_yours" }, { status: 403 });
   }
   const status = ["CALLBACK_NOT_FOUND"].includes(code) ? 404 : ["CALLBACK_NOT_ACTIVE", "CALLBACK_ALREADY_COMPLETED"].includes(code) ? 409 : ["CALLBACK_DATE_REQUIRED", "CALLBACK_DATE_PAST", "CALLBACK_ACTOR_INVALID"].includes(code) || message.startsWith("Choose a valid callback") ? 400 : 500;
   // A time in the past is refused and says so, rather than reading as a state problem.
@@ -81,14 +86,19 @@ export async function GET(request: Request) {
     const states = [...new Set(callbacks.map((callback) => callback.state).filter((state): state is string => Boolean(state)))];
     // A single-callback read (History) needs none of the page's context.
     const pageRead = !parsed.data.callback_id;
-    const [windows, agencyTimezone, refusals] = await Promise.all([
+    const [windows, agencyTimezone, refusals, ownZone] = await Promise.all([
       windowsFor(auth.context.tenantId, states),
       getWorkspaceTimezone(auth.context.tenantId).catch(() => null),
       pageRead ? recentCallbackRefusals(auth.context.tenantId).catch(() => []) : Promise.resolve([]),
+      agentTimezones(auth.context.tenantId, auth.context.userId),
     ]);
-    // The agency zone lets the page show "4:30 pm your time" for a time the agent is still picking.
+    // LA-1.22: the customer's time "with the agent's shown alongside" — the agent's OWN zone, the one
+    // saved with their working hours, not the agency's (an agent licensed in 14 states is routinely
+    // hours from both). With none saved, the page keeps the browser's zone; agencyTimezone stays in
+    // the response for callers that want the agency's clock.
     // The viewer decides the Mine/All default (non-owners start on Mine) and the owner-only source rates.
-    return NextResponse.json({ callbacks, windows, agencyTimezone, refusals, viewer: { userId: auth.context.userId, role: auth.context.role } });
+    const viewerTimezone = ownZone.get(auth.context.userId) ?? null;
+    return NextResponse.json({ callbacks, windows, agencyTimezone, viewerTimezone, refusals, viewer: { userId: auth.context.userId, role: auth.context.role } });
   }
   catch (error) { return errorResponse(error); }
 }

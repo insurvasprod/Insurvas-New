@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import { cn } from "@/lib/utils";
+import { StatStrip, StatTile, type MeterTone } from "@/components/ui/stat";
 
 /**
  * The admin boards' figure tile: 1px border, 12px radius, 16/18 padding, a 12px uppercase label, a
@@ -12,11 +12,12 @@ import { cn } from "@/lib/utils";
  */
 export type BoardStatTone = "default" | "success" | "warning" | "error";
 
-const FIGURE_TONE: Record<BoardStatTone, string> = {
-  default: "text-[var(--ink)]",
-  success: "text-[var(--success-ink)]",
-  warning: "text-[var(--warning-ink)]",
-  error: "text-[var(--error-ink)]",
+// The admin tiles are the shared StatTile now (2026-09-28: one compact figure style everywhere).
+const FIGURE_TONE: Record<BoardStatTone, MeterTone | undefined> = {
+  default: undefined,
+  success: "good",
+  warning: "warning",
+  error: "danger",
 };
 
 export function BoardStatTile({
@@ -33,18 +34,10 @@ export function BoardStatTile({
   /** Hover text: where the number comes from, when that is not obvious. */
   title?: string;
 }) {
-  return (
-    <div title={title} className="min-w-0 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] px-[18px] py-4">
-      <div className="text-[12px] leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]">{label}</div>
-      <div className={cn("mt-1 text-[32px] leading-[1.13] font-semibold tracking-[-0.025em] tabular-nums", FIGURE_TONE[tone])}>{value}</div>
-      {footnote !== undefined && footnote !== null && (
-        <div className="mt-1 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">{footnote}</div>
-      )}
-    </div>
-  );
+  return <StatTile label={label} labelTitle={title} value={value} valueTone={FIGURE_TONE[tone]} footnote={footnote ?? undefined} />;
 }
 
-/** Four across on a wide screen, two on a tablet, one on a phone — the boards' 16px gap. */
+/** The admin boards' figures: one compact strip (StatStrip), not a grid of boxes. */
 export function BoardStatGrid({ children, className }: { children: ReactNode; className?: string }) {
-  return <div className={cn("grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4", className)}>{children}</div>;
+  return <StatStrip className={className}>{children}</StatStrip>;
 }

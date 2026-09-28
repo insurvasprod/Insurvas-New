@@ -3,10 +3,9 @@ import Link from "next/link";
 
 import { getCurrentAdmin } from "@/lib/adminAuth/getCurrentAdmin";
 import { canViewInvoices } from "@/lib/invoices/permissions";
-import { AdminPageHeader } from "@/components/admin/page-header";
 import { BillingTabs } from "@/components/admin/billing-tabs";
-import { Callout } from "@/components/app/settings/primitives";
 import { Card, CardContent } from "@/components/ui/card";
+import { PageHeader } from "@/components/ui/page-header";
 
 const destinations = [
   ["Invoices", "What we billed, and whether it matches what the provider charged.", "/admin/invoices"],
@@ -26,12 +25,7 @@ export default async function BillingWorkspacePage() {
 
   return (
     <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
-      {/* "Four of", not "the four": the Billing group also holds Subscriptions, Trials, Offers,
-          Credits & limits and Setup, so "the four billing screens" would undercount it. */}
-      <AdminPageHeader
-        title="Billing"
-        subtitle="One door into four of the billing screens. The numbers live on the pages this links to."
-      />
+      <PageHeader title="Billing" />
       <BillingTabs />
       <div className="grid gap-6 sm:grid-cols-2">
         {destinations.map(([title, description, href]) => (
@@ -64,9 +58,6 @@ export default async function BillingWorkspacePage() {
           </Link>
         ))}
       </div>
-      <Callout tone="info" title="This page is a hub, not a dashboard">
-        If it ever grows metrics they belong on Invoices, not duplicated here where they can disagree.
-      </Callout>
     </div>
   );
 }

@@ -6,7 +6,7 @@
  * The table lists every product contract (a contracted carrier plus a product with a schedule or an
  * advance rule at the carrier's current level). The two cards under it show the selected row: the
  * schedule in force today, collapsed the way a carrier quotes it, and its advance rule — which is
- * the section's draft (the header's Save writes a new rule effective today, Discard puts it back).
+ * the section's draft (the save bar writes a new rule effective today, Discard puts it back).
  *
  * Every editor that was on this page before lives in the Edit / "Add a contract" dialog: carrier
  * choice (Configured / Not configured), contract level + writing number + effective date, contract
@@ -16,23 +16,25 @@
 
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 
+import { Plus } from "lucide-react";
+
 import {
-  btn,
   Callout,
   control,
-  DashedCard,
-  DraftActions,
   Field,
   Pill,
-  PlusIcon,
   SettingsCard,
   SettingsGrid,
   SettingsSectionHeader,
   SettingsStack,
-  SettingsTableCard,
   st,
 } from "@/components/app/settings/primitives";
+import { Button } from "@/components/ui/button";
+import { DataToolbar, RefreshButton, ToolbarSearch } from "@/components/ui/data-toolbar";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { EmptyState, NoMatches, SectionLoading } from "@/components/ui/page-states";
+import { SettingsSaveBar } from "@/components/ui/settings-layout";
+import { TableCard } from "@/components/ui/table-card";
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 import type { CarrierRow } from "@/lib/carriers/constants";
@@ -97,6 +99,7 @@ export function CarrierLibrarySettings() {
   const [ruleSaving, setRuleSaving] = useState(false);
   const [ruleError, setRuleError] = useState<string | null>(null);
   const [dialog, setDialog] = useState<DialogState | null>(null);
+  const [query, setQuery] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -118,6 +121,8 @@ export function CarrierLibrarySettings() {
   useEffect(() => { void load(); }, [load]);
 
   const rows = useMemo(() => (snapshot ? buildContractRows(snapshot) : []), [snapshot]);
+  const needle = query.trim().toLowerCase();
+  const shownRows = needle ? rows.filter((row) => row.carrierName.toLowerCase().includes(needle) || (row.productName ?? "").toLowerCase().includes(needle)) : rows;
   const selected = rows.find((row) => row.key === selectedKey) ?? rows[0] ?? null;
   const asOf = todayIso();
 
@@ -163,19 +168,15 @@ export function CarrierLibrarySettings() {
     setDialog({ mode: "edit", carrierId: row.carrierId, productCode: row.productCode ?? snapshot?.products[0]?.code ?? "" });
   }
 
-  if (loading && !snapshot) {
-    return (
-      <SettingsStack>
-        <SettingsSectionHeader />
-        <p role="status" className="text-[14px] text-[var(--muted)]">Loading carrier library…</p>
-      </SettingsStack>
-    );
-  }
   if (!snapshot) {
     return (
       <SettingsStack>
         <SettingsSectionHeader />
-        <Callout tone="error" title={loadError ?? "Could not load your carriers"} />
+        {loading ? (
+          <TableCard><SectionLoading label="Loading the carrier library" /></TableCard>
+        ) : (
+          <Callout tone="error" title={loadError ?? "Could not load your carriers"} />
+        )}
       </SettingsStack>
     );
   }
@@ -183,9 +184,9 @@ export function CarrierLibrarySettings() {
     return (
       <SettingsStack>
         <SettingsSectionHeader />
-        <DashedCard title="No carriers in the library yet">
-          The platform has not added any carriers yet. Ask support to add one before configuring appointments.
-        </DashedCard>
+        <TableCard>
+          <EmptyState title="No carriers in the library yet" hint="Ask support to add a carrier before configuring appointments." />
+        </TableCard>
       </SettingsStack>
     );
   }
@@ -198,42 +199,42 @@ export function CarrierLibrarySettings() {
 
   return (
     <SettingsStack>
-      <SettingsSectionHeader
-        actions={selected?.productCode ? <DraftActions dirty={ruleDirty} saving={ruleSaving} onDiscard={discardRule} onSave={() => void saveRuleDraft()} /> : undefined}
-      />
+      <SettingsSectionHeader />
 
-      <Callout tone="info" title="Basis points, not percentages, and effective-dated">
-        A contract level is stored in basis points because 117.5% is a real contract level and a percentage field rounds it. Every row carries an <strong>effective from</strong> date: a raise applies to policies issued after it, never to the ones already paid.
-      </Callout>
-
-      <SettingsTableCard
-        title="Carriers & contract levels"
-        actions={
-          <button type="button" className={btn("secondary")} onClick={openAdd}>
-            <PlusIcon />
-            Add a contract
-          </button>
+      <TableCard
+        toolbar={
+          <DataToolbar
+            actions={
+              <>
+                <Button type="button" onClick={openAdd}>
+                  <Plus aria-hidden="true" />
+                  Add a contract
+                </Button>
+                <RefreshButton onClick={() => void load()} refreshing={loading} />
+              </>
+            }
+          >
+            <ToolbarSearch value={query} onChange={setQuery} placeholder="Search carriers or products" />
+          </DataToolbar>
         }
       >
-        <table className={st.table}>
-          <thead>
-            <tr className={st.headRow}>
-              <th scope="col" className={st.th}>Carrier</th>
-              <th scope="col" className={cn(st.th, "w-[200px]")}>Product</th>
-              <th scope="col" className={cn(st.th, st.num, "w-[150px]")}>Contract level</th>
-              <th scope="col" className={cn(st.th, st.num, "w-[140px]")}>Effective from</th>
-              <th scope="col" className={cn(st.th, "w-[110px]")}><span className="sr-only">Actions</span></th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.length === 0 ? (
-              <tr>
-                <td colSpan={5} className={cn(st.td, "py-6 text-center text-[var(--muted)]")}>
-                  No carrier contracts yet. Add a contract to record its level, writing number and commission schedule.
-                </td>
+        {rows.length === 0 ? (
+          <EmptyState title="No carrier contracts yet" hint="Add a contract to record its level, writing number and commission schedule." />
+        ) : shownRows.length === 0 ? (
+          <NoMatches noun="contracts" onClear={() => setQuery("")} />
+        ) : (
+          <table className={st.table}>
+            <thead>
+              <tr className={st.headRow}>
+                <th scope="col" className={st.th}>Carrier</th>
+                <th scope="col" className={cn(st.th, "w-[200px]")}>Product</th>
+                <th scope="col" className={cn(st.th, st.num, "w-[150px]")}>Contract level</th>
+                <th scope="col" className={cn(st.th, st.num, "w-[140px]")}>Effective from</th>
+                <th scope="col" className={cn(st.th, st.num, "w-[90px]")}><span className="sr-only">Actions</span></th>
               </tr>
-            ) : (
-              rows.map((row) => {
+            </thead>
+            <tbody>
+              {shownRows.map((row) => {
                 const isSelected = row.key === selected?.key;
                 return (
                   <tr key={row.key} className={cn(isSelected && "bg-[var(--surface-alt)]")}>
@@ -252,17 +253,17 @@ export function CarrierLibrarySettings() {
                     <td className={cn(st.td, st.num)}>{formatBps(row.levelBp)}</td>
                     <td className={cn(st.td, st.num)}>{formatDay(row.effectiveFrom)}</td>
                     <td className={cn(st.td, st.num)}>
-                      <button type="button" className={btn("row")} onClick={() => openEdit(row)} aria-label={`Edit ${row.carrierName}${row.productName ? `, ${row.productName}` : ""}`}>
+                      <Button type="button" variant="outline" size="sm" onClick={() => openEdit(row)} aria-label={`Edit ${row.carrierName}${row.productName ? `, ${row.productName}` : ""}`}>
                         Edit
-                      </button>
+                      </Button>
                     </td>
                   </tr>
                 );
-              })
-            )}
-          </tbody>
-        </table>
-      </SettingsTableCard>
+              })}
+            </tbody>
+          </table>
+        )}
+      </TableCard>
 
       {selected && (
         <SettingsGrid>
@@ -292,7 +293,7 @@ export function CarrierLibrarySettings() {
             {laterRates > 0 && <p className="mt-2 text-[12px] leading-[1.5] text-[var(--muted)]">{laterRates === 1 ? "1 rate takes" : `${laterRates} rates take`} effect later; Edit shows every dated row.</p>}
           </SettingsCard>
 
-          <SettingsCard title="Advance rule" sub="What the carrier pays up front, and what it takes back. Saving here makes it effective today." bodyClassName="mt-3.5">
+          <SettingsCard title="Advance rule" sub={`${selected.carrierName} · ${selected.productName ?? "no product yet"}`} bodyClassName="mt-3.5">
             {!selected.productCode ? (
               <p className="text-[14px] leading-[1.5] text-[var(--muted)]">Advance rules are per product. Add a product to this contract with Edit first.</p>
             ) : (
@@ -307,7 +308,7 @@ export function CarrierLibrarySettings() {
                   <Field label="Clawback months" htmlFor="rule-clawback-months">
                     <input id="rule-clawback-months" type="text" inputMode="numeric" className={control} value={ruleCurrent.clawbackMonths} onChange={(e) => setRule({ clawbackMonths: e.target.value })} />
                   </Field>
-                  <Field label="Clawback type" htmlFor="rule-clawback-type">
+                  <Field label="Clawback type" htmlFor="rule-clawback-type" hint="Full takes the whole advance back if the policy lapses in the period.">
                     <select id="rule-clawback-type" className={selectControl} value={ruleCurrent.clawbackType} onChange={(e) => setRule({ clawbackType: e.target.value as RuleValues["clawbackType"] })}>
                       <option value="prorated">Prorated</option>
                       <option value="full">Full</option>
@@ -318,9 +319,6 @@ export function CarrierLibrarySettings() {
                 {!currentRule && !ruleDirty && <p className="mt-3 text-[12px] leading-[1.5] text-[var(--muted)]">No advance rule is recorded for this product yet.</p>}
               </>
             )}
-            <Callout tone="error" title="Full clawback is not the same risk as prorated" className="mt-3.5">
-              A full clawback takes the whole advance back if the policy lapses inside the period. The ledger models both, so the chargeback figure on Lapse risk is only right if this field is.
-            </Callout>
           </SettingsCard>
         </SettingsGrid>
       )}
@@ -335,6 +333,11 @@ export function CarrierLibrarySettings() {
           onSaved={load}
         />
       )}
+
+      <SettingsSaveBar visible={ruleDirty} note="The new advance rule takes effect today">
+        <Button type="button" variant="outline" onClick={discardRule} disabled={ruleSaving}>Discard</Button>
+        <Button type="button" onClick={() => void saveRuleDraft()} disabled={ruleSaving}>{ruleSaving ? "Saving…" : "Save changes"}</Button>
+      </SettingsSaveBar>
     </SettingsStack>
   );
 }
@@ -432,7 +435,7 @@ function ContractDialog({
         <DialogHeader>
           <DialogTitle className="text-[var(--ink)]">{state.mode === "add" ? "Add a contract" : `Edit ${carrier?.name ?? "contract"}`}</DialogTitle>
           <DialogDescription className="text-[var(--muted)]">
-            Each save is a new effective-dated row. The contract level comes first; rates and advance rules are recorded against it.
+            Each save is a new effective-dated row.
           </DialogDescription>
         </DialogHeader>
 
@@ -477,9 +480,9 @@ function ContractDialog({
               <input id="contract-effective" type="date" className={control} value={contractEffective} onChange={(e) => setContractEffective(e.target.value)} required />
             </Field>
             <div className="pb-[26px]">
-              <button type="submit" className={btn("primary", "w-full")} disabled={saving === "contract"}>
+              <Button type="submit" className="w-full" disabled={saving === "contract"}>
                 {saving === "contract" ? "Saving…" : `Save ${carrier.name}`}
-              </button>
+              </Button>
             </div>
           </form>
         )}
@@ -500,7 +503,7 @@ function ContractDialog({
                 <span className="block text-[12px] text-[var(--muted)]">
                   {snapshot.requirementsAvailable === false
                     ? "This setting needs a database update that has not been applied yet."
-                    : "Counted on Agency profile and States & licences when the agency's E&O policy nears expiry. Saved as soon as it changes."}
+                    : "Saved as soon as it changes."}
                 </span>
               </span>
             </label>
@@ -549,9 +552,9 @@ function ContractDialog({
               <input id="schedule-onward" type="checkbox" className="mt-1 size-4 accent-[var(--primary)]" checked={appliesOnward} onChange={(e) => setAppliesOnward(e.target.checked)} />
               <span>Also every later year without its own rate (shown as “Year {policyYear || "N"}+”)</span>
             </label>
-            <button type="submit" className={btn("primary")} disabled={saving === "schedule" || blocked}>
+            <Button type="submit" disabled={saving === "schedule" || blocked}>
               {blocked ? "Save a contract first" : saving === "schedule" ? "Saving…" : "Save commission rate"}
-            </button>
+            </Button>
             {schedules.length > 0 && (
               <div>
                 {schedules.map((row) => (
@@ -588,9 +591,9 @@ function ContractDialog({
                 <input id="rule-effective" type="date" className={control} value={ruleEffective} onChange={(e) => setRuleEffective(e.target.value)} required />
               </Field>
             </div>
-            <button type="submit" className={btn("primary")} disabled={saving === "rule" || blocked}>
+            <Button type="submit" disabled={saving === "rule" || blocked}>
               {blocked ? "Save a contract first" : saving === "rule" ? "Saving…" : "Save advance rule"}
-            </button>
+            </Button>
             {rules.length > 0 && (
               <div>
                 {rules.map((row) => (

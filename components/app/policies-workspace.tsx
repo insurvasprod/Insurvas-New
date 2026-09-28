@@ -1,14 +1,17 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, Check, Search, SlidersHorizontal, Upload } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { AlertTriangle, Check, Download, Plus, Upload } from "lucide-react";
 import { notify } from "@/lib/notify";
 
 import { Button } from "@/components/ui/button";
+import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PageHeader } from "@/components/ui/page-header";
-import { ErrorState, LoadingRows } from "@/components/ui/page-states";
-import { StatTile } from "@/components/ui/stat";
+import { PageLoading } from "@/components/ui/page-loading";
+import { EmptyState, ErrorState, NoMatches, SectionLoading } from "@/components/ui/page-states";
+import { StatStrip, StatTile } from "@/components/ui/stat";
+import { TableCard } from "@/components/ui/table-card";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { RecordLapseSignal } from "@/components/app/record-lapse-signal";
 import { parsePolicyCsv, policyCsvTemplate, type PolicyImportRow } from "@/lib/policies/csv";
@@ -32,31 +35,30 @@ const STATUS: Record<Policy["status"], { label: string; tone: StatusTone }> = {
   cancelled: { label: "Cancelled", tone: "neutral" },
 };
 
-const control = "box-border inline-flex h-10 items-center gap-2 rounded-lg border border-[var(--border-strong)] bg-card px-3.5 text-sm font-semibold leading-[1.43] tracking-[-0.01em] text-foreground";
 const field = "h-10 w-full rounded-lg border border-[var(--border-strong)] bg-card px-3 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring";
 const th = "bg-[var(--surface-alt)] px-3 py-2 text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] text-muted-foreground";
 const td = "border-t border-border px-3 py-2 text-sm leading-normal tracking-[-0.02em] text-[var(--body)]";
 const label = "text-sm font-semibold text-[var(--body)]";
 
 /**
- * Policies (p-app-policies): the book of business — four figures, one control bar, one table.
+ * Policies (p-app-policies): the book of business — a stat strip, then one table with its toolbar.
  *
  * The board's header offers the CSV template and Import policies; Add policy stays beside them,
  * because entering one policy by hand is a thing people do and the board has nowhere else for it.
  * Every policy row keeps its "Record a lapse signal" action (record-lapse-signal.tsx), which is how
  * a policy reaches /app/lapse-risk. There is no delete: a policy is a record.
  */
-export function PoliciesWorkspace({ readOnly, eyebrow }: { readOnly: boolean; eyebrow?: string }) {
+export function PoliciesWorkspace({ readOnly }: { readOnly: boolean }) {
   const [policies, setPolicies] = useState<Policy[]>([]);
   const [metrics, setMetrics] = useState<Metrics>({ active: 0, annualPremiumCents: 0, carriers: 0, renewalsDue: 0 });
   const [loading, setLoading] = useState(true);
+  // The first read draws the page skeleton; later reloads keep the page and spin Refresh.
+  const [ready, setReady] = useState(false);
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
   const [carrier, setCarrier] = useState("");
   const [status, setStatus] = useState("all");
   const [page, setPage] = useState(0);
-  const [filtersOpen, setFiltersOpen] = useState(false);
-  const filtersRef = useRef<HTMLDivElement | null>(null);
   const [mode, setMode] = useState<"manual" | "import" | null>(null);
   const [form, setForm] = useState<FormState>(blankForm);
   const [file, setFile] = useState<{ name: string; rows: PolicyImportRow[]; errors: Array<{ row: number; message: string }> } | null>(null);
@@ -70,20 +72,12 @@ export function PoliciesWorkspace({ readOnly, eyebrow }: { readOnly: boolean; ey
       if (!response.ok) throw new Error(body?.error ?? "Could not load policies");
       setPolicies(body.policies ?? []); setMetrics(body.metrics ?? { active: 0, annualPremiumCents: 0, carriers: 0, renewalsDue: 0 });
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not load policies"); }
-    finally { setLoading(false); }
+    finally { setLoading(false); setReady(true); }
   }
   useEffect(() => {
     const timer = window.setTimeout(() => { void load(); }, 0);
     return () => window.clearTimeout(timer);
   }, []);
-  useEffect(() => {
-    if (!filtersOpen) return;
-    const onPointer = (event: MouseEvent) => { if (filtersRef.current && !filtersRef.current.contains(event.target as Node)) setFiltersOpen(false); };
-    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setFiltersOpen(false); };
-    document.addEventListener("mousedown", onPointer);
-    document.addEventListener("keydown", onKey);
-    return () => { document.removeEventListener("mousedown", onPointer); document.removeEventListener("keydown", onKey); };
-  }, [filtersOpen]);
 
   const carriers = useMemo(() => [...new Set(policies.map((policy) => policy.carrier))].sort((a, b) => a.localeCompare(b)), [policies]);
   // Newest first: the API orders by effective date, most recent first.
@@ -130,105 +124,81 @@ export function PoliciesWorkspace({ readOnly, eyebrow }: { readOnly: boolean; ey
     finally { setSaving(false); }
   }
 
-  const filterCount = status !== "all" ? 1 : 0;
+  const clearFilters = () => { setQuery(""); setCarrier(""); setStatus("all"); setPage(0); };
+
+  if (!ready) return <PageLoading />;
 
   return <div className="m-stagger flex flex-col gap-6">
     <PageHeader
-      eyebrow={eyebrow}
       title="Policies"
-      description="The book of business."
       actions={<>
-        {readOnly && <StatusChip tone="warning">Read-only</StatusChip>}
-        <Button type="button" variant="outline" className="h-11 border-[var(--border-strong)] px-4" onClick={downloadTemplate}>Download CSV template</Button>
-        <Button type="button" variant="outline" className="h-11 border-[var(--border-strong)] px-4" disabled={readOnly} onClick={openManual}>Add policy</Button>
-        <Button type="button" className="h-11 px-4" disabled={readOnly} onClick={openImport}>Import policies</Button>
+        <Button type="button" variant="outline" onClick={downloadTemplate}><Download aria-hidden="true" />Download CSV template</Button>
+        <Button type="button" variant="outline" disabled={readOnly} onClick={openManual}><Plus aria-hidden="true" />Add policy</Button>
+        <Button type="button" disabled={readOnly} onClick={openImport}><Upload aria-hidden="true" />Import policies</Button>
       </>}
     />
 
-    <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-label="Book of business summary">
-      <StatTile label="Active policies" value={loading ? "…" : metrics.active.toLocaleString()} footnote={`across ${metrics.carriers} ${metrics.carriers === 1 ? "carrier" : "carriers"}`} />
-      <StatTile label="Annual premium" value={loading ? "…" : compactMoney(metrics.annualPremiumCents)} footnote="in force" />
-      <StatTile label="Carriers" value={loading ? "…" : metrics.carriers} footnote="with an active policy" />
-      <StatTile label="Renewals due" value={loading ? "…" : metrics.renewalsDue} valueTone={metrics.renewalsDue ? "warning" : undefined} footnote="next 30 days" />
-    </section>
+    {readOnly && <div role="status" className="rounded-lg border border-[var(--color-warning)]/30 bg-[var(--color-warning)]/10 px-4 py-3 text-sm text-foreground">Your account is read-only. Adding and importing policies is unavailable until billing is restored.</div>}
 
-    <div className="relative z-30 flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card p-3">
-      <select aria-label="Carrier" className={`${control} pr-8`} value={carrier} onChange={(event) => { setCarrier(event.target.value); setPage(0); }}>
-        <option value="">All carriers</option>
-        {carriers.map((name) => <option key={name} value={name}>{name}</option>)}
-      </select>
-      <span className="box-border flex h-10 w-full items-center gap-2 rounded-lg border border-[var(--border-strong)] bg-card px-3 text-muted-foreground sm:w-[248px]">
-        <Search className="size-4 shrink-0" aria-hidden="true" />
-        <input type="search" aria-label="Search customer, policy" placeholder="Search customer, policy" value={query} onChange={(event) => { setQuery(event.target.value); setPage(0); }} className="min-w-0 flex-grow border-0 bg-transparent text-sm tracking-[-0.02em] text-foreground outline-none" />
-      </span>
-      <div className="relative" ref={filtersRef}>
-        <button type="button" className={control} aria-expanded={filtersOpen} onClick={() => setFiltersOpen((open) => !open)}>
-          <SlidersHorizontal className="size-4" aria-hidden="true" />Filters
-          {filterCount > 0 && <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--surface-alt)] px-1.5 text-xs font-semibold tabular-nums text-foreground">{filterCount}</span>}
-        </button>
-        {filtersOpen && <div className="absolute left-0 top-[calc(100%+6px)] z-20 grid w-[220px] gap-2 rounded-xl border border-border bg-card p-3.5 shadow-[0_12px_32px_rgba(0,0,0,.16)]" role="group" aria-label="Filter policies">
-          <label htmlFor="policies-status" className="text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] text-muted-foreground">Status</label>
-          <select id="policies-status" aria-label="Filter policies by status" className={`${field} h-9`} value={status} onChange={(event) => { setStatus(event.target.value); setPage(0); }}>
+    <StatStrip label="Book of business summary">
+      <StatTile label="Active policies" value={metrics.active.toLocaleString()} footnote={`across ${metrics.carriers} ${metrics.carriers === 1 ? "carrier" : "carriers"}`} />
+      <StatTile label="Annual premium" value={compactMoney(metrics.annualPremiumCents)} footnote="in force" />
+      <StatTile label="Carriers" value={metrics.carriers} footnote="with an active policy" />
+      <StatTile label="Renewals due" value={metrics.renewalsDue} valueTone={metrics.renewalsDue ? "warning" : undefined} footnote="next 30 days" />
+    </StatStrip>
+
+    <TableCard
+      toolbar={
+        <DataToolbar actions={<RefreshButton onClick={() => void load()} refreshing={loading} />}>
+          <ToolbarSearch value={query} onChange={(value) => { setQuery(value); setPage(0); }} placeholder="Search customer, policy" />
+          <select aria-label="Filter policies by carrier" className={toolbarControl} value={carrier} onChange={(event) => { setCarrier(event.target.value); setPage(0); }}>
+            <option value="">All carriers</option>
+            {carriers.map((name) => <option key={name} value={name}>{name}</option>)}
+          </select>
+          <select aria-label="Filter policies by status" className={toolbarControl} value={status} onChange={(event) => { setStatus(event.target.value); setPage(0); }}>
             <option value="all">All statuses</option><option value="active">Active</option><option value="pending">Pending</option><option value="lapsed">Lapsed</option><option value="cancelled">Cancelled</option>
           </select>
-        </div>}
-      </div>
-    </div>
-
-    <section className="overflow-hidden rounded-xl border border-border bg-card" aria-label="Policies">
-      {loading ? <LoadingRows rows={4} columns={6} />
+        </DataToolbar>
+      }
+      footer={policies.length > 0 && !error ? <>
+        <span>{filtered.length ? `Showing ${currentPage * PAGE_SIZE + 1}–${currentPage * PAGE_SIZE + shown.length} of ${filtered.length.toLocaleString()} ${filtered.length === 1 ? "policy" : "policies"} · newest first` : "Nothing to show"}</span>
+        <span className="flex gap-2">
+          <Button type="button" variant="outline" size="sm" disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}>Previous</Button>
+          <Button type="button" variant="outline" size="sm" disabled={currentPage >= pageCount - 1} onClick={() => setPage(currentPage + 1)}>Next</Button>
+        </span>
+      </> : undefined}
+    >
+      {loading && policies.length === 0 ? <SectionLoading rows={4} columns={6} label="Loading policies" />
         : error ? <ErrorState title="Policies could not be loaded" detail={error} action={<Button type="button" variant="outline" onClick={() => void load()}>Try again</Button>} />
-        : policies.length === 0 ? (
-          <div className="flex flex-col items-center px-5 py-12 text-center sm:py-16">
-            <h2 className="text-lg font-semibold leading-[1.28] tracking-[-0.015em] text-foreground">No policies yet</h2>
-            <p className="mt-2 max-w-xl text-sm leading-normal text-muted-foreground">Your book of business appears here once policies are imported or added. Download the CSV template, import a carrier file, or add a policy by hand.</p>
-            <div className="mt-6 flex flex-wrap justify-center gap-2">
-              <Button type="button" variant="outline" className="border-[var(--border-strong)]" onClick={downloadTemplate}>Download CSV template</Button>
-              <Button type="button" variant="outline" className="border-[var(--border-strong)]" disabled={readOnly} onClick={openManual}>Add a policy</Button>
-              <Button type="button" disabled={readOnly} onClick={openImport}>Import policies</Button>
-            </div>
-            {readOnly && <p className="mt-4 text-xs font-semibold text-[var(--warning-ink)]">Viewing historical data remains available, but adding policies is disabled while the account is suspended.</p>}
-          </div>
-        ) : <>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[900px] table-fixed border-collapse text-left">
-              <thead><tr>
-                <th className={th}>Customer</th>
-                <th className={`${th} w-[160px]`}>Carrier</th>
-                <th className={`${th} w-[140px]`}>Product</th>
-                <th className={`${th} w-[150px]`}>Policy</th>
-                <th className={`${th} w-[120px]`}>Effective</th>
-                <th className={`${th} w-[140px] text-right`}>Annual premium</th>
-                <th className={`${th} w-[190px]`}>Status</th>
-              </tr></thead>
-              <tbody>
-                {shown.map((policy) => <tr key={policy.id} className="m-row">
-                  <td className={`${td} font-semibold text-foreground`}>{policy.insured_name}</td>
-                  <td className={td}>{policy.carrier}</td>
-                  <td className={td}>{policy.product}</td>
-                  <td className={td}><span className="block tabular-nums">{policy.policy_number}</span><span className="block text-xs text-muted-foreground">{policy.source === "csv" ? "Imported" : "Manual entry"}</span></td>
-                  <td className={`${td} tabular-nums`}>{date(policy.effective_date)}</td>
-                  <td className={`${td} text-right tabular-nums`}>{money(policy.annual_premium_cents)}</td>
-                  <td className={td}><span className="flex flex-wrap items-center gap-2"><StatusChip tone={STATUS[policy.status].tone}>{STATUS[policy.status].label}</StatusChip><RecordLapseSignal policy={policy} /></span></td>
-                </tr>)}
-              </tbody>
-            </table>
-          </div>
-          {filtered.length === 0 && <p className="border-t border-border px-4 py-8 text-center text-sm text-muted-foreground">No policies match these filters.</p>}
-          <div className="flex flex-wrap items-center justify-between gap-4 border-t border-border bg-[var(--canvas)] px-4 py-3 text-xs leading-normal text-muted-foreground">
-            <span>{filtered.length ? `Showing ${currentPage * PAGE_SIZE + 1}–${currentPage * PAGE_SIZE + shown.length} of ${filtered.length.toLocaleString()} ${filtered.length === 1 ? "policy" : "policies"} · newest first` : "Nothing to show"}</span>
-            <span className="flex gap-2">
-              <Button type="button" variant="outline" className="h-8 border-[var(--border-strong)] px-4" disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}>Previous</Button>
-              <Button type="button" variant="outline" className="h-8 border-[var(--border-strong)] px-4" disabled={currentPage >= pageCount - 1} onClick={() => setPage(currentPage + 1)}>Next</Button>
-            </span>
-          </div>
-        </>}
-    </section>
-
-    <div className="rounded-xl border border-border border-l-[3px] border-l-[var(--info)] bg-[var(--info-surface)] px-4 py-3.5">
-      <p className="text-sm font-semibold leading-normal tracking-[-0.02em] text-[var(--info-ink)]">A policy is a record, so there is no delete</p>
-      <p className="mt-1.5 text-sm leading-normal tracking-[-0.02em] text-[var(--body)]">Policies are kept with their history, and the lapse signals recorded against them point at them. Import policies is the one way in for a carrier file — the three buttons that used to open it under three different names are one now.</p>
-    </div>
+        : policies.length === 0 ? <EmptyState title="No policies yet" hint="Import a carrier file or add a policy by hand." />
+        : filtered.length === 0 ? <NoMatches noun="policies" onClear={clearFilters} />
+        : (
+          <table className="w-full min-w-[980px] table-fixed border-collapse text-left">
+            <thead><tr>
+              <th className={th}>Customer</th>
+              <th className={`${th} w-[160px]`}>Carrier</th>
+              <th className={`${th} w-[140px]`}>Product</th>
+              <th className={`${th} w-[150px]`}>Policy</th>
+              <th className={`${th} w-[120px]`}>Effective</th>
+              <th className={`${th} w-[140px] text-right`}>Annual premium</th>
+              <th className={`${th} w-[110px]`}>Status</th>
+              <th className={`${th} w-[170px] text-right`}>Actions</th>
+            </tr></thead>
+            <tbody>
+              {shown.map((policy) => <tr key={policy.id} className="m-row">
+                <td className={`${td} font-semibold text-foreground`}>{policy.insured_name}</td>
+                <td className={td}>{policy.carrier}</td>
+                <td className={td}>{policy.product}</td>
+                <td className={td}><span className="block tabular-nums">{policy.policy_number}</span><span className="block text-xs text-muted-foreground">{policy.source === "csv" ? "Imported" : "Manual entry"}</span></td>
+                <td className={`${td} tabular-nums`}>{date(policy.effective_date)}</td>
+                <td className={`${td} text-right tabular-nums`}>{money(policy.annual_premium_cents)}</td>
+                <td className={td}><StatusChip tone={STATUS[policy.status].tone}>{STATUS[policy.status].label}</StatusChip></td>
+                <td className={`${td} text-right`}><RecordLapseSignal policy={policy} /></td>
+              </tr>)}
+            </tbody>
+          </table>
+        )}
+    </TableCard>
 
     <Dialog open={mode === "import"} onOpenChange={(open) => { if (!open) setMode(null); }}>
       <DialogContent>

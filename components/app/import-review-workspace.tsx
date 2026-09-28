@@ -5,10 +5,12 @@ import { useRouter } from "next/navigation";
 import { ArrowRight, ChevronRight, Info } from "lucide-react";
 import { notify } from "@/lib/notify";
 
+import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
-import { Callout, KeyValues, Pill, SettingsCard, SettingsTableCard, btn, st } from "@/components/app/settings/primitives";
+import { StatStrip, StatTile } from "@/components/ui/stat";
+import { TableCard } from "@/components/ui/table-card";
+import { KeyValues, Pill, st } from "@/components/app/settings/primitives";
 import { ImportStepper } from "@/components/app/import-stepper";
-import { sectionForPath } from "@/lib/menu/definition";
 import { parseCsv } from "@/lib/agentTemplates/csv";
 import {
   formatCents,
@@ -70,17 +72,6 @@ const CHECKS: Array<{ bucket: ReviewBucket; outcome: Outcome; label: string; blu
 ];
 
 const LIST_PAGE = 50;
-
-function ToneTile({ label, value, foot, tone }: { label: string; value: string; foot?: string; tone: "success" | "warning" | "info" | "error" }) {
-  const ink = { success: "text-[var(--success-ink)]", warning: "text-[var(--warning-ink)]", info: "text-[var(--info-ink)]", error: "text-[var(--error-ink)]" }[tone];
-  return (
-    <div className="min-w-0 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] px-[18px] py-4">
-      <div className="text-[12px] leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]">{label}</div>
-      <div className={cn("mt-1.5 text-[32px] leading-[1.13] font-semibold tracking-[-0.025em] tabular-nums", ink)}>{value}</div>
-      {foot && <div className="mt-1.5 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)] tabular-nums">{foot}</div>}
-    </div>
-  );
-}
 
 /** A definition on demand — click, focus or hover — for a figure whose name alone is not enough. */
 function InfoTip({ id, label, children }: { id: string; label: string; children: ReactNode }) {
@@ -292,7 +283,7 @@ export function ImportReviewWorkspace({ plan, csv }: { plan: ReviewPlan; csv: st
       </div>
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] px-3 py-2 text-[12px] leading-[1.5] text-[var(--muted)]">
         <span className="tabular-nums">Showing {shown.length.toLocaleString()} of {numbers.length.toLocaleString()} · read from the file in this tab</span>
-        {shown.length < numbers.length && <button type="button" className={btn("row")} onClick={() => setListing((current) => ({ ...current, [bucket]: (current[bucket] ?? LIST_PAGE) + LIST_PAGE }))}>Show {Math.min(LIST_PAGE, numbers.length - shown.length)} more</button>}
+        {shown.length < numbers.length && <Button type="button" variant="ghost" size="sm" onClick={() => setListing((current) => ({ ...current, [bucket]: (current[bucket] ?? LIST_PAGE) + LIST_PAGE }))}>Show {Math.min(LIST_PAGE, numbers.length - shown.length)} more</Button>}
       </div>
     </div>;
   }
@@ -311,7 +302,7 @@ export function ImportReviewWorkspace({ plan, csv }: { plan: ReviewPlan; csv: st
         <label className={option}><input type="radio" className={radio} name={`dnc-${bucket}`} checked={dnc === "suppress"} onChange={() => setDnc("suppress")} />
           <span><strong className={title}>Import and suppress</strong><span className={help}>Keep the record and add the number to your do-not-call list permanently. It can never be dialed.</span></span></label>
         {/* Said plainly, because the missing option is the one people look for. */}
-        <p className="text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--body)]">There is no option to dial these. A do-not-call number may only be called with a documented prior relationship or written consent, and an import screen cannot establish either. This choice applies to both do-not-call checks.</p>
+        <p className="text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--body)]">There is no option to dial these. This choice applies to both do-not-call checks.</p>
       </fieldset>;
     if (decision === "existing")
       return <fieldset className="m-0 flex min-w-0 flex-col gap-2 border-0 p-0">
@@ -332,43 +323,54 @@ export function ImportReviewWorkspace({ plan, csv }: { plan: ReviewPlan; csv: st
     return null;
   }
 
+  const description = [plan.fileName ?? "File name not recorded", plan.vendorName, plan.campaignName].filter(Boolean).join(" · ");
+
   return <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
     <PageHeader
-      eyebrow={sectionForPath("/app/import") ?? undefined}
       title="Review before committing"
-      description="The last moment anyone can check what is about to enter the pipeline."
-      actions={<button type="button" className={btn("secondary", "h-11")} onClick={() => router.push("/app/import")}>Start over</button>}
+      description={description}
+      actions={<Button type="button" variant="outline" onClick={() => router.push("/app/import")}>Start over</Button>}
     />
 
     <ImportStepper current={committing ? 4 : 3} />
 
-    <SettingsCard pad={20}>
-      <dl className="m-0 grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-3 lg:grid-cols-5">
-        {[
-          { label: "File", value: plan.fileName ?? "Not recorded" },
-          { label: "Rows", value: plan.totalRows.toLocaleString() },
-          { label: "Vendor", value: plan.vendorName ?? "—" },
-          { label: "Campaign", value: plan.campaignName ?? "—" },
-          { label: "Cost per accepted lead", value: plan.costCents === null ? "No cost entered" : money(perAccepted) },
-        ].map((item) => <div key={item.label} className="min-w-0">
-          <dt className="text-[12px] leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]">{item.label}</dt>
-          <dd className="m-0 mt-1 truncate text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)] tabular-nums" title={item.value}>{item.value}</dd>
-        </div>)}
-      </dl>
-    </SettingsCard>
+    <StatStrip label="Import totals">
+      <StatTile label="Rows" value={plan.totalRows.toLocaleString()} footnote={fourSum === plan.totalRows ? "every row counted below" : `${fourSum.toLocaleString()} counted below`} />
+      <StatTile label="Accepted" value={accepted.toLocaleString()} valueTone="good" footnote={pct(accepted)} reserveFootnote />
+      <StatTile label="Duplicates" value={duplicates.toLocaleString()} valueTone="warning" footnote={pct(duplicates)} reserveFootnote />
+      <StatTile label="Suppressed" value={suppressed.toLocaleString()} valueTone="info" footnote={pct(suppressed)} reserveFootnote />
+      <StatTile label="Invalid" value={invalid.toLocaleString()} valueTone="danger" footnote={pct(invalid)} reserveFootnote />
+      <StatTile label="Cost per accepted" value={plan.costCents === null ? "—" : money(perAccepted)} footnote={plan.costCents === null ? "no batch cost entered" : `${formatCents(plan.costCents)} batch`} />
+    </StatStrip>
 
-    <div className="grid min-w-0 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-      <ToneTile label="Accepted" value={accepted.toLocaleString()} foot={pct(accepted)} tone="success" />
-      <ToneTile label="Duplicates" value={duplicates.toLocaleString()} foot={pct(duplicates)} tone="warning" />
-      <ToneTile label="Suppressed" value={suppressed.toLocaleString()} foot={pct(suppressed)} tone="info" />
-      <ToneTile label="Invalid" value={invalid.toLocaleString()} foot={pct(invalid)} tone="error" />
-    </div>
+    {fourSum !== plan.totalRows && <Alert tone="warning">
+      The four counts add up to <span className="tabular-nums">{fourSum.toLocaleString()}</span>, not the file&rsquo;s <span className="tabular-nums">{plan.totalRows.toLocaleString()}</span> rows.
+    </Alert>}
 
-    <div className="flex min-w-0 flex-col gap-6 lg:flex-row lg:items-start">
-      <SettingsTableCard
-        className="min-w-0 flex-1"
+    {/* LA-2.4-8: flagged before the commit, not discovered on the lead list afterwards. */}
+    {noState.length > 0 && <div className="flex min-w-0 flex-col gap-2">
+      <Alert tone="warning" action={<Button type="button" variant="ghost" size="sm" onClick={() => setNoStateShown((shown) => (shown ? 0 : LIST_PAGE))} aria-expanded={noStateShown !== 0}>{noStateShown ? "Hide rows" : "View rows"}</Button>}>
+        {noState.length.toLocaleString()} new {noState.length === 1 ? "lead has" : "leads have"} no state, so the dialer will not call {noState.length === 1 ? "it" : "them"} until one is added.
+      </Alert>
+      {noStateShown > 0 && (parsed
+        ? <div className="min-w-0 overflow-x-auto rounded-lg border border-border bg-card">
+            <table className={st.table}>
+              <thead><tr className={st.headRow}><th scope="col" className={st.th}>Row</th>{(parsed[0] ?? []).slice(0, 4).map((header, index) => <th scope="col" key={`${header}-${index}`} className={st.th}>{header}</th>)}</tr></thead>
+              <tbody>{noState.slice(0, noStateShown).map((rowNumber) => <tr key={rowNumber}>
+                <td className={cn(st.td, "tabular-nums")}>{rowNumber}</td>
+                {(parsed[0] ?? []).slice(0, 4).map((_, index) => <td key={index} className={cn(st.td, "whitespace-nowrap")}>{parsed[rowNumber - 1]?.[index] ?? ""}</td>)}
+              </tr>)}</tbody>
+            </table>
+            {noStateShown < noState.length && <Button type="button" variant="ghost" size="sm" className="m-2" onClick={() => setNoStateShown((shown) => shown + LIST_PAGE)}>Show {Math.min(LIST_PAGE, noState.length - noStateShown)} more</Button>}
+          </div>
+        : <p className="m-0 text-xs text-[var(--error-ink)]">The file in this tab could not be read to list these rows.</p>)}
+    </div>}
+
+    <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">
+      <TableCard
+        className="min-w-0"
         title="Validation & scrub"
-        actions={accountedFor ? <Pill>every row accounted for</Pill> : <Pill tone="warning">rows do not add up</Pill>}
+        action={accountedFor ? <Pill>every row accounted for</Pill> : <Pill tone="warning">rows do not add up</Pill>}
       >
         <table className={cn(st.table, "min-w-[520px]")}>
           <thead>
@@ -392,7 +394,7 @@ export function ImportReviewWorkspace({ plan, csv }: { plan: ReviewPlan; csv: st
                         aria-expanded={expanded}
                         aria-controls={`check-${check.bucket}`}
                         onClick={() => setOpen(expanded ? null : check.bucket)}
-                        className="inline-flex min-w-0 items-center gap-1.5 text-left text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--body)] hover:text-[var(--ink)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
+                        className="inline-flex min-w-0 items-center gap-1.5 text-left text-sm tracking-[-0.02em] text-[var(--body)] hover:text-[var(--ink)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
                       >
                         <ChevronRight className={cn("size-4 shrink-0 text-[var(--muted)] transition-transform", expanded && "rotate-90")} aria-hidden />
                         {check.label}
@@ -403,7 +405,7 @@ export function ImportReviewWorkspace({ plan, csv }: { plan: ReviewPlan; csv: st
                   <td className={cn(st.td, "text-right tabular-nums")}>{count.toLocaleString()}</td>
                   <td className={cn(st.td, "text-right")}>
                     {count > 0
-                      ? <button type="button" onClick={() => (listing[check.bucket] && expanded ? setListing((current) => { const next = { ...current }; delete next[check.bucket]; return next; }) : viewList(check.bucket))} className="inline-flex items-center gap-1.5 text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] whitespace-nowrap text-[var(--ink)] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]">
+                      ? <button type="button" onClick={() => (listing[check.bucket] && expanded ? setListing((current) => { const next = { ...current }; delete next[check.bucket]; return next; }) : viewList(check.bucket))} className="inline-flex items-center gap-1.5 text-sm font-semibold tracking-[-0.02em] whitespace-nowrap text-[var(--ink)] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]">
                           {listing[check.bucket] && expanded ? "Hide list" : "View list"}<ArrowRight className="size-4" aria-hidden />
                         </button>
                       : <span className="text-[var(--muted)]">None</span>}
@@ -412,7 +414,7 @@ export function ImportReviewWorkspace({ plan, csv }: { plan: ReviewPlan; csv: st
                 {expanded && <tr id={`check-${check.bucket}`}>
                   <td colSpan={3} className="border-t border-[var(--border)] bg-[var(--canvas)] px-4 py-4">
                     <div className="flex min-w-0 flex-col gap-3">
-                      <p className="text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--body)]">{check.blurb}</p>
+                      <p className="text-xs leading-[1.5] text-[var(--muted)]">{check.blurb}</p>
                       {count > 0 && decisionFieldset(check.decision, check.bucket)}
                       {listing[check.bucket] && count > 0 && listTable(check.bucket, check.outcome)}
                     </div>
@@ -423,47 +425,19 @@ export function ImportReviewWorkspace({ plan, csv }: { plan: ReviewPlan; csv: st
           </tbody>
           <tfoot>
             <tr className={st.headRow}>
-              <td className="border-t border-[var(--border-strong)] px-3 py-2.5 text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)] tabular-nums">
+              <td className="border-t border-[var(--border-strong)] px-3 py-2.5 text-sm font-semibold tracking-[-0.02em] text-[var(--ink)] tabular-nums">
                 {outcome.fresh.toLocaleString()} new · {outcome.added.toLocaleString()} added to existing · {outcome.leftOut.toLocaleString()} left out
               </td>
-              <td className="border-t border-[var(--border-strong)] px-3 py-2.5 text-right text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)] tabular-nums">{plan.totalRows.toLocaleString()}</td>
+              <td className="border-t border-[var(--border-strong)] px-3 py-2.5 text-right text-sm font-semibold tracking-[-0.02em] text-[var(--ink)] tabular-nums">{plan.totalRows.toLocaleString()}</td>
               <td className="border-t border-[var(--border-strong)] px-3 py-2.5" />
             </tr>
           </tfoot>
         </table>
-      </SettingsTableCard>
+      </TableCard>
 
-      <div className="flex min-w-0 flex-col gap-6 lg:w-[400px] lg:shrink-0">
-        {/* LA-2.4-8: flagged before the commit, not discovered on the lead list afterwards. */}
-        {noState.length > 0 && <Callout tone="warning" title={`${noState.length.toLocaleString()} new ${noState.length === 1 ? "lead has" : "leads have"} no state`}>
-          <div className="flex flex-col gap-2">
-            <p className="m-0">No state means no timezone, so the dialer will not call {noState.length === 1 ? "this lead" : "these leads"} until a state is added. {noState.length === 1 ? "It is" : "They are"} still imported, and the lead list shows {noState.length === 1 ? "it" : "them"} as missing a state.</p>
-            <button type="button" className={btn("row", "self-start")} onClick={() => setNoStateShown((shown) => (shown ? 0 : LIST_PAGE))} aria-expanded={noStateShown !== 0}>
-              {noStateShown ? "Hide rows" : "View rows"}
-            </button>
-            {noStateShown > 0 && (parsed
-              ? <div className="min-w-0 overflow-x-auto rounded-[8px] border border-[var(--border)] bg-[var(--surface)]">
-                  <table className={st.table}>
-                    <thead><tr className={st.headRow}><th scope="col" className={st.th}>Row</th>{(parsed[0] ?? []).slice(0, 4).map((header, index) => <th scope="col" key={`${header}-${index}`} className={st.th}>{header}</th>)}</tr></thead>
-                    <tbody>{noState.slice(0, noStateShown).map((rowNumber) => <tr key={rowNumber}>
-                      <td className={cn(st.td, "tabular-nums")}>{rowNumber}</td>
-                      {(parsed[0] ?? []).slice(0, 4).map((_, index) => <td key={index} className={cn(st.td, "whitespace-nowrap")}>{parsed[rowNumber - 1]?.[index] ?? ""}</td>)}
-                    </tr>)}</tbody>
-                  </table>
-                  {noStateShown < noState.length && <button type="button" className={btn("row", "m-2")} onClick={() => setNoStateShown((shown) => shown + LIST_PAGE)}>Show {Math.min(LIST_PAGE, noState.length - noStateShown)} more</button>}
-                </div>
-              : <p className="m-0 text-[12px] text-[var(--error-ink)]">The file in this tab could not be read to list these rows.</p>)}
-          </div>
-        </Callout>}
-        {fourSum === plan.totalRows
-          ? <Callout tone="info" title="The four counts sum to the file’s row count">
-              <span className="tabular-nums">{accepted.toLocaleString()} + {duplicates.toLocaleString()} + {suppressed.toLocaleString()} + {invalid.toLocaleString()} = {plan.totalRows.toLocaleString()}</span>
-            </Callout>
-          : <Callout tone="warning" title="The four counts do not sum to the file’s row count">
-              <span className="tabular-nums">{accepted.toLocaleString()} + {duplicates.toLocaleString()} + {suppressed.toLocaleString()} + {invalid.toLocaleString()} = {fourSum.toLocaleString()}, not {plan.totalRows.toLocaleString()}</span>
-            </Callout>}
-
-        <SettingsCard pad={20} title="Cost allocation">
+      <div className="flex min-w-0 flex-col gap-4">
+        <section aria-labelledby="cost-allocation" className="min-w-0 rounded-lg border border-border bg-card p-4">
+          <h2 id="cost-allocation" className="mb-3 text-sm font-semibold">Cost allocation</h2>
           <KeyValues items={[
             { label: "Batch cost", value: plan.costCents === null ? "Not entered" : formatCents(plan.costCents) },
             { label: "Accepted leads", value: accepted.toLocaleString() },
@@ -480,41 +454,49 @@ export function ImportReviewWorkspace({ plan, csv }: { plan: ReviewPlan; csv: st
                     New leads in this file whose state is not one your members are licensed in (Team &amp; access). They import, and nobody here can sell to them. Costed at the effective per dialable; a loss, not a vendor credit.
                   </InfoTip></>,
                   value: `${offTerritory.rows.toLocaleString()} ${offTerritory.rows === 1 ? "row" : "rows"}${offTerritoryCents !== null && offTerritory.rows > 0 ? ` · ${money(offTerritoryCents)}` : ""}`,
+                  tone: offTerritory.rows > 0 ? ("warning" as const) : undefined,
                 }]
               : []),
           ]} />
           {offTerritory && offTerritory.rows > 0 && (
-            <p className="mt-3 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--warning-ink)]">
-              {offTerritoryCents !== null ? `${money(offTerritoryCents)} of this file` : `${offTerritory.rows.toLocaleString()} of these leads`} {offTerritoryCents !== null ? "is" : "are"} in {offTerritory.states.slice(0, 4).join(", ")}{offTerritory.states.length > 4 ? ` and ${offTerritory.states.length - 4} more` : ""}, outside your {plan.licensedStates?.length ?? 0} licensed states. It is not claimable — buy only the states you can sell next time.
+            <p className="mt-3 text-xs leading-[1.5] text-[var(--warning-ink)]">
+              In {offTerritory.states.slice(0, 4).join(", ")}{offTerritory.states.length > 4 ? ` and ${offTerritory.states.length - 4} more` : ""}, outside your {plan.licensedStates?.length ?? 0} licensed states.
             </p>
           )}
           <label htmlFor="add-spend" className={cn("mt-4 flex gap-2.5 border-t border-[var(--border)] pt-4", plan.costCents === null ? "cursor-not-allowed" : "cursor-pointer")}>
             <input id="add-spend" type="checkbox" className="mt-1 size-4 shrink-0 accent-[var(--primary)]" checked={addSpend && plan.costCents !== null} disabled={plan.costCents === null} onChange={(event) => setAddSpend(event.target.checked)} />
             <span className="min-w-0">
-              <strong className="block text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">Add to {campaignLabel}’s spend</strong>
-              <span className="block text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">
+              <strong className="block text-sm font-semibold tracking-[-0.02em] text-[var(--ink)]">Add to {campaignLabel}’s spend</strong>
+              <span className="block text-xs leading-[1.5] text-[var(--muted)]">
                 {plan.costCents === null
-                  ? "No batch cost was entered on the upload step, so there is nothing to add."
-                  : `Adds ${formatCents(plan.costCents)} and ${(plan.recordsPurchased ?? plan.totalRows).toLocaleString()} rows purchased to the campaign’s totals, in the same transaction as the leads. Untick it if the campaign already includes this file’s cost.`}
+                  ? "No batch cost was entered on the upload step."
+                  : `Adds ${formatCents(plan.costCents)} and ${(plan.recordsPurchased ?? plan.totalRows).toLocaleString()} rows purchased to the campaign’s totals. Untick it if the campaign already includes this file’s cost.`}
               </span>
             </span>
           </label>
-        </SettingsCard>
+        </section>
 
-        <div className="flex flex-col gap-2">
-          <p className="text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">
+        <div className="flex flex-wrap items-center justify-end gap-3">
+          <p className="m-0 min-w-0 flex-1 text-xs leading-[1.5] text-[var(--muted)]">
             {willImport === 0
               ? "Nothing in this file will be imported with these choices."
-              : "Committed as one transaction — all of it or none of it. Nothing has been written until you press this."}
+              : "Nothing has been written until you press this."}
           </p>
-          <div className="flex flex-wrap justify-end gap-3">
-            <button type="button" className={btn("secondary", "h-11")} onClick={() => router.push("/app/import")}>Back</button>
-            <button type="button" className={btn("primary", "h-11")} disabled={committing || willImport === 0} onClick={() => void commit()}>
-              {committing ? "Importing…" : `Import ${willImport.toLocaleString()} lead${willImport === 1 ? "" : "s"}`}
-            </button>
-          </div>
+          <Button type="button" disabled={committing || willImport === 0} onClick={() => void commit()}>
+            {committing ? "Importing…" : `Import ${willImport.toLocaleString()} lead${willImport === 1 ? "" : "s"}`}
+          </Button>
         </div>
       </div>
     </div>
   </div>;
+}
+
+/** A one-line alert: something to act on now, never an explanation. */
+function Alert({ tone, action, children }: { tone: "warning" | "error"; action?: ReactNode; children: ReactNode }) {
+  return (
+    <div role="alert" className={cn("flex flex-wrap items-center justify-between gap-2 rounded-lg border px-4 py-2 text-sm", tone === "error" ? "border-[var(--error)]/30 bg-[var(--error-surface)] text-[var(--error-ink)]" : "border-[var(--warning)]/30 bg-[var(--warning-surface)] text-[var(--warning-ink)]")}>
+      <p className="m-0 min-w-0">{children}</p>
+      {action}
+    </div>
+  );
 }

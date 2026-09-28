@@ -42,17 +42,15 @@ export default async function PartnerPortalLayout({ children }: { children: Reac
             workspaceName: context.partnerName,
           }}
         />
-        {/* The board's context strip: who you are here on the left, what that means on the right. It
-            replaces a card that repeated the organisation name in 20px above every page title. */}
-        <div className="portal-context-strip" aria-label="Current workspace">
-          <span>{context.partnerName} · {roleLabel}</span>
-          <span className="portal-context-chips">
-            <span className={`portal-status-chip ${isRestricted ? "is-warning" : "is-success"}`}><span aria-hidden="true" />{statusLabel}</span>
-            {isRestricted && <span className="portal-status-chip is-warning">Submissions restricted</span>}
-            <span className="portal-status-chip">Only your organization’s records are visible</span>
-          </span>
-        </div>
+        {/* No context strip (removed 2026-09-28, as in the agent shell): the organisation and role
+            are in the account menu. The one thing it said that a partner must act on — submissions
+            are restricted while the organisation is not active — stays, as a banner, only then. */}
         <div className="flex min-w-0 flex-1 flex-col p-4 sm:p-6 lg:p-8 lg:pt-6">
+        {isRestricted && (
+          <div role="status" className="mb-4 rounded-md border border-[var(--warning)] bg-[var(--warning-surface)] px-4 py-2.5 text-sm text-[var(--warning-ink)]">
+            Your organization is {statusLabel.toLowerCase()}, so submissions are restricted.
+          </div>
+        )}
         <PortalPageTransition>{children}</PortalPageTransition>
       </div>
       </main>

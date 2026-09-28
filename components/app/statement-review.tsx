@@ -17,13 +17,15 @@
  * the statement's lines from the ledger without deleting anything.
  */
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
+import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { NoMatches } from "@/components/ui/page-states";
 import { TableCard } from "@/components/ui/table-card";
 import {
   STATEMENT_KIND_LABELS,
@@ -90,9 +92,15 @@ export function StatementReview({
   const [sourceOpen, setSourceOpen] = useState<string | null>(null);
   const [voidOpen, setVoidOpen] = useState(false);
   const [voidReason, setVoidReason] = useState("");
+  const [search, setSearch] = useState("");
+  const [refreshing, startRefresh] = useTransition();
 
   const active = FILTERS.find((item) => item.key === filter) ?? FILTERS[0];
-  const visible = lines.filter((line) => active.includes(line.review));
+  const needle = search.trim().toLowerCase();
+  const visible = lines.filter((line) =>
+    active.includes(line.review) &&
+    (!needle || [line.policyNumber, line.insuredName, line.match?.policy?.policyNumber, line.match?.policy?.insuredName].some((value) => value?.toLowerCase().includes(needle))),
+  );
   const proposed = lines.filter((line) => line.review === "proposed" && line.match?.status === "proposed");
 
   const matches = useMemo(() => {
@@ -136,54 +144,57 @@ export function StatementReview({
   }
 
   const toolbar = (
-    <>
-      <div className="flex flex-wrap gap-1.5" role="group" aria-label="Show lines">
-        {FILTERS.map((item) => {
-          const count = lines.filter((line) => item.includes(line.review)).length;
-          return (
-            <Button
-              key={item.key}
-              type="button"
-              size="sm"
-              variant={filter === item.key ? "secondary" : "ghost"}
-              aria-pressed={filter === item.key}
-              className={filter === item.key ? "border-[var(--border-strong)]" : undefined}
-              onClick={() => { setFilter(item.key); setShown(PAGE); }}
-            >
-              {item.label} <span className="tabular-nums text-muted-foreground">{count.toLocaleString("en-US")}</span>
-            </Button>
-          );
-        })}
-      </div>
-      <div className="ml-auto flex flex-wrap gap-2">
-        {canWrite && proposed.length > 0 && (
-          <Button type="button" size="sm" disabled={busy} onClick={() => void decide(proposed.map((line) => ({ line_id: line.id, action: "accept" })), `${proposed.length.toLocaleString("en-US")} proposed ${proposed.length === 1 ? "match" : "matches"} accepted and posted to the ledger.`)}>
-            Accept all {proposed.length.toLocaleString("en-US")} proposed
-          </Button>
-        )}
+    <DataToolbar
+      actions={<>
         {canWrite && (
-          <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => setVoidOpen(true)}>
+          <Button type="button" variant="outline" disabled={busy} onClick={() => setVoidOpen(true)}>
             Void statement
           </Button>
         )}
-      </div>
-    </>
+        {canWrite && proposed.length > 0 && (
+          <Button type="button" disabled={busy} onClick={() => void decide(proposed.map((line) => ({ line_id: line.id, action: "accept" })), `${proposed.length.toLocaleString("en-US")} proposed ${proposed.length === 1 ? "match" : "matches"} accepted and posted to the ledger.`)}>
+            Accept all {proposed.length.toLocaleString("en-US")} proposed
+          </Button>
+        )}
+        <RefreshButton onClick={() => startRefresh(() => router.refresh())} refreshing={refreshing} />
+      </>}
+    >
+      <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setShown(PAGE); }} placeholder="Search policy or insured" />
+      <select aria-label="Show lines" className={toolbarControl} value={filter} onChange={(event) => { setFilter(event.target.value as Filter); setShown(PAGE); }}>
+        {FILTERS.map((item) => (
+          <option key={item.key} value={item.key}>
+            {item.label} ({lines.filter((line) => item.includes(line.review)).length.toLocaleString("en-US")})
+          </option>
+        ))}
+      </select>
+    </DataToolbar>
   );
 
   return (
     <div className="flex flex-col gap-4">
-      {!canWrite && writeBlockedReason && !voided && <p className="text-xs font-medium text-[var(--warning-ink)]">{writeBlockedReason}</p>}
+      {!canWrite && writeBlockedReason && !voided && <p role="status" className="rounded-md bg-[var(--warning-surface)] px-3 py-2 text-sm text-[var(--warning-ink)]">{writeBlockedReason}</p>}
       {notice && <p role="status" className="rounded-md bg-[var(--success-surface)] px-3 py-2 text-sm text-[var(--success-ink)]">{notice}</p>}
       {error && <p role="alert" className="rounded-md bg-[var(--error-surface)] px-3 py-2 text-sm text-[var(--error-ink)]">{error}</p>}
 
       <TableCard
         toolbar={toolbar}
-        footer={<><span>{visible.length.toLocaleString("en-US")} of {lines.length.toLocaleString("en-US")} lines</span><span>Only accepted lines post to the ledger</span></>}
+        footer={<>
+          <span>{visible.length.toLocaleString("en-US")} of {lines.length.toLocaleString("en-US")} lines</span>
+          {visible.length > shown && (
+            <Button type="button" size="sm" variant="outline" onClick={() => setShown((current) => current + PAGE)}>
+              Show {Math.min(PAGE, visible.length - shown)} more
+            </Button>
+          )}
+        </>}
       >
         {visible.length === 0 ? (
-          <p className="px-6 py-10 text-center text-sm text-muted-foreground">
-            {filter === "waiting" ? "Nothing is waiting: every line is accepted, left unmatched on purpose, or could not be read." : "No line on this statement is in this state."}
-          </p>
+          needle ? (
+            <NoMatches noun="lines" onClear={() => setSearch("")} />
+          ) : (
+            <p className="px-6 py-10 text-center text-sm text-muted-foreground">
+              {filter === "waiting" ? "Nothing is waiting: every line is accepted, left unmatched on purpose, or could not be read." : "No line on this statement is in this state."}
+            </p>
+          )
         ) : (
           <table className="portal-lead-table w-full min-w-[1000px] text-left text-sm">
             <thead>
@@ -297,13 +308,6 @@ export function StatementReview({
               })}
             </tbody>
           </table>
-        )}
-        {visible.length > shown && (
-          <div className="flex justify-center border-t border-border px-4 py-3">
-            <Button type="button" size="sm" variant="outline" onClick={() => setShown((current) => current + PAGE)}>
-              Show {Math.min(PAGE, visible.length - shown)} more
-            </Button>
-          </div>
         )}
       </TableCard>
 

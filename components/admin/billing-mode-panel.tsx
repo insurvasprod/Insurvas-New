@@ -57,7 +57,6 @@ export function BillingModePanel({ tenantId, mode }: { tenantId: string; mode: "
 
         <Button
           variant="outline"
-          size="sm"
           disabled={busy}
           onClick={() => switchTo(mode === "manual" ? "automatic" : "manual")}
         >

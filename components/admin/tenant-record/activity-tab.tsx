@@ -5,14 +5,14 @@ import { AUDIT_ACTION_LABELS, type AuditAction } from "@/lib/audit/actions";
 import { fetchTenantActivity, TENANT_ACTIVITY_PAGE_SIZE, type TenantActivityRow } from "@/lib/tenants/activity";
 import { recordDateTime, sentenceCase } from "@/lib/tenants/recordFormat";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { TableCard } from "@/components/ui/table-card";
 
 // The boards' table vocabulary (settings primitives' `st`), restated here because a server
 // component cannot read values out of a "use client" module.
 const TH = "px-3 py-2 text-left text-[12px] leading-[1.33] font-semibold tracking-[0.02em] uppercase whitespace-nowrap text-[var(--muted)]";
 const TD = "border-t border-[var(--border)] px-3 py-2 align-top text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--body)]";
 const SUB = "block text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]";
-const PAGER =
-  "inline-flex h-8 items-center justify-center rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] px-4 text-[14px] leading-[1.43] font-semibold tracking-[-0.01em] text-[var(--ink)] no-underline hover:bg-[var(--surface-alt)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]";
 
 const TARGET_LABELS: Record<string, string> = {
   tenant: "Agency",
@@ -53,23 +53,38 @@ export async function TenantActivityTab({ tenantId, page }: TenantTabProps & { p
   const last = (page - 1) * TENANT_ACTIVITY_PAGE_SIZE + rows.length;
 
   return (
-    <section className="flex min-w-0 flex-col overflow-hidden rounded-[12px] border border-[var(--border)] bg-[var(--surface)]">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] bg-[var(--surface-alt)] px-4 py-3">
-        <h2 className="m-0 text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">
-          What has been done to this agency
-        </h2>
-        <span className="text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">
-          Every staff and system action. Append-only.
-        </span>
-      </div>
-
-      {partial && (
-        <p className="m-0 border-b border-[var(--border)] px-4 py-2.5 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--warning-ink)]">
-          Showing actions on the agency, its subscriptions, its newest 100 people and newest 60 invoices. The full history
-          appears once the activity database update is applied.
-        </p>
-      )}
-
+    <TableCard
+      toolbar={
+        partial ? (
+          <p role="note" className="m-0 text-xs text-[var(--warning-ink)]">
+            Partial history: the agency, its subscriptions, its newest 100 people and newest 60 invoices.
+          </p>
+        ) : undefined
+      }
+      footer={
+        total > 0 || page > 1 ? (
+          <>
+            <span className="tabular-nums">{rows.length ? `${first}–${last} of ${total} · newest first` : `Page ${page}`}</span>
+            <span className="flex items-center gap-2">
+              {page > 1 && (
+                <Button asChild variant="outline" size="sm">
+                  <Link href={page === 2 ? base : `${base}&page=${page - 1}`} scroll={false} className="no-underline">
+                    Newer
+                  </Link>
+                </Button>
+              )}
+              {page < pages && (
+                <Button asChild variant="outline" size="sm">
+                  <Link href={`${base}&page=${page + 1}`} scroll={false} className="no-underline">
+                    Older
+                  </Link>
+                </Button>
+              )}
+            </span>
+          </>
+        ) : undefined
+      }
+    >
       {rows.length === 0 ? (
         <div className="px-4 py-10 text-center">
           <p className="m-0 text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">
@@ -78,7 +93,7 @@ export async function TenantActivityTab({ tenantId, page }: TenantTabProps & { p
           <p className="m-0 mt-1 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">
             {page > 1
               ? "The history is shorter than this."
-              : "Nobody on staff has changed this agency, its subscription, its people or its invoices."}
+              : "Staff and system actions on this agency appear here."}
           </p>
         </div>
       ) : (
@@ -126,26 +141,6 @@ export async function TenantActivityTab({ tenantId, page }: TenantTabProps & { p
           </table>
         </div>
       )}
-
-      {(total > 0 || page > 1) && (
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] px-4 py-3">
-          <span className="text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)] tabular-nums">
-            {rows.length ? `${first}–${last} of ${total}` : `Page ${page}`}
-          </span>
-          <span className="flex items-center gap-2">
-            {page > 1 && (
-              <Link href={page === 2 ? base : `${base}&page=${page - 1}`} scroll={false} className={PAGER}>
-                Newer
-              </Link>
-            )}
-            {page < pages && (
-              <Link href={`${base}&page=${page + 1}`} scroll={false} className={PAGER}>
-                Older
-              </Link>
-            )}
-          </span>
-        </div>
-      )}
-    </section>
+    </TableCard>
   );
 }

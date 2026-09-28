@@ -2,29 +2,20 @@
 
 import { useMemo, useState, type FormEvent } from "react";
 import { notify } from "@/lib/notify";
+import { UserPlus } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { EmptyState, NoMatches } from "@/components/ui/page-states";
+import { SettingsSaveBar } from "@/components/ui/settings-layout";
+import { StatStrip, StatTile } from "@/components/ui/stat";
+import { TableCard } from "@/components/ui/table-card";
 import {
   Callout,
-  DraftActions,
   Field,
   Pill,
-  SearchBox,
-  SettingsCard,
-  SettingsMeter,
   SettingsSectionHeader,
   SettingsStack,
-  SettingsTableCard,
-  TableToolbar,
-  btn,
   control,
   st,
   type PillTone,
@@ -48,8 +39,14 @@ const STATUS_FILTERS: { key: Exclude<MemberStatus, "other" | "expired">; label: 
 /** Roles whose leads are gated on licences; a setter books only, and the others do not sell. */
 const LICENSED_ROLES: readonly TenantRole[] = ["owner", "producer"];
 
+/** One line per role, shown under the role picker. */
+function roleReach(role: TenantRole) {
+  const row = ROLE_REACH.find((item) => item.role === role);
+  return row ? `Leads: ${row.leads}. Money: ${row.money}. Settings: ${row.settings}.` : undefined;
+}
+
 /**
- * "What each role can reach", read off the real guards rather than the board's sample copy:
+ * What each role can reach, read off the real guards rather than the board's sample copy:
  * lib/tenantAuth/permissions.ts (ROLE_PERMISSIONS) and the required_roles in lib/menu/definition.ts.
  * Settings is owner-only (settings.root, and /app/settings refuses every other role); a producer can
  * read Carrier appointments but not change it.
@@ -62,8 +59,6 @@ const ROLE_REACH: { role: TenantRole; leads: string; money: string; settings: st
   { role: "bookkeeper", leads: "None", money: "Policies, all commissions, statements, payouts", settings: "None" },
 ];
 
-const NUMBER_WORDS = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
-const inWords = (count: number) => NUMBER_WORDS[count] ?? String(count);
 
 function statusOf(member: TeamMember, now: number): MemberStatus {
   if (!member.acceptedAt) {
@@ -95,8 +90,9 @@ export function TeamSettings({ initial, workspace }: { initial: TeamSnapshot; wo
   const viewerId = initial.viewerId;
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
-  const [roleFilter, setRoleFilter] = useState<Set<TenantRole>>(new Set());
-  const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
+  const [roleFilter, setRoleFilter] = useState<TenantRole | "">("");
+  const [statusFilter, setStatusFilter] = useState<string>("");
+  const [refreshing, setRefreshing] = useState(false);
   const [pending, setPending] = useState<Record<string, PendingChange>>({});
   const [saving, setSaving] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -111,6 +107,11 @@ export function TeamSettings({ initial, workspace }: { initial: TeamSnapshot; wo
     const response = await fetch("/api/app/team", { cache: "no-store" });
     const body = await response.json().catch(() => null);
     if (response.ok) setSnapshot(body);
+  }
+
+  async function reload() {
+    setRefreshing(true);
+    try { await refresh(); } finally { setRefreshing(false); }
   }
 
   const dirty = Object.keys(pending).length > 0;
@@ -193,10 +194,10 @@ export function TeamSettings({ initial, workspace }: { initial: TeamSnapshot; wo
     const needle = query.trim().toLowerCase();
     return snapshot.members.filter((member) => {
       if (needle && !member.name.toLowerCase().includes(needle) && !member.email.toLowerCase().includes(needle)) return false;
-      if (roleFilter.size && !roleFilter.has(pending[member.id]?.role ?? member.role)) return false;
-      if (statusFilter.size) {
+      if (roleFilter && roleFilter !== (pending[member.id]?.role ?? member.role)) return false;
+      if (statusFilter) {
         const status = statusOf(member, now);
-        if (!statusFilter.has(status === "expired" ? "invited" : status)) return false;
+        if (statusFilter !== (status === "expired" ? "invited" : status)) return false;
       }
       return true;
     });
@@ -206,7 +207,7 @@ export function TeamSettings({ initial, workspace }: { initial: TeamSnapshot; wo
   const pendingInvites = snapshot.members.filter((member) => !member.acceptedAt).length;
   const atSeatLimit = seats.max !== null && seats.used >= seats.max;
   const bufferAtLimit = snapshot.bufferSeats.max !== null && snapshot.bufferSeats.used >= snapshot.bufferSeats.max;
-  const filterCount = roleFilter.size + statusFilter.size;
+  const filtersOn = Boolean(roleFilter || statusFilter || query.trim());
   const planName = workspace?.planName ?? "Your plan";
   const outbound = snapshot.outboundLimits?.filter((item) => ["max_setter_seats", "max_active_campaigns"].includes(item.key)) ?? [];
   // LA-2.22: the setter-seat cap is its own limit, apart from total seats. At 80% it is named as a
@@ -217,136 +218,76 @@ export function TeamSettings({ initial, workspace }: { initial: TeamSnapshot; wo
 
   return (
     <SettingsStack>
-      <SettingsSectionHeader
-        actions={<DraftActions dirty={dirty} saving={saving} onDiscard={() => { setPending({}); setError(""); }} onSave={() => void saveChanges()} />}
-      />
+      <SettingsSectionHeader />
 
-      <div className="flex flex-col gap-6 lg:flex-row">
-        <div className="flex min-w-0 grow flex-col gap-6">
-          {atSeatLimit ? (
-            <Callout tone="warning" title="Your plan has reached its seat limit">
-              {planName} includes {seats.max} seat{seats.max === 1 ? "" : "s"} and {seats.used} {seats.used === 1 ? "is" : "are"} in use
-              {pendingInvites > 0 ? `, ${inWords(pendingInvites)} of them pending invite${pendingInvites === 1 ? "" : "s"}` : ""}. An invite that is
-              never accepted still holds a seat &mdash; revoke it, or upgrade the plan, before inviting anyone else.
-            </Callout>
-          ) : (
-            <p className="m-0 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">
-              Invite teammates and control what each person can see. Role changes apply on their next request. An invite that is never accepted still holds a seat until it is revoked.
-            </p>
-          )}
-          {setterSeats && (setterAtLimit || setterNearLimit) && (
-            <Callout tone="warning" title={setterAtLimit ? "Your plan has reached its setter-seat limit" : "Setter seats are nearly full"}>
-              {planName} includes {inWords(setterSeats.limit ?? 0)} setter seat{setterSeats.limit === 1 ? "" : "s"} and {setterSeats.usage.toLocaleString()} of {(setterSeats.limit ?? 0).toLocaleString()} {setterSeats.usage === 1 ? "is" : "are"} in use.
-              {setterAtLimit
-                ? " Inviting another setter will be refused until a setter is deactivated or the plan is upgraded to more setter seats. Other roles use the plan's total seats, not this limit."
-                : " Upgrade the plan before the next setter invite if you need more than that."}
-            </Callout>
-          )}
-        </div>
-        <div className="flex w-full shrink-0 flex-col gap-3 lg:w-[300px]">
-          {seats.max !== null ? (
-            <SettingsMeter
-              value={seats.used}
-              max={seats.max}
-              tone={atSeatLimit ? "warning" : "primary"}
-              ariaLabel={`${seats.used} of ${seats.max} seats used`}
-              caption={`${seats.used} of ${seats.max} seats used${pendingInvites ? ` · ${pendingInvites} pending` : ""}`}
-            />
-          ) : (
-            <p className="m-0 text-[12px] leading-[1.5] text-[var(--muted)] tabular-nums">{seats.used} seats used · unlimited seats</p>
-          )}
-          <dl className="m-0 grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)] tabular-nums">
-            <dt>Buffer seats</dt>
-            <dd className={cn("m-0 text-right", bufferAtLimit && "text-[var(--warning-ink)]")}>
-              {snapshot.bufferSeats.max === null ? `${snapshot.bufferSeats.used} used · unlimited` : `${snapshot.bufferSeats.used} of ${snapshot.bufferSeats.max}`}
-            </dd>
-            {outbound.map((item) => (
-              <FragmentRow key={item.key} label={item.label} value={item.limit === null ? `${item.usage} used · unlimited` : `${item.usage} of ${item.limit}`} />
-            ))}
-            <dt className="col-span-2 mt-1">
-              {TENANT_ROLES.map((role) => `${TENANT_ROLE_LABELS[role]} ${seats.byRole[role]}`).join(" · ")}
-            </dt>
-          </dl>
-        </div>
-      </div>
+      <StatStrip label="Seats">
+        <StatTile
+          label="Seats"
+          value={seats.used}
+          valueTone={atSeatLimit ? "warning" : undefined}
+          meter={seats.max !== null ? { value: seats.used, max: seats.max, tone: atSeatLimit ? "warning" : "info", label: `${seats.used} of ${seats.max} seats used` } : undefined}
+          footnote={seats.max === null ? "unlimited" : `of ${seats.max} on ${planName}`}
+        />
+        <StatTile label="Pending invites" value={pendingInvites} footnote={pendingInvites ? "each holds a seat" : "none outstanding"} />
+        <StatTile
+          label="Buffer seats"
+          value={snapshot.bufferSeats.used}
+          valueTone={bufferAtLimit ? "warning" : undefined}
+          footnote={snapshot.bufferSeats.max === null ? "unlimited" : `of ${snapshot.bufferSeats.max}`}
+        />
+        {outbound.map((item) => (
+          <StatTile
+            key={item.key}
+            label={item.label}
+            value={item.usage}
+            valueTone={item.limit !== null && item.usage >= item.limit ? "warning" : undefined}
+            footnote={item.limit === null ? "unlimited" : `of ${item.limit}`}
+          />
+        ))}
+      </StatStrip>
 
-      <SettingsTableCard
-        title="People"
-        actions={
-          <TableToolbar>
-            <SearchBox value={query} onChange={setQuery} placeholder="Search people" label="Search people" />
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button type="button" className={cn(btn("secondary"), "h-10 px-3.5")}>
-                  <svg aria-hidden width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
-                    <path d="M4 6h16M7 12h10M10 18h4" />
-                  </svg>
-                  Filters
-                  {filterCount > 0 && (
-                    <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--surface-alt)] px-1.5 text-[12px] font-semibold tabular-nums text-[var(--ink)]">
-                      {filterCount}
-                    </span>
-                  )}
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuLabel>Access</DropdownMenuLabel>
-                {TENANT_ROLES.map((role) => (
-                  <DropdownMenuCheckboxItem
-                    key={role}
-                    checked={roleFilter.has(role)}
-                    onSelect={(event) => event.preventDefault()}
-                    onCheckedChange={(checked) =>
-                      setRoleFilter((current) => {
-                        const next = new Set(current);
-                        if (checked) next.add(role);
-                        else next.delete(role);
-                        return next;
-                      })
-                    }
-                  >
-                    {TENANT_ROLE_LABELS[role]}
-                  </DropdownMenuCheckboxItem>
-                ))}
-                <DropdownMenuSeparator />
-                <DropdownMenuLabel>Status</DropdownMenuLabel>
-                {STATUS_FILTERS.map((status) => (
-                  <DropdownMenuCheckboxItem
-                    key={status.key}
-                    checked={statusFilter.has(status.key)}
-                    onSelect={(event) => event.preventDefault()}
-                    onCheckedChange={(checked) =>
-                      setStatusFilter((current) => {
-                        const next = new Set(current);
-                        if (checked) next.add(status.key);
-                        else next.delete(status.key);
-                        return next;
-                      })
-                    }
-                  >
-                    {status.label}
-                  </DropdownMenuCheckboxItem>
-                ))}
-                {filterCount > 0 && (
-                  <>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem onSelect={() => { setRoleFilter(new Set()); setStatusFilter(new Set()); }}>Clear filters</DropdownMenuItem>
-                  </>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
-            <span className="grow" />
-            <button type="button" className={btn("primary")} onClick={() => setInviteOpen(true)}>
-              Invite someone
-            </button>
-          </TableToolbar>
+      {atSeatLimit && <Callout tone="warning" title="Every seat is in use — revoke a pending invite or upgrade the plan before inviting anyone else." />}
+      {setterSeats && (setterAtLimit || setterNearLimit) && (
+        <Callout
+          tone="warning"
+          title={setterAtLimit
+            ? `All ${setterSeats.limit ?? 0} setter seats are in use — another setter invite will be refused until one is freed or the plan is upgraded.`
+            : `Setter seats are nearly full: ${setterSeats.usage} of ${setterSeats.limit ?? 0} in use.`}
+        />
+      )}
+      {error && <Callout tone="error" title={error} />}
+
+      <TableCard
+        toolbar={
+          <DataToolbar
+            actions={
+              <>
+                <Button type="button" onClick={() => setInviteOpen(true)}>
+                  <UserPlus aria-hidden="true" />
+                  Invite someone
+                </Button>
+                <RefreshButton onClick={() => void reload()} refreshing={refreshing} />
+              </>
+            }
+          >
+            <ToolbarSearch value={query} onChange={setQuery} placeholder="Search people" />
+            <select aria-label="Filter by access" className={toolbarControl} value={roleFilter} onChange={(event) => setRoleFilter(event.target.value as TenantRole | "")}>
+              <option value="">All access</option>
+              {TENANT_ROLES.map((role) => <option key={role} value={role}>{TENANT_ROLE_LABELS[role]}</option>)}
+            </select>
+            <select aria-label="Filter by status" className={toolbarControl} value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+              <option value="">All statuses</option>
+              {STATUS_FILTERS.map((status) => <option key={status.key} value={status.key}>{status.label}</option>)}
+            </select>
+          </DataToolbar>
         }
+        footer={<span className="tabular-nums">{TENANT_ROLES.map((role) => `${TENANT_ROLE_LABELS[role]} ${seats.byRole[role]}`).join(" · ")}</span>}
       >
-        {error && (
-          <p role="alert" className="border-b border-[var(--border)] bg-[var(--error-surface)] px-4 py-2.5 text-[14px] leading-[1.5] text-[var(--error-ink)]">
-            {error}
-          </p>
-        )}
+        {snapshot.members.length === 0 ? (
+          <EmptyState title="No one is on this workspace yet" hint="Invite a teammate to give them access." />
+        ) : filtered.length === 0 ? (
+          <NoMatches noun="people" onClear={filtersOn ? () => { setQuery(""); setRoleFilter(""); setStatusFilter(""); } : undefined} />
+        ) : (
         <table className={cn(st.table, "min-w-[760px]")} data-testid="team-settings">
           <thead>
             <tr className={st.headRow}>
@@ -417,55 +358,29 @@ export function TeamSettings({ initial, workspace }: { initial: TeamSnapshot; wo
                   </td>
                   <td className={cn(st.td, st.num, "whitespace-nowrap")}>
                     {status === "invited" || status === "expired" ? (
-                      <button type="button" className={btn("row")} disabled={rowBusy === member.id} onClick={() => void resend(member)} aria-label={`Resend invitation to ${member.name}`}>
+                      <Button type="button" variant="outline" size="sm" disabled={rowBusy === member.id} onClick={() => void resend(member)} aria-label={`Resend invitation to ${member.name}`}>
                         {rowBusy === member.id ? "Sending…" : "Resend"}
-                      </button>
+                      </Button>
                     ) : member.id === viewerId ? (
                       <span className="text-[var(--muted)]" title="This is you. Select your name to change your own licensed states.">&mdash;</span>
                     ) : (
-                      <button type="button" className={btn("row")} onClick={() => setManaging(member)} aria-label={`Manage ${member.name}`}>
+                      <Button type="button" variant="outline" size="sm" onClick={() => setManaging(member)} aria-label={`Manage ${member.name}`}>
                         Manage
-                      </button>
+                      </Button>
                     )}
                   </td>
                 </tr>
               );
             })}
-            {filtered.length === 0 && (
-              <tr>
-                <td colSpan={6} className={cn(st.td, "text-[var(--muted)]")}>
-                  {snapshot.members.length === 0 ? "No one is on this workspace yet." : "No one matches these filters."}
-                </td>
-              </tr>
-            )}
           </tbody>
         </table>
-      </SettingsTableCard>
+        )}
+      </TableCard>
 
-      <SettingsCard title="What each role can reach" sub="Roles are not a hierarchy. A bookkeeper sees money an agent cannot; an agent sees calls a bookkeeper cannot.">
-        <div className="overflow-x-auto">
-          <table className={cn(st.table, "min-w-[640px]")}>
-            <thead>
-              <tr className={st.headRow}>
-                <th scope="col" className={cn(st.th, "w-[150px]")}>Role</th>
-                <th scope="col" className={st.th}>Leads &amp; dialing</th>
-                <th scope="col" className={cn(st.th, "w-[240px]")}>Book &amp; money</th>
-                <th scope="col" className={cn(st.th, "w-[190px]")}>Settings</th>
-              </tr>
-            </thead>
-            <tbody>
-              {ROLE_REACH.map((row) => (
-                <tr key={row.role}>
-                  <th scope="row" className={cn(st.td, "text-left font-normal")}>{TENANT_ROLE_LABELS[row.role]}</th>
-                  <td className={st.td}>{row.leads}</td>
-                  <td className={st.td}>{row.money}</td>
-                  <td className={st.td}>{row.settings}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </SettingsCard>
+      <SettingsSaveBar visible={dirty} note={`${Object.keys(pending).length} ${Object.keys(pending).length === 1 ? "teammate" : "teammates"} changed`}>
+        <Button type="button" variant="outline" onClick={() => { setPending({}); setError(""); }} disabled={saving}>Discard</Button>
+        <Button type="button" onClick={() => void saveChanges()} disabled={saving}>{saving ? "Saving…" : "Save changes"}</Button>
+      </SettingsSaveBar>
 
       {inviteOpen && (
         <InviteDialog
@@ -508,15 +423,6 @@ export function TeamSettings({ initial, workspace }: { initial: TeamSnapshot; wo
         />
       )}
     </SettingsStack>
-  );
-}
-
-function FragmentRow({ label, value }: { label: string; value: string }) {
-  return (
-    <>
-      <dt>{label}</dt>
-      <dd className="m-0 text-right">{value}</dd>
-    </>
   );
 }
 
@@ -572,12 +478,8 @@ function InviteDialog({
   }
 
   return (
-    <TeamDialog title="Invite someone" description="They get an email with a link to choose a password. The invite holds a seat until it is accepted or revoked." onClose={onClose}>
-      {atSeatLimit && (
-        <Callout tone="warning" title="Every seat is in use">
-          This invite will be refused until a seat is freed or the plan is upgraded.
-        </Callout>
-      )}
+    <TeamDialog title="Invite someone" description="They get an email link to set a password. The invite holds a seat until it is accepted or revoked." onClose={onClose}>
+      {atSeatLimit && <Callout tone="warning" title="Every seat is in use — this invite will be refused until one is freed." />}
       <form className="grid gap-4 sm:grid-cols-2" onSubmit={(event) => void invite(event)}>
         <Field label="Name" htmlFor="team-name" required>
           <input id="team-name" className={control} value={name} onChange={(event) => setName(event.target.value)} maxLength={120} required />
@@ -585,7 +487,7 @@ function InviteDialog({
         <Field label="Email" htmlFor="team-email" required>
           <input id="team-email" type="email" className={control} value={email} onChange={(event) => setEmail(event.target.value)} maxLength={254} required />
         </Field>
-        <Field label="Role" htmlFor="team-role" className="sm:col-span-2">
+        <Field label="Role" htmlFor="team-role" className="sm:col-span-2" hint={roleReach(role)}>
           <select id="team-role" className={control} value={role} onChange={(event) => setRole(event.target.value as TenantRole)}>
             {TENANT_ROLES.map((item) => (
               <option key={item} value={item}>{TENANT_ROLE_LABELS[item]}</option>
@@ -607,11 +509,11 @@ function InviteDialog({
             {error}
           </p>
         )}
-        <div className="flex justify-end gap-2.5 sm:col-span-2">
-          <button type="button" className={btn("ghost")} onClick={onClose}>Cancel</button>
-          <button type="submit" className={btn("primary")} disabled={busy || (role === "assistant" && bufferAtLimit) || (role === "setter" && Boolean(setterSeats))}>
+        <div className="flex justify-end gap-2 sm:col-span-2">
+          <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
+          <Button type="submit" disabled={busy || (role === "assistant" && bufferAtLimit) || (role === "setter" && Boolean(setterSeats))}>
             {busy ? "Inviting…" : "Invite teammate"}
-          </button>
+          </Button>
         </div>
       </form>
     </TeamDialog>
@@ -649,9 +551,9 @@ function ManageDialog({
   const visibleStates = US_STATES.filter(([code, name]) => !stateQuery.trim() || name.toLowerCase().includes(stateQuery.trim().toLowerCase()) || code === stateQuery.trim().toUpperCase());
 
   return (
-    <TeamDialog title={`Manage ${member.name}`} description="Changes are held until you press Save changes at the top of the section." onClose={onClose}>
+    <TeamDialog title={`Manage ${member.name}`} description="Held until you save the section." onClose={onClose}>
       <div className="grid gap-4">
-        <Field label="Access" htmlFor="manage-role" hint={role === "owner" ? "Owners reach everything, including settings and billing." : undefined}>
+        <Field label="Access" htmlFor="manage-role" hint={roleReach(role)}>
           <select id="manage-role" className={control} value={role} onChange={(event) => setRole(event.target.value as TenantRole)}>
             {TENANT_ROLES.map((item) => (
               <option key={item} value={item}>{TENANT_ROLE_LABELS[item]}</option>
@@ -667,15 +569,15 @@ function ManageDialog({
                 ? role === "setter"
                   ? "A setter books only and is never given a lead that needs a licence."
                   : "This role is not given leads to sell."
-                : "Once any state is recorded, lead assignment only gives this person leads in those states (and only where the agency is licensed and appointed). Leave empty to judge them on the agency's licences."}
+                : "Leads are only assigned in these states. Leave empty to use the agency's licences."}
           </span>
           {licensed && statesAvailable && (
             <>
               <div className="mt-2 flex flex-wrap items-center gap-2">
-                <SearchBox value={stateQuery} onChange={setStateQuery} placeholder="Find a state" label="Find a state" />
+                <ToolbarSearch value={stateQuery} onChange={setStateQuery} placeholder="Find a state" />
                 <span className="text-[12px] text-[var(--muted)] tabular-nums">{states.size} selected</span>
                 {states.size > 0 && (
-                  <button type="button" className={btn("row")} onClick={() => setStates(new Set())}>Clear</button>
+                  <Button type="button" variant="ghost" onClick={() => setStates(new Set())}>Clear</Button>
                 )}
               </div>
               <div className="mt-2 grid max-h-56 grid-cols-2 gap-1.5 overflow-y-auto sm:grid-cols-3">
@@ -702,7 +604,7 @@ function ManageDialog({
                 <div className="mt-3">
                   <span className="block text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]">Licence valid through</span>
                   <span className="block text-[12px] leading-[1.5] text-[var(--muted)]">
-                    Optional. From the day after, this person is not handed or served leads in that state, and their open leads there go back to the pool (never mid-call or with a booked callback). Lead assignment warns 30 days ahead.
+                    Optional. After this date they get no leads in that state.
                   </span>
                   <div className="mt-2 grid max-h-44 grid-cols-1 gap-1.5 overflow-y-auto sm:grid-cols-2">
                     {[...states].sort().map((code) => (
@@ -728,25 +630,24 @@ function ManageDialog({
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-[12px] border border-[var(--border)] px-4 py-3">
             <span className="min-w-0 text-[14px] leading-[1.5] text-[var(--body)]">
               <span className="block font-semibold text-[var(--ink)]">Revoke the invitation</span>
-              The link stops working and the seat it holds is freed. This happens now, not on Save.
+              Frees the seat immediately.
             </span>
-            <button type="button" className={btn("danger-row")} disabled={revoking} onClick={onRevoke}>
+            <Button type="button" variant="outline" className="text-[var(--error-ink)]" disabled={revoking} onClick={onRevoke}>
               {revoking ? "Revoking…" : "Revoke invite"}
-            </button>
+            </Button>
           </div>
         )}
-        <div className="flex justify-end gap-2.5">
-          <button type="button" className={btn("ghost")} onClick={onClose}>Cancel</button>
-          <button
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
+          <Button
             type="button"
-            className={btn("primary")}
             onClick={() => {
               const kept = licensed && statesAvailable ? [...states] : initialStates;
               onApply({ role, states: kept, expiries: licensed && statesAvailable ? Object.fromEntries(kept.map((state) => [state, expiries[state] ?? null])) : initialExpiries });
             }}
           >
             Apply
-          </button>
+          </Button>
         </div>
       </div>
     </TeamDialog>

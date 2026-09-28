@@ -16,7 +16,6 @@ import { getMaintenanceStatus, getActiveAnnouncements } from "@/lib/system/servi
 import { planDisplayName } from "@/lib/plans/display";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { AppTopBar } from "@/components/app/app-top-bar";
-import { AgentWorkspaceBar } from "@/components/app/agent-workspace-bar";
 import { NotifySoundPrimer } from "@/components/app/notify-sound-primer";
 import { PortalPageTransition } from "@/components/portal/portal-page-transition";
 
@@ -129,14 +128,10 @@ export default async function AgentShellLayout({ children }: { children: React.R
         {/* The bar is chrome and always present. Below it, ordered by urgency: a platform-wide
             outage outranks a campaign announcement, which outranks a trial ending, which
             outranks an account already known to be read-only. */}
+        {/* No context strip under the bar (removed 2026-09-28): the workspace, plan and role are in
+            the account menu and the plan card, and the read-only and maintenance states it echoed
+            are the banners just below, which say what to do about them. */}
         <AppTopBar user={identity} />
-        <AgentWorkspaceBar
-          workspaceName={identity.workspaceName}
-          planName={planName}
-          roleLabel={identity.roleLabel}
-          readOnly={entitlement.access === "read_only" || maintenance.level === "read_only"}
-          maintenance={maintenance.level}
-        />
         <div className="flex min-w-0 flex-1 flex-col p-4 sm:p-6 lg:p-8 lg:pt-6">
         <MaintenanceMessage status={maintenance} />
         <AnnouncementStrip initialAnnouncements={announcements} />

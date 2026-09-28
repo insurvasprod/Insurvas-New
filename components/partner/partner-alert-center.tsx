@@ -5,6 +5,7 @@ import { notify } from "@/lib/notify";
 
 import type { TopBarAlert, TopBarFeed, TopBarNotification } from "@/components/app/app-top-bar";
 import { getPortalSoundSettings, playPortalSound, savePortalSoundSettings } from "@/components/portal/portal-feedback-bridge";
+import { SectionLoading } from "@/components/ui/page-states";
 import { PARTNER_ALERT_EVENTS, type PartnerAlertEvent, type PartnerAlertSettings } from "@/lib/partnerAlerts/presentation";
 import type { PartnerWorkspaceAlert } from "@/lib/partnerAlerts/workspaceAlerts";
 
@@ -37,14 +38,7 @@ const TONE: Record<PartnerAlertEvent, TopBarNotification["tone"]> = {
 };
 
 function PartnerAlertPreferences({ settings, save }: { settings: PartnerAlertSettings | null; save: (next: PartnerAlertSettings) => Promise<void> }) {
-  if (!settings) {
-    return (
-      <div className="portal-top-empty">
-        <p className="portal-top-empty-head">Loading your preferences</p>
-        <p className="portal-top-empty-body">They appear as soon as the first check answers.</p>
-      </div>
-    );
-  }
+  if (!settings) return <SectionLoading rows={4} columns={2} label="Loading your preferences" />;
   const local = getPortalSoundSettings();
   const setSound = (enabled: boolean) => {
     const next = { ...settings, sound_muted: !enabled, sound_opted_in_at: enabled ? settings.sound_opted_in_at ?? new Date().toISOString() : null };
@@ -53,7 +47,6 @@ function PartnerAlertPreferences({ settings, save }: { settings: PartnerAlertSet
   };
   return (
     <div className="portal-top-settings">
-      <p className="portal-top-settings-note">Sound is optional. Visual alerts always remain available.</p>
       {PARTNER_ALERT_EVENTS.map((event) => (
         <label key={event} className="portal-top-settings-row">
           <span>{labels[event]}</span>
@@ -167,7 +160,7 @@ export function usePartnerTopBarFeed(): TopBarFeed {
     notificationsEmptyBody: "Agent messages, lead status updates and changes to your account or team appear here as they happen.",
     alertsEmpty: {
       head: "Nothing is wrong with your organisation",
-      body: "Paused submissions and a rising duplicate rate appear here. They are not messages — they clear when the cause is fixed, not when you read this.",
+      body: "Paused submissions and a rising duplicate rate appear here.",
     },
   };
 }

@@ -49,6 +49,23 @@ export type ListCallbacksOptions = {
   statuses?: CallbackStatus[];
 };
 
+/**
+ * Each member's own timezone, as saved with their working hours (tenant_agent_availability), by
+ * user id; optionally one member. Members with none saved are absent. A failed read is an empty map:
+ * callers fall back to the workspace zone or the browser's. Untyped because the generated database
+ * types predate the table.
+ */
+export async function agentTimezones(tenantId: string, userId?: string): Promise<Map<string, string>> {
+  type Rows = { data: Array<{ user_id: string; timezone: string | null }> | null; error: unknown };
+  type Filter = PromiseLike<Rows> & { eq(column: string, value: string): Filter };
+  const loose = getSupabaseServiceClient() as unknown as { from(table: string): { select(columns: string): Filter } };
+  let query = loose.from("tenant_agent_availability").select("user_id, timezone").eq("tenant_id", tenantId);
+  if (userId) query = query.eq("user_id", userId);
+  const { data, error } = await query;
+  if (error) return new Map();
+  return new Map((data ?? []).filter((row) => row.timezone).map((row) => [row.user_id, row.timezone as string]));
+}
+
 export async function listCallbacks(tenantId: string, options: ListCallbacksOptions = {}): Promise<CallbackView[]> {
   const supabase = getSupabaseServiceClient();
   // The lead's values and the assignee's name ride along through tenant_callbacks_lead_id_fkey and
@@ -73,7 +90,13 @@ export async function listCallbacks(tenantId: string, options: ListCallbacksOpti
   };
   // The agency-side time on each callback is the workspace timezone (Settings › Agency profile). It
   // was the server's own zone, which on a hosted server is UTC — nobody's local time.
-  const [first, workspaceZone] = await Promise.all([build(BASE + LIFECYCLE), getWorkspaceTimezone(tenantId)]);
+  // agentTime is the ASSIGNEE's clock (LA-1.22: "the agent's shown alongside"), from the zone saved
+  // with their working hours; an assignee with none saved falls back to the workspace zone.
+  const [first, workspaceZone, assigneeZone] = await Promise.all([
+    build(BASE + LIFECYCLE),
+    getWorkspaceTimezone(tenantId),
+    agentTimezones(tenantId),
+  ]);
   const { data, error } = first.error && isMissingColumn(first.error) ? await build(BASE) : first;
   if (error) throw new Error(`Could not load callbacks: ${error.message}`);
   const agencyZone = workspaceZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -149,7 +172,7 @@ export async function listCallbacks(tenantId: string, options: ListCallbacksOpti
     const emailValue = values.email ?? values.email_address;
     return {
       id: row.id, leadId: row.lead_id, workItemId: row.work_item_id, customerName: String(values.full_name ?? values.name ?? ([values.first_name, values.last_name].filter(Boolean).join(" ") || "Customer")), scheduledAtUtc: row.scheduled_at_utc,
-      customerTimezone: timezone, customerTime: formatInTimezone(row.scheduled_at_utc, timezone), agentTime: formatInTimezone(row.scheduled_at_utc, agencyZone), assignedTo: row.assigned_to,
+      customerTimezone: timezone, customerTime: formatInTimezone(row.scheduled_at_utc, timezone), agentTime: formatInTimezone(row.scheduled_at_utc, assigneeZone.get(row.assigned_to) ?? agencyZone), assignedTo: row.assigned_to,
       assigneeName: userMap.get(row.assigned_to)?.name ?? "Assigned agent", assigneeRole: "agent", note: row.note, status: overdue && row.status === "scheduled" ? "due" : row.status as CallbackStatus,
       productName, phone: typeof phoneValue === "string" ? phoneValue : null, email: typeof emailValue === "string" ? emailValue : null,
       state: stateFromLeadValues(values),

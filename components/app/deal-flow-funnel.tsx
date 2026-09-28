@@ -10,8 +10,8 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
-import { Callout, btn } from "@/components/app/settings/primitives";
-import { LoadingRows } from "@/components/ui/page-states";
+import { Button } from "@/components/ui/button";
+import { SectionLoading } from "@/components/ui/page-states";
 import type { AgentLine, DialFunnel } from "@/lib/dealFlow/dialFunnel";
 import { formatCentsAsCurrency } from "@/lib/money";
 import { cn } from "@/lib/utils";
@@ -62,17 +62,16 @@ export function DealFlowFunnel({ from, to, agentId, isToday }: { from: string; t
 
   if (error && !data) {
     return (
-      <Callout tone="error" title="The dial funnel did not load">
-        <p className="m-0">{error}</p>
-        <button type="button" className={btn("secondary", "mt-3")} onClick={() => setReload((value) => value + 1)}>Try again</button>
-      </Callout>
+      <div role="alert" className="rounded-lg border border-border border-l-[3px] border-l-[var(--error)] bg-[var(--error-surface)] px-4 py-3 text-sm text-[var(--error-ink)]">
+        The dial funnel did not load: {error}{" "}
+        <button type="button" className="font-semibold underline underline-offset-2" onClick={() => setReload((value) => value + 1)}>Try again</button>
+      </div>
     );
   }
   if (!data) {
     return (
-      <section aria-busy="true" className="overflow-hidden rounded-[12px] border border-[var(--border)] bg-[var(--surface)]">
-        <p role="status" className="m-0 border-b border-[var(--border)] bg-[var(--surface-alt)] px-4 py-3 text-[14px] font-semibold text-[var(--ink)]">Loading the dial funnel…</p>
-        <LoadingRows rows={2} columns={5} />
+      <section className="overflow-hidden rounded-lg border border-border bg-card">
+        <SectionLoading rows={2} columns={5} label="Loading the dial funnel" />
       </section>
     );
   }
@@ -85,15 +84,16 @@ export function DealFlowFunnel({ from, to, agentId, isToday }: { from: string; t
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
-      <section aria-labelledby="dial-funnel-title" className="min-w-0 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] p-6">
+      <section aria-labelledby="dial-funnel-title" className="min-w-0 rounded-lg border border-border bg-card p-5">
         <div className="flex flex-wrap items-baseline justify-between gap-3">
           <h2 id="dial-funnel-title" className="m-0 text-[18px] leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]">Dial funnel</h2>
           <span className="text-[12px] leading-[1.5] text-[var(--muted)]">Distinct leads at each step, {when} · {data.timeZone}</span>
         </div>
         <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_240px]">
-          <ol className="m-0 grid list-none grid-cols-2 gap-3 p-0 sm:grid-cols-5">
+          {/* Joined cells, as the stat strip draws figures: one object, not a row of boxes. */}
+          <ol className="m-0 grid list-none grid-cols-2 gap-px overflow-hidden rounded-lg border border-border bg-border p-0 sm:grid-cols-5">
             {data.steps.map((step) => (
-              <li key={step.key} className="min-w-0 rounded-[10px] bg-[var(--surface-alt)] px-3.5 py-3">
+              <li key={step.key} className="min-w-0 bg-card px-3.5 py-3">
                 <span className={label12}>{step.label}</span>
                 <span className="mt-1 block text-[24px] leading-[1.2] font-semibold tracking-[-0.02em] tabular-nums text-[var(--ink)]">{step.count ?? "—"}</span>
                 <span className="mt-0.5 block text-[12px] leading-[1.5] text-[var(--muted)]">
@@ -102,7 +102,7 @@ export function DealFlowFunnel({ from, to, agentId, isToday }: { from: string; t
               </li>
             ))}
           </ol>
-          <div className="rounded-[10px] border border-[var(--border)] px-4 py-3">
+          <div className="rounded-lg border border-border px-4 py-3">
             <span className={label12}>Annualised premium</span>
             <span className="mt-1 block text-[24px] leading-[1.2] font-semibold tracking-[-0.02em] tabular-nums text-[var(--ink)]">{formatCentsAsCurrency(data.annualisedCents)}</span>
             <span className="mt-0.5 block text-[12px] leading-[1.5] text-[var(--muted)]">
@@ -116,7 +116,7 @@ export function DealFlowFunnel({ from, to, agentId, isToday }: { from: string; t
       </section>
 
       <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-        <section aria-labelledby="dial-agents-title" className="relative min-w-0 overflow-hidden rounded-[12px] border border-[var(--border)] bg-[var(--surface)]">
+        <section aria-labelledby="dial-agents-title" className="relative min-w-0 overflow-hidden rounded-lg border border-border bg-card">
           <div className="flex items-center justify-between gap-3 border-b border-[var(--border)] bg-[var(--surface-alt)] px-4 py-3">
             <h2 id="dial-agents-title" className="m-0 text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">By agent</h2>
             <Link href="/app/activity?view=scorecard" className="text-[12px] font-semibold text-[var(--ink)]">Open the scorecard</Link>
@@ -140,7 +140,7 @@ export function DealFlowFunnel({ from, to, agentId, isToday }: { from: string; t
           )}
         </section>
 
-        <section aria-labelledby="dial-leak-title" className="min-w-0 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] p-6">
+        <section aria-labelledby="dial-leak-title" className="min-w-0 rounded-lg border border-border bg-card p-5">
           <h2 id="dial-leak-title" className="m-0 text-[18px] leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]">
             {leak.servedNeverDialed === 0 ? (served === 0 ? "No leads were served" : "Every lead served was dialed") :`${leak.servedNeverDialed} ${leak.servedNeverDialed === 1 ? "lead was" : "leads were"} served and never dialed`}
           </h2>
@@ -149,9 +149,9 @@ export function DealFlowFunnel({ from, to, agentId, isToday }: { from: string; t
               ? served === 0
                 ? `The queue handed out no leads ${when}.`
                 : `The queue handed out ${served} ${served === 1 ? "lead" : "leads"} ${when}, and the agent it went to dialed each one.`
-              : `${percent(leak.share)} of everything the queue handed out ${when}.${leak.top ? ` ${leak.top.count} of them were ${leak.top.name}'s${leak.top.alsoMostZeroClick ? `, which is also where the most outcomes were logged without a dial (${leak.top.zeroClick})` : ""}.` : ""} A lead served and not dialed is a lead the list paid for and nobody called.`}
+              : `${percent(leak.share)} of everything the queue handed out ${when}.${leak.top ? ` ${leak.top.count} of them were ${leak.top.name}'s${leak.top.alsoMostZeroClick ? `, which is also where the most outcomes were logged without a dial (${leak.top.zeroClick})` : ""}.` : ""}`}
           </p>
-          <Link href="/app/activity?view=integrity" className={btn("secondary", "mt-4")}>Open the call log</Link>
+          <Button asChild variant="outline" className="mt-4"><Link href="/app/activity?view=integrity">Open the call log</Link></Button>
         </section>
       </div>
     </div>

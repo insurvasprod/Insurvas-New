@@ -287,6 +287,48 @@ export function capacityEmptyReason(open: number, max: number): string {
   return `You have ${open.toLocaleString()} open ${open === 1 ? "lead" : "leads"} and your limit is ${max.toLocaleString()}, so Serve next only serves leads already assigned to you — and none is due now. Finish or disposition some of your open leads to take new ones from the pool.`;
 }
 
+export const EMPTY_QUEUE_NORMAL =
+  "Every lead is either outside its local window, waiting on a retry timer, or already worked. This is normal early and late in the day.";
+
+export type CampaignServingState = { name: string; status: string; scrubStatus: string };
+
+const namesOf = (rows: CampaignServingState[]) => {
+  const names = rows.map((row) => row.name);
+  const shown = names.length > 3 ? [...names.slice(0, 3), `${names.length - 3} more`] : names;
+  return shown.length === 1 ? shown[0] : `${shown.slice(0, -1).join(", ")} and ${shown[shown.length - 1]}`;
+};
+
+/**
+ * Why Serve next came back empty, naming the campaigns that are held back (LA-2.3: only a scrubbed
+ * campaign serves, and "the dialer explains why"; LA-2.8: "the empty queue explains itself").
+ *
+ * Nothing servable at all → the scrub states are the answer, worst first (a failure needs attention,
+ * a run needs waiting, never-scrubbed needs starting), then paused campaigns. Something servable →
+ * the normal sentence, plus which campaigns' leads are held back until their scrub passes.
+ */
+export function describeEmptyQueue(input: { campaigns: CampaignServingState[]; anyUnclaimed: boolean }): string {
+  const active = input.campaigns.filter((row) => row.status === "active");
+  const servable = active.filter((row) => row.scrubStatus === "scrubbed");
+  const failed = active.filter((row) => row.scrubStatus === "failed");
+  const scrubbing = active.filter((row) => row.scrubStatus === "scrubbing");
+  const unscrubbed = active.filter((row) => row.scrubStatus === "unscrubbed");
+  const paused = input.campaigns.filter((row) => row.status === "paused");
+  const held: string[] = [];
+  if (failed.length) held.push(`the DNC scrub failed for ${namesOf(failed)}, so dialing it stays blocked until a scrub succeeds`);
+  if (scrubbing.length) held.push(`${namesOf(scrubbing)} ${scrubbing.length === 1 ? "is" : "are"} still being scrubbed`);
+  if (unscrubbed.length) held.push(`${namesOf(unscrubbed)} ${unscrubbed.length === 1 ? "has" : "have"} not been scrubbed against the suppression lists yet`);
+  const heldSentence = held.length ? held.join("; ") : "";
+
+  if (!input.campaigns.length) return input.anyUnclaimed ? EMPTY_QUEUE_NORMAL : "No campaigns exist yet, and no lead is waiting.";
+  if (!servable.length) {
+    if (heldSentence) return `Nothing can be served yet: ${heldSentence}. Only a scrubbed campaign is dialled.`;
+    if (paused.length) return `Every campaign is paused, draft or exhausted — ${namesOf(paused)} ${paused.length === 1 ? "is" : "are"} paused.`;
+    return "Every campaign is paused, draft or exhausted.";
+  }
+  const base = input.anyUnclaimed ? EMPTY_QUEUE_NORMAL : "Every lead has been worked or is with another agent.";
+  return heldSentence ? `${base} Held back until their scrub passes: ${heldSentence}.` : base;
+}
+
 /** Cents per record as the card prints it: "$0.36 / lead". */
 export function costPerLeadLabel(cents: number | null | undefined): string {
   if (cents === null || cents === undefined || !Number.isFinite(cents)) return "—";

@@ -4,9 +4,12 @@ import { useCallback, useId, useMemo, useState, useSyncExternalStore, type FormE
 
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
-import { AdminPageHeader } from "@/components/admin/page-header";
-import { Callout, Field, KeyValues, Pill, SettingsTableCard, btn, control, st } from "@/components/app/settings/primitives";
+import { BoardStatGrid, BoardStatTile } from "@/components/admin/board-stat-tile";
+import { Callout, Field, KeyValues, Pill, control, st } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
+import { DataToolbar, RefreshButton } from "@/components/ui/data-toolbar";
+import { PageHeader } from "@/components/ui/page-header";
+import { TableCard } from "@/components/ui/table-card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/ui/page-states";
 import { COMPLIANCE_VENDOR_TYPES, COMPLIANCE_VENDOR_TYPE_LABELS, type ComplianceVendor, type ComplianceVendorType } from "@/lib/compliance/constants";
@@ -15,7 +18,6 @@ import {
   dialingPosture,
   fullUtc,
   healthPill,
-  registryFooter,
   shortUtc,
   unreachableVendors,
   vendorRoles,
@@ -23,8 +25,8 @@ import {
 } from "@/lib/compliance/registryView";
 
 /**
- * Compliance (board p-adm-compliance): the dial-gate callout, the vendor registry and its footer
- * note. The board has no action column, so a row opens the vendor's dialog, which holds every
+ * Compliance (board p-adm-compliance): the vendor figures, the dial-gate alert when dialing is at
+ * risk, and the vendor registry. The board has no action column, so a row opens the vendor's dialog, which holds every
  * action the old table carried: test the connection, enable or disable, edit, rotate the credential.
  */
 
@@ -58,6 +60,7 @@ export function ComplianceVendorsTable({ initial }: { initial: ComplianceRegistr
   const [testing, setTesting] = useState<string | null>(null);
   const [toggling, setToggling] = useState<string | null>(null);
   const [pending, setPending] = useState<PendingConfirmation | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
   const mounted = useMounted();
   const formId = useId();
 
@@ -72,6 +75,12 @@ export function ComplianceVendorsTable({ initial }: { initial: ComplianceRegistr
     const response = await fetch("/api/admin/compliance-vendors");
     if (response.ok) setRegistry(await response.json());
   }, []);
+
+  async function reload() {
+    setRefreshing(true);
+    await refresh();
+    setRefreshing(false);
+  }
 
   /** Title text for a time: UTC always, plus the reader's local time once mounted. */
   const timeTitle = (iso: string | null) => {
@@ -155,38 +164,23 @@ export function ComplianceVendorsTable({ initial }: { initial: ComplianceRegistr
 
   return (
     <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
-      <AdminPageHeader
-        title="Compliance"
-        subtitle="TCPA and Do Not Call vendors, and whether they are actually working."
-        actions={<button type="button" className={btn("primary", "h-11")} onClick={startCreate}>Register a vendor</button>}
-      />
+      <PageHeader title="Compliance" actions={<Button type="button" onClick={startCreate}>Register a vendor</Button>} />
 
-      <Callout tone={posture.tone === "neutral" ? "info" : posture.tone} title={posture.title}>
-        <p className="m-0">
-          {posture.lines.join(" ")}
-          {!dialing.demo && (
-            <>
-              {" "}
-              <strong className="font-semibold">
-                With no available DNC vendor, <code className="font-mono text-[13px]">/api/app/dial/preflight</code> returns 503 and every tenant on the platform is blocked from calling.
-              </strong>{" "}
-              Disabling the last available one asks for a typed confirmation naming that effect.
-            </>
-          )}
-        </p>
-      </Callout>
+      <BoardStatGrid>
+        <BoardStatTile label="Registered" value={vendors.length.toLocaleString("en-US")} />
+        <BoardStatTile label="Enabled" value={enabledCount.toLocaleString("en-US")} />
+        <BoardStatTile label="DNC available" value={availableDnc.toLocaleString("en-US")} tone={availableDnc === 0 && !dialing.demo ? "error" : "default"} />
+        <BoardStatTile label="Unreachable" value={unreachable.length.toLocaleString("en-US")} tone={unreachable.length > 0 ? "error" : "default"} footnote="enabled, every call failed" />
+      </BoardStatGrid>
 
-      <SettingsTableCard
-        title="Vendors"
-        actions={
-          <>
-            <span className="text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)] tabular-nums">
-              {enabledCount} enabled · {vendors.length} registered · {availableDnc} DNC available
-            </span>
-            {unreachable.length > 0 && <Pill tone="error" dot>{unreachable.length} enabled but unreachable</Pill>}
-          </>
-        }
-      >
+      {(posture.tone === "error" || posture.tone === "warning") && (
+        <Callout tone={posture.tone} title={posture.title}>
+          {(posture.tone === "error" ? posture.lines.slice(0, -1) : posture.lines).join(" ")}
+        </Callout>
+      )}
+      {dialing.demo && <Callout tone="info" title={posture.title} />}
+
+      <TableCard toolbar={<DataToolbar actions={<RefreshButton onClick={() => void reload()} refreshing={refreshing} />} />}>
         <div className="min-w-0 overflow-x-auto">
           <table className={cn(st.table, "min-w-[880px] table-fixed")}>
             <thead>
@@ -237,10 +231,7 @@ export function ComplianceVendorsTable({ initial }: { initial: ComplianceRegistr
             </tbody>
           </table>
         </div>
-        <div className="border-t border-[var(--border)] bg-[var(--canvas)] px-4 py-3 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--body)]">
-          {registryFooter(unreachable)}
-        </div>
-      </SettingsTableCard>
+      </TableCard>
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
@@ -268,12 +259,12 @@ export function ComplianceVendorsTable({ initial }: { initial: ComplianceRegistr
               />
               <p className="m-0 min-w-0 truncate font-mono text-[12px] text-[var(--muted)]" title={editing.endpoint}>{editing.endpoint}</p>
               <div className="flex flex-wrap items-center gap-2.5">
-                <button type="button" className={btn("secondary")} onClick={() => test(editing)} disabled={testing === editing.id}>
+                <Button type="button" variant="outline" onClick={() => test(editing)} disabled={testing === editing.id}>
                   {testing === editing.id ? "Testing…" : "Test connection"}
-                </button>
-                <button type="button" className={btn("secondary")} onClick={() => toggle(editing)} disabled={toggling === editing.id}>
+                </Button>
+                <Button type="button" variant="outline" onClick={() => toggle(editing)} disabled={toggling === editing.id}>
                   {editing.is_enabled ? "Disable vendor" : "Enable vendor"}
-                </button>
+                </Button>
               </div>
             </div>
           )}

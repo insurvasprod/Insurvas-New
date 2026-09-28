@@ -6,7 +6,6 @@ import { LeadListDetailView } from "@/components/app/lead-list-detail";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { getWorkspaceTimezone } from "@/lib/agencyProfile/timezone";
 import { leadListDetail } from "@/lib/leadLists/detail";
-import { sectionForPath } from "@/lib/menu/definition";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -51,7 +50,6 @@ export default async function LeadListDetailPage({ params }: { params: Promise<{
   return (
     <LeadListDetailView
       detail={detail}
-      eyebrow={sectionForPath("/app/lead-lists") ?? undefined}
       money={money}
       timeZone={timeZone}
       assign={{ manager, blocked: assignBlocked }}

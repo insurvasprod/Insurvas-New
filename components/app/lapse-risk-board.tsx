@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronDown } from "lucide-react";
 import { notify } from "@/lib/notify";
@@ -9,9 +9,11 @@ import { RecordLapseSignal, refreshLapseSignalAccess } from "@/components/app/re
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/ui/page-header";
-import { StatTile } from "@/components/ui/stat";
+import { NoMatches } from "@/components/ui/page-states";
+import { StatStrip, StatTile } from "@/components/ui/stat";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
 import { formatCentsAsCurrency } from "@/lib/money";
@@ -30,8 +32,8 @@ import {
 
 /**
  * /app/lapse-risk with something on it: every policy carrying at least one open lapse signal, most
- * urgent first (the order is lib/lapseRisk/model.ts rankAtRisk, and URGENCY_RULE says it in one
- * line above the table). Each row shows the signals that put it there, the premium, and what a
+ * urgent first (the order is lib/lapseRisk/model.ts rankAtRisk, and URGENCY_RULE says it in the
+ * table's footer). Each row shows the signals that put it there, the premium, and what a
  * lapse today would charge back. The empty state stays the board's own (lapse-risk-empty.tsx).
  */
 
@@ -166,33 +168,41 @@ function ResolveAction({ policy, onDone }: { policy: AtRiskPolicy; onDone: () =>
 }
 
 export function LapseRiskBoard({
-  eyebrow,
   policies,
   totals,
   readOnly,
 }: {
-  eyebrow?: string;
   policies: AtRiskPolicy[];
   totals: AtRiskTotals;
   readOnly: boolean;
 }) {
   const router = useRouter();
+  const [refreshing, startRefresh] = useTransition();
   const refresh = () => {
     void refreshLapseSignalAccess();
-    router.refresh();
+    startRefresh(() => router.refresh());
   };
   const openSignals = policies.reduce((sum, policy) => sum + policy.signals.length, 0);
+  const [query, setQuery] = useState("");
+  const [kind, setKind] = useState<"all" | LapseSignalKind>("all");
+  const visible = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    return policies.filter((policy) =>
+      (kind === "all" || policy.signals.some((signal) => signal.kind === kind)) &&
+      (!needle || [policy.policyNumber, policy.insuredName, policy.carrier, policy.product].some((value) => value?.toLowerCase().includes(needle))),
+    );
+  }, [policies, query, kind]);
 
   return (
     <div className="m-stagger flex min-h-0 flex-grow flex-col gap-6">
       <PageHeader
-        eyebrow={eyebrow}
         title="Lapse risk"
-        description="Policies with a recorded reason to lapse, and what each lapse would cost."
-        actions={readOnly ? <span className="text-sm text-muted-foreground">Read-only</span> : <RecordLapseSignal />}
+        actions={readOnly ? undefined : <RecordLapseSignal />}
       />
 
-      <section className="grid gap-3 sm:grid-cols-3" aria-label="Lapse risk summary">
+      {readOnly && <div role="status" className="rounded-lg border border-border border-l-[3px] border-l-[var(--warning)] bg-[var(--warning-surface)] px-4 py-3 text-sm text-[var(--warning-ink)]">Your account is read-only. Recording and resolving lapse signals is unavailable.</div>}
+
+      <StatStrip label="Lapse risk summary">
         <StatTile label="Policies at risk" value={totals.policies.toLocaleString()} footnote={`${openSignals} open ${openSignals === 1 ? "signal" : "signals"}`} />
         <StatTile label="Premium at risk" value={formatCentsAsCurrency(totals.monthlyPremiumCents)} unit="/mo" footnote={`${formatCentsAsCurrency(totals.annualPremiumCents)} a year`} />
         <StatTile
@@ -201,9 +211,23 @@ export function LapseRiskBoard({
           value={formatCentsAsCurrency(totals.commissionExposedCents)}
           footnote={totals.unpriced > 0 ? `if all lapsed today · ${totals.unpriced} not priced` : "if all lapsed today"}
         />
-      </section>
+      </StatStrip>
 
-      <TableCard description={URGENCY_RULE}>
+      <TableCard
+        toolbar={
+          <DataToolbar actions={<RefreshButton onClick={refresh} refreshing={refreshing} />}>
+            <ToolbarSearch value={query} onChange={setQuery} placeholder="Search policy, insured, carrier" />
+            <select aria-label="Filter by signal" className={toolbarControl} value={kind} onChange={(event) => setKind(event.target.value as typeof kind)}>
+              <option value="all">All signals</option>
+              {(Object.keys(KIND_TONE) as LapseSignalKind[]).map((key) => <option key={key} value={key}>{LAPSE_SIGNAL_LABELS[key]}</option>)}
+            </select>
+          </DataToolbar>
+        }
+        footer={<span>{visible.length.toLocaleString()} of {policies.length.toLocaleString()} {policies.length === 1 ? "policy" : "policies"} · {URGENCY_RULE}</span>}
+      >
+        {visible.length === 0 ? (
+          <NoMatches noun="policies" onClear={() => { setQuery(""); setKind("all"); }} />
+        ) : (
         <Table>
           <TableHeader>
             <TableRow>
@@ -215,7 +239,7 @@ export function LapseRiskBoard({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {policies.map((policy) => (
+            {visible.map((policy) => (
               <TableRow key={policy.policyId}>
                 <TableCell className="align-top">
                   <span className="block text-sm font-semibold text-foreground">{policy.policyNumber}</span>
@@ -259,6 +283,7 @@ export function LapseRiskBoard({
             ))}
           </TableBody>
         </Table>
+        )}
       </TableCard>
     </div>
   );

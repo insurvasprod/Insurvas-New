@@ -47,7 +47,12 @@ export type BookingPolicy = {
 };
 
 /** Settings that belong to the agency, not to one member (20260924230200). */
-export type AgencyBookingSettings = { maxPerDay: number | null };
+/**
+ * callbackReminderMinutes (20260925711600): how long before a callback its reminder goes out, for
+ * the whole agency (LA-1.22 / LA-2.10 "reminder at a configurable lead time"); null = the platform
+ * default. Absent until that migration is applied, which the screen reads as "not available yet".
+ */
+export type AgencyBookingSettings = { maxPerDay: number | null; callbackReminderMinutes?: number | null };
 
 export type CalendarSettings = {
   userId: string;
@@ -116,11 +121,15 @@ function repeatOf(value: unknown): BlockRepeat {
 
 /** The agency-wide cap, or `ready: false` before 20260924230200. */
 async function readAgencySettings(db: Loose, tenantId: string): Promise<{ ready: boolean; agency: AgencyBookingSettings }> {
-  const result = await db.from("tenant_booking_settings").select("max_per_day").eq("tenant_id", tenantId);
+  let result = await db.from("tenant_booking_settings").select("max_per_day, callback_reminder_minutes").eq("tenant_id", tenantId);
+  const reminderReady = !isSchemaGap(result.error);
+  if (!reminderReady) result = await db.from("tenant_booking_settings").select("max_per_day").eq("tenant_id", tenantId);
   if (isSchemaGap(result.error)) return { ready: false, agency: { maxPerDay: null } };
   if (result.error) throw new Error(`Could not load the agency's booking settings: ${result.error.message}`);
   const row = (result.data ?? [])[0];
-  return { ready: true, agency: { maxPerDay: row && row.max_per_day != null ? Number(row.max_per_day) : null } };
+  const agency: AgencyBookingSettings = { maxPerDay: row && row.max_per_day != null ? Number(row.max_per_day) : null };
+  if (reminderReady) agency.callbackReminderMinutes = row && row.callback_reminder_minutes != null ? Number(row.callback_reminder_minutes) : null;
+  return { ready: true, agency };
 }
 
 export async function getCalendarSettings(
@@ -214,15 +223,18 @@ export async function getCalendarSettings(
   return { members: settings, schema: { settingsReady, bookingReady }, agency: agencyRead.agency };
 }
 
-/** The agency-wide cap. Owners only (the route checks); refuses before 20260924230200. */
-export async function saveAgencyBookingSettings(input: { tenantId: string; userId: string; maxPerDay: number | null }): Promise<void> {
+/**
+ * The agency-wide cap and callback reminder lead. Owners only (the route checks); refuses before
+ * 20260924230200 (and before 20260925711600 for the reminder). A field left undefined is unchanged.
+ */
+export async function saveAgencyBookingSettings(input: { tenantId: string; userId: string; maxPerDay?: number | null; callbackReminderMinutes?: number | null }): Promise<void> {
   const db = getSupabaseServiceClient() as unknown as Loose;
-  const saved = await db.from("tenant_booking_settings").upsert(
-    { tenant_id: input.tenantId, max_per_day: input.maxPerDay, updated_at: new Date().toISOString(), updated_by: input.userId },
-    { onConflict: "tenant_id" },
-  );
+  const row: Record<string, unknown> = { tenant_id: input.tenantId, updated_at: new Date().toISOString(), updated_by: input.userId };
+  if (input.maxPerDay !== undefined) row.max_per_day = input.maxPerDay;
+  if (input.callbackReminderMinutes !== undefined) row.callback_reminder_minutes = input.callbackReminderMinutes;
+  const saved = await db.from("tenant_booking_settings").upsert(row, { onConflict: "tenant_id" });
   if (isSchemaGap(saved.error)) throw new SchemaGapError();
-  if (saved.error) throw new Error(`Could not save the agency's daily limit: ${saved.error.message}`);
+  if (saved.error) throw new Error(`Could not save the agency's booking settings: ${saved.error.message}`);
 }
 
 /** True when a write only uses what the pre-migration schema can already hold. */

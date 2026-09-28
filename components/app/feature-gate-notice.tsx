@@ -24,18 +24,15 @@ export function FeatureGateNotice({
   guard,
   featureLabel,
   description,
-  eyebrow,
 }: {
   guard: Extract<PageGuardResult, { entitled: false }>;
   featureLabel: string;
   description?: string;
-  /** The menu section the closed page belongs to, when the caller knows it. */
-  eyebrow?: string;
 }) {
   if (guard.killed) {
     return (
       <div className="m-stagger flex min-h-0 flex-grow flex-col gap-6">
-        <PageHeader eyebrow={eyebrow} title={featureLabel} />
+        <PageHeader title={featureLabel} />
 
         <div className="flex min-h-0 flex-grow items-center justify-center">
           <div className="portal-gate-card">
@@ -61,7 +58,7 @@ export function FeatureGateNotice({
   if (guard.disabled) {
     return (
       <div className="m-stagger flex min-h-0 flex-grow flex-col gap-6">
-        <PageHeader eyebrow={eyebrow} title={featureLabel} />
+        <PageHeader title={featureLabel} />
 
         <div className="flex min-h-0 flex-grow items-center justify-center">
           <div className="portal-gate-card">
@@ -86,7 +83,6 @@ export function FeatureGateNotice({
       featureKey={guard.feature}
       grantedFeatures={guard.entitlement.features}
       planCode={guard.entitlement.plan_code}
-      eyebrow={eyebrow}
       seats={guard.entitlement.limits.max_seats}
     />
   );

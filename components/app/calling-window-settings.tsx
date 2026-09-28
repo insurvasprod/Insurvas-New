@@ -3,20 +3,23 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { notify } from "@/lib/notify";
 
+import { Plus } from "lucide-react";
+
+import { Button } from "@/components/ui/button";
+import { DataToolbar, RefreshButton, ToolbarSearch } from "@/components/ui/data-toolbar";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { EmptyState, NoMatches, SectionLoading } from "@/components/ui/page-states";
+import { SettingsSaveBar } from "@/components/ui/settings-layout";
+import { TableCard } from "@/components/ui/table-card";
 import {
   Callout,
-  DraftActions,
   Field,
   Pill,
-  PlusIcon,
   SettingsCard,
   SettingsGrid,
   SettingsSectionHeader,
   SettingsStack,
-  SettingsTableCard,
   ToggleRow,
-  btn,
   control,
   st,
 } from "@/components/app/settings/primitives";
@@ -41,8 +44,8 @@ import { cn } from "@/lib/utils";
 /**
  * LA-2.4 · Calling windows.
  *
- * The agency's own hours and its three switches are one draft (Discard / Save changes in the
- * header). A campaign's narrowing is edited in its own dialog and saved from there, because each
+ * The agency's own hours and its three switches are one draft (the save bar's Discard / Save
+ * changes). A campaign's narrowing is edited in its own dialog and saved from there, because each
  * campaign is its own row with its own busy state — the header does not pretend to hold it.
  */
 
@@ -88,6 +91,8 @@ export function CallingWindowSettingsPanel() {
   const [busy, setBusy] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [campaignEditor, setCampaignEditor] = useState<{ campaign: CampaignWindow | null } | null>(null);
+  const [campaignQuery, setCampaignQuery] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
 
   // A promise chain, not async/await: the effect below calls this on mount and every setState has
   // to land in a callback rather than anywhere the linter can reach it synchronously.
@@ -157,34 +162,23 @@ export function CallingWindowSettingsPanel() {
     }
   }
 
-  const header = (
-    <SettingsSectionHeader
-      actions={
-        loaded?.canEdit && draft ? (
-          <DraftActions
-            dirty={dirty}
-            saving={busy}
-            disabled={Boolean(check.problem)}
-            onDiscard={() => { if (baseline) setDraft(baseline); setSaveError(""); }}
-            onSave={() => void saveAgency()}
-          />
-        ) : undefined
-      }
-    />
-  );
+  async function refresh() {
+    setRefreshing(true);
+    try { await load(); } finally { setRefreshing(false); }
+  }
 
   if (error)
     return (
       <SettingsStack>
-        {header}
-        <Callout tone="error" title="Could not load your calling windows">{error}</Callout>
+        <SettingsSectionHeader />
+        <Callout tone="error" title={error} />
       </SettingsStack>
     );
   if (!loaded || !draft)
     return (
       <SettingsStack>
-        {header}
-        <p role="status" className="text-[14px] text-[var(--muted)]">Loading your calling windows…</p>
+        <SettingsSectionHeader />
+        <TableCard><SectionLoading label="Loading your calling windows" /></TableCard>
       </SettingsStack>
     );
 
@@ -219,12 +213,9 @@ export function CallingWindowSettingsPanel() {
       ? `${refreshed.toLocaleDateString("en-GB", { day: "numeric", month: "long" })}, ${refreshed.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false })}`
       : null;
 
-  // The callout's example comes from a real rule, never from the board's sample state.
-  const example = loaded.stateRules.find(
-    (rule) => rule.startHour * 60 > FEDERAL_MINUTES.start || rule.endHour * 60 < FEDERAL_MINUTES.end,
-  );
-
   const narrowing = loaded.campaigns.filter((campaign) => campaignMinutes(campaign) !== null);
+  const campaignNeedle = campaignQuery.trim().toLowerCase();
+  const shownNarrowing = narrowing.filter((campaign) => !campaignNeedle || campaign.name.toLowerCase().includes(campaignNeedle) || (campaign.reason ?? "").toLowerCase().includes(campaignNeedle));
   const holidays = loaded.federalHolidays;
   const holidayHelp =
     holidays === null
@@ -235,39 +226,14 @@ export function CallingWindowSettingsPanel() {
 
   return (
     <SettingsStack>
-      {header}
+      <SettingsSectionHeader />
 
       {saveError && <Callout tone="error" title={saveError} />}
-
-      <Callout tone="error" title="Nothing on this page can widen a legal window">
-        Federal rules allow {compact(FEDERAL_MINUTES.start)}&ndash;{compact(FEDERAL_MINUTES.end)} in the called
-        party&rsquo;s time.
-        {example && (
-          <>
-            {" "}
-            {stateName(example.state)} narrows that to {compact(Math.max(FEDERAL_MINUTES.start, example.startHour * 60))}&ndash;
-            {compact(Math.min(FEDERAL_MINUTES.end, example.endHour * 60))}.
-          </>
-        )}{" "}
-        Whatever you set here is intersected with {example ? "both" : "the federal and state limits"}, and the
-        narrowest wins. If you type 7am, it is refused rather than saved.
-      </Callout>
-
-      {!loaded.schemaReady && (
-        <Callout tone="warning" title="This setting needs a database update that has not been applied yet.">
-          Until it is, the agency&rsquo;s hours save in whole hours only, and the three switches and campaign reasons
-          cannot be saved.
-        </Callout>
-      )}
-
-      {readOnly && (
-        <Callout tone="info" title="Only an owner can change calling windows.">
-          You are seeing what is in force.
-        </Callout>
-      )}
+      {!loaded.schemaReady && <Callout tone="warning" title="Until a pending database update is applied, hours save in whole hours only and the switches cannot be saved." />}
+      {readOnly && <Callout tone="info" title="Only an owner can change calling windows. You are seeing what is in force." />}
 
       <SettingsGrid>
-        <SettingsCard title="Your agency’s hours" sub="Applied in the customer’s timezone, not yours.">
+        <SettingsCard title="Your agency’s hours" sub={`In the customer’s timezone. Narrowing only: federal law allows ${compact(FEDERAL_MINUTES.start)}–${compact(FEDERAL_MINUTES.end)}.`}>
           <div className="grid grid-cols-2 gap-4">
             <Field label="Earliest" htmlFor="window-start">
               <input
@@ -296,16 +262,16 @@ export function CallingWindowSettingsPanel() {
             <p role="alert" className="mt-3 mb-0 text-[12px] leading-[1.5] text-[var(--error-ink)]">{check.problem}</p>
           ) : (
             <p className="mt-3 mb-0 text-[12px] leading-[1.5] text-[var(--muted)]">
-              Set both hours, or neither. One alone is ambiguous and is refused.
+              Set both hours, or neither.
               {tenantWindow
                 ? ` In force now: ${minuteLabel(tenantWindow.start)}–${minuteLabel(tenantWindow.end)}.`
-                : " Empty means no narrowing of your own — only the federal and state limits apply."}
+                : " Empty: only the federal and state limits apply."}
             </p>
           )}
           {!readOnly && loaded.tenant && (
-            <button type="button" className={btn("row", "mt-2 -ml-3")} disabled={busy} onClick={() => void saveAgency(true)}>
+            <Button type="button" variant="outline" className="mt-3" disabled={busy} onClick={() => void saveAgency(true)}>
               Clear my narrowing
-            </button>
+            </Button>
           )}
           <div className="mt-[18px] flex flex-col gap-4">
             <ToggleRow
@@ -327,7 +293,7 @@ export function CallingWindowSettingsPanel() {
             <ToggleRow
               id="window-campaign-overrides"
               title="Per-campaign overrides"
-              help="A campaign may narrow further. It may never widen. Off, every campaign dials in the agency’s hours and its own narrowing is ignored."
+              help="A campaign may narrow further, never widen. Off, every campaign dials in the agency’s hours."
               checked={draft.options.campaignOverrides}
               disabled={readOnly || busy || !loaded.schemaReady}
               onChange={(next) => setDraft({ ...draft, options: { ...draft.options, campaignOverrides: next } })}
@@ -335,12 +301,9 @@ export function CallingWindowSettingsPanel() {
           </div>
         </SettingsCard>
 
-        <SettingsCard title="State rules in force" sub="Read live from the compliance source, not typed here.">
+        <SettingsCard title="State rules in force">
           {!loaded.stateRulesAvailable ? (
-            <Callout tone="warning" title="State rules could not be read on this deployment.">
-              The dialer still enforces whatever is stored &mdash; this panel just cannot show it, so do not read the
-              absence as &ldquo;no state rules apply&rdquo;.
-            </Callout>
+            <Callout tone="warning" title="State rules could not be read here. The dialer still enforces them." />
           ) : (
             <>
               <div className="overflow-x-auto">
@@ -387,64 +350,58 @@ export function CallingWindowSettingsPanel() {
                 </table>
               </div>
               {feed?.stale && (
-                <Callout tone="error" className="mt-3" title="The state rules are stale, so nothing is being dialled">
-                  They were last refreshed {refreshedLabel ?? "at an unknown time"}, more than {feed.staleAfterDays} days
-                  ago. The dialer refuses every call until the platform refreshes them.
-                </Callout>
+                <Callout tone="error" className="mt-3" title={`State rules are stale (last refreshed ${refreshedLabel ?? "at an unknown time"}) — dialing is blocked until they are refreshed.`} />
               )}
-              <p className="mt-3 mb-0 text-[12px] leading-[1.5] text-[var(--muted)]">
-                {feed && refreshedLabel
-                  ? `Last refreshed ${refreshedLabel}. A stale feed refuses the dial rather than guessing.`
-                  : "When the state rules were last refreshed is recorded once a pending database update is applied; from then a stale feed refuses the dial rather than guessing."}
-                {basis === "notable" && " Listing the states whose rule is tighter than yours, until your leads or licences say which states you work."}
-                {everyStateBansHolidays &&
-                  " A state’s own holidays are blocked wherever the calendar lists them; federal holidays only when No federal holidays is on."}
+              <p className="mt-3 mb-0 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">
+                {feed && refreshedLabel ? `Last refreshed ${refreshedLabel}.` : "Refresh time not recorded yet."}
+                {basis === "notable" && " Showing the states whose rule is tighter than yours."}
+                {everyStateBansHolidays && " State holidays are always blocked."}
               </p>
             </>
           )}
         </SettingsCard>
       </SettingsGrid>
 
-      <SettingsTableCard
+      <TableCard
         title="Per-campaign narrowing"
-        actions={
-          <>
+        toolbar={
+          <DataToolbar
+            actions={
+              <>
+                {!readOnly && loaded.campaigns.length > 0 && (
+                  <Button type="button" onClick={() => setCampaignEditor({ campaign: null })}>
+                    <Plus aria-hidden="true" />
+                    Narrow a campaign
+                  </Button>
+                )}
+                <RefreshButton onClick={() => void refresh()} refreshing={refreshing} />
+              </>
+            }
+          >
+            <ToolbarSearch value={campaignQuery} onChange={setCampaignQuery} placeholder="Search campaigns" />
             {!loaded.options.campaignOverrides && <Pill tone="warning">Overrides off &mdash; none applied</Pill>}
-            <Pill>
-              {narrowing.length === 0
-                ? "No campaign narrows further"
-                : `${narrowing.length} ${narrowing.length === 1 ? "campaign narrows" : "campaigns narrow"} further`}
-            </Pill>
-            {!readOnly && loaded.campaigns.length > 0 && (
-              <button type="button" className={btn("secondary")} onClick={() => setCampaignEditor({ campaign: null })}>
-                <PlusIcon />Narrow a campaign
-              </button>
-            )}
-          </>
+          </DataToolbar>
         }
       >
-        <table className={st.table}>
-          <thead>
-            <tr className={st.headRow}>
-              <th scope="col" className={st.th}>Campaign</th>
-              <th scope="col" className={cn(st.th, "w-[170px]")}>Earliest</th>
-              <th scope="col" className={cn(st.th, "w-[170px]")}>Latest</th>
-              <th scope="col" className={st.th}>Reason</th>
-              <th scope="col" className={cn(st.th, st.num, "w-[110px]")}><span className="sr-only">Actions</span></th>
-            </tr>
-          </thead>
-          <tbody>
-            {loaded.campaigns.length === 0 ? (
-              <tr><td colSpan={5} className={cn(st.td, "text-[var(--muted)]")}>You have no campaigns yet.</td></tr>
-            ) : narrowing.length === 0 ? (
-              <tr>
-                <td colSpan={5} className={cn(st.td, "text-[var(--muted)]")}>
-                  No campaign narrows further. A campaign can be tighter still &mdash; useful when one lead source only
-                  ever converts in the evening.
-                </td>
+        {loaded.campaigns.length === 0 ? (
+          <EmptyState title="No campaigns yet" hint="Create a campaign to narrow its calling window." />
+        ) : narrowing.length === 0 ? (
+          <EmptyState title="No campaign narrows further" hint="A campaign can be tighter than the agency’s hours — for example evenings only." />
+        ) : shownNarrowing.length === 0 ? (
+          <NoMatches noun="campaigns" onClear={() => setCampaignQuery("")} />
+        ) : (
+          <table className={st.table}>
+            <thead>
+              <tr className={st.headRow}>
+                <th scope="col" className={st.th}>Campaign</th>
+                <th scope="col" className={cn(st.th, "w-[150px]")}>Earliest</th>
+                <th scope="col" className={cn(st.th, "w-[150px]")}>Latest</th>
+                <th scope="col" className={st.th}>Reason</th>
+                <th scope="col" className={cn(st.th, st.num, "w-[90px]")}><span className="sr-only">Actions</span></th>
               </tr>
-            ) : (
-              narrowing.map((campaign) => {
+            </thead>
+            <tbody>
+              {shownNarrowing.map((campaign) => {
                 const window = campaignMinutes(campaign);
                 return (
                   <tr key={campaign.id}>
@@ -454,23 +411,24 @@ export function CallingWindowSettingsPanel() {
                     <td className={cn(st.td, !campaign.reason && "text-[var(--muted)]")}>{campaign.reason ?? "No reason recorded"}</td>
                     <td className={cn(st.td, st.num)}>
                       {!readOnly && (
-                        <button
+                        <Button
                           type="button"
-                          className={btn("row")}
+                          variant="outline"
+                          size="sm"
                           aria-label={`Edit ${campaign.name}’s calling window`}
                           onClick={() => setCampaignEditor({ campaign })}
                         >
                           Edit
-                        </button>
+                        </Button>
                       )}
                     </td>
                   </tr>
                 );
-              })
-            )}
-          </tbody>
-        </table>
-      </SettingsTableCard>
+              })}
+            </tbody>
+          </table>
+        )}
+      </TableCard>
 
       <Dialog open={campaignEditor !== null} onOpenChange={(next) => { if (!next) setCampaignEditor(null); }}>
         <DialogContent className="border-[var(--border)] bg-[var(--surface)] sm:max-w-lg">
@@ -496,6 +454,13 @@ export function CallingWindowSettingsPanel() {
           )}
         </DialogContent>
       </Dialog>
+
+      {loaded.canEdit && (
+        <SettingsSaveBar visible={dirty} note="Unsaved changes to your agency’s hours">
+          <Button type="button" variant="outline" onClick={() => { if (baseline) setDraft(baseline); setSaveError(""); }} disabled={busy}>Discard</Button>
+          <Button type="button" onClick={() => void saveAgency()} disabled={busy || Boolean(check.problem)}>{busy ? "Saving…" : "Save changes"}</Button>
+        </SettingsSaveBar>
+      )}
     </SettingsStack>
   );
 }
@@ -544,8 +509,7 @@ function CampaignForm({
       <DialogHeader>
         <DialogTitle className="text-[var(--ink)]">{campaign ? `Narrow ${campaign.name}` : "Narrow a campaign"}</DialogTitle>
         <DialogDescription className="text-[var(--muted)]">
-          In the customer&rsquo;s timezone. A campaign can only narrow the agency&rsquo;s hours; it is saved as soon as you
-          choose Save.
+          In the customer&rsquo;s timezone. A campaign can only narrow the agency&rsquo;s hours.
         </DialogDescription>
       </DialogHeader>
       {!campaign && (
@@ -568,7 +532,7 @@ function CampaignForm({
       <Field
         label="Reason"
         htmlFor="campaign-window-reason"
-        hint={schemaReady ? "Why this campaign stops earlier — for whoever reads this next." : "Reasons can be saved once the pending database update is applied."}
+        hint={schemaReady ? "Why this campaign stops earlier." : "Reasons can be saved once the pending database update is applied."}
       >
         <input
           id="campaign-window-reason"
@@ -583,16 +547,16 @@ function CampaignForm({
       {(problem || check.problem) && (
         <p role="alert" className="m-0 text-[12px] leading-[1.5] text-[var(--error-ink)]">{problem || check.problem}</p>
       )}
-      <div className="flex flex-wrap justify-end gap-2.5">
+      <div className="flex flex-wrap justify-end gap-2">
         {campaign && (
-          <button type="button" className={btn("ghost", "mr-auto text-[var(--error-ink)]")} disabled={saving} onClick={() => void submit(true)}>
+          <Button type="button" variant="ghost" className="mr-auto text-[var(--error-ink)]" disabled={saving} onClick={() => void submit(true)}>
             Clear narrowing
-          </button>
+          </Button>
         )}
-        <button type="button" className={btn("ghost")} disabled={saving} onClick={onClose}>Cancel</button>
-        <button type="submit" className={btn("primary")} disabled={saving || !campaignId || Boolean(check.problem) || !check.window}>
+        <Button type="button" variant="outline" disabled={saving} onClick={onClose}>Cancel</Button>
+        <Button type="submit" disabled={saving || !campaignId || Boolean(check.problem) || !check.window}>
           {saving ? "Saving…" : "Save"}
-        </button>
+        </Button>
       </div>
     </form>
   );

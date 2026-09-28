@@ -75,7 +75,7 @@ const sum = (values: Array<number | null>) => values.reduce<number>((total, valu
 const toneInk = { good: "text-[var(--success-ink)]", warning: "text-[var(--warning-ink)]", danger: "text-[var(--error-ink)]", neutral: "text-muted-foreground" } as const;
 type Tone = keyof typeof toneInk;
 const cardClass = "rounded-xl border border-border bg-card";
-const eyebrow = "text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] text-muted-foreground";
+const labelClass = "text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] text-muted-foreground";
 
 /* ── Sparkline ───────────────────────────────────────────────────────────── */
 
@@ -132,15 +132,14 @@ function TodayBand({ data, serverNow, canDial }: { data: DashboardToday; serverN
       <span className="pointer-events-none absolute -left-32 -top-40 size-[420px] rounded-full bg-[radial-gradient(closest-side,color-mix(in_srgb,var(--primary)_12%,transparent),transparent_70%)]" aria-hidden="true" />
       <div className="relative flex flex-wrap items-center gap-x-6 gap-y-3 px-5 py-4">
         <div className="min-w-0 flex-1">
-          <p className={eyebrow}>{data.scope === "agency" ? "Agency today" : "Your day"} · {data.dateLabel}</p>
-          <h2 id="today-heading" className="mt-1 text-2xl font-semibold leading-[1.2] tracking-[-0.02em] text-foreground">{data.greeting}{data.firstName ? `, ${data.firstName}` : ""}</h2>
+          <h2 id="today-heading" className="text-2xl font-semibold leading-[1.2] tracking-[-0.02em] text-foreground">{data.greeting}{data.firstName ? `, ${data.firstName}` : ""}</h2>
           <p className="mt-0.5 text-sm leading-normal text-muted-foreground">
-            {data.queueReady === null ? "Here is how today is going." : data.queueReady === 0 ? "The dial queue is empty right now." : <><strong className="font-semibold text-foreground">{data.queueReady.toLocaleString()}</strong> lead{data.queueReady === 1 ? "" : "s"} waiting in the dial queue.</>}
+            {data.dateLabel} · {data.queueReady === null ? "Here is how today is going." : data.queueReady === 0 ? "The dial queue is empty right now." : <><strong className="font-semibold text-foreground">{data.queueReady.toLocaleString()}</strong> lead{data.queueReady === 1 ? "" : "s"} waiting in the dial queue.</>}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
           {data.nextCallback && <NextCallback callback={data.nextCallback} serverNow={serverNow} />}
-          {canDial && <Button asChild className="h-10 px-4"><Link href="/app/dialer"><Phone className="size-4" aria-hidden="true" />Start calling</Link></Button>}
+          {canDial && <Button asChild><Link href="/app/dialer"><Phone aria-hidden="true" />Start calling</Link></Button>}
         </div>
       </div>
     </section>
@@ -154,7 +153,7 @@ type Kpi = { key: string; label: string; value: number | null; decimals?: number
 function KpiCell({ kpi, index }: { kpi: Kpi; index: number }) {
   return (
     <div className="flex min-w-0 flex-col bg-card px-4 pb-3 pt-3.5">
-      <p className={`${eyebrow} truncate`}>{kpi.label}</p>
+      <p className={`${labelClass} truncate`}>{kpi.label}</p>
       <p className="mt-1 text-2xl font-semibold leading-[1.2] tracking-[-0.025em] tabular-nums text-foreground">
         {kpi.value === null ? "—" : <CountUp value={kpi.value} decimals={kpi.decimals} prefix={kpi.prefix} suffix={kpi.suffix} compact={kpi.compact} />}
       </p>
@@ -450,7 +449,7 @@ function HeatmapPanel({ heat, zone }: { heat: NonNullable<DashboardToday["insigh
           <p className="mt-0.5 text-xs tabular-nums text-muted-foreground" aria-live="polite">
             {active && cell
               ? <><strong className="font-semibold text-foreground">{heat.days[active.day].weekday} {hourLabel(activeHour ?? 0)}</strong> · {cell.dials} dial{cell.dials === 1 ? "" : "s"} · {cell.contacts} reached{cell.dials ? ` · ${((cell.contacts / cell.dials) * 100).toFixed(0)}%` : ""}</>
-              : <>Dials by hour, {zoneLabel}. Darker is busier.</>}
+              : <>Dials by hour, {zoneLabel}</>}
           </p>
         </div>
         {heat.best ? (

@@ -11,7 +11,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { BoardTableFooter } from "@/components/admin/board-table-footer";
-import { btn, control, Field, Pill, SettingsTableCard, st, type PillTone } from "@/components/app/settings/primitives";
+import { btn, control, Field, Pill, st, type PillTone } from "@/components/app/settings/primitives";
+import { Button } from "@/components/ui/button";
+import { TableCard } from "@/components/ui/table-card";
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 import {
@@ -202,12 +204,12 @@ export function SystemAnnouncements({
 
   return (
     <>
-      <SettingsTableCard
+      <TableCard
         title="Announcements"
-        actions={
-          <button type="button" className={btn("secondary")} onClick={openNew}>
+        action={
+          <Button type="button" variant="outline" onClick={openNew}>
             New announcement
-          </button>
+          </Button>
         }
       >
         <table className={cn(st.table, "min-w-[900px]")}>
@@ -234,10 +236,7 @@ export function SystemAnnouncements({
               <tr>
                 <td colSpan={5} className={cn(st.td, "px-4 py-10 text-center")}>
                   <p className="m-0 font-semibold text-[var(--ink)]">No announcements yet</p>
-                  <p className="m-0 mt-1 text-[var(--muted)]">
-                    An announcement is shown to everyone, or one plan type, between its start and end. Use it for planned
-                    downtime and policy changes.
-                  </p>
+                  <p className="m-0 mt-1 text-[var(--muted)]">Announcements for planned downtime and policy changes appear here.</p>
                 </td>
               </tr>
             ) : (
@@ -291,7 +290,7 @@ export function SystemAnnouncements({
             onPageChange={setPage}
           />
         )}
-      </SettingsTableCard>
+      </TableCard>
 
       {/* New / edit */}
       <Dialog open={editing !== null} onOpenChange={(next) => !saving && !next && setEditing(null)}>

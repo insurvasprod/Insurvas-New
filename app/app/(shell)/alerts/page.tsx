@@ -32,11 +32,7 @@ export default async function AlertCentrePage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader
-        eyebrow="Workspace"
-        title="Alert centre"
-        description="What is wrong with the queue right now, and what happened to everything raised this week. Alerts clear when the work is claimed, not when they are read."
-      />
+      <PageHeader title="Alert centre" description="Alerts clear when the work is claimed, not when they are read." />
       {centre
         ? <AlertCentre open={centre.open} resolved={centre.resolved} canClaim={context.role === "owner" || context.role === "producer" || context.role === "assistant"} />
         : <ErrorState detail="The alert centre could not read the queue, so it cannot say which alerts are open. Nothing has changed; reload the page to try again." />}

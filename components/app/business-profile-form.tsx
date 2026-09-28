@@ -97,7 +97,7 @@ export function BusinessProfileForm() {
   }
 
   return (
-    <AuthCard width={1040} eyebrow="Step 2 of 3" title="Tell us about your agency" description="Six questions. The answers set up your workspace checklist, and you can change any of it later in Settings.">
+    <AuthCard width={1040} title="Tell us about your agency" description="Six questions to set up your workspace — you can change any of it later in Settings.">
       <Stepper />
       <form onSubmit={(event) => void save(event, "continue")} noValidate>
         <div className="mt-7 flex flex-col gap-6 lg:flex-row">

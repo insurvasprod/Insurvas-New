@@ -2,15 +2,20 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { ChevronDown, SlidersHorizontal, X } from "lucide-react";
+import { X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Dialog as DialogPrimitive } from "radix-ui";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 
-import { Callout, KeyValues, Pill, SearchBox, SettingsMeter, st, type PillTone } from "@/components/app/settings/primitives";
+import { Callout, KeyValues, Pill, SettingsMeter, st, type PillTone } from "@/components/app/settings/primitives";
+import { Button } from "@/components/ui/button";
+import { DataToolbar, FilterButton, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { PageHeader } from "@/components/ui/page-header";
+import { PageLoading } from "@/components/ui/page-loading";
+import { EmptyState, NoMatches } from "@/components/ui/page-states";
+import { StatStrip, StatTile } from "@/components/ui/stat";
+import { TableCard } from "@/components/ui/table-card";
 import { productLineLabel } from "@/lib/format/productLine";
-import { sectionForPath } from "@/lib/menu/definition";
 import { notify } from "@/lib/notify";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { isWithAgent, SCREENING_FILTER_OPTIONS, screeningSignal, type InboxSummary, type ScreeningSignal } from "@/lib/transferInbox/constants";
@@ -87,7 +92,7 @@ type Filters = { status: Status; partnerId: string; productLine: string; state: 
 type Realtime = "connecting" | "connected" | "offline";
 
 const DEFAULT_FILTERS: Filters = { status: "unclaimed", partnerId: "", productLine: "", state: "", screeningOutcome: "", claimedBy: "" };
-/** "Clear all" removes every chip, including the status one: that is All transfers. */
+/** "Clear filters" removes every chip, including the status one: that is All transfers. */
 const CLEARED_FILTERS: Filters = { ...DEFAULT_FILTERS, status: "all" };
 const STATUS_LABEL: Record<Status, string> = { unclaimed: "waiting", claimed: "claimed", all: "all" };
 const PAGE_SIZE = 25;
@@ -158,29 +163,10 @@ function screeningNote(item: Item) {
   return "Screening has not run for this transfer yet.";
 }
 
-/* ── local controls (board sizes: 44px header, 40px bar, 32px pager) ───── */
+/* ── local controls ─────────────────────────────────────────────────────── */
 
-const BTN = "inline-flex items-center justify-center gap-2 rounded-[8px] border text-[14px] leading-[1.43] font-semibold tracking-[-0.01em] whitespace-nowrap cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)] disabled:cursor-not-allowed disabled:opacity-50";
-const b = {
-  primary44: cn(BTN, "h-11 border-transparent bg-[var(--primary)] px-4 text-[var(--on-primary)] hover:bg-[var(--accent-hover)]"),
-  secondary44: cn(BTN, "h-11 border-[var(--border-strong)] bg-[var(--surface)] px-4 text-[var(--ink)] hover:bg-[var(--surface-alt)]"),
-  bar40: cn(BTN, "h-10 border-[var(--border-strong)] bg-[var(--surface)] px-3.5 text-[var(--ink)] hover:bg-[var(--surface-alt)]"),
-  pager32: cn(BTN, "h-8 border-[var(--border-strong)] bg-[var(--surface)] px-4 text-[var(--ink)] hover:bg-[var(--surface-alt)]"),
-  primaryFull: cn(BTN, "h-11 w-full border-transparent bg-[var(--primary)] px-4 text-[var(--on-primary)] hover:bg-[var(--accent-hover)]"),
-};
-const select40 = "box-border h-10 w-full rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] px-3 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--ink)] outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]";
+const selectFull = cn(toolbarControl, "w-full");
 const label12 = "text-[12px] leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]";
-
-function Kpi({ label, value, foot, ink }: { label: string; value: ReactNode; foot: ReactNode; ink?: "warning" | "error" | "success" }) {
-  const tone = ink === "warning" ? "text-[var(--warning-ink)]" : ink === "error" ? "text-[var(--error-ink)]" : ink === "success" ? "text-[var(--success-ink)]" : "text-[var(--ink)]";
-  return (
-    <div className="min-w-0 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] px-[18px] py-4">
-      <div className={label12}>{label}</div>
-      <div className={cn("text-[32px] leading-[1.13] font-semibold tracking-[-0.025em] tabular-nums", tone)}>{value}</div>
-      <div className="text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">{foot}</div>
-    </div>
-  );
-}
 
 function Chip({ label, onRemove }: { label: string; onRemove: () => void }) {
   return (
@@ -207,6 +193,7 @@ export function TransferInbox({ readOnly, role }: { readOnly: boolean; role: str
   const [claimingNext, setClaimingNext] = useState(false);
   const [accepting, setAccepting] = useState<string | null>(null);
   const [realtime, setRealtime] = useState<Realtime>("connecting");
+  const [refreshing, setRefreshing] = useState(false);
   // Filter options seen so far. The server derives them from the rows it returned, so with one
   // partner chosen it would offer only that partner; keeping the union lets the agent switch
   // directly instead of going back through "All partners".
@@ -322,7 +309,9 @@ export function TransferInbox({ readOnly, role }: { readOnly: boolean; role: str
   }, [filtersOpen]);
 
   function change(next: Partial<Filters>) { setFilters((current) => ({ ...current, ...next })); setPage(1); }
-  function resetFilters() { setFilters(DEFAULT_FILTERS); setSearch(""); setPage(1); }
+  /** "Clear filters" removes every chip, including the status one (that is All transfers), and the search. */
+  function clearFilters() { setFilters(CLEARED_FILTERS); setSearch(""); setPage(1); }
+  async function refresh() { setRefreshing(true); try { await load(); } finally { setRefreshing(false); } }
 
   // LA-1.10-8 / LA-1.14-9: give a transfer back, or put a dropped call back in the queue.
   async function release(item: Item, action: "unassign" | "requeue") {
@@ -383,32 +372,24 @@ export function TransferInbox({ readOnly, role }: { readOnly: boolean; role: str
 
   const header = (
     <PageHeader
-      eyebrow={sectionForPath("/app/inbound") ?? undefined}
       title="Inbound transfers"
-      description="Live transfers with their screening signals, longest waiting first."
-      actions={
-        <div className="flex gap-3">
-          <button type="button" onClick={resetFilters} className={b.secondary44}>Reset filters</button>
-          <button type="button" onClick={() => void claimNext()} disabled={readOnly || claimingNext} className={b.primary44}>{claimingNext ? "Claiming…" : "Claim next"}</button>
-        </div>
-      }
+      actions={<Button type="button" onClick={() => void claimNext()} disabled={readOnly || claimingNext}>{claimingNext ? "Claiming…" : "Claim next"}</Button>}
     />
   );
 
   if (!data) {
+    if (!error) return <PageLoading />;
     return (
-      <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
+      <div className="flex w-full min-w-0 flex-col gap-6">
         {header}
-        {error
-          ? <Callout tone="error" title="The transfer inbox could not be loaded">{error} <button type="button" onClick={() => void load()} className={cn(b.pager32, "ml-2")}>Try again</button></Callout>
-          : <p role="status" className="m-0 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">Loading transfer inbox…</p>}
+        <Callout tone="error" title={<span className="flex flex-wrap items-center gap-3">The transfer inbox could not be loaded: {error}<Button type="button" variant="outline" onClick={() => void refresh()} disabled={refreshing}>Try again</Button></span>} />
       </div>
     );
   }
 
   const summary = data.summary ?? null;
   const sla = data.sla ?? null;
-  const averageInk = !summary || !sla ? undefined : summary.averageWaitSeconds >= sla.escalateSeconds ? "error" : summary.averageWaitSeconds >= sla.warnSeconds ? "warning" : "success";
+  const averageTone = !summary || !sla ? undefined : summary.averageWaitSeconds >= sla.escalateSeconds ? "danger" : summary.averageWaitSeconds >= sla.warnSeconds ? "warning" : "good";
   const pages = Math.max(1, Math.ceil(shown.length / PAGE_SIZE));
   const currentPage = Math.min(page, pages);
   const pageRows = shown.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
@@ -426,6 +407,7 @@ export function TransferInbox({ readOnly, role }: { readOnly: boolean; role: str
     ...(filters.screeningOutcome ? [{ label: `Screening: ${screeningName(filters.screeningOutcome)}`, clear: { screeningOutcome: "" } }] : []),
     ...(filters.claimedBy ? [{ label: `Claimed by: ${userName(filters.claimedBy)}`, clear: { claimedBy: "" } }] : []),
   ];
+  const filtered = chips.length > 0 || search.trim() !== "";
   const selected = data.items.find((item) => item.id === selectedId) ?? null;
   const handoffIds = new Set(data.handoffs.map((handoff) => handoff.workItemId));
   const now = data.fetchedAt ? new Date(data.fetchedAt).getTime() : 0;
@@ -435,23 +417,20 @@ export function TransferInbox({ readOnly, role }: { readOnly: boolean; role: str
     <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
       {header}
 
-      <section aria-label="Transfer queue summary" className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Kpi label="Waiting" value={summary ? summary.waiting : "—"} foot={!summary ? "summary unavailable" : summary.waiting ? `longest ${duration(summary.longestWaitSeconds)}` : "nothing waiting"} />
-        <Kpi label="Claimed" value={summary ? summary.claimed : "—"} ink="warning" foot={!summary ? "summary unavailable" : `${summary.claimedWithoutCall} with no open call record`} />
-        <Kpi label="Needs review" value={summary ? summary.needsReview : "—"} ink={summary && summary.needsReview > 0 ? "error" : undefined} foot="screening" />
-        <Kpi label="Average wait" value={summary && summary.waiting ? duration(summary.averageWaitSeconds) : "—"} ink={summary && summary.waiting ? averageInk : undefined} foot={sla ? `target under ${target(sla.escalateSeconds)}` : "SLA target unavailable"} />
-      </section>
+      <StatStrip label="Transfer queue summary">
+        <StatTile label="Waiting" value={summary ? summary.waiting : "—"} footnote={!summary ? "summary unavailable" : summary.waiting ? `longest ${duration(summary.longestWaitSeconds)}` : "nothing waiting"} />
+        <StatTile label="Claimed" value={summary ? summary.claimed : "—"} valueTone="warning" footnote={!summary ? "summary unavailable" : `${summary.claimedWithoutCall} with no open call record`} />
+        <StatTile label="Needs review" value={summary ? summary.needsReview : "—"} valueTone={summary && summary.needsReview > 0 ? "danger" : undefined} footnote="screening" />
+        <StatTile label="Average wait" value={summary && summary.waiting ? duration(summary.averageWaitSeconds) : "—"} valueTone={summary && summary.waiting ? averageTone : undefined} footnote={sla ? `target under ${target(sla.escalateSeconds)}` : "SLA target unavailable"} />
+      </StatStrip>
 
       {extras && extras.lost.length > 0 && (
-        <section aria-label="Lost transfers" className="flex min-w-0 flex-col gap-3 rounded-[12px] border border-[color-mix(in_srgb,var(--error)_30%,transparent)] bg-[var(--error-surface)] px-4 py-3.5 sm:flex-row sm:items-start">
+        <section aria-label="Lost transfers" className="flex min-w-0 flex-col gap-2 rounded-[12px] border border-[color-mix(in_srgb,var(--error)_30%,transparent)] bg-[var(--error-surface)] px-4 py-3 sm:flex-row sm:items-start">
           <div className="min-w-0 flex-1">
             <h2 className="m-0 text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--error-ink)]">
               {extras.lost.length === 1 ? "1 lead was accepted but never reached this inbox" : `${extras.lost.length} leads were accepted but never reached this inbox`}
             </h2>
-            <p className="mt-1 mb-0 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--body)]">
-              The partner was told the submission worked and the lead saved, but its place in the queue did not. These are live transfers.
-            </p>
-            <ul className="mt-2 mb-0 list-none space-y-1 p-0 text-[12px] leading-[1.5] text-[var(--body)]">
+            <ul className="mt-1 mb-0 list-none space-y-0.5 p-0 text-[12px] leading-[1.5] text-[var(--body)]">
               {extras.lost.slice(0, 5).map((lost) => (
                 <li key={lost.failureId}>
                   <Link href={`/app/leads/${lost.leadId}`} className="font-semibold text-[var(--ink)] hover:underline">{lost.customer}</Link>
@@ -463,81 +442,83 @@ export function TransferInbox({ readOnly, role }: { readOnly: boolean; role: str
             </ul>
           </div>
           {extras.canRecover && (
-            <button type="button" disabled={readOnly || recovering} onClick={() => void recoverLost(extras.lost.map((lost) => lost.failureId))} className={cn(BTN, "h-10 shrink-0 border-transparent bg-[var(--error)] px-3.5 text-[var(--on-primary)] hover:opacity-90")}>
+            <Button type="button" variant="destructive" disabled={readOnly || recovering} onClick={() => void recoverLost(extras.lost.map((lost) => lost.failureId))}>
               {recovering ? "Recovering…" : extras.lost.length === 1 ? "Recover it" : `Recover all ${extras.lost.length}`}
-            </button>
+            </Button>
           )}
         </section>
       )}
 
-      {readOnly && <Callout tone="info" title="Read-only access">Your account is read-only. You can review transfers, but claiming a new call is disabled.</Callout>}
-      {error && <Callout tone="error" title="The latest refresh failed">{error} <button type="button" onClick={() => void load()} className={cn(b.pager32, "ml-2")}>Try again</button></Callout>}
+      {readOnly && <Callout tone="info" title="Your account is read-only: claiming a new call is disabled." />}
+      {error && <Callout tone="error" title={<span className="flex flex-wrap items-center gap-3">The latest refresh failed: {error}<Button type="button" variant="outline" onClick={() => void refresh()} disabled={refreshing}>Try again</Button></span>} />}
+      {data.truncated && <Callout tone="warning" title="Only the newest 500 transfers are loaded. Narrow the filters to see older ones." />}
 
       {role !== "assistant" && data.handoffs.length > 0 && (
-        <section aria-label="Handoffs waiting for you" className="min-w-0 overflow-hidden rounded-[12px] border border-[var(--border)] bg-[var(--surface)]">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] bg-[var(--surface-alt)] px-4 py-3">
-            <span className="text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">Handoffs waiting for you</span>
-            <Pill tone="brand">{data.handoffs.length} {data.handoffs.length === 1 ? "handoff" : "handoffs"}</Pill>
-          </div>
-          <p className="m-0 px-4 pt-3 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">Continue verification where a buffer assistant left off.</p>
-          <ul className="m-0 list-none p-0">
+        <TableCard title="Handoffs waiting for you" action={<Pill tone="brand">{data.handoffs.length} {data.handoffs.length === 1 ? "handoff" : "handoffs"}</Pill>}>
+          <ul aria-label="Handoffs waiting for you" className="m-0 list-none border-t border-[var(--border)] p-0">
             {data.handoffs.map((handoff) => (
-              <li key={handoff.id} className="flex flex-wrap items-center gap-4 border-t border-[var(--border)] px-4 py-3.5 first:border-t-0">
+              <li key={handoff.id} className="flex flex-wrap items-center gap-4 border-t border-[var(--border)] px-4 py-3 first:border-t-0">
                 <div className="min-w-[220px] flex-1">
                   <p className="m-0 text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">{handoff.customer}</p>
                   <p className="m-0 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">From {handoff.bufferName} · {productLineLabel(handoff.productLine)} · offer expires {clock(handoff.expiresAt)}</p>
                 </div>
                 <div className="w-[220px]"><SettingsMeter value={handoff.progressPercentage} max={100} label="Verification" valueLabel={`${handoff.progressPercentage}% complete`} ariaLabel={`Verification ${handoff.progressPercentage}% complete`} /></div>
-                <button type="button" onClick={() => void accept(handoff.id, handoff.workItemId)} disabled={readOnly || accepting === handoff.id} className={b.bar40}>{accepting === handoff.id ? "Opening…" : readOnly ? "Read-only" : "Accept handoff"}</button>
+                <Button type="button" variant="outline" size="sm" onClick={() => void accept(handoff.id, handoff.workItemId)} disabled={readOnly || accepting === handoff.id}>{accepting === handoff.id ? "Opening…" : readOnly ? "Read-only" : "Accept handoff"}</Button>
               </li>
             ))}
           </ul>
-        </section>
+        </TableCard>
       )}
 
-      {/* The board's control bar: partner, search, the Filters popover (every other filter), Refresh. */}
-      {/* relative z-30: the Filters popover must paint above the table below, which the entrance animation lifts into its own layer. */}
-      <div className="relative z-30 flex min-w-0 flex-wrap items-center gap-3 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] p-3">
-        <span className="relative inline-flex">
-          <select aria-label="Partner" value={filters.partnerId} onChange={(event) => change({ partnerId: event.target.value })} className="h-10 cursor-pointer appearance-none rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] pr-9 pl-3.5 text-[14px] leading-[1.43] font-semibold tracking-[-0.01em] text-[var(--ink)] hover:bg-[var(--surface-alt)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]">
-            <option value="">All partners</option>
-            {[...options.partners.entries()].sort((x, y) => x[1].localeCompare(y[1])).map(([id, name]) => <option key={id} value={id}>{name}</option>)}
-          </select>
-          <ChevronDown aria-hidden className="pointer-events-none absolute top-3 right-3 size-4 text-[var(--ink)]" />
-        </span>
-        <SearchBox value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Search loaded transfers" label="Search loaded transfers" />
-        <div ref={filtersRef} className="relative">
-          <button type="button" onClick={() => setFiltersOpen((open) => !open)} aria-haspopup="dialog" aria-expanded={filtersOpen} aria-controls="inbound-filters" className={b.bar40}>
-            <SlidersHorizontal aria-hidden className="size-4" />
-            Filters
-            {popoverCount > 0 && <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--surface-alt)] px-1.5 text-[12px] leading-[1.5] font-semibold tracking-[-0.01em] text-[var(--ink)]">{popoverCount}</span>}
-          </button>
-          {filtersOpen && (
-            <div id="inbound-filters" role="dialog" aria-label="Filter transfers" className="absolute top-[calc(100%+6px)] left-0 z-20 grid w-[340px] gap-3 rounded-[12px] border border-[var(--border-strong)] bg-[var(--surface)] p-4 shadow-[var(--shadow-overlay)]">
-              <FilterField id="inbox-status" label="Show"><select id="inbox-status" className={select40} value={filters.status} onChange={(event) => change({ status: event.target.value as Status })}><option value="unclaimed">Waiting</option><option value="claimed">Claimed</option><option value="all">All transfers</option></select></FilterField>
-              <FilterField id="inbox-product" label="Product"><select id="inbox-product" className={select40} value={filters.productLine} onChange={(event) => change({ productLine: event.target.value })}><option value="">All products</option>{[...options.products].sort().map((product) => <option key={product} value={product}>{productLineLabel(product)}</option>)}</select></FilterField>
-              <FilterField id="inbox-state" label="State"><select id="inbox-state" className={select40} value={filters.state} onChange={(event) => change({ state: event.target.value })}><option value="">All states</option>{[...options.states].sort().map((value) => <option key={value} value={value}>{value}</option>)}</select></FilterField>
-              <FilterField id="inbox-screening" label="Screening"><select id="inbox-screening" className={select40} value={filters.screeningOutcome} onChange={(event) => change({ screeningOutcome: event.target.value })}><option value="">Any result</option>{SCREENING_FILTER_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></FilterField>
-              <FilterField id="inbox-claimed" label="Claimed by"><select id="inbox-claimed" className={select40} value={filters.claimedBy} onChange={(event) => change({ claimedBy: event.target.value })}><option value="">Anyone</option><option value="me">Me</option>{[...options.users.entries()].filter(([id]) => id !== currentUserId).map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select></FilterField>
-              <div className="flex justify-end"><button type="button" onClick={() => setFiltersOpen(false)} className={b.pager32}>Done</button></div>
+      {/* overflow-visible: the Filters popover must paint outside the card, over the rows below. */}
+      <TableCard
+        className="relative z-30 overflow-visible [&>div:first-child]:rounded-t-lg [&>div:last-child]:rounded-b-lg"
+        toolbar={
+          <DataToolbar actions={<RefreshButton onClick={() => void refresh()} refreshing={refreshing} />}>
+            <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Search loaded transfers" />
+            <select aria-label="Partner" value={filters.partnerId} onChange={(event) => change({ partnerId: event.target.value })} className={toolbarControl}>
+              <option value="">All partners</option>
+              {[...options.partners.entries()].sort((x, y) => x[1].localeCompare(y[1])).map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+            </select>
+            <div ref={filtersRef} className="relative">
+              <FilterButton open={filtersOpen} onClick={() => setFiltersOpen((open) => !open)} count={popoverCount} />
+              {filtersOpen && (
+                <div id="inbound-filters" role="dialog" aria-label="Filter transfers" className="absolute top-[calc(100%+6px)] left-0 z-20 grid w-[320px] gap-3 rounded-[12px] border border-[var(--border-strong)] bg-[var(--surface)] p-4 shadow-[var(--shadow-overlay)]">
+                  <FilterField id="inbox-status" label="Show"><select id="inbox-status" className={selectFull} value={filters.status} onChange={(event) => change({ status: event.target.value as Status })}><option value="unclaimed">Waiting</option><option value="claimed">Claimed</option><option value="all">All transfers</option></select></FilterField>
+                  <FilterField id="inbox-product" label="Product"><select id="inbox-product" className={selectFull} value={filters.productLine} onChange={(event) => change({ productLine: event.target.value })}><option value="">All products</option>{[...options.products].sort().map((product) => <option key={product} value={product}>{productLineLabel(product)}</option>)}</select></FilterField>
+                  <FilterField id="inbox-state" label="State"><select id="inbox-state" className={selectFull} value={filters.state} onChange={(event) => change({ state: event.target.value })}><option value="">All states</option>{[...options.states].sort().map((value) => <option key={value} value={value}>{value}</option>)}</select></FilterField>
+                  <FilterField id="inbox-screening" label="Screening"><select id="inbox-screening" className={selectFull} value={filters.screeningOutcome} onChange={(event) => change({ screeningOutcome: event.target.value })}><option value="">Any result</option>{SCREENING_FILTER_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></FilterField>
+                  <FilterField id="inbox-claimed" label="Claimed by"><select id="inbox-claimed" className={selectFull} value={filters.claimedBy} onChange={(event) => change({ claimedBy: event.target.value })}><option value="">Anyone</option><option value="me">Me</option>{[...options.users.entries()].filter(([id]) => id !== currentUserId).map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select></FilterField>
+                  <div className="flex justify-end"><Button type="button" variant="outline" onClick={() => setFiltersOpen(false)}>Done</Button></div>
+                </div>
+              )}
             </div>
-          )}
-        </div>
-        <span className="flex-1" />
-        <button type="button" onClick={() => void load()} className={b.bar40}>Refresh</button>
-      </div>
-
-      <div className="-mt-3 flex min-w-0 flex-wrap items-center gap-2">
-        {chips.map((chip) => <Chip key={chip.label} label={chip.label} onRemove={() => change(chip.clear)} />)}
-        {chips.length > 0 && <button type="button" onClick={() => { setFilters(CLEARED_FILTERS); setPage(1); }} className="cursor-pointer border-0 bg-transparent p-1 text-[12px] leading-[1.5] font-semibold tracking-[-0.01em] text-[var(--ink)] hover:underline">Clear all</button>}
-        <span className="text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">{shown.length} of {data.items.length} transfers{data.truncated ? " · newest 500" : ""}</span>
-      </div>
-
-      {data.truncated && <Callout tone="warning" title="Only the newest 500 transfers are loaded">Older transfers that match these filters are not shown. Narrow the filters to see them.</Callout>}
-
-      <section aria-label="Transfer inbox" className="flex min-w-0 flex-col overflow-hidden rounded-[12px] border border-[var(--border)] bg-[var(--surface)]">
-        <div className="min-w-0 overflow-x-auto">
-          <table className={cn(st.table, "min-w-[860px]")}>
+            {chips.map((chip) => <Chip key={chip.label} label={chip.label} onRemove={() => change(chip.clear)} />)}
+            {filtered && <button type="button" onClick={clearFilters} className="cursor-pointer rounded-md border-0 bg-transparent px-1.5 py-1 text-[12px] leading-[1.5] font-semibold tracking-[-0.01em] text-[var(--accent-ink)] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]">Clear filters</button>}
+          </DataToolbar>
+        }
+        footer={
+          <>
+            <span>
+              {shown.length === 0 ? "No transfers" : `Showing ${first}–${last} of ${shown.length} transfers`}{search.trim() ? ` · ${data.items.length} loaded` : ""}{data.truncated ? " · newest 500" : ""} · longest wait first
+              <span className="ml-3 inline-flex items-center gap-1.5" role="status">
+                <span aria-hidden className={cn("size-1.5 rounded-full", realtime === "connected" ? "bg-[var(--success)]" : realtime === "connecting" ? "bg-[var(--muted)]" : "bg-[var(--warning)]")} />
+                {realtimeText}
+              </span>
+            </span>
+            <span className="flex gap-2">
+              <Button type="button" variant="outline" size="sm" onClick={() => setPage(currentPage - 1)} disabled={currentPage <= 1}>Previous</Button>
+              <Button type="button" variant="outline" size="sm" onClick={() => setPage(currentPage + 1)} disabled={currentPage >= pages}>Next</Button>
+            </span>
+          </>
+        }
+      >
+        {pageRows.length === 0 ? (
+          filtered
+            ? <NoMatches noun="transfers" onClear={clearFilters} />
+            : <EmptyState title="No transfers" hint="Transfers appear here as soon as a partner sends one." />
+        ) : (
+          <table aria-label="Transfer inbox" className={cn(st.table, "min-w-[860px]")}>
             <thead>
               <tr className={st.headRow}>
                 <th scope="col" className={st.th}>Customer</th>
@@ -550,9 +531,7 @@ export function TransferInbox({ readOnly, role }: { readOnly: boolean; role: str
               </tr>
             </thead>
             <tbody className="m-seq">
-              {pageRows.length === 0 ? (
-                <tr><td colSpan={7} className={cn(st.td, "py-6 text-center text-[var(--muted)]")}>{data.items.length === 0 ? "No transfers match these filters." : "No loaded transfer matches that search."}</td></tr>
-              ) : pageRows.map((item) => {
+              {pageRows.map((item) => {
                 const signal = signalOf(item);
                 const wait = waitOf(item);
                 const urgent = sla && item.status === "unclaimed" && item.waitSeconds >= sla.escalateSeconds;
@@ -577,54 +556,34 @@ export function TransferInbox({ readOnly, role }: { readOnly: boolean; role: str
               })}
             </tbody>
           </table>
-        </div>
-        <div className="flex-1" />
-        <div className="flex flex-wrap items-center justify-between gap-4 border-t border-[var(--border)] bg-[var(--canvas)] px-4 py-3">
-          <span className="text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">
-            Showing {first}–{last} of {shown.length} transfers · longest wait first
-            <span className="ml-3 inline-flex items-center gap-1.5" role="status">
-              <span aria-hidden className={cn("size-1.5 rounded-full", realtime === "connected" ? "bg-[var(--success)]" : realtime === "connecting" ? "bg-[var(--muted)]" : "bg-[var(--warning)]")} />
-              {realtimeText}
-            </span>
-          </span>
-          <span className="flex gap-2">
-            <button type="button" onClick={() => setPage(currentPage - 1)} disabled={currentPage <= 1} className={b.pager32}>Previous</button>
-            <button type="button" onClick={() => setPage(currentPage + 1)} disabled={currentPage >= pages} className={b.pager32}>Next</button>
-          </span>
-        </div>
-      </section>
+        )}
+      </TableCard>
 
       {extras && extras.byPartner.length > 0 && (
-        <section aria-labelledby="inbox-by-partner" className="relative min-w-0 overflow-hidden rounded-[12px] border border-[var(--border)] bg-[var(--surface)]">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] bg-[var(--surface-alt)] px-4 py-3">
-            <h2 id="inbox-by-partner" className="m-0 text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">Today by partner</h2>
-            <span className="text-[12px] leading-[1.5] text-[var(--muted)]">flagged = screening was not clear</span>
-          </div>
-          <div className="overflow-x-auto">
-            <table className={cn(st.table, "min-w-[520px]")}>
-              <thead>
-                <tr className={st.headRow}>
-                  <th scope="col" className={st.th}>Partner</th>
-                  <th scope="col" className={cn(st.th, "w-[90px] text-right")}>Sent</th>
-                  <th scope="col" className={cn(st.th, "w-[110px] text-right")}>Completed</th>
-                  <th scope="col" className={cn(st.th, "w-[90px] text-right")}>Dropped</th>
-                  <th scope="col" className={cn(st.th, "w-[90px] text-right")}>Flagged</th>
+        <TableCard title="Today by partner" footer={<span>Flagged = screening was not clear</span>}>
+          <table className={cn(st.table, "min-w-[520px]")}>
+            <thead>
+              <tr className={st.headRow}>
+                <th scope="col" className={st.th}>Partner</th>
+                <th scope="col" className={cn(st.th, "w-[90px] text-right")}>Sent</th>
+                <th scope="col" className={cn(st.th, "w-[110px] text-right")}>Completed</th>
+                <th scope="col" className={cn(st.th, "w-[90px] text-right")}>Dropped</th>
+                <th scope="col" className={cn(st.th, "w-[90px] text-right")}>Flagged</th>
+              </tr>
+            </thead>
+            <tbody>
+              {extras.byPartner.map((partner) => (
+                <tr key={partner.partnerId}>
+                  <td className={st.td}>{partner.name}{partner.status === "paused" && <span className="ml-2 text-[12px] text-[var(--warning-ink)]">paused</span>}</td>
+                  <td className={cn(st.td, "text-right tabular-nums")}>{partner.sent}</td>
+                  <td className={cn(st.td, "text-right tabular-nums")}>{partner.completed}</td>
+                  <td className={cn(st.td, "text-right tabular-nums", partner.dropped > 0 && "text-[var(--warning-ink)]")}>{partner.dropped}</td>
+                  <td className={cn(st.td, "text-right tabular-nums", partner.flagged > 0 && "font-semibold text-[var(--error-ink)]")}>{partner.flagged}</td>
                 </tr>
-              </thead>
-              <tbody>
-                {extras.byPartner.map((partner) => (
-                  <tr key={partner.partnerId}>
-                    <td className={st.td}>{partner.name}{partner.status === "paused" && <span className="ml-2 text-[12px] text-[var(--warning-ink)]">paused</span>}</td>
-                    <td className={cn(st.td, "text-right tabular-nums")}>{partner.sent}</td>
-                    <td className={cn(st.td, "text-right tabular-nums")}>{partner.completed}</td>
-                    <td className={cn(st.td, "text-right tabular-nums", partner.dropped > 0 && "text-[var(--warning-ink)]")}>{partner.dropped}</td>
-                    <td className={cn(st.td, "text-right tabular-nums", partner.flagged > 0 && "font-semibold text-[var(--error-ink)]")}>{partner.flagged}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
+              ))}
+            </tbody>
+          </table>
+        </TableCard>
       )}
 
       <TransferDrawer
@@ -640,7 +599,6 @@ export function TransferInbox({ readOnly, role }: { readOnly: boolean; role: str
     </div>
   );
 }
-
 function FilterField({ id, label, children }: { id: string; label: string; children: ReactNode }) {
   return (
     <div className="min-w-0">
@@ -748,18 +706,17 @@ function TransferDrawer({ item, sla, currentUserId, readOnly, claiming, onClaim,
                   ]} />
                 </section>
 
-                <div className="flex flex-col gap-3">
+                <div className="flex flex-wrap gap-2">
                   {item.status === "unclaimed" ? (
-                    <button type="button" onClick={() => onClaim(item.id)} disabled={readOnly || claiming === item.id} className={b.primaryFull}>{claiming === item.id ? "Connecting…" : readOnly ? "Read-only" : "Claim transfer"}</button>
+                    <Button type="button" className="w-full" onClick={() => onClaim(item.id)} disabled={readOnly || claiming === item.id} title="Assigns it to you, opens verification and tells the partner.">{claiming === item.id ? "Connecting…" : readOnly ? "Read-only" : "Claim transfer"}</Button>
                   ) : (
-                    <div className="flex flex-wrap gap-3">
-                      {mine && isWithAgent(item.status) && <Link href={`/app/inbound/${item.id}/verification`} className={b.primary44}>Resume verification</Link>}
-                      {item.status === "dropped" && <button type="button" onClick={() => onRelease(item, "requeue")} disabled={readOnly || claiming === item.id} className={b.primary44}>{claiming === item.id ? "Putting back…" : "Put back in the queue"}</button>}
-                      {mine && isWithAgent(item.status) && item.status !== "handed_pending" && <button type="button" onClick={() => onRelease(item, "unassign")} disabled={readOnly || claiming === item.id} className={b.secondary44}>Unassign</button>}
-                      <Link href={`/app/leads/${item.leadId}`} className={b.secondary44}>Open lead</Link>
-                    </div>
+                    <>
+                      {mine && isWithAgent(item.status) && <Button asChild><Link href={`/app/inbound/${item.id}/verification`}>Resume verification</Link></Button>}
+                      {item.status === "dropped" && <Button type="button" onClick={() => onRelease(item, "requeue")} disabled={readOnly || claiming === item.id}>{claiming === item.id ? "Putting back…" : "Put back in the queue"}</Button>}
+                      {mine && isWithAgent(item.status) && item.status !== "handed_pending" && <Button type="button" variant="outline" onClick={() => onRelease(item, "unassign")} disabled={readOnly || claiming === item.id}>Unassign</Button>}
+                      <Button asChild variant="outline"><Link href={`/app/leads/${item.leadId}`}>Open lead</Link></Button>
+                    </>
                   )}
-                  <p className="m-0 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">Claiming assigns it to you, opens verification and tells the partner. Once claimed, it leaves every other agent’s inbox.</p>
                 </div>
               </div>
             </>

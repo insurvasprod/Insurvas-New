@@ -3,9 +3,12 @@
 import { useCallback, useMemo, useState, type FormEvent } from "react";
 import { MoreHorizontal } from "lucide-react";
 
-import { AdminPageHeader } from "@/components/admin/page-header";
 import { BoardTableFooter } from "@/components/admin/board-table-footer";
-import { Field, Pill, SettingsMeter, SettingsTableCard, btn, control, st } from "@/components/app/settings/primitives";
+import { Field, Pill, SettingsMeter, control, st } from "@/components/app/settings/primitives";
+import { Button } from "@/components/ui/button";
+import { DataToolbar, RefreshButton, toolbarControl } from "@/components/ui/data-toolbar";
+import { PageHeader } from "@/components/ui/page-header";
+import { TableCard } from "@/components/ui/table-card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   DropdownMenu,
@@ -23,7 +26,7 @@ import {
   type DefaultLimitRow,
   type MeterPricing,
 } from "@/lib/creditsLimits/constants";
-import { buildMonitorEntries, furthestOver, tenantsOverCount, tenantsOverLabel, type LimitState, type MonitorEntry } from "@/lib/creditsLimits/present";
+import { buildMonitorEntries, tenantsOverCount, tenantsOverLabel, type LimitState, type MonitorEntry } from "@/lib/creditsLimits/present";
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 
@@ -59,6 +62,7 @@ export function CreditLimitsPanel({ initial }: { initial: CreditsLimitsData }) {
   const [overOnly, setOverOnly] = useState(false);
   const [page, setPage] = useState(1);
   const [busy, setBusy] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   // Pack create / edit dialog.
   const [packDialog, setPackDialog] = useState<{ pack: CreditPack | null } | null>(null);
@@ -83,7 +87,6 @@ export function CreditLimitsPanel({ initial }: { initial: CreditsLimitsData }) {
   const entries = useMemo(() => buildMonitorEntries(monitor, seats, warn), [monitor, seats, warn]);
   const visible = useMemo(() => (overOnly ? entries.filter((entry) => entry.state !== "ok") : entries), [entries, overOnly]);
   const overCount = tenantsOverCount(entries);
-  const top = furthestOver(entries);
   const pages = Math.max(1, Math.ceil(visible.length / PAGE_SIZE));
   const currentPage = Math.min(page, pages);
   const pageRows = visible.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
@@ -282,37 +285,49 @@ export function CreditLimitsPanel({ initial }: { initial: CreditsLimitsData }) {
 
   return (
     <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
-      <AdminPageHeader
+      <PageHeader
         title="Credits & limits"
-        subtitle="Who is about to exceed a limit, and the packs and defaults behind it."
         actions={
-          <button type="button" onClick={() => openPackDialog(null)} className={btn("primary", "h-11")}>
+          <Button type="button" onClick={() => openPackDialog(null)}>
             Add a credit pack
-          </button>
+          </Button>
         }
       />
 
       {/* Usage monitor */}
-      <section className="flex min-w-0 flex-col overflow-hidden rounded-[12px] border border-[var(--border)] bg-[var(--surface)]">
-        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[var(--border)] bg-[var(--surface-alt)] px-4 py-3">
-          <h2 className="m-0 text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">Usage monitor</h2>
-          <span className="flex flex-wrap items-center gap-2.5">
-            <button
-              type="button"
-              onClick={() => {
-                setOverOnly((value) => !value);
+      <TableCard
+        className="min-w-0"
+        title="Usage monitor"
+        toolbar={
+          <DataToolbar
+            actions={
+              <RefreshButton
+                refreshing={refreshing}
+                onClick={() => {
+                  setRefreshing(true);
+                  void refresh().finally(() => setRefreshing(false));
+                }}
+              />
+            }
+          >
+            <select
+              aria-label="Show limits"
+              value={overOnly ? "over" : "all"}
+              onChange={(event) => {
+                setOverOnly(event.target.value === "over");
                 setPage(1);
               }}
-              aria-pressed={overOnly}
-              className={btn("secondary", overOnly ? "border-[var(--primary)] bg-[var(--brand-50)] text-[var(--accent-ink)]" : undefined)}
+              className={toolbarControl}
             >
-              Over {warnPercent}%
-            </button>
+              <option value="all">All limits</option>
+              <option value="over">Over {warnPercent}%</option>
+            </select>
             <Pill tone={overCount > 0 ? "error" : "success"} dot>
               {tenantsOverLabel(overCount)}
             </Pill>
-          </span>
-        </div>
+          </DataToolbar>
+        }
+      >
 
         {pageRows.length === 0 ? (
           <p className="m-0 px-4 py-6 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">
@@ -328,15 +343,6 @@ export function CreditLimitsPanel({ initial }: { initial: CreditsLimitsData }) {
           </ul>
         )}
 
-        <div className="border-t border-[var(--border)] bg-[var(--canvas)] px-4 py-3 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--body)]">
-          Sorted by proximity to limit.{" "}
-          {top && (
-            <>
-              {top.tenantName} is <strong>{count(top.over)} over</strong> on {top.label}.{" "}
-            </>
-          )}
-          Granting credits always records a reason.
-        </div>
         {visible.length > PAGE_SIZE && (
           <BoardTableFooter
             page={currentPage}
@@ -347,11 +353,11 @@ export function CreditLimitsPanel({ initial }: { initial: CreditsLimitsData }) {
             onPageChange={setPage}
           />
         )}
-      </section>
+      </TableCard>
 
       <div className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1fr)_560px]">
         {/* Credit packs */}
-        <SettingsTableCard title="Credit packs">
+        <TableCard className="min-w-0" title="Credit packs">
           <table className={st.table}>
             <thead>
               <tr className={st.headRow}>
@@ -382,14 +388,9 @@ export function CreditLimitsPanel({ initial }: { initial: CreditsLimitsData }) {
                   <td className={cn(st.td, "py-1 text-right")}>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <button
-                          type="button"
-                          aria-label={`Actions for ${pack.name}`}
-                          disabled={busy === pack.id}
-                          className={btn("row", "w-8 px-0")}
-                        >
-                          <MoreHorizontal aria-hidden className="size-4" />
-                        </button>
+                        <Button type="button" variant="ghost" size="icon-sm" aria-label={`Actions for ${pack.name}`} disabled={busy === pack.id}>
+                          <MoreHorizontal aria-hidden />
+                        </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="w-56">
                         <DropdownMenuItem onSelect={() => openPackDialog(pack)}>Edit pack</DropdownMenuItem>
@@ -411,10 +412,10 @@ export function CreditLimitsPanel({ initial }: { initial: CreditsLimitsData }) {
               ))}
             </tbody>
           </table>
-        </SettingsTableCard>
+        </TableCard>
 
         {/* Default limits */}
-        <SettingsTableCard title="Default limits">
+        <TableCard className="min-w-0" title="Default limits">
           {defaultLimits.plans.length === 0 ? (
             <p className="m-0 px-4 py-6 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">No current plans.</p>
           ) : (
@@ -436,15 +437,11 @@ export function CreditLimitsPanel({ initial }: { initial: CreditsLimitsData }) {
               </tbody>
             </table>
           )}
-        </SettingsTableCard>
-      </div>
-
-      <div className="rounded-[12px] border border-[var(--border)] border-l-[3px] border-l-[var(--info)] bg-[var(--info-surface)] px-4 py-3.5 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--body)]">
-        <strong className="font-semibold">Unlimited</strong> is a real value, not a blank, and no usage bar is ever drawn without its limit beside it.
+        </TableCard>
       </div>
 
       {/* Meter pricing — kept from the previous screen, below the board's blocks. */}
-      <SettingsTableCard title="Meter pricing">
+      <TableCard className="min-w-0" title="Meter pricing">
         <table className={st.table}>
           <thead>
             <tr className={st.headRow}>
@@ -514,12 +511,7 @@ export function CreditLimitsPanel({ initial }: { initial: CreditsLimitsData }) {
             })}
           </tbody>
         </table>
-        <div className="border-t border-[var(--border)] bg-[var(--canvas)] px-4 py-3 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--body)]">
-          What a unit costs us, what we charge, and the resulting margin; margin updates as you type. A price at or below vendor
-          cost is flagged but never blocked — selling a meter at cost is sometimes deliberate. The platform default applies only
-          where a plan sets no allowance of its own; plan allowances always win. Empty means unlimited.
-        </div>
-      </SettingsTableCard>
+      </TableCard>
 
       {/* Pack create / edit */}
       <Dialog open={packDialog !== null} onOpenChange={(open) => !open && setPackDialog(null)}>
@@ -551,10 +543,10 @@ export function CreditLimitsPanel({ initial }: { initial: CreditsLimitsData }) {
             </div>
             {packError && <p role="alert" className="m-0 text-[14px] leading-[1.5] text-[var(--error-ink)]">{packError}</p>}
             <DialogFooter>
-              <button type="button" onClick={() => setPackDialog(null)} className={btn("ghost")}>Cancel</button>
-              <button type="submit" disabled={busy === "pack"} className={btn("primary")}>
+              <Button type="button" variant="ghost" onClick={() => setPackDialog(null)}>Cancel</Button>
+              <Button type="submit" disabled={busy === "pack"}>
                 {busy === "pack" ? "Saving…" : packDialog?.pack ? "Save pack" : "Create pack"}
-              </button>
+              </Button>
             </DialogFooter>
           </form>
         </DialogContent>
@@ -595,10 +587,10 @@ export function CreditLimitsPanel({ initial }: { initial: CreditsLimitsData }) {
             </Field>
             {grantError && <p role="alert" className="m-0 text-[14px] leading-[1.5] text-[var(--error-ink)]">{grantError}</p>}
             <DialogFooter>
-              <button type="button" onClick={() => setGrantOpen(false)} className={btn("ghost")}>Cancel</button>
-              <button type="submit" disabled={busy === "grant"} className={btn("primary")}>
+              <Button type="button" variant="ghost" onClick={() => setGrantOpen(false)}>Cancel</Button>
+              <Button type="submit" disabled={busy === "grant"}>
                 {busy === "grant" ? "Granting…" : "Grant credits"}
-              </button>
+              </Button>
             </DialogFooter>
           </form>
         </DialogContent>
@@ -635,10 +627,10 @@ export function CreditLimitsPanel({ initial }: { initial: CreditsLimitsData }) {
             </Field>
             {purchaseError && <p role="alert" className="m-0 text-[14px] leading-[1.5] text-[var(--error-ink)]">{purchaseError}</p>}
             <DialogFooter>
-              <button type="button" onClick={() => setPurchasePack(null)} className={btn("ghost")}>Cancel</button>
-              <button type="submit" disabled={busy === "purchase"} className={btn("primary")}>
+              <Button type="button" variant="ghost" onClick={() => setPurchasePack(null)}>Cancel</Button>
+              <Button type="submit" disabled={busy === "purchase"}>
                 {busy === "purchase" ? "Adding…" : "Add to invoice"}
-              </button>
+              </Button>
             </DialogFooter>
           </form>
         </DialogContent>
@@ -659,12 +651,12 @@ export function CreditLimitsPanel({ initial }: { initial: CreditsLimitsData }) {
               </span>
             </p>
             <div className="flex items-center gap-2">
-              <button type="button" onClick={() => setDraft({})} disabled={busy === "pricing"} className={btn("ghost")}>
+              <Button type="button" variant="ghost" onClick={() => setDraft({})} disabled={busy === "pricing"}>
                 Discard
-              </button>
-              <button type="button" onClick={() => void savePricing()} disabled={busy === "pricing"} className={btn("primary")}>
+              </Button>
+              <Button type="button" onClick={() => void savePricing()} disabled={busy === "pricing"}>
                 {busy === "pricing" ? "Saving…" : "Save changes"}
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -697,9 +689,9 @@ function MonitorRow({ entry, onGrant }: { entry: MonitorEntry; onGrant: (prefill
       </span>
       <span className="flex w-[124px] shrink-0 justify-end">
         {grantMeter ? (
-          <button type="button" onClick={() => onGrant({ tenantId: entry.tenantId, meter: grantMeter })} className={btn("secondary")}>
+          <Button type="button" variant="outline" size="sm" onClick={() => onGrant({ tenantId: entry.tenantId, meter: grantMeter })}>
             Grant credits
-          </button>
+          </Button>
         ) : (
           <span
             className="text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]"

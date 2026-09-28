@@ -59,7 +59,7 @@ export function MarkPaidDialog({
 
   return (
     <>
-      <Button variant="outline" className="h-10 w-full border-[var(--border-strong)]" onClick={() => setOpen(true)}>
+      <Button variant="outline" className="w-full" onClick={() => setOpen(true)}>
         Mark paid
       </Button>
 

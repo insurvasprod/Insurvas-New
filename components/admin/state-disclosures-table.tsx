@@ -1,26 +1,24 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, ListFilter } from "lucide-react";
+import { SlidersHorizontal } from "lucide-react";
 
-import { AdminPageHeader } from "@/components/admin/page-header";
 import { BoardStatGrid, BoardStatTile } from "@/components/admin/board-stat-tile";
 import { BoardTableFooter } from "@/components/admin/board-table-footer";
 import { NoMatches } from "@/components/admin/empty-state";
 import { StateDisclosureEditor, type EditorTarget } from "@/components/admin/state-disclosures-editor";
 import { StateDisclosuresImport } from "@/components/admin/state-disclosures-import";
 import { StateDisclosuresReviewCard } from "@/components/admin/state-disclosures-review";
-import { Callout, Pill, SearchBox, TableToolbar, btn, st } from "@/components/app/settings/primitives";
+import { Callout, Pill, btn, st } from "@/components/app/settings/primitives";
+import { Button } from "@/components/ui/button";
+import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
+import { PageHeader } from "@/components/ui/page-header";
+import { TableCard } from "@/components/ui/table-card";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { STATE_CODES } from "@/lib/appointments/constants";
@@ -40,11 +38,6 @@ const PAGE_SIZE = 25;
 const TOTAL_STATES = STATE_CODES.length;
 
 type CoverageFilter = "all" | "in_force" | "not_covered";
-
-const TOOLBAR_BUTTON =
-  "inline-flex h-10 items-center gap-2 rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] px-3.5 text-[14px] leading-[1.43] font-semibold tracking-[-0.01em] text-[var(--ink)] hover:bg-[var(--surface-alt)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]";
-const HEADER_SECONDARY =
-  "inline-flex h-11 items-center justify-center gap-2 rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] px-4 text-[14px] leading-[1.43] font-semibold tracking-[-0.01em] whitespace-nowrap text-[var(--ink)] hover:bg-[var(--surface-alt)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]";
 
 export type ProposalState = {
   /** False until migration 20260925507000 is applied: the editor then publishes directly, as before. */
@@ -114,7 +107,7 @@ export function StateDisclosuresTable({
     });
   }, [scopeRows, query, coverage, placeholderOnly, changingOnly]);
 
-  const activeFilters = (coverage !== "all" ? 1 : 0) + (placeholderOnly ? 1 : 0) + (changingOnly ? 1 : 0);
+  const activeFilters = (placeholderOnly ? 1 : 0) + (changingOnly ? 1 : 0);
   const pages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const current = Math.min(page, pages);
   const visible = filtered.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE);
@@ -157,40 +150,24 @@ export function StateDisclosuresTable({
   }
 
   const openRow = (row: CoverageRow) => setEditor({ kind: "pair", row });
-  const refresh = () => router.refresh();
+  const [refreshing, startRefresh] = useTransition();
+  const refresh = () => startRefresh(() => router.refresh());
 
   return (
     <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
-      <AdminPageHeader
+      <PageHeader
         title="Disclosures"
-        subtitle="The wording an agent must read before an outbound call, by state and product."
         actions={
           <>
-            <button type="button" className={HEADER_SECONDARY} onClick={() => setImportOpen(true)}>
+            <Button type="button" variant="outline" onClick={() => setImportOpen(true)}>
               Import a pack
-            </button>
-            <button type="button" className={btn("primary", "h-11")} onClick={() => setEditor({ kind: "new" })}>
+            </Button>
+            <Button type="button" onClick={() => setEditor({ kind: "new" })}>
               Add a disclosure
-            </button>
+            </Button>
           </>
         }
       />
-
-      {allSummary.placeholders > 0 && (
-        <Callout
-          tone="warning"
-          title={`${allSummary.placeholders.toLocaleString("en-US")} of the disclosures in force ${allSummary.placeholders === 1 ? "is" : "are"} placeholder wording, not approved text`}
-        >
-          <p className="m-0">
-            They were seeded so the dialer could be tested, and each begins with the marker “[PLACEHOLDER — NOT
-            COMPLIANCE-APPROVED …]”. The dialer serves them to agents exactly as stored. Replace each one with approved
-            wording before any live call; they carry a Placeholder pill below.
-          </p>
-          <button type="button" className={btn("secondary", "mt-3")} onClick={showPlaceholders}>
-            Show placeholder rows
-          </button>
-        </Callout>
-      )}
 
       <BoardStatGrid>
         <BoardStatTile
@@ -225,6 +202,27 @@ export function StateDisclosuresTable({
         />
       </BoardStatGrid>
 
+      {allSummary.placeholders > 0 && (
+        <Callout
+          tone="warning"
+          title={`${allSummary.placeholders.toLocaleString("en-US")} of the disclosures in force ${allSummary.placeholders === 1 ? "is" : "are"} placeholder wording. Replace ${allSummary.placeholders === 1 ? "it" : "them"} with approved wording before any live call.`}
+        >
+          <Button type="button" variant="outline" className="mt-1" onClick={showPlaceholders}>
+            Show placeholder rows
+          </Button>
+        </Callout>
+      )}
+      {summary.uncovered > 0 && (
+        <Callout
+          tone="error"
+          title={
+            product === "all"
+              ? `${summary.uncovered.toLocaleString("en-US")} state and product ${summary.uncovered === 1 ? "pair has" : "pairs have"} no wording, and the dialer refuses those calls.`
+              : `${(TOTAL_STATES - summary.statesCovered).toLocaleString("en-US")} ${TOTAL_STATES - summary.statesCovered === 1 ? "state has" : "states have"} no ${productName} wording, and the dialer refuses those calls.`
+          }
+        />
+      )}
+
       <StateDisclosuresReviewCard
         proposals={proposals}
         rows={allRows}
@@ -234,81 +232,62 @@ export function StateDisclosuresTable({
         onChanged={refresh}
       />
 
-      <TableToolbar>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button type="button" className={TOOLBAR_BUTTON}>
-              {productName}
-              <ChevronDown aria-hidden className="size-[13px] stroke-[2.4]" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-64">
-            <DropdownMenuLabel>Product</DropdownMenuLabel>
-            <DropdownMenuRadioGroup value={product} onValueChange={resetPage(setProduct)}>
-              <DropdownMenuRadioItem value="all">Every product</DropdownMenuRadioItem>
-              {scope.map((entry) => (
-                <DropdownMenuRadioItem key={entry.code} value={entry.code}>
-                  {entry.name}
-                  {!entry.inCatalog && <span className="ml-1 text-[var(--muted)]">(not in catalog)</span>}
-                </DropdownMenuRadioItem>
-              ))}
-            </DropdownMenuRadioGroup>
-          </DropdownMenuContent>
-        </DropdownMenu>
-        <SearchBox value={query} onChange={resetPage(setQuery)} placeholder="Search by state or wording" label="Search by state or wording" />
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button type="button" className={TOOLBAR_BUTTON}>
-              <ListFilter aria-hidden className="size-4" />
-              Filters
-              {activeFilters > 0 && (
-                <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--surface-alt)] px-1.5 text-[12px] leading-[1.5] font-semibold tabular-nums text-[var(--ink)]">
-                  {activeFilters}
-                </span>
-              )}
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-64">
-            <DropdownMenuLabel>Coverage</DropdownMenuLabel>
-            <DropdownMenuRadioGroup value={coverage} onValueChange={(value) => resetPage(setCoverage)(value as CoverageFilter)}>
-              <DropdownMenuRadioItem value="all">Every pair</DropdownMenuRadioItem>
-              <DropdownMenuRadioItem value="in_force">Wording in force</DropdownMenuRadioItem>
-              <DropdownMenuRadioItem value="not_covered">Not covered</DropdownMenuRadioItem>
-            </DropdownMenuRadioGroup>
-            <DropdownMenuSeparator />
-            <DropdownMenuCheckboxItem checked={placeholderOnly} onCheckedChange={(value) => resetPage(setPlaceholderOnly)(value === true)}>
-              Placeholder wording only
-            </DropdownMenuCheckboxItem>
-            <DropdownMenuCheckboxItem checked={changingOnly} onCheckedChange={(value) => resetPage(setChangingOnly)(value === true)}>
-              Change scheduled or in review
-            </DropdownMenuCheckboxItem>
-            {activeFilters > 0 && (
+      <TableCard
+        toolbar={
+          <DataToolbar
+            actions={
               <>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onSelect={() => {
-                    setCoverage("all");
-                    setPlaceholderOnly(false);
-                    setChangingOnly(false);
-                    setPage(1);
-                  }}
-                >
-                  Clear filters
-                </DropdownMenuItem>
+                <Button type="button" variant="outline" onClick={exportCsv} disabled={filtered.length === 0}>
+                  Export
+                </Button>
+                <RefreshButton onClick={refresh} refreshing={refreshing} />
               </>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
-        <span className="grow" />
-        <button type="button" className={cn(TOOLBAR_BUTTON, "px-4")} onClick={exportCsv} disabled={filtered.length === 0}>
-          Export
-        </button>
-        <span className="text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)] tabular-nums">
-          {summary.statesCovered} of {TOTAL_STATES} states covered
-        </span>
-      </TableToolbar>
-
-      <section className="flex min-w-0 flex-col overflow-hidden rounded-[12px] border border-[var(--border)] bg-[var(--surface)]">
+            }
+          >
+            <ToolbarSearch value={query} onChange={resetPage(setQuery)} placeholder="Search by state or wording" />
+            <select aria-label="Product" className={toolbarControl} value={product} onChange={(event) => resetPage(setProduct)(event.target.value)}>
+              <option value="all">Every product</option>
+              {scope.map((entry) => (
+                <option key={entry.code} value={entry.code}>
+                  {entry.name}
+                  {entry.inCatalog ? "" : " (not in catalog)"}
+                </option>
+              ))}
+            </select>
+            <select
+              aria-label="Coverage"
+              className={toolbarControl}
+              value={coverage}
+              onChange={(event) => resetPage(setCoverage)(event.target.value as CoverageFilter)}
+            >
+              <option value="all">Every pair</option>
+              <option value="in_force">Wording in force</option>
+              <option value="not_covered">Not covered</option>
+            </select>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button type="button" variant="outline">
+                  <SlidersHorizontal aria-hidden="true" />
+                  Filters
+                  {activeFilters > 0 && (
+                    <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-muted px-1.5 text-xs tabular-nums text-foreground">
+                      {activeFilters}
+                    </span>
+                  )}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-64">
+                <DropdownMenuCheckboxItem checked={placeholderOnly} onCheckedChange={(value) => resetPage(setPlaceholderOnly)(value === true)}>
+                  Placeholder wording only
+                </DropdownMenuCheckboxItem>
+                <DropdownMenuCheckboxItem checked={changingOnly} onCheckedChange={(value) => resetPage(setChangingOnly)(value === true)}>
+                  Change scheduled or in review
+                </DropdownMenuCheckboxItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </DataToolbar>
+        }
+      >
         <div className="min-w-0 overflow-x-auto">
           <table className={cn(st.table, "min-w-[880px] table-fixed")}>
             <thead>
@@ -396,7 +375,6 @@ export function StateDisclosuresTable({
             </tbody>
           </table>
         </div>
-        <div className="grow" />
         <BoardTableFooter
           page={current}
           pageSize={PAGE_SIZE}
@@ -405,31 +383,7 @@ export function StateDisclosuresTable({
           order="by state, then product"
           onPageChange={setPage}
         />
-      </section>
-
-      <div className="grid gap-5 lg:grid-cols-2">
-        {summary.uncovered > 0 ? (
-          <Callout
-            tone="error"
-            title={
-              product === "all"
-                ? `${summary.uncovered.toLocaleString("en-US")} state and product ${summary.uncovered === 1 ? "pair has" : "pairs have"} no wording, and the dialer refuses those calls`
-                : `${(TOTAL_STATES - summary.statesCovered).toLocaleString("en-US")} ${TOTAL_STATES - summary.statesCovered === 1 ? "state has" : "states have"} no ${productName} wording, and the dialer refuses those calls`
-            }
-          >
-            A lead whose state and product line have no disclosure in force cannot be dialled: the agent is told dialing is
-            blocked until one is published. Coverage is the number to drive to 51 for every product you sell.
-          </Callout>
-        ) : (
-          <Callout tone="success" title={`Every state has wording in force for ${product === "all" ? "every product" : productName}`}>
-            The dialer can serve a disclosure for every lead in view. Placeholder rows still need approved wording.
-          </Callout>
-        )}
-        <Callout tone="info" title="A change here is effective-dated, never retroactive">
-          A new version takes effect from a future date and the old wording stays on record, so a call placed under the old
-          wording stays compliant under the old wording. Editing in place would rewrite the record of what was actually said.
-        </Callout>
-      </div>
+      </TableCard>
 
       {editor && (
         <StateDisclosureEditor

@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 
 import { getCurrentAdmin } from "@/lib/adminAuth/getCurrentAdmin";
 import { canAccessConfigurationSection } from "@/lib/configuration/sections";
-import { AdminPageHeader } from "@/components/admin/page-header";
+import { PageHeader } from "@/components/ui/page-header";
 import { SystemSettingsPanel } from "@/components/admin/system-settings-panel";
 import { canChangeMaintenance } from "@/lib/system/adminFormat";
 import { loadSystemAdminView } from "@/lib/system/adminView";
@@ -20,7 +20,7 @@ export default async function SystemPage() {
     <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
       {/* "Maintenance" to match the sidebar — it is what the screen is for, where "System" said
           nothing. The route stays /admin/system so existing links keep working. */}
-      <AdminPageHeader title="Maintenance" subtitle="Maintenance mode and platform announcements." />
+      <PageHeader title="Maintenance" />
       <SystemSettingsPanel view={view} canChangeMaintenance={canChangeMaintenance(admin.role)} />
     </div>
   );

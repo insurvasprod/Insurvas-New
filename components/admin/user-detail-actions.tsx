@@ -19,11 +19,7 @@ import { cn } from "@/lib/utils";
 import { credentialAction } from "@/lib/adminUsers/credential";
 import type { UserListRow } from "@/lib/users/list";
 
-const BUTTON =
-  "inline-flex h-10 w-full items-center justify-center gap-2 rounded-[8px] border px-4 text-[14px] leading-[1.43] font-semibold tracking-[-0.01em] cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)] disabled:cursor-not-allowed disabled:opacity-50";
-const PRIMARY = cn(BUTTON, "border-transparent bg-[var(--primary)] text-[var(--on-primary)] hover:bg-[var(--accent-hover)]");
-const SECONDARY = cn(BUTTON, "border-[var(--border-strong)] bg-[var(--surface)] text-[var(--ink)] hover:bg-[var(--surface-alt)]");
-const DANGER = cn(BUTTON, "border-[var(--error)] bg-[var(--surface)] text-[var(--error-ink)] hover:bg-[var(--error-surface)]");
+const DANGER = "border-[var(--error)] text-[var(--error-ink)] hover:bg-[var(--error-surface)] hover:text-[var(--error-ink)]";
 const NOTE = "m-0 mt-3 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]";
 
 type Transition = "activate" | "deactivate" | "unsuspend";
@@ -59,7 +55,7 @@ export function UserDetailActions({
       <p className={cn(NOTE, "mt-3.5")}>
         {user.status === "deleted"
           ? "This account has been deleted. Nothing on this page can change it."
-          : `Changing this account needs the ${managerRoleLabel} role. Everything on this page is readable to you.`}
+          : `Read-only. Changing this account needs the ${managerRoleLabel} role.`}
       </p>
     );
   }
@@ -132,48 +128,44 @@ export function UserDetailActions({
     <>
       <div className="mt-3.5 flex flex-col gap-2">
         {user.status === "suspended" && (
-          <button type="button" className={PRIMARY} disabled={busy} onClick={() => changeState("unsuspend", "unsuspended", "Could not unsuspend this user")}>
+          <Button type="button" className="w-full" disabled={busy} onClick={() => changeState("unsuspend", "unsuspended", "Could not unsuspend this user")}>
             Unsuspend
-          </button>
+          </Button>
         )}
         {user.status === "inactive" && (
-          <button type="button" className={PRIMARY} disabled={busy} onClick={() => changeState("activate", "reactivated", "Could not reactivate this user")}>
+          <Button type="button" className="w-full" disabled={busy} onClick={() => changeState("activate", "reactivated", "Could not reactivate this user")}>
             Reactivate
-          </button>
+          </Button>
         )}
         {user.status === "active" && (
           <>
-            <button type="button" className={DANGER} disabled={busy} onClick={() => setSuspendOpen(true)}>
+            <Button type="button" variant="outline" className={cn("w-full", DANGER)} disabled={busy} onClick={() => setSuspendOpen(true)}>
               Suspend…
-            </button>
-            <button type="button" className={SECONDARY} disabled={busy} onClick={() => changeState("deactivate", "deactivated", "Could not deactivate this user")}>
+            </Button>
+            <Button type="button" variant="outline" className="w-full" disabled={busy} onClick={() => changeState("deactivate", "deactivated", "Could not deactivate this user")}>
               Deactivate in every agency
-            </button>
+            </Button>
           </>
         )}
         {/* At most one applies (lib/adminUsers/credential.ts): someone who has joined their agency
             gets a reset; someone still being onboarded gets the invitation again; a suspended or
             deactivated account gets neither, because consuming a reset link reactivates it. */}
         {credential === "reset" && (
-          <button type="button" className={SECONDARY} disabled={busy} onClick={sendReset}>
+          <Button type="button" variant="outline" className="w-full" disabled={busy} onClick={sendReset}>
             Send password reset link
-          </button>
+          </Button>
         )}
         {credential === "invite" && (
-          <button type="button" className={SECONDARY} disabled={busy} onClick={resendInvite}>
+          <Button type="button" variant="outline" className="w-full" disabled={busy} onClick={resendInvite}>
             Resend invitation
-          </button>
+          </Button>
         )}
         {user.status === "active" && (
-          <button type="button" className={SECONDARY} disabled={busy} onClick={() => setSignOutOpen(true)}>
+          <Button type="button" variant="outline" className="w-full" disabled={busy} onClick={() => setSignOutOpen(true)}>
             Sign out everywhere…
-          </button>
+          </Button>
         )}
       </div>
-      <p className={NOTE}>
-        Status, reset and invitation actions are the list page&rsquo;s, with the same confirmation. Sign out everywhere is
-        only here: it ends every open session and leaves the account and password as they are.
-      </p>
 
       <Dialog open={signOutOpen} onOpenChange={(open) => { if (!open) { setSignOutOpen(false); setSignOutError(null); } }}>
         <DialogContent>

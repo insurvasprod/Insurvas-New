@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { notify } from "@/lib/notify";
@@ -9,6 +9,9 @@ import { BoardTableFooter } from "@/components/admin/board-table-footer";
 import { EmptyState } from "@/components/admin/empty-state";
 import { StatusChip, type StatusTone } from "@/components/admin/status-chip";
 import { fullDate } from "@/components/admin/tenant-record/billing-format";
+import { Button } from "@/components/ui/button";
+import { DataToolbar, RefreshButton } from "@/components/ui/data-toolbar";
+import { TableCard } from "@/components/ui/table-card";
 import { formatCentsAsCurrency } from "@/lib/money";
 import { CREDIT_REASON_LABELS, type CreditReason } from "@/lib/credits/rules";
 import { cn } from "@/lib/utils";
@@ -57,7 +60,6 @@ const RECONCILIATION: Record<string, { label: string; tone: StatusTone }> = {
 const PAGE = 25;
 const th = "px-3 py-2 text-left text-[12px] leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]";
 const td = "border-t border-[var(--border)] px-3 py-2 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--body)]";
-const rowButton = "inline-flex h-8 items-center rounded-[8px] border px-3 text-[14px] font-semibold whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-50";
 
 /**
  * The refunds & credits table (p-adm-credit-notes): every credit note, what it was raised against,
@@ -67,6 +69,7 @@ const rowButton = "inline-flex h-8 items-center rounded-[8px] border px-3 text-[
  */
 export function CreditNotesTable({ notes, currentAdminId }: { notes: CreditNoteRow[]; currentAdminId: string }) {
   const router = useRouter();
+  const [refreshing, startRefresh] = useTransition();
   const [busy, setBusy] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const pages = Math.max(1, Math.ceil(notes.length / PAGE));
@@ -87,8 +90,10 @@ export function CreditNotesTable({ notes, currentAdminId }: { notes: CreditNoteR
   }
 
   return (
-    <div className="relative min-w-0 overflow-hidden rounded-[12px] border border-[var(--border)] bg-[var(--surface)]">
-      <div className="overflow-x-auto">
+    <TableCard
+      className="min-w-0"
+      toolbar={<DataToolbar actions={<RefreshButton onClick={() => startRefresh(() => router.refresh())} refreshing={refreshing} />} />}
+    >
         <table className="w-full min-w-[920px] border-collapse">
           <thead>
             <tr className="bg-[var(--surface-alt)]">
@@ -105,7 +110,7 @@ export function CreditNotesTable({ notes, currentAdminId }: { notes: CreditNoteR
             {notes.length === 0 ? (
               <tr>
                 <td colSpan={7} className="p-0">
-                  <EmptyState title="No refunds or credits yet" hint="Raised from an invoice when money needs to go back or be written off. Every one needs a reason, and anything above the approval threshold needs a second approver." />
+                  <EmptyState title="No refunds or credits yet" hint="Raise one from a paid invoice when money needs to go back or be written off." />
                 </td>
               </tr>
             ) : shown.map((note) => {
@@ -134,13 +139,13 @@ export function CreditNotesTable({ notes, currentAdminId }: { notes: CreditNoteR
                   </td>
                   <td className={cn(td, "text-right")}>
                     {providerPending ? (
-                      <button type="button" className={cn(rowButton, "border-[var(--border-strong)] bg-[var(--surface)] text-[var(--ink)] hover:bg-[var(--surface-alt)]")} disabled={busy === note.id} onClick={() => void act(note, "reconcile")}>Retry reconciliation</button>
+                      <Button type="button" variant="outline" size="sm" disabled={busy === note.id} onClick={() => void act(note, "reconcile")}>Retry reconciliation</Button>
                     ) : pending ? (
                       isOwn ? (
                         // Shown rather than hidden: the person waiting needs to know WHY they cannot act.
                         <span className="text-[12px] text-[var(--muted)]">You raised this — a second admin must approve</span>
                       ) : (
-                        <button type="button" className={cn(rowButton, "border-transparent bg-[var(--primary)] text-[var(--on-primary)] hover:bg-[var(--accent-hover)]")} disabled={busy === note.id} onClick={() => void act(note, "approve")}>Approve</button>
+                        <Button type="button" size="sm" disabled={busy === note.id} onClick={() => void act(note, "approve")}>Approve</Button>
                       )
                     ) : null}
                   </td>
@@ -149,8 +154,7 @@ export function CreditNotesTable({ notes, currentAdminId }: { notes: CreditNoteR
             })}
           </tbody>
         </table>
-      </div>
       {notes.length > 0 && <BoardTableFooter page={current} pageSize={PAGE} total={notes.length} itemLabel={notes.length === 1 ? "credit note" : "credit notes"} order="newest first" onPageChange={setPage} />}
-    </div>
+    </TableCard>
   );
 }

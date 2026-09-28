@@ -2,10 +2,10 @@ import type { ReactElement } from "react";
 import Link from "next/link";
 import { ArrowRight, ChevronDown } from "lucide-react";
 
-import { AdminPageHeader } from "@/components/admin/page-header";
+import { PageHeader } from "@/components/ui/page-header";
 import { BoardStatGrid, BoardStatTile } from "@/components/admin/board-stat-tile";
 import { DashboardUtcTime } from "@/components/admin/dashboard-utc-time";
-import { Callout, Pill } from "@/components/app/settings/primitives";
+import { Pill } from "@/components/app/settings/primitives";
 import { getCurrentAdmin } from "@/lib/adminAuth/getCurrentAdmin";
 import { ADMIN_ROLE_LABELS, type AdminRole } from "@/lib/adminAuth/roles";
 import { activeAdminsByRole, formatUtcDateTime, plural } from "@/lib/adminDashboard/figures";
@@ -124,20 +124,15 @@ export default async function AdminDashboardPage() {
 
   return (
     <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
-      <AdminPageHeader title="Platform administration" subtitle="Start with the workspace you need below." />
+      <PageHeader title="Platform administration" />
 
       {tiles.length > 0 && <BoardStatGrid>{tiles}</BoardStatGrid>}
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_420px]">
+      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_420px]">
         <section className={`m-card ${cardClass}`} aria-labelledby="start-here-title">
-          <div>
-            <h2 id="start-here-title" className={cardTitle}>
-              Start here
-            </h2>
-            <p className="mt-1 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">
-              The order of operations, for someone who opens this panel twice a month.
-            </p>
-          </div>
+          <h2 id="start-here-title" className={`${cardTitle} mb-3`}>
+            Start here
+          </h2>
 
           {STEPS.map((step, index) => (
             <details key={step.title} className="group border-t border-[var(--border)] py-3.5" open={step.open}>
@@ -167,47 +162,41 @@ export default async function AdminDashboardPage() {
           ))}
         </section>
 
-        <div className="flex min-w-0 flex-col gap-6">
-          <section className={cardClass} aria-labelledby="admins-by-role-title">
-            <h2 id="admins-by-role-title" className={cardTitle}>
-              Admins by role
-            </h2>
-            <div className="mt-3.5 flex flex-wrap gap-2">
-              {byRole.map(({ role, count }) => (
-                <Pill key={role} tone={role === "super_admin" ? "info" : "neutral"} dot>
-                  {roleLabel(role)} &middot; {count.toLocaleString("en-US")}
-                </Pill>
-              ))}
-              {byRole.length === 0 && (
-                <p className="text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">No active admins.</p>
+        <section className={cardClass} aria-labelledby="admins-by-role-title">
+          <h2 id="admins-by-role-title" className={cardTitle}>
+            Admins by role
+          </h2>
+          <div className="mt-3.5 flex flex-wrap gap-2">
+            {byRole.map(({ role, count }) => (
+              <Pill key={role} tone={role === "super_admin" ? "info" : "neutral"} dot>
+                {roleLabel(role)} &middot; {count.toLocaleString("en-US")}
+              </Pill>
+            ))}
+            {byRole.length === 0 && (
+              <p className="text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">No active admins.</p>
+            )}
+          </div>
+          {deactivated > 0 && (
+            <p className="mt-2 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">
+              {plural(deactivated, "deactivated account is", "deactivated accounts are")} not counted.
+            </p>
+          )}
+
+          <div className="mt-5 grid grid-cols-2 gap-x-6 gap-y-4">
+            <div>
+              <div className={factLabel}>Your role</div>
+              <span className={factValue}>{admin ? roleLabel(admin.role) : "—"}</span>
+            </div>
+            <div>
+              <div className={factLabel}>Signed in</div>
+              {admin?.last_login_at && signedIn ? (
+                <DashboardUtcTime iso={admin.last_login_at} text={signedIn} className={factValue} />
+              ) : (
+                <span className={factValue}>First sign-in</span>
               )}
             </div>
-            {deactivated > 0 && (
-              <p className="mt-2 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">
-                {plural(deactivated, "deactivated account is", "deactivated accounts are")} not counted.
-              </p>
-            )}
-
-            <div className="mt-5 grid grid-cols-2 gap-x-6 gap-y-4">
-              <div>
-                <div className={factLabel}>Your role</div>
-                <span className={factValue}>{admin ? roleLabel(admin.role) : "—"}</span>
-              </div>
-              <div>
-                <div className={factLabel}>Signed in</div>
-                {admin?.last_login_at && signedIn ? (
-                  <DashboardUtcTime iso={admin.last_login_at} text={signedIn} className={factValue} />
-                ) : (
-                  <span className={factValue}>First sign-in</span>
-                )}
-              </div>
-            </div>
-          </section>
-
-          <Callout tone="info" title="Counting admins is the least useful fact available">
-            The tiles above are platform health instead &mdash; each one comes from the page that owns it.
-          </Callout>
-        </div>
+          </div>
+        </section>
       </div>
     </div>
   );

@@ -1,10 +1,11 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Fragment, useId, useMemo, useState, type FormEvent } from "react";
 
-import { Callout, Field, Pill, SettingsCard, SettingsTableCard, btn, control, st } from "@/components/app/settings/primitives";
+import { Field, Pill, SettingsCard, btn, control, st } from "@/components/app/settings/primitives";
+import { Button } from "@/components/ui/button";
+import { TableCard } from "@/components/ui/table-card";
 import type { AdminRole } from "@/lib/adminAuth/roles";
 import { ADMIN_ROLE_LABELS, isAdminRole } from "@/lib/adminAuth/roles";
 import {
@@ -26,9 +27,6 @@ import { cn } from "@/lib/utils";
 
 /** Features the platform kill switch closes for this tenant: off for everyone, or beta and not listed. */
 export type KillStates = Record<string, "off" | "beta">;
-
-const NUMBER_WORDS = ["No", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine"];
-const countWord = (n: number) => NUMBER_WORDS[n] ?? String(n);
 
 /** "2 Sep", with the year only when it is not this year — the board's short date. */
 function shortDate(value: string | null, dateOnly = false): string {
@@ -71,23 +69,12 @@ export function FeaturesTabView({
 
   return (
     <div className="flex w-full min-w-0 flex-col gap-6">
-      <Callout tone="info" title="An override is a deviation, and it is listed as one">
-        {state.source === "default" ? (
-          <>This tenant has no subscription, so {plan} decides what it can reach. </>
-        ) : state.tenantsOnPlan !== null ? (
-          <>The plan is the answer for {state.tenantsOnPlan} {state.tenantsOnPlan === 1 ? "tenant" : "tenants"}. </>
-        ) : null}
-        {deviations === 0
-          ? "Nothing is switched on or off for this one specifically."
-          : `${countWord(deviations)} ${deviations === 1 ? "thing is" : "things are"} switched on or off for this one specifically — each with who did it, when, and why, so the next person does not have to guess whether it was deliberate.`}
-      </Callout>
-
       <OverridesTable tenantId={tenantId} role={role} state={state} rows={overrides} deviations={deviations} kill={kill} plan={plan} />
 
       <div className="grid items-start gap-5 lg:grid-cols-2">
-        <SettingsTableCard
+        <TableCard
           title={`Everything ${plan} grants`}
-          actions={<Pill tone="neutral">{granted.length === 1 ? "1 feature" : `${granted.length} features`}</Pill>}
+          action={<Pill tone="neutral">{granted.length === 1 ? "1 feature" : `${granted.length} features`}</Pill>}
         >
           <table className={st.table}>
             <thead>
@@ -128,22 +115,9 @@ export function FeaturesTabView({
               )}
             </tbody>
           </table>
-        </SettingsTableCard>
+        </TableCard>
 
-        <div className="flex min-w-0 flex-col gap-5">
-          <AddOverrideCard tenantId={tenantId} role={role} state={state} plan={plan} />
-
-          <Callout tone="error" title="A kill switch is not an override">
-            Switching a feature off for everyone is done on the{" "}
-            <Link href="/admin/features" className="font-semibold text-[var(--ink)] underline">
-              Features page
-            </Link>{" "}
-            and shows customers &ldquo;temporarily unavailable&rdquo;. An override here changes this one agency only:
-            the feature leaves their menu, and opening it directly says it is not available on their account &mdash;
-            no upgrade offer, and nothing in it is deleted. A kill switch still wins over an override that switches a
-            feature on.
-          </Callout>
-        </div>
+        <AddOverrideCard tenantId={tenantId} role={role} state={state} plan={plan} />
       </div>
     </div>
   );
@@ -206,9 +180,9 @@ function OverridesTable({
   }
 
   return (
-    <SettingsTableCard
+    <TableCard
       title="Overrides on this tenant"
-      actions={
+      action={
         deviations > 0 ? (
           <Pill tone="warning" dot>
             {deviations === 1 ? "1 deviation" : `${deviations} deviations`} from {plan}
@@ -314,12 +288,12 @@ function OverridesTable({
                             />
                           </Field>
                           <div className="flex gap-2 pb-[26px]">
-                            <button type="button" className={btn("ghost")} onClick={() => setRemoving(null)} disabled={busy}>
+                            <Button type="button" variant="ghost" onClick={() => setRemoving(null)} disabled={busy}>
                               Cancel
-                            </button>
-                            <button type="submit" className={btn("primary")} disabled={busy}>
+                            </Button>
+                            <Button type="submit" disabled={busy}>
                               {busy ? "Removing…" : "Remove the override"}
-                            </button>
+                            </Button>
                           </div>
                         </form>
                       </td>
@@ -331,7 +305,7 @@ function OverridesTable({
           )}
         </tbody>
       </table>
-    </SettingsTableCard>
+    </TableCard>
   );
 }
 
@@ -364,7 +338,7 @@ function AddOverrideCard({ tenantId, role, state, plan }: { tenantId: string; ro
     return (
       <SettingsCard title="Add an override">
         <p className="m-0 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--body)]">
-          Your role ({ADMIN_ROLE_LABELS[role]}) can see overrides but not change them. A super admin or a support agent can.
+          Read-only for your role ({ADMIN_ROLE_LABELS[role]}).
         </p>
       </SettingsCard>
     );
@@ -499,9 +473,9 @@ function AddOverrideCard({ tenantId, role, state, plan }: { tenantId: string; ro
         </Field>
 
         <div className="flex flex-wrap items-center gap-3">
-          <button type="submit" className={btn("primary", "self-start")} disabled={disabled}>
+          <Button type="submit" className="self-start" disabled={disabled}>
             {busy ? "Saving…" : "Add the override"}
-          </button>
+          </Button>
           {saved && (
             <span role="status" className="text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--success-ink)]">
               {saved}

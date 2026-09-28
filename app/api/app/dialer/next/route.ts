@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { DialerWorkflowError, serveNextLead } from "@/lib/dialerScripts/service";
+import { DialerWorkflowError, emptyQueueReason, serveNextLead } from "@/lib/dialerScripts/service";
 import { capacityEmptyReason } from "@/lib/dialerScripts/display";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 
@@ -40,20 +40,22 @@ export async function POST() {
         ? `The dialer passed over ${refused.length === 1 ? "a lead" : `${refused.length} leads`} in ${refusedStates.join(", ")}, where you are not licensed; ${refused.length === 1 ? "it is" : "they are"} back in the queue for a licensed agent. ${refused[0].message}`
         : `The dialer passed over ${refused.length === 1 ? "a lead" : `${refused.length} leads`} it could not match to your licences. ${refused[0].message}`
       : null;
+    // The copy lives here, not in the component, so every caller of this endpoint explains an empty
+    // queue the same way. LA-2.8 asks for the reason rather than a blank panel; LA-2.3 asks the
+    // dialer to say when a campaign is held back by its scrub, so the fallback names those
+    // campaigns (emptyQueueReason) and is read only when nothing was served.
+    const emptyReason = served
+      ? null
+      : refusal
+        // 20260925700000: at the open-lead ceiling the pool is closed to this agent; say so,
+        // rather than blaming windows and timers for an empty screen they did not cause.
+        ?? (atCapacity ? capacityEmptyReason(atCapacity.open, atCapacity.max) : null)
+        ?? (await emptyQueueReason(auth.context.tenantId));
     return NextResponse.json(
       {
         served,
         refused: refused.length,
-        // The copy lives here, not in the component, so every caller of this endpoint explains an
-        // empty queue the same way. LA-2.8 asks for the reason rather than a blank panel, and names
-        // the three reasons it is almost always one of.
-        emptyReason: served
-          ? null
-          : refusal
-            // 20260925700000: at the open-lead ceiling the pool is closed to this agent; say so,
-            // rather than blaming windows and timers for an empty screen they did not cause.
-            ?? (atCapacity ? capacityEmptyReason(atCapacity.open, atCapacity.max) : null)
-            ?? "Every lead is either outside its local window, waiting on a retry timer, or already worked. This is normal early and late in the day.",
+        emptyReason,
         atCapacity: atCapacity ?? null,
       },
       { headers: { "Cache-Control": "no-store" } },

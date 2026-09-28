@@ -1,12 +1,16 @@
 "use client";
 
-import { Fragment, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useId, useMemo, useRef, useState, useTransition, type ReactNode } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 import { BoardTableFooter } from "@/components/admin/board-table-footer";
 import { EmptyState, NoMatches } from "@/components/admin/empty-state";
-import { Pill, SearchBox, btn, st } from "@/components/app/settings/primitives";
+import { Pill, st } from "@/components/app/settings/primitives";
+import { Button } from "@/components/ui/button";
+import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { ErrorState } from "@/components/ui/page-states";
+import { TableCard } from "@/components/ui/table-card";
 import { BILLING_CYCLES, BILLING_CYCLE_LABELS, formatCentsAsCurrency, type BillingCycle } from "@/lib/money";
 import type { SubscriptionStatus } from "@/lib/subscriptions/access";
 import { LIST_ORDER, LIST_STATUS, LIST_STATUS_ORDER, type QueuedKind, type SubscriptionListRow } from "@/lib/subscriptionsList/model";
@@ -17,16 +21,13 @@ const PAGE_SIZE = 25;
 type StatusFilter = "all" | "current" | SubscriptionStatus;
 type QueuedFilter = "any" | "plan" | "ends" | "trial" | "none";
 
-const OUTLINE =
-  "inline-flex h-10 cursor-pointer items-center gap-2 rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] px-3.5 text-[14px] leading-[1.43] font-semibold tracking-[-0.01em] text-[var(--ink)] hover:bg-[var(--surface-alt)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]";
-
 const CYCLE_UNIT: Record<BillingCycle, string> = { monthly: "month", quarterly: "quarter", yearly: "year" };
 
 /**
- * The subscriptions list (board p-adm-subscriptions): the toolbar card, then the table card with its
- * footer. Siblings, so the page's 24px rhythm spaces them as on the board.
+ * The subscriptions list (board p-adm-subscriptions): one TableCard, its toolbar inside, the pager
+ * at its foot.
  *
- * Read-only on purpose, as the board's callout says: assigning, changing, pausing and cancelling
+ * Read-only on purpose: assigning, changing, pausing and cancelling
  * stay on the tenant record, next to the customer they affect. A row opens in place to show the
  * dates to the second, the cancellation reason and what the plan is worth a month, with the way
  * through to that tenant's Subscription & billing tab.
@@ -41,12 +42,13 @@ export function SubscriptionsList({
   listError: boolean;
 }) {
   const id = useId();
+  const router = useRouter();
+  const [refreshing, startRefresh] = useTransition();
   const [search, setSearch] = useState("");
   const [plan, setPlan] = useState("all");
   const [status, setStatus] = useState<StatusFilter>("all");
   const [cycle, setCycle] = useState<"any" | BillingCycle>("any");
   const [queued, setQueued] = useState<QueuedFilter>("any");
-  const [filtersOpen, setFiltersOpen] = useState(false);
   const [page, setPage] = useState(1);
   const [open, setOpen] = useState<string | null>(null);
 
@@ -73,129 +75,102 @@ export function SubscriptionsList({
   const pages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const current = Math.min(Math.max(page, 1), pages);
   const shown = filtered.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE);
-  const panelFilters = (status === "all" ? 0 : 1) + (cycle === "any" ? 0 : 1) + (queued === "any" ? 0 : 1);
+  const anyFilter = status !== "all" || cycle !== "any" || queued !== "any" || plan !== "all" || search.trim() !== "";
 
-  function clearPanel() {
+  function clearAll() {
     setStatus("all");
     setCycle("any");
     setQueued("any");
+    setSearch("");
+    setPlan("all");
     setPage(1);
   }
 
-  function clearAll() {
-    clearPanel();
-    setSearch("");
-    setPlan("all");
-  }
-
   return (
-    <>
-      <div className="flex min-w-0 flex-col gap-3 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] p-3">
-        <div className="flex flex-wrap items-center gap-3">
-          <span className="relative inline-flex">
-            <select
-              aria-label="Plan"
-              value={plan}
-              onChange={(event) => {
-                setPlan(event.target.value);
-                setPage(1);
-              }}
-              className={cn(OUTLINE, "appearance-none pr-9")}
-            >
-              <option value="all">All plans</option>
-              {plans.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.label}
-                </option>
-              ))}
-            </select>
-            <Chevron className="pointer-events-none absolute top-1/2 right-3.5 -translate-y-1/2 text-[var(--ink)]" />
-          </span>
-          <SearchBox
+    <TableCard
+      className="min-w-0"
+      toolbar={
+        <DataToolbar actions={<RefreshButton onClick={() => startRefresh(() => router.refresh())} refreshing={refreshing} />}>
+          <ToolbarSearch
             value={search}
             onChange={(value) => {
               setSearch(value);
               setPage(1);
             }}
             placeholder="Search tenant"
-            label="Search tenant"
           />
-          <button
-            type="button"
-            aria-expanded={filtersOpen}
-            aria-controls={`${id}-filters`}
-            onClick={() => setFiltersOpen((value) => !value)}
-            className={OUTLINE}
+          <select
+            aria-label="Plan"
+            value={plan}
+            onChange={(event) => {
+              setPlan(event.target.value);
+              setPage(1);
+            }}
+            className={cn(toolbarControl, "max-w-48")}
           >
-            <svg aria-hidden width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
-              <path d="M3 5h18M6 12h12M10 19h4" />
-            </svg>
-            Filters
-            {panelFilters > 0 && (
-              <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--surface-alt)] px-1.5 text-[12px] leading-[1.5] font-semibold tracking-[-0.01em] text-[var(--ink)] tabular-nums">
-                {panelFilters}
-              </span>
-            )}
-          </button>
-          <span className="grow" />
-        </div>
-
-        {filtersOpen && (
-          <div id={`${id}-filters`} className="flex flex-wrap items-end gap-4 border-t border-[var(--border)] pt-3">
-            <FilterSelect
-              id={`${id}-status`}
-              label="Status"
-              value={status}
-              onChange={(value) => {
-                setStatus(value as StatusFilter);
-                setPage(1);
-              }}
-              options={[
-                { value: "all", label: "All, including expired" },
-                { value: "current", label: "Everything but expired" },
-                ...LIST_STATUS_ORDER.map((s) => ({ value: s, label: LIST_STATUS[s].label })),
-              ]}
-            />
-            <FilterSelect
-              id={`${id}-cycle`}
-              label="Cycle"
-              value={cycle}
-              onChange={(value) => {
-                setCycle(value as "any" | BillingCycle);
-                setPage(1);
-              }}
-              options={[{ value: "any", label: "Any" }, ...BILLING_CYCLES.map((c) => ({ value: c, label: BILLING_CYCLE_LABELS[c] }))]}
-            />
-            <FilterSelect
-              id={`${id}-queued`}
-              label="Queued change"
-              value={queued}
-              onChange={(value) => {
-                setQueued(value as QueuedFilter);
-                setPage(1);
-              }}
-              options={[
-                { value: "any", label: "Any" },
-                { value: "plan", label: `Plan change at renewal (${queuedCounts.plan})` },
-                { value: "ends", label: `Ends at period end (${queuedCounts.ends})` },
-                { value: "trial", label: `Trial ending (${queuedCounts.trial})` },
-                { value: "none", label: "Nothing queued" },
-              ]}
-            />
-            {panelFilters > 0 && (
-              <button type="button" className={btn("row")} onClick={clearPanel}>
-                Clear filters
-              </button>
-            )}
-          </div>
-        )}
-      </div>
-
-      <section
-        aria-label="Subscriptions"
-        className="flex min-w-0 flex-col overflow-hidden rounded-[12px] border border-[var(--border)] bg-[var(--surface)]"
-      >
-        <div className="min-w-0 overflow-x-auto">
+            <option value="all">All plans</option>
+            {plans.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.label}
+              </option>
+            ))}
+          </select>
+          <select
+            aria-label="Status"
+            value={status}
+            onChange={(event) => {
+              setStatus(event.target.value as StatusFilter);
+              setPage(1);
+            }}
+            className={toolbarControl}
+          >
+            <option value="all">All statuses</option>
+            <option value="current">Everything but expired</option>
+            {LIST_STATUS_ORDER.map((s) => (
+              <option key={s} value={s}>
+                {LIST_STATUS[s].label}
+              </option>
+            ))}
+          </select>
+          <select
+            aria-label="Cycle"
+            value={cycle}
+            onChange={(event) => {
+              setCycle(event.target.value as "any" | BillingCycle);
+              setPage(1);
+            }}
+            className={toolbarControl}
+          >
+            <option value="any">Any cycle</option>
+            {BILLING_CYCLES.map((c) => (
+              <option key={c} value={c}>
+                {BILLING_CYCLE_LABELS[c]}
+              </option>
+            ))}
+          </select>
+          <select
+            aria-label="Queued change"
+            value={queued}
+            onChange={(event) => {
+              setQueued(event.target.value as QueuedFilter);
+              setPage(1);
+            }}
+            className={toolbarControl}
+          >
+            <option value="any">Any queued change</option>
+            <option value="plan">Plan change at renewal ({queuedCounts.plan})</option>
+            <option value="ends">Ends at period end ({queuedCounts.ends})</option>
+            <option value="trial">Trial ending ({queuedCounts.trial})</option>
+            <option value="none">Nothing queued</option>
+          </select>
+          {anyFilter && (
+            <Button type="button" variant="ghost" onClick={clearAll}>
+              Clear
+            </Button>
+          )}
+        </DataToolbar>
+      }
+    >
           <table className={cn(st.table, "min-w-[900px]")}>
             <thead>
               <tr className={st.headRow}>
@@ -223,7 +198,7 @@ export function SubscriptionsList({
                   <td colSpan={6} className="border-t border-[var(--border)] p-0">
                     <EmptyState
                       title="No subscriptions yet"
-                      hint="A subscription is what puts a tenant on a plan and starts their billing period. Assign one from a tenant's page."
+                      hint="Assign one from a tenant's page."
                     />
                   </td>
                 </tr>
@@ -290,8 +265,6 @@ export function SubscriptionsList({
               })}
             </tbody>
           </table>
-        </div>
-        <div className="grow" />
         <BoardTableFooter
           page={current}
           pageSize={PAGE_SIZE}
@@ -300,8 +273,7 @@ export function SubscriptionsList({
           order={LIST_ORDER}
           onPageChange={setPage}
         />
-      </section>
-    </>
+    </TableCard>
   );
 }
 
@@ -351,12 +323,9 @@ function SubscriptionDetail({ row }: { row: SubscriptionListRow }) {
       )}
 
       <div className="flex flex-wrap items-center gap-3">
-        <span className="text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">
-          Assign, change plan, pause and cancel live on the tenant record.
-        </span>
         <Link
           href={`/admin/tenants/${row.tenantId}?tab=subscription`}
-          className="ml-auto rounded-sm text-[14px] leading-[1.43] font-semibold tracking-[-0.01em] text-[var(--accent-ink)] no-underline hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
+          className="rounded-sm text-[14px] leading-[1.43] font-semibold tracking-[-0.01em] text-[var(--accent-ink)] no-underline hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
         >
           Open Subscription &amp; billing
         </Link>
@@ -384,48 +353,6 @@ function UtcHover({ full, isos, children }: { full: string; isos: (string | null
   return (
     <span ref={ref} title={full}>
       {children}
-    </span>
-  );
-}
-
-function Chevron({ className }: { className?: string }) {
-  return (
-    <svg aria-hidden width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <path d="m6 9 6 6 6-6" />
-    </svg>
-  );
-}
-
-function FilterSelect({
-  id,
-  label,
-  value,
-  onChange,
-  options,
-}: {
-  id: string;
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  options: { value: string; label: string }[];
-}) {
-  return (
-    <span className="flex min-w-[200px] flex-col gap-1">
-      <label htmlFor={id} className="text-[12px] leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]">
-        {label}
-      </label>
-      <select
-        id={id}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className="h-10 rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] px-3 text-[14px] tracking-[-0.02em] text-[var(--ink)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
-      >
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
     </span>
   );
 }

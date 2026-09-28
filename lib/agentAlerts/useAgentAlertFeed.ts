@@ -11,8 +11,7 @@ import { setServerSoundSettings } from "@/lib/notify/sound";
  *
  * The alert centre owned the polling, the toasts, the sound and the settings in a single
  * component, which was fine while it was the only thing that wanted them. The top bar wants the
- * same feed — and a second copy of this loop would mean two requests every 2.5 seconds and two
- * toasts per alert. Extracting it changes nothing about the behaviour and makes a second consumer
+ * same feed — and a second copy of this loop would mean two request loops and two toasts per alert. Extracting it changes nothing about the behaviour and makes a second consumer
  * free.
  *
  * Mount this ONCE per page. Everything below is unchanged from the alert centre except that the
@@ -95,10 +94,35 @@ export function useAgentAlertFeed() {
     }
   }, [deliver]);
 
+  // The poll schedules itself AFTER each answer instead of firing on a fixed interval. A fixed 2.5s
+  // interval never waited for the previous request, so on a slow server the polls stacked into the
+  // hundreds, used up the tab's connections and held every page's own requests behind them (the
+  // "pages take 11 seconds" report, 2026-09-28). Now: one request at a time; paused while the tab
+  // is hidden and re-checked the moment it is shown; the first poll waits until the page's own
+  // reads have had the network; and a slow answer stretches the next wait instead of piling on.
   useEffect(() => {
-    const initialTimer = window.setTimeout(() => void load(), 0);
-    const timer = window.setInterval(() => void load(), 2500);
-    return () => { window.clearTimeout(initialTimer); window.clearInterval(timer); };
+    let cancelled = false;
+    let timer: number | undefined;
+    let inFlight = false;
+    const BASE_MS = 4000;
+    const schedule = (delay: number) => {
+      window.clearTimeout(timer);
+      if (!cancelled) timer = window.setTimeout(tick, delay);
+    };
+    async function tick() {
+      if (cancelled || inFlight) return;
+      if (document.visibilityState === "hidden") return; // resumed by the visibility listener
+      inFlight = true;
+      const started = performance.now();
+      await load();
+      inFlight = false;
+      const took = performance.now() - started;
+      schedule(Math.min(30_000, BASE_MS + took * 2));
+    }
+    const onVisible = () => { if (document.visibilityState === "visible" && !inFlight) schedule(0); };
+    document.addEventListener("visibilitychange", onVisible);
+    schedule(1500);
+    return () => { cancelled = true; window.clearTimeout(timer); document.removeEventListener("visibilitychange", onVisible); };
   }, [load]);
 
   const requestBrowserAlerts = useCallback(async () => {

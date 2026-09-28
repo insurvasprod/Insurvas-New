@@ -25,6 +25,7 @@ export function CustomInvoiceDialog({
   lockedTenant,
   triggerLabel = "Custom invoice",
   triggerClassName,
+  triggerSize = "sm",
 }: {
   tenants: { id: string; name: string }[];
   /** Raise the invoice for this tenant only — the picker becomes a read-only line. */
@@ -32,6 +33,8 @@ export function CustomInvoiceDialog({
   triggerLabel?: string;
   /** When set, the trigger is a plain button with these classes instead of the default small Button. */
   triggerClassName?: string;
+  /** The Button's size when no class is given: "default" (36px) for a page-header action, "sm" inside a card. */
+  triggerSize?: "default" | "sm";
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -89,7 +92,7 @@ export function CustomInvoiceDialog({
           {triggerLabel}
         </button>
       ) : (
-        <Button size="sm" onClick={() => setOpen(true)}>
+        <Button size={triggerSize} onClick={() => setOpen(true)}>
           {triggerLabel}
         </Button>
       )}

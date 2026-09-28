@@ -2,13 +2,15 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { Bell, ChevronDown, Loader2 } from "lucide-react";
+import { Bell, ChevronDown, ChevronLeft, Loader2 } from "lucide-react";
 
 import { Callout, KeyValues, Pill, SettingsMeter, Timeline, type PillTone } from "@/components/app/settings/primitives";
 import { DispositionWizardDialog } from "@/components/app/disposition-wizard-dialog";
+import { Button } from "@/components/ui/button";
+import { toolbarControl } from "@/components/ui/data-toolbar";
 import { PageHeader } from "@/components/ui/page-header";
+import { PageLoading } from "@/components/ui/page-loading";
 import { productLineLabel } from "@/lib/format/productLine";
-import { sectionForPath } from "@/lib/menu/definition";
 import { notify } from "@/lib/notify";
 import type { TemplateField } from "@/lib/templates/constants";
 import type { VerificationState } from "@/lib/verification/progress";
@@ -45,14 +47,9 @@ function elapsed(from: string, now: number) {
   return h > 0 ? `${h}h ${String(m).padStart(2, "0")}m` : `${m}m ${String(s).padStart(2, "0")}s`;
 }
 
-/* ── local controls: 44px header buttons, 36px row buttons, a flat 16px editor ─ */
+/* ── local controls: a text link and a flat 16px editor ─ */
 
-const BTN = "inline-flex items-center justify-center gap-2 rounded-[8px] border text-[14px] leading-[1.43] font-semibold tracking-[-0.01em] whitespace-nowrap cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)] disabled:cursor-not-allowed disabled:opacity-50";
 const b = {
-  primary44: cn(BTN, "h-11 border-transparent bg-[var(--primary)] px-4 text-[var(--on-primary)] hover:bg-[var(--accent-hover)]"),
-  secondary44: cn(BTN, "h-11 border-[var(--border-strong)] bg-[var(--surface)] px-4 text-[var(--ink)] hover:bg-[var(--surface-alt)]"),
-  row36: cn(BTN, "h-9 border-[var(--border-strong)] bg-[var(--surface)] px-4 text-[var(--ink)] hover:bg-[var(--surface-alt)]"),
-  primary36: cn(BTN, "h-9 border-transparent bg-[var(--primary)] px-4 text-[var(--on-primary)] hover:bg-[var(--accent-hover)]"),
   link: "cursor-pointer border-0 bg-transparent p-0 text-[12px] leading-[1.5] font-semibold tracking-[-0.01em] text-[var(--accent-ink)] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)] disabled:cursor-not-allowed disabled:opacity-50",
 };
 const FLAT = "box-border w-full rounded-[6px] border border-transparent bg-transparent px-2 text-[16px] leading-[1.5] tracking-[-0.02em] text-[var(--ink)] outline-none placeholder:text-[var(--muted)] hover:border-[var(--border)] focus:border-[var(--border-strong)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--ring-color)] disabled:cursor-not-allowed disabled:opacity-60";
@@ -104,9 +101,9 @@ function sectionComplete(fields: Array<{ is_required: boolean; state: Verificati
 
 function Card({ title, children, className }: { title: string; children: ReactNode; className?: string }) {
   return (
-    <section className={cn("min-w-0 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] p-6", className)}>
-      <h2 className="m-0 text-[18px] leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]">{title}</h2>
-      <div className="mt-4">{children}</div>
+    <section className={cn("min-w-0 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] p-5", className)}>
+      <h2 className="m-0 text-[16px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">{title}</h2>
+      <div className="mt-3">{children}</div>
     </section>
   );
 }
@@ -233,33 +230,33 @@ export function VerificationPanel({ workItemId, readOnly, canHandoff }: { workIt
   const labels = useMemo(() => new Map((panel?.sections ?? []).flatMap((section) => section.fields.map((field) => [field.field_key, field.label] as const))), [panel?.sections]);
 
   const actions = (
-    <div className="flex flex-wrap gap-3">
+    <>
       {!readOnly && panel && (
-        <button type="button" onClick={() => void nudgeTeam()} disabled={nudgeSaving} className={b.secondary44}>
-          {nudgeSaving ? <Loader2 aria-hidden className="size-4 animate-spin" /> : <Bell aria-hidden className="size-4" />}Nudge team
-        </button>
+        <Button type="button" variant="outline" onClick={() => void nudgeTeam()} disabled={nudgeSaving}>
+          {nudgeSaving ? <Loader2 aria-hidden className="animate-spin" /> : <Bell aria-hidden />}Nudge team
+        </Button>
       )}
-      <Link href="/app/inbound" className={b.secondary44}>Back to inbound</Link>
       {/* Opens the call-outcome dialog over this panel; "Back to verification" in it just closes it.
           /app/inbound/[id]/disposition stays for deep links. */}
-      <button type="button" onClick={() => setOutcomeOpen(true)} className={b.primary44}>Record call outcome</button>
+      <Button type="button" onClick={() => setOutcomeOpen(true)}>Record call outcome</Button>
       <DispositionWizardDialog workItemId={workItemId} open={outcomeOpen} onOpenChange={setOutcomeOpen} readOnly={readOnly} onBackToVerification={() => setOutcomeOpen(false)} />
-    </div>
+    </>
+  );
+  /* A detail page keeps one back link above its title instead of a breadcrumb or a header button. */
+  const backLink = (
+    <Link href="/app/inbound" className="inline-flex w-fit items-center gap-1.5 text-sm font-semibold tracking-[-0.01em] text-muted-foreground transition-colors hover:text-foreground">
+      <ChevronLeft className="size-4" aria-hidden="true" />
+      Inbound transfers
+    </Link>
   );
 
-  if (loading && !panel) {
-    return (
-      <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
-        <PageHeader eyebrow={sectionForPath("/app/inbound") ?? undefined} title="Verification" description="Confirm every required field while you are on the call. Each confirmation and correction is saved as you make it." />
-        <p role="status" className="m-0 inline-flex items-center gap-2 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]"><Loader2 aria-hidden className="size-4 animate-spin" />Loading verification…</p>
-      </div>
-    );
-  }
+  if (loading && !panel) return <PageLoading strip={false} />;
   if (!panel) {
     return (
-      <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
-        <PageHeader eyebrow={sectionForPath("/app/inbound") ?? undefined} title="Verification" actions={<Link href="/app/inbound" className={b.secondary44}>Back to inbound</Link>} />
-        <Callout tone="error" title="Verification is unavailable">{error || "Verification is unavailable"} <button type="button" onClick={() => void load()} className={cn(b.row36, "ml-2 h-8")}>Try again</button></Callout>
+      <div className="flex w-full min-w-0 flex-col gap-6">
+        {backLink}
+        <PageHeader title="Verification" />
+        <Callout tone="error" title={<span className="flex flex-wrap items-center gap-3">{error || "Verification is unavailable"}<Button type="button" variant="outline" onClick={() => void load()}>Try again</Button></span>} />
       </div>
     );
   }
@@ -283,12 +280,8 @@ export function VerificationPanel({ workItemId, readOnly, canHandoff }: { workIt
 
   return (
     <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
-      <PageHeader
-        eyebrow={sectionForPath("/app/inbound") ?? undefined}
-        title={`Verification — ${leadName}`}
-        description="Confirm every required field while you are on the call. Each confirmation and correction is saved as you make it."
-        actions={actions}
-      />
+      {backLink}
+      <PageHeader title={`Verification — ${leadName}`} actions={actions} />
 
       <section aria-label="Call" className="grid min-w-0 gap-4 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] px-[18px] py-4 sm:grid-cols-3 lg:grid-cols-5">
         {[["Customer", leadName], ["State", leadState], ["Product", panel.template.product_name || productLineLabel(panel.workItem.productLine)], ["Lead source", source], ["Session status", requiredDone ? "Complete" : "In progress"]].map(([label, value]) => (
@@ -300,29 +293,23 @@ export function VerificationPanel({ workItemId, readOnly, canHandoff }: { workIt
       </section>
 
       {context?.claim.at && new Date(panel.session.started_at).getTime() < new Date(context.claim.at).getTime() - 5_000 && (
-        <Callout tone="info" title="Picking up where the last call stopped">This verification was started before this claim. Every field confirmed or corrected then is kept below, and the corrected values are already on the application.</Callout>
+        <Callout tone="info" title="Resumed from an earlier call: fields confirmed or corrected then are kept below." />
       )}
-      {readOnly && <Callout tone="info" title="Read-only access">Your account is read-only. You can review this application, but field changes are disabled.</Callout>}
-      {error && <Callout tone="error" title="Something went wrong">{error}</Callout>}
+      {readOnly && <Callout tone="info" title="Your account is read-only: field changes are disabled." />}
+      {error && <Callout tone="error" title={error} />}
 
       {canHandoff && handoffContext && (
-        <section className="min-w-0 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] p-6">
-          <h2 className="m-0 text-[18px] leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]">Hand off to a licensed agent</h2>
-          <p className="mt-1 mb-0 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">Your verification progress travels with the call. The receiving agent sees it before accepting.</p>
-          <div className="mt-4 flex flex-wrap items-end gap-3">
-            <div className="min-w-56 flex-1">
-              <label htmlFor="handoff-agent" className="mb-1.5 block text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]">Licensed agent</label>
-              <select id="handoff-agent" className="box-border h-11 w-full rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] px-3 text-[16px] leading-[1.5] tracking-[-0.02em] text-[var(--ink)] outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]" value={handoffTarget} disabled={readOnly || handoffSaving} onChange={(event) => setHandoffTarget(event.target.value)}>
-                <option value="">Choose an agent…</option>
-                {handoffContext.licensedAgents.map((agent) => <option key={agent.id} value={agent.id}>{agent.name} ({agent.role})</option>)}
-              </select>
-            </div>
-            <button type="button" onClick={() => void offerHandoff()} disabled={readOnly || handoffSaving || !handoffTarget} className={b.primary44}>{handoffSaving ? "Offering…" : "Offer handoff"}</button>
-          </div>
-          {handoffError && <p role="alert" className="mt-2 mb-0 text-[14px] leading-[1.5] text-[var(--error-ink)]">{handoffError}</p>}
+        <section aria-label="Hand off to a licensed agent" className="flex min-w-0 flex-wrap items-center gap-3 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
+          <label htmlFor="handoff-agent" className="text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">Hand off to a licensed agent</label>
+          <select id="handoff-agent" className={cn(toolbarControl, "min-w-56 flex-1 sm:flex-none")} value={handoffTarget} disabled={readOnly || handoffSaving} onChange={(event) => setHandoffTarget(event.target.value)}>
+            <option value="">Choose an agent…</option>
+            {handoffContext.licensedAgents.map((agent) => <option key={agent.id} value={agent.id}>{agent.name} ({agent.role})</option>)}
+          </select>
+          <Button type="button" onClick={() => void offerHandoff()} disabled={readOnly || handoffSaving || !handoffTarget}>{handoffSaving ? "Offering…" : "Offer handoff"}</Button>
+          {handoffError && <p role="alert" className="m-0 w-full text-[14px] leading-[1.5] text-[var(--error-ink)]">{handoffError}</p>}
         </section>
       )}
-      {canHandoff && handoffError && !handoffContext && <Callout tone="error" title="Handoff is unavailable">{handoffError}</Callout>}
+      {canHandoff && handoffError && !handoffContext && <Callout tone="error" title={`Handoff is unavailable: ${handoffError}`} />}
 
       <div className="flex min-w-0 flex-col gap-6 lg:flex-row lg:items-start">
         <div className="flex min-w-0 flex-1 flex-col gap-6">
@@ -383,13 +370,13 @@ export function VerificationPanel({ workItemId, readOnly, canHandoff }: { workIt
                           <span className="flex gap-2">
                             {field.state === "outstanding" ? (
                               <>
-                                <button type="button" onClick={() => void update(field, "confirmed")} disabled={busy} className={b.row36}>{saving === key ? <Loader2 aria-hidden className="size-4 animate-spin" /> : null}Confirm</button>
-                                <button type="button" onClick={() => void update(field, "corrected")} disabled={busy} className={dirty ? b.primary36 : b.row36}>Save correction</button>
+                                <Button type="button" size="sm" variant="outline" onClick={() => void update(field, "confirmed")} disabled={busy}>{saving === key ? <Loader2 aria-hidden className="animate-spin" /> : null}Confirm</Button>
+                                <Button type="button" size="sm" variant={dirty ? "default" : "outline"} onClick={() => void update(field, "corrected")} disabled={busy}>Save correction</Button>
                               </>
                             ) : (
                               <>
-                                <button type="button" onClick={() => void update(field, "corrected")} disabled={busy} className={dirty ? b.primary36 : b.row36}>{saving === key ? <Loader2 aria-hidden className="size-4 animate-spin" /> : null}Save correction</button>
-                                <button type="button" onClick={() => void update(field, "outstanding")} disabled={busy} className={b.row36}>Mark outstanding</button>
+                                <Button type="button" size="sm" variant={dirty ? "default" : "outline"} onClick={() => void update(field, "corrected")} disabled={busy}>{saving === key ? <Loader2 aria-hidden className="animate-spin" /> : null}Save correction</Button>
+                                <Button type="button" size="sm" variant="outline" onClick={() => void update(field, "outstanding")} disabled={busy}>Mark outstanding</Button>
                               </>
                             )}
                           </span>
@@ -413,7 +400,7 @@ export function VerificationPanel({ workItemId, readOnly, canHandoff }: { workIt
           </section>
         </div>
 
-        <div className="flex min-w-0 flex-col gap-6 lg:w-[400px] lg:shrink-0">
+        <div className="flex min-w-0 flex-col gap-4 lg:w-[360px] lg:shrink-0">
           <Card title="Verification progress">
             <SettingsMeter value={panel.session.progress_percentage} max={100} tone={requiredDone ? "success" : "primary"} caption={progressText} ariaLabel={progressText} />
             <div className="mt-4">
@@ -425,10 +412,6 @@ export function VerificationPanel({ workItemId, readOnly, canHandoff }: { workIt
               ]} />
             </div>
           </Card>
-
-          <Callout tone="info" title="A dropped call must not lose the work">
-            Every field saves on its own. There is no batched Save button on this screen, by design.
-          </Callout>
 
           <Card title="Change history">
             {history.length === 0 ? (

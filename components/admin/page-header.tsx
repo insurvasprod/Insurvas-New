@@ -2,29 +2,28 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 
 import { PageHeader } from "@/components/ui/page-header";
-import { adminSectionForPath } from "@/lib/adminNav/build";
 
 /**
  * The admin wrapper kept so its 30-odd call sites keep working; PageHeader in components/ui is the
  * shared one.
  *
- * `path` is optional and is how a page gets its eyebrow — the section it belongs to, read from the
- * nav rather than typed here, so the two cannot drift. A page that passes nothing renders exactly
- * as it did before, which is what makes adopting this one page at a time safe.
+ * One title per page (UI standard, 2026-09-28): `path` used to add a section eyebrow above it and is
+ * now accepted and ignored, so older call sites keep compiling. `subtitle` is optional — one short
+ * sentence at most.
  *
- * `backHref` is the detail-page shape from the artboards: the way back sits above the eyebrow, in
- * one place, rather than as an ad-hoc link each detail page invents for itself.
+ * `backHref` is the detail-page shape: the one way back sits above the title, in one place, rather
+ * than as an ad-hoc link each detail page invents for itself.
  */
 export function AdminPageHeader({
   title,
   subtitle,
-  path,
   backHref,
   backLabel,
   actions,
 }: {
   title: string;
-  subtitle: string;
+  subtitle?: string;
+  /** Accepted and ignored (no eyebrows). */
   path?: string;
   backHref?: string;
   backLabel?: string;
@@ -33,8 +32,7 @@ export function AdminPageHeader({
   const header = (
     <PageHeader
       title={title}
-      description={subtitle}
-      eyebrow={path ? adminSectionForPath(path) ?? undefined : undefined}
+      description={subtitle || undefined}
       actions={actions}
     />
   );

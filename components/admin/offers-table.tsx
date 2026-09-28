@@ -1,13 +1,14 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ChevronDown, MoreHorizontal, Search } from "lucide-react";
+import { MoreHorizontal } from "lucide-react";
 import { notify } from "@/lib/notify";
 
 import { BoardStatGrid, BoardStatTile } from "@/components/admin/board-stat-tile";
 import { BoardTableFooter } from "@/components/admin/board-table-footer";
 import { EmptyState, NoMatches } from "@/components/admin/empty-state";
 import { StatusChip, type StatusTone } from "@/components/admin/status-chip";
+import { Callout } from "@/components/app/settings/primitives";
 import { fullDate } from "@/components/admin/tenant-record/billing-format";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -15,7 +16,9 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { DataToolbar, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { PageHeader } from "@/components/ui/page-header";
+import { TableCard } from "@/components/ui/table-card";
 import { formatCentsAsCurrency } from "@/lib/money";
 import { PLAN_TYPES, PLAN_TYPE_LABELS, BILLING_CYCLE_LABELS, OFFER_DURATION_LABELS, type OfferRow, type PlanType, type BillingCycle, type DiscountType, type CouponDuration } from "@/lib/offers/constants";
 import type { PlanListRow } from "@/lib/plans/constants";
@@ -124,10 +127,8 @@ function overlaps(a: OfferRow, b: OfferRow): boolean {
 }
 
 const PAGE = 25;
-const control = "h-10 rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] px-3.5 text-[14px] leading-[1.43] font-semibold tracking-[-0.01em] text-[var(--ink)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]";
 const th = "px-3 py-2 text-left text-[12px] leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]";
 const td = "border-t border-[var(--border)] px-3 py-2 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--body)]";
-const primary44 = "inline-flex h-11 items-center justify-center rounded-[8px] border border-transparent bg-[var(--primary)] px-4 text-[14px] font-semibold text-[var(--on-primary)] hover:bg-[var(--accent-hover)]";
 
 /**
  * The offers board (p-adm-offers): the campaign layer over coupons. Figures, filters and table all
@@ -317,8 +318,8 @@ export function OffersTable({
     <div className="flex min-w-0 flex-col gap-6">
       <PageHeader
         title="Offers & discounts"
-        description="The campaign layer over coupons: promotions and automatic discount rules."
-        actions={<button type="button" className={primary44} onClick={openNew}>New offer</button>}
+        description="Promotions and automatic discount rules on top of coupons."
+        actions={<Button type="button" onClick={openNew}>New offer</Button>}
       />
 
       <BoardStatGrid>
@@ -334,30 +335,34 @@ export function OffersTable({
         />
       </BoardStatGrid>
 
-      <div className="flex flex-wrap items-center gap-3 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] p-3">
-        <span className="relative inline-flex">
-          <select aria-label="Target" value={target} onChange={(event) => { setTarget(event.target.value); setPage(1); }} className={cn(control, "appearance-none pr-9")}>
-            <option value="">All targets</option>
-            <option value="all">Every plan (no plan restriction)</option>
-            {plans.filter((p) => !p.is_archived).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
-          <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-[var(--muted)]" aria-hidden />
-        </span>
-        <span className="flex h-10 w-full items-center gap-2 rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] px-3 text-[var(--muted)] sm:w-[248px]">
-          <Search className="size-4 shrink-0" aria-hidden />
-          <input type="search" aria-label="Search offer or coupon" placeholder="Search offer or coupon" value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} className="min-w-0 flex-grow border-0 bg-transparent text-[14px] text-[var(--ink)] outline-none placeholder:text-[var(--muted)]" />
-        </span>
-        <span role="group" aria-label="Status" className="inline-flex flex-wrap gap-[3px] rounded-[8px] bg-[var(--surface-alt)] p-[3px]">
-          {([["", "All"], ["active", "Active"], ["scheduled", "Scheduled"], ["ended", "Ended"], ["inactive", "Deactivated"]] as const).map(([value, label]) => (
-            <button key={value || "all"} type="button" aria-pressed={stateFilter === value} onClick={() => { setStateFilter(value); setPage(1); }} className={cn("h-8 rounded-[6px] border px-3 text-[14px] font-semibold", stateFilter === value ? "border-[var(--border)] bg-[var(--surface)] text-[var(--ink)]" : "border-transparent text-[var(--muted)]")}>{label}</button>
-          ))}
-        </span>
-        <span className="flex-grow" />
-        {anyFilter && <button type="button" onClick={clear} className="text-[14px] font-semibold text-[var(--ink)] hover:underline">Clear</button>}
-      </div>
+      {firstOverlap && (
+        <Callout
+          tone="warning"
+          title={`${firstOverlap.offer.name} and ${firstOverlap.with[0].name}${overlapping.length > 2 ? ` (and ${overlapping.length - 2} more)` : ""} could both apply to the same subscription — narrow a window, plan or customer rule if they are not meant to combine.`}
+        />
+      )}
 
-      <div className="relative min-w-0 overflow-hidden rounded-[12px] border border-[var(--border)] bg-[var(--surface)]">
-        <div className="overflow-x-auto">
+      <TableCard
+        className="min-w-0"
+        toolbar={
+          <DataToolbar>
+            <ToolbarSearch value={query} onChange={(value) => { setQuery(value); setPage(1); }} placeholder="Search offer or coupon" />
+            <select aria-label="Target" value={target} onChange={(event) => { setTarget(event.target.value); setPage(1); }} className={cn(toolbarControl, "max-w-56")}>
+              <option value="">All targets</option>
+              <option value="all">Every plan (no plan restriction)</option>
+              {plans.filter((p) => !p.is_archived).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+            <select aria-label="Status" value={stateFilter} onChange={(event) => { setStateFilter(event.target.value as "" | OfferState); setPage(1); }} className={toolbarControl}>
+              <option value="">All statuses</option>
+              <option value="active">Active</option>
+              <option value="scheduled">Scheduled</option>
+              <option value="ended">Ended</option>
+              <option value="inactive">Deactivated</option>
+            </select>
+            {anyFilter && <Button type="button" variant="ghost" onClick={clear}>Clear</Button>}
+          </DataToolbar>
+        }
+      >
           <table className="w-full min-w-[980px] border-collapse">
             <thead>
               <tr className="bg-[var(--surface-alt)]">
@@ -395,9 +400,9 @@ export function OffersTable({
                     <td className={cn(td, "text-right")}>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <button type="button" aria-label={`Actions for ${offer.name}`} disabled={busy} className="inline-flex size-8 items-center justify-center rounded-[8px] text-[var(--muted)] hover:bg-[var(--surface-alt)] hover:text-[var(--ink)] disabled:opacity-50">
-                            <MoreHorizontal className="size-4" aria-hidden />
-                          </button>
+                          <Button type="button" variant="ghost" size="icon-sm" aria-label={`Actions for ${offer.name}`} disabled={busy}>
+                            <MoreHorizontal aria-hidden />
+                          </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem onSelect={() => openEdit(offer)}>Edit</DropdownMenuItem>
@@ -414,16 +419,8 @@ export function OffersTable({
               })}
             </tbody>
           </table>
-        </div>
         {rows.length > 0 && <BoardTableFooter page={current} pageSize={PAGE} total={rows.length} itemLabel={rows.length === 1 ? "offer" : "offers"} order="latest start first" onPageChange={setPage} />}
-      </div>
-
-      {firstOverlap && (
-        <div className="rounded-[12px] border border-[var(--border)] border-l-[3px] border-l-[var(--warning)] bg-[var(--warning-surface)] px-4 py-3.5">
-          <p className="text-[14px] font-semibold text-[var(--warning-ink)]">{overlapping.length === 1 ? "One offer overlaps another" : `${overlapping.length} offers overlap another`}</p>
-          <p className="mt-1.5 text-[14px] leading-normal text-[var(--body)]">{firstOverlap.offer.name} and {firstOverlap.with[0].name} could both apply to the same subscription in the same window. Narrow a window, a plan or a customer rule if they are not meant to combine. A cancelled subscription is never offered in Apply.</p>
-        </div>
-      )}
+      </TableCard>
 
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">

@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
 import { BoardTableFooter } from "@/components/admin/board-table-footer";
 import { EmptyState, NoMatches } from "@/components/admin/empty-state";
-import { Pill, SearchBox, btn, st } from "@/components/app/settings/primitives";
+import { Pill, st } from "@/components/app/settings/primitives";
+import { Button } from "@/components/ui/button";
+import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import {
   Dialog,
   DialogContent,
@@ -15,6 +17,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ErrorState } from "@/components/ui/page-states";
+import { TableCard } from "@/components/ui/table-card";
 import type { CouponRow } from "@/lib/coupons/constants";
 import type { CouponStatus } from "@/lib/coupons/discount";
 import {
@@ -37,23 +40,20 @@ import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 25;
 
-const OUTLINE =
-  "inline-flex h-10 cursor-pointer items-center gap-2 rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] px-3.5 text-[14px] leading-[1.43] font-semibold tracking-[-0.01em] text-[var(--ink)] hover:bg-[var(--surface-alt)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]";
-
 type StatusFilter = "all" | CouponStatus;
 type TypeFilter = "any" | "percent" | "fixed";
 
 const USD = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
 
 /**
- * The coupons list (board p-adm-coupons): the toolbar card, then the table card with its footer.
+ * The coupons list (board p-adm-coupons): one TableCard with its toolbar inside and the pager at
+ * its foot.
  *
- * Every coupon is on the client (tens, not thousands), so the status filter, search, the Filters
- * panel and paging are instant and the counts exact. `nowIso` comes from the server so a coupon's
- * status is decided once and the browser cannot disagree with it during hydration.
+ * Every coupon is on the client (tens, not thousands), so search, the filters and paging are
+ * instant and the counts exact. `nowIso` comes from the server so a coupon's status is decided once
+ * and the browser cannot disagree with it during hydration.
  *
- * Deactivate is the one action a row has. The board draws no action column; it is added at the end
- * because the board's callout tells staff to "deactivate instead", and they need somewhere to do it.
+ * Deactivate is the one action a row has, in the last column.
  */
 export function CouponsTable({
   coupons,
@@ -71,7 +71,7 @@ export function CouponsTable({
   listError: boolean;
 }) {
   const router = useRouter();
-  const id = useId();
+  const [refreshing, startRefresh] = useTransition();
   const now = useMemo(() => new Date(nowIso), [nowIso]);
   const planMap = useMemo(() => (plans ? new Map(plans.map((p) => [p.id, p])) : null), [plans]);
 
@@ -79,7 +79,6 @@ export function CouponsTable({
   const [search, setSearch] = useState("");
   const [expiry, setExpiry] = useState<ExpiryFilter>("any");
   const [type, setType] = useState<TypeFilter>("any");
-  const [filtersOpen, setFiltersOpen] = useState(false);
   const [page, setPage] = useState(1);
   const [pending, setPending] = useState<CouponRow | null>(null);
   const [busy, setBusy] = useState(false);
@@ -99,18 +98,14 @@ export function CouponsTable({
   const pages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const current = Math.min(Math.max(page, 1), pages);
   const shown = filtered.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE);
-  const panelFilters = (expiry === "any" ? 0 : 1) + (type === "any" ? 0 : 1);
-
-  function clearPanel() {
-    setExpiry("any");
-    setType("any");
-    setPage(1);
-  }
+  const anyFilter = status !== "all" || expiry !== "any" || type !== "any" || search.trim() !== "";
 
   function clearAll() {
-    clearPanel();
+    setExpiry("any");
+    setType("any");
     setStatus("all");
     setSearch("");
+    setPage(1);
   }
 
   function closeDialog() {
@@ -137,9 +132,18 @@ export function CouponsTable({
 
   return (
     <>
-      <div className="flex min-w-0 flex-col gap-3 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] p-3">
-        <div className="flex flex-wrap items-center gap-3">
-          <span className="relative inline-flex">
+      <TableCard
+        className="min-w-0"
+        toolbar={
+          <DataToolbar actions={<RefreshButton onClick={() => startRefresh(() => router.refresh())} refreshing={refreshing} />}>
+            <ToolbarSearch
+              value={search}
+              onChange={(value) => {
+                setSearch(value);
+                setPage(1);
+              }}
+              placeholder="Search code"
+            />
             <select
               aria-label="Status"
               value={status}
@@ -147,7 +151,7 @@ export function CouponsTable({
                 setStatus(event.target.value as StatusFilter);
                 setPage(1);
               }}
-              className={cn(OUTLINE, "appearance-none pr-9")}
+              className={toolbarControl}
             >
               <option value="all">All statuses</option>
               <option value="active">Active</option>
@@ -155,176 +159,132 @@ export function CouponsTable({
               <option value="expired">Expired</option>
               <option value="exhausted">Exhausted</option>
             </select>
-            <Chevron className="pointer-events-none absolute top-1/2 right-3.5 -translate-y-1/2 text-[var(--ink)]" />
-          </span>
-          <SearchBox
-            value={search}
-            onChange={(value) => {
-              setSearch(value);
-              setPage(1);
-            }}
-            placeholder="Search code"
-            label="Search code"
-          />
-          <button
-            type="button"
-            aria-expanded={filtersOpen}
-            aria-controls={`${id}-filters`}
-            onClick={() => setFiltersOpen((value) => !value)}
-            className={OUTLINE}
-          >
-            <svg aria-hidden width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
-              <path d="M3 5h18M6 12h12M10 19h4" />
-            </svg>
-            Filters
-            {panelFilters > 0 && (
-              <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--surface-alt)] px-1.5 text-[12px] leading-[1.5] font-semibold tracking-[-0.01em] text-[var(--ink)] tabular-nums">
-                {panelFilters}
-              </span>
-            )}
-          </button>
-          <span className="grow" />
-        </div>
-
-        {filtersOpen && (
-          <div id={`${id}-filters`} className="flex flex-wrap items-end gap-4 border-t border-[var(--border)] pt-3">
-            <FilterSelect
-              id={`${id}-expiry`}
-              label="Expiry"
+            <select
+              aria-label="Expiry"
               value={expiry}
-              onChange={(value) => {
-                setExpiry(value as ExpiryFilter);
+              onChange={(event) => {
+                setExpiry(event.target.value as ExpiryFilter);
                 setPage(1);
               }}
-              options={[
-                { value: "any", label: "Any" },
-                { value: "soon", label: `Active, expiring within ${EXPIRING_SOON_DAYS} days` },
-                { value: "dated", label: "Has an expiry date" },
-                { value: "none", label: "Never expires" },
-              ]}
-            />
-            <FilterSelect
-              id={`${id}-type`}
-              label="Discount type"
+              className={toolbarControl}
+            >
+              <option value="any">Any expiry</option>
+              <option value="soon">Active, expiring within {EXPIRING_SOON_DAYS} days</option>
+              <option value="dated">Has an expiry date</option>
+              <option value="none">Never expires</option>
+            </select>
+            <select
+              aria-label="Discount type"
               value={type}
-              onChange={(value) => {
-                setType(value as TypeFilter);
+              onChange={(event) => {
+                setType(event.target.value as TypeFilter);
                 setPage(1);
               }}
-              options={[
-                { value: "any", label: "Any" },
-                { value: "percent", label: "Percentage" },
-                { value: "fixed", label: "Fixed amount" },
-              ]}
-            />
-            {panelFilters > 0 && (
-              <button type="button" className={btn("row")} onClick={clearPanel}>
-                Clear filters
-              </button>
+              className={toolbarControl}
+            >
+              <option value="any">Any discount type</option>
+              <option value="percent">Percentage</option>
+              <option value="fixed">Fixed amount</option>
+            </select>
+            {anyFilter && (
+              <Button type="button" variant="ghost" onClick={clearAll}>
+                Clear
+              </Button>
             )}
-          </div>
-        )}
-      </div>
-
-      <section
-        aria-label="Coupons"
-        className="flex min-w-0 grow flex-col overflow-hidden rounded-[12px] border border-[var(--border)] bg-[var(--surface)]"
+          </DataToolbar>
+        }
       >
-        <div className="min-w-0 overflow-x-auto">
-          <table className={cn(st.table, "min-w-[980px]")}>
-            <thead>
-              <tr className={st.headRow}>
-                <th scope="col" className={cn(st.th, "w-[150px]")}>Code</th>
-                <th scope="col" className={cn(st.th, "w-[120px]")}>Discount</th>
-                <th scope="col" className={st.th}>Restrictions</th>
-                <th scope="col" className={cn(st.th, "w-[130px]")}>Redemptions</th>
-                <th scope="col" className={cn(st.th, "w-[130px]")}>Expires</th>
-                <th scope="col" className={cn(st.th, "w-[130px]")}>Status</th>
-                <th scope="col" className={cn(st.th, "w-[120px] text-right")}>
-                  <span className="sr-only">Action</span>
-                </th>
+        <table className={cn(st.table, "min-w-[980px]")}>
+          <thead>
+            <tr className={st.headRow}>
+              <th scope="col" className={cn(st.th, "w-[150px]")}>Code</th>
+              <th scope="col" className={cn(st.th, "w-[120px]")}>Discount</th>
+              <th scope="col" className={st.th}>Restrictions</th>
+              <th scope="col" className={cn(st.th, "w-[130px]")}>Redemptions</th>
+              <th scope="col" className={cn(st.th, "w-[130px]")}>Expires</th>
+              <th scope="col" className={cn(st.th, "w-[130px]")}>Status</th>
+              <th scope="col" className={cn(st.th, "w-[120px] text-right")}>
+                <span className="sr-only">Action</span>
+              </th>
+            </tr>
+          </thead>
+          <tbody className="m-seq">
+            {listError && (
+              <tr>
+                <td colSpan={7} className="border-t border-[var(--border)] p-0">
+                  <ErrorState
+                    title="The coupons could not be read"
+                    detail="The list did not load, so it is not shown as empty. Reload the page; if it keeps failing, the error is in the server log."
+                  />
+                </td>
               </tr>
-            </thead>
-            <tbody className="m-seq">
-              {listError && (
-                <tr>
-                  <td colSpan={7} className="border-t border-[var(--border)] p-0">
-                    <ErrorState
-                      title="The coupons could not be read"
-                      detail="The list did not load, so it is not shown as empty. Reload the page; if it keeps failing, the error is in the server log."
-                    />
+            )}
+            {!listError && coupons.length === 0 && (
+              <tr>
+                <td colSpan={7} className="border-t border-[var(--border)] p-0">
+                  <EmptyState title="No coupons yet" hint="Create one to hand out a price break at Whop checkout." />
+                </td>
+              </tr>
+            )}
+            {coupons.length > 0 && filtered.length === 0 && (
+              <tr>
+                <td colSpan={7} className="border-t border-[var(--border)] p-0">
+                  <NoMatches noun="coupons" onClear={clearAll} />
+                </td>
+              </tr>
+            )}
+            {shown.map((coupon) => {
+              const state = statusOf(coupon, now);
+              const given = discountGiven?.[coupon.id];
+              return (
+                <tr key={coupon.id} className="m-row hover:bg-[var(--brand-50)]">
+                  <td className={st.td}>
+                    <code className="font-mono text-[14px] font-semibold text-[var(--ink)]">{coupon.code}</code>
+                  </td>
+                  <td
+                    className={cn(st.td, "whitespace-nowrap")}
+                    title={
+                      given === undefined
+                        ? undefined
+                        : `${USD.format(given / 100)} taken off our invoices so far (applied by staff or offers)`
+                    }
+                  >
+                    {describeDiscount(coupon)}
+                  </td>
+                  <td className={st.td}>{describeRestrictions(coupon, planMap)}</td>
+                  <td className={cn(st.td, "tabular-nums whitespace-nowrap")}>
+                    {describeRedemptions(coupon.redeemed_count, coupon.max_redemptions)}
+                  </td>
+                  <td className={cn(st.td, "tabular-nums")}>
+                    {coupon.expires_at ? <ExpiryDate iso={coupon.expires_at} /> : "—"}
+                  </td>
+                  <td className={st.td}>
+                    <Pill tone={COUPON_STATUS_TONE[state]} dot>
+                      {COUPON_STATUS_LABEL[state]}
+                    </Pill>
+                  </td>
+                  <td className={cn(st.td, "text-right")}>
+                    {coupon.is_active && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="text-[var(--error-ink)]"
+                        onClick={() => {
+                          setDialogError(null);
+                          setPending(coupon);
+                        }}
+                        aria-label={`Deactivate ${coupon.code}`}
+                      >
+                        Deactivate
+                      </Button>
+                    )}
                   </td>
                 </tr>
-              )}
-              {!listError && coupons.length === 0 && (
-                <tr>
-                  <td colSpan={7} className="border-t border-[var(--border)] p-0">
-                    <EmptyState
-                      title="No coupons yet"
-                      hint="A coupon is a Whop promo code, so the customer is actually charged less rather than being told they were. Create one to hand out a price break."
-                    />
-                  </td>
-                </tr>
-              )}
-              {coupons.length > 0 && filtered.length === 0 && (
-                <tr>
-                  <td colSpan={7} className="border-t border-[var(--border)] p-0">
-                    <NoMatches noun="coupons" onClear={clearAll} />
-                  </td>
-                </tr>
-              )}
-              {shown.map((coupon) => {
-                const state = statusOf(coupon, now);
-                const given = discountGiven?.[coupon.id];
-                return (
-                  <tr key={coupon.id} className="m-row hover:bg-[var(--brand-50)]">
-                    <td className={st.td}>
-                      <code className="font-mono text-[14px] font-semibold text-[var(--ink)]">{coupon.code}</code>
-                    </td>
-                    <td
-                      className={cn(st.td, "whitespace-nowrap")}
-                      title={
-                        given === undefined
-                          ? undefined
-                          : `${USD.format(given / 100)} taken off our invoices so far (applied by staff or offers)`
-                      }
-                    >
-                      {describeDiscount(coupon)}
-                    </td>
-                    <td className={st.td}>{describeRestrictions(coupon, planMap)}</td>
-                    <td className={cn(st.td, "tabular-nums whitespace-nowrap")}>
-                      {describeRedemptions(coupon.redeemed_count, coupon.max_redemptions)}
-                    </td>
-                    <td className={cn(st.td, "tabular-nums")}>
-                      {coupon.expires_at ? <ExpiryDate iso={coupon.expires_at} /> : "—"}
-                    </td>
-                    <td className={st.td}>
-                      <Pill tone={COUPON_STATUS_TONE[state]} dot>
-                        {COUPON_STATUS_LABEL[state]}
-                      </Pill>
-                    </td>
-                    <td className={cn(st.td, "text-right")}>
-                      {coupon.is_active && (
-                        <button
-                          type="button"
-                          className={btn("danger-row")}
-                          onClick={() => {
-                            setDialogError(null);
-                            setPending(coupon);
-                          }}
-                          aria-label={`Deactivate ${coupon.code}`}
-                        >
-                          Deactivate
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-        <div className="grow" />
+              );
+            })}
+          </tbody>
+        </table>
         <BoardTableFooter
           page={current}
           pageSize={PAGE_SIZE}
@@ -333,7 +293,7 @@ export function CouponsTable({
           order="active first, then newest"
           onPageChange={setPage}
         />
-      </section>
+      </TableCard>
 
       <Dialog open={pending !== null} onOpenChange={(value) => !value && closeDialog()}>
         <DialogContent>
@@ -352,17 +312,12 @@ export function CouponsTable({
             </p>
           )}
           <DialogFooter>
-            <button type="button" className={btn("ghost")} onClick={closeDialog} disabled={busy}>
+            <Button type="button" variant="ghost" onClick={closeDialog} disabled={busy}>
               Cancel
-            </button>
-            <button
-              type="button"
-              className={btn("primary", "bg-[var(--error)] hover:bg-[var(--error-ink)]")}
-              onClick={() => pending && void deactivate(pending)}
-              disabled={busy}
-            >
+            </Button>
+            <Button type="button" variant="destructive" onClick={() => pending && void deactivate(pending)} disabled={busy}>
               {busy ? "Deactivating…" : "Deactivate coupon"}
-            </button>
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -384,47 +339,5 @@ function ExpiryDate({ iso }: { iso: string }) {
     <time ref={ref} dateTime={iso} title={full} className="whitespace-nowrap">
       {utcDay(iso)}
     </time>
-  );
-}
-
-function Chevron({ className }: { className?: string }) {
-  return (
-    <svg aria-hidden width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <path d="m6 9 6 6 6-6" />
-    </svg>
-  );
-}
-
-function FilterSelect({
-  id,
-  label,
-  value,
-  onChange,
-  options,
-}: {
-  id: string;
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  options: { value: string; label: string }[];
-}) {
-  return (
-    <span className="flex min-w-[200px] flex-col gap-1">
-      <label htmlFor={id} className="text-[12px] leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]">
-        {label}
-      </label>
-      <select
-        id={id}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className="h-10 rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] px-3 text-[14px] tracking-[-0.02em] text-[var(--ink)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
-      >
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-    </span>
   );
 }

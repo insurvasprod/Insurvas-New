@@ -2,7 +2,6 @@ import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { VendorReturnsWorkspace } from "@/components/app/vendor-returns-workspace";
 import { guardPage } from "@/lib/entitlements/guardPage";
-import { sectionForPath } from "@/lib/menu/definition";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -17,7 +16,6 @@ export default async function VendorReturnsPage({ searchParams }: { searchParams
         guard={guard}
         featureLabel="Vendor returns"
         description="Prepare evidence-backed return claims and reconcile vendor credits without losing the source history."
-        eyebrow={sectionForPath("/app/vendor-returns") ?? undefined}
       />
     );
   }
@@ -26,10 +24,9 @@ export default async function VendorReturnsPage({ searchParams }: { searchParams
       <RoleGateNotice
         featureLabel="Vendor returns"
         detail="Owners, producers, and bookkeepers can review vendor return claims."
-        eyebrow={sectionForPath("/app/vendor-returns") ?? undefined}
       />
     );
   }
   // The header is drawn by the workspace, because its New claim action needs the claimable rows.
-  return <VendorReturnsWorkspace eyebrow={sectionForPath("/app/vendor-returns") ?? undefined} initialVendorId={initialVendorId} />;
+  return <VendorReturnsWorkspace initialVendorId={initialVendorId} />;
 }

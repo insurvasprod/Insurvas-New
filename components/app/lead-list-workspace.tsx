@@ -6,8 +6,9 @@ import { ChevronLeft, Users } from "lucide-react";
 import { notify } from "@/lib/notify";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Label } from "@/components/ui/label";
+import { DataToolbar, RefreshButton, toolbarControl } from "@/components/ui/data-toolbar";
+import { ErrorState, SectionLoading } from "@/components/ui/page-states";
+import { TableCard } from "@/components/ui/table-card";
 import { LeadListIndex, type LeadListIndexRow } from "@/components/app/lead-list-index";
 
 /**
@@ -45,6 +46,7 @@ export function LeadListWorkspace() {
   const [unassignedOnly, setUnassignedOnly] = useState(true);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [listLoading, setListLoading] = useState(false);
   const [error, setError] = useState("");
 
   const load = useCallback(
@@ -71,7 +73,7 @@ export function LeadListWorkspace() {
   useEffect(() => { void load(); }, [load]);
 
   const openList = useCallback(async (list: LeadList, onlyUnassigned: boolean) => {
-    setOpen(list); setSelected(new Set()); setLeads([]);
+    setOpen(list); setSelected(new Set()); setLeads([]); setListLoading(true);
     const params = new URLSearchParams({ campaign_id: list.campaignId });
     if (onlyUnassigned) params.set("unassigned", "1");
     try {
@@ -81,6 +83,8 @@ export function LeadListWorkspace() {
       setLeads(body.leads ?? []);
     } catch (cause) {
       notify.fail(cause instanceof Error ? cause.message : "Could not load this list");
+    } finally {
+      setListLoading(false);
     }
   }, []);
 
@@ -138,105 +142,113 @@ export function LeadListWorkspace() {
   const selectable = useMemo(() => leads.filter((lead) => lead.workItemId), [leads]);
 
 
-  if (loading) return <p className="text-sm text-muted-foreground">Loading your lead lists…</p>;
+  if (loading) return <TableCard><SectionLoading rows={6} columns={5} label="Loading lead lists" /></TableCard>;
   if (error)
-    return <Card><CardContent className="p-6"><p role="alert" className="text-sm text-destructive">{error}</p><Button className="mt-4" variant="outline" onClick={() => { setLoading(true); void load(); }}>Try again</Button></CardContent></Card>;
+    return <TableCard><ErrorState detail={error} action={<Button type="button" variant="outline" onClick={() => { setLoading(true); void load(); }}>Try again</Button>} /></TableCard>;
 
   if (open) {
     const chosen = members.find((member) => member.id === assignee);
     const atCapacity = chosen ? chosen.capacity > 0 && chosen.currentOpen >= chosen.capacity : false;
     return (
       <div className="space-y-4">
-        <Button variant="ghost" size="sm" onClick={() => { setOpen(null); setSelected(new Set()); }}><ChevronLeft className="size-4" />All lists</Button>
+        <button type="button" onClick={() => { setOpen(null); setSelected(new Set()); }} className="inline-flex w-fit items-center gap-1.5 text-sm font-semibold tracking-[-0.01em] text-muted-foreground transition-colors hover:text-foreground">
+          <ChevronLeft className="size-4" aria-hidden="true" />All lists
+        </button>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">{open.campaignName}</CardTitle>
-            <CardDescription>{open.vendorName} · {open.leadsReceived.toLocaleString()} of {open.recordsPurchased.toLocaleString()} records arrived · {open.untouched.toLocaleString()} never dialled and unassigned</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="flex flex-wrap items-end gap-3">
-              <label className="flex items-center gap-2 text-sm">
-                <input type="checkbox" checked={unassignedOnly} onChange={(event) => { setUnassignedOnly(event.target.checked); void openList(open, event.target.checked); }} />
+        {atCapacity && (
+          // Said before the attempt, not after. The server skips a full member anyway; being
+          // told by a toast after selecting four hundred leads is a worse way to learn it.
+          <p role="status" className="rounded-lg border border-[var(--warning)]/30 bg-[var(--warning-surface)] px-4 py-2.5 text-sm text-[var(--warning-ink)]">{chosen?.name} is at capacity — the server will skip them. Choose somebody else or free some of their open leads.</p>
+        )}
+
+        <TableCard
+          title={open.campaignName}
+          description={`${open.vendorName} · ${open.leadsReceived.toLocaleString()} of ${open.recordsPurchased.toLocaleString()} records arrived · ${open.untouched.toLocaleString()} never dialled and unassigned`}
+          toolbar={
+            <DataToolbar
+              actions={
+                <>
+                  <Button type="button" disabled={!assignee || selected.size === 0 || busy} onClick={() => void assignSelected()}>
+                    <Users aria-hidden="true" />{busy ? "Assigning…" : `Assign ${selected.size || ""}`.trim()}
+                  </Button>
+                  <RefreshButton onClick={() => void openList(open, unassignedOnly)} refreshing={listLoading} />
+                </>
+              }
+            >
+              <select aria-label="Assign to" className={toolbarControl} value={assignee} onChange={(event) => setAssignee(event.target.value)}>
+                <option value="">Assign to…</option>
+                {members.map((member) => <option key={member.id} value={member.id}>{member.name} · {member.currentOpen}{member.capacity > 0 ? ` of ${member.capacity}` : ""} open</option>)}
+              </select>
+              <label className="inline-flex h-9 items-center gap-2 text-sm">
+                <input type="checkbox" className="size-4 accent-[var(--primary)]" checked={unassignedOnly} onChange={(event) => { setUnassignedOnly(event.target.checked); void openList(open, event.target.checked); }} />
                 Unassigned only
               </label>
-              <div className="space-y-1">
-                <Label htmlFor="assign-to">Assign to</Label>
-                <select id="assign-to" className="lead-form-control" value={assignee} onChange={(event) => setAssignee(event.target.value)}>
-                  <option value="">Choose a member…</option>
-                  {members.map((member) => <option key={member.id} value={member.id}>{member.name} · {member.currentOpen}{member.capacity > 0 ? ` of ${member.capacity}` : ""} open</option>)}
-                </select>
-              </div>
-              <Button type="button" disabled={!assignee || selected.size === 0 || busy} onClick={() => void assignSelected()}>
-                <Users className="size-4" />{busy ? "Assigning…" : `Assign ${selected.size || ""}`.trim()}
-              </Button>
-            </div>
-            {atCapacity && (
-              // Said before the attempt, not after. The server skips a full member anyway; being
-              // told by a toast after selecting four hundred leads is a worse way to learn it.
-              <p role="status" className="text-sm text-[var(--warning-ink)]">{chosen?.name} is at capacity — the server will skip them. Free some of their open leads first, or choose somebody else.</p>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="overflow-x-auto p-0">
-            <table className="w-full min-w-[820px] text-left text-sm">
-              <thead className="border-b text-xs uppercase tracking-wide text-muted-foreground">
-                <tr>
-                  <th className="p-3">
-                    <input
-                      type="checkbox"
-                      aria-label="Select every lead that can be assigned"
-                      checked={selectable.length > 0 && selected.size === selectable.length}
-                      onChange={(event) => setSelected(event.target.checked ? new Set(selectable.map((lead) => lead.workItemId as string)) : new Set())}
-                    />
-                  </th>
-                  <th className="p-3">Lead</th><th className="p-3">State</th><th className="p-3">Status</th>
-                  <th className="p-3">Attempts</th><th className="p-3">Owner</th>
-                </tr>
-              </thead>
-              <tbody>
-                {leads.map((lead) => (
-                  <tr key={lead.leadId} className="border-b last:border-0">
-                    <td className="p-3">
+            </DataToolbar>
+          }
+        >
+          {listLoading ? (
+            <SectionLoading rows={6} columns={5} label="Loading leads" />
+          ) : (
+            <>
+              <table className="w-full min-w-[820px] text-left text-sm">
+                <thead className="border-b bg-muted/30 text-xs text-muted-foreground">
+                  <tr>
+                    <th className="w-10 px-4 py-3 font-medium">
                       <input
                         type="checkbox"
-                        aria-label={`Select ${lead.name}`}
-                        disabled={!lead.workItemId}
-                        checked={Boolean(lead.workItemId && selected.has(lead.workItemId))}
-                        onChange={(event) => setSelected((current) => {
-                          const next = new Set(current);
-                          if (!lead.workItemId) return next;
-                          if (event.target.checked) next.add(lead.workItemId); else next.delete(lead.workItemId);
-                          return next;
-                        })}
+                        className="size-4 accent-[var(--primary)]"
+                        aria-label="Select every lead that can be assigned"
+                        checked={selectable.length > 0 && selected.size === selectable.length}
+                        onChange={(event) => setSelected(event.target.checked ? new Set(selectable.map((lead) => lead.workItemId as string)) : new Set())}
                       />
-                    </td>
-                    <td className="p-3"><strong>{lead.name}</strong><span className="block text-xs text-muted-foreground">{lead.phone || "No phone"}{lead.state ? ` · ${lead.state}` : ""}</span></td>
-                    <td className="p-3">{STATE_LABEL[lead.leadState] ?? lead.leadState}</td>
-                    <td className="p-3">{lead.queueStatus ?? <span className="text-muted-foreground">Not queued</span>}</td>
-                    <td className="p-3">{lead.attemptsMade}</td>
-                    <td className="p-3">{lead.ownerName ?? <span className="text-muted-foreground">Unassigned</span>}</td>
+                    </th>
+                    <th className="px-4 py-3 font-medium">Lead</th><th className="px-4 py-3 font-medium">State</th><th className="px-4 py-3 font-medium">Status</th>
+                    <th className="px-4 py-3 font-medium">Attempts</th><th className="px-4 py-3 font-medium">Owner</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-            {leads.length === 0 && (
-              // Three different nothings, and they need three different sentences. "Every lead is
-              // assigned" is a claim about leads that exist; saying it about a list that received
-              // none is asserting something nothing measured, which is the empty state this audit
-              // has spent a week removing elsewhere.
-              <p className="py-8 text-center text-sm text-muted-foreground">
-                {open.leadsReceived === 0
-                  ? "No leads have arrived against this list yet, so there is nothing to hand out."
-                  : unassignedOnly
-                    ? "Every lead in this list is already assigned."
-                    : "No leads match this filter."}
-              </p>
-            )}
-          </CardContent>
-        </Card>
+                </thead>
+                <tbody className="divide-y">
+                  {leads.map((lead) => (
+                    <tr key={lead.leadId} className="transition-colors hover:bg-muted/30">
+                      <td className="px-4 py-3">
+                        <input
+                          type="checkbox"
+                          className="size-4 accent-[var(--primary)]"
+                          aria-label={`Select ${lead.name}`}
+                          disabled={!lead.workItemId}
+                          checked={Boolean(lead.workItemId && selected.has(lead.workItemId))}
+                          onChange={(event) => setSelected((current) => {
+                            const next = new Set(current);
+                            if (!lead.workItemId) return next;
+                            if (event.target.checked) next.add(lead.workItemId); else next.delete(lead.workItemId);
+                            return next;
+                          })}
+                        />
+                      </td>
+                      <td className="px-4 py-3"><span className="font-semibold">{lead.name}</span><span className="block text-xs text-muted-foreground">{lead.phone || "No phone"}{lead.state ? ` · ${lead.state}` : ""}</span></td>
+                      <td className="px-4 py-3">{STATE_LABEL[lead.leadState] ?? lead.leadState}</td>
+                      <td className="px-4 py-3">{lead.queueStatus ?? <span className="text-muted-foreground">Not queued</span>}</td>
+                      <td className="px-4 py-3 tabular-nums">{lead.attemptsMade}</td>
+                      <td className="px-4 py-3">{lead.ownerName ?? <span className="text-muted-foreground">Unassigned</span>}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {leads.length === 0 && (
+                // Three different nothings, and they need three different sentences. "Every lead is
+                // assigned" is a claim about leads that exist; saying it about a list that received
+                // none is asserting something nothing measured, which is the empty state this audit
+                // has spent a week removing elsewhere.
+                <p className="px-4 py-8 text-center text-sm text-muted-foreground">
+                  {open.leadsReceived === 0
+                    ? "No leads have arrived against this list yet, so there is nothing to hand out."
+                    : unassignedOnly
+                      ? "Every lead in this list is already assigned."
+                      : "No leads match this filter."}
+                </p>
+              )}
+            </>
+          )}
+        </TableCard>
       </div>
     );
   }
@@ -244,5 +256,5 @@ export function LeadListWorkspace() {
   // A row opens the list itself (/app/lead-lists/[campaignId]); its drawer's "Pick leads one by one"
   // (and "See the N unassigned" for everyone else) comes back here through the hash, which is what
   // opens the per-lead assignment view above.
-  return <LeadListIndex lists={lists} licensedStates={licensedStates} nowAt={nowAt} onOpen={(list) => router.push(`/app/lead-lists/${list.campaignId}`)} />;
+  return <LeadListIndex lists={lists} licensedStates={licensedStates} nowAt={nowAt} onOpen={(list) => router.push(`/app/lead-lists/${list.campaignId}`)} onRefresh={() => void load()} />;
 }

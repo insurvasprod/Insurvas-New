@@ -4,7 +4,9 @@ import { useId, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { notify } from "@/lib/notify";
 
-import { Field, Pill, SettingsTableCard, btn, control } from "@/components/app/settings/primitives";
+import { Field, Pill, btn, control } from "@/components/app/settings/primitives";
+import { Button } from "@/components/ui/button";
+import { TableCard } from "@/components/ui/table-card";
 import {
   SWITCH_STATES,
   SWITCH_STATE_HELP,
@@ -191,7 +193,15 @@ export function FeatureSwitchesPanel({
     .sort((a, b) => STATE_RANK[a.state] - STATE_RANK[b.state] || a.index - b.index);
 
   return (
-    <SettingsTableCard title="Kill switches" actions={<Pill tone="error">Super admin only</Pill>}>
+    <TableCard
+      toolbar={
+        canToggle ? undefined : (
+          <p role="note" className="m-0 text-xs text-muted-foreground">
+            Read-only. Only a super admin can change a kill switch.
+          </p>
+        )
+      }
+    >
       <ul className="m-0 list-none p-0">
         {rows.length === 0 && (
           <li className="px-4 py-3 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--body)]">
@@ -333,12 +343,12 @@ export function FeatureSwitchesPanel({
                   )}
 
                   <div className="flex flex-wrap gap-2">
-                    <button type="submit" className={btn("primary")} disabled={busy}>
+                    <Button type="submit" disabled={busy}>
                       {busy ? "Saving…" : "Apply"}
-                    </button>
-                    <button type="button" className={btn("ghost")} onClick={close} disabled={busy}>
+                    </Button>
+                    <Button type="button" variant="ghost" onClick={close} disabled={busy}>
                       Cancel
-                    </button>
+                    </Button>
                   </div>
                 </form>
               )}
@@ -346,12 +356,6 @@ export function FeatureSwitchesPanel({
           );
         })}
       </ul>
-
-      <div className="border-t border-[var(--border)] bg-[var(--canvas)] px-4 py-3 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--body)]">
-        Archived features are listed too &mdash; archiving only takes a feature out of the plan picker, and tenants
-        who already have it keep it, so a kill switch on one still takes something away. Naming a feature and taking
-        it away from every tenant do not share a permission: a non-super-admin sees this tab read-only.
-      </div>
-    </SettingsTableCard>
+    </TableCard>
   );
 }

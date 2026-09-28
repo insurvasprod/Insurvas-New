@@ -4,8 +4,6 @@ import { MAINTENANCE_LEVEL_LABELS, type MaintenanceRow, type MaintenanceStatus }
 import { utcDateTime } from "@/lib/system/adminFormat";
 import type { MaintenanceLastChange } from "@/lib/system/adminView";
 
-const ECHO = "The current state is echoed in the admin shell on every page while it is anything other than off.";
-
 /**
  * The board's status callout: what is true for customers RIGHT NOW (the effective level, after the
  * scheduled window is applied), not what the unsaved form below says.
@@ -46,12 +44,9 @@ export function SystemMaintenanceStatus({
 
   return (
     <Callout tone={tone} title={title}>
-      <p className="m-0">
-        {detail ? `${detail} ` : ""}
-        {ECHO}
-      </p>
+      {detail && <p className="m-0">{detail}</p>}
       {lastChange && (
-        <p className="m-0 mt-1.5 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">
+        <p className={`m-0 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)] ${detail ? "mt-1.5" : ""}`}>
           Last changed <DashboardUtcTime iso={lastChange.at} text={utcDateTime(lastChange.at)} />
           {lastChange.actorName ? ` by ${lastChange.actorName}` : ""}
           {lastChange.reason ? ` — “${lastChange.reason}”` : ""}

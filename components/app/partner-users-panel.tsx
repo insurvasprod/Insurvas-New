@@ -27,6 +27,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import type { PartnerRole } from "@/lib/partnerAuth/roles";
+import { SectionLoading } from "@/components/ui/page-states";
 
 type Member = {
   id: string;
@@ -514,7 +515,7 @@ export function PartnerUsersPanel({
           </div>
 
           {loading ? (
-            <div className="portal-team-loading" role="status">Loading team workspace…</div>
+            <SectionLoading rows={5} columns={4} label="Loading team" />
           ) : (
             <MemberTable
               members={filtered}

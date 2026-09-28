@@ -1,13 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ChevronDown, Download, Search, SlidersHorizontal, X } from "lucide-react";
+import { Download, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { DataToolbar, FilterButton, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { PageHeader } from "@/components/ui/page-header";
-import { StatTile, type MeterTone } from "@/components/ui/stat";
+import { PageLoading } from "@/components/ui/page-loading";
+import { NoMatches, SectionLoading } from "@/components/ui/page-states";
+import { StatStrip, StatTile, type MeterTone } from "@/components/ui/stat";
 import { TableCard } from "@/components/ui/table-card";
-import { sectionForPath } from "@/lib/menu/definition";
 import {
   formatSpan,
   mayReviewZeroClick,
@@ -19,12 +21,13 @@ import {
   type BlockedDialRow,
 } from "@/lib/activityLog/types";
 import { AppointmentCloseOutStrip } from "@/components/app/appointment-close-out-strip";
-import { Callout, Pill } from "@/components/app/settings/primitives";
+import { Pill } from "@/components/app/settings/primitives";
 
 /**
- * Activity & scorecard, as the board draws it: four figures against the window before, one control
- * bar, the chips it has applied, and one table — with the scorecard and the data-integrity review
- * behind the view switch rather than stacked below it.
+ * Activity & scorecard, laid out to the UI consistency standard (docs/design/UI-CONSISTENCY.md): one
+ * strip of four figures against the window before, then one table whose toolbar holds the search,
+ * the window, the filters, the view switch and the chips it has applied — with the scorecard and the
+ * data-integrity review behind the view switch rather than stacked below it.
  *
  * Every figure names its comparison window, and nothing here is talk time: click-to-call hands the
  * call to the handset, so the platform never sees how long it lasted.
@@ -371,21 +374,17 @@ export function ActivityLogWorkspace({ initialView = "activity", role = "" }: { 
   const blockedShown = entries.filter((entry) => entry.kind === "blocked").length;
   const concentration = useMemo(() => zeroClickConcentration(report?.scorecard ?? []), [report]);
 
-  return (
-    <div className="m-stagger portal-activity-page flex flex-col gap-6">
-      <PageHeader
-        className="portal-activity-header"
-        eyebrow={sectionForPath("/app/activity") ?? undefined}
-        title="Activity & scorecard"
-        description="What each agent did, and how it turned out."
-        actions={
-          <Button asChild variant="outline" className="h-11 border-[var(--border-strong)] px-4">
-            <a href={`/api/app/activity?${exportQuery}`}><Download aria-hidden="true" />Export CSV</a>
-          </Button>
-        }
-      />
+  const refresh = () => { void load(); if (view === "scorecard") void loadSetters(); };
+  const segment = (on: boolean) => `h-8 rounded-[5px] px-3 text-sm font-semibold ${on ? "bg-card text-foreground shadow-[0_1px_2px_rgba(16,20,26,.08)]" : "text-muted-foreground hover:text-foreground"}`;
 
-      <div className="portal-activity-kpis grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+  // First read of the page: the one loading look, header and all.
+  if (loading && !report && !error) return <PageLoading />;
+
+  return (
+    <div className="m-stagger flex flex-col gap-6">
+      <PageHeader title="Activity & scorecard" description="What each agent did, and how it turned out." />
+
+      <StatStrip label="Activity totals">
         <StatTile
           label="Leads served"
           value={loading || !now_ ? "…" : now_.served.toLocaleString()}
@@ -417,214 +416,157 @@ export function ActivityLogWorkspace({ initialView = "activity", role = "" }: { 
         />
         <StatTile label="Contact rate" value={loading || now_?.contactRate == null ? "—" : now_.contactRate} unit={loading || now_?.contactRate == null ? undefined : "%"} valueTone={tone(now_?.contactRate ?? null, then?.contactRate ?? null)} footnote={vs(then?.contactRate, "%")} />
         <StatTile label="Appointments" value={loading || !now_ ? "…" : now_.appointments.toLocaleString()} valueTone={tone(now_?.appointments ?? null, then?.appointments ?? null)} footnote={vs(then?.appointments)} />
-      </div>
+      </StatStrip>
 
-      <div className="portal-activity-filters">
-        <label className="relative inline-flex items-center">
-          <span className="sr-only">Date range</span>
-          <select
-            value={range}
-            onChange={(event) => { setRange(event.target.value as Range); setAnchor(now()); setPage(1); if (event.target.value === "custom") setShowFilters(true); }}
-            className="appearance-none rounded-lg border border-[var(--border-strong)] bg-card pl-3.5 pr-9 font-semibold text-foreground"
-          >
-            <option value="7">Last 7 days</option>
-            <option value="30">Last 30 days</option>
-            <option value="90">Last 90 days</option>
-            <option value="custom">Custom range</option>
-          </select>
-          <ChevronDown className="pointer-events-none absolute right-3 size-4 text-muted-foreground" aria-hidden="true" />
-        </label>
-        <label className="relative flex w-full items-center sm:w-[248px]">
-          <Search className="pointer-events-none absolute left-3 size-4 text-muted-foreground" aria-hidden="true" />
-          <input
-            type="search"
-            aria-label="Search leads"
-            placeholder="Search leads"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            className="w-full rounded-lg border border-[var(--border-strong)] bg-card pl-9 pr-3 text-foreground placeholder:text-muted-foreground"
-          />
-        </label>
-        <Button type="button" variant="outline" aria-expanded={showFilters} onClick={() => setShowFilters((open) => !open)} className="border-[var(--border-strong)] px-3.5">
-          <SlidersHorizontal aria-hidden="true" />Filters
-          {activeFilters.length > 0 && (
-            <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--surface-alt)] px-1.5 text-xs font-semibold">{activeFilters.length}</span>
-          )}
-        </Button>
-        <span className="flex-1" />
-        <span role="group" aria-label="View" className="inline-flex gap-[3px] rounded-lg bg-[var(--surface-alt)] p-[3px]">
-          {([["activity", "Activity"], ["scorecard", "Scorecard"], ["integrity", "Data integrity"]] as const).map(([key, label]) => (
-            <button
-              key={key}
-              type="button"
-              aria-pressed={view === key}
-              onClick={() => { setView(key); setIntegrityFilter("any"); setPage(1); }}
-              className={`!h-8 !min-h-8 rounded-lg px-3.5 text-sm font-semibold ${view === key ? "bg-card text-foreground shadow-[0_1px_2px_rgba(16,20,26,.08)]" : "bg-transparent text-muted-foreground"}`}
-            >
-              {label}
-            </button>
-          ))}
-        </span>
-      </div>
-
-      {showFilters && (
-        <div className="grid gap-3 rounded-lg border border-border bg-card p-4 sm:grid-cols-2 lg:grid-cols-5">
-          <label className="text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] text-muted-foreground">
-            Agent
-            <select value={agentId} onChange={(event) => { setAgentId(event.target.value); setPage(1); }} className="mt-1.5 block h-10 w-full rounded-lg border border-[var(--border-strong)] bg-card px-3 text-sm font-normal normal-case tracking-normal text-foreground">
-              <option value="">All agents</option>
-              {agents.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
-            </select>
-          </label>
-          <label className="text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] text-muted-foreground">
-            Campaign
-            <select value={campaignId} onChange={(event) => { setCampaignId(event.target.value); setPage(1); }} className="mt-1.5 block h-10 w-full rounded-lg border border-[var(--border-strong)] bg-card px-3 text-sm font-normal normal-case tracking-normal text-foreground">
-              <option value="">All campaigns</option>
-              {campaigns.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
-            </select>
-          </label>
-          <label className="text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] text-muted-foreground">
-            Disposition
-            <select value={disposition} onChange={(event) => { setDisposition(event.target.value); setPage(1); }} className="mt-1.5 block h-10 w-full rounded-lg border border-[var(--border-strong)] bg-card px-3 text-sm font-normal normal-case tracking-normal text-foreground">
-              <option value="">All dispositions</option>
-              {dispositions.map((key) => <option key={key} value={key}>{humanize(key)}</option>)}
-            </select>
-          </label>
-          {range === "custom" && (
-            <>
-              <label className="text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] text-muted-foreground">
-                From
-                <input type="date" value={customFrom} onChange={(event) => { setCustomFrom(event.target.value); setPage(1); }} className="mt-1.5 block h-10 w-full rounded-lg border border-[var(--border-strong)] bg-card px-3 text-sm font-normal normal-case tracking-normal text-foreground" />
-              </label>
-              <label className="text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] text-muted-foreground">
-                To
-                <input type="date" value={customTo} onChange={(event) => { setCustomTo(event.target.value); setPage(1); }} className="mt-1.5 block h-10 w-full rounded-lg border border-[var(--border-strong)] bg-card px-3 text-sm font-normal normal-case tracking-normal text-foreground" />
-              </label>
-            </>
-          )}
-        </div>
-      )}
-
-      <div className="flex flex-wrap items-center gap-2">
-        {view === "integrity" && reviewsZeroClick && (
-          <span role="group" aria-label="Flag" className="inline-flex gap-2">
-            {([["any", "All flags"], ["zero_click_disposition", `Logged without a dial${now_?.zeroClick != null ? ` · ${now_.zeroClick.toLocaleString()}` : ""}`]] as const).map(([key, label]) => (
-              <button
-                key={key}
-                type="button"
-                aria-pressed={integrityFilter === key}
-                onClick={() => { setIntegrityFilter(key); setPage(1); }}
-                className={`rounded-full border px-3 py-1 text-xs font-semibold leading-normal ${integrityFilter === key
-                  ? key === "zero_click_disposition" ? "border-[var(--error)] bg-[var(--error-surface)] text-[var(--error-ink)]" : "border-[var(--border-strong)] bg-card text-foreground"
-                  : "border-border bg-card text-[var(--body)]"}`}
-              >
-                {label}
-              </button>
-            ))}
-          </span>
-        )}
-        {activeFilters.map((filter) => <Chip key={filter.key} label={filter.label} onRemove={() => { filter.clear(); setPage(1); }} />)}
-        {(activeFilters.length > 0 || debounced) && (
-          <button type="button" onClick={clearAll} className="bg-transparent p-1 text-xs font-semibold text-foreground">Clear all</button>
-        )}
-        <span className="text-xs leading-normal tracking-[-0.01em] text-muted-foreground">
-          {range === "custom" && !windows
-            ? "Choose a from and to date"
-            : view === "scorecard"
-              ? windows?.label
-              : `${total.toLocaleString()} of ${(inRange ?? total).toLocaleString()} ${view === "integrity" ? (zeroClickOnly ? "served leads logged without a dial" : "served leads flagged") : "served leads"}`}
-        </span>
-      </div>
-
-      {error && <p role="alert" className="rounded-lg border border-[color-mix(in_srgb,var(--error)_24%,transparent)] bg-[var(--error-surface)] px-4 py-3 text-sm text-[var(--error-ink)]">{error}</p>}
+      {error && <p role="alert" className="rounded-lg border border-[color-mix(in_srgb,var(--error)_24%,transparent)] bg-[var(--error-surface)] px-4 py-2.5 text-sm text-[var(--error-ink)]">{error}</p>}
 
       {view === "integrity" && reviewsZeroClick && !loading && concentration.total > 0 && (
-        <Callout
-          tone="error"
-          title={`${concentration.total.toLocaleString()} ${concentration.total === 1 ? "outcome was" : "outcomes were"} logged without a Dial press${concentration.top ? (concentration.top.count === concentration.total ? `, all by ${concentration.top.name}` : `, ${concentration.top.count.toLocaleString()} of them by ${concentration.top.name}`) : ""}.`}
-        >
-          The dialer will not save an outcome before Dial is pressed, so each of these was recorded some other way: a call placed
-          from a phone the platform cannot see, or an outcome for a call that never happened. Both are worth a conversation; only
-          one is a data problem.
-        </Callout>
+        <p role="note" className="rounded-lg border border-[color-mix(in_srgb,var(--error)_24%,transparent)] bg-[var(--error-surface)] px-4 py-2.5 text-sm font-semibold text-[var(--error-ink)]">
+          {`${concentration.total.toLocaleString()} ${concentration.total === 1 ? "outcome was" : "outcomes were"} logged without a Dial press${concentration.top ? (concentration.top.count === concentration.total ? `, all by ${concentration.top.name}` : `, ${concentration.top.count.toLocaleString()} of them by ${concentration.top.name}`) : ""}.`}
+        </p>
       )}
 
-      {view !== "scorecard" && (
-        <TableCard
-          footer={
-            <>
-              <span className="text-xs leading-normal tracking-[-0.01em] text-muted-foreground">
-                {total === 0 ? `No ${noun}` : `Showing ${first}–${last} of ${total.toLocaleString()} ${noun} · newest first`}
-                {blockedShown > 0 && ` · ${blockedShown.toLocaleString()} blocked ${blockedShown === 1 ? "dial" : "dials"} between them, not counted`}
-              </span>
-              <span className="flex gap-2">
-                <Button type="button" variant="outline" size="sm" className="border-[var(--border-strong)] px-4" disabled={page <= 1 || loading} onClick={() => setPage((value) => value - 1)}>Previous</Button>
-                <Button type="button" variant="outline" size="sm" className="border-[var(--border-strong)] px-4" disabled={page >= totalPages || loading} onClick={() => setPage((value) => value + 1)}>Next</Button>
-              </span>
-            </>
-          }
-        >
-          <table className="portal-activity-table w-full min-w-[860px] text-left text-sm">
-            <thead>
-              <tr>
-                <th scope="col" className="w-[130px]">Agent</th>
-                <th scope="col" className="w-[170px]">Campaign</th>
-                <th scope="col" className="w-[210px]">Disposition</th>
-                <th scope="col">Lead</th>
-                {view === "integrity" && <th scope="col" className="w-[210px]">Flag</th>}
-                <th scope="col" className="w-[130px] text-right">Time</th>
-                <th scope="col" className="w-[80px] text-right">Attempt</th>
-              </tr>
-            </thead>
-            <tbody className="m-seq">
-              {entries.map((entry) => entry.kind === "blocked" ? (
-                <BlockedRow key={`blocked-${entry.row.id}`} row={entry.row} />
-              ) : (
-                <ServedRow key={entry.row.id} row={entry.row} showFlags={view === "integrity"} />
+      <TableCard
+        toolbar={
+          <DataToolbar
+            actions={<>
+              <Button asChild variant="outline"><a href={`/api/app/activity?${exportQuery}`}><Download aria-hidden="true" />Export</a></Button>
+              <RefreshButton onClick={refresh} refreshing={loading || (view === "scorecard" && settersLoading)} />
+            </>}
+          >
+            <ToolbarSearch value={search} onChange={setSearch} placeholder="Search leads" />
+            <select
+              aria-label="Date range"
+              className={toolbarControl}
+              value={range}
+              onChange={(event) => { setRange(event.target.value as Range); setAnchor(now()); setPage(1); }}
+            >
+              <option value="7">Last 7 days</option>
+              <option value="30">Last 30 days</option>
+              <option value="90">Last 90 days</option>
+              <option value="custom">Custom range</option>
+            </select>
+            {range === "custom" && (
+              <>
+                <input type="date" aria-label="From" className={toolbarControl} value={customFrom} onChange={(event) => { setCustomFrom(event.target.value); setPage(1); }} />
+                <input type="date" aria-label="To" className={toolbarControl} value={customTo} onChange={(event) => { setCustomTo(event.target.value); setPage(1); }} />
+              </>
+            )}
+            <FilterButton open={showFilters} onClick={() => setShowFilters((open) => !open)} count={activeFilters.length} />
+            {view === "integrity" && reviewsZeroClick && (
+              <select aria-label="Flag" className={toolbarControl} value={integrityFilter} onChange={(event) => { setIntegrityFilter(event.target.value as IntegrityFilter); setPage(1); }}>
+                <option value="any">All flags</option>
+                <option value="zero_click_disposition">{`Logged without a dial${now_?.zeroClick != null ? ` · ${now_.zeroClick.toLocaleString()}` : ""}`}</option>
+              </select>
+            )}
+            <span role="group" aria-label="View" className="inline-flex h-9 items-center gap-0.5 rounded-md bg-[var(--surface-alt)] p-0.5">
+              {([["activity", "Activity"], ["scorecard", "Scorecard"], ["integrity", "Data integrity"]] as const).map(([key, label]) => (
+                <button key={key} type="button" aria-pressed={view === key} onClick={() => { setView(key); setIntegrityFilter("any"); setPage(1); }} className={segment(view === key)}>
+                  {label}
+                </button>
               ))}
-            </tbody>
-          </table>
-          {!loading && entries.length === 0 && (
-            <p className="px-4 py-8 text-center text-sm text-muted-foreground">
-              {view === "integrity" ? "Nothing to review — every event in this window is consistent." : "No activity matched these filters."}
-            </p>
-          )}
-        </TableCard>
-      )}
-
-      {view === "scorecard" && (
-        <>
-          <TableCard title="Agent scorecard" description="Served, dialled and logged are deliberately separate: a card can be opened and never dialled, and dialled and never logged. None of them is talk time.">
-            <table className="portal-activity-table w-full min-w-[1050px] text-left text-sm">
-              <thead><tr><th>Agent</th><th className="text-right">Served</th><th className="text-right">Dialled</th><th className="text-right">Logged</th><th className="text-right">Worked</th><th className="text-right">Contact rate</th><th className="text-right">Callbacks booked / kept</th><th className="text-right">Appointments booked / showed</th><th className="text-right">Applications started / submitted</th></tr></thead>
-              <tbody>
-                {report?.scorecard.map((row) => (
-                  <tr key={row.agent_user_id ?? "unknown"}>
-                    <td className="font-medium">{row.agent_name ?? "Unknown agent"}</td>
-                    <td className="text-right tabular-nums">{row.served}</td>
-                    <td className="text-right tabular-nums">{row.clicked}</td>
-                    <td className="text-right tabular-nums">{row.logged}</td>
-                    <td className="text-right tabular-nums" title="Logged outcomes that count as work, per Settings → Dispositions">{row.worked ?? 0}</td>
-                    <td className="text-right tabular-nums">{row.contact_rate_percent == null ? "—" : `${row.contact_rate_percent}%`}</td>
-                    <td className="text-right tabular-nums">{row.callbacks_booked} / {row.callbacks_kept}</td>
-                    <td className="text-right tabular-nums">{row.appointments_booked} / {row.appointments_showed}</td>
-                    <td className="text-right tabular-nums">{row.applications_started} / {row.applications_submitted}</td>
-                  </tr>
+            </span>
+            {showFilters && (
+              <div className="flex w-full flex-wrap items-center gap-2" role="group" aria-label="Filter the log">
+                <select aria-label="Agent" className={toolbarControl} value={agentId} onChange={(event) => { setAgentId(event.target.value); setPage(1); }}>
+                  <option value="">All agents</option>
+                  {agents.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+                </select>
+                <select aria-label="Campaign" className={toolbarControl} value={campaignId} onChange={(event) => { setCampaignId(event.target.value); setPage(1); }}>
+                  <option value="">All campaigns</option>
+                  {campaigns.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+                </select>
+                <select aria-label="Disposition" className={toolbarControl} value={disposition} onChange={(event) => { setDisposition(event.target.value); setPage(1); }}>
+                  <option value="">All dispositions</option>
+                  {dispositions.map((key) => <option key={key} value={key}>{humanize(key)}</option>)}
+                </select>
+              </div>
+            )}
+            {(activeFilters.length > 0 || debounced) && (
+              <div className="flex w-full flex-wrap items-center gap-2">
+                {activeFilters.map((filter) => <Chip key={filter.key} label={filter.label} onRemove={() => { filter.clear(); setPage(1); }} />)}
+                <button type="button" onClick={clearAll} className="bg-transparent p-1 text-xs font-semibold text-foreground hover:underline">Clear all</button>
+              </div>
+            )}
+          </DataToolbar>
+        }
+        footer={view === "scorecard" ? (
+          <span>{range === "custom" && !windows ? "Choose a from and to date" : windows?.label}</span>
+        ) : (
+          <>
+            <span className="text-xs leading-normal tracking-[-0.01em] text-muted-foreground">
+              {range === "custom" && !windows
+                ? "Choose a from and to date"
+                : total === 0 ? `No ${noun}` : `Showing ${first}–${last} of ${total.toLocaleString()} ${noun}${inRange != null && inRange !== total ? ` (${inRange.toLocaleString()} served in the window)` : ""} · newest first`}
+              {blockedShown > 0 && ` · ${blockedShown.toLocaleString()} blocked ${blockedShown === 1 ? "dial" : "dials"} between them, not counted`}
+            </span>
+            <span className="flex gap-2">
+              <Button type="button" variant="outline" size="sm" disabled={page <= 1 || loading} onClick={() => setPage((value) => value - 1)}>Previous</Button>
+              <Button type="button" variant="outline" size="sm" disabled={page >= totalPages || loading} onClick={() => setPage((value) => value + 1)}>Next</Button>
+            </span>
+          </>
+        )}
+      >
+        {loading ? <SectionLoading rows={6} columns={6} />
+          : view === "scorecard" ? (
+            report?.scorecard.length ? (
+              <table className="portal-activity-table w-full min-w-[1050px] text-left text-sm">
+                <thead><tr><th>Agent</th><th className="text-right">Served</th><th className="text-right">Dialled</th><th className="text-right">Logged</th><th className="text-right">Worked</th><th className="text-right">Contact rate</th><th className="text-right">Callbacks booked / kept</th><th className="text-right">Appointments booked / showed</th><th className="text-right">Applications started / submitted</th></tr></thead>
+                <tbody>
+                  {report.scorecard.map((row) => (
+                    <tr key={row.agent_user_id ?? "unknown"}>
+                      <td className="font-medium">{row.agent_name ?? "Unknown agent"}</td>
+                      <td className="text-right tabular-nums">{row.served}</td>
+                      <td className="text-right tabular-nums">{row.clicked}</td>
+                      <td className="text-right tabular-nums">{row.logged}</td>
+                      <td className="text-right tabular-nums" title="Logged outcomes that count as work, per Settings → Dispositions">{row.worked ?? 0}</td>
+                      <td className="text-right tabular-nums">{row.contact_rate_percent == null ? "—" : `${row.contact_rate_percent}%`}</td>
+                      <td className="text-right tabular-nums">{row.callbacks_booked} / {row.callbacks_kept}</td>
+                      <td className="text-right tabular-nums">{row.appointments_booked} / {row.appointments_showed}</td>
+                      <td className="text-right tabular-nums">{row.applications_started} / {row.applications_submitted}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : <p className="px-4 py-8 text-center text-sm text-muted-foreground">No activity in this window.</p>
+          ) : entries.length === 0 ? (
+            view === "integrity"
+              ? <p className="px-4 py-8 text-center text-sm text-muted-foreground">Nothing to review. Every event in this window is consistent.</p>
+              : activeFilters.length > 0 || debounced
+                ? <NoMatches noun="served leads" onClear={clearAll} />
+                : <p className="px-4 py-8 text-center text-sm text-muted-foreground">No activity in this window.</p>
+          ) : (
+            <table className="portal-activity-table w-full min-w-[860px] text-left text-sm">
+              <thead>
+                <tr>
+                  <th scope="col" className="w-[130px]">Agent</th>
+                  <th scope="col" className="w-[170px]">Campaign</th>
+                  <th scope="col" className="w-[210px]">Disposition</th>
+                  <th scope="col">Lead</th>
+                  {view === "integrity" && <th scope="col" className="w-[210px]">Flag</th>}
+                  <th scope="col" className="w-[130px] text-right">Time</th>
+                  <th scope="col" className="w-[80px] text-right">Attempt</th>
+                </tr>
+              </thead>
+              <tbody className="m-seq">
+                {entries.map((entry) => entry.kind === "blocked" ? (
+                  <BlockedRow key={`blocked-${entry.row.id}`} row={entry.row} />
+                ) : (
+                  <ServedRow key={entry.row.id} row={entry.row} showFlags={view === "integrity"} />
                 ))}
               </tbody>
             </table>
-            {report?.scorecard.length === 0 && <p className="px-4 py-6 text-center text-sm text-muted-foreground">No activity in this window.</p>}
-          </TableCard>
+          )}
+      </TableCard>
 
+      {view === "scorecard" && (
+        <>
           <AppointmentCloseOutStrip />
 
-          <TableCard
-            title="Setter outcomes"
-            description={`${setters?.scope === "own" ? "Your setter metrics only." : "Team setter metrics with outcome coverage and close-out status."} Show rate is always paired with coverage so a small sample is not mistaken for a stable result.`}
-          >
-            {settersError && <p className="mx-4 mb-4 rounded-lg border border-[color-mix(in_srgb,var(--error)_24%,transparent)] bg-[var(--error-surface)] p-3 text-sm text-[var(--error-ink)]" role="alert">{settersError}</p>}
+          <TableCard title="Setter outcomes" description={setters?.scope === "own" ? "Your own setter metrics." : undefined}>
+            {settersError && <p className="border-t border-border bg-[var(--error-surface)] px-4 py-2.5 text-sm text-[var(--error-ink)]" role="alert">{settersError}</p>}
             {settersLoading ? (
-              <p className="px-4 py-6 text-center text-sm text-muted-foreground" role="status">Loading setter outcomes…</p>
+              <SectionLoading rows={4} columns={6} label="Loading setter outcomes" />
             ) : setters?.rows.length ? (
               <table className="portal-activity-table w-full min-w-[1080px] text-left text-sm">
                 <thead><tr><th>Setter / day</th><th className="text-right">Dials</th><th className="text-right">Contacts</th><th className="text-right">Booked</th><th className="text-right">Showed</th><th className="text-right">Show rate</th><th className="text-right">Coverage</th><th className="text-right">Sold</th><th>Close-out</th></tr></thead>
@@ -645,54 +587,49 @@ export function ActivityLogWorkspace({ initialView = "activity", role = "" }: { 
                 </tbody>
               </table>
             ) : (
-              <p className="px-4 py-6 text-center text-sm text-muted-foreground">No setter outcomes in this window.</p>
-            )}
-            {setters?.scope === "team" && setters.roster.length > 0 && (
-              <div className="border-t border-border px-4 py-4">
-                <h3 className="mb-2 text-sm font-semibold">Setter roster</h3>
-                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                  {setters.roster.map((member) => (
-                    <div className="rounded-lg border border-border p-3 text-sm" key={member.userId}>
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="font-medium">{member.name}</span>
-                        <span className={`text-xs font-semibold ${member.onShiftNow ? "text-[var(--success-ink)]" : "text-muted-foreground"}`}>{member.onShiftNow ? "On shift" : "Off shift"}</span>
-                      </div>
-                      <p className="mt-1 text-xs text-muted-foreground">{member.role} · {member.localLabel} · {member.timezone}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
+              <p className="border-t border-border px-4 py-6 text-center text-sm text-muted-foreground">No setter outcomes in this window.</p>
             )}
           </TableCard>
 
-          <TableCard title="Fresh vs recycled performance" description="Recycled contacts are reported separately from fresh acquisition; this is contact evidence, not talk time.">
-            <table className="portal-activity-table w-full min-w-[640px] text-left text-sm">
-              <thead><tr><th>Source</th><th className="text-right">Served</th><th className="text-right">Dialled</th><th className="text-right">Contacts</th><th className="text-right">Contact rate</th></tr></thead>
-              <tbody>
-                {report?.recycle_performance.map((row) => (
-                  <tr key={row.source_type}>
-                    <td className="font-medium capitalize">{row.source_type}</td>
-                    <td className="text-right tabular-nums">{row.served}</td>
-                    <td className="text-right tabular-nums">{row.clicked}</td>
-                    <td className="text-right tabular-nums">{row.contacts}</td>
-                    <td className="text-right tabular-nums">{row.contact_rate_percent == null ? "—" : `${row.contact_rate_percent}%`}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {report?.recycle_performance.length === 0 && <p className="px-4 py-6 text-center text-sm text-muted-foreground">No fresh or recycled activity in this window.</p>}
+          {setters?.scope === "team" && setters.roster.length > 0 && (
+            <TableCard title="Setter roster">
+              <table className="portal-activity-table w-full min-w-[640px] text-left text-sm">
+                <thead><tr><th>Setter</th><th>Role</th><th>Local time</th><th>Timezone</th><th className="text-right">Shift</th></tr></thead>
+                <tbody>
+                  {setters.roster.map((member) => (
+                    <tr key={member.userId}>
+                      <td className="font-medium">{member.name}</td>
+                      <td>{member.role}</td>
+                      <td className="tabular-nums">{member.localLabel}</td>
+                      <td className="text-muted-foreground">{member.timezone}</td>
+                      <td className={`text-right text-xs font-semibold ${member.onShiftNow ? "text-[var(--success-ink)]" : "text-muted-foreground"}`}>{member.onShiftNow ? "On shift" : "Off shift"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </TableCard>
+          )}
+
+          <TableCard title="Fresh vs recycled performance">
+            {report?.recycle_performance.length ? (
+              <table className="portal-activity-table w-full min-w-[640px] text-left text-sm">
+                <thead><tr><th>Source</th><th className="text-right">Served</th><th className="text-right">Dialled</th><th className="text-right">Contacts</th><th className="text-right">Contact rate</th></tr></thead>
+                <tbody>
+                  {report.recycle_performance.map((row) => (
+                    <tr key={row.source_type}>
+                      <td className="font-medium capitalize">{row.source_type}</td>
+                      <td className="text-right tabular-nums">{row.served}</td>
+                      <td className="text-right tabular-nums">{row.clicked}</td>
+                      <td className="text-right tabular-nums">{row.contacts}</td>
+                      <td className="text-right tabular-nums">{row.contact_rate_percent == null ? "—" : `${row.contact_rate_percent}%`}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : <p className="border-t border-border px-4 py-6 text-center text-sm text-muted-foreground">No fresh or recycled activity in this window.</p>}
           </TableCard>
         </>
       )}
-
-      <div className="rounded-lg border border-border border-l-[3px] border-l-[var(--warning)] bg-[var(--warning-surface)] px-4 py-3.5 text-sm leading-normal tracking-[-0.02em]">
-        <p className="font-semibold text-[var(--warning-ink)]">There is no talk-time column, on purpose</p>
-        <p className="mt-1.5 text-[var(--body)]">
-          Click-to-call hands the call to the handset, so the platform never sees its duration, and nothing here pretends to. What the
-          log does know is when a card was opened, when Dial was pressed and when the outcome was logged. Every delta above names its
-          comparison window.
-        </p>
-      </div>
     </div>
   );
 }

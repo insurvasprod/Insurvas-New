@@ -3,13 +3,18 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
-import { ArrowRight, X } from "lucide-react";
+import { ArrowRight, Download, X } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { RefreshButton, toolbarControl } from "@/components/ui/data-toolbar";
 import { PageHeader } from "@/components/ui/page-header";
-import { StatTile } from "@/components/ui/stat";
+import { PageLoading } from "@/components/ui/page-loading";
+import { EmptyState, SectionLoading } from "@/components/ui/page-states";
+import { Pager, paginate } from "@/components/ui/pager";
+import { StatStrip, StatTile } from "@/components/ui/stat";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { TableCard } from "@/components/ui/table-card";
 import { activityLabel, dayMonth } from "@/lib/format/ago";
 import { dayMonthYear, viewerTimeZone } from "@/lib/format/dates";
 import { HELD_STATUSES, SALE_DISPOSITIONS } from "@/lib/partnerLeads/lanes";
@@ -36,7 +41,7 @@ function SelectedTeammateDrawer({ selected, leads, onClose }: { selected: Select
   }, [onClose]);
 
   return <aside ref={drawerRef} className="portal-team-review-detail" aria-label={`${selected.user.name} lead activity`}>
-    <div className="portal-team-review-detail-header"><p className="portal-page-eyebrow">Selected teammate</p><button type="button" className="portal-team-review-detail-close" aria-label="Close teammate details" onClick={onClose}><X className="size-5" aria-hidden="true" /></button></div>
+    <div className="portal-team-review-detail-header justify-end"><button type="button" className="portal-team-review-detail-close" aria-label="Close teammate details" onClick={onClose}><X className="size-5" aria-hidden="true" /></button></div>
     <div className="portal-team-review-detail-person"><span>{initials(selected.user.name)}</span><div><h2>{selected.user.name}</h2><p>{selected.user.role === "partner_admin" ? "Partner admin" : "Partner user"}</p></div></div>
     <dl><div><dt>Leads this period</dt><dd>{selected.stats.submitted}</dd></div><div><dt>Application rate</dt><dd>{selected.stats.submitted ? `${((selected.stats.applications / selected.stats.submitted) * 100).toFixed(1)}%` : "—"}</dd></div><div><dt>In progress</dt><dd>{selected.stats.progress}</dd></div></dl>
     <div className="portal-team-review-detail-leads"><div className="portal-team-review-detail-leads-heading"><strong>Submitted leads</strong><span>{leads.length} total</span></div>{leads.length ? leads.map((lead) => <article className="portal-team-review-detail-lead" key={lead.id}><div className="portal-team-review-detail-lead-heading"><div><strong>{lead.customer}</strong><span>{lead.product}</span></div><Badge variant="secondary">{lead.stageName || lead.status || "Submitted"}</Badge></div><dl><div><dt>Outcome</dt><dd>{lead.outcome ?? lead.disposition ?? "Awaiting update"}</dd></div><div><dt>Submitted</dt><dd>{formatDate(lead.submittedAt)}</dd></div><div><dt>Last update</dt><dd>{formatDate(lead.updatedAt)}</dd></div></dl>{lead.outcomeNote && <p className="portal-team-review-detail-lead-note">{lead.outcomeNote}</p>}</article>) : <p className="portal-team-review-detail-empty">No leads submitted in this period.</p>}</div>
@@ -47,6 +52,7 @@ function SelectedTeammateDrawer({ selected, leads, onClose }: { selected: Select
 /** Below this many leads a member's conversion rate is noise, and showing it would rank people on it. */
 const MIN_CONVERSION_SAMPLE = 10;
 const DAY_MS = 86_400_000;
+const PAGE_SIZE = 25;
 
 function localDay(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
@@ -102,6 +108,9 @@ export function PartnerTeamReviewWorkspace({ partnerName }: { partnerName: strin
   const [previous, setPrevious] = useState<Figures | null>(null);
   const [pulse, setPulse] = useState<Pulse | null>(null);
   const [loading, setLoading] = useState(true);
+  // The first read draws the page skeleton; a new range keeps the page and its date controls.
+  const [loaded, setLoaded] = useState(false);
+  const [page, setPage] = useState(1);
   const [error, setError] = useState<string | null>(null);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
@@ -129,7 +138,7 @@ export function PartnerTeamReviewWorkspace({ partnerName }: { partnerName: strin
       // The pulse is a side card: if it fails, the page still stands and the card says so.
       setPulse(pulseResponse.ok && pulseBody ? pulseBody as Pulse : null);
       setError(null);
-    }).catch(() => { if (!cancelled) setError("Could not load team review. Check your connection and try again."); }).finally(() => { if (!cancelled) setLoading(false); });
+    }).catch(() => { if (!cancelled) setError("Could not load team review. Check your connection and try again."); }).finally(() => { if (!cancelled) { setLoading(false); setLoaded(true); } });
     return () => { cancelled = true; };
   }, [range, days, retryToken]);
 
@@ -183,92 +192,96 @@ export function PartnerTeamReviewWorkspace({ partnerName }: { partnerName: strin
 
   const conversionChange = metrics.conversion !== null && previous?.conversion !== null && previous?.conversion !== undefined ? metrics.conversion - previous.conversion : null;
   const tone = (current: number, before: number | null | undefined) => (!loading && before !== null && before !== undefined && current > before ? "good" as const : undefined);
+  const reload = () => { setError(null); setLoading(true); setRetryToken((value) => value + 1); };
+  const visible = paginate(memberStats, page, PAGE_SIZE);
 
-  return <div className="m-stagger portal-partner-review-view">
+  if (!loaded) return <PageLoading />;
+
+  return <div className="m-stagger space-y-6">
     <PageHeader
-      eyebrow="Organization"
       title="Team review"
-      description="How your own team is performing. Partner admins only."
-      actions={<Button variant="outline" asChild><a href={`/api/partner/leads/export?${new URLSearchParams({ limit: "5000", date_from: range.from, date_to: range.to })}`}>Export report</a></Button>}
+      actions={<form className="flex flex-wrap items-center gap-2" onSubmit={apply}>
+        <input type="date" aria-label="Review start date" className={toolbarControl} value={draftFrom} max={draftTo || undefined} onChange={(event) => setDraftFrom(event.target.value)} />
+        <span className="text-sm text-muted-foreground" aria-hidden="true">–</span>
+        <input type="date" aria-label="Review end date" className={toolbarControl} value={draftTo} min={draftFrom || undefined} onChange={(event) => setDraftTo(event.target.value)} />
+        <Button type="submit" variant="outline" disabled={rangeInvalid || (draftFrom === range.from && draftTo === range.to)}>Apply</Button>
+        <Button variant="outline" asChild><a href={`/api/partner/leads/export?${new URLSearchParams({ limit: "5000", date_from: range.from, date_to: range.to })}`}><Download aria-hidden="true" />Export report</a></Button>
+      </form>}
     />
-    <form className="portal-partner-review-panel is-padded portal-partner-review-range" onSubmit={apply}>
-      <label><span>Review start date</span><input type="date" value={draftFrom} max={draftTo || undefined} onChange={(event) => setDraftFrom(event.target.value)} /></label>
-      <label><span>Review end date</span><input type="date" value={draftTo} min={draftFrom || undefined} onChange={(event) => setDraftTo(event.target.value)} /></label>
-      <Button type="submit" disabled={rangeInvalid || (draftFrom === range.from && draftTo === range.to)}>Apply</Button>
-      {rangeInvalid && <small role="alert">Choose an end date on or after the start date, within a year.</small>}
-    </form>
-    {error && <div className="portal-partner-team-callout is-error" role="alert"><strong>Team review could not be loaded.</strong><p>{error}</p><Button variant="outline" size="sm" onClick={() => { setError(null); setLoading(true); setRetryToken((value) => value + 1); }}>Try again</Button></div>}
-    <div className="portal-partner-review-tiles">
-      <StatTile label="Leads submitted" value={loading ? "—" : metrics.submitted} valueTone={tone(metrics.submitted, previous?.submitted)} footnote={loading || !previous ? " " : changeLabel(metrics.submitted, previous.submitted, days)} />
-      <StatTile label="In progress" value={loading ? "—" : metrics.progress} footnote={loading || !previous ? " " : changeLabel(metrics.progress, previous.progress, days)} />
-      <StatTile label="Applications" value={loading ? "—" : metrics.applications} valueTone={tone(metrics.applications, previous?.applications)} footnote={loading || !previous ? " " : changeLabel(metrics.applications, previous.applications, days)} />
+    {rangeInvalid && <p role="alert" className="rounded-md border border-[var(--error)] bg-[var(--error-surface)] px-4 py-2.5 text-sm text-[var(--error-ink)]">Choose an end date on or after the start date, within a year.</p>}
+    {error && <p role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-[var(--error)] bg-[var(--error-surface)] px-4 py-2 text-sm text-[var(--error-ink)]">Team review could not be loaded: {error}<Button type="button" variant="outline" onClick={reload}>Try again</Button></p>}
+    <StatStrip label={`${partnerName} team review, ${rangeLabel(range.from, range.to, new Date(now))}`}>
+      <StatTile label="Leads submitted" value={loading ? "—" : metrics.submitted} valueTone={tone(metrics.submitted, previous?.submitted)} footnote={loading || !previous ? undefined : changeLabel(metrics.submitted, previous.submitted, days)} reserveFootnote />
+      <StatTile label="In progress" value={loading ? "—" : metrics.progress} footnote={loading || !previous ? undefined : changeLabel(metrics.progress, previous.progress, days)} reserveFootnote />
+      <StatTile label="Applications" value={loading ? "—" : metrics.applications} valueTone={tone(metrics.applications, previous?.applications)} footnote={loading || !previous ? undefined : changeLabel(metrics.applications, previous.applications, days)} reserveFootnote />
       <StatTile
         label="Conversion rate"
         value={loading || metrics.conversion === null ? "—" : metrics.conversion.toFixed(1)}
         unit={loading || metrics.conversion === null ? undefined : "%"}
         valueTone={conversionChange !== null && conversionChange > 0 && !loading ? "good" : undefined}
-        footnote={loading ? " " : `${metrics.applications} of ${metrics.submitted}${conversionChange === null ? "" : ` · ${conversionChange >= 0 ? "+" : "−"}${Math.abs(conversionChange).toFixed(1)} pts vs previous ${days} days`}`}
+        footnote={loading ? undefined : `${metrics.applications} of ${metrics.submitted}${conversionChange === null ? "" : ` · ${conversionChange >= 0 ? "+" : "−"}${Math.abs(conversionChange).toFixed(1)} pts vs previous ${days} days`}`}
+        reserveFootnote
       />
-    </div>
-    <div className="portal-partner-review-body">
-      <section className="portal-partner-review-panel is-roomy portal-partner-review-trend" aria-labelledby="partner-review-trend-heading">
-        <h2 id="partner-review-trend-heading">Submission trend</h2>
-        <p>Leads submitted per {trend.step === 1 ? "day" : "week"} · {rangeLabel(range.from, range.to, new Date(now))}</p>
-        {loading ? <div className="portal-partner-review-chart is-loading" role="status" aria-label="Loading trend" />
-          : <div className="portal-partner-review-chart" role="img" aria-label={`${metrics.submitted} leads submitted between ${rangeLabel(range.from, range.to, new Date(now))}`}>
-            {trend.buckets.map((bucket) => <span key={bucket.key} style={{ height: `${bucket.height}%` }} title={`${bucket.label}: ${bucket.count} ${bucket.count === 1 ? "lead" : "leads"}`} />)}
-          </div>}
-        <small>One series. This is a trend, not a comparison, and it never sets {partnerName} against another partner.</small>
-      </section>
-      <section className="portal-partner-review-panel is-roomy portal-partner-review-pulse" aria-labelledby="partner-review-pulse-heading">
-        <h2 id="partner-review-pulse-heading">Team pulse</h2>
-        <dl>
-          <div><dt>Average response time</dt><dd title={pulse?.responses ? `Over ${pulse.responses} ${pulse.responses === 1 ? "reply" : "replies"} to your agent` : undefined}>{loading ? "—" : pulse?.averageResponseMinutes != null ? durationLabel(pulse.averageResponseMinutes) : pulse ? "No replies yet" : "Unavailable"}</dd></div>
-          <div><dt>Active members</dt><dd>{loading ? "—" : `${activeInPeriod} of ${members.length}`}</dd></div>
-          <div><dt>Pending follow-ups</dt><dd>{loading ? "—" : pulse ? pulse.pendingFollowUps : "Unavailable"}</dd></div>
-          <div><dt>Invites outstanding</dt><dd>{loading ? "—" : invitesOutstanding}</dd></div>
-        </dl>
-        <div className="portal-partner-review-meter">
-          <span role="meter" aria-label={`${activeInPeriod} of ${members.length} members active in this period`} aria-valuemin={0} aria-valuemax={members.length || 1} aria-valuenow={activeInPeriod}><span style={{ width: `${members.length ? Math.round((activeInPeriod / members.length) * 100) : 0}%` }} /></span>
-          <small>{loading ? "Loading…" : `${activeInPeriod} of ${members.length} members active in this period`}</small>
-        </div>
-      </section>
-    </div>
-    <div className="portal-team-review-lower">
-      <section className="portal-partner-review-panel portal-partner-review-performance" aria-labelledby="partner-review-performance-heading">
-        <div className="portal-partner-team-members-bar"><h2 id="partner-review-performance-heading">Partner performance</h2></div>
-        {loading ? <div className="portal-partner-team-empty" role="status"><p>Loading team performance…</p></div>
-          : !memberStats.length ? <div className="portal-partner-team-empty"><strong>No partner users yet</strong><p>Invite teammates from Team access.</p></div>
-          : <Table>
-            <TableHeader><TableRow>
-              <TableHead>Member</TableHead>
-              <TableHead className="w-[120px] text-right">Submitted</TableHead>
-              <TableHead className="w-[130px] text-right">In progress</TableHead>
-              <TableHead className="w-[130px] text-right">Applications</TableHead>
-              <TableHead className="w-[120px] text-right">Conversion</TableHead>
-              <TableHead className="w-[160px]">Last activity</TableHead>
-              <TableHead className="w-[100px] text-right"><span className="sr-only">Details</span></TableHead>
-            </TableRow></TableHeader>
-            <TableBody>
-              {memberStats.map(({ user, stats }) => {
-                const isSelected = detailOpen && selected?.user.user_id === user.user_id;
-                return <TableRow key={user.user_id} data-state={isSelected ? "selected" : undefined}>
-                  <TableCell className="portal-partner-team-member"><strong>{user.name}</strong>{user.status !== "active" && <span>Deactivated</span>}</TableCell>
-                  <TableCell className="text-right tabular-nums">{stats.submitted}</TableCell>
-                  <TableCell className="text-right tabular-nums">{stats.progress}</TableCell>
-                  <TableCell className="text-right tabular-nums">{stats.applications}</TableCell>
-                  <TableCell className="text-right tabular-nums" title={stats.submitted && stats.submitted < MIN_CONVERSION_SAMPLE ? `${stats.applications} of ${stats.submitted} — too few leads for a rate` : undefined}>{stats.submitted >= MIN_CONVERSION_SAMPLE ? `${((stats.applications / stats.submitted) * 100).toFixed(1)}%` : "—"}</TableCell>
-                  <TableCell>{user.last_login_at ? activityLabel(Date.parse(user.last_login_at), now) : "Never"}</TableCell>
-                  <TableCell className="text-right"><Button type="button" variant="outline" size="sm" className="portal-partner-review-view" aria-expanded={isSelected} onClick={() => toggleDetail(user.user_id)}>{isSelected ? "Close" : "View"}</Button></TableCell>
-                </TableRow>;
-              })}
-            </TableBody>
-          </Table>}
-        <p className="portal-partner-review-footnote">A conversion rate is never shown without its denominator, and a sample under {MIN_CONVERSION_SAMPLE} leads is not a ranking. <strong>View</strong> opens the teammate panel, which links straight into their leads in the pipeline.</p>
-      </section>
-      {/* On the body, not in the page: the page animates in with a transform, and a transformed
-          ancestor turns position: fixed into position: absolute. */}
-      {detailOpen && selected && createPortal(<><div className="portal-partner-review-backdrop" aria-hidden="true" /><SelectedTeammateDrawer selected={selected} leads={selectedLeads} onClose={() => { setDetailOpen(false); setSelectedUserId(null); }} /></>, document.body)}
-    </div>
+      <StatTile
+        label="Avg response time"
+        labelTitle={pulse?.responses ? `Over ${pulse.responses} ${pulse.responses === 1 ? "reply" : "replies"} to your agent` : undefined}
+        value={loading ? "—" : pulse?.averageResponseMinutes != null ? durationLabel(pulse.averageResponseMinutes) : pulse ? "No replies yet" : "Unavailable"}
+        footnote={loading ? undefined : pulse ? `${pulse.pendingFollowUps} pending follow-up${pulse.pendingFollowUps === 1 ? "" : "s"}` : "pending follow-ups unavailable"}
+        reserveFootnote
+      />
+      <StatTile
+        label="Active members"
+        value={loading ? "—" : activeInPeriod}
+        meter={loading ? undefined : { value: activeInPeriod, max: members.length || 1, tone: "good", label: `${activeInPeriod} of ${members.length} members active in this period` }}
+        footnote={loading ? undefined : `of ${members.length} · ${invitesOutstanding} invite${invitesOutstanding === 1 ? "" : "s"} outstanding`}
+        reserveFootnote
+      />
+    </StatStrip>
+    <section className="rounded-lg border border-border bg-card p-4" aria-labelledby="partner-review-trend-heading">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 id="partner-review-trend-heading" className="text-lg font-semibold leading-[1.28] tracking-[-0.015em]">Submission trend</h2>
+        <p className="text-sm text-muted-foreground">Leads per {trend.step === 1 ? "day" : "week"} · {rangeLabel(range.from, range.to, new Date(now))}</p>
+      </div>
+      {loading ? <div className="mt-4"><SectionLoading rows={4} columns={1} label="Loading trend" /></div>
+        : <div className="mt-4 flex h-[150px] items-end gap-1.5 border-b border-border" role="img" aria-label={`${metrics.submitted} leads submitted between ${rangeLabel(range.from, range.to, new Date(now))}`}>
+          {trend.buckets.map((bucket) => <span key={bucket.key} className="min-w-[2px] flex-1 rounded-t-[2px] bg-[var(--primary)]" style={{ height: `${bucket.height}%` }} title={`${bucket.label}: ${bucket.count} ${bucket.count === 1 ? "lead" : "leads"}`} />)}
+        </div>}
+    </section>
+    <TableCard
+      title="Partner performance"
+      action={<RefreshButton onClick={reload} refreshing={loading} />}
+      footer={!loading && memberStats.length ? <Pager page={visible.current} total={memberStats.length} noun="members" pageSize={PAGE_SIZE} onPage={setPage} /> : undefined}
+    >
+      {loading ? <SectionLoading rows={5} columns={6} />
+        : !memberStats.length ? <EmptyState title="No partner users yet" hint="Invite teammates from Team access." action={<Button asChild variant="outline"><Link href="/partner/team">Team access</Link></Button>} />
+        : <Table>
+          <TableHeader><TableRow>
+            <TableHead>Member</TableHead>
+            <TableHead className="w-[120px] text-right">Submitted</TableHead>
+            <TableHead className="w-[130px] text-right">In progress</TableHead>
+            <TableHead className="w-[130px] text-right">Applications</TableHead>
+            <TableHead className="w-[120px] text-right">Conversion</TableHead>
+            <TableHead className="w-[160px]">Last activity</TableHead>
+            <TableHead className="w-[100px] text-right"><span className="sr-only">Details</span></TableHead>
+          </TableRow></TableHeader>
+          <TableBody>
+            {visible.rows.map(({ user, stats }) => {
+              const isSelected = detailOpen && selected?.user.user_id === user.user_id;
+              return <TableRow key={user.user_id} data-state={isSelected ? "selected" : undefined}>
+                <TableCell><strong className="font-semibold text-foreground">{user.name}</strong>{user.status !== "active" && <span className="block text-xs text-muted-foreground">Deactivated</span>}</TableCell>
+                <TableCell className="text-right tabular-nums">{stats.submitted}</TableCell>
+                <TableCell className="text-right tabular-nums">{stats.progress}</TableCell>
+                <TableCell className="text-right tabular-nums">{stats.applications}</TableCell>
+                <TableCell className="text-right tabular-nums" title={stats.submitted && stats.submitted < MIN_CONVERSION_SAMPLE ? `${stats.applications} of ${stats.submitted} — too few leads for a rate` : undefined}>{stats.submitted >= MIN_CONVERSION_SAMPLE ? `${((stats.applications / stats.submitted) * 100).toFixed(1)}%` : "—"}</TableCell>
+                <TableCell>{user.last_login_at ? activityLabel(Date.parse(user.last_login_at), now) : "Never"}</TableCell>
+                <TableCell className="text-right"><Button type="button" variant="outline" size="sm" aria-expanded={isSelected} onClick={() => toggleDetail(user.user_id)}>{isSelected ? "Close" : "View"}</Button></TableCell>
+              </TableRow>;
+            })}
+          </TableBody>
+        </Table>}
+    </TableCard>
+    {/* On the body, not in the page: the page animates in with a transform, and a transformed
+        ancestor turns position: fixed into position: absolute. */}
+    {detailOpen && selected && createPortal(<><div className="portal-partner-review-backdrop" aria-hidden="true" /><SelectedTeammateDrawer selected={selected} leads={selectedLeads} onClose={() => { setDetailOpen(false); setSelectedUserId(null); }} /></>, document.body)}
   </div>;
 }

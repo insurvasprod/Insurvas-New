@@ -1,6 +1,7 @@
 import { CircleCheck, TriangleAlert } from "lucide-react";
 
 import { EmptyState } from "@/components/ui/page-states";
+import { TableCard } from "@/components/ui/table-card";
 import { agoLabel } from "@/lib/format/ago";
 import { weekdayDayMonth } from "@/lib/format/dates";
 import type { SlaDigestDay, SlaJobStatus } from "@/lib/queueSla/digest";
@@ -52,13 +53,9 @@ export function SlaJobCard({ status, nowMs }: { status: SlaJobStatus; nowMs: num
   const head = jobHeadline(status, nowMs);
   const day = status.lastDay;
   return (
-    <section aria-labelledby="sla-job" className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]">
-      <header className="flex items-center justify-between gap-3 border-b border-[var(--border)] px-3.5 py-3">
-        <h2 id="sla-job" className="text-sm font-semibold text-[var(--ink)]">Unclaimed SLA job</h2>
-        <span className="text-xs text-[var(--muted)]">Last 24 hours</span>
-      </header>
+    <TableCard title="Unclaimed SLA job" action={<span className="text-xs text-[var(--muted)]">Last 24 hours</span>}>
       {head.tone === "alert" ? (
-        <div className="portal-top-alert" data-severity="critical" role="alert">
+        <div className="portal-top-alert border-t border-[var(--border)]" data-severity="critical" role="alert">
           <TriangleAlert className="size-4 shrink-0" aria-hidden="true" />
           <span className="min-w-0 flex-1">
             <span className="portal-top-alert-title">{head.title}</span>
@@ -66,7 +63,7 @@ export function SlaJobCard({ status, nowMs }: { status: SlaJobStatus; nowMs: num
           </span>
         </div>
       ) : (
-        <div className="flex gap-2.5 px-3.5 py-3">
+        <div className="flex gap-2.5 border-t border-[var(--border)] px-4 py-3">
           <CircleCheck className="mt-0.5 size-4 shrink-0 text-[var(--success)]" aria-hidden="true" />
           <span className="min-w-0 flex-1">
             <span className="block text-sm font-semibold text-[var(--ink)]">{head.title}</span>
@@ -75,7 +72,7 @@ export function SlaJobCard({ status, nowMs }: { status: SlaJobStatus; nowMs: num
         </div>
       )}
       {status.ready && (
-        <div className="flex flex-wrap gap-x-6 gap-y-3 border-t border-[var(--border)] px-3.5 py-3">
+        <div className="flex flex-wrap gap-x-6 gap-y-3 border-t border-[var(--border)] px-4 py-3">
           <Figure label="Escalations alerted" value={day.escalationsAlerted} />
           <Figure label="Partner notices" value={day.partnerNotices} />
           <Figure label="Nobody-claimed alerts" value={day.nobodyClaimedAlerts} />
@@ -86,25 +83,25 @@ export function SlaJobCard({ status, nowMs }: { status: SlaJobStatus; nowMs: num
           <Figure label="Failing" value={day.retrying + day.gaveUp} />
         </div>
       )}
-    </section>
+    </TableCard>
   );
 }
 
 export function SlaDigestCard({ ready, days }: { ready: boolean; days: SlaDigestDay[] }) {
   return (
-    <section aria-labelledby="sla-digest" className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]">
-      <header className="flex items-center justify-between gap-3 border-b border-[var(--border)] px-3.5 py-3">
-        <h2 id="sla-digest" className="text-sm font-semibold text-[var(--ink)]">Daily digest</h2>
-        <span className="text-xs text-[var(--muted)]">Escalated and expired, by partner</span>
-      </header>
+    <TableCard
+      title="Daily digest"
+      action={<span className="text-xs text-[var(--muted)]">Escalated and expired, by partner</span>}
+      footer={ready && days.length > 0 ? <span>Days run midnight to midnight, {[...new Set(days.map((day) => day.timezone))].join(", ")}.</span> : undefined}
+    >
       {!ready ? (
         <EmptyState title="The daily digest is not set up yet" hint={PENDING} />
       ) : days.length === 0 ? (
-        <EmptyState title="Nothing escalated or expired this week" hint="Each day's escalated and expired transfers are counted here by partner, in your agency's timezone." />
+        <EmptyState title="Nothing escalated or expired this week" hint="Each day's escalated and expired transfers are counted here by partner." />
       ) : (
-        <ul>
+        <ul className="border-t border-[var(--border)]">
           {days.map((day) => (
-            <li key={day.date} className="border-b border-[var(--border)] px-3.5 py-3 last:border-b-0">
+            <li key={day.date} className="border-b border-[var(--border)] px-4 py-3 last:border-b-0">
               <div className="flex flex-wrap items-baseline justify-between gap-2">
                 <span className="text-sm font-semibold text-[var(--ink)]">
                   {day.today ? `Today so far · ${weekdayDayMonth(day.date)}` : weekdayDayMonth(day.date)}
@@ -131,11 +128,10 @@ export function SlaDigestCard({ ready, days }: { ready: boolean; days: SlaDigest
                   ))}
                 </tbody>
               </table>
-              <span className="mt-1 block text-xs text-[var(--muted)]">Days run midnight to midnight, {day.timezone}.</span>
             </li>
           ))}
         </ul>
       )}
-    </section>
+    </TableCard>
   );
 }

@@ -11,8 +11,9 @@
  *       statement and its proposals — nothing posts until someone accepts a match on the review
  *       screen, where this dialog sends them.
  *
- * Mounted on the ledger page (both states) and the statements history. Only rendered for a viewer
- * who may import; everyone else gets the disabled button and its reason from the page.
+ * Mounted in the page header of the ledger and the statements history, as each page's primary
+ * action. Only rendered for a viewer who may import; everyone else gets the disabled button and its
+ * reason from the page.
  */
 
 import { useMemo, useState } from "react";
@@ -139,7 +140,7 @@ export function StatementImportButton({
 
   return (
     <>
-      <Button type="button" variant="outline" className="h-11 border-[var(--border-strong)] px-4" onClick={() => setOpen(true)}>
+      <Button type="button" onClick={() => setOpen(true)}>
         Import statement
       </Button>
       <Dialog open={open} onOpenChange={(next) => { setOpen(next); if (!next) reset(); }}>
@@ -273,10 +274,11 @@ export function StatementImportButton({
                   </tbody>
                 </table>
               </div>
-              <p className="text-xs text-muted-foreground">
-                {preview.sample.length < preview.totalLines ? `Showing ${preview.sample.length} of ${preview.totalLines.toLocaleString("en-US")} lines, unreadable ones first. ` : ""}
-                Importing keeps every row as the carrier sent it. Lines that could not be read stay on the statement and never post.
-              </p>
+              {preview.sample.length < preview.totalLines && (
+                <p className="text-xs text-muted-foreground">
+                  Showing {preview.sample.length} of {preview.totalLines.toLocaleString("en-US")} lines, unreadable ones first.
+                </p>
+              )}
             </div>
           )}
 

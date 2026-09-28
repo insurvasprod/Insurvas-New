@@ -1,23 +1,15 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { ListFilter } from "lucide-react";
 
-import { AdminPageHeader } from "@/components/admin/page-header";
 import { EmptyState, NoMatches } from "@/components/admin/empty-state";
 import { BoardTableFooter } from "@/components/admin/board-table-footer";
-import { Callout, Pill, SearchBox, TableToolbar, btn, st } from "@/components/app/settings/primitives";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { Pill, st } from "@/components/app/settings/primitives";
+import { Button } from "@/components/ui/button";
+import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
+import { PageHeader } from "@/components/ui/page-header";
+import { TableCard } from "@/components/ui/table-card";
 import { BILLING_CYCLE_LABELS, BILLING_CYCLES, formatCentsAsCurrency, type BillingCycle } from "@/lib/money";
 import type { AddonRow } from "@/lib/addons/constants";
 import { attachableTo, CYCLE_SUFFIX, type PlanRef } from "@/lib/addons/catalogView";
@@ -30,8 +22,8 @@ const PAGE_SIZE = 25;
 type StatusFilter = "all" | "active" | "retired";
 
 /**
- * The Add-ons catalog (board p-adm-addons): header, the figures the server computed, a search and
- * filter bar, the catalog table and the callout. A row click — or the name, for the keyboard —
+ * The Add-ons catalog (board p-adm-addons): header, the figures the server computed, then one
+ * TableCard with its toolbar inside. A row click — or the name, for the keyboard —
  * opens the editor; the open row carries the brand tint.
  */
 export function AddonsCatalog({
@@ -61,6 +53,7 @@ export function AddonsCatalog({
   billedByAddon: Record<string, number> | null;
 }) {
   const router = useRouter();
+  const [refreshing, startRefresh] = useTransition();
   const [editor, setEditor] = useState<{ mode: "create" | "edit"; addon?: AddonRow } | null>(null);
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<StatusFilter>("all");
@@ -117,112 +110,85 @@ export function AddonsCatalog({
 
   return (
     <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
-      <AdminPageHeader
+      <PageHeader
         title="Add-ons"
-        subtitle="Extras sold on top of a plan, granting features and credits through exactly the same entitlement path."
+        description="Extras sold on top of a plan."
         actions={
-          <button type="button" className={btn("primary", "h-11")} onClick={() => setEditor({ mode: "create" })}>
+          <Button type="button" onClick={() => setEditor({ mode: "create" })}>
             New add-on
-          </button>
+          </Button>
         }
       />
 
       {tiles}
 
-      <TableToolbar>
-        <SearchBox
-          value={query}
-          onChange={(value) => {
-            setQuery(value);
-            setPage(1);
-          }}
-          placeholder="Search add-ons"
-          label="Search add-ons"
-        />
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button
-              type="button"
-              className="inline-flex h-10 items-center gap-2 rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] px-3.5 text-[14px] leading-[1.43] font-semibold tracking-[-0.01em] text-[var(--ink)] hover:bg-[var(--surface-alt)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
-            >
-              <ListFilter aria-hidden className="size-4" />
-              Filters
-              {activeFilters > 0 && (
-                <span className="rounded-full bg-[var(--brand-50)] px-2 text-[12px] leading-[1.5] text-[var(--accent-ink)]">{activeFilters}</span>
-              )}
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-60">
-            <DropdownMenuLabel>Status</DropdownMenuLabel>
-            <DropdownMenuRadioGroup
+      <TableCard
+        className="min-w-0"
+        toolbar={
+          <DataToolbar actions={<RefreshButton onClick={() => startRefresh(() => router.refresh())} refreshing={refreshing} />}>
+            <ToolbarSearch
+              value={query}
+              onChange={(value) => {
+                setQuery(value);
+                setPage(1);
+              }}
+              placeholder="Search add-ons"
+            />
+            <select
+              aria-label="Status"
               value={status}
-              onValueChange={(value) => {
-                setStatus(value as StatusFilter);
+              onChange={(event) => {
+                setStatus(event.target.value as StatusFilter);
                 setPage(1);
               }}
+              className={toolbarControl}
             >
-              <DropdownMenuRadioItem value="all">All</DropdownMenuRadioItem>
-              <DropdownMenuRadioItem value="active">Active</DropdownMenuRadioItem>
-              <DropdownMenuRadioItem value="retired">Retired</DropdownMenuRadioItem>
-            </DropdownMenuRadioGroup>
-            <DropdownMenuSeparator />
-            <DropdownMenuLabel>Billing cycle</DropdownMenuLabel>
-            <DropdownMenuRadioGroup
+              <option value="all">All statuses</option>
+              <option value="active">Active</option>
+              <option value="retired">Retired</option>
+            </select>
+            <select
+              aria-label="Billing cycle"
               value={cycle}
-              onValueChange={(value) => {
-                setCycle(value as "all" | BillingCycle);
+              onChange={(event) => {
+                setCycle(event.target.value as "all" | BillingCycle);
                 setPage(1);
               }}
+              className={toolbarControl}
             >
-              <DropdownMenuRadioItem value="all">All</DropdownMenuRadioItem>
+              <option value="all">Any cycle</option>
               {BILLING_CYCLES.map((item) => (
-                <DropdownMenuRadioItem key={item} value={item}>
+                <option key={item} value={item}>
                   {BILLING_CYCLE_LABELS[item]}
-                </DropdownMenuRadioItem>
+                </option>
               ))}
-            </DropdownMenuRadioGroup>
+            </select>
             {planCodes.length > 0 && (
-              <>
-                <DropdownMenuSeparator />
-                <DropdownMenuLabel>Attachable to</DropdownMenuLabel>
-                <DropdownMenuRadioGroup
-                  value={plan}
-                  onValueChange={(value) => {
-                    setPlan(value);
-                    setPage(1);
-                  }}
-                >
-                  <DropdownMenuRadioItem value="all">Any plan</DropdownMenuRadioItem>
-                  {planCodes.map(([code, name]) => (
-                    <DropdownMenuRadioItem key={code} value={code}>
-                      {name}
-                    </DropdownMenuRadioItem>
-                  ))}
-                </DropdownMenuRadioGroup>
-              </>
+              <select
+                aria-label="Attachable to"
+                value={plan}
+                onChange={(event) => {
+                  setPlan(event.target.value);
+                  setPage(1);
+                }}
+                className={cn(toolbarControl, "max-w-56")}
+              >
+                <option value="all">Attachable to any plan</option>
+                {planCodes.map(([code, name]) => (
+                  <option key={code} value={code}>
+                    {name}
+                  </option>
+                ))}
+              </select>
             )}
-            {activeFilters > 0 && (
-              <>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onSelect={() => {
-                    setStatus("all");
-                    setCycle("all");
-                    setPlan("all");
-                    setPage(1);
-                  }}
-                >
-                  Clear filters
-                </DropdownMenuItem>
-              </>
+            {(activeFilters > 0 || query.trim() !== "") && (
+              <Button type="button" variant="ghost" onClick={clearFilters}>
+                Clear
+              </Button>
             )}
-          </DropdownMenuContent>
-        </DropdownMenu>
-        <span className="grow" />
-      </TableToolbar>
-
-      <section className="flex min-w-0 flex-col overflow-hidden rounded-[12px] border border-[var(--border)] bg-[var(--surface)]">
-        <div className="min-w-0 overflow-x-auto">
+          </DataToolbar>
+        }
+      >
           <table className={cn(st.table, "min-w-[1040px]")}>
             <thead>
               <tr className={st.headRow}>
@@ -241,7 +207,7 @@ export function AddonsCatalog({
                   <td colSpan={7} className="p-0">
                     <EmptyState
                       title="No add-ons yet"
-                      hint="An add-on is something a tenant pays for on top of their plan — extra seats, an extra allowance. Create one and it becomes available to attach to a subscription."
+                      hint="Create one and it becomes available to attach to a subscription."
                     />
                   </td>
                 </tr>
@@ -330,8 +296,6 @@ export function AddonsCatalog({
               })}
             </tbody>
           </table>
-        </div>
-        <div className="grow" />
         {addons.length > 0 && (
           <BoardTableFooter
             page={current}
@@ -342,11 +306,7 @@ export function AddonsCatalog({
             onPageChange={setPage}
           />
         )}
-      </section>
-
-      <Callout tone="info" title="An operator debugging “why does this tenant have X” needs to see both sources">
-        An add-on grants exactly as a plan does. Archived features never appear in the picker, and which plans an add-on can attach to is always shown rather than hidden behind an edit.
-      </Callout>
+      </TableCard>
 
       {editor && (
         <AddonDialog

@@ -48,8 +48,14 @@ const saveSchema = z.object({
     honourLinkedCalendars: z.boolean().optional(),
     allowDoubleBooking: z.boolean().optional(),
   }),
-  // The agency-wide cap (20260924230200). Owners only; null clears it. Omitted means unchanged.
-  agency: z.object({ maxPerDay: z.number().int().min(1).max(1000).nullable() }).strict().optional(),
+  // The agency-wide settings. Owners only; null clears a field, omitted means unchanged.
+  //   maxPerDay (20260924230200): the agency's daily appointment cap.
+  //   callbackReminderMinutes (20260925711600): the callback reminder lead time, 5–1440 minutes,
+  //   null = the platform default (LA-1.22 / LA-2.10 "reminder at a configurable lead time").
+  agency: z.object({
+    maxPerDay: z.number().int().min(1).max(1000).nullable().optional(),
+    callbackReminderMinutes: z.number().int().min(5).max(1440).nullable().optional(),
+  }).strict().optional(),
 }).strict();
 
 export async function GET() {
@@ -133,7 +139,7 @@ export async function PUT(request: NextRequest) {
   // The agency's cap is the agency's, so only an owner changes it — whoever's week is being saved.
   if (parsed.data.agency && auth.context.role !== "owner")
     return NextResponse.json(
-      { error: "Only an owner can change the agency's daily limit.", code: "agency_owner_only" },
+      { error: "Only an owner can change the agency's daily limit or callback reminder time.", code: "agency_owner_only" },
       { status: 403 },
     );
 
@@ -143,6 +149,7 @@ export async function PUT(request: NextRequest) {
         tenantId: auth.context.tenantId,
         userId: auth.context.userId,
         maxPerDay: parsed.data.agency.maxPerDay,
+        callbackReminderMinutes: parsed.data.agency.callbackReminderMinutes,
       });
     }
     await saveCalendarSettings({
@@ -173,6 +180,7 @@ export async function PUT(request: NextRequest) {
         allowSameDay: parsed.data.policy.allowSameDay ?? true,
         allowDoubleBooking: parsed.data.policy.allowDoubleBooking ?? false,
         agencyMaxPerDay: parsed.data.agency ? parsed.data.agency.maxPerDay : undefined,
+        agencyCallbackReminderMinutes: parsed.data.agency ? parsed.data.agency.callbackReminderMinutes : undefined,
         repeatingBlocks: parsed.data.blocks.filter((block) => (block.repeats ?? "none") !== "none").length,
       },
       request,

@@ -20,11 +20,7 @@ export default async function OwnProfilePage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader
-        eyebrow="Your account"
-        title="Your profile"
-        description="How you appear to your team and partners in this workspace, and the producer numbers you sell under."
-      />
+      <PageHeader title="Your profile" />
       {profile
         ? <OwnProfileForm initial={profile} />
         : <ErrorState detail="Your profile could not be loaded. Nothing has changed; reload the page to try again." />}

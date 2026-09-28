@@ -119,3 +119,18 @@ export function LoadingRows({ rows = 5, columns = 4 }: { rows?: number; columns?
     </div>
   );
 }
+
+/**
+ * A section waiting on its data: the same skeleton the page-level loading screen draws, sized to one
+ * card. Use it wherever a client component would otherwise print "Loading…" (2026-09-28: one loading
+ * look across every page). Put it where the rows will appear — inside the TableCard, or in place of
+ * the panel — so nothing moves when the data lands.
+ */
+export function SectionLoading({ rows = 5, columns = 4, label = "Loading" }: { rows?: number; columns?: number; label?: string }) {
+  return (
+    <div role="status" aria-live="polite">
+      <span className="sr-only">{label}</span>
+      <LoadingRows rows={rows} columns={columns} />
+    </div>
+  );
+}

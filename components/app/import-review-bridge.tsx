@@ -5,12 +5,12 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, FileWarning } from "lucide-react";
 
+import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
-import { Callout, DashedCard, SettingsCard, SettingsMeter, btn } from "@/components/app/settings/primitives";
+import { Callout, DashedCard, SettingsCard, SettingsMeter } from "@/components/app/settings/primitives";
 import { ImportStepper } from "@/components/app/import-stepper";
 import { ImportReviewWorkspace, type ReviewPlan } from "@/components/app/import-review-workspace";
 import { IMPORT_CSV_KEY } from "@/lib/agentTemplates/importReviewModel";
-import { sectionForPath } from "@/lib/menu/definition";
 
 /**
  * Carries the uploaded file across the redirect to the review screen.
@@ -50,16 +50,14 @@ export function ImportReviewBridge({ plan }: { plan: ReviewPlan }) {
 
   if (!csv)
     return <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
-      <PageHeader eyebrow={sectionForPath("/app/import") ?? undefined} title="Review before committing" description="The last moment anyone can check what is about to enter the pipeline." />
+      <PageHeader title="Review before committing" />
       <ImportStepper current={3} />
       <DashedCard
         icon={<FileWarning className="size-4" aria-hidden />}
         title="This review is no longer holding your file"
-        action={<Link href="/app/import" className={btn("secondary", "h-11")}>Upload the file again</Link>}
+        action={<Button asChild variant="outline"><Link href="/app/import">Upload the file again</Link></Button>}
       >
-        The checks are still saved, but the file itself is not — it stays in this browser tab only, and this
-        tab does not have it. Upload it again with the same campaign and cost and the review will be waiting:
-        nothing was imported, and the scrub is not charged twice for the same file.
+        Upload it again with the same campaign and cost. Nothing was imported, and the scrub is not charged twice.
       </DashedCard>
     </div>;
 
@@ -69,23 +67,21 @@ export function ImportReviewBridge({ plan }: { plan: ReviewPlan }) {
 /**
  * The finished state, for a batch that was already committed.
  *
- * Here rather than in the page because the primitives are a client module: a server component can
- * render `DashedCard`, but it cannot call `btn()` to style the links.
+ * Here rather than in the page because the primitives are a client module.
  */
 export function ImportAlreadyImported() {
   return <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
-    <PageHeader eyebrow={sectionForPath("/app/import") ?? undefined} title="Review before committing" description="The last moment anyone can check what is about to enter the pipeline." />
+    <PageHeader title="Review before committing" />
     <ImportStepper current={5} />
     <DashedCard
       icon={<CheckCircle2 className="size-4" aria-hidden />}
       title="This list has already been imported"
-      action={<span className="flex flex-wrap justify-center gap-3">
-        <Link href="/app/import" className={btn("primary", "h-11")}>Import another list</Link>
-        <Link href="/app/lead-lists" className={btn("secondary", "h-11")}>Open lead lists</Link>
+      action={<span className="flex flex-wrap justify-center gap-2">
+        <Button asChild variant="outline"><Link href="/app/lead-lists">Open lead lists</Link></Button>
+        <Button asChild><Link href="/app/import">Import another list</Link></Button>
       </span>}
     >
-      Nothing further is pending for it. The leads are in your lead lists; this review step is finished and
-      cannot be repeated, because the decisions it carried have already been applied.
+      The leads are in your lead lists.
     </DashedCard>
   </div>;
 }
@@ -190,7 +186,7 @@ export function ImportScreeningBridge({ progress: initial }: { progress: Screeni
   const minutes = perSecond && perSecond > 0 ? Math.ceil(left / perSecond / 60) : null;
 
   return <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
-    <PageHeader eyebrow={sectionForPath("/app/import") ?? undefined} title="Review before committing" description="The last moment anyone can check what is about to enter the pipeline." />
+    <PageHeader title="Review before committing" />
     <ImportStepper current={3} />
     <SettingsCard pad={20} title="Screening the file" sub={`${progress.fileName ?? "This file"} · ${progress.totalRows.toLocaleString()} rows`} bodyClassName="flex flex-col gap-3">
       <SettingsMeter
@@ -203,23 +199,22 @@ export function ImportScreeningBridge({ progress: initial }: { progress: Screeni
       />
       <p role="status" className="m-0 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--body)]">
         {left > 0
-          ? "Nothing is staged or imported until every number has an answer. The progress is saved as it goes: you can leave this page, and uploading the same file with the same campaign and cost picks it up where it stopped."
+          ? "Progress is saved as it goes; you can leave this page."
           : "Every number has an answer. Building the review…"}
       </p>
     </SettingsCard>
     {paused && <Callout tone="warning" title="Screening paused">
       <div className="flex flex-col gap-2">
-        <p className="m-0">{paused} No number without an answer is ever let through, so nothing has been staged.</p>
-        <button type="button" className={btn("secondary", "self-start")} onClick={() => { setPaused(null); setRun((value) => value + 1); }}>Carry on checking</button>
+        <p className="m-0">{paused} Nothing has been staged.</p>
+        <Button type="button" variant="outline" className="self-start" onClick={() => { setPaused(null); setRun((value) => value + 1); }}>Carry on checking</Button>
       </div>
     </Callout>}
     {needsFile && <DashedCard
       icon={<FileWarning className="size-4" aria-hidden />}
       title="Every number is checked, but this tab no longer holds the file"
-      action={<Link href="/app/import" className={btn("secondary", "h-11")}>Upload the file again</Link>}
+      action={<Button asChild variant="outline"><Link href="/app/import">Upload the file again</Link></Button>}
     >
-      The review is built from the file, which stays in the tab it was uploaded from. Upload it again with the same
-      campaign and cost: the answers are saved, so nothing is screened or charged twice.
+      Upload it again with the same campaign and cost. The answers are saved, so nothing is screened or charged twice.
     </DashedCard>}
   </div>;
 }

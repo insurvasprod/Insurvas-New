@@ -5,7 +5,7 @@ import { canAccessConfigurationSection } from "@/lib/configuration/sections";
 // Server component only. The transport pulls in nodemailer and the service client; nothing on this
 // page is a client component, and nothing here may pass the transport's module into one.
 import { emailConfigProblems, emailDeliveryMode } from "@/lib/email/transport";
-import { AdminPageHeader } from "@/components/admin/page-header";
+import { PageHeader } from "@/components/ui/page-header";
 import { ConfigurationPlaceholder } from "@/components/admin/configuration-placeholder";
 
 /** What sendEmail() will do in THIS environment, in the order it checks (lib/email/transport.ts). */
@@ -34,18 +34,13 @@ export default async function EmailPage() {
   // table and no template editor, so this screen reports what is true rather than showing a form
   // that saves values nothing reads.
   return (
-    <div className="m-stagger flex w-full min-w-0 flex-1 flex-col gap-6">
-      {/* "Mail Setup" to match the sidebar. Route stays /admin/email. No eyebrow and no subtitle,
-          as on the p-adm-email board. */}
-      <AdminPageHeader title="Mail Setup" subtitle="" />
+    <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
+      {/* "Mail Setup" to match the sidebar. Route stays /admin/email. */}
+      <PageHeader title="Mail Setup" />
       <ConfigurationPlaceholder
         title="Mail setup is not editable here"
         lede={deliveryStatus()}
-        detail="The mail server and sender are set in the server's environment, and email wording is in code, so changing either takes a deploy."
-        note={{
-          title: "No form is shown, on purpose",
-          body: "A form that saves values nothing reads is worse than an honest empty screen. Nothing here references a ticket, an owner or an internal hub.",
-        }}
+        detail="The mail server and sender are set in the server's environment and email wording is in code, so changing either takes a deploy."
       />
     </div>
   );

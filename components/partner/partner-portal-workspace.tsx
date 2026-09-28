@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/card";
 import { Check, CheckCircle2, Send, Users } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
+import { SectionLoading } from "@/components/ui/page-states";
 import { PartnerChatPanel } from "@/components/partner/partner-chat-panel";
 import { PartnerLeadPipeline } from "@/components/partner/partner-lead-pipeline";
 import { PartnerPortalOverview } from "@/components/partner/partner-portal-overview";
@@ -1002,23 +1003,17 @@ export function PartnerLeadForm({
   }
   const loading = status.startsWith("Loading");
   if (!template)
-    return (
-      <div
-        className="portal-partner-submit-panel is-roomy portal-partner-submit-empty"
-        role={loading ? undefined : "status"}
-        aria-busy={loading || undefined}
-      >
-        <h2>{loading ? "Loading lead form…" : "Lead form not ready"}</h2>
-        <p>
-          {loading
-            ? "Preparing the secure phone screening step."
-            : "Your agent needs to configure this product form before this partner can submit a lead."}
-        </p>
-        {!loading && (
-          <Button asChild variant="outline">
-            <Link href="/partner/messages">Message your agent</Link>
-          </Button>
-        )}
+    return loading ? (
+      <div className="overflow-hidden rounded-lg border border-border bg-card">
+        <SectionLoading rows={4} columns={2} label="Loading lead form" />
+      </div>
+    ) : (
+      <div className="portal-partner-submit-panel is-roomy portal-partner-submit-empty" role="status">
+        <h2>Lead form not ready</h2>
+        <p>Your agent needs to configure this product form before this partner can submit a lead.</p>
+        <Button asChild variant="outline">
+          <Link href="/partner/messages">Message your agent</Link>
+        </Button>
       </div>
     );
   if (!phoneField)
@@ -1774,34 +1769,15 @@ function LegacyPartnerPortalWorkspace({
       )}
       {section === "submit" && (
         <section id="submit" className="portal-partner-submit-shell scroll-mt-6">
-          <PageHeader
-            eyebrow="Partner workspace"
-            title="Submit a lead"
-            description="Complete the agent-approved form for one product. Screening happens before the lead is sent."
-          />
+          <PageHeader title="Submit a lead" />
           {partnerStatus !== "active" && (
-            <div
-              className="portal-partner-submit-restriction"
-              role="status"
-            >
-              <p className="font-medium">
-                New submissions are disabled while this partner account is{" "}
-                {partnerStatus}.
-              </p>
-              <p>
-                Your existing lead history remains available in Pipeline.
-                Contact your agent if this status needs to change.
-              </p>
-            </div>
+            <p role="status" className="rounded-md border border-[var(--warning)] bg-[var(--warning-surface)] px-4 py-2.5 text-sm text-[var(--warning-ink)]">
+              New submissions are disabled while this partner account is {partnerStatus}.
+            </p>
           )}
           {!productsLoaded ? (
-            <div
-              className="portal-partner-submit-panel portal-partner-submit-loading"
-              aria-busy="true"
-              aria-label="Loading approved products"
-            >
-              <span />
-              <span />
+            <div className="overflow-hidden rounded-lg border border-border bg-card">
+              <SectionLoading rows={3} columns={3} label="Loading approved products" />
             </div>
           ) : approvedProducts.length > 0 ? (
             <>

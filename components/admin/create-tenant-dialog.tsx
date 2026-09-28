@@ -3,7 +3,6 @@
 import { useState, type FormEvent } from "react";
 import { notify } from "@/lib/notify";
 
-import { btn } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { InviteLinkPanel } from "@/components/admin/invite-link-panel";
 import { Input } from "@/components/ui/input";
@@ -69,10 +68,10 @@ export function CreateTenantDialog({ onCreated }: { onCreated: () => void }) {
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      {/* The board's header action: 44px primary, "Create tenant" — the same words as the dialog it opens. */}
-      <button type="button" className={btn("primary", "h-11")} onClick={() => setOpen(true)}>
+      {/* The header action, "Create tenant" — the same words as the dialog it opens. */}
+      <Button type="button" onClick={() => setOpen(true)}>
         Create tenant
-      </button>
+      </Button>
       <DialogContent>
         <form onSubmit={handleSubmit}>
           <DialogHeader>

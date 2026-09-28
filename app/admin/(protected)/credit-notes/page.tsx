@@ -3,26 +3,13 @@ import { redirect } from "next/navigation";
 import { getCurrentAdmin } from "@/lib/adminAuth/getCurrentAdmin";
 import { canViewInvoices } from "@/lib/invoices/permissions";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
-import { AdminPageHeader } from "@/components/admin/page-header";
+import { Callout } from "@/components/app/settings/primitives";
+import { PageHeader } from "@/components/ui/page-header";
 import { BillingTabs } from "@/components/admin/billing-tabs";
 import { CreditNotesTable, type CreditNoteRow } from "@/components/admin/credit-notes-table";
 import { RaiseCreditNotePicker } from "@/components/admin/raise-credit-note-picker";
 import { formatCentsAsCurrency } from "@/lib/money";
 import { refundApprovalThresholdCents } from "@/lib/settings/queries";
-
-const PRIMARY_44 =
-  "inline-flex h-11 items-center justify-center gap-2 rounded-[8px] border border-transparent bg-[var(--primary)] px-4 text-[14px] leading-[1.43] font-semibold tracking-[-0.01em] text-[var(--on-primary)] hover:bg-[var(--accent-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]";
-
-function Callout({ tone, title, children }: { tone: "warning" | "error"; title: string; children: React.ReactNode }) {
-  const edge = tone === "error" ? "border-l-[var(--error)] bg-[var(--error-surface)]" : "border-l-[var(--warning)] bg-[var(--warning-surface)]";
-  const ink = tone === "error" ? "text-[var(--error-ink)]" : "text-[var(--warning-ink)]";
-  return (
-    <div role="status" className={`rounded-[12px] border border-[var(--border)] border-l-[3px] px-4 py-3.5 ${edge}`}>
-      <p className={`text-[14px] font-semibold ${ink}`}>{title}</p>
-      <p className="mt-1.5 text-[14px] leading-normal text-[var(--body)]">{children}</p>
-    </div>
-  );
-}
 
 export default async function CreditNotesPage() {
   const admin = await getCurrentAdmin();
@@ -51,32 +38,26 @@ export default async function CreditNotesPage() {
 
   return (
     <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
-      <AdminPageHeader
+      <PageHeader
         title="Refunds & credits"
-        subtitle={`Refunds above ${formatCentsAsCurrency(thresholdCents)} need a second admin. The threshold comes from settings.`}
-        actions={<RaiseCreditNotePicker invoices={paid} className={PRIMARY_44} />}
+        description={`Refunds above ${formatCentsAsCurrency(thresholdCents)} need a second admin.`}
+        actions={<RaiseCreditNotePicker invoices={paid} />}
       />
       <BillingTabs />
 
       {(pending.length > 0 || failed.length > 0 || providerPending.length > 0) && (
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-2">
           {pending.length > 0 && (
-            <Callout tone="warning" title={`${pending.length} pending approval`}>
-              No money moves until a second admin approves.{" "}
-              {ownPending.length > 0
-                ? <><strong className="font-semibold text-[var(--ink)]">You cannot approve one you raised yourself</strong> — {names(ownPending)} {ownPending.length === 1 ? "is" : "are"} yours.</>
-                : "You cannot approve one you raised yourself."}
-            </Callout>
+            <Callout
+              tone="warning"
+              title={`${pending.length} pending approval — no money moves until a second admin approves${ownPending.length > 0 ? `; ${names(ownPending)} ${ownPending.length === 1 ? "is" : "are"} yours, so another admin must approve` : ""}.`}
+            />
           )}
           {failed.length > 0 && (
-            <Callout tone="error" title={`${failed.length} failed at the provider`}>
-              The credit note is kept in <code className="rounded bg-[var(--surface)] px-1 text-[14px]">failed</code> so the attempt is on record. Investigate before retrying: the money may or may not have moved. {names(failed)}.
-            </Callout>
+            <Callout tone="error" title={`${failed.length} failed at the provider (${names(failed)}) — investigate before retrying; the money may or may not have moved.`} />
           )}
           {providerPending.length > 0 && (
-            <Callout tone="warning" title={`${providerPending.length} awaiting local reconciliation`}>
-              The provider may already have accepted {providerPending.length === 1 ? "this refund" : "these refunds"}. Retry reconciliation to check the same idempotent request. <strong className="font-semibold text-[var(--ink)]">Do not raise a second credit note.</strong>
-            </Callout>
+            <Callout tone="warning" title={`${providerPending.length} awaiting reconciliation — use Retry reconciliation; do not raise a second credit note.`} />
           )}
         </div>
       )}

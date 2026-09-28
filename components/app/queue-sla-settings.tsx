@@ -3,17 +3,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { notify } from "@/lib/notify";
 
-import {
-  Callout,
-  DraftActions,
-  KeyValues,
-  SettingsCard,
-  SettingsSectionHeader,
-  SettingsGrid,
-  SettingsStack,
-  btn,
-  st,
-} from "@/components/app/settings/primitives";
+import { Button } from "@/components/ui/button";
+import { SectionLoading } from "@/components/ui/page-states";
+import { SettingsSaveBar } from "@/components/ui/settings-layout";
+import { StatStrip, StatTile } from "@/components/ui/stat";
+import { TableCard } from "@/components/ui/table-card";
+import { Callout, SettingsCard, SettingsSectionHeader, SettingsStack } from "@/components/app/settings/primitives";
 import { formatDuration, ladderStepStates, parseDuration, type LadderValues } from "@/lib/queueSla/ladder";
 import { cn } from "@/lib/utils";
 
@@ -45,11 +40,12 @@ type Stats = {
 
 const MAX_SECONDS = 604_800;
 
+/** Each rung's hint says what it does on the floor — the one place a reader learns it. */
 const FIELDS: Array<{ key: keyof Values; label: string; help: string }> = [
-  { key: "warn", label: "Warn after", help: "Amber on Agent Floor" },
-  { key: "escalate", label: "Escalate after", help: "Alerts the workspace owner" },
-  { key: "partner", label: "Partner notice after", help: "Tells the partner nobody claimed it" },
-  { key: "expire", label: "Expire after", help: "Leaves the active queue" },
+  { key: "warn", label: "Warn after", help: "The row turns amber and sorts to the top" },
+  { key: "escalate", label: "Escalate after", help: "An alert, and the lead is offered more widely" },
+  { key: "partner", label: "Partner notice after", help: "Their pipeline row says nobody claimed it" },
+  { key: "expire", label: "Expire after", help: "It leaves the active queue marked expired" },
 ];
 
 const textsFor = (values: Values): Texts => ({
@@ -153,37 +149,19 @@ export function QueueSlaSettings() {
     }
   }
 
-  const header = (
-    <SettingsSectionHeader
-      actions={
-        texts && saved ? (
-          <DraftActions
-            dirty={dirty}
-            saving={saving}
-            disabled={Boolean(problem)}
-            onDiscard={() => { setTexts(textsFor(saved)); setError(""); }}
-            onSave={() => void save()}
-          />
-        ) : undefined
-      }
-    />
-  );
-
   if (loading)
     return (
       <SettingsStack>
-        {header}
-        <p role="status" className="text-[14px] text-[var(--muted)]">Loading queue SLA settings…</p>
+        <SettingsSectionHeader />
+        <TableCard><SectionLoading rows={3} label="Loading queue SLA settings" /></TableCard>
       </SettingsStack>
     );
   if (loadError || !texts || !saved)
     return (
       <SettingsStack>
-        {header}
-        <Callout tone="error" title="Could not load queue SLA settings">
-          <span className="block">{loadError}</span>
-          <button type="button" className={btn("secondary", "mt-3")} onClick={() => { setLoading(true); void load(); }}>Try again</button>
-        </Callout>
+        <SettingsSectionHeader />
+        <Callout tone="error" title={loadError || "Could not load queue SLA settings"} />
+        <div><Button type="button" variant="outline" onClick={() => { setLoading(true); void load(); }}>Try again</Button></div>
       </SettingsStack>
     );
 
@@ -200,19 +178,26 @@ export function QueueSlaSettings() {
 
   return (
     <SettingsStack>
-      {header}
+      <SettingsSectionHeader />
+
+      {stats && (
+        <StatStrip label="Last seven days">
+          <StatTile label={`Claimed inside ${short(saved.warn)}`} value={stats.claimedInsideWarn.toLocaleString()} footnote="last 7 days" />
+          <StatTile label="Warned" value={stats.warned.toLocaleString()} />
+          <StatTile label="Escalated" value={stats.escalated.toLocaleString()} />
+          <StatTile label="Partner told" value={stats.partnerTold.toLocaleString()} />
+          <StatTile label="Expired" value={stats.expired.toLocaleString()} valueTone={stats.expired > 0 ? "warning" : undefined} footnote={stats.expired > 0 ? "left the queue unclaimed" : undefined} />
+          <StatTile label="Median claim" value={stats.medianClaimSeconds == null ? "—" : short(stats.medianClaimSeconds)} footnote={stats.sampleCapped ? "latest 20,000 claims" : undefined} />
+        </StatStrip>
+      )}
 
       {error && <Callout tone="error" title={error} />}
 
-      <Callout tone="info" title="Four rungs, and they must increase">
-        Warn, then escalate, then tell the partner, then expire. The form refuses a set where a later step fires before an
-        earlier one, because that ladder cannot be walked.
-      </Callout>
-
-      <SettingsCard title="The ladder" sub="Applied from the moment a lead becomes claimable.">
-        <div className="mt-[18px] grid gap-[18px] sm:grid-cols-2 lg:grid-cols-4">
+      <SettingsCard title="The ladder" sub="Counted from the moment a lead becomes claimable. Each rung must be later than the one before.">
+        <div className="grid gap-[18px] sm:grid-cols-2 lg:grid-cols-4">
           {FIELDS.map((field) => {
             const invalid = parsed?.[field.key] === null;
+            const help = field.key === "expire" && nurtureReady ? "It leaves the active queue and becomes a nurture lead" : field.help;
             return (
               <label key={field.key} htmlFor={`sla-${field.key}`} className="block min-w-0">
                 <span className="text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]">{field.label}</span>
@@ -238,7 +223,7 @@ export function QueueSlaSettings() {
                   )}
                 />
                 <span id={`sla-${field.key}-help`} className={cn("mt-1.5 block text-[12px] leading-[1.5] tracking-[-0.01em]", invalid ? "text-[var(--error-ink)]" : "text-[var(--muted)]")}>
-                  {invalid ? "Not a duration — try “45 seconds” or “4 hours”." : field.help}
+                  {invalid ? "Not a duration — try “45 seconds” or “4 hours”." : help}
                 </span>
               </label>
             );
@@ -248,10 +233,10 @@ export function QueueSlaSettings() {
           <p role="alert" className="mt-3 mb-0 text-[12px] leading-[1.5] text-[var(--error-ink)]">{problem}</p>
         )}
 
-        <div className="mt-[22px]">
+        <div className="mt-5 border-t border-[var(--border)] pt-4">
           <ol
             aria-label={oldestWaiting === null ? "The ladder, in order. Nothing is waiting right now." : `The ladder, in order. The longest-waiting transfer has waited ${short(oldestWaiting)}.`}
-            className="m-0 box-border flex list-none flex-wrap items-center gap-y-3 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] px-5 py-3.5"
+            className="m-0 flex list-none flex-wrap items-center gap-y-3 p-0"
           >
             {steps.map((step, index) => {
               const state = states[index];
@@ -285,78 +270,10 @@ export function QueueSlaSettings() {
         </div>
       </SettingsCard>
 
-      <SettingsGrid>
-        <SettingsCard title="What each rung actually does">
-          <div className="overflow-x-auto">
-            <table className={st.table}>
-              <thead>
-                <tr className={st.headRow}>
-                  <th scope="col" className={cn(st.th, "w-[130px]")}>Rung</th>
-                  <th scope="col" className={cn(st.th, "w-[160px]")}>Who sees it</th>
-                  <th scope="col" className={st.th}>What happens</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td className={st.td}>Warn</td>
-                  <td className={st.td}>Every agent on the floor</td>
-                  <td className={st.td}>The row turns amber and sorts to the top</td>
-                </tr>
-                <tr>
-                  <td className={st.td}>Escalate</td>
-                  <td className={st.td}>The workspace owner</td>
-                  <td className={st.td}>An alert, and the lead is offered more widely</td>
-                </tr>
-                <tr>
-                  <td className={st.td}>Partner notice</td>
-                  <td className={st.td}>The submitting partner</td>
-                  <td className={st.td}>Their pipeline row says nobody claimed it</td>
-                </tr>
-                <tr>
-                  <td className={st.td}>Expire</td>
-                  <td className={st.td}>Nobody, by design</td>
-                  <td className={st.td}>
-                    {nurtureReady
-                      ? "It leaves the active queue and becomes a nurture lead"
-                      : "It leaves the active queue marked expired, and can be reopened from the lead. Becoming a nurture lead needs a database update that has not been applied yet"}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </SettingsCard>
-
-        <SettingsCard title="Last seven days">
-          {stats ? (
-            <>
-              <KeyValues
-                items={[
-                  { label: `Claimed inside ${short(saved.warn)}`, value: stats.claimedInsideWarn.toLocaleString() },
-                  { label: "Warned", value: stats.warned.toLocaleString() },
-                  { label: "Escalated", value: stats.escalated.toLocaleString() },
-                  { label: "Partner told", value: stats.partnerTold.toLocaleString() },
-                  { label: "Expired", value: stats.expired.toLocaleString() },
-                  { label: "Median claim time", value: stats.medianClaimSeconds == null ? "—" : short(stats.medianClaimSeconds) },
-                ]}
-              />
-              {stats.sampleCapped && (
-                <p className="mt-4 mb-0 text-[12px] leading-[1.5] text-[var(--muted)]">Over the most recent 20,000 claims.</p>
-              )}
-              {stats.expired > 0 && (
-                <Callout
-                  tone="warning"
-                  className="mt-4"
-                  title={`${stats.expired.toLocaleString()} ${stats.expired === 1 ? "lead" : "leads"} expired unclaimed`}
-                >
-                  Expiry is not free. Each one reached your queue and left it before anybody claimed it.
-                </Callout>
-              )}
-            </>
-          ) : (
-            <p className="m-0 text-[14px] text-[var(--muted)]">The last seven days could not be counted right now. The ladder above is unaffected.</p>
-          )}
-        </SettingsCard>
-      </SettingsGrid>
+      <SettingsSaveBar visible={dirty} note="Unsaved changes to the ladder">
+        <Button type="button" variant="outline" onClick={() => { setTexts(textsFor(saved)); setError(""); }} disabled={saving}>Discard</Button>
+        <Button type="button" onClick={() => void save()} disabled={saving || Boolean(problem)}>{saving ? "Saving…" : "Save changes"}</Button>
+      </SettingsSaveBar>
     </SettingsStack>
   );
 }

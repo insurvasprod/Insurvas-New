@@ -3,10 +3,15 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 
 import { notify } from "@/lib/notify";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PageHeader } from "@/components/ui/page-header";
-import { Callout, DashedCard, Field, Pill, SearchBox, SettingsCard, btn, control, st } from "@/components/app/settings/primitives";
-import { sectionForPath } from "@/lib/menu/definition";
+import { PageLoading } from "@/components/ui/page-loading";
+import { EmptyState, NoMatches } from "@/components/ui/page-states";
+import { StatStrip, StatTile } from "@/components/ui/stat";
+import { TableCard } from "@/components/ui/table-card";
+import { Callout, DashedCard, Field, Pill, SettingsCard, btn, control, st } from "@/components/app/settings/primitives";
 import { cn } from "@/lib/utils";
 import { dobConflict, matchedOnLabel } from "@/lib/contacts/matchPolicy";
 import type { ContactDirectory, ContactRow, ContactWorkspace as Workspace, DuplicateMatch, FieldSchemaRow, RecentMerge, ReviewPair, ReviewQueue } from "@/lib/contacts/types";
@@ -17,7 +22,7 @@ import type { ContactDirectory, ContactRow, ContactWorkspace as Workspace, Dupli
  * The page is built around one question at a time: the head of a persisted review queue, drawn as
  * two cards of the same fields, differing rows highlighted with a radio each, and the two Keep
  * buttons under their own card. The directory is paged and searched on the server; the tiles come
- * from one stats read. Every merge can be undone from Recent merges, and the page only offers the
+ * from one stats read (the strip under the header). Every merge can be undone from Recent merges, and the page only offers the
  * undo the server will accept (see undo_contact_merge's later-merge guard).
  */
 
@@ -185,17 +190,8 @@ function matchAsContact(match: DuplicateMatch): ContactRow {
   return { id: match.contact_id, tenant_id: "", household_id: match.household_id, first_name: match.first_name, last_name: match.last_name, dob: match.dob, primary_phone: match.primary_phone, state: match.state, custom_fields: match.custom_fields, merged_into_id: null, created_at: "", updated_at: "", phones: [], emails: [], address_line1: match.address_line1, city: match.city, postal_code: match.postal_code };
 }
 
-/* ── tiles ──────────────────────────────────────────────────────────────── */
-
-function Tile({ label, value, foot, tone, title }: { label: string; value: ReactNode; foot?: ReactNode; tone?: "warning" | "success"; title?: string }) {
-  return (
-    <div title={title} className="min-w-0 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] px-[18px] py-4">
-      <div className="text-[12px] leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]">{label}</div>
-      <div className={cn("text-[32px] leading-[1.13] font-semibold tracking-[-0.025em] tabular-nums", tone === "warning" ? "text-[var(--warning-ink)]" : tone === "success" ? "text-[var(--success-ink)]" : "text-[var(--ink)]")}>{value}</div>
-      {foot && <div className="text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">{foot}</div>}
-    </div>
-  );
-}
+/** The custom-field form's controls: as tall as the button beside them. */
+const fieldControl = cn(toolbarControl, "mt-1.5 w-full");
 
 function ChevronIcon({ direction }: { direction: "left" | "right" }) {
   return (
@@ -414,33 +410,26 @@ export function ContactWorkspace({ readOnly = false }: { readOnly?: boolean }) {
 
   const header = (
     <PageHeader
-      eyebrow={sectionForPath("/app/duplicates") ?? undefined}
       title="Duplicate check"
-      description="Find probable household duplicates before paying for the same person twice."
       actions={
-        <div className="flex flex-wrap gap-3">
-          <a href="/api/app/contacts/export" className={btn("secondary", "h-11")}>Export CSV</a>
-          <label htmlFor="contact-import-file" className={cn(btn("secondary", "h-11"), "focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[var(--ring-color)]", (readOnly || busy === "import") && "cursor-not-allowed opacity-50")}>
+        <>
+          <Button asChild variant="outline"><a href="/api/app/contacts/export">Export CSV</a></Button>
+          <label htmlFor="contact-import-file" className={cn(buttonVariants({ variant: "outline" }), "cursor-pointer focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2", (readOnly || busy === "import") && "pointer-events-none opacity-40")}>
             {busy === "import" ? "Importing…" : "Import contacts"}
             <input id="contact-import-file" type="file" accept=".csv,text/csv" className="sr-only" disabled={readOnly || busy === "import"} onChange={(event) => void importFile(event)} />
           </label>
-          <button type="button" className={btn("primary", "h-11")} disabled={readOnly} onClick={() => { setFormError(null); setAddOpen(true); }}>Add contact</button>
-        </div>
+          <Button type="button" disabled={readOnly} onClick={() => { setFormError(null); setAddOpen(true); }}>Add contact</Button>
+        </>
       }
     />
   );
 
   if (!workspace || !directory) {
+    if (!loadError) return <PageLoading />;
     return (
-      <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
+      <div className="flex w-full min-w-0 flex-col gap-6">
         {header}
-        {loadError ? (
-          <Callout tone="error" title="Contacts could not be loaded">
-            {loadError} <button type="button" className={btn("secondary", "ml-2 h-8")} onClick={() => void load().catch((error: Error) => setLoadError(error.message))}>Try again</button>
-          </Callout>
-        ) : (
-          <p role="status" className="rounded-[12px] border border-[var(--border)] bg-[var(--surface)] px-4 py-8 text-[14px] text-[var(--muted)]">Loading contacts…</p>
-        )}
+        <Callout tone="error" title={<span className="flex flex-wrap items-center gap-3">Contacts could not be loaded: {loadError}<Button type="button" variant="outline" onClick={() => void load().catch((error: Error) => setLoadError(error.message))}>Try again</Button></span>} />
       </div>
     );
   }
@@ -453,21 +442,22 @@ export function ContactWorkspace({ readOnly = false }: { readOnly?: boolean }) {
   const shownMerges = showAllMerges ? merges : merges.slice(0, 5);
   const firstRow = directory.total ? directory.page * directory.pageSize + 1 : 0;
   const lastRow = directory.page * directory.pageSize + directory.rows.length;
+  const clearSearch = () => { setSearch(""); void loadDirectory("", 0); };
 
   return (
     <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
       {header}
 
-      {readOnly && <Callout tone="warning" title="This workspace is read-only">Contacts can be viewed, searched and exported. Adding, importing, merging and undoing are paused until the subscription is active again.</Callout>}
+      <StatStrip label="Contact and merge totals">
+        <StatTile label="Contacts" value={stats.contacts.toLocaleString()} footnote={stats.households === null ? "active records" : `across ${stats.households.toLocaleString()} household${stats.households === 1 ? "" : "s"}`} />
+        <StatTile label="Pending review" valueTone="warning" value={stats.pending === null ? "—" : stats.pending.toLocaleString()} footnote={stats.pending === null ? "Review queue not set up yet" : stats.pending && stats.oldestPendingAt ? `oldest ${age(stats.oldestPendingAt)}` : "nothing waiting"} />
+        <StatTile label="Merged this month" valueTone="good" labelTitle={`Calendar month in ${stats.timezone}`} value={(stats.mergedThisMonth ?? 0).toLocaleString()} footnote={stats.undoableThisMonth === null ? `month in ${stats.timezone}` : `${stats.undoableThisMonth.toLocaleString()} can be undone`} />
+        <StatTile label="Merges undone" value={(stats.undoneThisMonth ?? 0).toLocaleString()} footnote={stats.mergedThisMonth ? `${undonePercent}% of merges` : "no merges this month"} />
+      </StatStrip>
 
-      <section aria-label="Contact and merge totals" className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Tile label="Contacts" value={stats.contacts.toLocaleString()} foot={stats.households === null ? "active records" : `across ${stats.households.toLocaleString()} household${stats.households === 1 ? "" : "s"}`} />
-        <Tile label="Pending review" tone="warning" value={stats.pending === null ? "—" : stats.pending.toLocaleString()} foot={stats.pending === null ? "Review queue not set up yet" : stats.pending && stats.oldestPendingAt ? `oldest ${age(stats.oldestPendingAt)}` : "nothing waiting"} />
-        <Tile label="Merged this month" tone="success" title={`Calendar month in ${stats.timezone}`} value={(stats.mergedThisMonth ?? 0).toLocaleString()} foot={stats.undoableThisMonth === null ? `month in ${stats.timezone}` : `${stats.undoableThisMonth.toLocaleString()} can be undone`} />
-        <Tile label="Merges undone" value={(stats.undoneThisMonth ?? 0).toLocaleString()} foot={stats.mergedThisMonth ? `${undonePercent}% of merges` : "no merges this month"} />
-      </section>
+      {readOnly && <Callout tone="warning" title="This workspace is read-only: adding, importing, merging and undoing are paused." />}
 
-      <div className="flex min-w-0 flex-col gap-5 lg:flex-row">
+      <div className="flex min-w-0 flex-col gap-5 lg:flex-row lg:items-start">
         <div className="flex min-w-0 flex-1 flex-col gap-3">
           {pair ? (
             <>
@@ -486,7 +476,7 @@ export function ContactWorkspace({ readOnly = false }: { readOnly?: boolean }) {
                     {conflict && <Pill tone="error">DOB differs</Pill>}
                     <span className="text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">on {matchedOnLabel(pair.review.matched_on)}</span>
                   </>}
-                  action={<button type="button" className={btn("secondary", "h-10 w-full")} disabled={writeBlocked} onClick={() => void merge("existing")}>{busy === "merge" ? "Merging…" : "Keep existing"}</button>}
+                  action={<Button type="button" variant="outline" className="w-full" disabled={writeBlocked} onClick={() => void merge("existing")}>{busy === "merge" ? "Merging…" : "Keep existing"}</Button>}
                 />
                 <PairCard
                   side="incoming"
@@ -504,74 +494,80 @@ export function ContactWorkspace({ readOnly = false }: { readOnly?: boolean }) {
                       <button type="button" aria-label="Next pair" className={btn("row", "h-7 px-1.5")} disabled={current.index >= current.total - 1 || busy === "queue"} onClick={() => void goToPair(current.index + 1)}><ChevronIcon direction="right" /></button>
                     </span>
                   ) : <span className="text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">1 of 1</span>}
-                  action={<button type="button" className={btn("primary", "h-10 w-full")} disabled={writeBlocked} onClick={() => void merge("incoming")}>{busy === "merge" ? "Merging…" : "Keep new"}</button>}
+                  action={<Button type="button" className="w-full" disabled={writeBlocked} onClick={() => void merge("incoming")}>{busy === "merge" ? "Merging…" : "Keep new"}</Button>}
                 />
               </div>
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                <button type="button" className={btn("row")} disabled={writeBlocked} onClick={() => void dismiss()}>{busy === "dismiss" ? "Saving…" : "Not the same person"}</button>
+                <Button type="button" variant="ghost" disabled={writeBlocked} onClick={() => void dismiss()}>{busy === "dismiss" ? "Saving…" : "Not the same person"}</Button>
                 {pair.review.created_at && <span className="text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">Waiting {age(pair.review.created_at)}</span>}
               </div>
             </>
           ) : (
             <DashedCard title="No pairs waiting">
               {queue.ready
-                ? "When a new contact looks like someone already here, the two wait here side by side. Add contact and Import contacts both check."
+                ? "Possible duplicates from Add contact and Import contacts wait here side by side."
                 : "Matches found by Add contact appear here. Imported matches are not kept until a database update is applied."}
             </DashedCard>
           )}
         </div>
 
-        <div className="flex min-w-0 flex-col gap-4 lg:w-[320px] lg:shrink-0">
-          <Callout tone="success" title="Merges can be undone">
-            Undo restores both original contacts, with their phones and emails. If one of them was merged again later, undo that merge first.
-          </Callout>
-          <section aria-labelledby="recent-merges-title" className="min-w-0 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] p-5">
-            <h2 id="recent-merges-title" className="m-0 text-[18px] leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]">Recent merges</h2>
-            {merges.length ? (
-              <ul className="m-0 mt-0 list-none p-0">
-                {shownMerges.map((row: RecentMerge) => (
-                  <li key={row.id} className="flex items-center gap-2.5 border-t border-[var(--border)] py-2.5">
-                    <span className="min-w-0 flex-1">
-                      <span className="flex flex-wrap items-center gap-1.5 text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">
-                        <span className="min-w-0 break-words">{row.keptName}</span>
-                        {row.source === "auto" && <Pill tone="neutral">Auto</Pill>}
-                      </span>
-                      <span className="block text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">
-                        {ago(row.mergedAt)}{shortName(row.actorName) ? ` · ${shortName(row.actorName)}` : ""}
-                        {!row.reversedAt && !row.undoable ? " · undo the later merge first" : ""}
-                      </span>
+        <TableCard className="min-w-0 lg:w-[320px] lg:shrink-0" title="Recent merges">
+          {merges.length ? (
+            <ul className="m-0 list-none border-t border-[var(--border)] p-0">
+              {shownMerges.map((row: RecentMerge) => (
+                <li key={row.id} className="flex items-center gap-2.5 border-t border-[var(--border)] px-4 py-2.5 first:border-t-0">
+                  <span className="min-w-0 flex-1">
+                    <span className="flex flex-wrap items-center gap-1.5 text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">
+                      <span className="min-w-0 break-words">{row.keptName}</span>
+                      {row.source === "auto" && <Pill tone="neutral">Auto</Pill>}
                     </span>
-                    {row.reversedAt ? (
-                      <Pill tone="neutral">Undone</Pill>
-                    ) : (
-                      <button type="button" aria-label={`Undo merge into ${row.keptName}`} className={btn("secondary", "h-[30px]")} disabled={writeBlocked || !row.undoable} onClick={() => void undo(row.id)}>{busy === `undo:${row.id}` ? "Undoing…" : "Undo"}</button>
-                    )}
-                  </li>
-                ))}
-                {merges.length > 5 && (
-                  <li className="border-t border-[var(--border)] pt-2.5">
-                    <button type="button" className={btn("row", "px-0")} onClick={() => setShowAllMerges((value) => !value)}>{showAllMerges ? "Show fewer" : `Show all ${merges.length}`}</button>
-                  </li>
-                )}
-              </ul>
-            ) : (
-              <p className="m-0 border-t border-[var(--border)] pt-2.5 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">No merges yet. Each one you make, or that matching makes on its own, is listed here with an Undo.</p>
-            )}
-          </section>
-        </div>
+                    <span className="block text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">
+                      {ago(row.mergedAt)}{shortName(row.actorName) ? ` · ${shortName(row.actorName)}` : ""}
+                      {!row.reversedAt && !row.undoable ? " · undo the later merge first" : ""}
+                    </span>
+                  </span>
+                  {row.reversedAt ? (
+                    <Pill tone="neutral">Undone</Pill>
+                  ) : (
+                    <Button type="button" size="sm" variant="outline" aria-label={`Undo merge into ${row.keptName}`} disabled={writeBlocked || !row.undoable} onClick={() => void undo(row.id)}>{busy === `undo:${row.id}` ? "Undoing…" : "Undo"}</Button>
+                  )}
+                </li>
+              ))}
+              {merges.length > 5 && (
+                <li className="border-t border-[var(--border)] px-4 py-2">
+                  <button type="button" className={btn("row", "px-0")} onClick={() => setShowAllMerges((value) => !value)}>{showAllMerges ? "Show fewer" : `Show all ${merges.length}`}</button>
+                </li>
+              )}
+            </ul>
+          ) : (
+            <p className="m-0 border-t border-[var(--border)] px-4 py-3 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">No merges yet.</p>
+          )}
+        </TableCard>
       </div>
 
-      <section aria-label="Contact directory" className="flex min-w-0 flex-col overflow-hidden rounded-[12px] border border-[var(--border)] bg-[var(--surface)]">
-        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[var(--border)] bg-[var(--surface-alt)] px-4 py-3">
-          <span className="text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">Contact directory</span>
-          <span className="flex flex-wrap items-center gap-2.5">
-            <SearchBox value={search} onChange={onSearch} placeholder="Search name, phone, email, city" label="Search contacts" />
+      <TableCard
+        title="Contact directory"
+        toolbar={
+          <DataToolbar actions={<RefreshButton onClick={() => void loadDirectory(directory.query, directory.page)} refreshing={directoryLoading} />}>
+            <ToolbarSearch value={search} onChange={onSearch} placeholder="Search name, phone, email, city" label="Search contacts" className="sm:w-72" />
             {stats.flaggedContacts ? <Pill tone="warning">{stats.flaggedContacts.toLocaleString()} duplicate-suspected</Pill> : null}
-          </span>
-        </div>
-        <div className="min-w-0 overflow-x-auto" aria-busy={directoryLoading}>
+          </DataToolbar>
+        }
+        footer={
+          <>
+            <span className="tabular-nums" role="status">
+              {directory.total ? `Showing ${firstRow.toLocaleString()}–${lastRow.toLocaleString()} of ${directory.total.toLocaleString()} contact${directory.total === 1 ? "" : "s"}` : "No contacts to show"}
+            </span>
+            <span className="flex gap-2">
+              <Button type="button" variant="outline" size="sm" disabled={directory.page === 0 || directoryLoading} onClick={() => void loadDirectory(directory.query, directory.page - 1)}>Previous</Button>
+              <Button type="button" variant="outline" size="sm" disabled={lastRow >= directory.total || directoryLoading} onClick={() => void loadDirectory(directory.query, directory.page + 1)}>Next</Button>
+            </span>
+          </>
+        }
+      >
+        <div aria-busy={directoryLoading}>
           {directory.rows.length ? (
-            <table className={cn(st.table, "min-w-[720px]")}>
+            <table aria-label="Contact directory" className={cn(st.table, "min-w-[720px]")}>
               <thead>
                 <tr className={st.headRow}>
                   <th scope="col" className={st.th}>Contact</th>
@@ -619,40 +615,23 @@ export function ContactWorkspace({ readOnly = false }: { readOnly?: boolean }) {
               </tbody>
             </table>
           ) : directory.query ? (
-            <div className="flex flex-col items-center gap-2 px-6 py-12 text-center">
-              <p className="m-0 text-[14px] leading-[1.5] font-semibold text-[var(--ink)]">No contacts match “{directory.query}”</p>
-              <p className="m-0 max-w-[52ch] text-[14px] leading-[1.5] text-[var(--muted)]">Search looks at names, phones, emails, cities, street addresses, postcodes, states and custom fields.</p>
-              <button type="button" className={btn("secondary", "mt-2")} onClick={() => { setSearch(""); void loadDirectory("", 0); }}>Clear search</button>
-            </div>
+            <NoMatches noun="contacts" onClear={clearSearch} />
           ) : (
-            <div className="flex flex-col items-center gap-2 px-6 py-12 text-center">
-              <p className="m-0 text-[14px] leading-[1.5] font-semibold text-[var(--ink)]">No contacts yet</p>
-              <p className="m-0 max-w-[52ch] text-[14px] leading-[1.5] text-[var(--muted)]">Add a contact or import a CSV. Each one is checked against everyone already here before it is saved.</p>
-            </div>
+            <EmptyState title="No contacts yet" hint="Add a contact or import a CSV; each one is checked for duplicates first." />
           )}
         </div>
-        <div className="flex-grow" />
-        <div className="flex flex-wrap items-center justify-between gap-4 border-t border-[var(--border)] bg-[var(--canvas)] px-4 py-3">
-          <span className="text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)] tabular-nums" role="status">
-            {directory.total ? `Showing ${firstRow.toLocaleString()}–${lastRow.toLocaleString()} of ${directory.total.toLocaleString()} contact${directory.total === 1 ? "" : "s"}` : "No contacts to show"}
-          </span>
-          <span className="flex gap-2">
-            <button type="button" className={btn("secondary")} disabled={directory.page === 0 || directoryLoading} onClick={() => void loadDirectory(directory.query, directory.page - 1)}>Previous</button>
-            <button type="button" className={btn("secondary")} disabled={lastRow >= directory.total || directoryLoading} onClick={() => void loadDirectory(directory.query, directory.page + 1)}>Next</button>
-          </span>
-        </div>
-      </section>
+      </TableCard>
 
-      <SettingsCard title="Custom contact fields" sub="Extra fields every contact can carry. Imports read them from custom_<key> columns, and Export CSV writes them back out." pad={20}>
+      <SettingsCard title="Custom contact fields" sub="Imported from and exported to custom_<key> columns." pad={20}>
         <form onSubmit={saveField} className="grid gap-3 sm:grid-cols-[1fr_1fr_180px_auto] sm:items-end">
-          <Field label="Key" htmlFor="field-key"><input id="field-key" className={control} placeholder="preferred_language" value={field.field_key} disabled={readOnly} onChange={(event) => setField((value) => ({ ...value, field_key: event.target.value }))} /></Field>
-          <Field label="Label" htmlFor="field-label"><input id="field-label" className={control} placeholder="Preferred language" value={field.label} disabled={readOnly} onChange={(event) => setField((value) => ({ ...value, label: event.target.value }))} /></Field>
+          <Field label="Key" htmlFor="field-key"><input id="field-key" className={fieldControl} placeholder="preferred_language" value={field.field_key} disabled={readOnly} onChange={(event) => setField((value) => ({ ...value, field_key: event.target.value }))} /></Field>
+          <Field label="Label" htmlFor="field-label"><input id="field-label" className={fieldControl} placeholder="Preferred language" value={field.label} disabled={readOnly} onChange={(event) => setField((value) => ({ ...value, label: event.target.value }))} /></Field>
           <Field label="Type" htmlFor="field-type">
-            <select id="field-type" className={control} value={field.type} disabled={readOnly} onChange={(event) => setField((value) => ({ ...value, type: event.target.value }))}>
+            <select id="field-type" className={fieldControl} value={field.type} disabled={readOnly} onChange={(event) => setField((value) => ({ ...value, type: event.target.value }))}>
               <option value="text">Text</option><option value="number">Number</option><option value="date">Date</option><option value="single_select">Single select</option><option value="multi_select">Multi select</option><option value="boolean">Boolean</option><option value="currency">Currency (cents)</option><option value="phone">Phone</option>
             </select>
           </Field>
-          <button type="submit" className={btn("primary", "h-11")} disabled={readOnly || busy === "field"}>{busy === "field" ? "Saving…" : "Add field"}</button>
+          <Button type="submit" disabled={readOnly || busy === "field"}>{busy === "field" ? "Saving…" : "Add field"}</Button>
         </form>
         {fieldError && <p role="alert" className="mt-2 text-[12px] leading-[1.5] text-[var(--error-ink)]">{fieldError}</p>}
         <div className="mt-4 flex flex-wrap gap-2">
@@ -665,7 +644,7 @@ export function ContactWorkspace({ readOnly = false }: { readOnly?: boolean }) {
         <DialogContent className="rounded-[12px] border-[var(--border)] bg-[var(--surface)] sm:max-w-[600px]">
           <DialogHeader>
             <DialogTitle className="text-[18px] text-[var(--ink)]">Add contact</DialogTitle>
-            <DialogDescription className="text-[14px] text-[var(--muted)]">Checked against everyone already here. A match on date of birth plus phone or address merges on its own, and can be undone; anything less waits for review.</DialogDescription>
+            <DialogDescription className="text-[14px] text-[var(--muted)]">Checked for duplicates before it is saved.</DialogDescription>
           </DialogHeader>
           <form onSubmit={create} className="grid gap-4 sm:grid-cols-2">
             <Field label="First name" htmlFor="contact-first_name" required><input id="contact-first_name" className={control} required value={form.first_name} onChange={(event) => setForm((value) => ({ ...value, first_name: event.target.value }))} /></Field>
@@ -679,8 +658,8 @@ export function ContactWorkspace({ readOnly = false }: { readOnly?: boolean }) {
             <Field label="Postal code" htmlFor="contact-postal_code"><input id="contact-postal_code" type="tel" className={control} value={form.postal_code} onChange={(event) => setForm((value) => ({ ...value, postal_code: event.target.value }))} /></Field>
             {formError && <p role="alert" className="m-0 text-[12px] leading-[1.5] text-[var(--error-ink)] sm:col-span-2">{formError}</p>}
             <DialogFooter className="sm:col-span-2">
-              <button type="button" className={btn("ghost")} disabled={busy === "create"} onClick={() => setAddOpen(false)}>Cancel</button>
-              <button type="submit" className={btn("primary")} disabled={readOnly || busy === "create"}>{busy === "create" ? "Saving…" : "Add contact"}</button>
+              <Button type="button" variant="ghost" disabled={busy === "create"} onClick={() => setAddOpen(false)}>Cancel</Button>
+              <Button type="submit" disabled={readOnly || busy === "create"}>{busy === "create" ? "Saving…" : "Add contact"}</Button>
             </DialogFooter>
           </form>
         </DialogContent>

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
-import { ErrorState, LoadingRows } from "@/components/ui/page-states";
+import { ErrorState, SectionLoading } from "@/components/ui/page-states";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { LeadRecord, RecordCallback } from "@/lib/leadWorkspace/record";
@@ -36,8 +36,8 @@ function useLeadRecord(leadId: string) {
 }
 
 function Loading({ record, error, reload, children }: { record: LeadRecord | null; error: string | null; reload: () => Promise<void>; children: (record: LeadRecord) => ReactNode }) {
-  if (error) return <div className="p-5"><ErrorState title="The record did not load" detail={error} action={<Button variant="outline" onClick={() => void reload()}>Try again</Button>} /></div>;
-  if (!record) return <div className="p-5"><LoadingRows rows={4} /></div>;
+  if (error) return <div className="p-5"><ErrorState title="The record did not load" detail={error} action={<Button type="button" variant="outline" onClick={() => void reload()}>Try again</Button>} /></div>;
+  if (!record) return <SectionLoading rows={4} />;
   return <>{children(record)}</>;
 }
 
@@ -102,15 +102,6 @@ function Fact({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-function Note({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <div className="rounded-lg border border-border border-l-[3px] border-l-[var(--info)] bg-[var(--info-surface)] px-4 py-3.5">
-      <p className="text-sm font-semibold leading-normal tracking-[-0.02em] text-[var(--info-ink)]">{title}</p>
-      <p className="mt-1.5 text-sm leading-normal tracking-[-0.02em] text-[var(--body)]">{children}</p>
-    </div>
-  );
-}
-
 const cell = "px-3 py-2 text-sm leading-normal tracking-[-0.02em] text-[var(--body)] whitespace-normal";
 const head = "h-auto bg-[var(--surface-alt)] px-3 py-2";
 
@@ -130,7 +121,7 @@ export function LeadAttemptsTab({ leadId }: { leadId: string }) {
       {(record) => (
         <div>
           {record.attempts.length === 0 ? (
-            <p className="px-5 py-6 text-sm leading-normal tracking-[-0.02em] text-muted-foreground">No dial has been placed or refused on this lead yet. Attempts appear here as the dialer places them, with the screening result that let each one through.</p>
+            <p className="px-5 py-6 text-sm leading-normal tracking-[-0.02em] text-muted-foreground">No dial has been placed or refused on this lead yet.</p>
           ) : (
             <Table className="table-fixed">
               <TableHeader>
@@ -157,12 +148,7 @@ export function LeadAttemptsTab({ leadId }: { leadId: string }) {
               </TableBody>
             </Table>
           )}
-          <div className="p-[18px]">
-            <Note title="A refused attempt is still an attempt, and it is still shown">
-              A dial screening refuses is never placed, so it has no number and does not count against the cadence. It is kept because &ldquo;why did nobody call them on Monday&rdquo; is a question with an answer, and dropping the row destroys it.
-            </Note>
-            <p className="mt-3 text-xs leading-normal text-muted-foreground">Times are {zoneShort(record.zones.agent)}. Call length is not shown: calls leave through your own phone, so nothing here times them.</p>
-          </div>
+          <p className="border-t border-border px-5 py-3 text-xs leading-normal text-muted-foreground">Times are {zoneShort(record.zones.agent)}.</p>
         </div>
       )}
     </Loading>
@@ -201,7 +187,7 @@ export function LeadCallbacksTab({ leadId }: { leadId: string }) {
             </div>
             <div className="-mx-5 mt-[18px]">
               {record.callbacks.length === 0 ? (
-                <p className="border-t border-border px-5 py-6 text-sm leading-normal tracking-[-0.02em] text-muted-foreground">No callback has been booked or refused. A time the customer asks for is booked in their timezone; when it comes due the lead goes back to the agent who booked it.</p>
+                <p className="border-t border-border px-5 py-6 text-sm leading-normal tracking-[-0.02em] text-muted-foreground">No callback has been booked or refused.</p>
               ) : (
                 <Table className="table-fixed">
                   <TableHeader>
@@ -232,11 +218,6 @@ export function LeadCallbacksTab({ leadId }: { leadId: string }) {
                   </TableBody>
                 </Table>
               )}
-            </div>
-            <div className="mt-[18px]">
-              <Note title="A refused time is recorded, not dropped">
-                A time outside the customer&rsquo;s legal window is refused at the picker and kept here as refused. A callback a person believes they booked, which the system quietly discarded, is the worst outcome available here.
-              </Note>
             </div>
           </div>
         );
@@ -342,14 +323,6 @@ export function LeadNurtureTab({ leadId }: { leadId: string }) {
                   }).join(" · ")}
                 </p>
               )}
-            </div>
-            <div className="mt-[18px] flex flex-col gap-3">
-              <Note title="A booked callback outranks the cadence">
-                The cadence exists to reach people who have not committed to a time. Someone who has is served at the time they chose, ahead of every retry, which is how a customer avoids three calls in a day from the same agency.
-              </Note>
-              <Note title="Re-screening happens at the moment of the attempt">
-                Passing screening once says nothing about next week. Each attempt is checked again when it is dialled, and one that fails is recorded as refused on the Attempts tab rather than as a missed call.
-              </Note>
             </div>
           </div>
         );

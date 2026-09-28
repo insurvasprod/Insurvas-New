@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 
-import { AdminPageHeader } from "@/components/admin/page-header";
 import { DashboardUtcTime } from "@/components/admin/dashboard-utc-time";
 import { Callout, Pill } from "@/components/app/settings/primitives";
+import { PageHeader } from "@/components/ui/page-header";
 import type { UserDetail } from "@/lib/adminUsers/detail";
 import { userStatusTone, utcDate, utcDateTime } from "@/lib/adminUsers/detailFormat";
 import { TENANT_ROLE_LABELS, type TenantRole } from "@/lib/tenantAuth/roles";
@@ -13,15 +13,11 @@ import { userStatusLabel } from "@/lib/users/constants";
 /** More than this many distinct IPs in 24h suggests a shared account (same threshold as the list). */
 const SHARED_ACCOUNT_IP_THRESHOLD = 3;
 
-/** The board's 44px secondary header button, as a link. */
-const HEADER_LINK =
-  "inline-flex h-11 items-center justify-center gap-2 rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] px-4 text-[14px] leading-[1.43] font-semibold tracking-[-0.01em] whitespace-nowrap text-[var(--ink)] no-underline hover:bg-[var(--surface-alt)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]";
-
 type Fact = { label: string; value: string; iso?: string | null };
 
 /**
- * The top of the admin user record (board p-adm-user-detail): back link, header, the chip row, the
- * shared-account warning when it applies, and the fact card. Server-rendered; times are printed in
+ * The top of the admin user record (board p-adm-user-detail): back link, header with the state
+ * chips, the shared-account warning when it applies, and the fact card. Server-rendered; times are printed in
  * UTC with the reader's local time on hover.
  */
 export function UserDetailSummary({ user }: { user: UserDetail }) {
@@ -51,41 +47,37 @@ export function UserDetailSummary({ user }: { user: UserDetail }) {
           <ArrowLeft className="size-[13px] stroke-[2.4]" aria-hidden="true" />
           Back to users
         </Link>
-        <AdminPageHeader
+        <PageHeader
           title={user.name || user.email || "User"}
-          subtitle="One user, their tenant membership, and their sign-in history."
           actions={
-            <Link href="/admin/users" className={HEADER_LINK}>
-              Back to users
-            </Link>
+            <span role="group" aria-label="Account state" className="flex flex-wrap items-center gap-2">
+              <Pill tone={userStatusTone(user.status)} dot>
+                {userStatusLabel(user.status)}
+              </Pill>
+              {user.memberships.length === 0 && <Pill tone="neutral">No agency</Pill>}
+              {user.memberships.map((membership) => (
+                <span key={membership.tenantId} className="contents">
+                  {roleLabel(membership.role) && <Pill tone="neutral">{roleLabel(membership.role)}</Pill>}
+                  <Link
+                    href={`/admin/tenants/${membership.tenantId}`}
+                    className="rounded-full no-underline hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
+                    title="Open this agency's record"
+                  >
+                    <Pill tone="neutral">{membership.tenantName ?? "Unnamed agency"}</Pill>
+                  </Link>
+                </span>
+              ))}
+              {!isOnboarded(user) && <Pill tone="warning">Invite pending</Pill>}
+            </span>
           }
         />
       </div>
 
-      <div role="group" aria-label="Account state" className="flex flex-wrap gap-2">
-        <Pill tone={userStatusTone(user.status)} dot>
-          {userStatusLabel(user.status)}
-        </Pill>
-        {user.memberships.length === 0 && <Pill tone="neutral">No agency</Pill>}
-        {user.memberships.map((membership) => (
-          <span key={membership.tenantId} className="contents">
-            {roleLabel(membership.role) && <Pill tone="neutral">{roleLabel(membership.role)}</Pill>}
-            <Link
-              href={`/admin/tenants/${membership.tenantId}`}
-              className="rounded-full no-underline hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
-              title="Open this agency's record"
-            >
-              <Pill tone="neutral">{membership.tenantName ?? "Unnamed agency"}</Pill>
-            </Link>
-          </span>
-        ))}
-        {!isOnboarded(user) && <Pill tone="warning">Invite pending</Pill>}
-      </div>
-
       {sharedAccountSuspected && (
-        <Callout tone="warning" title="Possible shared account">
-          Successful logins from {user.distinctIps24h} different IP addresses in the last 24 hours.
-        </Callout>
+        <Callout
+          tone="warning"
+          title={`Possible shared account: successful logins from ${user.distinctIps24h} different IP addresses in the last 24 hours.`}
+        />
       )}
 
       <section aria-label="Key facts" className="min-w-0 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] p-5">

@@ -4,12 +4,11 @@ import { getCurrentAdmin } from "@/lib/adminAuth/getCurrentAdmin";
 import { canManageCoupons } from "@/lib/coupons/permissions";
 import { fetchCouponList, fetchCouponPlans, fetchDiscountGivenByCoupon } from "@/lib/coupons/queries";
 import { EXPIRING_SOON_DAYS, expiresSoon, statusOf, utcDay } from "@/lib/coupons/format";
-import { AdminPageHeader } from "@/components/admin/page-header";
 import { BillingTabs } from "@/components/admin/billing-tabs";
 import { BoardStatGrid, BoardStatTile } from "@/components/admin/board-stat-tile";
 import { CouponCreateDialog } from "@/components/admin/coupon-create-dialog";
 import { CouponsTable } from "@/components/admin/coupons-table";
-import { Callout } from "@/components/app/settings/primitives";
+import { PageHeader } from "@/components/ui/page-header";
 
 const USD_WHOLE = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 const USD = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
@@ -37,9 +36,9 @@ export default async function CouponsPage() {
 
   return (
     <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
-      <AdminPageHeader
+      <PageHeader
         title="Coupons"
-        subtitle="Promo codes created at Whop, so a customer who enters one at checkout is actually charged less."
+        description="Whop promo codes that lower what the customer is charged."
         actions={<CouponCreateDialog plans={plans ? plans.filter((p) => !p.is_archived) : null} />}
       />
       <BillingTabs />
@@ -82,19 +81,6 @@ export default async function CouponsPage() {
         nowIso={now.toISOString()}
         listError={failed}
       />
-
-      <Callout tone="info" title="Spent coupons are history, not clutter">
-        An exhausted or expired coupon stays visible and is never deleted while redemptions exist &mdash; deactivate
-        instead. A discount always says whether it is a percentage or a fixed amount, and an unlimited cap renders as{" "}
-        <strong>&infin;</strong> rather than a blank.
-      </Callout>
-
-      {/* Not on the board. It is here because the subtitle's promise does not hold for this path. */}
-      <Callout tone="warning" title="Applying a coupon to a subscription does not change what Whop charges">
-        A coupon applied from a tenant record discounts our invoice only. Whop&rsquo;s API has no documented way to add a
-        promo code to an existing membership, so until it does, apply the same code to that membership in Whop&rsquo;s
-        dashboard as well, or the invoice will show a discount the card was not given.
-      </Callout>
     </div>
   );
 }

@@ -58,10 +58,7 @@ export function DashboardMetrics({ tiles, tenantId }: { tiles: DashboardTile[]; 
   if (!tiles.length) return null;
   return (
     <section aria-labelledby="metrics-heading" className="space-y-3">
-      <div className="flex items-baseline justify-between gap-3">
-        <h2 id="metrics-heading" className="text-sm font-semibold leading-normal tracking-[-0.01em] text-foreground">Across the agency</h2>
-        <p className="text-xs text-muted-foreground">Live counts · select one to open it</p>
-      </div>
+      <h2 id="metrics-heading" className="text-sm font-semibold leading-normal tracking-[-0.01em] text-foreground">Across the agency</h2>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-6">
         {tiles.map((tile) => {
           const Icon = ICONS[tile.icon] ?? SquareStack;

@@ -4,15 +4,13 @@ import { getCurrentAdmin } from "@/lib/adminAuth/getCurrentAdmin";
 import { canManageSubscriptions } from "@/lib/subscriptions/permissions";
 import { fetchSubscriptionsBoard } from "@/lib/subscriptionsList/board";
 import { formatCentsAsCurrency } from "@/lib/money";
-import { AdminPageHeader } from "@/components/admin/page-header";
 import { BoardStatGrid, BoardStatTile } from "@/components/admin/board-stat-tile";
 import { SubscriptionsList } from "@/components/admin/subscriptions-list";
-import { Callout } from "@/components/app/settings/primitives";
+import { PageHeader } from "@/components/ui/page-header";
 
 /**
- * Admin Subscriptions (board p-adm-subscriptions): four figures, the toolbar, every subscription
- * with its current period and what is queued to change, and the callout on why the list is
- * read-only. Every figure is read from the database on each request; the board's names and
+ * Admin Subscriptions (board p-adm-subscriptions): four figures, then every subscription with its
+ * current period and what is queued to change. Every figure is read from the database on each request; the board's names and
  * numbers are samples.
  */
 export default async function SubscriptionsPage() {
@@ -26,10 +24,7 @@ export default async function SubscriptionsPage() {
 
   return (
     <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
-      <AdminPageHeader
-        title="Subscriptions"
-        subtitle="Who is on what, and what is queued to change. Assign and cancel from a tenant’s page."
-      />
+      <PageHeader title="Subscriptions" description="Who is on what, and what is queued to change." />
 
       <BoardStatGrid>
         <BoardStatTile
@@ -67,12 +62,6 @@ export default async function SubscriptionsPage() {
       </BoardStatGrid>
 
       <SubscriptionsList rows={board.rows} plans={board.plans} listError={listError} />
-
-      <Callout tone="warning" title="Cancelled and expired are different facts, and both belong">
-        A cancelled subscription keeps access until its period ends; an expired one has ended. Assign and cancel live on the tenant
-        page on purpose — a destructive money action belongs next to the customer it affects, not in a list where the wrong row is
-        one mis-click away.
-      </Callout>
     </div>
   );
 }

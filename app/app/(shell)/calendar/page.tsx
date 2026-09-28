@@ -2,7 +2,6 @@ import { guardPage } from "@/lib/entitlements/guardPage";
 import { AppointmentCalendar } from "@/components/app/appointment-calendar";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
-import { sectionForPath } from "@/lib/menu/definition";
 
 /**
  * `/app/calendar` — and the path matters. `book_appointment` has always written its notification
@@ -33,5 +32,5 @@ export default async function CalendarPage({
 
   // The header lives in the calendar itself: its "Day" and "Book an appointment" actions drive the
   // calendar's own state.
-  return <AppointmentCalendar highlightId={appointment} eyebrow={sectionForPath("/app/calendar") ?? undefined} />;
+  return <AppointmentCalendar highlightId={appointment} />;
 }

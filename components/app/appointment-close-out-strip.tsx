@@ -2,10 +2,12 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { CalendarCheck, Check, CircleAlert, Loader2, UserRound, UserX, X } from "lucide-react";
+import { Check, CircleAlert, UserRound, UserX, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { RefreshButton } from "@/components/ui/data-toolbar";
+import { TableCard } from "@/components/ui/table-card";
+import { SectionLoading } from "@/components/ui/page-states";
 
 type Appointment = {
   appointmentId: string;
@@ -75,11 +77,8 @@ export function AppointmentCloseOutStrip({ hideWhenEmpty = false }: { hideWhenEm
   // so the dashboard does not flash a card that is about to disappear on most mornings.
   if (hideWhenEmpty && !error && appointments.length === 0) return null;
 
-  return <Card aria-labelledby="appointment-close-out-heading">
-    <CardHeader><CardTitle id="appointment-close-out-heading" className="flex items-center gap-2"><CalendarCheck className="size-5" />Appointment close-out</CardTitle><CardDescription>These appointments ended recently and still need an outcome. They are excluded from show rate until reviewed.</CardDescription></CardHeader>
-    <CardContent>
-      {error && <div role="alert" className="mb-3 flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive"><CircleAlert className="size-4 shrink-0" />{error}<Button type="button" variant="ghost" size="sm" className="ml-auto" onClick={() => void load()}>Retry</Button></div>}
-      {loading ? <p className="flex items-center gap-2 py-4 text-sm text-muted-foreground" role="status"><Loader2 className="size-4 animate-spin" />Loading close-outs…</p> : appointments.length === 0 ? <p className="py-4 text-sm text-muted-foreground">No appointments need close-out right now.</p> : <div className="space-y-3">{appointments.map((appointment) => <div key={appointment.appointmentId} className="flex flex-col gap-3 rounded-md border p-3 sm:flex-row sm:items-center sm:justify-between"><div className="min-w-0"><p className="flex items-center gap-2 font-medium"><UserRound className="size-4 shrink-0 text-muted-foreground" />{appointment.customerName}</p><p className="mt-1 text-xs text-muted-foreground">{appointment.startsAtLocal} ({appointment.customerTimezone}) · {appointment.note || "No setter note"}</p><Link href={`/app/leads/${appointment.leadId}`} className="mt-1 inline-block text-xs text-primary underline underline-offset-2">Open lead</Link></div><div className="flex flex-wrap gap-2">{outcomes.map(({ value, label, icon: Icon }) => <Button key={value} type="button" size="sm" variant={value === "showed" ? "default" : "outline"} disabled={saving === appointment.appointmentId} onClick={() => void record(appointment, value)}><Icon className="size-4" />{saving === appointment.appointmentId ? "Saving…" : label}</Button>)}</div></div>)}</div>}
-    </CardContent>
-  </Card>;
+  return <TableCard title="Appointment close-out" description="Ended recently and still need an outcome." action={<RefreshButton onClick={() => void load()} refreshing={loading} />}>
+    {error && <div role="alert" className="flex items-center gap-2 border-t border-destructive/40 bg-destructive/10 px-4 py-2.5 text-sm text-destructive"><CircleAlert className="size-4 shrink-0" />{error}<Button type="button" variant="ghost" size="sm" className="ml-auto" onClick={() => void load()}>Retry</Button></div>}
+    {loading ? <SectionLoading rows={2} columns={3} label="Loading close-outs" /> : appointments.length === 0 ? <p className="border-t border-border px-4 py-4 text-sm text-muted-foreground">No appointments need close-out right now.</p> : <ul className="m-0 list-none divide-y divide-border border-t border-border p-0">{appointments.map((appointment) => <li key={appointment.appointmentId} className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"><div className="min-w-0"><p className="flex items-center gap-2 text-sm font-medium"><UserRound className="size-4 shrink-0 text-muted-foreground" />{appointment.customerName}</p><p className="mt-1 text-xs text-muted-foreground">{appointment.startsAtLocal} ({appointment.customerTimezone}) · {appointment.note || "No setter note"} · <Link href={`/app/leads/${appointment.leadId}`} className="text-primary underline underline-offset-2">Open lead</Link></p></div><div className="flex flex-wrap gap-2">{outcomes.map(({ value, label, icon: Icon }) => <Button key={value} type="button" size="sm" variant={value === "showed" ? "default" : "outline"} disabled={saving === appointment.appointmentId} onClick={() => void record(appointment, value)}><Icon className="size-4" />{saving === appointment.appointmentId ? "Saving…" : label}</Button>)}</div></li>)}</ul>}
+  </TableCard>;
 }

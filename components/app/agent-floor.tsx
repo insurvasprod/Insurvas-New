@@ -5,10 +5,15 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Check } from "lucide-react";
 
+import { Button } from "@/components/ui/button";
+import { DataToolbar, RefreshButton, ToolbarSearch } from "@/components/ui/data-toolbar";
 import { PageHeader } from "@/components/ui/page-header";
-import { Callout, Pill, SettingsTableCard, btn, st, type PillTone } from "@/components/app/settings/primitives";
+import { PageLoading } from "@/components/ui/page-loading";
+import { EmptyState, NoMatches } from "@/components/ui/page-states";
+import { StatStrip, StatTile } from "@/components/ui/stat";
+import { TableCard } from "@/components/ui/table-card";
+import { Callout, Pill, st, type PillTone } from "@/components/app/settings/primitives";
 import { productLineLabel } from "@/lib/format/productLine";
-import { sectionForPath } from "@/lib/menu/definition";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
@@ -260,35 +265,20 @@ function doingLabel(member: Member, state: RosterState, now: number) {
 
 /* ── pieces ────────────────────────────────────────────────────────────── */
 
-/** The board's KPI tile: radius 12, 16/18 padding, no shadow, 32px value. */
-function Kpi({ label, value, foot, valueClassName }: { label: string; value: React.ReactNode; foot: React.ReactNode; valueClassName?: string }) {
+/** Your own status. The one you are in is the filled button, with a check. */
+function StatusButton({ pressed, disabled, onClick, children }: { pressed: boolean; disabled: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
-    <div className="min-w-0 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] px-[18px] py-4">
-      <div className="text-[12px] leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]">{label}</div>
-      <div className={cn("text-[32px] leading-[1.13] font-semibold tracking-[-0.025em] tabular-nums text-[var(--ink)]", valueClassName)}>{value}</div>
-      <div className="text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">{foot}</div>
-    </div>
-  );
-}
-
-function StatusButton({ pressed, kind, disabled, onClick, children }: { pressed: boolean; kind: "primary" | "outline" | "ghost"; disabled: boolean; onClick: () => void; children: React.ReactNode }) {
-  const look = {
-    primary: "border-transparent bg-[var(--primary)] text-[var(--on-primary)] hover:bg-[var(--accent-hover)]",
-    outline: "border-[var(--border-strong)] bg-[var(--surface)] text-[var(--ink)] hover:bg-[var(--surface-alt)]",
-    ghost: cn("bg-transparent text-[var(--ink)] hover:bg-[var(--surface-alt)]", pressed ? "border-[var(--border-strong)]" : "border-transparent"),
-  }[kind];
-  return (
-    <button type="button" aria-pressed={pressed} disabled={disabled} onClick={onClick} className={cn("inline-flex h-11 items-center justify-center gap-2 rounded-[8px] border px-4 text-[14px] leading-[1.43] font-semibold tracking-[-0.01em] whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-50", look)}>
-      {pressed && <Check className="size-4" aria-hidden="true" />}
+    <Button type="button" variant={pressed ? "default" : "outline"} aria-pressed={pressed} disabled={disabled} onClick={onClick}>
+      {pressed && <Check aria-hidden="true" />}
       {children}
-    </button>
+    </Button>
   );
 }
 
 function PendingHandoffs({ items, readOnly, saving, now, onAccept }: { items: Handoff[]; readOnly: boolean; saving: string | null; now: number; onAccept: (id: string, workItemId: string) => void }) {
   if (!items.length) return null;
   return (
-    <section aria-labelledby="handoffs-heading" className="rounded-[12px] border border-[var(--border)] border-l-[3px] border-l-[var(--info)] bg-[var(--info-surface)] px-4 py-3.5">
+    <section aria-labelledby="handoffs-heading" className="rounded-[12px] border border-[var(--border)] border-l-[3px] border-l-[var(--info)] bg-[var(--info-surface)] px-4 py-3">
       <h2 id="handoffs-heading" className="m-0 text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--info-ink)]">
         {items.length === 1 ? "A handoff is waiting for you" : `${items.length} handoffs are waiting for you`}
       </h2>
@@ -303,9 +293,9 @@ function PendingHandoffs({ items, readOnly, saving, now, onAccept }: { items: Ha
                 {handoff.expiresAt && new Date(handoff.expiresAt).getTime() > now ? ` · offer ends ${clockTime(handoff.expiresAt, now)}` : ""}
               </span>
             </span>
-            <button type="button" className={btn("primary-sm")} disabled={readOnly || saving === `handoff:${handoff.id}`} onClick={() => onAccept(handoff.id, handoff.workItemId)}>
+            <Button type="button" size="sm" disabled={readOnly || saving === `handoff:${handoff.id}`} onClick={() => onAccept(handoff.id, handoff.workItemId)}>
               {saving === `handoff:${handoff.id}` ? "Accepting…" : "Accept handoff"}
-            </button>
+            </Button>
           </li>
         ))}
       </ul>
@@ -313,14 +303,16 @@ function PendingHandoffs({ items, readOnly, saving, now, onAccept }: { items: Ha
   );
 }
 
-function Roster({ members, now, currentUserId, isOwner, canAsk, readOnly, saving, onAsk }: { members: Member[]; now: number; currentUserId: string; isOwner: boolean; canAsk: boolean; readOnly: boolean; saving: string | null; onAsk: (member: Member) => void }) {
+function Roster({ members, searching, now, currentUserId, isOwner, canAsk, readOnly, saving, onAsk }: { members: Member[]; searching: boolean; now: number; currentUserId: string; isOwner: boolean; canAsk: boolean; readOnly: boolean; saving: string | null; onAsk: (member: Member) => void }) {
   const rows = members
     .map((member) => ({ member, state: rosterState(member, now) }))
     .sort((a, b) => STATE_ORDER.indexOf(a.state) - STATE_ORDER.indexOf(b.state) || a.member.name.localeCompare(b.member.name));
   return (
-    <SettingsTableCard className="flex-1" title="Roster" actions={<Pill>A held lead with nobody at the desk shows as Away</Pill>}>
+    <TableCard title="Roster">
       {rows.length === 0 ? (
-        <p className="m-0 px-4 py-6 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">Nobody else here can take transfers yet. Owners, producers and buffer assistants appear on the floor.</p>
+        searching
+          ? <NoMatches noun="agents" />
+          : <EmptyState title="Nobody on the floor yet" hint="Owners, producers and buffer assistants appear here." />
       ) : (
         <table className={st.table}>
           <thead>
@@ -329,7 +321,7 @@ function Roster({ members, now, currentUserId, isOwner, canAsk, readOnly, saving
               <th scope="col" className={cn(st.th, "w-[112px]")}>Status</th>
               <th scope="col" className={cn(st.th, "w-[160px]")}>Doing</th>
               <th scope="col" className={cn(st.th, "w-[76px]")}>On call</th>
-              <th scope="col" className={cn(st.th, "w-[124px]")}><span className="sr-only">Action</span></th>
+              <th scope="col" className={cn(st.th, "w-[132px] text-right")}><span className="sr-only">Action</span></th>
             </tr>
           </thead>
           <tbody className="m-seq">
@@ -351,13 +343,13 @@ function Roster({ members, now, currentUserId, isOwner, canAsk, readOnly, saving
                   <td className={st.td}><Pill tone={pill.tone} dot>{pill.label}</Pill></td>
                   <td className={st.td}>{doingLabel(member, state, now)}</td>
                   <td className={cn(st.td, "tabular-nums")}>{onCall && member.call ? callClock(secondsSince(member.call.startedAt, now)) : "—"}</td>
-                  <td className={st.td}>
+                  <td className={cn(st.td, "text-right")}>
                     {onCall && member.call ? (
-                      <Link href={`/app/leads/${member.call.leadId}`} className={btn("secondary", "px-3")}>Open lead</Link>
+                      <Button asChild size="sm" variant="outline"><Link href={`/app/leads/${member.call.leadId}`}>Open lead</Link></Button>
                     ) : askable ? (
-                      <button type="button" className={btn("secondary", "px-3")} disabled={readOnly || saving === `ask:${member.id}`} onClick={() => onAsk(member)}>
+                      <Button type="button" size="sm" variant="outline" disabled={readOnly || saving === `ask:${member.id}`} onClick={() => onAsk(member)}>
                         {saving === `ask:${member.id}` ? "Asking…" : "Ask to pick up"}
-                      </button>
+                      </Button>
                     ) : null}
                   </td>
                 </tr>
@@ -366,7 +358,7 @@ function Roster({ members, now, currentUserId, isOwner, canAsk, readOnly, saving
           </tbody>
         </table>
       )}
-    </SettingsTableCard>
+    </TableCard>
   );
 }
 
@@ -378,13 +370,13 @@ function OnCalls({ calls, now, currentUserId, isOwner, readOnly, saving, onRelea
   if (!calls.length) return null;
   const sorted = [...calls].sort((a, b) => new Date(a.startedAt).getTime() - new Date(b.startedAt).getTime());
   return (
-    <SettingsTableCard title="On a call now" actions={<span className="text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">{calls.length} open call {calls.length === 1 ? "record" : "records"}</span>}>
-      <ul className="m-0 list-none p-0">
+    <TableCard title="On a call now" action={<span className="text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">{calls.length} open call {calls.length === 1 ? "record" : "records"}</span>}>
+      <ul className="m-0 list-none border-t border-[var(--border)] p-0">
         {sorted.map((call) => {
           const seconds = secondsSince(call.startedAt, now);
           const stale = seconds > 4 * 3600;
           return (
-            <li key={call.activeCallId} className="flex items-center gap-3 border-t border-[var(--border)] px-4 py-3 first:border-t-0">
+            <li key={call.activeCallId} className="flex flex-wrap items-center gap-3 border-t border-[var(--border)] px-4 py-3 first:border-t-0">
               <span className="min-w-0 flex-1">
                 <span className="block text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">{call.agentName} <span className="font-normal text-[var(--muted)]">→</span> {call.customer}</span>
                 <span className={st.sub}>
@@ -396,23 +388,25 @@ function OnCalls({ calls, now, currentUserId, isOwner, readOnly, saving, onRelea
                 {callClock(seconds)}
                 {stale && <span className="block text-[12px] font-normal">never closed</span>}
               </span>
-              {/* Two different acts (LA-1.14-9): the buffer leaving a call the agent keeps, and the agent giving the transfer back. */}
-              {call.buffer && (isOwner || call.buffer.userId === currentUserId || call.agentId === currentUserId) && (
-                <button type="button" className={btn("secondary", "px-3")} disabled={readOnly || saving === `end_buffer:${call.id}`} onClick={() => onRelease(call, "end_buffer")}>
-                  {saving === `end_buffer:${call.id}` ? "Ending…" : "End buffer involvement"}
-                </button>
-              )}
-              {(isOwner || call.agentId === currentUserId) && (
-                <button type="button" className={btn("secondary", "px-3")} disabled={readOnly || saving === `unassign:${call.id}`} onClick={() => onRelease(call, "unassign")}>
-                  {saving === `unassign:${call.id}` ? "Unassigning…" : "Unassign"}
-                </button>
-              )}
-              <Link href={`/app/leads/${call.leadId}`} className={btn("secondary", "px-3")}>Open lead</Link>
+              <span className="flex shrink-0 flex-wrap justify-end gap-2">
+                {/* Two different acts (LA-1.14-9): the buffer leaving a call the agent keeps, and the agent giving the transfer back. */}
+                {call.buffer && (isOwner || call.buffer.userId === currentUserId || call.agentId === currentUserId) && (
+                  <Button type="button" size="sm" variant="outline" disabled={readOnly || saving === `end_buffer:${call.id}`} onClick={() => onRelease(call, "end_buffer")}>
+                    {saving === `end_buffer:${call.id}` ? "Ending…" : "End buffer involvement"}
+                  </Button>
+                )}
+                {(isOwner || call.agentId === currentUserId) && (
+                  <Button type="button" size="sm" variant="outline" disabled={readOnly || saving === `unassign:${call.id}`} onClick={() => onRelease(call, "unassign")}>
+                    {saving === `unassign:${call.id}` ? "Unassigning…" : "Unassign"}
+                  </Button>
+                )}
+                <Button asChild size="sm" variant="outline"><Link href={`/app/leads/${call.leadId}`}>Open lead</Link></Button>
+              </span>
             </li>
           );
         })}
       </ul>
-    </SettingsTableCard>
+    </TableCard>
   );
 }
 
@@ -425,15 +419,15 @@ function Fact({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
-function TransferQueue({ items, totalWaiting, now, thresholds, expandedId, readOnly, saving, members, onToggle, onClaim, onNudge }: { items: Lead[]; totalWaiting: number; now: number; thresholds: FloorData["waitThresholds"]; expandedId: string | null; readOnly: boolean; saving: string | null; members: Member[]; onToggle: (id: string) => void; onClaim: (id: string) => void; onNudge: (id: string) => void }) {
+function TransferQueue({ items, totalWaiting, now, thresholds, expandedId, readOnly, saving, members, toolbar, footer, onClearSearch, onToggle, onClaim, onNudge }: { items: Lead[]; totalWaiting: number; now: number; thresholds: FloorData["waitThresholds"]; expandedId: string | null; readOnly: boolean; saving: string | null; members: Member[]; toolbar: React.ReactNode; footer: React.ReactNode; onClearSearch: () => void; onToggle: (id: string) => void; onClaim: (id: string) => void; onNudge: (id: string) => void }) {
   // Who could take a non-English lead right now: free (available) members whose recorded languages include it.
   const freeSpeakers = (language: string) => members.filter((member) => rosterState(member, now) === "available" && (member.languages ?? []).some((spoken) => languageKey(spoken) === languageKey(language)));
   return (
-    <SettingsTableCard className="flex-1" title="Transfer queue" actions={<span className="text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">longest first</span>}>
+    <TableCard title="Transfer queue" action={<span className="text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">longest first</span>} toolbar={toolbar} footer={footer}>
       {items.length === 0 ? (
-        <p className="m-0 px-4 py-6 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">
-          {totalWaiting ? "No waiting transfer matches this search." : "Nobody is waiting. A new inbound transfer appears here the moment a partner sends it."}
-        </p>
+        totalWaiting
+          ? <NoMatches noun="waiting transfers" onClear={onClearSearch} />
+          : <EmptyState title="Nobody is waiting" hint="A new inbound transfer appears here the moment a partner sends it." />
       ) : (
         <ol className="m-0 list-none p-0">
           {items.map((item, index) => {
@@ -467,9 +461,9 @@ function TransferQueue({ items, totalWaiting, now, thresholds, expandedId, readO
                     })()}
                   </button>
                   <span className={cn("shrink-0 text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] tabular-nums", waitTone(wait, thresholds))}>{waitLabel(wait)}</span>
-                  <button type="button" className={btn("primary-sm")} disabled={readOnly || saving === item.id} onClick={() => onClaim(item.id)}>
+                  <Button type="button" size="sm" disabled={readOnly || saving === item.id} onClick={() => onClaim(item.id)}>
                     {saving === item.id ? "Picking up…" : "Pick up"}
-                  </button>
+                  </Button>
                 </div>
                 {expanded && (
                   <div id={`transfer-${item.id}`} className="px-4 pb-4 pl-[52px]">
@@ -487,10 +481,10 @@ function TransferQueue({ items, totalWaiting, now, thresholds, expandedId, readO
                     </dl>
                     <p className="m-0 mt-3 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--body)]">{screeningNote(item)}</p>
                     <div className="mt-3 flex flex-wrap items-center gap-2">
-                      <button type="button" className={btn("secondary")} disabled={readOnly || saving === `nudge:${item.id}`} onClick={() => onNudge(item.id)}>
+                      <Button type="button" size="sm" variant="outline" disabled={readOnly || saving === `nudge:${item.id}`} onClick={() => onNudge(item.id)}>
                         {saving === `nudge:${item.id}` ? "Sending…" : "Nudge team"}
-                      </button>
-                      <Link href={`/app/leads/${item.leadId}`} className={btn("secondary")}>Open lead</Link>
+                      </Button>
+                      <Button asChild size="sm" variant="outline"><Link href={`/app/leads/${item.leadId}`}>Open lead</Link></Button>
                     </div>
                   </div>
                 )}
@@ -499,18 +493,17 @@ function TransferQueue({ items, totalWaiting, now, thresholds, expandedId, readO
           })}
         </ol>
       )}
-      <div className="border-t border-[var(--border)] bg-[var(--canvas)] px-4 py-3 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--body)]">
-        A claim is settled by the server. The second presser is told who won — never shown a dead button.
-      </div>
-    </SettingsTableCard>
+    </TableCard>
   );
 }
 
-function CallbacksTable({ items }: { items: Callback[] }) {
+function CallbacksTable({ items, searching }: { items: Callback[]; searching: boolean }) {
   return (
-    <SettingsTableCard title="Upcoming callbacks" actions={<Link href="/app/callbacks" className="text-[12px] leading-[1.5] font-semibold tracking-[-0.01em] text-[var(--accent-ink)]">View all</Link>}>
+    <TableCard title="Upcoming callbacks" action={<Button asChild variant="outline"><Link href="/app/callbacks">View all</Link></Button>}>
       {items.length === 0 ? (
-        <p className="m-0 px-4 py-6 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">No callbacks are due today.</p>
+        searching
+          ? <NoMatches noun="callbacks" />
+          : <EmptyState title="No callbacks due today" hint="Callbacks booked from a call outcome appear here on the day they are due." />
       ) : (
         <table className={st.table}>
           <thead>
@@ -521,7 +514,7 @@ function CallbacksTable({ items }: { items: Callback[] }) {
               <th scope="col" className={st.th}>Owner</th>
               <th scope="col" className={st.th}>Timezone</th>
               <th scope="col" className={st.th}>Notes</th>
-              <th scope="col" className={st.th}><span className="sr-only">Action</span></th>
+              <th scope="col" className={cn(st.th, "text-right")}><span className="sr-only">Action</span></th>
             </tr>
           </thead>
           <tbody>
@@ -540,19 +533,18 @@ function CallbacksTable({ items }: { items: Callback[] }) {
                   <td className={st.td}>{owner}</td>
                   <td className={st.td}>{callback.customerTimezone}</td>
                   <td className={st.td}>{callback.note || "No callback note."}</td>
-                  <td className={st.td}><Link className={btn("secondary", "px-3")} href={`/app/leads/${callback.leadId}`}>Open</Link></td>
+                  <td className={cn(st.td, "text-right")}><Button asChild size="sm" variant="outline"><Link href={`/app/leads/${callback.leadId}`}>Open</Link></Button></td>
                 </tr>
               );
             })}
           </tbody>
         </table>
       )}
-    </SettingsTableCard>
+    </TableCard>
   );
 }
 
 /* ── the page ──────────────────────────────────────────────────────────── */
-
 export function AgentFloor({ currentUserId, readOnly, role }: { currentUserId: string; readOnly: boolean; role: string }) {
   const router = useRouter();
   const [floor, setFloor] = useState<FloorData | null>(null);
@@ -571,6 +563,7 @@ export function AgentFloor({ currentUserId, readOnly, role }: { currentUserId: s
   const [realtimeStatus, setRealtimeStatus] = useState("connecting");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async ({ initial = false }: { initial?: boolean } = {}): Promise<void> => {
     // A change that arrives while a read is out is not dropped: the read runs once more when it lands.
@@ -598,6 +591,7 @@ export function AgentFloor({ currentUserId, readOnly, role }: { currentUserId: s
     }
   }, []);
   useEffect(() => { loadRef.current = load; }, [load]);
+  async function refresh() { setRefreshing(true); try { await load(); } finally { setRefreshing(false); } }
 
   useEffect(() => {
     // The initial server-backed snapshot intentionally synchronizes React state from the API.
@@ -721,90 +715,97 @@ export function AgentFloor({ currentUserId, readOnly, role }: { currentUserId: s
     void load();
   }
 
-  const liveLabel = realtimeStatus === "subscribed" ? "Live" : realtimeStatus === "unconfigured" ? "Live unavailable" : "Connecting";
+  const liveLabel = realtimeStatus === "subscribed" ? "Live" : realtimeStatus === "unconfigured" ? "Live unavailable, refreshing every 10 seconds" : "Connecting";
   const updated = lastUpdated ? `${shortDuration(secondsSince(lastUpdated, now))} ago` : "just now";
   const statusDisabled = readOnly || availability === null;
 
   const header = (
     <PageHeader
-      eyebrow={sectionForPath("/app/floor") ?? undefined}
       title="Agent Floor"
-      description="Who is waiting, who is on a call, who is free."
       actions={
         <>
-          <span className="relative inline-flex w-[200px] max-w-full">
-            <svg aria-hidden width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" className="pointer-events-none absolute top-[14px] left-3 text-[var(--muted)]">
-              <circle cx="11" cy="11" r="7" />
-              <path d="m20 20-3.2-3.2" />
-            </svg>
-            <input type="search" aria-label="Search the floor" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search the floor" className="box-border h-11 w-full rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] pr-3 pl-9 text-[14px] tracking-[-0.02em] text-[var(--ink)] outline-none placeholder:text-[var(--muted)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]" />
-          </span>
-          <span className="inline-flex items-center gap-1.5 px-1 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">
-            <span aria-hidden className={cn("size-1.5 rounded-full", realtimeStatus === "subscribed" ? "bg-[var(--success)]" : "bg-[var(--muted)]")} />
-            <span className="font-semibold text-[var(--body)]">{liveLabel}</span> · {updated}
-          </span>
-          <StatusButton kind="ghost" pressed={availability === "off"} disabled={statusDisabled} onClick={() => setAvailability("off")}>Go offline</StatusButton>
-          <StatusButton kind="outline" pressed={availability === "on_break"} disabled={statusDisabled} onClick={() => setAvailability("on_break")}>Wrap-up</StatusButton>
-          <StatusButton kind="primary" pressed={availability === "ready"} disabled={statusDisabled} onClick={() => setAvailability("ready")}>Available</StatusButton>
+          <StatusButton pressed={availability === "off"} disabled={statusDisabled} onClick={() => setAvailability("off")}>Go offline</StatusButton>
+          <StatusButton pressed={availability === "on_break"} disabled={statusDisabled} onClick={() => setAvailability("on_break")}>Wrap-up</StatusButton>
+          <StatusButton pressed={availability === "ready"} disabled={statusDisabled} onClick={() => setAvailability("ready")}>Available</StatusButton>
         </>
       }
     />
   );
 
   if (!floor) {
+    if (!(error && !loading)) return <PageLoading />;
     return (
-      <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
+      <div className="flex w-full min-w-0 flex-col gap-6">
         {header}
-        {error && !loading ? (
-          <div role="alert">
-            <Callout tone="error" title="We couldn’t open your Agent Floor">
-              <p className="m-0">{error}</p>
-              <button type="button" className={btn("secondary", "mt-3")} onClick={() => void load({ initial: true })}>Try again</button>
-            </Callout>
-          </div>
-        ) : (
-          <p role="status" className="m-0 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">Loading the floor…</p>
-        )}
+        <div role="alert">
+          <Callout tone="error" title={<span className="flex flex-wrap items-center gap-3">We couldn’t open your Agent Floor: {error}<Button type="button" variant="outline" onClick={() => void load({ initial: true })}>Try again</Button></span>} />
+        </div>
       </div>
     );
   }
 
   const thresholds = floor.waitThresholds;
   const k = kpis!;
+  const searching = normalizedSearch !== "";
 
   return (
     <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
       {header}
-      {readOnly && <Callout tone="warning" title="This account is suspended and read-only">You can watch the floor, but picking up, nudging, accepting handoffs and changing your status are turned off.</Callout>}
-      {realtimeStatus === "unconfigured" && <Callout tone="info" title="Live updates are unavailable in this browser">The floor still refreshes every 10 seconds while this tab is open.</Callout>}
-      {floor.truncated && <Callout tone="warning" title="More than 500 transfers are open">The newest 500 are shown; older ones are hidden until the queue is worked down.</Callout>}
-      {error && <Callout tone="error" title="The floor could not refresh">{error} What you see may be out of date.</Callout>}
+
+      <StatStrip label="Floor totals">
+        <StatTile label="Agents available" value={`${k.available} of ${k.onFloor}`} footnote="on the floor now" />
+        <StatTile label="In queue" value={floor.waiting.length} footnote={`avg wait ${waitLabel(k.average)}`} />
+        <StatTile label="Longest wait" value={waitLabel(k.longest)} valueTone={k.longest >= thresholds.redSeconds ? "danger" : k.longest >= thresholds.amberSeconds ? "warning" : undefined} footnote={`Escalates at ${thresholdLabel(thresholds.redSeconds)}`} />
+        <StatTile
+          label="Closed this hour"
+          value={k.closed.thisHour ?? "—"}
+          valueTone={k.closed.thisHour ? "good" : undefined}
+          footnote={k.closed.thisHour === null ? "Could not be counted" : k.delta === null ? "No comparison yet" : k.delta === 0 ? "Same as last hour" : `${k.delta > 0 ? "+" : "−"}${Math.abs(k.delta)} vs last hour`}
+        />
+      </StatStrip>
+
+      {readOnly && <Callout tone="warning" title="This account is suspended and read-only: picking up, nudging, handoffs and status changes are off." />}
+      {floor.truncated && <Callout tone="warning" title="More than 500 transfers are open: the newest 500 are shown." />}
+      {error && <Callout tone="error" title={`The floor could not refresh: ${error} What you see may be out of date.`} />}
 
       <PendingHandoffs items={floor.pendingHandoffs} readOnly={readOnly} saving={saving} now={now} onAccept={(id, workItemId) => void accept(id, workItemId)} />
 
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <Kpi label="Agents available" value={`${k.available} of ${k.onFloor}`} foot="on the floor now" />
-        <Kpi label="In queue" value={floor.waiting.length} foot={`avg wait ${waitLabel(k.average)}`} />
-        <Kpi label="Longest wait" value={waitLabel(k.longest)} valueClassName={waitTone(k.longest, thresholds)} foot={`Escalates at ${thresholdLabel(thresholds.redSeconds)}`} />
-        <Kpi
-          label="Transfers closed this hour"
-          value={k.closed.thisHour ?? "—"}
-          valueClassName={k.closed.thisHour ? "text-[var(--success-ink)]" : undefined}
-          foot={k.closed.thisHour === null ? "Could not be counted" : k.delta === null ? "No comparison yet" : k.delta === 0 ? "Same as last hour" : `${k.delta > 0 ? "+" : "−"}${Math.abs(k.delta)} vs last hour`}
-        />
-      </div>
-
-      <div className="flex flex-col gap-6 lg:flex-row">
+      <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
         <div className="flex min-w-0 flex-1 flex-col gap-6">
           <OnCalls calls={floor.onCalls} now={now} currentUserId={currentUserId} isOwner={role === "owner"} readOnly={readOnly} saving={saving} onRelease={(call, action) => void release(call, action)} />
-          <Roster members={members} now={now} currentUserId={currentUserId} isOwner={role === "owner"} canAsk={Boolean(headOfQueue)} readOnly={readOnly} saving={saving} onAsk={(member) => headOfQueue && void sendNudge(headOfQueue.id, member)} />
+          <Roster members={members} searching={searching} now={now} currentUserId={currentUserId} isOwner={role === "owner"} canAsk={Boolean(headOfQueue)} readOnly={readOnly} saving={saving} onAsk={(member) => headOfQueue && void sendNudge(headOfQueue.id, member)} />
         </div>
         <div className="flex min-w-0 flex-col gap-6 lg:w-[460px] lg:shrink-0">
-          <TransferQueue items={waiting} totalWaiting={floor.waiting.length} now={now} thresholds={thresholds} expandedId={expandedId} readOnly={readOnly} saving={saving} members={members} onToggle={(id) => setExpandedId((current) => (current === id ? null : id))} onClaim={(id) => void claim(id)} onNudge={(id) => void sendNudge(id, null)} />
+          <TransferQueue
+            items={waiting}
+            totalWaiting={floor.waiting.length}
+            now={now}
+            thresholds={thresholds}
+            expandedId={expandedId}
+            readOnly={readOnly}
+            saving={saving}
+            members={members}
+            toolbar={
+              <DataToolbar actions={<RefreshButton onClick={() => void refresh()} refreshing={refreshing} />}>
+                {/* One search for the whole floor: it narrows the queue, the roster and the callbacks together. */}
+                <ToolbarSearch value={search} onChange={setSearch} placeholder="Search the floor" />
+              </DataToolbar>
+            }
+            footer={
+              <span className="inline-flex items-center gap-1.5" role="status">
+                <span aria-hidden className={cn("size-1.5 rounded-full", realtimeStatus === "subscribed" ? "bg-[var(--success)]" : "bg-[var(--muted)]")} />
+                <span className="font-semibold text-[var(--body)]">{liveLabel}</span> · updated {updated}
+              </span>
+            }
+            onClearSearch={() => setSearch("")}
+            onToggle={(id) => setExpandedId((current) => (current === id ? null : id))}
+            onClaim={(id) => void claim(id)}
+            onNudge={(id) => void sendNudge(id, null)}
+          />
         </div>
       </div>
 
-      <CallbacksTable items={callbacks} />
+      <CallbacksTable items={callbacks} searching={searching} />
     </div>
   );
 }

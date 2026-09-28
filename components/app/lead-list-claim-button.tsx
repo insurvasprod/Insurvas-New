@@ -54,7 +54,6 @@ export function LeadListClaimButton({ campaignId, rows, amount, blocked }: { cam
       <Button
         type="button"
         variant="outline"
-        className="h-11 border-[var(--border-strong)] px-4"
         disabled={Boolean(disabledBy)}
         aria-describedby={blocked || error ? `claim-${campaignId}-why` : undefined}
         title={`Drafts one claim for ${amount} on Vendor returns`}

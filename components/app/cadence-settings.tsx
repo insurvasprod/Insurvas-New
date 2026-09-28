@@ -3,25 +3,26 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { notify } from "@/lib/notify";
 
+import { Plus } from "lucide-react";
+
+import { Button } from "@/components/ui/button";
+import { DataToolbar, toolbarControl } from "@/components/ui/data-toolbar";
+import { SectionLoading } from "@/components/ui/page-states";
+import { SettingsSaveBar } from "@/components/ui/settings-layout";
+import { StatStrip, StatTile } from "@/components/ui/stat";
+import { TableCard } from "@/components/ui/table-card";
 import {
   Callout,
-  DraftActions,
   Field,
   LockIcon,
   Pill,
-  PlusIcon,
-  SettingsCard,
-  SettingsGrid,
-  SettingsMeter,
   SettingsSectionHeader,
   SettingsStack,
-  SettingsTableCard,
-  btn,
   control,
   st,
 } from "@/components/app/settings/primitives";
-import { DAY_PARTS, SLOTS, isDayPart, parseInterval, type CadenceRow } from "@/lib/cadence/engine";
-import { LAST_DIALLED_ATTEMPT, builtInRule, countWord, effectiveLadder, ladderSummary } from "@/lib/cadence/ladder";
+import { DAY_PARTS, SLOTS, parseInterval, type CadenceRow } from "@/lib/cadence/engine";
+import { LAST_DIALLED_ATTEMPT, builtInRule, effectiveLadder, ladderSummary } from "@/lib/cadence/ladder";
 import { cn } from "@/lib/utils";
 
 /**
@@ -208,34 +209,19 @@ export function CadenceSettings() {
   }
 
   const readOnly = !loaded?.canEdit;
-  const header = (
-    <SettingsSectionHeader
-      actions={
-        loaded && !readOnly ? (
-          <DraftActions
-            dirty={dirty}
-            saving={busy}
-            disabled={invalid}
-            onDiscard={() => { setDraft(withKeys(loaded.rows)); setSaveError(""); setOpenKey(null); }}
-            onSave={() => void save()}
-          />
-        ) : undefined
-      }
-    />
-  );
 
   if (error)
     return (
       <SettingsStack>
-        {header}
-        <Callout tone="error" title="Could not load the cadence">{error}</Callout>
+        <SettingsSectionHeader />
+        <Callout tone="error" title={error} />
       </SettingsStack>
     );
   if (!loaded)
     return (
       <SettingsStack>
-        {header}
-        <p role="status" className="text-[14px] text-[var(--muted)]">Loading the cadence…</p>
+        <SettingsSectionHeader />
+        <TableCard><SectionLoading label="Loading the cadence" /></TableCard>
       </SettingsStack>
     );
 
@@ -258,49 +244,51 @@ export function CadenceSettings() {
 
   return (
     <SettingsStack>
-      {header}
+      <SettingsSectionHeader />
+
+      <StatStrip label="Cadence in force">
+        <StatTile
+          label="In force"
+          value={loaded.usingDefaults ? "Built-in" : "Yours"}
+          footnote={loaded.usingDefaults && campaignId && fallback.length > 0 ? "tenant default for this campaign" : `${runningSummary.total} attempts running`}
+        />
+        <StatTile label="Planned attempts" value={plannedSummary.total} footnote={`over ${plannedSummary.days} ${plannedSummary.days === 1 ? "day" : "days"}`} />
+        <StatTile label="First 72 hours" value={plannedSummary.first72} footnote={plannedSummary.first72 === 1 ? "attempt" : "attempts"} />
+        <StatTile label="Days 4–7" value={plannedSummary.week} footnote={plannedSummary.week === 1 ? "attempt" : "attempts"} />
+        <StatTile label={plannedSummary.lastDay > 7 ? `Days 8–${plannedSummary.lastDay}` : "After day 7"} value={plannedSummary.later} footnote={plannedSummary.later === 1 ? "attempt" : "attempts"} />
+      </StatStrip>
 
       {saveError && <Callout tone="error" title={saveError} />}
-      {readOnly && (
-        <Callout tone="info" title="Only an owner can change the cadence.">You are seeing what is in force.</Callout>
-      )}
+      {readOnly && <Callout tone="info" title="Only an owner can change the cadence. You are seeing what is in force." />}
+      {!ready && <Callout tone="warning" title={`Until a pending database update is applied, the dialer stops after the ${ordinal(lastAttempt)} dial.`} />}
 
-      <SettingsGrid>
-        {/* The fact an owner is missing: whether these rows are running, or the built-in table is. */}
-        <Callout
-          tone={loaded.usingDefaults ? "info" : "success"}
-          title={loaded.usingDefaults ? "The built-in cadence is running" : "Your cadence is running"}
-        >
-          {countWord(runningSummary.first72)} of {countWord(runningSummary.total).toLowerCase()} attempts land in the
-          first 72 hours, which is where a fresh lead is worth answering.
-          {runningSummary.widens
-            ? " After that the gaps widen — a lead that has not answered by day four rarely answers on day five."
-            : ""}
-          {loaded.usingDefaults &&
-            (campaignId && fallback.length > 0
-              ? ` ${campaignName ?? "This campaign"} has no rules of its own, so it runs the tenant default.`
-              : ` No rules are stored for ${campaignName ?? "this scope"}, so the dialer uses its own front-loaded schedule.`)}
-          {!ready &&
-            ` Until a pending database update is applied, the dialer stops after the ${ordinal(lastAttempt)} dial and marks the lead exhausted.`}
-        </Callout>
-
-        <SettingsCard pad={18}>
-          <Field
-            label="Applies to"
-            htmlFor="cadence-scope"
-            hint={
-              ready
-                ? "A campaign cadence replaces this one entirely; the two are never merged."
-                : campaignId
-                  ? "A campaign rule wins over the tenant default for the same attempt. Any attempt the campaign has no rule for uses the tenant default, then the built-in delay."
-                  : "Used for every campaign, attempt by attempt, wherever a campaign has no rule of its own."
+      <TableCard
+        title="Attempt ladder"
+        toolbar={
+          <DataToolbar
+            actions={
+              !readOnly ? (
+                <>
+                  {draft.length === 0 && (
+                    <Button type="button" variant="outline" disabled={busy} onClick={startFromDefaults}>
+                      Start from the built-in cadence
+                    </Button>
+                  )}
+                  <Button type="button" disabled={busy} onClick={() => addRow()}>
+                    <Plus aria-hidden="true" />
+                    Add a rule
+                  </Button>
+                </>
+              ) : undefined
             }
           >
+            <label htmlFor="cadence-scope" className="sr-only">Applies to</label>
             <select
               id="cadence-scope"
-              className={control}
+              className={cn(toolbarControl, "max-w-full")}
               value={campaignId}
               disabled={busy}
+              title={ready ? "A campaign cadence replaces the tenant default entirely." : "A campaign rule wins over the tenant default for the same attempt."}
               onChange={(event) => {
                 if (dirty && !window.confirm("Switching scope drops the unsaved changes to this cadence. Continue?")) return;
                 setCampaignId(event.target.value);
@@ -311,29 +299,8 @@ export function CadenceSettings() {
                 <option key={campaign.id} value={campaign.id}>{campaign.name}</option>
               ))}
             </select>
-          </Field>
-        </SettingsCard>
-      </SettingsGrid>
-
-      <SettingsTableCard
-        title="Attempt ladder"
-        actions={
-          <>
             {dirty && <Pill tone="warning">Unsaved changes</Pill>}
-            <Pill tone="success" dot>
-              {plannedSummary.total} attempts over {plannedSummary.days} {plannedSummary.days === 1 ? "day" : "days"}
-            </Pill>
-            {!readOnly && draft.length === 0 && (
-              <button type="button" className={btn("secondary")} disabled={busy} onClick={startFromDefaults}>
-                Start from the built-in cadence
-              </button>
-            )}
-            {!readOnly && (
-              <button type="button" className={btn("secondary")} disabled={busy} onClick={() => addRow()}>
-                <PlusIcon />Add a rule
-              </button>
-            )}
-          </>
+          </DataToolbar>
         }
       >
         <table className={st.table}>
@@ -399,9 +366,9 @@ export function CadenceSettings() {
                 </td>
                 <td className={cn(st.td, st.num)}>
                   {!readOnly && problems.gap === null && step.attempt === (draft.length ? Math.max(...draft.map((r) => r.attemptNumber)) + 1 : 2) && (
-                    <button type="button" className={btn("row")} disabled={busy} aria-label={`Set a rule for attempt ${step.attempt}`} onClick={() => addRow(step.attempt)}>
+                    <Button type="button" variant="outline" size="sm" disabled={busy} aria-label={`Set a rule for attempt ${step.attempt}`} onClick={() => addRow(step.attempt)}>
                       Edit
-                    </button>
+                    </Button>
                   )}
                 </td>
               </tr>
@@ -412,73 +379,26 @@ export function CadenceSettings() {
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] px-4 py-3">
             {problems.gap !== null ? (
               <p role="alert" className="m-0 text-[14px] text-[var(--error-ink)]">
-                Attempt {problems.gap} is missing. The dialer looks each attempt up by number, so a gap falls back to
-                the built-in delay instead of the rule above it.
+                Attempt {problems.gap} is missing — add it, or the dialer uses the built-in delay there.
               </p>
             ) : (
               <span />
             )}
             {!readOnly && draft.length > 0 && (
-              <button type="button" className={btn("row")} disabled={busy} onClick={() => { setDraft([]); setOpenKey(null); }}>
+              <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => { setDraft([]); setOpenKey(null); }}>
                 Clear and use the built-in cadence
-              </button>
+              </Button>
             )}
           </div>
         )}
-      </SettingsTableCard>
+      </TableCard>
 
-      <SettingsGrid>
-        <SettingsCard
-          title="Where the attempts fall"
-          sub={
-            plannedSummary.first72 === plannedSummary.total
-              ? `Every attempt sits inside 72 hours.`
-              : plannedSummary.first72 > 1
-                ? `Front-loaded on purpose: attempts 1–${plannedSummary.first72} all sit inside 72 hours.`
-                : "Only the first dial sits inside 72 hours."
-          }
-        >
-          <div className="mt-[18px] flex flex-col gap-3.5">
-            <SettingsMeter
-              ariaLabel="Attempts in the first 72 hours"
-              label="First 72 hours"
-              valueLabel={`${plannedSummary.first72} ${plannedSummary.first72 === 1 ? "attempt" : "attempts"}`}
-              value={plannedSummary.first72}
-              max={plannedSummary.total}
-            />
-            <SettingsMeter
-              ariaLabel="Attempts on days 4 to 7"
-              label="Days 4–7"
-              valueLabel={`${plannedSummary.week} ${plannedSummary.week === 1 ? "attempt" : "attempts"}`}
-              value={plannedSummary.week}
-              max={plannedSummary.total}
-              tone="muted"
-            />
-            <SettingsMeter
-              ariaLabel="Attempts after day 7"
-              label={plannedSummary.lastDay > 7 ? `Days 8–${plannedSummary.lastDay}` : "After day 7"}
-              valueLabel={`${plannedSummary.later} ${plannedSummary.later === 1 ? "attempt" : "attempts"}`}
-              value={plannedSummary.later}
-              max={plannedSummary.total}
-              tone="muted"
-              caption="Counted for a lead that never answers, using each attempt's catch-all rule."
-            />
-          </div>
-        </SettingsCard>
-
-        <SettingsCard title="What the cadence cannot do">
-          <div className="flex flex-col gap-3">
-            <Callout tone="error" title="It cannot widen a calling window">
-              A rule that prefers &ldquo;evening&rdquo; still stops at the earlier of the federal, state and agency
-              limit. Preference chooses inside the window; it never moves the edge.
-            </Callout>
-            <Callout tone="warning" title="It cannot outrun a suppression">
-              An attempt that comes due while the number is on a do-not-call list is never served. The dialer checks
-              suppression every time it picks a lead, so the lead waits in the queue and is not dialled.
-            </Callout>
-          </div>
-        </SettingsCard>
-      </SettingsGrid>
+      {!readOnly && (
+        <SettingsSaveBar visible={dirty} note={campaignName ? `Unsaved changes to ${campaignName}'s cadence` : "Unsaved changes to the cadence"}>
+          <Button type="button" variant="outline" onClick={() => { setDraft(withKeys(loaded.rows)); setSaveError(""); setOpenKey(null); }} disabled={busy}>Discard</Button>
+          <Button type="button" onClick={() => void save()} disabled={busy || invalid}>{busy ? "Saving…" : "Save changes"}</Button>
+        </SettingsSaveBar>
+      )}
     </SettingsStack>
   );
 }
@@ -523,9 +443,9 @@ function RuleRows({
         <td className={st.td}>{scopeLabel(row.dispositionScope)}{restsAfter ? " — then rests" : ""}</td>
         <td className={cn(st.td, st.num)}>
           {!readOnly && (
-            <button type="button" className={btn("row")} aria-expanded={expanded} aria-label={`Edit the rule for attempt ${row.attemptNumber}`} onClick={onToggle}>
+            <Button type="button" variant="outline" size="sm" aria-expanded={expanded} aria-label={`Edit the rule for attempt ${row.attemptNumber}`} onClick={onToggle}>
               {expanded ? "Done" : "Edit"}
-            </button>
+            </Button>
           )}
         </td>
       </tr>
@@ -593,22 +513,19 @@ function RuleRows({
                   )}
                 </select>
               </Field>
-              <button
+              <Button
                 type="button"
-                className={btn("danger-row", "mb-[7px]")}
+                variant="outline"
+                size="sm"
+                className="mb-1.5 text-[var(--error-ink)]"
                 disabled={disabled}
                 onClick={onRemove}
                 aria-label={`Remove the rule for attempt ${row.attemptNumber}`}
               >
                 Delete
-              </button>
+              </Button>
             </div>
-            <p className="mt-2 mb-0 text-[12px] leading-[1.5] text-[var(--muted)]">
-              A whole number and a unit — minutes, hours, days or weeks. The wait is a floor.{" "}
-              {isDayPart(row.preferredSlot)
-                ? "After it, the dialer waits for the first legal moment in the preferred part of the day, in the customer’s timezone; if the legal window never reaches it within eight days, it rotates through the parts of the day instead."
-                : "After it, the dialer serves the lead in a part of the day it has not been tried in — the preferred one first, while it is still untried — and always inside the legal window."}
-            </p>
+            <p className="mt-2 mb-0 text-[12px] leading-[1.5] text-[var(--muted)]">A number and a unit: minutes, hours, days or weeks. The dialer always stays inside the legal calling window.</p>
           </td>
         </tr>
       )}

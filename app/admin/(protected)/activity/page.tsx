@@ -7,10 +7,9 @@ import {
   fetchLoginActivityStats,
 } from "@/lib/loginEvents/queries";
 import { DEFAULT_ACTIVITY_FILTERS, weekOverWeek } from "@/lib/loginEvents/present";
-import { AdminPageHeader } from "@/components/admin/page-header";
+import { PageHeader } from "@/components/ui/page-header";
 import { BoardStatGrid, BoardStatTile } from "@/components/admin/board-stat-tile";
 import { ActivityFeed } from "@/components/admin/activity-feed";
-import { Callout } from "@/components/app/settings/primitives";
 
 /** Lockouts are security state: only super_admin reads them, as on /admin/advanced. */
 async function lockoutFootnote(isSuperAdmin: boolean): Promise<string | null> {
@@ -37,10 +36,7 @@ export default async function ActivityPage() {
 
   return (
     <div className="m-stagger flex w-full min-w-0 flex-1 flex-col gap-6">
-      <AdminPageHeader
-        title="Login activity"
-        subtitle="Every sign-in attempt across the platform, tenant users and admins alike."
-      />
+      <PageHeader title="Login activity" />
 
       <BoardStatGrid>
         <BoardStatTile
@@ -64,18 +60,12 @@ export default async function ActivityPage() {
         <BoardStatTile
           label="Signed in last 15 min"
           value={stats.active_last_15_min.toLocaleString("en-US")}
-          footnote="tenant users; logged in recently, not necessarily still here"
+          footnote="tenant users, recent sign-ins"
+          title="Tenant users with a successful sign-in in the last 15 minutes. Staff are not counted, and a sign-in does not mean they are still using the app."
         />
       </BoardStatGrid>
 
       <ActivityFeed initial={initial} />
-
-      <Callout tone="info" title="“Signed in last 15 min” is not “online now”">
-        It counts tenant users with a successful sign-in in the last 15 minutes; staff sign-ins are not
-        in it. We record when someone signs in, not whether they are still using the app. Failed and
-        blocked attempts are marked with a red edge rather than a red row, and repeated blocked
-        attempts from one email and IP are logged at most once a minute.
-      </Callout>
     </div>
   );
 }

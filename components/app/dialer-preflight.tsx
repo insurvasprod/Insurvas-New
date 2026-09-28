@@ -4,7 +4,9 @@ import { useState, type FormEvent } from "react";
 import { notify } from "@/lib/notify";
 
 import { OverlayFrame } from "@/components/app/dialer-overlay-frame";
-import { Callout, Pill, btn, st } from "@/components/app/settings/primitives";
+import { Callout, Pill, st } from "@/components/app/settings/primitives";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { toolbarControl } from "@/components/ui/data-toolbar";
 import { US_STATES } from "@/lib/appointments/constants";
 import { refusalBody, type PreflightCheck } from "@/lib/compliance/preflightChecks";
 import { cn } from "@/lib/utils";
@@ -86,8 +88,8 @@ export function DialerPreflightDialog({ open, onOpenChange, readOnly = false }: 
       footerNote="DNC compliance is mandatory and cannot be switched off."
       footerActions={<>
         <span id="preflight-dial-reason" className="text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">Dial from the queue or a lead</span>
-        <button type="button" onClick={() => onOpenChange(false)} className={btn("secondary", "h-10")}>Close</button>
-        <button type="button" disabled aria-describedby="preflight-dial-reason" className={cn(btn("secondary", "h-10"), "border-[var(--border)] bg-[var(--surface-alt)] text-[var(--muted)] disabled:opacity-100")}>Dial</button>
+        <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Close</Button>
+        <button type="button" disabled aria-describedby="preflight-dial-reason" className={cn(buttonVariants({ variant: "outline" }), "bg-[var(--surface-alt)] text-[var(--muted)] disabled:opacity-100")}>Dial</button>
       </>}
     >
       <form onSubmit={submit} className="flex min-w-0 flex-col gap-2.5 sm:flex-row sm:items-end">
@@ -103,10 +105,10 @@ export function DialerPreflightDialog({ open, onOpenChange, readOnly = false }: 
             onChange={(event) => { setPhone(event.target.value); setFieldError(""); setReport(null); }}
             aria-invalid={Boolean(fieldError)}
             aria-describedby={fieldError ? "dial-phone-error" : "dial-phone-privacy"}
-            className="mt-1.5 box-border h-11 w-full rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] px-3 text-[16px] leading-[1.5] tracking-[-0.02em] text-[var(--ink)] outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
+            className={cn(toolbarControl, "mt-1.5 w-full")}
           />
         </div>
-        <button type="submit" disabled={readOnly || checking || !phone.trim()} className={btn("primary", "h-11")}>{readOnly ? "Read-only account" : checking ? "Checking…" : "Check"}</button>
+        <Button type="submit" disabled={readOnly || checking || !phone.trim()}>{readOnly ? "Read-only account" : checking ? "Checking…" : "Check"}</Button>
       </form>
       {fieldError
         ? <p id="dial-phone-error" role="alert" className="-mt-3 mb-0 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--error-ink)]">{fieldError}</p>
@@ -160,11 +162,7 @@ export function DialerPreflightDialog({ open, onOpenChange, readOnly = false }: 
 
       {refusal && <Callout tone="error" title="This number will not be dialled" className="m-deny">{refusal}</Callout>}
       {report && !checks && report.error && <Callout tone="error" title="This number will not be dialled" className="m-deny">{report.error}</Callout>}
-      {report?.ok && checks && <Callout tone="success" title="Every check passed">Dial it from the queue or from the lead: the dialer runs its own checks again at the moment you call.</Callout>}
-
-      <Callout tone="info" title="Fail closed means a missing answer is a no">
-        If a feed is unreachable, this screen says so and the dial is refused. It never treats &ldquo;we could not check&rdquo; as &ldquo;clear&rdquo;. With no enabled DNC vendor answering, dialing is blocked platform-wide: calling without a check can expose the platform to $500&ndash;$1,500 penalties per call.
-      </Callout>
+      {report?.ok && checks && <Callout tone="success" title="Every check passed. Dial it from the queue or from the lead." />}
     </OverlayFrame>
   );
 }

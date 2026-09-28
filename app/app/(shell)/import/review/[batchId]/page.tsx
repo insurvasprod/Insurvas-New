@@ -1,7 +1,6 @@
 import { notFound } from "next/navigation";
 
 import { guardPage } from "@/lib/entitlements/guardPage";
-import { sectionForPath } from "@/lib/menu/definition";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { ImportAlreadyImported, ImportReviewBridge, ImportScreeningBridge } from "@/components/app/import-review-bridge";
@@ -21,9 +20,9 @@ import { getSupabaseServiceClient } from "@/lib/supabase/service";
 export default async function ImportReviewPage({ params }: { params: Promise<{ batchId: string }> }) {
   const guard = await guardPage("lead_import");
   if (!guard.entitled)
-    return <FeatureGateNotice guard={guard} featureLabel="List import" description="Review a lead list before it is imported." eyebrow={sectionForPath("/app/import") ?? undefined} />;
+    return <FeatureGateNotice guard={guard} featureLabel="List import" description="Review a lead list before it is imported." />;
   if (!("owner" === guard.role || "producer" === guard.role || "assistant" === guard.role))
-    return <RoleGateNotice featureLabel="List import" detail="Only owners, producers and assistants can import leads." eyebrow={sectionForPath("/app/import") ?? undefined} />;
+    return <RoleGateNotice featureLabel="List import" detail="Only owners, producers and assistants can import leads." />;
 
   // `guardPage` already resolved the tenant to decide entitlement, so re-resolving it here would
   // be a second answer to a question already answered.

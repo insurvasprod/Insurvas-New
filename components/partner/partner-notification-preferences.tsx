@@ -4,6 +4,9 @@ import { useCallback, useEffect, useState } from "react";
 import { notify } from "@/lib/notify";
 
 import { Button } from "@/components/ui/button";
+import { toolbarControl } from "@/components/ui/data-toolbar";
+import { SectionLoading } from "@/components/ui/page-states";
+import { cn } from "@/lib/utils";
 import type { PartnerAlertEvent, PartnerAlertSettings } from "@/lib/partnerAlerts/presentation";
 
 /**
@@ -102,24 +105,24 @@ export function PartnerNotificationPreferences({
     }
   }
 
-  if (loading) return <div className="space-y-3" aria-busy="true"><div className="h-4 w-40 animate-pulse rounded bg-muted" /><div className="h-4 w-full animate-pulse rounded bg-muted" /><div className="h-4 w-3/4 animate-pulse rounded bg-muted" /></div>;
+  if (loading) return <SectionLoading rows={3} columns={1} label="Loading notification preferences" />;
   if (!draft) return <p className="text-sm text-[var(--error-ink)]" role="alert">{error ?? "Notification preferences are unavailable."}</p>;
 
   const zones = TIMEZONES.some(([value]) => value === zone) ? TIMEZONES : [[zone, zone] as [string, string], ...TIMEZONES];
 
-  return <div className="portal-partner-preferences">
-    <div className="portal-partner-preferences-events">
-      {BOARD_EVENTS.map(([event, label]) => <label className="portal-remember-me" key={event}>
-        <input type="checkbox" checked={draft.enabled_events[event]} disabled={saving} onChange={(input) => setDraft({ ...draft, enabled_events: { ...draft.enabled_events, [event]: input.target.checked } })} />
+  return <div className="flex flex-col items-start gap-4">
+    <div className="flex flex-col gap-2.5">
+      {BOARD_EVENTS.map(([event, label]) => <label className="flex cursor-pointer items-center gap-2.5 text-sm text-[var(--body)]" key={event}>
+        <input type="checkbox" className="size-4 accent-[var(--primary)]" checked={draft.enabled_events[event]} disabled={saving} onChange={(input) => setDraft({ ...draft, enabled_events: { ...draft.enabled_events, [event]: input.target.checked } })} />
         {label}
       </label>)}
     </div>
-    <label className="portal-partner-preferences-field">
-      <span>Timezone</span>
-      <select value={zone} disabled={!canEditTimezone || saving} onChange={(event) => setZoneDraft(event.target.value)}>
+    <label className="flex w-full flex-col gap-1.5">
+      <span className="text-sm font-semibold text-[var(--body)]">Timezone</span>
+      <select className={cn(toolbarControl, "w-full")} value={zone} disabled={!canEditTimezone || saving} onChange={(event) => setZoneDraft(event.target.value)}>
         {zones.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
       </select>
-      {!canEditTimezone && <small>Your partner admin sets the timezone your submission dates are read in.</small>}
+      {!canEditTimezone && <small className="text-xs text-muted-foreground">Your partner admin sets the timezone your submission dates are read in.</small>}
     </label>
     {error && <p className="text-sm text-[var(--error-ink)]" role="alert">{error}</p>}
     <Button type="button" onClick={() => void save()} disabled={saving || (!eventsChanged && !zoneChanged)}>{saving ? "Saving…" : "Save notification preferences"}</Button>

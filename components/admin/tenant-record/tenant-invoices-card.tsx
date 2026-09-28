@@ -3,7 +3,9 @@
 import Link from "next/link";
 
 import { CustomInvoiceDialog } from "@/components/admin/custom-invoice-dialog";
-import { Pill, SettingsTableCard, btn, st, type PillTone } from "@/components/app/settings/primitives";
+import { Pill, btn, st, type PillTone } from "@/components/app/settings/primitives";
+import { buttonVariants } from "@/components/ui/button";
+import { TableCard } from "@/components/ui/table-card";
 import { INVOICE_STATUS_LABELS, type InvoiceStatus } from "@/lib/invoices/constants";
 import { formatCentsAsCurrency } from "@/lib/money";
 import type { TenantInvoiceRow } from "@/lib/subscriptions/tenantBilling";
@@ -35,14 +37,14 @@ export function TenantInvoicesCard({
 }) {
   const now = new Date();
   return (
-    <SettingsTableCard
+    <TableCard
       title="Invoices"
-      actions={
+      action={
         <CustomInvoiceDialog
           tenants={[tenant]}
           lockedTenant={tenant}
           triggerLabel="Issue an invoice"
-          triggerClassName={btn("secondary")}
+          triggerClassName={buttonVariants({ variant: "outline" })}
         />
       }
     >
@@ -64,9 +66,7 @@ export function TenantInvoicesCard({
             <tr>
               <td colSpan={6} className={st.td}>
                 <span className={st.strong}>No invoices yet</span>
-                <span className={st.sub}>
-                  An invoice appears here when a billing period is charged, or when one is issued by hand.
-                </span>
+                <span className={st.sub}>Charged periods and invoices issued by hand appear here.</span>
               </td>
             </tr>
           ) : (
@@ -92,6 +92,6 @@ export function TenantInvoicesCard({
           )}
         </tbody>
       </table>
-    </SettingsTableCard>
+    </TableCard>
   );
 }
