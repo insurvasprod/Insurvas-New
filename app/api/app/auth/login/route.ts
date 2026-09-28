@@ -10,6 +10,7 @@ import {
   TENANT_SUSPENDED_MESSAGE,
 } from "@/lib/tenants/suspension";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
+import { holdsPartnerMembership, PARTNER_ACCOUNT_AT_AGENT_SIGN_IN, WRONG_PORTAL_CODE } from "@/lib/auth/planeSeparation";
 import { signTenantSessionToken, tenantSessionCookieOptions, TENANT_SESSION_COOKIE } from "@/lib/tenantAuth/session";
 import { partnerSessionCookieOptions, PARTNER_SESSION_COOKIE } from "@/lib/partnerAuth/session";
 import { recordLastLogin, recordLoginEvent, type LoginFailureReason } from "@/lib/loginEvents/record";
@@ -111,13 +112,24 @@ export async function POST(request: NextRequest) {
     return fail("inactive", user.id, NextResponse.json(GENERIC_ERROR, { status: 401 }));
   }
 
+  // A partner organisation's account never gets an agent session (lib/auth/planeSeparation.ts).
+  // Past the password, so naming the right door reveals nothing the caller could not know.
+  const [isPartnerAccount, { data: memberships }] = await Promise.all([
+    holdsPartnerMembership(user.id),
+    supabase.from("tenant_users").select("tenant_id, role, accepted_at").eq("user_id", user.id),
+  ]);
+  if (isPartnerAccount) {
+    return fail(
+      "no_membership",
+      user.id,
+      NextResponse.json({ error: PARTNER_ACCOUNT_AT_AGENT_SIGN_IN, code: WRONG_PORTAL_CODE }, { status: 403 }),
+      false,
+    );
+  }
+
   // Every membership, not `maybeSingle`: that errored on a second row, so a person who belonged to
   // two workspaces could not sign in at all. The choice of which to open is `pickLoginMembership`;
   // the other is one "Switch workspace" away in the account menu.
-  const { data: memberships } = await supabase
-    .from("tenant_users")
-    .select("tenant_id, role, accepted_at")
-    .eq("user_id", user.id);
   const allMemberships = (memberships ?? []) as { tenant_id: string; role: string; accepted_at: string | null }[];
 
   // The agencies' own state, for every membership at once. A suspended agency is never opened
