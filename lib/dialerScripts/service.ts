@@ -3,7 +3,7 @@ import "server-only";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { customerName, formatInTimezone, stateFromLeadValues, STATE_TIMEZONES } from "@/lib/callbacks/timezone";
 import { productLineLabel } from "@/lib/format/productLine";
-import { pickRefusalMessage, returnWindowLine, suppressionRefusal, type ReturnWindow } from "./display";
+import { describeEmptyQueue, EMPTY_QUEUE_NORMAL, pickRefusalMessage, returnWindowLine, suppressionRefusal, type ReturnWindow } from "./display";
 import { getDncDialingStatus, performDncDialPreflight } from "@/lib/compliance/service";
 import { normalizeDialPhone } from "@/lib/compliance/scrub";
 import { getCallingWindows, staleRulesReason } from "@/lib/callingWindow/service";
@@ -835,24 +835,45 @@ export async function saveRebuttal(input: { tenantId: string; objectionKey: stri
  * This is the missing call. It returns null when the queue has nothing servable, which is a normal
  * state several times a day and not an error.
  */
+/**
+ * The empty-queue sentence for this agency, with the held-back campaigns named (describeEmptyQueue).
+ * Read only when Serve next found nothing, so a served press pays nothing for it. A failed read
+ * falls back to the normal sentence rather than failing the press.
+ */
+export async function emptyQueueReason(tenantId: string): Promise<string> {
+  const db = getSupabaseServiceClient() as unknown as Db;
+  const [campaigns, waiting] = await Promise.all([
+    db.from("tenant_campaigns").select("name, status, scrub_status").eq("tenant_id", tenantId),
+    db.from("lead_queue").select("id").eq("tenant_id", tenantId).eq("status", "unclaimed").limit(1),
+  ]);
+  if (campaigns.error) return EMPTY_QUEUE_NORMAL;
+  const rows = ((campaigns.data as Row[] | null) ?? []).map((row) => ({ name: text(row.name) || "Unnamed campaign", status: text(row.status), scrubStatus: text(row.scrub_status) }));
+  const anyUnclaimed = !waiting.error && ((waiting.data as Row[] | null) ?? []).length > 0;
+  return describeEmptyQueue({ campaigns: rows, anyUnclaimed });
+}
+
 /** At most this many leads are refused and handed back in one press of Next before it gives up. */
 const MAX_REFUSED_PER_SERVE = 4;
 
 /**
- * Puts a lead the dialer refused back exactly as the queue would find it: unclaimed, in the
- * lead_state it was served from, and with first_dial_at cleared if this serve was what set it
- * (serve_next_lead stamps it on claim, but no call was made).
+ * Puts a lead the dialer refused back exactly as the queue would find it: unclaimed, and in the
+ * lead_state it was served from — `fresh` if it has never been dialled, whatever tier served it.
+ *
+ * first_dial_at: since 20260925711500 it is stamped at the first Dial click, not at serve, so a
+ * refused lead has none. Until that migration is applied, serve_next_lead still stamps it on claim;
+ * a stamp equal to this serve's claim time is that, and is cleared.
  */
 async function returnRefusedLead(db: Db, tenantId: string, agentId: string, served: Row) {
   const workItemId = text(served.work_item_id);
   const leadId = text(served.lead_id);
   const [queue, lead] = await Promise.all([
     db.from("lead_queue").select("claimed_at").eq("tenant_id", tenantId).eq("id", workItemId).maybeSingle<Row>(),
-    db.from("agent_leads").select("first_dial_at").eq("tenant_id", tenantId).eq("id", leadId).maybeSingle<Row>(),
+    db.from("agent_leads").select("first_dial_at, attempts_made").eq("tenant_id", tenantId).eq("id", leadId).maybeSingle<Row>(),
   ]);
   const claimedAt = text(queue.data?.claimed_at);
   const firstDialAt = text(lead.data?.first_dial_at);
-  const neverDialled = Boolean(claimedAt && firstDialAt && new Date(claimedAt).getTime() === new Date(firstDialAt).getTime());
+  const stampedByThisServe = Boolean(claimedAt && firstDialAt && new Date(claimedAt).getTime() === new Date(firstDialAt).getTime());
+  const neverDialled = Number(lead.data?.attempts_made ?? 0) === 0;
   const released = await db
     .from("lead_queue")
     .update({ status: "unclaimed", claimed_by: null, owner_user_id: null, locked_until: null, updated_at: new Date().toISOString() })
@@ -864,7 +885,7 @@ async function returnRefusedLead(db: Db, tenantId: string, agentId: string, serv
   const restoredState = neverDialled ? "fresh" : leadStateBeforeServe(Number(served.tier ?? 0));
   const leadPatch: Row = {};
   if (restoredState) leadPatch.lead_state = restoredState;
-  if (neverDialled) leadPatch.first_dial_at = null;
+  if (stampedByThisServe) leadPatch.first_dial_at = null;
   if (Object.keys(leadPatch).length) {
     const restored = await db.from("agent_leads").update(leadPatch).eq("tenant_id", tenantId).eq("id", leadId).eq("lead_state", "working");
     if (restored.error) console.error(`[dialer] could not restore a refused lead's state: ${restored.error.message}`);

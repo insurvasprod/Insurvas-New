@@ -72,7 +72,7 @@ type Payload = {
   selfUserId: string;
   schema?: { settingsReady: boolean; bookingReady?: boolean };
   /** The agency-wide daily limit (20260924230200); null = no agency limit. */
-  agency?: { maxPerDay: number | null };
+  agency?: { maxPerDay: number | null; callbackReminderMinutes?: number | null };
 };
 type Linked = { available: boolean; providers: CalendarProviderView[]; connections: CalendarConnectionView[] };
 
@@ -128,6 +128,8 @@ export function CalendarAvailabilitySettings() {
   // The agency's cap is one value for the whole agency, so it is its own draft beside the
   // per-member edits. `undefined` = unchanged.
   const [agencyCap, setAgencyCap] = useState<number | null | undefined>(undefined);
+  // The callback reminder lead (20260925711600) is the agency's too; same draft rule.
+  const [reminderLead, setReminderLead] = useState<number | null | undefined>(undefined);
   const [linked, setLinked] = useState<Linked | null>(null);
   const [linking, setLinking] = useState("");
 
@@ -190,8 +192,13 @@ export function CalendarAvailabilitySettings() {
   const editable = Boolean(data && draft && (data.canEditOthers || draft.userId === data.selfUserId));
   const savedAgencyCap = data?.agency?.maxPerDay ?? null;
   const agencyDirty = agencyCap !== undefined && agencyCap !== savedAgencyCap;
+  // Present only once 20260925711600 is applied; before that the field says so and stays disabled.
+  const reminderReady = data?.agency !== undefined && data.agency.callbackReminderMinutes !== undefined;
+  const savedReminderLead = data?.agency?.callbackReminderMinutes ?? null;
+  const reminderDirty = reminderLead !== undefined && reminderLead !== savedReminderLead;
   const dirty =
     agencyDirty ||
+    reminderDirty ||
     Boolean(active && edits[active.userId] && JSON.stringify(edits[active.userId]) !== JSON.stringify(active));
   const schemaReady = data?.schema?.settingsReady !== false;
   const bookingReady = data?.schema?.bookingReady === true;
@@ -210,6 +217,7 @@ export function CalendarAvailabilitySettings() {
       return next;
     });
     setAgencyCap(undefined);
+    setReminderLead(undefined);
     setSaveError("");
     setOpenDay(null);
   }
@@ -236,7 +244,9 @@ export function CalendarAvailabilitySettings() {
             repeats: block.repeats,
           })),
           policy: draft.policy,
-          ...(agencyDirty && isOwner ? { agency: { maxPerDay: agencyCap ?? null } } : {}),
+          ...((agencyDirty || reminderDirty) && isOwner
+            ? { agency: { ...(agencyDirty ? { maxPerDay: agencyCap ?? null } : {}), ...(reminderDirty ? { callbackReminderMinutes: reminderLead ?? null } : {}) } }
+            : {}),
         }),
       });
       const body = await response.json().catch(() => null);
@@ -502,6 +512,34 @@ export function CalendarAvailabilitySettings() {
                 onChange={(event) => {
                   const next = event.target.value.trim();
                   setAgencyCap(next === "" ? null : Math.max(1, Math.min(1000, Math.round(Number(next)) || 1)));
+                  setSaveError("");
+                }}
+              />
+            </Field>
+            <Field
+              label="Callback reminder"
+              htmlFor="callback-reminder-lead"
+              hint={
+                !reminderReady
+                  ? "Minutes before a callback that its reminder goes out. Can be set once a pending database update is applied."
+                  : !isOwner
+                    ? "Minutes before a callback that its reminder goes out, for the whole agency. Only an owner changes it."
+                    : "Minutes before a callback that its reminder goes out, for the whole agency. Leave empty for the platform default."
+              }
+            >
+              <input
+                id="callback-reminder-lead"
+                type="number"
+                inputMode="numeric"
+                min={5}
+                max={1440}
+                placeholder="Platform default"
+                className={control}
+                value={(reminderLead === undefined ? savedReminderLead : reminderLead) ?? ""}
+                disabled={busy || !reminderReady || !isOwner}
+                onChange={(event) => {
+                  const next = event.target.value.trim();
+                  setReminderLead(next === "" ? null : Math.max(5, Math.min(1440, Math.round(Number(next)) || 5)));
                   setSaveError("");
                 }}
               />

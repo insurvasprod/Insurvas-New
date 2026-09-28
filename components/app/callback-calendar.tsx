@@ -140,8 +140,8 @@ function holderLine(callback: CallbackView, showAssignee: boolean) {
   return showAssignee ? callback.assigneeName : null;
 }
 
-function CallbackRow({ callback, now, callWindow, agencyZone, selected, readOnly, showAssignee, onReschedule }: {
-  callback: CallbackView; now: number; callWindow: CallbackWindowFacts | undefined; agencyZone: string; selected: boolean; readOnly: boolean; showAssignee: boolean; onReschedule: () => void;
+function CallbackRow({ callback, now, callWindow, yourZone, selected, readOnly, showAssignee, onReschedule }: {
+  callback: CallbackView; now: number; callWindow: CallbackWindowFacts | undefined; yourZone: string; selected: boolean; readOnly: boolean; showAssignee: boolean; onReschedule: () => void;
 }) {
   const status = rowStatus(callback, now, callWindow);
   const second = [callback.phone, `attempt ${callback.attemptNumber}`, callback.sourceName, holderLine(callback, showAssignee)].filter(Boolean).join(" · ");
@@ -157,7 +157,7 @@ function CallbackRow({ callback, now, callWindow, agencyZone, selected, readOnly
       </span>
       <span className="portal-callbacks-when">
         <strong>{withDate ? longTime(callback.scheduledAtUtc, callback.customerTimezone) : shortTime(callback.scheduledAtUtc, callback.customerTimezone)}</strong>
-        <small>{shortTime(callback.scheduledAtUtc, agencyZone, false)} your time</small>
+        <small>{shortTime(callback.scheduledAtUtc, yourZone, false)} your time</small>
       </span>
       <Chip tone={status.tone}>{status.label}</Chip>
       <span className="portal-callbacks-actions">
@@ -194,7 +194,7 @@ export function CallbackCalendar({ readOnly }: { readOnly: boolean }) {
   const [refusals, setRefusals] = useState<CallbackRefusalNotice[]>([]);
   const [viewer, setViewer] = useState<Viewer | null>(null);
   const [scope, setScope] = useState<Scope | null>(null);
-  const [agencyZone, setAgencyZone] = useState(() => Intl.DateTimeFormat().resolvedOptions().timeZone);
+  const [yourZone, setYourZone] = useState(() => Intl.DateTimeFormat().resolvedOptions().timeZone);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -228,7 +228,9 @@ export function CallbackCalendar({ readOnly }: { readOnly: boolean }) {
       setViewer(who);
       // Owners start on every callback in the workspace; everyone else on their own.
       setScope((current) => current ?? (who && who.role !== "owner" ? "mine" : "all"));
-      if (typeof body.agencyTimezone === "string") setAgencyZone(body.agencyTimezone);
+      // "Your time" is the viewer's own zone (saved with their working hours), else the browser's —
+      // never the agency's, which is nobody's clock in particular (LA-1.22).
+      if (typeof body.viewerTimezone === "string" && body.viewerTimezone) setYourZone(body.viewerTimezone);
       // Book a callback opens on the most urgent open callback, as the board does.
       const mineFirst = who && who.role !== "owner" ? next.filter((item) => item.assignedTo === who.userId || item.isDemo) : next;
       const open = mineFirst.filter((item) => OPEN_STATUSES.has(item.status));
@@ -354,7 +356,7 @@ export function CallbackCalendar({ readOnly }: { readOnly: boolean }) {
 
   if (loading) return <div className="m-stagger portal-callbacks-page portal-callbacks-state" role="status"><Loader2 className="size-4 animate-spin" />Loading callbacks…</div>;
 
-  const rowProps = (callback: CallbackView) => ({ callback, now, callWindow: callback.state ? windows[callback.state] : undefined, agencyZone, selected: callback.id === selectedId, readOnly, showAssignee: !mineOnly && callback.assignedTo !== viewer?.userId, onReschedule: () => choose(callback) });
+  const rowProps = (callback: CallbackView) => ({ callback, now, callWindow: callback.state ? windows[callback.state] : undefined, yourZone, selected: callback.id === selectedId, readOnly, showAssignee: !mineOnly && callback.assignedTo !== viewer?.userId, onReschedule: () => choose(callback) });
 
   const scopeToggle = viewer && (
     <div role="group" aria-label="Whose callbacks" className="inline-flex gap-1">
@@ -402,7 +404,7 @@ export function CallbackCalendar({ readOnly }: { readOnly: boolean }) {
                 <strong>{refusal.customerName}&rsquo;s callback could not be booked{asked ? ` for ${shortTime(asked, refusal.timezone)}` : ""}</strong>
                 <p>
                   {refusal.message}
-                  {refusal.nearest && <> The nearest legal time is {longTime(refusal.nearest.utc, refusal.timezone)} their time, which is {shortTime(refusal.nearest.utc, agencyZone, false)} yours.</>}
+                  {refusal.nearest && <> The nearest legal time is {longTime(refusal.nearest.utc, refusal.timezone)} their time, which is {shortTime(refusal.nearest.utc, yourZone, false)} yours.</>}
                 </p>
                 <div className="mt-2 flex flex-wrap items-center gap-3">
                   {refusal.nearest && openOne && !readOnly && <Button type="button" size="sm" variant="outline" onClick={() => takeSuggestion(openOne, refusal.nearest as NearestLegalTime)}>Use that time</Button>}
@@ -419,7 +421,7 @@ export function CallbackCalendar({ readOnly }: { readOnly: boolean }) {
                 return (
                   <div className="portal-callbacks-row" key={callback.id}>
                     <span className="portal-callbacks-who"><strong>{callback.customerName}</strong><small>{[callback.phone, callback.sourceName].filter(Boolean).join(" · ")}</small></span>
-                    <span className="portal-callbacks-when"><strong>{longTime(callback.scheduledAtUtc, callback.customerTimezone)}</strong><small>{shortTime(callback.scheduledAtUtc, agencyZone, false)} your time</small></span>
+                    <span className="portal-callbacks-when"><strong>{longTime(callback.scheduledAtUtc, callback.customerTimezone)}</strong><small>{shortTime(callback.scheduledAtUtc, yourZone, false)} your time</small></span>
                     <Chip tone={look.tone}>{look.label}</Chip>
                     <span className="portal-callbacks-actions">{!callback.isDemo && <Link className="portal-callbacks-link" href={`/app/leads/${callback.leadId}`}>Open lead</Link>}</span>
                   </div>
@@ -440,7 +442,7 @@ export function CallbackCalendar({ readOnly }: { readOnly: boolean }) {
               <div className="portal-callbacks-local">
                 <span>Their local time</span>
                 <strong>{draftAt ? longTime(draftAt, selected.customerTimezone) : "Choose a date and time"}</strong>
-                <small>{draftAt ? `${shortTime(draftAt, agencyZone, false)} your time (${zoneAbbreviation(agencyZone, draftAt)})` : " "}</small>
+                <small>{draftAt ? `${shortTime(draftAt, yourZone, false)} your time (${zoneAbbreviation(yourZone, draftAt)})` : " "}</small>
               </div>
               <div className="portal-callbacks-fields">
                 <label><span>Date</span><input type="date" value={draftDate} disabled={readOnly || selected.isDemo || terminal} onChange={(event) => setDraft({ id: selected.id, date: event.target.value, time: draftTime })} /></label>
@@ -457,7 +459,7 @@ export function CallbackCalendar({ readOnly }: { readOnly: boolean }) {
                 </span>
                 {suggestion && (
                   <span>
-                    <small className="text-[var(--body)]">Nearest legal time: <strong className="font-semibold text-[var(--ink)]">{longTime(suggestion.utc, selected.customerTimezone)}</strong> their time &mdash; {shortTime(suggestion.utc, agencyZone, false)} yours</small>
+                    <small className="text-[var(--body)]">Nearest legal time: <strong className="font-semibold text-[var(--ink)]">{longTime(suggestion.utc, selected.customerTimezone)}</strong> their time &mdash; {shortTime(suggestion.utc, yourZone, false)} yours</small>
                     <Button type="button" size="sm" variant="outline" onClick={() => takeSuggestion(selected, suggestion)}>Use that</Button>
                   </span>
                 )}
@@ -477,7 +479,7 @@ export function CallbackCalendar({ readOnly }: { readOnly: boolean }) {
               {historyOpen && (
                 historyLoading ? <p className="portal-callbacks-history-note" role="status">Loading history…</p>
                   : selected.history.length === 0 ? <p className="portal-callbacks-history-note">No history recorded yet.</p>
-                  : <ol className="portal-callbacks-history">{[...selected.history].reverse().map((entry) => <li key={entry.id}><strong>{longTime(entry.createdAt, agencyZone)}</strong><span>{entry.action.replaceAll("_", " ")}{entry.via === "manual" ? " by hand" : entry.via === "call" ? " on the call" : ""} · {entry.actorName}</span>{entry.note && <small>{entry.note}</small>}</li>)}</ol>
+                  : <ol className="portal-callbacks-history">{[...selected.history].reverse().map((entry) => <li key={entry.id}><strong>{longTime(entry.createdAt, yourZone)}</strong><span>{entry.action.replaceAll("_", " ")}{entry.via === "manual" ? " by hand" : entry.via === "call" ? " on the call" : ""} · {entry.actorName}</span>{entry.note && <small>{entry.note}</small>}</li>)}</ol>
               )}
             </section>
           ) : (
