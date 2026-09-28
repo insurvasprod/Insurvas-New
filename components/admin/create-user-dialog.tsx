@@ -119,9 +119,9 @@ export function CreateUserDialog({
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       {triggerLabel ? (
-        <button type="button" className={triggerClassName} onClick={() => setOpen(true)}>
+        <Button type="button" className={triggerClassName} onClick={() => setOpen(true)}>
           {triggerLabel}
-        </button>
+        </Button>
       ) : (
         <Button size="sm" onClick={() => setOpen(true)}>
           <Plus />

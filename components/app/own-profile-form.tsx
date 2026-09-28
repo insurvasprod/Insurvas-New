@@ -69,7 +69,7 @@ export function OwnProfileForm({ initial }: { initial: OwnProfile }) {
 
   return (
     <form onSubmit={(event) => void save(event)} className="flex max-w-[720px] flex-col gap-6">
-      <section aria-labelledby="profile-identity" className="rounded-xl border border-[var(--border)] bg-[var(--surface)]">
+      <section aria-labelledby="profile-identity" className="rounded-lg border border-[var(--border)] bg-[var(--surface)]">
         <header className="border-b border-[var(--border)] px-5 py-4">
           <h2 id="profile-identity" className="text-base font-semibold text-[var(--ink)]">Name and contact</h2>
           <p className="mt-0.5 text-sm text-[var(--muted)]">{profile.roleLabel} · {profile.workspaceName}</p>
@@ -91,15 +91,17 @@ export function OwnProfileForm({ initial }: { initial: OwnProfile }) {
         </div>
       </section>
 
-      <section aria-labelledby="profile-licences" className="rounded-xl border border-[var(--border)] bg-[var(--surface)]">
+      <section aria-labelledby="profile-licences" className="rounded-lg border border-[var(--border)] bg-[var(--surface)]">
         <header className="border-b border-[var(--border)] px-5 py-4">
           <h2 id="profile-licences" className="text-base font-semibold text-[var(--ink)]">Licence numbers</h2>
-          <p className="mt-0.5 text-sm text-[var(--muted)]">Your own producer numbers. The agency&rsquo;s licences stay in Settings.</p>
+          <p className="mt-0.5 text-sm text-[var(--muted)]">Your own producer numbers.</p>
         </header>
         {!profile.licenceNumbersReady ? (
-          <p className="px-5 py-4 text-sm text-[var(--body)]">
-            Licence numbers need a database update that has not been applied to this workspace yet. Your name and phone still save.
-          </p>
+          <div className="px-5 py-4">
+            <p role="status" className="rounded-lg border border-border border-l-[3px] border-l-[var(--warning)] bg-[var(--warning-surface)] px-4 py-3 text-sm text-[var(--warning-ink)]">
+              Licence numbers need a database update that has not been applied yet. Your name and phone still save.
+            </p>
+          </div>
         ) : (
           <div className="flex flex-col gap-4 px-5 py-4">
             <div className="flex max-w-[280px] flex-col gap-1.5">
@@ -109,9 +111,7 @@ export function OwnProfileForm({ initial }: { initial: OwnProfile }) {
             {profile.licensedStates === null ? (
               <p className="text-sm text-[var(--body)]">Your licensed states cannot be read yet, so there are no state numbers to fill in.</p>
             ) : states.length === 0 ? (
-              <p className="text-sm text-[var(--body)]">
-                You are not recorded as licensed in any state yet. Your owner records your states on Team &amp; access; a field for each one appears here.
-              </p>
+              <p className="text-sm text-[var(--body)]">No licensed states recorded yet. Your owner adds them on Team &amp; access.</p>
             ) : (
               <div className="grid gap-3 sm:grid-cols-2">
                 {states.map((state) => (
@@ -131,7 +131,7 @@ export function OwnProfileForm({ initial }: { initial: OwnProfile }) {
         )}
       </section>
 
-      {error && <p role="alert" className="text-sm text-[var(--error-ink)]">{error}</p>}
+      {error && <p role="alert" className="rounded-lg border border-border border-l-[3px] border-l-[var(--error)] bg-[var(--error-surface)] px-4 py-3 text-sm text-[var(--error-ink)]">{error}</p>}
       <div className="flex items-center gap-3">
         <Button type="submit" disabled={saving || !dirty} aria-busy={saving}>{saving ? "Saving…" : "Save profile"}</Button>
         {!dirty && !saving && <span className="text-xs text-[var(--muted)]">No unsaved changes</span>}

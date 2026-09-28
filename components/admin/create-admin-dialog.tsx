@@ -4,7 +4,6 @@ import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { notify } from "@/lib/notify";
 
-import { btn } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -81,9 +80,9 @@ export function CreateAdminDialog({ onCreated }: { onCreated?: () => void }) {
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <button type="button" onClick={() => setOpen(true)} className={btn("primary", "h-11")}>
+      <Button type="button" onClick={() => setOpen(true)}>
         Create admin
-      </button>
+      </Button>
       <DialogContent>
         {enrollment ? (
           <>

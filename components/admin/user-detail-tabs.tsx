@@ -174,11 +174,6 @@ export async function UserSessionsTab({ userId, status }: { userId: string; stat
         </div>
       )}
 
-      <p className={FOOT}>
-        A sign-in lasts {hours} hours. Signing out clears it in that browser only; Sign out everywhere, suspending,
-        deactivating or changing the role ends every one at once. Switching agency starts a fresh {hours} hours. There is no
-        live list of open sessions.
-      </p>
     </>
   );
 }
@@ -201,10 +196,7 @@ export async function UserAuditTab({ userId, page }: { userId: string; page: num
 
   return (
     <>
-      <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5">
-        <span className="text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">
-          Staff and agency actions on this person. Append-only.
-        </span>
+      <div className="flex flex-wrap items-center justify-end gap-3 px-4 py-2.5">
         <Link
           href={auditLogHref}
           className="rounded-sm text-[14px] leading-[1.43] font-semibold tracking-[-0.01em] text-[var(--accent-ink)] no-underline hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"

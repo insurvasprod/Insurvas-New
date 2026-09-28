@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useMemo, useState, useSyncExternalStore } from "react";
+import { useMemo, useState, useSyncExternalStore, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { MoreHorizontal } from "lucide-react";
 
@@ -18,10 +18,12 @@ import {
   type StaffChange,
   type StaffRow,
 } from "@/lib/adminStaff/present";
-import { Pill, SearchBox, TableToolbar, btn, st } from "@/components/app/settings/primitives";
+import { Pill, st } from "@/components/app/settings/primitives";
 import { BoardTableFooter } from "@/components/admin/board-table-footer";
 import { NoMatches } from "@/components/admin/empty-state";
 import { Button } from "@/components/ui/button";
+import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
+import { TableCard } from "@/components/ui/table-card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   DropdownMenu,
@@ -68,16 +70,13 @@ export function AdminUsersTable({
 }) {
   const router = useRouter();
   const isClient = useIsClient();
-  const filtersId = useId();
+  const [refreshing, startRefresh] = useTransition();
 
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState<RoleFilter>("all");
   const [stateFilter, setStateFilter] = useState<StateFilter>("all");
-  const [filtersOpen, setFiltersOpen] = useState(false);
   const [page, setPage] = useState(1);
   const [pending, setPending] = useState<Pending | null>(null);
-
-  const activeFilters = (roleFilter === "all" ? 0 : 1) + (stateFilter === "all" ? 0 : 1);
 
   const filtered = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -105,76 +104,51 @@ export function AdminUsersTable({
 
   return (
     <>
-      <TableToolbar>
-        <SearchBox
-          value={search}
-          onChange={(value) => {
-            setSearch(value);
-            setPage(1);
-          }}
-          placeholder="Search admins"
-          label="Search admins by name or email"
-        />
-        <button
-          type="button"
-          onClick={() => setFiltersOpen((open) => !open)}
-          aria-expanded={filtersOpen}
-          aria-controls={filtersId}
-          className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] px-3.5 text-[14px] leading-[1.43] font-semibold tracking-[-0.01em] text-[var(--ink)] hover:bg-[var(--surface-alt)]"
-        >
-          <svg aria-hidden width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
-            <path d="M4 6h16M7 12h10M10 18h4" />
-          </svg>
-          Filters
-          {activeFilters > 0 && (
-            <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--surface-alt)] px-1.5 text-[12px] leading-[1.5] font-semibold tracking-[-0.01em] text-[var(--ink)]">
-              {activeFilters}
-            </span>
-          )}
-        </button>
-        <span className="grow" />
-        {filtersOpen && (
-          <div id={filtersId} className="flex w-full flex-wrap items-end gap-4 border-t border-[var(--border)] pt-3">
-            <FilterSelect
-              id={`${filtersId}-role`}
-              label="Role"
+      <TableCard
+        toolbar={
+          <DataToolbar actions={<RefreshButton onClick={() => startRefresh(() => router.refresh())} refreshing={refreshing} />}>
+            <ToolbarSearch
+              value={search}
+              onChange={(value) => {
+                setSearch(value);
+                setPage(1);
+              }}
+              placeholder="Search admins"
+              label="Search admins by name or email"
+            />
+            <select
+              aria-label="Role"
+              className={toolbarControl}
               value={roleFilter}
-              onChange={(value) => {
-                setRoleFilter(value as RoleFilter);
+              onChange={(event) => {
+                setRoleFilter(event.target.value as RoleFilter);
                 setPage(1);
               }}
-              options={[{ value: "all", label: "Every role" }, ...ADMIN_ROLES.map((role) => ({ value: role, label: ADMIN_ROLE_LABELS[role] }))]}
-            />
-            <FilterSelect
-              id={`${filtersId}-state`}
-              label="State"
+            >
+              <option value="all">Every role</option>
+              {ADMIN_ROLES.map((role) => (
+                <option key={role} value={role}>
+                  {ADMIN_ROLE_LABELS[role]}
+                </option>
+              ))}
+            </select>
+            <select
+              aria-label="State"
+              className={toolbarControl}
               value={stateFilter}
-              onChange={(value) => {
-                setStateFilter(value as StateFilter);
+              onChange={(event) => {
+                setStateFilter(event.target.value as StateFilter);
                 setPage(1);
               }}
-              options={STATE_FILTERS}
-            />
-            {activeFilters > 0 && (
-              <button
-                type="button"
-                className={btn("row")}
-                onClick={() => {
-                  setRoleFilter("all");
-                  setStateFilter("all");
-                  setPage(1);
-                }}
-              >
-                Clear filters
-              </button>
-            )}
-          </div>
-        )}
-      </TableToolbar>
-
-      <section
-        aria-label="Admin users"
-        className="flex min-w-0 flex-col overflow-hidden rounded-[12px] border border-[var(--border)] bg-[var(--surface)]"
+            >
+              {STATE_FILTERS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </DataToolbar>
+        }
       >
         <div className="min-w-0 overflow-x-auto">
           <table className={cn(st.table, "min-w-[960px]")}>
@@ -242,7 +216,6 @@ export function AdminUsersTable({
             </tbody>
           </table>
         </div>
-        <span className="grow" />
         <BoardTableFooter
           page={safePage}
           pageSize={PAGE_SIZE}
@@ -251,7 +224,7 @@ export function AdminUsersTable({
           order={STAFF_ORDER}
           onPageChange={setPage}
         />
-      </section>
+      </TableCard>
 
       <ConfirmChangeDialog pending={pending} onClose={() => setPending(null)} onDone={() => router.refresh()} />
     </>
@@ -412,39 +385,5 @@ function ConfirmChangeDialog({ pending, onClose, onDone }: { pending: Pending | 
         )}
       </DialogContent>
     </Dialog>
-  );
-}
-
-function FilterSelect({
-  id,
-  label,
-  value,
-  onChange,
-  options,
-}: {
-  id: string;
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  options: { value: string; label: string }[];
-}) {
-  return (
-    <span className="flex min-w-[200px] flex-col gap-1">
-      <label htmlFor={id} className="text-[12px] leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]">
-        {label}
-      </label>
-      <select
-        id={id}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className="h-10 rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] px-3 text-[14px] tracking-[-0.02em] text-[var(--ink)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
-      >
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-    </span>
   );
 }

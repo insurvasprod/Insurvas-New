@@ -12,7 +12,7 @@ import type { SubscriptionRow } from "@/lib/subscriptions/queries";
 import { fetchLatestSuspension, fetchTenantRecordFrame } from "@/lib/tenants/recordFrame";
 import { recordDate, recordDayMonth, sentenceCase } from "@/lib/tenants/recordFormat";
 import { isTenantSuspended } from "@/lib/tenants/suspension";
-import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 
 /**
  * Overview (board p-adm-tenant-detail), inside the record's approved frame.
@@ -29,12 +29,7 @@ import { cn } from "@/lib/utils";
  * helper the subscription routes use.
  */
 
-const LINK_BASE =
-  "inline-flex h-11 items-center justify-center gap-2 rounded-[8px] border px-4 text-[14px] leading-[1.43] font-semibold tracking-[-0.01em] whitespace-nowrap no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]";
-const LINK = {
-  primary: "border-transparent bg-[var(--primary)] text-[var(--on-primary)] hover:bg-[var(--accent-hover)]",
-  danger: "border-[var(--error)] bg-[var(--surface)] text-[var(--error-ink)] hover:bg-[var(--error-surface)]",
-} as const;
+const DANGER_LINK = "border-[var(--error)] text-[var(--error-ink)] no-underline hover:bg-[var(--error-surface)] hover:text-[var(--error-ink)]";
 
 const ACCESS_NOTE = {
   read_only: "Read-only: they can still open their book of business, but cannot dial, import or sell.",
@@ -94,14 +89,9 @@ function SubscriptionCard({
       aria-labelledby="overview-subscription"
       className="flex min-w-0 flex-1 flex-col gap-5 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] p-5"
     >
-      <div>
-        <h2 id="overview-subscription" className="m-0 text-[18px] leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]">
-          Subscription
-        </h2>
-        <p className="m-0 mt-1 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">
-          Every control here moves money, so each one confirms with its effective date.
-        </p>
-      </div>
+      <h2 id="overview-subscription" className="m-0 text-[18px] leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]">
+        Subscription
+      </h2>
 
       {subscription ? (
         <>
@@ -117,11 +107,10 @@ function SubscriptionCard({
           {access !== "full" && <Callout tone="warning" title={ACCESS_NOTE[access]} />}
 
           {subscription.pending_plan_id && (
-            <Callout tone="warning" title={`Queued change — takes effect ${periodEnd ?? "at period end"}`}>
-              {planName(subscription.plan_name, subscription.plan_version)} &rarr;{" "}
-              {planName(subscription.pending_plan_name, subscription.pending_plan_version)} at renewal. Nothing is prorated because the
-              change was scheduled rather than applied now.
-            </Callout>
+            <Callout
+              tone="warning"
+              title={`Queued change: ${planName(subscription.plan_name, subscription.plan_version)} → ${planName(subscription.pending_plan_name, subscription.pending_plan_version)}, takes effect ${periodEnd ?? "at period end"}`}
+            />
           )}
 
           {subscription.cancel_at_period_end && (
@@ -139,24 +128,30 @@ function SubscriptionCard({
       {canManage ? (
         <div className="flex flex-wrap gap-3">
           {!subscription && (
-            <Link href={tabHref} scroll={false} className={cn(LINK_BASE, LINK.primary)}>
-              Assign a plan
-            </Link>
+            <Button asChild>
+              <Link href={tabHref} scroll={false} className="no-underline">
+                Assign a plan
+              </Link>
+            </Button>
           )}
           {actions?.canChangePlan && (
-            <Link href={tabHref} scroll={false} className={cn(LINK_BASE, LINK.primary)}>
-              Change plan
-            </Link>
+            <Button asChild>
+              <Link href={tabHref} scroll={false} className="no-underline">
+                Change plan
+              </Link>
+            </Button>
           )}
           {actions?.canCancel && !subscription?.cancel_at_period_end && (
-            <Link href={tabHref} scroll={false} className={cn(LINK_BASE, LINK.danger)}>
-              Cancel subscription
-            </Link>
+            <Button asChild variant="outline" className={DANGER_LINK}>
+              <Link href={tabHref} scroll={false}>
+                Cancel subscription
+              </Link>
+            </Button>
           )}
         </div>
       ) : (
         <p className="m-0 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">
-          Read-only for your role. Plan, seat and billing changes are made by billing staff.
+          Read-only for your role.
         </p>
       )}
     </section>
@@ -204,10 +199,6 @@ export async function TenantOverviewTab({ tenantId, admin }: TenantTabProps) {
               &ldquo;{suspension.reason}&rdquo;{suspension.actorName ? ` — ${suspension.actorName}` : ""}
             </p>
           ) : null}
-          <p className="m-0 mt-1">
-            Nobody in this agency can sign in, and partner portal users working for it are signed out. Billing and data are
-            untouched.
-          </p>
         </Callout>
       )}
 
@@ -215,28 +206,13 @@ export async function TenantOverviewTab({ tenantId, admin }: TenantTabProps) {
         <div className="flex min-w-0 flex-1 flex-col gap-4">
           <SubscriptionCard tenantId={tenantId} subscription={subscription} canManage={canManageSubscriptions(admin.role)} />
 
-          <SettingsCard title="Account" sub="Who this agency is and where it stands." pad={20}>
+          <SettingsCard title="Account" pad={20}>
             <KeyValues items={account} />
-            <p className="mt-5 mb-0 border-t border-[var(--border)] pt-4 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">
-              Add-ons, coupons, invoices, billing mode and the payment provider are on{" "}
-              <Link
-                href={`/admin/tenants/${tenantId}?tab=subscription`}
-                scroll={false}
-                className="font-semibold text-[var(--accent-ink)] underline-offset-2 hover:underline"
-              >
-                Subscription &amp; billing
-              </Link>
-              .
-            </p>
           </SettingsCard>
         </div>
 
         <div className="flex min-w-0 flex-col gap-4 lg:w-[360px] lg:shrink-0">
           <TenantUsagePanel usage={usage} />
-          <Callout tone="info" title="Assign and Change are not the same action">
-            Assign attaches a plan to a tenant that has none, and is only offered then. Change moves an existing subscription,
-            and asks whether it applies now or at renewal.
-          </Callout>
         </div>
       </div>
     </div>

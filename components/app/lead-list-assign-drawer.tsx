@@ -7,7 +7,8 @@ import { X } from "lucide-react";
 import { Dialog as DialogPrimitive } from "radix-ui";
 
 import { Button } from "@/components/ui/button";
-import { Callout, btn, control } from "@/components/app/settings/primitives";
+import { SectionLoading } from "@/components/ui/page-states";
+import { Callout, control } from "@/components/app/settings/primitives";
 import { LICENCE_WARNING_DAYS, LIST_CHANGED_MESSAGE, daysUntil, lapseDay, ownerWhy, shortDate, type LeadListAssignMode, type LeadListAssignmentPreview, type LicenceExpiry } from "@/lib/assignment/constants";
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
@@ -197,7 +198,7 @@ export function LeadListAssignDrawer({ campaignId, listName, assignable }: { cam
   return (
     <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
       <DialogPrimitive.Trigger asChild>
-        <Button type="button" className="h-11 px-4">Assign the {count(assignable)}</Button>
+        <Button type="button">Assign the {count(assignable)}</Button>
       </DialogPrimitive.Trigger>
       <DialogPrimitive.Portal>
         <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-[rgba(10,12,16,0.55)] transition-opacity duration-200 starting:opacity-0" />
@@ -251,7 +252,7 @@ export function LeadListAssignDrawer({ campaignId, listName, assignable }: { cam
                   <div className="block">
                     <label htmlFor={ownerId} className="text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]">Owner</label>
                     <select id={ownerId} className={control} value={owner} disabled={busy || !members} onChange={(event) => { setOwner(event.target.value); setChanged(false); }}>
-                      <option value="">{members ? "Choose a member…" : "Loading members…"}</option>
+                      <option value="">Choose a member…</option>
                       {(members ?? []).map((member) => (
                         <option key={member.id} value={member.id}>{member.name} · {count(member.currentOpen)} of {count(member.capacity)} open</option>
                       ))}
@@ -261,7 +262,7 @@ export function LeadListAssignDrawer({ campaignId, listName, assignable }: { cam
                   <fieldset className="m-0 min-w-0 border-0 p-0">
                     <legend className="p-0 text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]">Members, in turn</legend>
                     {!members ? (
-                      <p className="mt-1.5 text-[14px] leading-[1.5] text-[var(--muted)]">Loading members…</p>
+                      <div className="mt-1.5 rounded-[8px] border border-[var(--border-strong)]"><SectionLoading rows={3} columns={2} label="Loading members" /></div>
                     ) : members.length === 0 ? (
                       <p className="mt-1.5 text-[14px] leading-[1.5] text-[var(--muted)]">Nobody in this workspace can be given leads yet.</p>
                     ) : (
@@ -351,7 +352,7 @@ export function LeadListAssignDrawer({ campaignId, listName, assignable }: { cam
                           ))}
                         </>
                       )
-                    ) : state.status === "loading" ? (
+                    ) : state.status === "loading" || (state.status === "idle" && mode === "chain") ? (
                       [0, 1, 2].map((index) => (
                         <tr key={index}>
                           <Cell><span className="m-skel block h-[14px] w-32 rounded" aria-hidden="true" /></Cell>
@@ -362,10 +363,10 @@ export function LeadListAssignDrawer({ campaignId, listName, assignable }: { cam
                     ) : state.status === "error" ? (
                       <PlainRow>
                         <span className={state.pending ? "text-[var(--warning-ink)]" : "text-[var(--error-ink)]"} role="alert">{state.message}</span>
-                        {!state.pending && <button type="button" className={cn(btn("secondary"), "ml-3 align-middle")} onClick={() => void loadPreview()}>Try again</button>}
+                        {!state.pending && <Button type="button" variant="outline" size="sm" className="ml-3 align-middle" onClick={() => void loadPreview()}>Try again</Button>}
                       </PlainRow>
                     ) : (
-                      <PlainRow>{mode === "owner" ? "Choose an owner to see what this would do." : mode === "round_robin" ? "Choose the members to rotate between to see what this would do." : "Working out who gets what…"}</PlainRow>
+                      <PlainRow>{mode === "owner" ? "Choose an owner to see what this would do." : "Choose the members to rotate between to see what this would do."}</PlainRow>
                     )}
                   </tbody>
                 </table>
@@ -390,14 +391,6 @@ export function LeadListAssignDrawer({ campaignId, listName, assignable }: { cam
               </Callout>
             )}
 
-            {/* Nothing routable: "all 0 move, or none do" says nothing, and the nobody callout and
-                the disabled button already explain why. */}
-            {preview && preview.total > 0 && routable > 0 && (
-              <Callout tone="info" title="This runs as one transaction">
-                All {count(routable)} routable {routable === 1 ? "lead moves" : "leads move"}, or none do.{nobody > 0 ? ` The other ${count(nobody)} stay unassigned.` : ""} A half-assigned list is the state that produces two agents calling the same person.
-              </Callout>
-            )}
-
             {commitError && <Callout tone="error" title="Nothing was assigned">{commitError}</Callout>}
 
             {/* The per-lead picker (lead-list-workspace's hash view) stays one click away. */}
@@ -415,17 +408,16 @@ export function LeadListAssignDrawer({ campaignId, listName, assignable }: { cam
             </span>
             <span className="ml-auto flex gap-2.5">
               <DialogPrimitive.Close asChild>
-                <button type="button" className={btn("secondary", "h-10")} disabled={busy}>Cancel</button>
+                <Button type="button" variant="outline" disabled={busy}>Cancel</Button>
               </DialogPrimitive.Close>
-              <button
+              <Button
                 type="button"
-                className={btn("primary")}
                 disabled={Boolean(blockedBy)}
                 aria-describedby={blockedBy && !busy ? whyId : undefined}
                 onClick={() => void commit()}
               >
                 {busy ? "Assigning…" : `Assign ${count(routable)}`}
-              </button>
+              </Button>
             </span>
           </div>
         </DialogPrimitive.Content>

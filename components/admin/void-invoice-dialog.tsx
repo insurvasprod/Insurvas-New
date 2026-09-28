@@ -34,7 +34,7 @@ export function VoidInvoiceDialog({
   if (refusalReason) {
     return (
       <div>
-        <Button variant="outline" className="h-10 w-full border-[var(--border-strong)]" disabled>
+        <Button variant="outline" className="w-full" disabled>
           Void invoice
         </Button>
         <p className="mt-1.5 text-xs leading-normal text-muted-foreground">{refusalReason}</p>
@@ -64,7 +64,7 @@ export function VoidInvoiceDialog({
 
   return (
     <>
-      <Button variant="outline" className="h-10 w-full border-[var(--border-strong)]" onClick={() => setOpen(true)}>
+      <Button variant="outline" className="w-full" onClick={() => setOpen(true)}>
         Void invoice
       </Button>
 

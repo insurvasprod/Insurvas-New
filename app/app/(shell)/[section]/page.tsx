@@ -41,10 +41,10 @@ export default async function AgentSectionPage({ params }: { params: Promise<{ s
   if (item.required_feature) {
     const guard = await guardPage(item.required_feature);
     if (!guard.entitled) {
-      return <FeatureGateNotice guard={guard} featureLabel={item.label} description={item.blurb} eyebrow={item.sectionLabel} />;
+      return <FeatureGateNotice guard={guard} featureLabel={item.label} description={item.blurb} />;
     }
     if (item.required_roles && !item.required_roles.includes(guard.role)) {
-      return <RoleGateNotice featureLabel={item.label} detail="Your tenant role does not include this workspace." eyebrow={item.sectionLabel} />;
+      return <RoleGateNotice featureLabel={item.label} detail="Your tenant role does not include this workspace." />;
     }
     return <ComingSoon item={item} available={grantedAndBuilt(guard.entitlement.features, guard.role)} />;
   }
@@ -57,7 +57,7 @@ export default async function AgentSectionPage({ params }: { params: Promise<{ s
   const entitlement = await getEntitlement(context.tenantId);
 
   if (item.required_roles && !item.required_roles.includes(context.role)) {
-    return <RoleGateNotice featureLabel={item.label} detail="Your tenant role does not include this workspace." eyebrow={item.sectionLabel} />;
+    return <RoleGateNotice featureLabel={item.label} detail="Your tenant role does not include this workspace." />;
   }
 
   return <ComingSoon item={item} available={grantedAndBuilt(entitlement.features, context.role)} />;

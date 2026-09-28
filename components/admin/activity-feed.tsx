@@ -1,19 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ChevronDown, SlidersHorizontal, X } from "lucide-react";
 
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { Button } from "@/components/ui/button";
+import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { EmptyState, ErrorState, NoMatches } from "@/components/ui/page-states";
-import { SearchBox } from "@/components/app/settings/primitives";
+import { TableCard } from "@/components/ui/table-card";
 // From ./constants and ./present, not ./queries — this is a client component, and queries.ts is
 // server-only.
 import { ACTIVITY_PAGE_SIZE, type LoginEventRow } from "@/lib/loginEvents/constants";
@@ -24,7 +16,6 @@ import {
   OUTCOME_OPTIONS,
   RANGE_OPTIONS,
   countLine,
-  popoverFilterCount,
   type ActivityActor,
   type ActivityFilters,
   type ActivityOutcome,
@@ -33,10 +24,6 @@ import {
 import { LoginActivityTable } from "./login-activity-table";
 import { BoardTableFooter } from "./board-table-footer";
 
-const TOOL_BUTTON =
-  "inline-flex h-10 shrink-0 items-center gap-2 rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] px-3.5 text-[14px] leading-[1.43] font-semibold tracking-[-0.01em] text-[var(--ink)] hover:bg-[var(--surface-alt)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]";
-const MENU_ITEM = "text-[14px] tracking-[-0.02em] text-[var(--ink)]";
-
 type Loaded = { events: LoginEventRow[]; total: number; rangeTotal: number };
 
 function sameFilters(a: ActivityFilters, b: ActivityFilters) {
@@ -44,7 +31,7 @@ function sameFilters(a: ActivityFilters, b: ActivityFilters) {
 }
 
 /**
- * The board's filter card, chip row, table and footer. Page 1 with the default filters is rendered
+ * The login-attempt table with its toolbar and footer. Page 1 with the default filters is rendered
  * on the server; every change after that reads /api/admin/activity. The rows on screen always
  * belong to the filters on screen: while a request is out the old rows are dimmed, and if it fails
  * they are replaced by the error — never left standing under a filter they do not match.
@@ -114,9 +101,6 @@ export function ActivityFeed({ initial }: { initial: Loaded }) {
     setPage(1);
   }
 
-  const outcome = OUTCOME_OPTIONS.find((option) => option.value === filters.outcome) ?? OUTCOME_OPTIONS[0];
-  const actor = ACTOR_OPTIONS.find((option) => option.value === filters.actor) ?? ACTOR_OPTIONS[0];
-  const popoverCount = popoverFilterCount(filters);
   const narrowed = filters.outcome !== "all" || filters.actor !== "all" || filters.q !== "";
   const atDefaults = sameFilters(filters, DEFAULT_ACTIVITY_FILTERS) && search.trim() === "";
   const rangePhrase = RANGE_OPTIONS.find((option) => option.value === filters.range)?.phrase ?? "";
@@ -128,9 +112,9 @@ export function ActivityFeed({ initial }: { initial: Loaded }) {
         title="Login activity did not load"
         detail="The attempts for these filters could not be read. Nothing has been hidden; try again."
         action={
-          <button type="button" className={TOOL_BUTTON} onClick={() => setRetry((n) => n + 1)}>
+          <Button type="button" variant="outline" onClick={() => setRetry((n) => n + 1)}>
             Try again
-          </button>
+          </Button>
         }
       />
     );
@@ -140,100 +124,79 @@ export function ActivityFeed({ initial }: { initial: Loaded }) {
     empty = (
       <EmptyState
         title="No login attempts recorded yet"
-        hint="Every sign-in and failed attempt lands here, so this fills up on its own. An empty list this early is normal."
+        hint="Sign-ins and failed attempts appear here as they happen."
       />
     );
   } else {
     empty = (
       <EmptyState
         title={`No sign-in attempts ${rangePhrase}`}
-        hint="Attempts appear here as they happen. Choose a wider range under Filters to see earlier ones."
+        hint="Choose a wider range to see earlier attempts."
       />
     );
   }
 
   return (
-    <>
-      <div className="flex flex-wrap items-center gap-3 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] p-3">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button type="button" className={TOOL_BUTTON} aria-label={`Outcome: ${outcome.label}`}>
-              {outcome.label}
-              <ChevronDown className="size-[13px]" strokeWidth={2.4} aria-hidden="true" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="min-w-[200px]">
-            <DropdownMenuRadioGroup value={filters.outcome} onValueChange={(value) => update({ outcome: value as ActivityOutcome })}>
-              {OUTCOME_OPTIONS.map((option) => (
-                <DropdownMenuRadioItem key={option.value} value={option.value} className={MENU_ITEM}>
-                  {option.label}
-                </DropdownMenuRadioItem>
-              ))}
-            </DropdownMenuRadioGroup>
-          </DropdownMenuContent>
-        </DropdownMenu>
-
-        <SearchBox value={search} onChange={setSearch} placeholder="Search actor, IP" label="Search by email address or IP" />
-
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button
-              type="button"
-              className={TOOL_BUTTON}
-              aria-label={popoverCount > 0 ? `Filters, ${popoverCount} changed` : "Filters"}
-            >
-              <SlidersHorizontal className="size-[15px]" strokeWidth={2.2} aria-hidden="true" />
-              Filters
-              {popoverCount > 0 && (
-                <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--surface-alt)] px-1.5 text-[12px] leading-[1.5] font-semibold tracking-[-0.01em] text-[var(--ink)] tabular-nums">
-                  {popoverCount}
-                </span>
+    <TableCard
+      toolbar={
+        <DataToolbar
+          actions={
+            <>
+              {!atDefaults && (
+                <Button type="button" variant="ghost" onClick={clearAll}>
+                  Clear filters
+                </Button>
               )}
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="min-w-[220px]">
-            <DropdownMenuLabel className="text-[12px]">Actor</DropdownMenuLabel>
-            <DropdownMenuRadioGroup value={filters.actor} onValueChange={(value) => update({ actor: value as ActivityActor })}>
-              {ACTOR_OPTIONS.map((option) => (
-                <DropdownMenuRadioItem key={option.value} value={option.value} className={MENU_ITEM}>
-                  {option.label}
-                </DropdownMenuRadioItem>
-              ))}
-            </DropdownMenuRadioGroup>
-            <DropdownMenuSeparator />
-            <DropdownMenuLabel className="text-[12px]">Range</DropdownMenuLabel>
-            <DropdownMenuRadioGroup value={filters.range} onValueChange={(value) => update({ range: value as ActivityRange })}>
-              {RANGE_OPTIONS.map((option) => (
-                <DropdownMenuRadioItem key={option.value} value={option.value} className={MENU_ITEM}>
-                  {option.label}
-                </DropdownMenuRadioItem>
-              ))}
-            </DropdownMenuRadioGroup>
-          </DropdownMenuContent>
-        </DropdownMenu>
-
-        <span className="flex-1" />
-      </div>
-
-      <div className="flex flex-wrap items-center gap-2">
-        <FilterChip label={`Outcome: ${outcome.chip}`} onClear={filters.outcome !== "all" ? () => update({ outcome: "all" }) : undefined} clearLabel="Clear the outcome filter" />
-        <FilterChip label={`Actor: ${actor.chip}`} onClear={filters.actor !== "all" ? () => update({ actor: "all" }) : undefined} clearLabel="Clear the actor filter" />
-        <button
-          type="button"
-          onClick={clearAll}
-          disabled={atDefaults}
-          title={atDefaults ? "Nothing to clear — every filter is at its default" : undefined}
-          className="rounded-[6px] bg-transparent p-1 text-[12px] leading-[1.5] font-semibold tracking-[-0.01em] text-[var(--ink)] hover:underline disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:no-underline"
+              <RefreshButton onClick={() => setRetry((n) => n + 1)} refreshing={busy} />
+            </>
+          }
         >
-          Clear all
-        </button>
-        <span className="text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)] tabular-nums" aria-live="polite">
-          {failed ? "Count unavailable" : countLine(data.total, data.rangeTotal, filters.range)}
-        </span>
-      </div>
-
+          <ToolbarSearch value={search} onChange={setSearch} placeholder="Search actor, IP" label="Search by email address or IP" />
+          <select
+            aria-label="Outcome"
+            className={toolbarControl}
+            value={filters.outcome}
+            onChange={(event) => update({ outcome: event.target.value as ActivityOutcome })}
+          >
+            {OUTCOME_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          <select
+            aria-label="Actor"
+            className={toolbarControl}
+            value={filters.actor}
+            onChange={(event) => update({ actor: event.target.value as ActivityActor })}
+          >
+            {ACTOR_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          <select
+            aria-label="Range"
+            className={toolbarControl}
+            value={filters.range}
+            onChange={(event) => update({ range: event.target.value as ActivityRange })}
+          >
+            {RANGE_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          <span className="text-xs text-muted-foreground tabular-nums" aria-live="polite">
+            {failed ? "Count unavailable" : countLine(data.total, data.rangeTotal, filters.range)}
+          </span>
+        </DataToolbar>
+      }
+    >
       <LoginActivityTable
         layout="board"
+        framed={false}
         events={data.events}
         busy={busy}
         empty={empty}
@@ -249,29 +212,6 @@ export function ActivityFeed({ initial }: { initial: Loaded }) {
           />
         }
       />
-    </>
-  );
-}
-
-function FilterChip({ label, onClear, clearLabel }: { label: string; onClear?: () => void; clearLabel: string }) {
-  return (
-    <span
-      className={
-        "inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] py-1 pl-3 text-[12px] leading-[1.5] font-semibold tracking-[-0.01em] text-[var(--body)] " +
-        (onClear ? "pr-2" : "pr-3")
-      }
-    >
-      {label}
-      {onClear && (
-        <button
-          type="button"
-          onClick={onClear}
-          aria-label={clearLabel}
-          className="inline-flex size-4 items-center justify-center rounded-full bg-[var(--surface-alt)] text-[var(--body)] hover:bg-[var(--border)]"
-        >
-          <X className="size-2.5" strokeWidth={2.6} aria-hidden="true" />
-        </button>
-      )}
-    </span>
+    </TableCard>
   );
 }

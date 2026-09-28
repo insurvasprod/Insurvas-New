@@ -4,7 +4,10 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
+import { toolbarControl } from "@/components/ui/data-toolbar";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { EmptyState, NoMatches, SectionLoading } from "@/components/ui/page-states";
+import { Pager, paginate } from "@/components/ui/pager";
 import type { PipelineStage } from "@/lib/pipelines/types";
 import type { MappedDisposition, PipelineViewContext, StageEvent } from "@/lib/pipelines/views";
 import { cn } from "@/lib/utils";
@@ -17,6 +20,9 @@ import { dateTime, dayMonth, viewerTimeZone } from "@/lib/format/dates";
  *
  * One rule runs through all of them: a lead changes stage only by a disposition. Every move goes to
  * POST /api/app/leads/move, which applies the outcome, moves the lead and records the change.
+ *
+ * The views render bare: the lead workspace's TableCard is the card, so none of them draws an outer
+ * border of its own (UI consistency standard: no card around a card).
  */
 
 export type ViewLead = {
@@ -147,7 +153,6 @@ export function DispositionPicker({
             ))}
           </div>
         )}
-        <p className="text-xs text-muted-foreground">The lead goes to the stage its disposition belongs to, and the move is written to its history. A stage change with no disposition is not accepted.</p>
       </DialogContent>
     </Dialog>
   );
@@ -178,34 +183,48 @@ function stageMeta(stage: PipelineStage, context: ViewContext | null) {
 
 // ── Stages ───────────────────────────────────────────────────────────────────────────────────
 
-export function StagesView({ pipelines, leads, context, isOwner, now, onEditStages, onOpenLibrary = null, onNewPipeline = null }: { pipelines: ViewPipeline[]; leads: ViewLead[]; context: ViewContext | null; isOwner: boolean; now: number; onEditStages: ((pipelineId: string) => void) | null; onOpenLibrary?: (() => void) | null; onNewPipeline?: (() => void) | null }) {
-  const unmappedUses = (context?.unmapped ?? []).reduce((sum, entry) => sum + entry.uses, 0);
+/** A one-line alert at the top of a view, for something that is actually wrong. */
+function ViewAlert({ tone, children }: { tone: "warning" | "error"; children: React.ReactNode }) {
   return (
-    <div className="flex flex-col gap-5">
-      {(onOpenLibrary || onNewPipeline) && (
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          {onOpenLibrary && <Button type="button" variant="outline" className="h-9 border-[var(--border-strong)] px-4" onClick={onOpenLibrary}>Disposition library</Button>}
-          {onNewPipeline && <Button type="button" className="h-9 px-4" onClick={onNewPipeline}>New pipeline</Button>}
-        </div>
+    <p role="alert" className={cn("border-b px-4 py-2.5 text-sm", tone === "error" ? "border-[var(--error)]/30 bg-[var(--error-surface)] text-[var(--error-ink)]" : "border-[var(--warning)]/30 bg-[var(--warning-surface)] text-[var(--warning-ink)]")}>
+      {children}
+    </p>
+  );
+}
+
+export function StagesView({ pipelines, leads, context, isOwner, now }: { pipelines: ViewPipeline[]; leads: ViewLead[]; context: ViewContext | null; isOwner: boolean; now: number }) {
+  const unmapped = context?.unmapped ?? [];
+  const unmappedUses = unmapped.reduce((sum, entry) => sum + entry.uses, 0);
+  const drift = context?.stageDrift ?? 0;
+  return (
+    <div className="flex flex-col">
+      {unmapped.length > 0 && (
+        <ViewAlert tone="warning">
+          {unmapped.length} {unmapped.length === 1 ? "disposition has" : "dispositions have"} no stage ({unmapped.slice(0, 3).map((entry) => entry.label).join(", ")}{unmapped.length > 3 ? ", …" : ""}) — {unmappedUses.toLocaleString()} recorded {unmappedUses === 1 ? "outcome is" : "outcomes are"} missing from the stage counts.
+          {isOwner && <> <Link href="/app/settings#pipelines" className="font-semibold text-foreground underline-offset-4 hover:underline">Map them in Settings › Pipelines</Link></>}
+        </ViewAlert>
       )}
-      {pipelines.map((pipeline) => {
+      {drift > 0 && (
+        <ViewAlert tone="error">
+          {drift} {drift === 1 ? "lead's stage disagrees" : "leads' stages disagree"} between its two records. Move {drift === 1 ? "it" : "each"} with a disposition to set both again.
+        </ViewAlert>
+      )}
+      {pipelines.map((pipeline, pipelineIndex) => {
         const live = pipeline.stages.filter((stage) => !stage.is_archived).sort((a, b) => a.position - b.position);
+        const owned = leads.filter((lead) => lead.pipeline_id === pipeline.id).length;
         return (
-          <section key={pipeline.id} className="overflow-hidden rounded-lg border border-border bg-card shadow-[0_1px_2px_rgba(16,20,26,.05)]">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-[var(--surface-alt)] px-4 py-3">
-              <div>
-                <h2 className="text-sm font-semibold">{pipeline.name}{context?.draftPipelineIds.includes(pipeline.id) ? " · draft" : ""}</h2>
-                <p className="text-xs text-muted-foreground">Stages in order, and the dispositions that send a lead to each.</p>
-              </div>
-              {onEditStages && <Button type="button" variant="outline" size="sm" className="h-8 border-[var(--border-strong)] px-3" onClick={() => onEditStages(pipeline.id)}>Add or edit stages</Button>}
-            </div>
+          <section key={pipeline.id} aria-label={pipeline.name} className={cn(pipelineIndex > 0 && "border-t border-border")}>
+            <header className="flex items-baseline gap-2 px-4 pb-1 pt-3">
+              <h2 className="text-sm font-semibold">{pipeline.name}{context?.draftPipelineIds.includes(pipeline.id) ? " · draft" : ""}</h2>
+              <span className="text-xs text-muted-foreground tabular-nums">{live.length} {live.length === 1 ? "stage" : "stages"} · {owned.toLocaleString()} {owned === 1 ? "lead" : "leads"}</span>
+            </header>
             {live.map((stage, index) => {
               const count = leads.filter((lead) => lead.stage_id === stage.id).length;
               const overdue = leads.filter((lead) => lead.stage_id === stage.id && isOverdue(lead, context, now)).length;
               const options = context?.dispositionsByStage[stage.id] ?? [];
               const meta = stageMeta(stage, context);
               return (
-                <div key={stage.id} className="flex flex-col gap-3 border-t border-border px-4 py-3.5 first-of-type:border-t-0 md:flex-row md:items-start">
+                <div key={stage.id} className={cn("flex flex-col gap-3 px-4 py-3 md:flex-row md:items-start", index > 0 && "border-t border-border")}>
                   <div className="flex min-w-0 items-start gap-3 md:w-[320px] md:shrink-0">
                     <span className="inline-flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white" style={{ background: stage.color }}>{index + 1}</span>
                     <span className="min-w-0">
@@ -216,7 +235,8 @@ export function StagesView({ pipelines, leads, context, isOwner, now, onEditStag
                   </div>
                   <div className="flex flex-grow flex-wrap items-center gap-1.5">
                     {options.map((option) => <Chip key={option.key} dot={stage.color}>{option.label}</Chip>)}
-                    {options.length === 0 && (index === 0 ? <span className="text-xs text-muted-foreground">Where new leads arrive — no disposition sends a lead back here.</span> : <span className="text-xs font-semibold text-[var(--warning-ink)]">No disposition lands here — a lead cannot be moved into this stage.</span>)}
+                    {/* The first stage is where leads arrive, so it needs no disposition; any other stage without one cannot be entered. */}
+                    {options.length === 0 && index > 0 && <span className="text-xs font-semibold text-[var(--warning-ink)]">No disposition lands here</span>}
                     {isOwner && <Link href="/app/settings#dispositions" className="text-xs font-semibold text-foreground underline-offset-4 hover:underline">+ Disposition</Link>}
                   </div>
                 </div>
@@ -226,24 +246,7 @@ export function StagesView({ pipelines, leads, context, isOwner, now, onEditStag
           </section>
         );
       })}
-
-      {(context?.unmapped.length ?? 0) > 0 && (
-        <div className="rounded-lg border border-border border-l-[3px] border-l-[var(--warning)] bg-[var(--warning-surface)] px-4 py-3.5 text-sm leading-normal">
-          <p className="font-semibold text-[var(--warning-ink)]">{context!.unmapped.length} {context!.unmapped.length === 1 ? "disposition an agent can set has" : "dispositions an agent can set have"} no stage</p>
-          <div className="mt-2 flex flex-wrap gap-1.5">{context!.unmapped.map((entry) => <Chip key={entry.key} className="bg-card text-[var(--body)]">{entry.label} · {entry.uses.toLocaleString()}</Chip>)}</div>
-          <p className="mt-2 text-[var(--body)]">The agent picks one, the lead keeps the stage it already had, and every stage report is short by that many leads. {unmappedUses.toLocaleString()} recorded outcomes fall out of the funnel here.</p>
-          {isOwner && <Link href="/app/settings#pipelines" className="mt-2 inline-block text-sm font-semibold text-foreground underline-offset-4 hover:underline">Map them in Settings › Pipelines</Link>}
-        </div>
-      )}
-      {(context?.stageDrift ?? 0) > 0 && (
-        <div className="rounded-lg border border-border border-l-[3px] border-l-[var(--error)] bg-[var(--error-surface)] px-4 py-3.5 text-sm leading-normal">
-          <p className="font-semibold text-[var(--error-ink)]">{context!.stageDrift} {context!.stageDrift === 1 ? "lead's stage disagrees" : "leads' stages disagree"} between its two records</p>
-          <p className="mt-1.5 text-[var(--body)]">A lead carries a stage on its own row and on its work item. Every move from these screens writes both in one step; these were written some other way. Moving the lead with a disposition sets both again.</p>
-        </div>
-      )}
-      {context && !context.schemaReady && (
-        <p className="text-xs text-muted-foreground">Time allowed per stage, counts-as-worked and the stage history arrive with a database update (20260925100000) that has not been applied yet.</p>
-      )}
+      {pipelines.length === 0 && <EmptyState title="No pipelines yet" hint="An owner sets pipelines up under Settings › Pipelines." />}
     </div>
   );
 }
@@ -280,34 +283,35 @@ export function TableView({
     // Longest in stage first — the leads most likely to need a hand.
     return [...filtered].sort((a, b) => (inStageMs(b, now) ?? -1) - (inStageMs(a, now) ?? -1));
   }, [leads, saved, context, now, currentUserId]);
-  const pages = Math.max(1, Math.ceil(rows.length / PAGE));
-  const current = Math.min(page, pages);
-  const pageRows = rows.slice((current - 1) * PAGE, current * PAGE);
+  const { current, rows: pageRows } = paginate(rows, page, PAGE);
   const allOnPage = pageRows.length > 0 && pageRows.every((lead) => selected.has(lead.id));
   const toggle = (id: string) => setSelected((set) => { const next = new Set(set); if (next.has(id)) next.delete(id); else next.add(id); return next; });
   const premiumTotal = pageRows.reduce((sum, lead) => sum + (lead.monthly_premium_cents ?? 0) * 12, 0);
   const views: Array<[SavedView, string]> = [["all", "All"], ["overdue", "Overdue in stage"], ["mine", "My leads"], ["unassigned", "Unassigned"]];
 
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Saved views">
-        {views.map(([key, label]) => (
-          <button key={key} type="button" aria-pressed={saved === key} onClick={() => { setSaved(key); setPage(1); }} disabled={key === "overdue" && !context?.schemaReady} title={key === "overdue" && !context?.schemaReady ? "Needs time allowed per stage (database update 20260925100000)" : undefined} className={cn("inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs font-semibold disabled:opacity-50", saved === key ? "border-[var(--primary)] bg-[var(--soft-orange-surface)] text-[var(--accent-ink)]" : "border-border bg-card text-[var(--body)]")}>
-            {label}<span className="tabular-nums opacity-70">{counts[key].toLocaleString()}</span>
-          </button>
-        ))}
+    <div className="flex flex-col">
+      {/* Saved views and the bulk actions: one row directly under the workspace toolbar. */}
+      <div className="flex min-h-[3.25rem] flex-wrap items-center gap-2 border-b border-border px-4 py-2">
+        <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Saved views">
+          {views.map(([key, label]) => (
+            <button key={key} type="button" aria-pressed={saved === key} onClick={() => { setSaved(key); setPage(1); }} disabled={key === "overdue" && !context?.schemaReady} title={key === "overdue" && !context?.schemaReady ? "Needs time allowed per stage (database update 20260925100000)" : undefined} className={cn("inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs font-semibold disabled:opacity-50", saved === key ? "border-[var(--primary)] bg-[var(--soft-orange-surface)] text-[var(--accent-ink)]" : "border-border bg-card text-[var(--body)]")}>
+              {label}<span className="tabular-nums opacity-70">{counts[key].toLocaleString()}</span>
+            </button>
+          ))}
+        </div>
+        {selected.size > 0 && (
+          <div className="ml-auto flex flex-wrap items-center gap-2 text-sm">
+            <span className="font-semibold">{selected.size} {selected.size === 1 ? "lead" : "leads"} selected</span>
+            <Button type="button" variant="outline" onClick={() => setSelected(new Set())}>Clear</Button>
+            <Button type="button" disabled={readOnly} onClick={() => onBulkMove([...selected])}>Change stage</Button>
+          </div>
+        )}
       </div>
 
-      {selected.size > 0 && (
-        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-[var(--primary)] bg-[var(--soft-orange-surface)] px-4 py-2.5 text-sm">
-          <span className="font-semibold">{selected.size} {selected.size === 1 ? "lead" : "leads"} selected</span>
-          <Button type="button" size="sm" className="h-8 px-3" disabled={readOnly} onClick={() => onBulkMove([...selected])}>Change stage</Button>
-          <Button type="button" variant="outline" size="sm" className="h-8 border-[var(--border-strong)] px-3" onClick={() => setSelected(new Set())}>Clear</Button>
-          <span className="text-xs text-[var(--body)]">A bulk change asks for one disposition, applied to each lead, and writes a separate history entry for each.</span>
-        </div>
-      )}
-
-      <div className="overflow-hidden rounded-lg border border-border bg-card shadow-[0_1px_2px_rgba(16,20,26,.05)]">
+      {rows.length === 0 ? (
+        saved === "all" ? <NoMatches noun="leads" /> : <NoMatches noun="leads" onClear={() => { setSaved("all"); setPage(1); }} />
+      ) : (
         <div className="overflow-x-auto">
           <table className="portal-lead-table w-full min-w-[900px] text-left text-sm">
             <thead>
@@ -342,14 +346,18 @@ export function TableView({
             </tbody>
           </table>
         </div>
-        {rows.length === 0 && <p className="px-4 py-8 text-center text-sm text-muted-foreground">No leads in this view.</p>}
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border bg-[var(--canvas)] px-4 py-2.5 text-xs text-muted-foreground">
-          <span>{rows.length ? `${(current - 1) * PAGE + 1}–${Math.min(current * PAGE, rows.length)} of ${rows.length.toLocaleString()}` : "0"} · longest in stage first{context?.schemaReady ? " · red past the stage's time allowed" : ""}{money && premiumTotal ? ` · $${Math.round(premiumTotal / 100).toLocaleString("en-US")} on this page` : ""}</span>
-          <span className="flex gap-2">
-            <Button type="button" variant="outline" size="sm" className="border-[var(--border-strong)] px-4" disabled={current <= 1} onClick={() => setPage(current - 1)}>Previous</Button>
-            <Button type="button" variant="outline" size="sm" className="border-[var(--border-strong)] px-4" disabled={current >= pages} onClick={() => setPage(current + 1)}>Next</Button>
-          </span>
-        </div>
+      )}
+
+      {/* The card's footer row, drawn here because the pager belongs to this view's rows. Same plinth as TableCard's footer slot. */}
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-b-[7px] border-t border-border bg-[var(--canvas)] px-4 py-2.5 text-xs text-muted-foreground">
+        <Pager
+          page={current}
+          total={rows.length}
+          noun="leads"
+          pageSize={PAGE}
+          onPage={setPage}
+          suffix={`longest in stage first${money && premiumTotal ? ` · $${Math.round(premiumTotal / 100).toLocaleString("en-US")} on this page` : ""}`}
+        />
       </div>
     </div>
   );
@@ -412,21 +420,21 @@ export function ListView({
   const quick = selected ? dispositionGroups(selectedStage?.pipeline, selected.stage_id, context) : [];
 
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-center gap-3 text-sm">
-        <label className="inline-flex h-9 items-center gap-2 rounded-lg border border-[var(--border-strong)] bg-card px-3 font-semibold">
-          <span className="font-normal text-muted-foreground">Group by</span>
-          <select value={groupBy} onChange={(event) => setGroupBy(event.target.value as "stage" | "owner")} className="bg-transparent font-semibold outline-none"><option value="stage">Stage</option><option value="owner">Owner</option></select>
+    <div className="flex flex-col">
+      <div className="flex min-h-[3.25rem] flex-wrap items-center gap-3 border-b border-border px-4 py-2 text-sm">
+        <label className="inline-flex items-center gap-2">
+          <span className="text-muted-foreground">Group by</span>
+          <select value={groupBy} onChange={(event) => setGroupBy(event.target.value as "stage" | "owner")} className={toolbarControl}><option value="stage">Stage</option><option value="owner">Owner</option></select>
         </label>
         <span className="text-xs text-muted-foreground tabular-nums">{leads.length.toLocaleString()} leads{lateCount ? <> · <strong className="text-[var(--error-ink)]">{lateCount} past their stage&rsquo;s time allowed</strong></> : null}</span>
       </div>
-      <div className="flex flex-col gap-3 xl:flex-row xl:items-start">
-        <section className="flex min-w-0 flex-col overflow-hidden rounded-lg border border-border bg-card shadow-[0_1px_2px_rgba(16,20,26,.05)] xl:w-[60%]">
+      <div className="flex flex-col xl:flex-row xl:items-start">
+        <section aria-label="Leads" className="flex min-w-0 flex-col xl:w-[60%] xl:self-stretch xl:border-r xl:border-border">
           {groups.map((group) => {
             const open = expanded[group.id] ?? !group.terminal;
             return (
               <div key={group.id}>
-                <button type="button" onClick={() => setExpanded((state) => ({ ...state, [group.id]: !open }))} aria-expanded={open} className="flex w-full items-center justify-between gap-3 border-t border-border bg-[var(--surface-alt)] px-3 py-1.5 text-left first:border-t-0">
+                <button type="button" onClick={() => setExpanded((state) => ({ ...state, [group.id]: !open }))} aria-expanded={open} className="flex w-full items-center justify-between gap-3 border-t border-border bg-[var(--surface-alt)] px-4 py-1.5 text-left first:border-t-0">
                   <span className="flex items-center gap-2"><span className="size-1.5 rounded-full" style={{ background: group.color }} aria-hidden="true" /><span className="text-xs font-semibold">{group.name}</span><span className="text-xs text-muted-foreground tabular-nums">{group.items.length} {group.items.length === 1 ? "lead" : "leads"}</span></span>
                   <span className="text-xs text-muted-foreground">{group.rule}{open ? "" : " · show"}</span>
                 </button>
@@ -434,7 +442,7 @@ export function ListView({
                   const active = lead.id === selectedId;
                   const late = isOverdue(lead, context, now);
                   return (
-                    <button key={lead.id} type="button" onClick={() => setSelectedId(active ? null : lead.id)} aria-pressed={active} className={cn("flex w-full items-center gap-2.5 border-t border-border px-3 py-2 text-left", active ? "bg-[var(--soft-orange-surface)] shadow-[inset_3px_0_0_var(--primary)]" : "bg-card hover:bg-[var(--surface-alt)]")}>
+                    <button key={lead.id} type="button" onClick={() => setSelectedId(active ? null : lead.id)} aria-pressed={active} className={cn("flex w-full items-center gap-2.5 border-t border-border px-4 py-2 text-left", active ? "bg-[var(--soft-orange-surface)] shadow-[inset_3px_0_0_var(--primary)]" : "bg-card hover:bg-[var(--surface-alt)]")}>
                       <span className={cn("inline-flex size-[26px] shrink-0 items-center justify-center rounded-full text-[11px] font-bold", active ? "bg-[var(--primary)] text-[var(--primary-foreground)]" : "bg-[var(--surface-alt)] text-[var(--body)]")}>{initials(leadName(lead))}</span>
                       <span className="min-w-0 flex-grow">
                         <span className="block truncate text-sm font-semibold">{leadName(lead)}</span>
@@ -451,11 +459,10 @@ export function ListView({
               </div>
             );
           })}
-          {groups.length === 0 && <p className="px-4 py-8 text-center text-sm text-muted-foreground">No leads match these filters.</p>}
-          <p className="border-t border-border bg-[var(--canvas)] px-3 py-2 text-xs text-[var(--body)]">Groups follow the stage order set on the Stages view. Terminal stages start collapsed — history, not work.</p>
+          {groups.length === 0 && <NoMatches noun="leads" />}
         </section>
 
-        <section className="flex min-w-0 flex-grow flex-col overflow-hidden rounded-lg border border-border bg-card shadow-[0_1px_2px_rgba(16,20,26,.05)]">
+        <section aria-label="Selected lead" className="flex min-w-0 flex-grow flex-col border-t border-border xl:border-t-0">
           {selected ? (
             <>
               <div className="border-b border-border bg-[var(--soft-orange-surface)] px-4 py-3">
@@ -464,7 +471,7 @@ export function ListView({
                     <p className="truncate text-base font-semibold">{leadName(selected)}</p>
                     <p className="text-xs text-[var(--body)]">{selected.submitter_name ?? "Workspace"} · arrived {dayMonth(selected.created_at, viewerTimeZone())}</p>
                   </div>
-                  <Button asChild size="sm" className="h-8 shrink-0 px-3"><Link href={`/app/leads/${selected.id}`}>Open workspace</Link></Button>
+                  <Button asChild size="sm" className="shrink-0"><Link href={`/app/leads/${selected.id}`}>Open workspace</Link></Button>
                 </div>
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   {selectedStage && <Chip className="border border-[var(--primary)] bg-card text-[var(--accent-ink)]" dot={selectedStage.stage.color}>{selectedStage.stage.name}</Chip>}
@@ -474,7 +481,7 @@ export function ListView({
               </div>
               <div className="border-b border-border px-4 py-3">
                 <p className="text-xs font-semibold uppercase tracking-[0.02em] text-muted-foreground">Stage history</p>
-                {history?.leadId !== selected.id ? <p className="mt-2 text-sm text-muted-foreground">Loading…</p> : history.error ? <p className="mt-2 text-sm text-[var(--error-ink)]">{history.error}</p> : history.events && history.events.length ? (
+                {history?.leadId !== selected.id ? <div className="-mx-4 mt-1"><SectionLoading rows={3} columns={2} label="Loading stage history" /></div> : history.error ? <p className="mt-2 text-sm text-[var(--error-ink)]">{history.error}</p> : history.events && history.events.length ? (
                   <ol className="mt-2 flex flex-col gap-2">
                     {history.events.map((event) => (
                       <li key={event.id} className="flex gap-2 text-sm">
@@ -486,11 +493,10 @@ export function ListView({
                       </li>
                     ))}
                   </ol>
-                ) : <p className="mt-2 text-sm text-muted-foreground">{context?.schemaReady ? "No stage change recorded yet." : "The stage history starts with a database update (20260925100000) that has not been applied yet."}</p>}
+                ) : <p className="mt-2 text-sm text-muted-foreground">No stage change recorded yet.</p>}
               </div>
               <div className="px-4 py-3">
                 <p className="text-xs font-semibold uppercase tracking-[0.02em] text-muted-foreground">Record an outcome</p>
-                <p className="mt-1 text-xs text-[var(--body)]">Picking one moves the lead to the stage it belongs to and writes the change to its history.</p>
                 {quick.length ? quick.map((group) => (
                   <div key={group.label} className="mt-2.5">
                     <p className="text-xs text-muted-foreground">{group.label}</p>
@@ -506,7 +512,7 @@ export function ListView({
               </div>
             </>
           ) : (
-            <p className="m-auto px-6 py-16 text-center text-sm text-muted-foreground">Pick a lead to see its stage history and record an outcome without leaving the list.</p>
+            <p className="m-auto px-6 py-16 text-center text-sm text-muted-foreground">Pick a lead to see its stage history and record an outcome.</p>
           )}
         </section>
       </div>

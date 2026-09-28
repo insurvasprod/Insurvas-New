@@ -3,9 +3,8 @@
 /**
  * Settings › Agency profile.
  *
- * Four tiles on what the agency is contracted to sell, the legal identity (a real draft: edits are
- * held here, the header's Save writes them, Discard puts them back), what needs attention, and who
- * owns the workspace. The tiles and the attention list are derived from the carrier library and
+ * A strip of figures on what the agency is contracted to sell, the legal identity (a real draft: the
+ * save bar writes it, Discard puts it back), what needs attention, and who owns the workspace. The tiles and the attention list are derived from the carrier library and
  * the appointment vault — the same rows those sections edit — never stored twice.
  */
 
@@ -16,16 +15,18 @@ import { useEffect, useMemo, useState } from "react";
 import {
   Callout,
   control,
-  DraftActions,
   Field,
   KeyValues,
   SettingsCard,
   SettingsGrid,
   SettingsSectionHeader,
   SettingsStack,
-  StatTile,
   Timeline,
 } from "@/components/app/settings/primitives";
+import { Button } from "@/components/ui/button";
+import { SectionLoading } from "@/components/ui/page-states";
+import { SettingsSaveBar } from "@/components/ui/settings-layout";
+import { StatStrip, StatTile } from "@/components/ui/stat";
 import { notify } from "@/lib/notify";
 import { carriersRequiringEo, formatDay, summarizeLibrary, type LibraryLike, type LibrarySummary } from "@/lib/carriers/contracts";
 import { normalizeTaxId, npnHint, WORKSPACE_TIMEZONES, type AgencyProfileResponse, type AgencyProfileView } from "@/lib/agencyProfile/types";
@@ -67,7 +68,6 @@ function whenPhrase(days: number) {
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 const NUMBER_WORDS = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve"];
 const inWords = (n: number) => NUMBER_WORDS[n] ?? String(n);
-const capitalise = (value: string) => value.charAt(0).toUpperCase() + value.slice(1);
 const LICENCE_TYPE_LABEL = { resident: "Resident", non_resident: "Non-resident" } as const;
 
 type AttentionItem = { key: string; title: string; sub: string; tone: "error" | "warning"; order: number };
@@ -271,36 +271,31 @@ export function AgentSettingsOverview({ team, workspace }: { team?: TeamSnapshot
 
   return (
     <SettingsStack>
-      <SettingsSectionHeader
-        actions={draft || support?.schemaReady ? <DraftActions dirty={dirty} saving={saving} onDiscard={discard} onSave={() => void save()} /> : undefined}
-      />
+      <SettingsSectionHeader />
 
-      <SettingsGrid cols={4} className="gap-4">
-        <StatTile label="Active carriers" value={tile(summary?.activeCarriers)} foot={summary ? `of ${summary.libraryCarriers} in the library` : " "} />
-        <StatTile label="Product contracts" value={tile(summary?.productContracts)} foot={summary ? `across ${plural(summary.contractCarriers, "carrier", "carriers")}` : " "} />
+      <StatStrip label="Agency contracts">
+        <StatTile label="Active carriers" value={tile(summary?.activeCarriers)} footnote={summary ? `of ${summary.libraryCarriers} in the library` : undefined} reserveFootnote />
+        <StatTile label="Product contracts" value={tile(summary?.productContracts)} footnote={summary ? `across ${plural(summary.contractCarriers, "carrier", "carriers")}` : undefined} reserveFootnote />
         <StatTile
           label="Commission schedules"
           value={tile(summary?.schedules)}
-          foot={summary ? (summary.schedules === summary.productContracts ? "one per contract" : `${plural(summary.productContracts - summary.schedules, "contract has", "contracts have")} none`) : " "}
+          footnote={summary ? (summary.schedules === summary.productContracts ? "one per contract" : `${plural(summary.productContracts - summary.schedules, "contract has", "contracts have")} none`) : undefined}
+          reserveFootnote
         />
-        <StatTile label="Needs attention" value={attentionKnown ? attention.items.length : "—"} tone="warning" foot={attentionKnown ? attention.breakdown : " "} />
-      </SettingsGrid>
+        <StatTile label="Needs attention" value={attentionKnown ? attention.items.length : "—"} valueTone={attentionKnown && attention.items.length > 0 ? "warning" : undefined} footnote={attentionKnown ? attention.breakdown : undefined} reserveFootnote />
+      </StatStrip>
 
       {/* Effective-dated as written: every save adds a dated agency_profile_history row (20260924100000). */}
-      <SettingsCard title="Legal identity" sub="This is what appears on a carrier contract. Changing it is effective-dated, not retroactive.">
+      <SettingsCard title="Legal identity">
         {profileError ? (
           <Callout tone={profileError === OWNERS_ONLY ? "info" : "error"} title={profileError} />
         ) : !draft || !p ? (
-          <p role="status" className="text-[14px] text-[var(--muted)]">Loading the legal identity…</p>
+          <SectionLoading rows={3} columns={2} label="Loading the legal identity" />
         ) : (
           <>
             {saveError && <Callout tone="error" title={saveError} className="mb-4" />}
-            {!profile.schemaReady && !saveError && (
-              <Callout tone="warning" title="Saving needs a database update" className="mb-4">
-                These fields show what Insurvas already knows about the agency. They can be saved once the agency profile migration is applied.
-              </Callout>
-            )}
-            <div className="grid gap-x-6 gap-y-[18px] sm:grid-cols-2">
+            {!profile.schemaReady && !saveError && <Callout tone="warning" title="Saving the agency profile needs a database update." className="mb-4" />}
+            <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
               <Field label="Legal entity name" htmlFor="agency-legal-name" required>
                 <input id="agency-legal-name" type="text" className={control} value={draft.legalName} onChange={set("legalName")} autoComplete="organization" required />
               </Field>
@@ -329,13 +324,7 @@ export function AgentSettingsOverview({ team, workspace }: { team?: TeamSnapshot
               <Field label="Principal address" htmlFor="agency-address">
                 <input id="agency-address" type="text" className={control} value={draft.principalAddress} onChange={set("principalAddress")} autoComplete="street-address" />
               </Field>
-              <Field
-                label="Workspace timezone"
-                htmlFor="agency-timezone"
-                // The board says every calling window reads it too. Calling windows are the customer's
-                // local hours by law (TCPA and state rules), so they stay on the customer's clock.
-                hint="Every callback and report reads this. Calling windows follow each customer's own timezone, as the law requires."
-              >
+              <Field label="Workspace timezone" htmlFor="agency-timezone" hint="Used for callbacks and reports. Calling windows follow each customer’s own timezone.">
                 <select id="agency-timezone" className={control} value={draft.timezone} onChange={set("timezone")}>
                   <option value="">Not set</option>
                   {timezoneOptions.map((zone) => <option key={zone} value={zone}>{zone}</option>)}
@@ -347,19 +336,15 @@ export function AgentSettingsOverview({ team, workspace }: { team?: TeamSnapshot
       </SettingsCard>
 
       {/* Moved here from the partner-chat page: the agency's own contact details belong with its identity. */}
-      <SettingsCard title="Partner support contact" sub="Shown to every partner in Messages, under Details. Leave a field blank and partners see “Not set by your agency”.">
+      <SettingsCard title="Partner support contact">
         {support === null && !supportError ? (
-          <p role="status" className="text-[14px] text-[var(--muted)]">Loading the support contact…</p>
+          <SectionLoading rows={1} columns={2} label="Loading the support contact" />
         ) : (
           <>
             {supportError && <Callout tone="error" title={supportError} className="mb-4" />}
-            {support && !support.schemaReady && (
-              <Callout tone="warning" title="Saving needs a database update" className="mb-4">
-                This setting needs a database update that has not been applied yet. Until it is, partners do not see a support email or phone.
-              </Callout>
-            )}
-            <div className="grid gap-x-6 gap-y-[18px] sm:grid-cols-2">
-              <Field label="Support email" htmlFor="agency-support-email">
+            {support && !support.schemaReady && <Callout tone="warning" title="Saving the support contact needs a database update." className="mb-4" />}
+            <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
+              <Field label="Support email" htmlFor="agency-support-email" hint="Partners see it in Messages. Leave blank to hide it.">
                 <input
                   id="agency-support-email"
                   type="email"
@@ -395,21 +380,11 @@ export function AgentSettingsOverview({ team, workspace }: { team?: TeamSnapshot
       </SettingsCard>
 
       <SettingsGrid>
-        <SettingsCard
-          title="Needs attention"
-          sub={
-            !attentionKnown
-              ? "Reading the appointment vault and the carrier library…"
-              : attention.items.length
-                ? `${capitalise(inWords(attention.items.length))} thing${attention.items.length === 1 ? "" : "s"} will stop a sale if ${attention.items.length === 1 ? "it is" : "they are"} not fixed.`
-                : `What is expiring within ${WINDOW_DAYS} days or missing, soonest first.`
-          }
-          bodyClassName="mt-3.5"
-        >
+        <SettingsCard title="Needs attention" bodyClassName="mt-3.5">
           {!attentionKnown ? (
-            derivedLoaded ? <p className="text-[14px] text-[var(--muted)]">The appointment vault and carrier library could not be read, so there is nothing to check.</p> : null
+            derivedLoaded ? <p className="m-0 text-[14px] text-[var(--muted)]">The appointment vault and carrier library could not be read.</p> : <SectionLoading rows={3} columns={2} label="Checking licences and advance rules" />
           ) : attention.items.length === 0 ? (
-            <p className="text-[14px] leading-[1.5] text-[var(--muted)]">Nothing expires in the next {WINDOW_DAYS} days, and every contracted carrier has an advance rule.</p>
+            <p className="m-0 text-[14px] leading-[1.5] text-[var(--muted)]">Nothing due in the next {WINDOW_DAYS} days.</p>
           ) : (
             <Timeline items={attention.items.map((item) => ({ title: item.title, sub: item.sub, tone: item.tone }))} />
           )}
@@ -425,11 +400,13 @@ export function AgentSettingsOverview({ team, workspace }: { team?: TeamSnapshot
               { label: "Workspace ID", value: workspace?.tenantId ?? "—" },
             ]}
           />
-          <Callout tone="warning" title="Ownership is shared, never left empty" className="mt-4">
-            A workspace can have more than one owner, and each holds every owner-only permission. The last owner cannot be demoted until another member is promoted, and every role change is written to the audit log.
-          </Callout>
         </SettingsCard>
       </SettingsGrid>
+
+      <SettingsSaveBar visible={dirty} note="Unsaved changes to the agency profile">
+        <Button type="button" variant="outline" onClick={discard} disabled={saving}>Discard</Button>
+        <Button type="button" onClick={() => void save()} disabled={saving}>{saving ? "Saving…" : "Save changes"}</Button>
+      </SettingsSaveBar>
     </SettingsStack>
   );
 }

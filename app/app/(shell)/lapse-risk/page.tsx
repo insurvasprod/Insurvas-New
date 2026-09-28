@@ -1,5 +1,4 @@
 import { guardPage } from "@/lib/entitlements/guardPage";
-import { sectionForPath } from "@/lib/menu/definition";
 import { getLapseRisk, LAPSE_SCHEMA_PENDING_MESSAGE } from "@/lib/lapseRisk/service";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { LapseRiskBoard } from "@/components/app/lapse-risk-board";
@@ -32,12 +31,11 @@ export default async function LapseRiskPage() {
     return <RoleGateNotice featureLabel="Lapse risk" detail="Only owners and producers can view retention risk and commission exposure." />;
   }
 
-  const eyebrow = sectionForPath("/app/lapse-risk") ?? undefined;
   const view = await getLapseRisk(guard.context);
 
   if (view.policies.length === 0) {
-    return <LapseRiskEmpty eyebrow={eyebrow} notice={view.storage === "pending" ? LAPSE_SCHEMA_PENDING_MESSAGE : undefined} />;
+    return <LapseRiskEmpty notice={view.storage === "pending" ? LAPSE_SCHEMA_PENDING_MESSAGE : undefined} />;
   }
 
-  return <LapseRiskBoard eyebrow={eyebrow} policies={view.policies} totals={view.totals} readOnly={guard.entitlement.access === "read_only"} />;
+  return <LapseRiskBoard policies={view.policies} totals={view.totals} readOnly={guard.entitlement.access === "read_only"} />;
 }

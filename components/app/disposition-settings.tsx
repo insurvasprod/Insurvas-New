@@ -3,7 +3,7 @@
 /**
  * Settings → Dispositions, drawn from p-set-dispositions.
  *
- * The outcome table is a draft: an Edit applies to this screen only, and the header's Save writes
+ * The outcome table is a draft: an Edit applies to this screen only, and the save bar writes
  * every changed outcome. The wizard's question graph keeps saving each edit as it is made, inside
  * its own editor, because a half-saved graph is what the wizard would walk.
  *
@@ -13,27 +13,26 @@
  * this screen cannot grow a second vocabulary (lib/dispositions/oneVocabulary.test.mjs).
  */
 
-import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { Plus } from "lucide-react";
 
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { EmptyState, NoMatches, SectionLoading } from "@/components/ui/page-states";
+import { SettingsSaveBar } from "@/components/ui/settings-layout";
+import { TableCard } from "@/components/ui/table-card";
 import {
   Callout,
-  DraftActions,
   Field,
   Pill,
-  PlusIcon,
-  SearchBox,
   SettingsCard,
-  SettingsGrid,
   SettingsSectionHeader,
   SettingsStack,
-  SettingsTableCard,
-  TableToolbar,
   Timeline,
   ToggleRow,
-  btn,
   control,
   st,
 } from "@/components/app/settings/primitives";
@@ -253,77 +252,6 @@ function SettingsDialog({ open, onOpenChange, title, description, wide, children
   );
 }
 
-/* ── filters ───────────────────────────────────────────────────────────── */
-
-function FilterIcon() {
-  return (
-    <svg aria-hidden width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M4 5h16M7 12h10M10 19h4" />
-    </svg>
-  );
-}
-
-function FiltersButton({ filters, onChange }: { filters: Filters; onChange: (next: Filters) => void }) {
-  const [open, setOpen] = useState(false);
-  const wrap = useRef<HTMLSpanElement>(null);
-  const active = (filters.status !== "all" ? 1 : 0) + (filters.work !== "any" ? 1 : 0) + (filters.closes !== "any" ? 1 : 0);
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (event: MouseEvent) => { if (!wrap.current?.contains(event.target as Node)) setOpen(false); };
-    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setOpen(false); };
-    document.addEventListener("mousedown", onDown);
-    document.addEventListener("keydown", onKey);
-    return () => { document.removeEventListener("mousedown", onDown); document.removeEventListener("keydown", onKey); };
-  }, [open]);
-  const select = "box-border h-10 w-full rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] px-3 text-[14px] text-[var(--ink)]";
-  return (
-    <span ref={wrap} className="relative inline-flex">
-      <button
-        type="button"
-        aria-expanded={open}
-        aria-haspopup="dialog"
-        onClick={() => setOpen((value) => !value)}
-        className="inline-flex h-10 items-center gap-2 rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] px-3.5 text-[14px] leading-[1.43] font-semibold tracking-[-0.01em] text-[var(--ink)] hover:bg-[var(--surface-alt)]"
-      >
-        <FilterIcon />
-        Filters
-        {active > 0 && (
-          <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--surface-alt)] px-1.5 text-[12px] font-semibold text-[var(--ink)]">{active}</span>
-        )}
-      </button>
-      {open && (
-        <div role="dialog" aria-label="Filter outcomes" className="absolute top-12 left-0 z-20 flex w-[260px] flex-col gap-3 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] p-4 shadow-[var(--shadow-rest)]">
-          <Field label="Status" htmlFor="outcome-filter-status">
-            <select id="outcome-filter-status" className={cn(select, "mt-1.5")} value={filters.status} onChange={(event) => onChange({ ...filters, status: event.target.value as StatusFilter })}>
-              <option value="active">Active</option>
-              <option value="archived">Archived</option>
-              <option value="all">Active and archived</option>
-            </select>
-          </Field>
-          <Field label="Counts as work" htmlFor="outcome-filter-work">
-            <select id="outcome-filter-work" className={cn(select, "mt-1.5")} value={filters.work} onChange={(event) => onChange({ ...filters, work: event.target.value as YesNoFilter })}>
-              <option value="any">Any</option>
-              <option value="yes">Yes</option>
-              <option value="no">No</option>
-            </select>
-          </Field>
-          <Field label="Closes as" htmlFor="outcome-filter-closes">
-            <select id="outcome-filter-closes" className={cn(select, "mt-1.5")} value={filters.closes} onChange={(event) => onChange({ ...filters, closes: event.target.value as ClosesFilter })}>
-              <option value="any">Any</option>
-              <option value="won">Won</option>
-              <option value="lost">Lost</option>
-              <option value="none">Not closed by a stage</option>
-            </select>
-          </Field>
-          <button type="button" className={btn("secondary", "self-start")} onClick={() => onChange({ status: "all", work: "any", closes: "any" })} disabled={active === 0}>
-            Clear filters
-          </button>
-        </div>
-      )}
-    </span>
-  );
-}
-
 /* ── outcome dialogs ───────────────────────────────────────────────────── */
 
 function OutcomeEditor({
@@ -407,11 +335,10 @@ function OutcomeEditor({
       </Field>
       <ToggleRow id="outcome-edit-active" title="Active" help="Archived outcomes leave the wizard. Past calls keep their label; nothing is deleted." checked={active} onChange={(value) => { setActive(value); setError(""); }} />
       {error && <Callout tone="error" title="This outcome cannot be applied yet">{error}</Callout>}
-      <div className="flex justify-end gap-2.5">
-        <button type="button" className={btn("ghost")} onClick={onClose}>Cancel</button>
-        <button type="submit" className={btn("primary")}>Apply</button>
+      <div className="flex justify-end gap-2">
+        <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
+        <Button type="submit">Apply</Button>
       </div>
-      <p className="m-0 text-[12px] leading-[1.5] text-[var(--muted)]">Applied changes are held until you choose Save changes at the top of the section.</p>
     </form>
   );
 }
@@ -466,7 +393,7 @@ function AddOutcome({ stages, pipelines, endsCallAvailable, nextActionAvailable,
         <input id="outcome-new-key" className={cn(control, "font-mono")} required maxLength={80} value={dispositionKey} onChange={(event) => { setKeyTouched(true); setKeyValue(event.target.value); }} />
       </Field>
       <ToggleRow id="outcome-new-work" title="Counts as work" help="Counted as worked on the activity scorecard when an agent records it." checked={work} onChange={setWork} />
-      <ToggleRow id="outcome-new-ends" title="Ends call" help={endsCallAvailable ? "The wizard offers new outcomes at once. The dialer's own buttons are a fixed set today, so this takes effect there only for outcomes it can record." : "Needs a database update that has not been applied yet."} checked={endsCall} disabled={!endsCallAvailable} onChange={(value) => { setEndsCall(value); setNext((current) => coerceNext(dispositionKey, value, current)); }} />
+      <ToggleRow id="outcome-new-ends" title="Ends call" help={endsCallAvailable ? "The lead is closed or rested instead of going back on the cadence." : "Needs a database update that has not been applied yet."} checked={endsCall} disabled={!endsCallAvailable} onChange={(value) => { setEndsCall(value); setNext((current) => coerceNext(dispositionKey, value, current)); }} />
       {endsCallAvailable && (
         <NextActionFields idPrefix="outcome-new" dispositionKey={dispositionKey} endsCall={endsCall} value={effectiveNext} available={nextActionAvailable} onChange={setNext} />
       )}
@@ -480,9 +407,9 @@ function AddOutcome({ stages, pipelines, endsCallAvailable, nextActionAvailable,
         </select>
       </Field>
       {error && <Callout tone="error" title="The outcome was not added">{error}</Callout>}
-      <div className="flex justify-end gap-2.5">
-        <button type="button" className={btn("ghost")} onClick={onClose}>Cancel</button>
-        <button type="submit" className={btn("primary")} disabled={saving || !label.trim()}>{saving ? "Adding…" : "Add outcome"}</button>
+      <div className="flex justify-end gap-2">
+        <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
+        <Button type="submit" disabled={saving || !label.trim()}>{saving ? "Adding…" : "Add outcome"}</Button>
       </div>
     </form>
   );
@@ -602,7 +529,7 @@ function FlowEditor({ config, flowId, onFlowChange, reload }: { config: Config; 
               {Object.entries(NODE_TYPE_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
             </select>
           </Field>
-          <button type="submit" className={btn("secondary", "justify-self-start sm:col-span-2")}>Add question</button>
+          <Button type="submit" variant="outline" className="justify-self-start sm:col-span-2">Add question</Button>
         </form>
       )}
 
@@ -627,7 +554,7 @@ function FlowEditor({ config, flowId, onFlowChange, reload }: { config: Config; 
           <Field label="Note template" htmlFor="new-option-note">
             <input id="new-option-note" className={small} maxLength={2000} value={newOption.note_template} onChange={(event) => setNewOption({ ...newOption, note_template: event.target.value })} />
           </Field>
-          <button type="submit" className={btn("secondary", "justify-self-start sm:col-span-2")}>Add answer</button>
+          <Button type="submit" variant="outline" className="justify-self-start sm:col-span-2">Add answer</Button>
         </form>
       )}
     </div>
@@ -674,6 +601,7 @@ export function DispositionSettings() {
   const [editing, setEditing] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [flowEditorOpen, setFlowEditorOpen] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   async function load() {
     const response = await fetch("/api/app/dispositions/config", { cache: "no-store" });
@@ -763,15 +691,16 @@ export function DispositionSettings() {
     else notify.done(dirtyIds.length === 1 ? "Outcome saved" : "Outcomes saved");
   }
 
-  const header = config ? (
-    <DraftActions dirty={dirtyIds.length > 0} saving={saving} onDiscard={() => { setEdits({}); setSaveError(""); }} onSave={() => void saveAll()} />
-  ) : undefined;
+  async function refresh() {
+    setRefreshing(true);
+    try { await load(); } finally { setRefreshing(false); }
+  }
 
   if (loading) {
     return (
       <SettingsStack>
         <SettingsSectionHeader />
-        <SettingsCard><p className="m-0 text-[14px] text-[var(--muted)]">Loading call outcomes…</p></SettingsCard>
+        <TableCard><SectionLoading label="Loading call outcomes" /></TableCard>
       </SettingsStack>
     );
   }
@@ -779,10 +708,8 @@ export function DispositionSettings() {
     return (
       <SettingsStack>
         <SettingsSectionHeader />
-        <Callout tone="error" title="Call outcomes could not be loaded">
-          {loadError}
-          <div className="mt-3"><button type="button" className={btn("secondary")} onClick={() => { setLoading(true); void load(); }}>Try again</button></div>
-        </Callout>
+        <Callout tone="error" title={loadError || "Call outcomes could not be loaded"} />
+        <div><Button type="button" variant="outline" onClick={() => { setLoading(true); void load(); }}>Try again</Button></div>
       </SettingsStack>
     );
   }
@@ -793,134 +720,134 @@ export function DispositionSettings() {
   const editingRow = editing ? rows.find((row) => row.id === editing) ?? null : null;
   const editingSaved = editing ? savedById.get(editing) ?? null : null;
 
+  const filtersOn = filters.status !== DEFAULT_FILTERS.status || filters.work !== "any" || filters.closes !== "any" || Boolean(query.trim());
+
   return (
     <SettingsStack>
-      <SettingsSectionHeader actions={header} />
+      <SettingsSectionHeader />
 
-      <Callout tone="info" title="Four flags decide everything downstream">
-        Whether it counts as work (the scorecard), whether it ends the call (the dialer), what it closes as (the funnel), and its next action (the cadence). An outcome with none of them set is a note, not a disposition.
-      </Callout>
-
-      {!endsCallAvailable && (
-        <Callout tone="warning" title="Ends call is read-only for now">
-          This setting needs a database update that has not been applied yet. Until then the dialer uses its built-in list, and this column shows a dash.
-        </Callout>
-      )}
+      {!endsCallAvailable && <Callout tone="warning" title="Ends call is read-only until a pending database update is applied." />}
+      {unmapped > 0 && <Callout tone="error" title={`${unmapped} of ${activeRows.length} active outcomes have no stage. Every outcome must map to a stage before it can be saved.`} />}
       {saveError && <Callout tone="error" title="Some changes were not saved">{saveError}</Callout>}
 
-      <SettingsTableCard
-        title="Call outcomes"
-        actions={
-          <TableToolbar>
-            <SearchBox value={query} onChange={setQuery} placeholder="Search outcomes" label="Search outcomes" />
-            <FiltersButton filters={filters} onChange={setFilters} />
-            <span className="grow" />
-            <button type="button" className={btn("primary")} onClick={() => setAdding(true)}>
-              <PlusIcon />
-              Add an outcome
-            </button>
-          </TableToolbar>
+      <TableCard
+        toolbar={
+          <DataToolbar
+            actions={
+              <>
+                <Button type="button" onClick={() => setAdding(true)}>
+                  <Plus aria-hidden="true" />
+                  Add an outcome
+                </Button>
+                <RefreshButton onClick={() => void refresh()} refreshing={refreshing} />
+              </>
+            }
+          >
+            <ToolbarSearch value={query} onChange={setQuery} placeholder="Search outcomes" />
+            <select aria-label="Status" className={toolbarControl} value={filters.status} onChange={(event) => setFilters({ ...filters, status: event.target.value as StatusFilter })}>
+              <option value="active">Active</option>
+              <option value="archived">Archived</option>
+              <option value="all">Active and archived</option>
+            </select>
+            <select aria-label="Counts as work" className={toolbarControl} value={filters.work} onChange={(event) => setFilters({ ...filters, work: event.target.value as YesNoFilter })}>
+              <option value="any">Work: any</option>
+              <option value="yes">Counts as work</option>
+              <option value="no">Does not count as work</option>
+            </select>
+            <select aria-label="Closes as" className={toolbarControl} value={filters.closes} onChange={(event) => setFilters({ ...filters, closes: event.target.value as ClosesFilter })}>
+              <option value="any">Closes: any</option>
+              <option value="won">Closes as Won</option>
+              <option value="lost">Closes as Lost</option>
+              <option value="none">Not closed by a stage</option>
+            </select>
+          </DataToolbar>
         }
       >
-        <table className={st.table}>
-          <thead>
-            <tr className={st.headRow}>
-              <th scope="col" className={st.th}>Outcome</th>
-              <th scope="col" className={cn(st.th, "w-[160px]")}>Counts as work</th>
-              <th scope="col" className={cn(st.th, "w-[130px]")}>Ends call</th>
-              <th scope="col" className={cn(st.th, "w-[170px]")}>Closes as</th>
-              <th scope="col" className={cn(st.th, "w-[240px]")}>Next action</th>
-              <th scope="col" className={cn(st.th, "w-[110px]")}><span className="sr-only">Actions</span></th>
-            </tr>
-          </thead>
-          <tbody>
-            {visible.length === 0 && (
-              <tr>
-                <td colSpan={6} className={cn(st.td, "py-6 text-center text-[var(--muted)]")}>
-                  {rows.length === 0 ? "No call outcomes yet. Add the first one." : "No outcome matches the search and filters."}
-                </td>
+        {rows.length === 0 ? (
+          <EmptyState title="No call outcomes yet" hint="Add the first outcome an agent can record." />
+        ) : visible.length === 0 ? (
+          <NoMatches noun="outcomes" onClear={filtersOn ? () => { setQuery(""); setFilters(DEFAULT_FILTERS); } : undefined} />
+        ) : (
+          <table className={st.table}>
+            <thead>
+              <tr className={st.headRow}>
+                <th scope="col" className={st.th}>Outcome</th>
+                <th scope="col" className={cn(st.th, "w-[150px]")}>Counts as work</th>
+                <th scope="col" className={cn(st.th, "w-[110px]")}>Ends call</th>
+                <th scope="col" className={cn(st.th, "w-[120px]")}>Closes as</th>
+                <th scope="col" className={cn(st.th, "w-[240px]")}>Next action</th>
+                <th scope="col" className={cn(st.th, st.num, "w-[90px]")}><span className="sr-only">Actions</span></th>
               </tr>
-            )}
-            {visible.map((row) => {
-              const closes = closesAs(row);
-              const next = nextActionText(row);
-              const pending = Boolean(edits[row.id]);
-              return (
-                <tr key={row.id}>
-                  <td className={st.td}>
-                    <span className={cn("inline-flex flex-wrap items-center gap-2", !row.is_active && "text-[var(--muted)]")}>
-                      {row.label}
-                      {!row.is_active && <Pill tone="neutral">Archived</Pill>}
-                      {pending && <Pill tone="warning" dot>Unsaved</Pill>}
-                    </span>
-                  </td>
-                  <td className={st.td}><YesNo value={row.counts_as_work_completed} /></td>
-                  <td className={st.td}><YesNo value={row.ends_call} /></td>
-                  <td className={st.td}>{closes ? <Pill tone={closes === "won" ? "success" : "error"}>{closes === "won" ? "Won" : "Lost"}</Pill> : <span className="text-[var(--muted)]">—</span>}</td>
-                  <td className={st.td}>
-                    {next.main}
-                    {next.sub && <span className={st.sub}>{next.sub}</span>}
-                  </td>
-                  <td className={st.td}>
-                    <button type="button" className={btn("row")} onClick={() => setEditing(row.id)} aria-label={`Edit ${row.label}`}>Edit</button>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </SettingsTableCard>
+            </thead>
+            <tbody>
+              {visible.map((row) => {
+                const closes = closesAs(row);
+                const next = nextActionText(row);
+                const pending = Boolean(edits[row.id]);
+                return (
+                  <tr key={row.id}>
+                    <td className={st.td}>
+                      <span className={cn("inline-flex flex-wrap items-center gap-2", !row.is_active && "text-[var(--muted)]")}>
+                        {row.label}
+                        {!row.is_active && <Pill tone="neutral">Archived</Pill>}
+                        {pending && <Pill tone="warning" dot>Unsaved</Pill>}
+                      </span>
+                    </td>
+                    <td className={st.td}><YesNo value={row.counts_as_work_completed} /></td>
+                    <td className={st.td}><YesNo value={row.ends_call} /></td>
+                    <td className={st.td}>{closes ? <Pill tone={closes === "won" ? "success" : "error"}>{closes === "won" ? "Won" : "Lost"}</Pill> : <span className="text-[var(--muted)]">—</span>}</td>
+                    <td className={st.td}>
+                      {next.main}
+                      {next.sub && <span className={st.sub}>{next.sub}</span>}
+                    </td>
+                    <td className={cn(st.td, st.num)}>
+                      <Button type="button" variant="outline" size="sm" onClick={() => setEditing(row.id)} aria-label={`Edit ${row.label}`}>Edit</Button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </TableCard>
 
-      <SettingsGrid>
-        <SettingsCard
-          title={flow ? `The wizard behind “${flow.stage_name}”` : "The outcome wizard"}
-          sub="One question at a time, so the outcome is structured rather than typed."
-          action={config.flows.length > 0 ? <button type="button" className={btn("secondary")} onClick={() => setFlowEditorOpen(true)}>Edit questions</button> : undefined}
-        >
-          {config.flows.length > 1 && (
-            <div className="mb-4">
-              <label htmlFor="wizard-flow" className="sr-only">Wizard</label>
-              <select id="wizard-flow" className={cn(control, "mt-0")} value={flowId} onChange={(event) => setFlowId(event.target.value)}>
-                {config.flows.map((item) => <option key={item.id} value={item.id}>{item.stage_name} · {item.name}</option>)}
-              </select>
-            </div>
-          )}
-          {!flow ? (
-            <p className="m-0 text-[14px] text-[var(--muted)]">No wizard is configured yet. One is created for each pipeline stage.</p>
-          ) : flow.nodes.length === 0 ? (
-            <p className="m-0 text-[14px] text-[var(--muted)]">This stage&apos;s wizard has no questions yet.</p>
-          ) : (
-            <Timeline items={wizardTimeline(flow, outcomesByKey)} />
-          )}
-        </SettingsCard>
-
-        <SettingsCard title="Rules the editor enforces">
-          <div className="flex flex-col gap-3">
-            <Callout tone="error" title="Every outcome maps to a stage">
-              Saving an outcome with no stage is refused, with the pipeline named. This is the single rule that keeps the board and the reports agreeing.
-              {unmapped > 0 ? ` ${unmapped} of ${activeRows.length} active outcomes have no stage yet.` : ""}
-            </Callout>
-            <Callout tone="warning" title="“Callback” requires a time">
-              The outcome cannot be saved without one, and the time is validated against the customer&rsquo;s calling window before the disposition is written.
-            </Callout>
-            <Callout tone="info" title="Deleting is archiving">
-              An outcome used by a past call is archived, never removed &mdash; the history would otherwise read as blank.
-            </Callout>
+      <SettingsCard
+        title={flow ? `The wizard behind “${flow.stage_name}”` : "The outcome wizard"}
+        action={config.flows.length > 0 ? <Button type="button" variant="outline" onClick={() => setFlowEditorOpen(true)}>Edit questions</Button> : undefined}
+      >
+        {config.flows.length > 1 && (
+          <div className="mb-4">
+            <label htmlFor="wizard-flow" className="sr-only">Wizard</label>
+            <select id="wizard-flow" className={cn(toolbarControl, "w-full sm:w-80")} value={flowId} onChange={(event) => setFlowId(event.target.value)}>
+              {config.flows.map((item) => <option key={item.id} value={item.id}>{item.stage_name} · {item.name}</option>)}
+            </select>
           </div>
-        </SettingsCard>
-      </SettingsGrid>
+        )}
+        {!flow ? (
+          <p className="m-0 text-[14px] text-[var(--muted)]">No wizard is configured yet. One is created for each pipeline stage.</p>
+        ) : flow.nodes.length === 0 ? (
+          <p className="m-0 text-[14px] text-[var(--muted)]">This stage&apos;s wizard has no questions yet.</p>
+        ) : (
+          <Timeline items={wizardTimeline(flow, outcomesByKey)} />
+        )}
+      </SettingsCard>
 
-      <SettingsDialog open={Boolean(editingRow)} onOpenChange={(open) => { if (!open) setEditing(null); }} title={editingRow ? `Edit “${editingRow.label}”` : "Edit outcome"} description="What this outcome counts as, whether it ends the call, what happens next, and the stage it moves the lead to.">
+      <SettingsSaveBar visible={dirtyIds.length > 0} note={`${dirtyIds.length} unsaved ${dirtyIds.length === 1 ? "outcome" : "outcomes"}`}>
+        <Button type="button" variant="outline" onClick={() => { setEdits({}); setSaveError(""); }} disabled={saving}>Discard</Button>
+        <Button type="button" onClick={() => void saveAll()} disabled={saving}>{saving ? "Saving…" : "Save changes"}</Button>
+      </SettingsSaveBar>
+
+      <SettingsDialog open={Boolean(editingRow)} onOpenChange={(open) => { if (!open) setEditing(null); }} title={editingRow ? `Edit “${editingRow.label}”` : "Edit outcome"} description="Held until you save the section.">
         {editingRow && editingSaved && (
           <OutcomeEditor key={editingRow.id} row={editingRow} saved={editingSaved} stages={config.stages} pipelines={pipelineList} endsCallAvailable={endsCallAvailable} nextActionAvailable={nextActionAvailable} onApply={(edit) => applyEdit(editingRow.id, edit)} onClose={() => setEditing(null)} />
         )}
       </SettingsDialog>
 
-      <SettingsDialog open={adding} onOpenChange={setAdding} title="Add an outcome" description="The wizard can offer it as soon as it is added. It saves now, not with Save changes.">
+      <SettingsDialog open={adding} onOpenChange={setAdding} title="Add an outcome" description="Saved as soon as you add it.">
         {adding && <AddOutcome stages={config.stages} pipelines={pipelineList} endsCallAvailable={endsCallAvailable} nextActionAvailable={nextActionAvailable} onCreated={load} onClose={() => setAdding(false)} />}
       </SettingsDialog>
 
-      <SettingsDialog open={flowEditorOpen} onOpenChange={setFlowEditorOpen} wide title="Edit the wizard" description="Questions, answers, and the outcome each answer ends with. Each edit saves as you make it.">
+      <SettingsDialog open={flowEditorOpen} onOpenChange={setFlowEditorOpen} wide title="Edit the wizard" description="Each edit saves as you make it.">
         {flowEditorOpen && <FlowEditor config={config} flowId={flowId} onFlowChange={setFlowId} reload={load} />}
       </SettingsDialog>
     </SettingsStack>

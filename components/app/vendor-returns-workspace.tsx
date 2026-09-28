@@ -1,14 +1,16 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
-import { ChevronDown, Download, Search, SlidersHorizontal } from "lucide-react";
+import { ChevronDown, Download } from "lucide-react";
 import { notify } from "@/lib/notify";
 import { dayMonthYear, viewerTimeZone } from "@/lib/format/dates";
 import { Button } from "@/components/ui/button";
+import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { PageHeader } from "@/components/ui/page-header";
-import { ErrorState, LoadingRows } from "@/components/ui/page-states";
-import { StatTile } from "@/components/ui/stat";
+import { PageLoading } from "@/components/ui/page-loading";
+import { EmptyState, ErrorState, NoMatches, SectionLoading } from "@/components/ui/page-states";
+import { StatStrip, StatTile } from "@/components/ui/stat";
+import { TableCard } from "@/components/ui/table-card";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import type { VendorReturnClaim } from "@/lib/vendorScorecard/types";
 import {
@@ -50,7 +52,6 @@ const unreconciled = (claim: VendorReturnClaim) => claim.status === "draft" || c
 // Calendar days in the tenant's zone, counted by the service (LA-2.19-2): 1 is "Closes tomorrow".
 const daysText = (days: number | null) => closesLabel(days);
 
-const control = "box-border inline-flex h-10 items-center gap-2 rounded-lg border border-[var(--border-strong)] bg-card px-3.5 text-sm font-semibold leading-[1.43] tracking-[-0.01em] text-foreground";
 const field = "h-9 w-full rounded-lg border border-[var(--border-strong)] bg-card px-2.5 text-sm text-foreground";
 const panel = "absolute top-[calc(100%+6px)] z-20 grid gap-2 rounded-xl border border-border bg-card p-3.5 shadow-[0_12px_32px_rgba(0,0,0,.16)]";
 const panelLabel = "text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] text-muted-foreground";
@@ -81,7 +82,7 @@ type CostState = CampaignCostPerPolicy | null | "loading";
  */
 function CostPerPolicyLine({ cost, creditCents, landed }: { cost: CostState | undefined; creditCents: number; landed?: boolean }) {
   if (cost === undefined || cost === null) return null;
-  if (cost === "loading") return <p className="text-sm leading-normal text-muted-foreground">Checking this campaign&rsquo;s cost per issued policy&hellip;</p>;
+  if (cost === "loading") return <div role="status"><span className="sr-only">Loading</span><span aria-hidden="true" className="block h-3 w-80 max-w-full m-skel rounded-full" /></div>;
   if (!cost.issued_policies || cost.cost_per_issued_cents == null) {
     return <p className="text-sm leading-normal text-[var(--body)]">No policy from this campaign has issued yet, so {landed ? "the credit lowered" : "a credit lowers"} its spend but there is no cost per issued policy to move.</p>;
   }
@@ -126,7 +127,7 @@ function ClaimOutcome({ claim, onSaved }: { claim: VendorReturnClaim; onSaved: (
     </div>
     {status === "rejected" && <label className="grid gap-1.5"><span className={label}>Why they rejected it</span><input className={field} value={reason} onChange={(event) => setReason(event.target.value)} /></label>}
     {error && <p role="alert" className="text-sm text-[var(--error-ink)]">{error}</p>}
-    <div><Button type="button" className="h-9 px-4" onClick={() => void save()} disabled={busy}>{busy ? "Saving…" : "Record outcome"}</Button></div>
+    <div><Button type="button" onClick={() => void save()} disabled={busy}>{busy ? "Saving…" : "Record outcome"}</Button></div>
   </div>;
 }
 
@@ -152,8 +153,8 @@ function ClaimPreview({ entry, cost, busy, fallback, onCreate, onCancel }: {
   return <div className="grid gap-3 border-t border-border bg-[var(--canvas)] px-4 py-4">
     <p className="max-w-[80ch] text-sm leading-normal text-[var(--body)]">
       {entry.unit_cost_cents == null
-        ? "This campaign has no cost per record yet, so a claim would have no amount. Enter its spend and records purchased on Vendors & campaigns first."
-        : <>Each row is priced at <strong className="tabular-nums text-foreground">{perRecord(entry.unit_cost_cents)}</strong>, the campaign&rsquo;s spend over the records it bought. Turn off a reason to leave its rows out of this claim; they stay claimable until their window closes.</>}
+        ? "This campaign has no cost per record yet. Enter its spend and records purchased on Vendors & campaigns first."
+        : <>Each row is priced at <strong className="tabular-nums text-foreground">{perRecord(entry.unit_cost_cents)}</strong>.</>}
     </p>
     <div className="overflow-x-auto rounded-lg border border-border bg-card">
       <table className="w-full min-w-[620px] border-collapse text-left">
@@ -182,22 +183,21 @@ function ClaimPreview({ entry, cost, busy, fallback, onCreate, onCancel }: {
         </tr></tfoot>
       </table>
     </div>
-    {fallback && <p className="text-sm leading-normal text-muted-foreground">Choosing reasons needs a database update that has not been applied yet, so this draft takes every row shown.</p>}
+    {fallback && <p className="text-sm leading-normal text-[var(--warning-ink)]">Until a pending database update is applied, this draft takes every row shown.</p>}
     {amount != null && amount > 0 && <CostPerPolicyLine cost={cost} creditCents={amount} />}
     <div className="flex flex-wrap items-center gap-3">
-      <Button type="button" className="h-9 px-4" disabled={busy || rows === 0 || amount == null} onClick={() => onCreate(off.size === 0 ? null : chosen.map((row) => row.reason))}>
+      <Button type="button" disabled={busy || rows === 0 || amount == null} onClick={() => onCreate(off.size === 0 ? null : chosen.map((row) => row.reason))}>
         {busy ? "Drafting…" : `Create draft claim · ${count(rows)} row${rows === 1 ? "" : "s"}${amount == null ? "" : ` · ${dollars(amount)}`}`}
       </Button>
-      <Button type="button" variant="outline" className="h-9 border-[var(--border-strong)] px-4" disabled={busy} onClick={onCancel}>Cancel</Button>
+      <Button type="button" variant="outline" disabled={busy} onClick={onCancel}>Cancel</Button>
       {rows === 0 && <span className="text-sm text-muted-foreground">Turn on at least one reason.</span>}
     </div>
-    <p className="text-xs leading-normal text-muted-foreground">Nothing is sent to the vendor from here. The draft is exported as evidence and marked submitted by you.</p>
   </div>;
 }
 
 /** The rows behind one campaign's line, soonest window first. */
 function CandidateRows({ state }: { state: { rows: ReturnCandidateRow[]; limit: number } | "loading" | { error: string } | undefined }) {
-  if (state === undefined || state === "loading") return <p className="border-t border-border px-4 py-3 text-sm text-muted-foreground">Loading the rows&hellip;</p>;
+  if (state === undefined || state === "loading") return <div className="border-t border-border"><SectionLoading rows={3} columns={4} /></div>;
   if ("error" in state) return <p role="alert" className="border-t border-border px-4 py-3 text-sm text-[var(--error-ink)]">{state.error}</p>;
   if (!state.rows.length) return <p className="border-t border-border px-4 py-3 text-sm text-muted-foreground">No row is waiting on this campaign any more.</p>;
   return <div className="overflow-x-auto border-t border-border">
@@ -218,7 +218,7 @@ function CandidateRows({ state }: { state: { rows: ReturnCandidateRow[]; limit: 
         </tr>;
       })}</tbody>
     </table>
-    {state.rows.length >= state.limit && <p className="border-t border-border px-4 py-2.5 text-xs text-muted-foreground">Showing the first {count(state.limit)} rows, soonest window first. The claim&rsquo;s evidence CSV carries every row it includes.</p>}
+    {state.rows.length >= state.limit && <p className="border-t border-border px-4 py-2.5 text-xs text-muted-foreground">Showing the first {count(state.limit)} rows, soonest window first.</p>}
   </div>;
 }
 
@@ -233,8 +233,12 @@ function CandidateRows({ state }: { state: { rows: ReturnCandidateRow[]; limit: 
  * what already lapsed and the window counting down. Nothing is sent to a vendor from here: a claim
  * is exported as evidence, marked submitted, then reconciled by hand. `?vendor=<id>` opens the page
  * filtered to one vendor (Vendors links its claimable line here).
+ *
+ * Laid out to the UI consistency standard (docs/design/UI-CONSISTENCY.md): header with New claim, one
+ * strip of figures, the claims table with its search and filters in its own toolbar, then the
+ * claimable rows and the undialable share as further tables.
  */
-export function VendorReturnsWorkspace({ eyebrow, initialVendorId }: { eyebrow?: string; initialVendorId?: string }) {
+export function VendorReturnsWorkspace({ initialVendorId }: { initialVendorId?: string }) {
   const [report, setReport] = useState<VendorReturnsPageData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -249,9 +253,8 @@ export function VendorReturnsWorkspace({ eyebrow, initialVendorId }: { eyebrow?:
   const [candidateRows, setCandidateRows] = useState<Record<string, { rows: ReturnCandidateRow[]; limit: number } | "loading" | { error: string }>>({});
   const [costs, setCosts] = useState<Record<string, CostState>>({});
   const [newOpen, setNewOpen] = useState(false);
-  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const newRef = useDismiss(newOpen, useCallback(() => setNewOpen(false), []));
-  const filtersRef = useDismiss(filtersOpen, useCallback(() => setFiltersOpen(false), []));
 
   const load = useCallback(async () => {
     setError(null);
@@ -264,6 +267,11 @@ export function VendorReturnsWorkspace({ eyebrow, initialVendorId }: { eyebrow?:
     finally { setLoading(false); }
   }, []);
   useEffect(() => { void (async () => { await Promise.resolve(); await load(); })(); }, [load]);
+
+  async function refresh() {
+    setRefreshing(true);
+    try { await load(); } finally { setRefreshing(false); }
+  }
 
   /** The vendor filter lives in the URL too, so the view can be linked and survives a reload. */
   function chooseVendor(next: string) {
@@ -380,18 +388,20 @@ export function VendorReturnsWorkspace({ eyebrow, initialVendorId }: { eyebrow?:
   const claimedCents = sum(claims, (claim) => claim.amount_claimed_cents);
   const creditedCents = sum(claims, (claim) => claim.amount_credited_cents);
   const outstandingCents = sum(claims.filter((claim) => claim.status !== "rejected"), (claim) => claim.amount_claimed_cents - claim.amount_credited_cents);
-  const filterCount = statusFilter ? 1 : 0;
+
+  if (loading && !report) return <PageLoading />;
+
+  const clearFilters = () => { setSearch(""); setStatusFilter(""); chooseVendor(""); };
 
   return <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
     <PageHeader
-      eyebrow={eyebrow}
       title="Vendor returns"
       description="Evidence-backed return claims, and what the vendor actually credited."
       actions={<div className="relative" ref={newRef}>
-        <Button className="h-11 px-4" aria-expanded={newOpen} disabled={!report || Boolean(busy)} onClick={() => setNewOpen((open) => !open)}>New claim<ChevronDown className="size-4" aria-hidden="true" /></Button>
+        <Button aria-expanded={newOpen} disabled={!report || Boolean(busy)} onClick={() => setNewOpen((open) => !open)}>New claim<ChevronDown aria-hidden="true" /></Button>
         {newOpen && <div className={`${panel} right-0 w-[340px]`} role="menu" aria-label="Draft a claim for">
           <span className={panelLabel}>Review a claim for</span>
-          {draftable.length === 0 ? <p className="text-sm leading-normal text-muted-foreground">Nothing is claimable right now{vendorId ? " for this vendor" : ""}. A row becomes claimable when a scrub removes or flags it, or a call is dispositioned wrong number or disconnected, and stays so until its return window closes.</p>
+          {draftable.length === 0 ? <p className="text-sm leading-normal text-muted-foreground">Nothing is claimable right now{vendorId ? " for this vendor" : ""}.</p>
             : draftable.map((entry) => <button key={entry.campaign_id} type="button" role="menuitem" className="flex items-baseline justify-between gap-3 rounded-lg px-2.5 py-2 text-left hover:bg-[var(--surface-alt)]" onClick={() => openPreview(entry.campaign_id)}>
               <span className="min-w-0"><span className="block truncate text-sm font-semibold text-foreground">{entry.vendor_name} &middot; {entry.campaign_name}</span><span className="block text-xs text-muted-foreground">{count(entry.claimable_rows)} claimable row{entry.claimable_rows === 1 ? "" : "s"}{entry.unit_cost_cents == null ? "" : ` · ${dollars(entry.claimable_cents)}`}</span></span>
               <span className={`shrink-0 text-xs font-semibold tabular-nums ${entry.days_left !== null && entry.days_left <= 3 ? "text-[var(--error-ink)]" : "text-muted-foreground"}`}>{entry.days_left === 0 ? "closes today" : entry.days_left === 1 ? "closes tomorrow" : `${entry.days_left}d left`}</span>
@@ -400,130 +410,108 @@ export function VendorReturnsWorkspace({ eyebrow, initialVendorId }: { eyebrow?:
       </div>}
     />
 
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-      <StatTile label="Open claims" value={loading ? "…" : openClaims} footnote={`${draftCount} draft`} />
-      <StatTile label="Claimed" value={loading ? "…" : dollars(claimedCents)} footnote={`${claims.length} claim${claims.length === 1 ? "" : "s"}`} />
-      <StatTile label="Credited" value={loading ? "…" : dollars(creditedCents)} valueTone={creditedCents > 0 ? "good" : undefined} footnote={claimedCents > 0 ? `${((creditedCents / claimedCents) * 100).toFixed(1)}% of claimed` : undefined} reserveFootnote />
-      <StatTile label="Outstanding" value={loading ? "…" : dollars(outstandingCents)} valueTone={outstandingCents > 0 ? "warning" : undefined} footnote="unreconciled" />
-    </div>
+    <StatStrip label="Vendor return totals">
+      <StatTile label="Open claims" value={openClaims} footnote={`${draftCount} draft`} />
+      <StatTile label="Claimed" value={dollars(claimedCents)} footnote={`${claims.length} claim${claims.length === 1 ? "" : "s"}`} />
+      <StatTile label="Credited" value={dollars(creditedCents)} valueTone={creditedCents > 0 ? "good" : undefined} footnote={claimedCents > 0 ? `${((creditedCents / claimedCents) * 100).toFixed(1)}% of claimed` : undefined} reserveFootnote />
+      <StatTile label="Outstanding" value={dollars(outstandingCents)} valueTone={outstandingCents > 0 ? "warning" : undefined} footnote="unreconciled" />
+    </StatStrip>
 
-    <div className="relative z-30 flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card p-3">
-      <select aria-label="Vendor" className={`${control} pr-8`} value={vendorId} onChange={(event) => chooseVendor(event.target.value)}>
-        <option value="">All vendors</option>
-        {vendors.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
-      </select>
-      <span className="box-border flex h-10 w-full items-center gap-2 rounded-lg border border-[var(--border-strong)] bg-card px-3 text-muted-foreground sm:w-[248px]">
-        <Search className="size-4 shrink-0" aria-hidden="true" />
-        <input type="search" aria-label="Search claims" placeholder="Search claims" value={search} onChange={(event) => { setSearch(event.target.value); setPage(0); }} className="min-w-0 flex-grow border-0 bg-transparent text-sm tracking-[-0.02em] text-foreground outline-none" />
-      </span>
-      <div className="relative" ref={filtersRef}>
-        <button type="button" className={control} aria-expanded={filtersOpen} onClick={() => setFiltersOpen((open) => !open)}>
-          <SlidersHorizontal className="size-4" aria-hidden="true" />Filters
-          {filterCount > 0 && <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--surface-alt)] px-1.5 text-xs font-semibold tabular-nums text-foreground">{filterCount}</span>}
-        </button>
-        {filtersOpen && <div className={`${panel} left-0 w-[220px]`} role="group" aria-label="Filter claims">
-          <label className={panelLabel} htmlFor="returns-status">Status</label>
-          <select id="returns-status" className={field} value={statusFilter} onChange={(event) => { setStatusFilter(event.target.value as typeof statusFilter); setPage(0); }}>
+    <TableCard
+      toolbar={
+        <DataToolbar actions={<RefreshButton onClick={() => void refresh()} refreshing={refreshing} />}>
+          <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setPage(0); }} placeholder="Search claims" />
+          <select aria-label="Vendor" className={toolbarControl} value={vendorId} onChange={(event) => chooseVendor(event.target.value)}>
+            <option value="">All vendors</option>
+            {vendors.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+          </select>
+          <select aria-label="Status" className={toolbarControl} value={statusFilter} onChange={(event) => { setStatusFilter(event.target.value as typeof statusFilter); setPage(0); }}>
             <option value="">Any status</option>
             <option value="open">Unreconciled (draft or awaiting)</option>
             <option value="resolved">Resolved</option>
           </select>
-        </div>}
-      </div>
-    </div>
-
-    <section className="overflow-hidden rounded-xl border border-border bg-card">
-      {error && !report ? <ErrorState title="Vendor returns did not load" detail={error} action={<Button variant="outline" onClick={() => void load()}>Try again</Button>} />
-        : loading ? <LoadingRows rows={3} columns={6} />
-        : <>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[860px] table-fixed border-collapse text-left">
-              <thead><tr>
-                <th scope="col" className={th}>Vendor</th>
-                <th scope="col" className={`${th} w-[130px]`}>Period</th>
-                <th scope="col" className={`${th} w-[120px] text-right`}>Claimed</th>
-                <th scope="col" className={`${th} w-[120px] text-right`}>Credited</th>
-                <th scope="col" className={`${th} w-[120px] text-right`}>Variance</th>
-                <th scope="col" className={`${th} w-[150px]`}>Status</th>
-                <th scope="col" className={`${th} w-[150px]`}><span className="sr-only">Evidence</span></th>
-              </tr></thead>
-              <tbody>
-                {shown.map((claim) => {
-                  const open = openClaim === claim.id;
-                  const status = STATUS[claim.status];
-                  return <Fragment key={claim.id}>
-                    <tr className={`m-row cursor-pointer ${open ? "bg-[var(--soft-orange-surface)]" : ""}`} onClick={() => toggleClaim(claim)}>
-                      <td className={td}>
-                        <button type="button" aria-expanded={open} className="text-left hover:underline" onClick={(event) => { event.stopPropagation(); toggleClaim(claim); }}>
-                          <span className="block font-semibold text-foreground">{claim.vendor_name ?? "Unnamed vendor"}</span>
-                          <span className="block text-xs text-muted-foreground">{claim.campaign_name ?? "Campaign"} &middot; {claim.lead_count} row{claim.lead_count === 1 ? "" : "s"} &middot; {claim.reason.replaceAll("_", " ")}</span>
-                        </button>
-                      </td>
-                      <td className={`${td} tabular-nums`}>{period(claim.period_from, claim.period_to)}</td>
-                      <td className={`${td} text-right tabular-nums`}>{dollars(claim.amount_claimed_cents)}</td>
-                      <td className={`${td} text-right tabular-nums`}>{claim.status === "draft" || claim.status === "submitted" ? "—" : dollars(claim.amount_credited_cents)}</td>
-                      <td className={`${td} text-right font-semibold tabular-nums text-foreground`}>{dollars(claim.amount_claimed_cents - claim.amount_credited_cents)}</td>
-                      <td className={td}><StatusChip tone={status.tone}>{status.label}</StatusChip></td>
-                      <td className={td} onClick={(event) => event.stopPropagation()}><Button asChild variant="outline" className="h-8 border-[var(--border-strong)] px-3"><a href={`/api/app/vendor-returns/claims/${claim.id}?format=csv`}><Download className="size-4" aria-hidden="true" />Evidence CSV</a></Button></td>
-                    </tr>
-                    {open && <tr><td colSpan={7} className="border-t border-border bg-[var(--canvas)] px-4 py-4">
-                      <div className="grid gap-3">
-                        {claim.status === "draft" && <div className="flex flex-wrap items-center justify-between gap-3">
-                          <p className="max-w-[60ch] text-sm leading-normal text-[var(--body)]">Download the evidence, send it to the vendor the way your contract says, then mark it submitted. Nothing leaves Insurvas on its own.</p>
-                          <Button type="button" className="h-9 px-4" disabled={busy === `submit:${claim.id}`} onClick={() => void submitClaim(claim.id)}>{busy === `submit:${claim.id}` ? "Saving…" : "Mark submitted"}</Button>
-                        </div>}
-                        {claim.status === "submitted" && <ClaimOutcome claim={claim} onSaved={() => { setOpenClaim(null); setCosts((current) => { const next = { ...current }; delete next[claim.campaign_id]; return next; }); void load(); }} />}
-                        {(claim.status === "accepted" || claim.status === "partial" || claim.status === "rejected") && <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-4">
-                          <div><dt className={label}>Resolved</dt><dd className="mt-1 text-sm font-semibold tabular-nums text-foreground">{claim.resolved_at ? dayMonthYear(claim.resolved_at, viewerTimeZone()) : "—"}</dd></div>
-                          <div><dt className={label}>Replacement leads</dt><dd className="mt-1 text-sm font-semibold tabular-nums text-foreground">{claim.replacement_leads_count}</dd></div>
-                          <div className="sm:col-span-2"><dt className={label}>{claim.status === "rejected" ? "Why it was rejected" : "Vendor reference"}</dt><dd className="mt-1 text-sm text-foreground">{(claim.status === "rejected" ? claim.rejection_reason : claim.notes) || "—"}</dd></div>
-                        </dl>}
-                        {unreconciled(claim) && claim.amount_claimed_cents > 0 && <CostPerPolicyLine cost={costs[claim.campaign_id]} creditCents={claim.amount_claimed_cents} />}
-                        {(claim.status === "accepted" || claim.status === "partial") && <CostPerPolicyLine cost={costs[claim.campaign_id]} creditCents={claim.amount_credited_cents} landed />}
-                      </div>
-                    </td></tr>}
-                  </Fragment>;
-                })}
-              </tbody>
-              {rows.length > 0 && <tfoot><tr>
-                <td className="border-t border-border bg-[var(--surface-alt)] px-3 py-2.5 text-sm font-semibold text-foreground">{rows.length} claim{rows.length === 1 ? "" : "s"}</td>
-                <td className="border-t border-border bg-[var(--surface-alt)]" />
-                <td className="border-t border-border bg-[var(--surface-alt)] px-3 py-2.5 text-right text-sm font-semibold tabular-nums text-foreground">{dollars(sum(rows, (claim) => claim.amount_claimed_cents))}</td>
-                <td className="border-t border-border bg-[var(--surface-alt)] px-3 py-2.5 text-right text-sm font-semibold tabular-nums text-foreground">{dollars(sum(rows, (claim) => claim.amount_credited_cents))}</td>
-                <td className="border-t border-border bg-[var(--surface-alt)] px-3 py-2.5 text-right text-sm font-semibold tabular-nums text-foreground">{dollars(sum(rows, (claim) => claim.amount_claimed_cents - claim.amount_credited_cents))}</td>
-                <td className="border-t border-border bg-[var(--surface-alt)]" colSpan={2} />
-              </tr></tfoot>}
-            </table>
-          </div>
-          {rows.length === 0 && <p className="border-t border-border px-4 py-8 text-center text-sm text-muted-foreground">{claims.length ? "No claim matches these filters." : draftable.length ? "No claim yet. Review one from the claimable rows below — New claim opens the preview." : "No claim yet, and nothing is claimable. A row becomes claimable when a scrub removes or flags it (DNC, litigator, invalid number, a repeat in the same file) or a call is dispositioned wrong number or disconnected, and stays so until its return window closes."}</p>}
-          <div className="flex flex-wrap items-center justify-between gap-4 border-t border-border bg-[var(--canvas)] px-4 py-3 text-xs leading-normal text-muted-foreground">
-            <span>{rows.length ? `Showing ${currentPage * PAGE_SIZE + 1}–${currentPage * PAGE_SIZE + shown.length} of ${rows.length} claim${rows.length === 1 ? "" : "s"} · oldest unreconciled first` : "Nothing to show"}</span>
-            <span className="flex gap-2">
-              <Button type="button" variant="outline" className="h-8 border-[var(--border-strong)] px-4" disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}>Previous</Button>
-              <Button type="button" variant="outline" className="h-8 border-[var(--border-strong)] px-4" disabled={currentPage >= pageCount - 1} onClick={() => setPage(currentPage + 1)}>Next</Button>
-            </span>
-          </div>
-        </>}
-    </section>
-
-    <div className="rounded-xl border border-border border-l-[3px] border-l-[var(--info)] bg-[var(--info-surface)] px-4 py-3.5">
-      <p className="text-sm font-semibold leading-normal tracking-[-0.02em] text-[var(--info-ink)]">Claimed and credited sit side by side with the variance between them</p>
-      <p className="mt-1.5 text-sm leading-normal tracking-[-0.02em] text-[var(--body)]">The reader never has to subtract. Reconciling a credit never overwrites what was originally claimed — a claim without its evidence is a request, not a position. Accepted and part credits reduce the campaign&rsquo;s spend on True CPA; a rejection does not.</p>
-    </div>
-
-    {report && campaigns.length > 0 && <section className="overflow-hidden rounded-xl border border-border bg-card" aria-labelledby="returns-claimable-heading">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-[var(--surface-alt)] px-4 py-3">
-        <div className="min-w-0">
-          <h2 id="returns-claimable-heading" className="text-sm font-semibold leading-normal tracking-[-0.02em] text-foreground">Claimable rows, by campaign</h2>
-          <span className="block text-xs text-muted-foreground">Scrub removals and hits, and wrong-number or disconnected calls, not yet in a claim</span>
-        </div>
-        <span className="text-sm tabular-nums text-[var(--body)]">
-          <strong className="font-semibold text-foreground">{dollars(claimableCents)}</strong> claimable now
-          {expiredCents > 0 && <> &middot; <span className="text-[var(--warning-ink)]">{dollars(expiredCents)} lapsed unclaimed</span></>}
+        </DataToolbar>
+      }
+      footer={<>
+        <span>{rows.length ? `Showing ${currentPage * PAGE_SIZE + 1}–${currentPage * PAGE_SIZE + shown.length} of ${rows.length} claim${rows.length === 1 ? "" : "s"} · oldest unreconciled first` : "Nothing to show"}</span>
+        <span className="flex gap-2">
+          <Button type="button" variant="outline" size="sm" disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}>Previous</Button>
+          <Button type="button" variant="outline" size="sm" disabled={currentPage >= pageCount - 1} onClick={() => setPage(currentPage + 1)}>Next</Button>
         </span>
-      </div>
-      {report.summaryFallback && <p className="border-b border-border px-4 py-2.5 text-xs leading-normal text-muted-foreground">Rows the scrub removed at import, and each list&rsquo;s first import date, join this list once a database update is applied. Until then, claim them from the lead list.</p>}
-      {campaigns.map((entry, index) => {
+      </>}
+    >
+      {error && !report ? <ErrorState title="Vendor returns did not load" detail={error} action={<Button variant="outline" onClick={() => void refresh()}>Try again</Button>} />
+        : rows.length === 0 ? (claims.length
+          ? <NoMatches noun="claims" onClear={clearFilters} />
+          : <EmptyState title="No claims yet" hint={draftable.length ? "Review one from the claimable rows below, or with New claim." : "A row becomes claimable when a scrub flags it or a call is dispositioned wrong number or disconnected."} />)
+        : <table className="w-full min-w-[860px] table-fixed border-collapse text-left">
+          <thead><tr>
+            <th scope="col" className={th}>Vendor</th>
+            <th scope="col" className={`${th} w-[130px]`}>Period</th>
+            <th scope="col" className={`${th} w-[120px] text-right`}>Claimed</th>
+            <th scope="col" className={`${th} w-[120px] text-right`}>Credited</th>
+            <th scope="col" className={`${th} w-[120px] text-right`}>Variance</th>
+            <th scope="col" className={`${th} w-[150px]`}>Status</th>
+            <th scope="col" className={`${th} w-[170px] text-right`}><span className="sr-only">Evidence</span></th>
+          </tr></thead>
+          <tbody>
+            {shown.map((claim) => {
+              const open = openClaim === claim.id;
+              const status = STATUS[claim.status];
+              return <Fragment key={claim.id}>
+                <tr className={`m-row cursor-pointer ${open ? "bg-[var(--soft-orange-surface)]" : ""}`} onClick={() => toggleClaim(claim)}>
+                  <td className={td}>
+                    <button type="button" aria-expanded={open} className="text-left hover:underline" onClick={(event) => { event.stopPropagation(); toggleClaim(claim); }}>
+                      <span className="block font-semibold text-foreground">{claim.vendor_name ?? "Unnamed vendor"}</span>
+                      <span className="block text-xs text-muted-foreground">{claim.campaign_name ?? "Campaign"} &middot; {claim.lead_count} row{claim.lead_count === 1 ? "" : "s"} &middot; {claim.reason.replaceAll("_", " ")}</span>
+                    </button>
+                  </td>
+                  <td className={`${td} tabular-nums`}>{period(claim.period_from, claim.period_to)}</td>
+                  <td className={`${td} text-right tabular-nums`}>{dollars(claim.amount_claimed_cents)}</td>
+                  <td className={`${td} text-right tabular-nums`}>{claim.status === "draft" || claim.status === "submitted" ? "—" : dollars(claim.amount_credited_cents)}</td>
+                  <td className={`${td} text-right font-semibold tabular-nums text-foreground`}>{dollars(claim.amount_claimed_cents - claim.amount_credited_cents)}</td>
+                  <td className={td}><StatusChip tone={status.tone}>{status.label}</StatusChip></td>
+                  <td className={`${td} text-right`} onClick={(event) => event.stopPropagation()}><Button asChild variant="outline" size="sm"><a href={`/api/app/vendor-returns/claims/${claim.id}?format=csv`}><Download aria-hidden="true" />Evidence CSV</a></Button></td>
+                </tr>
+                {open && <tr><td colSpan={7} className="border-t border-border bg-[var(--canvas)] px-4 py-4">
+                  <div className="grid gap-3">
+                    {claim.status === "draft" && <div className="flex flex-wrap items-center justify-between gap-3">
+                      <p className="text-sm leading-normal text-[var(--body)]">Send the evidence CSV to the vendor, then mark the claim submitted.</p>
+                      <Button type="button" disabled={busy === `submit:${claim.id}`} onClick={() => void submitClaim(claim.id)}>{busy === `submit:${claim.id}` ? "Saving…" : "Mark submitted"}</Button>
+                    </div>}
+                    {claim.status === "submitted" && <ClaimOutcome claim={claim} onSaved={() => { setOpenClaim(null); setCosts((current) => { const next = { ...current }; delete next[claim.campaign_id]; return next; }); void load(); }} />}
+                    {(claim.status === "accepted" || claim.status === "partial" || claim.status === "rejected") && <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-4">
+                      <div><dt className={label}>Resolved</dt><dd className="mt-1 text-sm font-semibold tabular-nums text-foreground">{claim.resolved_at ? dayMonthYear(claim.resolved_at, viewerTimeZone()) : "—"}</dd></div>
+                      <div><dt className={label}>Replacement leads</dt><dd className="mt-1 text-sm font-semibold tabular-nums text-foreground">{claim.replacement_leads_count}</dd></div>
+                      <div className="sm:col-span-2"><dt className={label}>{claim.status === "rejected" ? "Why it was rejected" : "Vendor reference"}</dt><dd className="mt-1 text-sm text-foreground">{(claim.status === "rejected" ? claim.rejection_reason : claim.notes) || "—"}</dd></div>
+                    </dl>}
+                    {unreconciled(claim) && claim.amount_claimed_cents > 0 && <CostPerPolicyLine cost={costs[claim.campaign_id]} creditCents={claim.amount_claimed_cents} />}
+                    {(claim.status === "accepted" || claim.status === "partial") && <CostPerPolicyLine cost={costs[claim.campaign_id]} creditCents={claim.amount_credited_cents} landed />}
+                  </div>
+                </td></tr>}
+              </Fragment>;
+            })}
+          </tbody>
+          <tfoot><tr>
+            <td className="border-t border-border bg-[var(--surface-alt)] px-3 py-2.5 text-sm font-semibold text-foreground">{rows.length} claim{rows.length === 1 ? "" : "s"}</td>
+            <td className="border-t border-border bg-[var(--surface-alt)]" />
+            <td className="border-t border-border bg-[var(--surface-alt)] px-3 py-2.5 text-right text-sm font-semibold tabular-nums text-foreground">{dollars(sum(rows, (claim) => claim.amount_claimed_cents))}</td>
+            <td className="border-t border-border bg-[var(--surface-alt)] px-3 py-2.5 text-right text-sm font-semibold tabular-nums text-foreground">{dollars(sum(rows, (claim) => claim.amount_credited_cents))}</td>
+            <td className="border-t border-border bg-[var(--surface-alt)] px-3 py-2.5 text-right text-sm font-semibold tabular-nums text-foreground">{dollars(sum(rows, (claim) => claim.amount_claimed_cents - claim.amount_credited_cents))}</td>
+            <td className="border-t border-border bg-[var(--surface-alt)]" colSpan={2} />
+          </tr></tfoot>
+        </table>}
+    </TableCard>
+
+    {report && campaigns.length > 0 && <TableCard
+      title="Claimable rows, by campaign"
+      action={<span className="text-sm tabular-nums text-[var(--body)]">
+        <strong className="font-semibold text-foreground">{dollars(claimableCents)}</strong> claimable now
+        {expiredCents > 0 && <> &middot; <span className="text-[var(--warning-ink)]">{dollars(expiredCents)} lapsed unclaimed</span></>}
+      </span>}
+    >
+      {report.summaryFallback && <p className="border-t border-border px-4 py-2.5 text-xs leading-normal text-muted-foreground">Rows removed at import are not listed until a pending database update is applied; claim them from the lead list.</p>}
+      {campaigns.map((entry) => {
         const open = openCampaign === entry.campaign_id;
         const previewing = previewCampaign === entry.campaign_id;
         const reasons = reasonTotals(entry.reasons);
@@ -533,7 +521,7 @@ export function VendorReturnsWorkspace({ eyebrow, initialVendorId }: { eyebrow?:
           `${entry.return_window_days}-day window`,
           entry.unit_cost_cents == null ? "no cost per record entered" : `${perRecord(entry.unit_cost_cents)} a record`,
         ].filter(Boolean).join(" · ");
-        return <div key={entry.campaign_id} id={`returns-campaign-${entry.campaign_id}`} className={index ? "border-t border-border" : ""}>
+        return <div key={entry.campaign_id} id={`returns-campaign-${entry.campaign_id}`} className="border-t border-border">
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
             <button type="button" aria-expanded={open} className="min-w-0 flex-grow text-left" onClick={() => toggleRows(entry.campaign_id)}>
               <span className="block text-sm font-semibold text-foreground">{entry.vendor_name} &middot; {entry.campaign_name}</span>
@@ -545,42 +533,35 @@ export function VendorReturnsWorkspace({ eyebrow, initialVendorId }: { eyebrow?:
             <span className={`text-sm font-semibold tabular-nums ${entry.days_left === null ? "text-muted-foreground" : entry.days_left <= 3 ? "text-[var(--error-ink)]" : entry.days_left <= 14 ? "text-[var(--warning-ink)]" : "text-[var(--success-ink)]"}`}>
               {daysText(entry.days_left)}
             </span>
-            {entry.claimable_rows > 0 && <Button type="button" variant="outline" className="h-8 border-[var(--border-strong)] px-3" aria-expanded={previewing} disabled={busy === `create:${entry.campaign_id}`} onClick={() => (previewing ? setPreviewCampaign(null) : openPreview(entry.campaign_id))}>{previewing ? "Close preview" : `Review claim (${count(entry.claimable_rows)})`}</Button>}
+            {entry.claimable_rows > 0 && <Button type="button" variant="outline" size="sm" aria-expanded={previewing} disabled={busy === `create:${entry.campaign_id}`} onClick={() => (previewing ? setPreviewCampaign(null) : openPreview(entry.campaign_id))}>{previewing ? "Close preview" : `Review claim (${count(entry.claimable_rows)})`}</Button>}
           </div>
           {previewing && <ClaimPreview key={`${entry.campaign_id}-${entry.claimable_rows}`} entry={entry} cost={costs[entry.campaign_id]} busy={busy === `create:${entry.campaign_id}`} fallback={report.summaryFallback} onCreate={(chosen) => void createClaim(entry.campaign_id, chosen)} onCancel={() => setPreviewCampaign(null)} />}
           {open && <CandidateRows state={candidateRows[entry.campaign_id]} />}
         </div>;
       })}
-    </section>}
+    </TableCard>}
 
     {report && (undialable === null
-      ? <p className="text-xs leading-normal text-muted-foreground">The undialable share per vendor appears here once a database update is applied.</p>
-      : undialable.length > 0 && <section className="overflow-hidden rounded-xl border border-border bg-card" aria-labelledby="returns-undialable-heading">
-        <div className="border-b border-border bg-[var(--surface-alt)] px-4 py-3">
-          <h2 id="returns-undialable-heading" className="text-sm font-semibold leading-normal tracking-[-0.02em] text-foreground">Undialable, by vendor</h2>
-          <span className="block text-xs text-muted-foreground">Share of every record bought that could never be dialed</span>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[760px] border-collapse text-left">
-            <thead><tr>
-              <th scope="col" className={th}>Vendor</th>
-              <th scope="col" className={`${th} text-right`}>Records bought</th>
-              <th scope="col" className={`${th} text-right`}>Removed at import</th>
-              <th scope="col" className={`${th} text-right`}>Found later</th>
-              <th scope="col" className={`${th} text-right`}>Undialable</th>
-              <th scope="col" className={`${th} text-right`}>Undialable spend</th>
-            </tr></thead>
-            <tbody>{undialable.map((row) => <tr key={row.vendor_id} className="m-row">
-              <td className={`${td} font-semibold text-foreground`}>{row.vendor_name}</td>
-              <td className={`${td} text-right tabular-nums`}>{count(row.records_purchased)}</td>
-              <td className={`${td} text-right tabular-nums`}>{count(row.removed_at_import)}</td>
-              <td className={`${td} text-right tabular-nums`}>{count(row.undialable_leads)}</td>
-              <td className={`${td} text-right tabular-nums`}><span className="font-semibold text-foreground">{row.undialable_percent == null ? "—" : `${row.undialable_percent.toFixed(1)}%`}</span><span className="block text-xs text-muted-foreground">{count(row.undialable_rows)} of {count(row.records_purchased)}</span></td>
-              <td className={`${td} text-right tabular-nums`}>{dollars(row.undialable_cents)}</td>
-            </tr>)}</tbody>
-          </table>
-        </div>
-        <p className="border-t border-border px-4 py-3 text-xs leading-normal text-muted-foreground">Rows the scrub removed at import (federal DNC, TCPA litigator, invalid number, a repeat in the same file) plus imported leads later found on the registry or dispositioned wrong number or disconnected, over every record bought. Hits on your own do-not-call list are your decision, not the vendor&rsquo;s, and are not counted. This is not the claim acceptance rate, which is on <Link className="font-semibold text-[var(--accent-ink)] hover:underline" href="/app/true-cpa">True CPA</Link>.</p>
-      </section>)}
+      ? <p className="text-xs leading-normal text-muted-foreground">The undialable share per vendor appears here once a pending database update is applied.</p>
+      : undialable.length > 0 && <TableCard title="Undialable, by vendor" description="Share of every record bought that could never be dialed.">
+        <table className="w-full min-w-[760px] border-collapse text-left">
+          <thead><tr>
+            <th scope="col" className={th}>Vendor</th>
+            <th scope="col" className={`${th} text-right`}>Records bought</th>
+            <th scope="col" className={`${th} text-right`}>Removed at import</th>
+            <th scope="col" className={`${th} text-right`}>Found later</th>
+            <th scope="col" className={`${th} text-right`}>Undialable</th>
+            <th scope="col" className={`${th} text-right`}>Undialable spend</th>
+          </tr></thead>
+          <tbody>{undialable.map((row) => <tr key={row.vendor_id} className="m-row">
+            <td className={`${td} font-semibold text-foreground`}>{row.vendor_name}</td>
+            <td className={`${td} text-right tabular-nums`}>{count(row.records_purchased)}</td>
+            <td className={`${td} text-right tabular-nums`}>{count(row.removed_at_import)}</td>
+            <td className={`${td} text-right tabular-nums`}>{count(row.undialable_leads)}</td>
+            <td className={`${td} text-right tabular-nums`}><span className="font-semibold text-foreground">{row.undialable_percent == null ? "—" : `${row.undialable_percent.toFixed(1)}%`}</span><span className="block text-xs text-muted-foreground">{count(row.undialable_rows)} of {count(row.records_purchased)}</span></td>
+            <td className={`${td} text-right tabular-nums`}>{dollars(row.undialable_cents)}</td>
+          </tr>)}</tbody>
+        </table>
+      </TableCard>)}
   </div>;
 }

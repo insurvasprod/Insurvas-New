@@ -16,13 +16,16 @@ import { cn } from "@/lib/utils";
  * caller has to change, and both values now render the same type.
  */
 export function PageHeader({
-  eyebrow,
   title,
   description,
   actions,
   size = "page",
   className,
 }: {
+  /**
+   * Accepted and ignored (2026-09-28 review): the eyebrow repeated the page's section, which the
+   * sidebar already shows, so a page read its own name twice or three times. One title per page.
+   */
   eyebrow?: string;
   title: string;
   description?: string;
@@ -33,11 +36,6 @@ export function PageHeader({
   return (
     <div className={cn("flex flex-wrap items-end justify-between gap-4", className)}>
       <div className="min-w-0">
-        {eyebrow && (
-          <p className="mb-1.5 text-xs leading-[1.33] font-semibold uppercase tracking-[0.02em] text-muted-foreground">
-            {eyebrow}
-          </p>
-        )}
         <h1 data-size={size} className="text-[32px] font-semibold leading-[1.13] tracking-[-0.025em]">
           {title}
         </h1>

@@ -4,6 +4,8 @@ import { useMemo, useState } from "react";
 
 import { DashboardUtcTime } from "@/components/admin/dashboard-utc-time";
 import { Callout, Field, KeyValues, Pill, btn, control, st } from "@/components/app/settings/primitives";
+import { Button } from "@/components/ui/button";
+import { TableCard } from "@/components/ui/table-card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { formatUtcDateTime } from "@/lib/adminDashboard/figures";
 import { formatEffectiveDate, STATE_NAME, type CoverageRow, type ScopeProduct } from "@/lib/stateDisclosures/board";
@@ -66,23 +68,16 @@ export function StateDisclosuresReviewCard({
   if (!proposals.available || (proposals.pending.length === 0 && proposals.recent.length === 0)) return null;
 
   return (
-    <section className="flex min-w-0 flex-col overflow-hidden rounded-[12px] border border-[var(--border)] bg-[var(--surface)]">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] px-4 py-3">
-        <div className="min-w-0">
-          <h2 className="m-0 text-[16px] leading-[1.4] font-semibold tracking-[-0.02em] text-[var(--ink)]">
-            Awaiting review <span className="text-[var(--muted)] tabular-nums">· {proposals.pending.length}</span>
-          </h2>
-          <p className="m-0 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">
-            Proposed wording reaches the dialer only when an admin other than its author approves it, or its author,
-            with a written attestation, when no other admin can.
-          </p>
-        </div>
-        {proposals.recent.length > 0 && (
-          <button type="button" className={btn("secondary")} onClick={() => setShowRecent((value) => !value)} aria-expanded={showRecent}>
+    <TableCard
+      title={`Awaiting review · ${proposals.pending.length}`}
+      action={
+        proposals.recent.length > 0 && (
+          <Button type="button" variant="outline" onClick={() => setShowRecent((value) => !value)} aria-expanded={showRecent}>
             {showRecent ? "Hide recent decisions" : `Recent decisions (${proposals.recent.length})`}
-          </button>
-        )}
-      </div>
+          </Button>
+        )
+      }
+    >
       <div className="min-w-0 overflow-x-auto">
         <table className={cn(st.table, "min-w-[760px]")}>
           <thead>
@@ -170,7 +165,7 @@ export function StateDisclosuresReviewCard({
           onDone={onChanged}
         />
       )}
-    </section>
+    </TableCard>
   );
 }
 
@@ -394,7 +389,7 @@ function ReviewDialog({
             {pending ? "Cancel" : "Close"}
           </button>
           {pending && mine && (
-            <button type="button" className={btn("secondary", "h-10")} onClick={() => decide("cancel")} disabled={Boolean(busy)}>
+            <button type="button" className={btn("secondary")} onClick={() => decide("cancel")} disabled={Boolean(busy)}>
               {busy === "cancel" ? "Withdrawing…" : "Withdraw proposal"}
             </button>
           )}
@@ -413,7 +408,7 @@ function ReviewDialog({
             <>
               <button
                 type="button"
-                className={btn("secondary", "h-10")}
+                className={btn("secondary")}
                 onClick={() => decide("reject")}
                 disabled={Boolean(busy) || note.trim().length === 0}
                 title={note.trim().length === 0 ? "Add a review note saying why" : undefined}

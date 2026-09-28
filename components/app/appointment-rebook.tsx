@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { SectionLoading } from "@/components/ui/page-states";
 import { clockLabel, openSlots, wallClock, type PickerContext } from "@/lib/appointments/calendarMath";
 
 /**
@@ -86,7 +87,7 @@ function RebookDialog({ appointmentId, agentUserId, customerName, onClose, onReb
     onRebooked();
   }
 
-  const field = "mt-1.5 block h-10 w-full rounded-lg border border-[var(--border-strong)] bg-card px-3 text-sm font-normal normal-case tracking-normal text-foreground";
+  const field = "mt-1.5 block h-9 w-full rounded-md border border-input bg-background px-3 text-sm font-normal normal-case tracking-normal text-foreground";
   const labelClass = "block text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] text-muted-foreground";
 
   return (
@@ -94,12 +95,12 @@ function RebookDialog({ appointmentId, agentUserId, customerName, onClose, onReb
       <DialogContent className="sm:max-w-[480px]">
         <DialogHeader>
           <DialogTitle>Rebook {customerName}</DialogTitle>
-          <DialogDescription>A new appointment. The no-show stays on the record and still counts. Only slots the calendar offers are listed; times are in {zone}.</DialogDescription>
+          <DialogDescription>A new appointment; the no-show stays on the record. Times are in {zone}.</DialogDescription>
         </DialogHeader>
         {loadError ? (
           <p role="alert" className="rounded-lg border border-[color-mix(in_srgb,var(--error)_24%,transparent)] bg-[var(--error-surface)] px-3 py-2 text-sm text-[var(--error-ink)]">{loadError}</p>
         ) : !context ? (
-          <p className="text-sm text-muted-foreground" role="status">Loading availability…</p>
+          <SectionLoading rows={2} columns={2} label="Loading availability" />
         ) : (
           <div className="grid gap-4">
             <label htmlFor="rebook-agent" className={labelClass}>

@@ -11,6 +11,10 @@ import { cn } from "@/lib/utils";
  *
  * `toolbar` sits below the heading and above the rules: search, filters, bulk actions. `footer` is
  * where pagination goes. Both are optional; a table with neither is just the card.
+ *
+ * No `overflow-hidden` on the card (2026-09-28): it clipped the toolbar's filter popovers and
+ * menus. The first and last blocks round their own corners instead, and the table scrolls sideways
+ * inside its own wrapper.
  */
 export function TableCard({
   title,
@@ -33,14 +37,16 @@ export function TableCard({
 
   return (
     <section
+      data-slot="table-card"
       className={cn(
-        "overflow-hidden rounded-lg border border-border bg-card",
+        "rounded-lg border border-border bg-card",
+        "[&>*:first-child]:rounded-t-[7px] [&>*:last-child]:rounded-b-[7px]",
         "shadow-[0_1px_2px_rgba(16,20,26,.05)] dark:shadow-[0_1px_2px_rgba(0,0,0,.55)]",
         className
       )}
     >
       {hasHeading && (
-        <div className="flex flex-wrap items-start justify-between gap-3 px-4 py-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-4">
           <div className="min-w-0">
             {title && <h2 className="text-lg font-semibold leading-[1.28] tracking-[-0.015em]">{title}</h2>}
             {description && <p className="mt-0.5 text-sm text-muted-foreground">{description}</p>}

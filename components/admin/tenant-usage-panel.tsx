@@ -97,10 +97,7 @@ function UsageRow({
 
 function Header() {
   return (
-    <div>
-      <h2 className="m-0 text-[18px] leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]">Usage against plan limits</h2>
-      <p className="m-0 mt-1 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">A bar without its denominator is decoration.</p>
-    </div>
+    <h2 className="m-0 mb-3 text-[18px] leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]">Usage against plan limits</h2>
   );
 }
 
@@ -113,8 +110,8 @@ export async function TenantUsagePanel({ usage }: { usage: TenantUsageSummary })
     return (
       <section className={CARD} aria-label="Usage against plan limits">
         <Header />
-        <p className="m-0 mt-3 border-t border-[var(--border)] pt-3 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">
-          No subscription, so nothing is metered. Allowances start once a plan is assigned.
+        <p className="m-0 border-t border-[var(--border)] pt-3 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">
+          No subscription, so nothing is metered.
         </p>
       </section>
     );
@@ -193,9 +190,9 @@ export async function TenantUsagePanel({ usage }: { usage: TenantUsageSummary })
       })}
 
       <p className="m-0 border-t border-[var(--border)] pt-3 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">
-        {usage.meters.length === 0 ? "This plan doesn’t meter anything. " : ""}
-        Metered rows cover the current billing period{usage.periodStart ? `, since ${recordDate(usage.periodStart)}` : ""}, and reset on the
-        tenant’s billing date, not the calendar month.
+        {usage.meters.length === 0
+          ? "This plan doesn’t meter anything."
+          : `Current billing period${usage.periodStart ? `, since ${recordDate(usage.periodStart)}` : ""}.`}
       </p>
     </section>
   );

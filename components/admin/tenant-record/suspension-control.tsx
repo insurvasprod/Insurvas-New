@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { btn, Callout, control, Field } from "@/components/app/settings/primitives";
+import { Button } from "@/components/ui/button";
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 import {
@@ -21,9 +22,8 @@ import {
   TENANT_SUSPENDED_MESSAGE,
 } from "@/lib/tenants/suspension";
 
-/** The board's 44px header button. Danger is error-ink on white with the error edge. */
-const HEADER_BUTTON =
-  "inline-flex h-11 items-center justify-center gap-2 rounded-[8px] border bg-[var(--surface)] px-4 text-[14px] leading-[1.43] font-semibold tracking-[-0.01em] whitespace-nowrap cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]";
+/** The header button at the default size. Danger is error-ink on white with the error edge. */
+const DANGER = "border-[var(--error)] text-[var(--error-ink)] hover:bg-[var(--error-surface)] hover:text-[var(--error-ink)]";
 
 /**
  * Suspend / Unsuspend in the tenant record's header (decision 4). Rendered only for super_admin —
@@ -80,18 +80,9 @@ export function TenantSuspensionControl({
 
   return (
     <>
-      <button
-        type="button"
-        onClick={openDialog}
-        className={cn(
-          HEADER_BUTTON,
-          suspended
-            ? "border-[var(--border-strong)] text-[var(--ink)] hover:bg-[var(--surface-alt)]"
-            : "border-[var(--error)] text-[var(--error-ink)] hover:bg-[var(--error-surface)]",
-        )}
-      >
+      <Button type="button" variant="outline" onClick={openDialog} className={suspended ? undefined : DANGER}>
         {suspended ? "Unsuspend" : "Suspend"}
-      </button>
+      </Button>
 
       <Dialog open={open} onOpenChange={(next) => !saving && setOpen(next)}>
         <DialogContent className="sm:max-w-[560px]">

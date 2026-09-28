@@ -15,10 +15,10 @@ import { cn } from "@/lib/utils";
 type State = { schemaPending: boolean; answers: SignatureAnswers; updatedAt: string | null };
 
 const TONE: Record<string, string> = {
-  success: "border-l-[var(--success)] bg-[var(--success-surface)] text-[var(--success-ink)]",
-  warning: "border-l-[var(--warning)] bg-[var(--warning-surface)] text-[var(--warning-ink)]",
-  error: "border-l-[var(--error)] bg-[var(--error-surface)] text-[var(--error-ink)]",
-  neutral: "border-l-[var(--border-strong)] bg-[var(--surface-alt)] text-[var(--ink)]",
+  success: "border-[var(--success)]/30 bg-[var(--success-surface)] text-[var(--success-ink)]",
+  warning: "border-[var(--warning)]/30 bg-[var(--warning-surface)] text-[var(--warning-ink)]",
+  error: "border-[var(--error)]/30 bg-[var(--error-surface)] text-[var(--error-ink)]",
+  neutral: "border-border bg-[var(--surface-alt)] text-[var(--ink)]",
 };
 
 export function LeadSignatureReadiness({ leadId, readOnly }: { leadId: string; readOnly: boolean }) {
@@ -57,7 +57,7 @@ export function LeadSignatureReadiness({ leadId, readOnly }: { leadId: string; r
         <h2 id="signature-readiness-title" className="text-lg font-semibold leading-[1.28] tracking-[-0.015em]">Can they finish on this call?</h2>
         <span className="text-sm font-semibold tabular-nums text-muted-foreground">{guidance.yes} of {SIGNATURE_KEYS.length}</span>
       </div>
-      {state?.schemaPending && <p className="mt-2 text-sm text-[var(--warning-ink)]">This needs a database update that has not been applied yet, so the answers cannot be saved.</p>}
+      {state?.schemaPending && <p role="status" className="mt-2 text-sm text-[var(--warning-ink)]">Answers cannot be saved until a pending database update is applied.</p>}
       <div className="mt-3 grid gap-2 sm:grid-cols-2">
         {SIGNATURE_KEYS.map((key) => {
           const value = answers[key];
@@ -82,10 +82,9 @@ export function LeadSignatureReadiness({ leadId, readOnly }: { leadId: string; r
           );
         })}
       </div>
-      <div role="status" className={cn("mt-3 rounded-lg border border-border border-l-[3px] px-4 py-3 text-sm", TONE[guidance.tone])}>
-        <p className="font-semibold">{guidance.headline}</p>
-        <p className="mt-1 text-[var(--body)]">{guidance.detail}</p>
-      </div>
+      <p role="status" className={cn("mt-3 rounded-lg border px-4 py-2.5 text-sm", TONE[guidance.tone])}>
+        <span className="font-semibold">{guidance.headline}</span> <span className="text-[var(--body)]">{guidance.detail}</span>
+      </p>
     </section>
   );
 }

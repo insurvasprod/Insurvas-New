@@ -6,7 +6,6 @@ import { outboundLimitSnapshot } from "@/lib/metering/outbound";
 import { PageHeader } from "@/components/ui/page-header";
 import { getWorkspaceSnapshot } from "@/lib/settings/workspaceSnapshot";
 import { AgentSettingsTabs } from "@/components/app/agent-settings-tabs";
-import { sectionForPath } from "@/lib/menu/definition";
 import { SETTINGS_SECTIONS } from "@/lib/settings/sections";
 
 export default async function SettingsPage() {
@@ -37,11 +36,7 @@ export default async function SettingsPage() {
   const team = { ...teamSnapshot, outboundLimits, viewerId: guard.context.userId };
   return (
     <div className="m-stagger portal-settings-page flex flex-col gap-6">
-      <PageHeader
-        eyebrow={sectionForPath("/app/settings") ?? "Settings"}
-        title="Settings"
-        description="Agency products, credentials, calling rules and team access. Owner only, effective-dated, audited."
-      />
+      <PageHeader title="Settings" />
 
       <AgentSettingsTabs team={team} workspace={workspace} tabs={SETTINGS_SECTIONS} />
     </div>

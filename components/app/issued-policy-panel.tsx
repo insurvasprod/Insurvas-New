@@ -15,6 +15,7 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Field, Pill, btn } from "@/components/app/settings/primitives";
 import type { IssuedPoliciesResponse, IssuedPolicy } from "@/lib/issuedPolicies/types";
 import { notify } from "@/lib/notify";
+import { SectionLoading } from "@/components/ui/page-states";
 
 const input40 =
   "mt-1.5 box-border h-10 w-full rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] px-3 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--ink)] outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]";
@@ -89,7 +90,7 @@ export function IssuedPolicyPanel({ dealId, defaultCarrier, readOnly, onChanged 
     <div className="mt-4 border-t border-[var(--border)] pt-4" aria-labelledby={`deal-policies-${dealId}`}>
       <div id={`deal-policies-${dealId}`} className={label12}>Issued policy</div>
       {loadError ? <p role="alert" className="mt-1 mb-0 text-[14px] leading-[1.5] text-[var(--error-ink)]">{loadError}</p>
-        : !data ? <p className={`mt-1 mb-0 ${small}`}>Loading…</p>
+        : !data ? <SectionLoading rows={1} columns={3} label="Loading issued policy" />
         : policies.length === 0 ? <p className="mt-1 mb-0 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--body)]">No policy recorded on this deal.</p>
         : <ul className="mt-1.5 flex list-none flex-col gap-2 p-0">
           {policies.map((policy) => <li key={policy.id} className="min-w-0">

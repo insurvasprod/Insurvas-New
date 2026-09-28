@@ -16,6 +16,8 @@ export type PartnerQualityPeriod = {
 export type PartnerQualityRow = PartnerQualityPeriod & {
   partner_id: string;
   partner_name: string;
+  /** publisher | marketing | affiliate — joined from partners after the report RPC. */
+  partner_type?: string | null;
   disqualified: number;
   duplicates: number;
   previous: PartnerQualityPeriod;
@@ -88,6 +90,88 @@ export type PartnerQualityLeadResult = {
   partner_id: string;
   total: number;
   rows: PartnerQualityLead[];
+};
+
+/** One lead row from partner_quality_evidence (the RPC every figure on these pages is counted from). */
+export type PartnerQualityEvidence = {
+  lead_id: string;
+  partner_id: string;
+  lead_date: string;
+  full_name: string;
+  phone: string | null;
+  screening_outcome: string | null;
+  screening_result_outcome: string | null;
+  claimed: boolean;
+  worked: boolean;
+  submitted: boolean;
+  duplicate: boolean;
+  disposition: string | null;
+};
+
+export type PartnerQualityPeriodMetrics = {
+  sent: number;
+  claimed: number;
+  worked: number;
+  submitted: number;
+  disqualified: number;
+  duplicates: number;
+  screening: PartnerQualityScreening;
+  conversion_rate: number | null;
+  disqualification_rate: number | null;
+  duplicate_rate: number | null;
+  screening_pass_rate: number | null;
+};
+
+export type PartnerQualityDailyRow = { date: string; sent: number; claimed: number; worked: number; submitted: number; flagged: number; duplicates: number };
+
+export type PartnerQualityDetailLead = {
+  lead_id: string;
+  date: string;
+  received_at: string | null;
+  full_name: string;
+  phone: string | null;
+  state: string | null;
+  product: string | null;
+  screening: string;
+  duplicate: boolean;
+  claimed: boolean;
+  worked: boolean;
+  submitted: boolean;
+  disposition: string | null;
+  queue_status: string | null;
+  agent_id: string | null;
+  agent_name: string | null;
+  /** The partner admin/user who submitted it, when a partner account created the lead. */
+  submitted_by: string | null;
+};
+
+export type PartnerQualityAgentRow = {
+  user_id: string;
+  name: string;
+  leads: number;
+  worked: number;
+  submitted: number;
+  conversion_rate: number | null;
+};
+
+export type PartnerQualityDetail = {
+  partner: { id: string; name: string; partner_type: string | null; status: string | null };
+  from: string;
+  to: string;
+  previous_from: string;
+  previous_to: string;
+  current: PartnerQualityPeriodMetrics;
+  previous: PartnerQualityPeriodMetrics;
+  leads: PartnerQualityDetailLead[];
+  /** True when the partner sent more leads than the page lists (figures still count every lead). */
+  leads_truncated: boolean;
+  dispositions: PartnerQualityDisposition[];
+  disposition_labels: Record<string, string>;
+  daily: PartnerQualityDailyRow[];
+  team: PartnerQualityMember[];
+  /** Sent in the period by no partner account (API posts, agency imports). */
+  unattributed: PartnerQualityPeriodMetrics;
+  agents: PartnerQualityAgentRow[];
 };
 
 export const PARTNER_QUALITY_METRICS: PartnerQualityMetric[] = ["sent", "claimed", "worked", "submitted", "disqualified", "tcpa", "dnc", "invalid", "duplicate", "disposition"];

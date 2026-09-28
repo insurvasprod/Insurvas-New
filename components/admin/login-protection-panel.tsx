@@ -4,7 +4,10 @@ import { useEffect, useState } from "react";
 import { Unlock } from "lucide-react";
 import { notify } from "@/lib/notify";
 
-import { Pill, SettingsTableCard, btn, st } from "@/components/app/settings/primitives";
+import { Pill, btn, st } from "@/components/app/settings/primitives";
+import { DataToolbar, RefreshButton } from "@/components/ui/data-toolbar";
+import { SectionLoading } from "@/components/ui/page-states";
+import { TableCard } from "@/components/ui/table-card";
 import { formatUtcDateTime } from "@/lib/adminDashboard/figures";
 
 type Lockout = {
@@ -25,6 +28,7 @@ export function LoginProtectionPanel() {
   const [lockouts, setLockouts] = useState<Lockout[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -45,7 +49,7 @@ export function LoginProtectionPanel() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [reloadKey]);
 
   async function unlock(scopeKey: string) {
     setBusy(scopeKey);
@@ -67,14 +71,26 @@ export function LoginProtectionPanel() {
   const locked = lockouts.filter((entry) => entry.locked_until).length;
 
   return (
-    <SettingsTableCard
+    <TableCard
       title="Login lockouts"
-      actions={!loading && <Pill tone={locked > 0 ? "error" : "neutral"}>{locked} locked</Pill>}
+      toolbar={
+        <DataToolbar
+          actions={
+            <RefreshButton
+              onClick={() => {
+                setLoading(true);
+                setReloadKey((key) => key + 1);
+              }}
+              refreshing={loading}
+            />
+          }
+        >
+          {!loading && <Pill tone={locked > 0 ? "error" : "neutral"}>{locked} locked</Pill>}
+        </DataToolbar>
+      }
     >
       {loading ? (
-        <p role="status" className="m-0 px-4 py-3 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">
-          Loading current lockouts…
-        </p>
+        <SectionLoading rows={3} columns={5} label="Loading current lockouts" />
       ) : lockouts.length === 0 ? (
         <p className="m-0 px-4 py-3 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">No recorded login lockouts.</p>
       ) : (
@@ -120,9 +136,6 @@ export function LoginProtectionPanel() {
           </tbody>
         </table>
       )}
-      <div className="border-t border-[var(--border)] bg-[var(--canvas)] px-4 py-3 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--body)]">
-        Failed-login limits are persistent across restarts. Clear a lockout only after confirming the account owner.
-      </div>
-    </SettingsTableCard>
+    </TableCard>
   );
 }

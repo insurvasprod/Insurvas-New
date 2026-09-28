@@ -5,16 +5,14 @@ import Link from "next/link";
 import { Check, Loader2 } from "lucide-react";
 
 import { Callout, KeyValues } from "@/components/app/settings/primitives";
+import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
+import { PageLoading } from "@/components/ui/page-loading";
 import type { DispositionOption } from "@/lib/dispositions/types";
-import { sectionForPath } from "@/lib/menu/definition";
 import { cn } from "@/lib/utils";
 import { answerLabel, useDispositionWalk, when, type DispositionWalk, type Step, type WalkView } from "@/components/app/use-disposition-walk";
 
-const BTN = "inline-flex items-center justify-center gap-2 rounded-[8px] border text-[14px] leading-[1.43] font-semibold tracking-[-0.01em] whitespace-nowrap cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)] disabled:cursor-not-allowed disabled:opacity-50";
 const b = {
-  primary44: cn(BTN, "h-11 border-transparent bg-[var(--primary)] px-4 text-[var(--on-primary)] hover:bg-[var(--accent-hover)]"),
-  secondary44: cn(BTN, "h-11 border-[var(--border-strong)] bg-[var(--surface)] px-4 text-[var(--ink)] hover:bg-[var(--surface-alt)]"),
   edit: "cursor-pointer border-0 bg-transparent p-1 text-[12px] leading-[1.5] font-semibold tracking-[-0.01em] text-[var(--ink)] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)] disabled:cursor-not-allowed disabled:opacity-50",
 };
 const control = "mt-1.5 box-border h-11 w-full rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] px-3 text-[16px] leading-[1.5] tracking-[-0.02em] text-[var(--ink)] outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)] disabled:cursor-not-allowed disabled:opacity-60";
@@ -72,10 +70,10 @@ export function OptionCard({ name, checked, disabled, onSelect, title, sub, mult
 
 function Panel({ title, sub, children }: { title: string; sub?: ReactNode; children: ReactNode }) {
   return (
-    <section className="min-w-0 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] p-6">
-      <h2 className="m-0 text-[24px] leading-[1.21] font-semibold tracking-[-0.02em] text-[var(--ink)]">{title}</h2>
-      {sub && <p className="mt-2 mb-5 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">{sub}</p>}
-      <div className={sub ? "" : "mt-5"}>{children}</div>
+    <section className="min-w-0 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] p-5">
+      <h2 className="m-0 text-[18px] leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]">{title}</h2>
+      {sub && <p className="mt-1 mb-4 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">{sub}</p>}
+      <div className={sub ? "" : "mt-4"}>{children}</div>
     </section>
   );
 }
@@ -233,22 +231,20 @@ export function DispositionWizard({ workItemId, readOnly }: { workItemId: string
 
   const header = (
     <PageHeader
-      eyebrow={sectionForPath("/app/inbound") ?? undefined}
       title="Record the call outcome"
-      description="One structured outcome per call. Each answer decides the next question."
-      actions={<Link href={`/app/inbound/${workItemId}/verification`} className={b.secondary44}>Back to verification</Link>}
+      actions={<Button asChild variant="outline"><Link href={`/app/inbound/${workItemId}/verification`}>Back to verification</Link></Button>}
     />
   );
 
-  if (loading && !wizard) return <div className="m-stagger flex w-full min-w-0 flex-col gap-6">{header}<p role="status" className="m-0 inline-flex items-center gap-2 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]"><Loader2 aria-hidden className="size-4 animate-spin" />Loading call outcome…</p></div>;
-  if (!wizard || !view) return <div className="m-stagger flex w-full min-w-0 flex-col gap-6">{header}<Callout tone="error" title="The call outcome wizard is unavailable">{error || "The call outcome wizard is unavailable."} <button type="button" onClick={() => void walk.load()} className={cn(b.secondary44, "ml-2 h-8")}>Try again</button></Callout></div>;
+  if (loading && !wizard) return <PageLoading strip={false} rows={6} />;
+  if (!wizard || !view) return <div className="flex w-full min-w-0 flex-col gap-6">{header}<Callout tone="error" title={<span className="flex flex-wrap items-center gap-3">{error || "The call outcome wizard is unavailable."}<Button type="button" variant="outline" onClick={() => void walk.load()}>Try again</Button></span>} /></div>;
 
   const { node, multi, selected, completed, chosen, isCallback, orderedSteps, firstSequence, nodesById, walking, steps } = view;
 
   const preview = chosen && !completed && !walking ? (
-    <div className="rounded-[12px] border border-[var(--border)] border-l-[3px] border-l-[var(--primary)] bg-[var(--brand-50)] px-4 py-3.5">
+    <div className="rounded-[12px] border border-[var(--border)] border-l-[3px] border-l-[var(--primary)] bg-[var(--brand-50)] px-4 py-3">
       <div className="text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--accent-ink)]">What this outcome will do</div>
-      <p className="mt-1.5 mb-0 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--body)]"><OutcomeEffects walk={walk} view={view} /></p>
+      <p className="mt-1 mb-0 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--body)]"><OutcomeEffects walk={walk} view={view} /></p>
     </div>
   ) : null;
 
@@ -256,28 +252,28 @@ export function DispositionWizard({ workItemId, readOnly }: { workItemId: string
   const footer = completed ? null : node ? (
     <div className="flex justify-between gap-3">
       {editingSequence !== null
-        ? <button type="button" onClick={walk.cancelEdit} disabled={saving} className={b.secondary44}>Cancel</button>
-        : <Link href={`/app/inbound/${workItemId}/verification`} className={b.secondary44}>Back</Link>}
-      <button type="button" onClick={() => void walk.saveAnswer(node, editingSequence ?? wizard.steps.length)} disabled={readOnly || saving || (multi ? selected.length === 0 : !walk.answer)} className={b.primary44}>
-        {saving && <Loader2 aria-hidden className="size-4 animate-spin" />}{editingSequence !== null ? "Save answer" : "Continue"}
-      </button>
+        ? <Button type="button" variant="outline" onClick={walk.cancelEdit} disabled={saving}>Cancel</Button>
+        : <Button asChild variant="outline"><Link href={`/app/inbound/${workItemId}/verification`}>Back</Link></Button>}
+      <Button type="button" onClick={() => void walk.saveAnswer(node, editingSequence ?? wizard.steps.length)} disabled={readOnly || saving || (multi ? selected.length === 0 : !walk.answer)}>
+        {saving && <Loader2 aria-hidden className="animate-spin" />}{editingSequence !== null ? "Save answer" : "Continue"}
+      </Button>
     </div>
   ) : phase === "outcome" ? (
     <div className="flex justify-between gap-3">
-      <Link href={`/app/inbound/${workItemId}/verification`} className={b.secondary44}>Back</Link>
-      <button type="button" onClick={walk.next} disabled={readOnly || !chosen} className={b.primary44}>Continue</button>
+      <Button asChild variant="outline"><Link href={`/app/inbound/${workItemId}/verification`}>Back</Link></Button>
+      <Button type="button" onClick={walk.next} disabled={readOnly || !chosen}>Continue</Button>
     </div>
   ) : phase === "details" ? (
     <div className="flex justify-between gap-3">
-      <button type="button" onClick={walk.back} className={b.secondary44}>Back</button>
-      <button type="button" onClick={walk.next} disabled={readOnly || !walk.callbackLocal} className={b.primary44}>Continue</button>
+      <Button type="button" variant="outline" onClick={walk.back}>Back</Button>
+      <Button type="button" onClick={walk.next} disabled={readOnly || !walk.callbackLocal}>Continue</Button>
     </div>
   ) : (
     <div className="flex justify-between gap-3">
-      <button type="button" onClick={walk.back} disabled={saving} className={b.secondary44}>Back</button>
-      <button type="button" onClick={walk.record} disabled={readOnly || saving || !chosen || (isCallback && !walk.callbackLocal)} className={b.primary44}>
-        {saving && <Loader2 aria-hidden className="size-4 animate-spin" />}Record outcome
-      </button>
+      <Button type="button" variant="outline" onClick={walk.back} disabled={saving}>Back</Button>
+      <Button type="button" onClick={walk.record} disabled={readOnly || saving || !chosen || (isCallback && !walk.callbackLocal)}>
+        {saving && <Loader2 aria-hidden className="animate-spin" />}Record outcome
+      </Button>
     </div>
   );
 
@@ -289,39 +285,38 @@ export function DispositionWizard({ workItemId, readOnly }: { workItemId: string
         <div className="flex w-full max-w-[720px] min-w-0 flex-col gap-4">
           <Stepper steps={steps} />
 
-          {readOnly && <Callout tone="info" title="Read-only access">Your account is read-only. You can review the call path, but cannot change its outcome.</Callout>}
-          {error && <Callout tone="error" title="The outcome was not recorded">{error}</Callout>}
+          {readOnly && <Callout tone="info" title="Your account is read-only: the outcome cannot be changed." />}
+          {error && <Callout tone="error" title={`The outcome was not recorded: ${error}`} />}
 
           {completed ? (
-            <Panel title="Outcome recorded" sub="This call is closed. The answers, note and outcome are kept for audit.">
-              <div className="flex items-start gap-3 rounded-[8px] border border-[var(--border)] bg-[var(--canvas)] px-4 py-3.5">
+            <Panel title="Outcome recorded" sub="This call is closed.">
+              <div className="flex items-start gap-3 rounded-[8px] border border-[var(--border)] bg-[var(--canvas)] px-4 py-3">
                 <Check aria-hidden className="mt-1 size-4 shrink-0 text-[var(--success-ink)]" />
                 <div className="min-w-0">
                   <p className="m-0 text-[16px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">{wizard.dispositions.find((item) => item.disposition_key === wizard.walk.final_disposition_key)?.label ?? chosen?.label ?? wizard.walk.final_disposition_key}</p>
                   <p className="mt-1 mb-0 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">{wizard.walk.composed_note || "No note was composed."}</p>
                 </div>
               </div>
-              <div className="mt-5 flex flex-wrap gap-3">
-                {firstSequence !== null && <button type="button" onClick={() => walk.beginEdit(firstSequence)} disabled={readOnly} className={b.secondary44}>Edit an earlier answer</button>}
-                <Link href={`/app/deal-flow?focus_lead_id=${encodeURIComponent(wizard.lead.id)}`} className={b.primary44}>Open Daily deal flow</Link>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {firstSequence !== null && <Button type="button" variant="outline" onClick={() => walk.beginEdit(firstSequence)} disabled={readOnly}>Edit an earlier answer</Button>}
+                <Button asChild><Link href={`/app/deal-flow?focus_lead_id=${encodeURIComponent(wizard.lead.id)}`}>Open Daily deal flow</Link></Button>
               </div>
             </Panel>
           ) : node ? (
-            <Panel title={node.prompt || node.label} sub={editingSequence !== null ? "Correct the answer and the walk continues from here." : "Your answer decides the next question."}>
+            <Panel title={node.prompt || node.label}>
               <QuestionAnswer walk={walk} view={view} readOnly={readOnly} />
             </Panel>
           ) : phase === "outcome" ? (
-            <Panel title="What was the outcome?" sub="Only the dispositions mapped to a stage in your pipelines are offered.">
+            <Panel title="What was the outcome?">
               <OutcomeChoices walk={walk} readOnly={readOnly} />
             </Panel>
           ) : phase === "details" ? (
-            <Panel title="Callback details" sub={`Booked in ${view.customerName}’s timezone (${wizard.customerTimezone}) and checked against their calling window.`}>
+            <Panel title="Callback details">
               <CallbackDetailsFields walk={walk} view={view} readOnly={readOnly} />
             </Panel>
           ) : (
-            <Panel title="Review" sub="Check the outcome before you record it.">
+            <Panel title="Review">
               <ReviewSummary walk={walk} view={view} workItemId={workItemId} />
-              <p className="mt-5 mb-0 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">The answers, note and outcome are kept for audit.</p>
             </Panel>
           )}
 

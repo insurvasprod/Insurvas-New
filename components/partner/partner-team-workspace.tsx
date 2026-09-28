@@ -1,17 +1,27 @@
 "use client";
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { ShieldCheck } from "lucide-react";
+import { ShieldCheck, UserPlus } from "lucide-react";
 import { notify } from "@/lib/notify";
 
 import { PartnerInviteResultPanel, type PartnerInviteResult } from "@/components/app/partner-invite-result";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
+import { Input } from "@/components/ui/input";
 import { PageHeader } from "@/components/ui/page-header";
-import { StatTile } from "@/components/ui/stat";
+import { PageLoading } from "@/components/ui/page-loading";
+import { EmptyState, NoMatches } from "@/components/ui/page-states";
+import { Pager, paginate } from "@/components/ui/pager";
+import { StatStrip, StatTile } from "@/components/ui/stat";
+import { StatusChip } from "@/components/ui/status-chip";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { TableCard } from "@/components/ui/table-card";
 import { activityLabel, dayMonth, dayMonthTime, expiresInLabel } from "@/lib/format/ago";
 import type { PartnerRole } from "@/lib/partnerAuth/roles";
+import { cn } from "@/lib/utils";
+
+const PAGE_SIZE = 25;
 
 type PartnerUser = {
   id: string;
@@ -30,9 +40,13 @@ type PartnerUser = {
 
 type FieldError = { field: "name" | "email"; message: string } | null;
 
-export function PartnerTeamWorkspace({ role, partnerStatus, partnerName }: { role: PartnerRole; partnerStatus: "draft" | "active" | "paused" | "offboarded"; partnerName?: string }) {
+export function PartnerTeamWorkspace({ role }: { role: PartnerRole; partnerStatus: "draft" | "active" | "paused" | "offboarded"; partnerName?: string }) {
   const [users, setUsers] = useState<PartnerUser[]>([]);
   const [loading, setLoading] = useState(role === "partner_admin");
+  // The first read draws the page skeleton; a reload after an invite keeps the page and its form.
+  const [loaded, setLoaded] = useState(false);
+  const [page, setPage] = useState(1);
+  const [inviteOpen, setInviteOpen] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -67,6 +81,7 @@ export function PartnerTeamWorkspace({ role, partnerStatus, partnerName }: { rol
       notify.fail("Could not load team members. Check your connection and try again.");
     } finally {
       setLoading(false);
+      setLoaded(true);
     }
   }, [role]);
 
@@ -106,6 +121,8 @@ export function PartnerTeamWorkspace({ role, partnerStatus, partnerName }: { rol
       setName("");
       setEmail("");
       setInvite({ url: body.invite.url, expiresAt: body.invite.expiresAt, delivered: Boolean(body.invite.delivered), recipient: body.user.email, mode: body.invite.mode });
+      // The result (and its copyable link) shows on the page, where a resend's result shows too.
+      setInviteOpen(false);
       notify.done(body.invite.delivered ? "Invitation sent" : "Invitation created; copy the secure link");
       await load();
     } catch {
@@ -159,17 +176,14 @@ export function PartnerTeamWorkspace({ role, partnerStatus, partnerName }: { rol
 
   if (role !== "partner_admin") {
     return (
-      <Card className="mx-auto w-full max-w-3xl">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2"><ShieldCheck className="size-5 text-[var(--color-accent-ink)]" aria-hidden="true" />Team access is managed by your admin</CardTitle>
-          <CardDescription>Partner users can submit and track leads, but cannot invite, activate, or deactivate people.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="rounded-lg border border-[var(--color-blue)]/25 bg-[var(--color-blue-faint)] p-4 text-sm text-muted-foreground">Ask your partner admin to update team access. Your lead and message permissions are unchanged.</div>
-        </CardContent>
-      </Card>
+      <div className="m-stagger space-y-6">
+        <PageHeader title="Team access" />
+        <p role="status" className="flex items-center gap-2 rounded-md border border-border bg-[var(--surface-alt)] px-4 py-2.5 text-sm text-[var(--body)]"><ShieldCheck className="size-4 shrink-0" aria-hidden="true" />Team access is managed by your partner admin.</p>
+      </div>
     );
   }
+
+  if (!loaded) return <PageLoading />;
 
   const active = users.filter((user) => user.status === "active" && user.accepted_at).length;
   const pendingUsers = users.filter((user) => user.status === "active" && !user.accepted_at);
@@ -184,6 +198,7 @@ export function PartnerTeamWorkspace({ role, partnerStatus, partnerName }: { rol
     .sort((a, b) => a - b)[0];
   const needle = search.trim().toLowerCase();
   const shown = users.filter((user) => !needle || `${user.name} ${user.email}`.toLowerCase().includes(needle));
+  const visible = paginate(shown, page, PAGE_SIZE);
 
   function lastActivity(user: PartnerUser) {
     if (user.status !== "active") return user.deactivated_at ? dayMonth(new Date(user.deactivated_at), new Date(now)) : "—";
@@ -195,95 +210,94 @@ export function PartnerTeamWorkspace({ role, partnerStatus, partnerName }: { rol
     return user.last_login_at ? activityLabel(Date.parse(user.last_login_at), now) : "Not signed in yet";
   }
 
+  const labelText = "text-sm font-semibold text-[var(--body)]";
+
   return (
-    <div className="m-stagger portal-partner-team-view">
-      <PageHeader eyebrow="Organization" title="Team access" description="Invite and manage your own teammates. Partner admins only." />
-      {partnerStatus === "paused" && <div className="portal-partner-team-callout is-warning" role="status"><strong>This partner is paused</strong><p>New lead submissions are stopped. Existing leads and team history remain available.</p></div>}
-      {error && <div className="portal-partner-team-callout is-error" role="alert"><strong>Team access could not be refreshed.</strong><p>{error}</p><Button variant="outline" size="sm" onClick={() => void load()}>Try again</Button></div>}
+    <div className="m-stagger space-y-6">
+      <PageHeader title="Team access" actions={<Button type="button" onClick={() => setInviteOpen(true)}><UserPlus aria-hidden="true" />Invite teammate</Button>} />
+      {error &&<p role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-[var(--error)] bg-[var(--error-surface)] px-4 py-2 text-sm text-[var(--error-ink)]">Team access could not be refreshed: {error}<Button type="button" variant="outline" onClick={() => void load()}>Try again</Button></p>}
 
-      <div className="portal-partner-team-tiles">
-        <StatTile label="Active members" value={loading ? "—" : active} valueTone={loading ? undefined : "good"} footnote={loading ? " " : seatLimit ? `${seatsUsed} of ${seatLimit} seats used` : "no seat limit"} />
-        <StatTile label="Pending invitations" value={loading ? "—" : pending} valueTone={loading || !pending ? undefined : "warning"} footnote={loading ? " " : soonestExpiry ? expiresInLabel(soonestExpiry, now) : "none waiting"} />
-        <StatTile label="Deactivated" value={loading ? "—" : deactivated} valueTone={loading || !deactivated ? undefined : "danger"} footnote="history retained" />
-      </div>
+      <StatStrip label="Team totals">
+        <StatTile label="Active members" value={active} valueTone="good" footnote={seatLimit ? `${seatsUsed} of ${seatLimit} seats used` : "no seat limit"} />
+        <StatTile label="Pending invitations" value={pending} valueTone={pending ? "warning" : undefined} footnote={soonestExpiry ? expiresInLabel(soonestExpiry, now) : "none waiting"} />
+        <StatTile label="Deactivated" value={deactivated} valueTone={deactivated ? "danger" : undefined} footnote="history retained" />
+      </StatStrip>
+      {invite && <PartnerInviteResultPanel result={invite} />}
 
-      <div className="portal-partner-team-body">
-        <section className="portal-partner-team-panel portal-partner-team-members" aria-labelledby="partner-team-members-heading">
-          <div className="portal-partner-team-members-bar">
-            <h2 id="partner-team-members-heading">Members &amp; invitations</h2>
-            {users.length > 3 && <input type="search" aria-label="Search members by name or email" placeholder="Search members…" value={search} onChange={(event) => setSearch(event.target.value)} />}
-          </div>
-          {loading ? <div className="portal-partner-team-empty" role="status" aria-live="polite"><p>Loading team members…</p></div>
-            : users.length === 0 ? <div className="portal-partner-team-empty"><strong>No team members yet</strong><p>Invite the first teammate to start working leads together.</p></div>
-            : shown.length === 0 ? <div className="portal-partner-team-empty"><strong>No members match this search</strong><p>Try a different name or email address.</p></div>
-            : <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Member</TableHead>
-                  <TableHead className="w-[124px]">Role</TableHead>
-                  <TableHead className="w-[124px]">Status</TableHead>
-                  <TableHead className="w-[150px]">Last activity</TableHead>
-                  <TableHead className="w-[118px] text-right"><span className="sr-only">Actions</span></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {shown.map((user) => {
-                  const pendingInvite = user.status === "active" && !user.accepted_at;
-                  const status = user.status !== "active" ? "deactivated" : pendingInvite ? "invited" : "active";
-                  return <TableRow key={user.id}>
-                    <TableCell className="portal-partner-team-member">
-                      <strong>{user.name}</strong>
-                      <span title={user.email}>{user.email}</span>
-                    </TableCell>
-                    <TableCell><span className={`portal-status-chip${user.role === "partner_admin" ? " is-accent" : ""}`}>{user.role === "partner_admin" ? "Partner admin" : "Partner user"}</span></TableCell>
-                    <TableCell><span className={`portal-status-chip ${status === "active" ? "is-success" : status === "invited" ? "is-warning" : "is-error"}`}><span aria-hidden="true" />{status === "active" ? "Active" : status === "invited" ? "Invited" : "Deactivated"}</span></TableCell>
-                    <TableCell className="tabular-nums">{lastActivity(user)}</TableCell>
-                    <TableCell className="text-right">
-                      <span className="portal-partner-team-actions">
-                        {pendingInvite && <Button type="button" variant="outline" size="sm" disabled={busy !== null} onClick={() => void resend(user)}>{busy === user.id ? "Sending…" : "Resend"}</Button>}
-                        <Button type="button" variant="outline" size="sm" disabled={busy !== null} onClick={() => void changeStatus(user)} aria-label={pendingInvite ? `Withdraw the invitation for ${user.name}` : undefined}>{user.status !== "active" ? "Reactivate" : pendingInvite ? "Withdraw" : "Deactivate"}</Button>
-                      </span>
-                    </TableCell>
-                  </TableRow>;
-                })}
-              </TableBody>
-            </Table>}
-        </section>
+      <TableCard
+        toolbar={
+          <DataToolbar actions={<RefreshButton onClick={() => void load()} refreshing={loading} />}>
+            <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Search members" label="Search members by name or email" />
+          </DataToolbar>
+        }
+        footer={users.length ? <Pager page={visible.current} total={shown.length} noun="members" pageSize={PAGE_SIZE} onPage={setPage} /> : undefined}
+      >
+        {users.length === 0 ? <EmptyState title="No team members yet" hint="Invite the first teammate to start working leads together." action={<Button type="button" variant="outline" onClick={() => setInviteOpen(true)}>Invite teammate</Button>} />
+          : shown.length === 0 ? <NoMatches noun="members" onClear={() => setSearch("")} />
+          : <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Member</TableHead>
+                <TableHead>Role</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Last activity</TableHead>
+                <TableHead className="text-right"><span className="sr-only">Actions</span></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {visible.rows.map((user) => {
+                const pendingInvite = user.status === "active" && !user.accepted_at;
+                const status = user.status !== "active" ? "deactivated" : pendingInvite ? "invited" : "active";
+                return <TableRow key={user.id}>
+                  <TableCell className="max-w-[320px]">
+                    <strong className="block truncate font-semibold text-foreground">{user.name}</strong>
+                    <span className="block truncate text-xs text-muted-foreground" title={user.email}>{user.email}</span>
+                  </TableCell>
+                  <TableCell><StatusChip tone={user.role === "partner_admin" ? "action" : "neutral"}>{user.role === "partner_admin" ? "Partner admin" : "Partner user"}</StatusChip></TableCell>
+                  <TableCell><StatusChip tone={status === "active" ? "good" : status === "invited" ? "warning" : "danger"}>{status === "active" ? "Active" : status === "invited" ? "Invited" : "Deactivated"}</StatusChip></TableCell>
+                  <TableCell className="tabular-nums">{lastActivity(user)}</TableCell>
+                  <TableCell className="text-right">
+                    <span className="inline-flex justify-end gap-2">
+                      {pendingInvite && <Button type="button" variant="outline" size="sm" disabled={busy !== null} onClick={() => void resend(user)}>{busy === user.id ? "Sending…" : "Resend"}</Button>}
+                      <Button type="button" variant="outline" size="sm" disabled={busy !== null} onClick={() => void changeStatus(user)} aria-label={pendingInvite ? `Withdraw the invitation for ${user.name}` : undefined}>{user.status !== "active" ? "Reactivate" : pendingInvite ? "Withdraw" : "Deactivate"}</Button>
+                    </span>
+                  </TableCell>
+                </TableRow>;
+              })}
+            </TableBody>
+          </Table>}
+      </TableCard>
 
-        <aside className="portal-partner-team-side">
-          <section className="portal-partner-team-panel is-padded" aria-labelledby="partner-team-invite-heading">
-            <h2 id="partner-team-invite-heading">Invite a teammate</h2>
-            <form className="portal-partner-team-form" onSubmit={(event) => void submit(event)} noValidate>
-              <label className="portal-partner-team-field">
-                <span>Full name</span>
-                <input id="partner-team-name" autoComplete="name" maxLength={120} value={name} aria-invalid={fieldError?.field === "name"} onChange={(event) => { setName(event.target.value); if (fieldError?.field === "name") setFieldError(null); }} />
-                {fieldError?.field === "name" && <small className="is-error" role="alert">{fieldError.message}</small>}
-              </label>
-              <label className="portal-partner-team-field">
-                <span>Work email</span>
-                <input id="partner-team-email" type="email" autoComplete="email" maxLength={254} value={email} aria-invalid={fieldError?.field === "email"} onChange={(event) => { setEmail(event.target.value); if (fieldError?.field === "email") setFieldError(null); }} />
-                {fieldError?.field === "email" && <small className="is-error" role="alert">{fieldError.message}</small>}
-              </label>
-              <label className="portal-partner-team-field">
-                <span>Role</span>
-                <select value="partner_user" onChange={() => undefined}>
-                  <option value="partner_user">Partner user</option>
-                  {/* A partner admin can grant only what they cannot use to widen their own access. */}
-                  <option value="partner_admin" disabled>Partner admin — added by your agent</option>
-                </select>
-                <small>Partner users can submit leads, track your organization&rsquo;s pipeline, and message the agent.</small>
-              </label>
-              <Button type="submit" className="w-full" disabled={busy !== null}>{busy === "invite" ? "Sending…" : "Send invitation"}</Button>
-            </form>
-            <p className="portal-partner-team-note">Invitations expire after 72 hours. If sending fails, your form is still here to try again.</p>
-            {invite && <PartnerInviteResultPanel result={invite} />}
-          </section>
-          <div className="portal-partner-team-callout is-info">
-            <strong>Access rules</strong>
-            <p>Only partner admins manage members. Access is limited to {partnerName ?? "your organization"}&rsquo;s data. <strong>Deactivation retains submission and message history</strong> &mdash; nobody is ever deleted.</p>
-          </div>
-        </aside>
-      </div>
+      <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader><DialogTitle>Invite a teammate</DialogTitle></DialogHeader>
+          <form className="space-y-4" onSubmit={(event) => void submit(event)} noValidate>
+            <label className="block">
+              <span className={labelText}>Full name</span>
+              <Input id="partner-team-name" className="mt-1.5" autoComplete="name" maxLength={120} value={name} aria-invalid={fieldError?.field === "name"} onChange={(event) => { setName(event.target.value); if (fieldError?.field === "name") setFieldError(null); }} />
+              {fieldError?.field === "name" && <small className="mt-1.5 block text-xs text-[var(--error-ink)]" role="alert">{fieldError.message}</small>}
+            </label>
+            <label className="block">
+              <span className={labelText}>Work email</span>
+              <Input id="partner-team-email" className="mt-1.5" type="email" autoComplete="email" maxLength={254} value={email} aria-invalid={fieldError?.field === "email"} onChange={(event) => { setEmail(event.target.value); if (fieldError?.field === "email") setFieldError(null); }} />
+              {fieldError?.field === "email" && <small className="mt-1.5 block text-xs text-[var(--error-ink)]" role="alert">{fieldError.message}</small>}
+            </label>
+            <label className="block">
+              <span className={labelText}>Role</span>
+              <select value="partner_user" onChange={() => undefined} className={cn(toolbarControl, "mt-1.5 w-full")}>
+                <option value="partner_user">Partner user</option>
+                {/* A partner admin can grant only what they cannot use to widen their own access. */}
+                <option value="partner_admin" disabled>Partner admin — added by your agent</option>
+              </select>
+              <small className="mt-1.5 block text-xs text-muted-foreground">Partner users can submit leads, track your organization&rsquo;s pipeline, and message the agent.</small>
+            </label>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setInviteOpen(false)}>Cancel</Button>
+              <Button type="submit" disabled={busy !== null}>{busy === "invite" ? "Sending…" : "Send invitation"}</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

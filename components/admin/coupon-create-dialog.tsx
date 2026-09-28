@@ -3,7 +3,7 @@
 import { useId, useState } from "react";
 import { useRouter } from "next/navigation";
 
-import { btn } from "@/components/app/settings/primitives";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -18,9 +18,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { endOfUtcDay, planLabel, type CouponPlanRef } from "@/lib/coupons/format";
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
-
-const PRIMARY_44 =
-  "inline-flex h-11 cursor-pointer items-center justify-center gap-2 rounded-[8px] border border-transparent bg-[var(--primary)] px-4 text-[14px] leading-[1.43] font-semibold tracking-[-0.01em] text-[var(--on-primary)] hover:bg-[var(--accent-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]";
 
 const HINT = "text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]";
 
@@ -108,9 +105,9 @@ export function CouponCreateDialog({ plans }: { plans: CouponPlanRef[] | null })
 
   return (
     <>
-      <button type="button" className={PRIMARY_44} onClick={() => setOpen(true)}>
+      <Button type="button" onClick={() => setOpen(true)}>
         New coupon
-      </button>
+      </Button>
 
       <Dialog open={open} onOpenChange={(value) => !busy && setOpen(value)}>
         <DialogContent className="max-h-[90vh] overflow-y-auto">
@@ -280,17 +277,16 @@ export function CouponCreateDialog({ plans }: { plans: CouponPlanRef[] | null })
           </div>
 
           <DialogFooter>
-            <button type="button" className={btn("ghost")} onClick={() => setOpen(false)} disabled={busy}>
+            <Button type="button" variant="ghost" onClick={() => setOpen(false)} disabled={busy}>
               Cancel
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
-              className={btn("primary")}
               onClick={() => void create()}
               disabled={busy || form.code.trim().length < 3 || periodsNeedCycle || expiryInvalid}
             >
               {busy ? "Creating…" : "Create coupon"}
-            </button>
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

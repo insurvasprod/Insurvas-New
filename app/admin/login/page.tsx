@@ -80,8 +80,7 @@ export default function AdminLoginPage() {
       return;
     }
 
-    router.push("/admin");
-    router.refresh();
+    router.replace("/admin");
   }
 
   async function handleTotp(event: FormEvent) {
@@ -102,8 +101,7 @@ export default function AdminLoginPage() {
       return;
     }
 
-    router.push("/admin");
-    router.refresh();
+    router.replace("/admin");
   }
 
   // The authenticator entry is labelled "Insurvas Admin" + the account's email (lib/adminAuth/totp.ts).

@@ -24,7 +24,6 @@ import {
   Pause,
   Play,
   Plus,
-  Search,
   X,
 } from "lucide-react";
 
@@ -34,7 +33,6 @@ import { PartnerFormStudio } from "@/components/app/partner-form-studio";
 import { PartnerMarketAccessPanel } from "@/components/app/partner-market-access-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -64,10 +62,12 @@ import {
 } from "@/lib/partners/constants";
 import { PageHeader } from "@/components/ui/page-header";
 import { PartnerOnboarding } from "@/components/app/partner-onboarding";
-import { Meter } from "@/components/ui/stat";
-import { sectionForPath } from "@/lib/menu/definition";
+import { StatStrip, StatTile } from "@/components/ui/stat";
+import { PageLoading } from "@/components/ui/page-loading";
+import { TableCard } from "@/components/ui/table-card";
+import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
+import { NoMatches } from "@/components/ui/page-states";
 import { productLineLabel } from "@/lib/format/productLine";
-import { worstDropRate } from "@/lib/partners/dropInsight";
 import { PARTNER_LIMIT_KEYS, capacityLabel } from "@/lib/partners/limits";
 import { partnerLimitMessage } from "@/lib/partnerLimits/copy";
 import { cn } from "@/lib/utils";
@@ -237,15 +237,15 @@ function CapacityMetric({
     limit == null
       ? 0
       : Math.min(100, limit === 0 ? 100 : (usage / limit) * 100);
+  // Said before the ceiling is hit, in the same count the server enforces: only an ACTIVE partner
+  // holds a slot (LA-1.19). Drafts, paused and offboarded partners do not.
   return (
-    <div className="rounded-lg border border-border bg-card px-[15px] py-[13px] shadow-[var(--shadow-rest)]">
-      <div className="text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] text-muted-foreground">{label}</div>
-      <div className="mt-1.5 text-[30px] font-semibold leading-none tracking-[-0.03em] tabular-nums">{usage}</div>
-      {/* Said before the ceiling is hit, in the same count the server enforces: only an ACTIVE
-          partner holds a slot (LA-1.19). Drafts, paused and offboarded partners do not. */}
-      <p className="mt-2 text-xs text-muted-foreground">{capacityLabel(usage, limit, usage === 1 && limit == null ? noun.replace(/s$/, "") : noun)}{activeOnly && limit != null ? " · active only" : ""}</p>
-      <Meter className="mt-2" value={percent} tone="info" label={`${label} capacity used`} />
-    </div>
+    <StatTile
+      label={label}
+      value={usage}
+      meter={{ value: percent, tone: "info", label: `${label} capacity used` }}
+      footnote={`${capacityLabel(usage, limit, usage === 1 && limit == null ? noun.replace(/s$/, "") : noun)}${activeOnly && limit != null ? " · active only" : ""}`}
+    />
   );
 }
 
@@ -522,7 +522,6 @@ export function PartnersWorkspace({
     setDialogOpen(true);
   }
 
-  const dropInsight = useMemo(() => worstDropRate(partners), [partners]);
   const filteredPartners = useMemo(() => {
     const query = search.trim().toLowerCase();
     return partners.filter((partner) => {
@@ -564,16 +563,7 @@ export function PartnersWorkspace({
     return cap != null && usage[type === "publisher" ? "publishers" : type === "marketing" ? "marketing" : "affiliates"] >= cap;
   });
 
-  if (loading)
-    return (
-      <div className="portal-partners-page">
-        <Card>
-          <CardContent className="portal-partners-loading py-12 text-sm text-muted-foreground">
-            Loading partner records…
-          </CardContent>
-        </Card>
-      </div>
-    );
+  if (loading) return <PageLoading />;
 
   return (
     <div className="m-stagger portal-partners-page flex flex-col gap-6 pb-6">
@@ -593,32 +583,20 @@ export function PartnersWorkspace({
           <ChevronLeft className="size-4" aria-hidden="true" />
           Back to partners
         </Link>
-      ) : (
-        <p className="text-xs font-medium text-muted-foreground">
-          <Link href="/app/publishers" className="transition-colors hover:text-foreground">Partners</Link>
-          <span className="mx-2 text-border">›</span>
-          Partner Records
-        </p>
-      )}
+      ) : null}
       <PageHeader
-        eyebrow={sectionForPath("/app/publishers") ?? undefined}
         title={detailOnly ? (selectedPartner?.name ?? "Publisher details") : "Partners"}
-        description={
-          detailOnly
-            ? "The same workspace opened directly on one partner, for linking and bookmarking."
-            : "Publishers, marketing companies and affiliates — without losing their history."
-        }
         actions={
           detailOnly ? (
             selectedPartner ? (
               <>
-                <Button type="button" variant="outline" className="h-11 border-[var(--border-strong)] px-4" onClick={() => openEdit(selectedPartner)} disabled={readOnly || selectedPartner.status === "offboarded"}>
+                <Button type="button" variant="outline" onClick={() => openEdit(selectedPartner)} disabled={readOnly || selectedPartner.status === "offboarded"}>
                   <Edit3 data-icon="inline-start" aria-hidden="true" />Edit
                 </Button>
                 {!readOnly && selectedPartner.status !== "offboarded" && (
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button type="button" className="h-11 px-4">
+                      <Button type="button">
                         <MoreHorizontal data-icon="inline-start" aria-hidden="true" />Actions<ChevronDown data-icon="inline-end" aria-hidden="true" />
                       </Button>
                     </DropdownMenuTrigger>
@@ -639,9 +617,9 @@ export function PartnersWorkspace({
               {/* A real link, not a button with a handler: the browser owns the download, so
                   middle-click and "Save link as" work, and a large directory does not have to be
                   held in memory first. Same pattern as the deal-flow export. */}
-              <Button asChild type="button" variant="outline" className="h-10 px-4"><a href="/api/app/partners/export" download aria-label="Export the partner directory as CSV"><Download className="mr-2 size-4" aria-hidden="true" />Export</a></Button>
+              <Button asChild type="button" variant="outline"><a href="/api/app/partners/export" download aria-label="Export the partner directory as CSV"><Download aria-hidden="true" />Export</a></Button>
               <Button type="button" onClick={openCreate} disabled={readOnly || everyTypeAtCap} title={everyTypeAtCap ? "Your plan's publisher, marketing partner and affiliate limits are all in use. Upgrade your plan to add another partner." : undefined}>
-                <Plus className="mr-1.5 size-4" aria-hidden="true" />
+                <Plus aria-hidden="true" />
                 Add partner
               </Button>
             </>
@@ -649,7 +627,7 @@ export function PartnersWorkspace({
         }
       />
       {!detailOnly && (
-        <section className="portal-partners-capacity grid gap-3 sm:grid-cols-2 lg:grid-cols-4" aria-label="Partner capacity">
+        <StatStrip label="Partner capacity" className="portal-partners-capacity">
           <CapacityMetric
             label="Publishers"
             noun="publishers"
@@ -675,23 +653,7 @@ export function PartnersWorkspace({
             limit={limits.max_partner_users}
             activeOnly={false}
           />
-        </section>
-      )}
-      {!detailOnly && dropInsight && (
-        <section aria-label="Drop rate" className="flex flex-col gap-3 rounded-lg border border-[color-mix(in_srgb,var(--warning)_30%,transparent)] bg-[var(--warning-surface)] px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between">
-          <p className="m-0 text-sm leading-normal text-[var(--body)]">
-            <strong className="text-[var(--warning-ink)]">
-              {dropInsight.name} drops {Math.round(dropInsight.dropRate * 100)}% of what it transfers and {Math.round(dropInsight.completedRate * 100)}% ends as completed work this month.
-            </strong>{" "}
-            {dropInsight.droppedCostCents != null && dropInsight.rateCents != null
-              ? `${dropInsight.dropped} dropped ${dropInsight.dropped === 1 ? "call" : "calls"} at ${money(dropInsight.rateCents)} each is ${money(dropInsight.droppedCostCents)} of transfers you pay for. `
-              : `${dropInsight.dropped} of ${dropInsight.transfers} transfers dropped. `}
-            Pause them, or renegotiate on the drop rate.
-          </p>
-          <Button asChild type="button" variant="outline" size="sm" className="shrink-0">
-            <Link href={`/app/publishers/${dropInsight.partnerId}`}>Open {dropInsight.name}</Link>
-          </Button>
-        </section>
+        </StatStrip>
       )}
       {!detailOnly && selectedPartner && (
         <div className="flex justify-end lg:hidden">
@@ -716,32 +678,16 @@ export function PartnersWorkspace({
             : "lg:grid-cols-1",
         )}
       >
-        {!detailOnly && <Card className="min-w-0 overflow-hidden">
-          <CardContent className="p-0">
-            <div className="flex flex-col gap-3 border-b p-4 sm:flex-row sm:items-center">
-              <div className="relative min-w-0 flex-1">
-                <Search
-                  className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-                  aria-hidden="true"
-                />
-                <Input
-                  aria-label="Search partners"
-                  className="pl-9"
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Search partners"
-                />
-              </div>
+        {!detailOnly && <TableCard
+          className="min-w-0"
+          toolbar={
+            <DataToolbar actions={<RefreshButton onClick={() => void load()} refreshing={loading} />}>
+              <ToolbarSearch value={search} onChange={setSearch} placeholder="Search partners" />
               <select
                 aria-label="Filter by partner type"
-                className={cn(
-                  "flex h-9 rounded-md border border-input bg-transparent px-3 text-sm",
-                  selectedPartner && "hidden",
-                )}
+                className={cn(toolbarControl, selectedPartner && "hidden")}
                 value={typeFilter}
-                onChange={(event) =>
-                  setTypeFilter(event.target.value as typeof typeFilter)
-                }
+                onChange={(event) => setTypeFilter(event.target.value as typeof typeFilter)}
               >
                 <option value="all">All types</option>
                 {PARTNER_TYPES.map((type) => (
@@ -752,32 +698,22 @@ export function PartnersWorkspace({
               </select>
               <select
                 aria-label="Filter by partner status"
-                className={cn(
-                  "flex h-9 rounded-md border border-input bg-transparent px-3 text-sm",
-                  selectedPartner && "hidden",
-                )}
+                className={cn(toolbarControl, selectedPartner && "hidden")}
                 value={statusFilter}
-                onChange={(event) =>
-                  setStatusFilter(event.target.value as typeof statusFilter)
-                }
+                onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}
               >
                 <option value="all">All statuses</option>
-                {(
-                  ["draft", "active", "paused", "offboarded"] as PartnerStatus[]
-                ).map((status) => (
+                {(["draft", "active", "paused", "offboarded"] as PartnerStatus[]).map((status) => (
                   <option key={status} value={status}>
                     {PARTNER_STATUS_LABELS[status]}
                   </option>
                 ))}
               </select>
-            </div>
+            </DataToolbar>
+          }
+        >
             {filteredPartners.length === 0 ? (
-              <div className="py-12 text-center">
-                <p className="font-medium">No matching partners</p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Try a different search or filter.
-                </p>
-              </div>
+              <NoMatches noun="partners" onClear={() => { setSearch(""); setTypeFilter("all"); setStatusFilter("all"); }} />
             ) : (
               <div className="overflow-x-auto">
                 <table
@@ -962,8 +898,7 @@ export function PartnersWorkspace({
               Showing {filteredPartners.length} of {partners.length} partner
               records
             </div>
-          </CardContent>
-        </Card>}
+        </TableCard>}
         {detailOnly && !selectedPartner && (
           <div className="rounded-lg border border-border bg-card px-5 py-10 text-center text-sm text-muted-foreground">
             This partner is not in your workspace.{" "}

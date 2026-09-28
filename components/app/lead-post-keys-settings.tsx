@@ -1,25 +1,25 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Copy } from "lucide-react";
+import { Copy, Plus } from "lucide-react";
 
 import { notify } from "@/lib/notify";
+import { Button } from "@/components/ui/button";
+import { DataToolbar, RefreshButton, ToolbarSearch } from "@/components/ui/data-toolbar";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { EmptyState, NoMatches, SectionLoading } from "@/components/ui/page-states";
+import { SettingsSaveBar } from "@/components/ui/settings-layout";
+import { TableCard } from "@/components/ui/table-card";
 import {
   Callout,
   control,
-  DashedCard,
-  DraftActions,
   Field,
   Pill,
-  PlusIcon,
   SettingsCard,
   SettingsGrid,
   SettingsMeter,
   SettingsSectionHeader,
   SettingsStack,
-  SettingsTableCard,
-  btn,
   st,
 } from "@/components/app/settings/primitives";
 import { cn } from "@/lib/utils";
@@ -90,6 +90,8 @@ export function LeadPostKeysSettings() {
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [keyQuery, setKeyQuery] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
 
   // A promise chain, not async/await: the effect below calls this on mount and every setState has
   // to land in a callback rather than anywhere the linter can reach it synchronously.
@@ -261,11 +263,16 @@ export function LeadPostKeysSettings() {
   // The older, global URL. Vendors already set up on it (header or key-in-path) keep working.
   const legacyUrl = `${origin}/api/leads/post`;
 
+  async function refresh() {
+    setRefreshing(true);
+    try { await load(selectedKeyId); } finally { setRefreshing(false); }
+  }
+
   if (error) {
     return (
       <SettingsStack>
         <SettingsSectionHeader />
-        <Callout tone="error" title="Could not load your posting keys">{error}</Callout>
+        <Callout tone="error" title={error} />
       </SettingsStack>
     );
   }
@@ -273,7 +280,7 @@ export function LeadPostKeysSettings() {
     return (
       <SettingsStack>
         <SettingsSectionHeader />
-        <p className="text-[14px] text-[var(--muted)]">Loading your posting keys…</p>
+        <TableCard><SectionLoading label="Loading your posting keys" /></TableCard>
       </SettingsStack>
     );
   }
@@ -284,59 +291,47 @@ export function LeadPostKeysSettings() {
   const campaignsByVendor = (vendorId: string) => loaded.campaigns.filter((campaign) => campaign.vendorId === vendorId);
   const totalRejected = loaded.rejections.reduce((sum, row) => sum + row.count, 0);
   const mintCampaigns = campaignsByVendor(mintVendor);
+  const keyNeedle = keyQuery.trim().toLowerCase();
+  const shownKeys = loaded.keys.filter((key) => !keyNeedle || key.vendorName.toLowerCase().includes(keyNeedle) || key.keyPrefix.toLowerCase().includes(keyNeedle));
 
   return (
     <SettingsStack>
-      <SettingsSectionHeader
-        actions={
-          selectedKey ? (
-            <DraftActions dirty={dirty} saving={saving} onDiscard={discard} onSave={() => void save()} disabled={draftProblems.size > 0} />
-          ) : undefined
-        }
-      />
+      <SettingsSectionHeader />
 
-      <Callout tone="warning" title="A key is shown once, at creation, and never again">
-        It is stored hashed. If a vendor loses it, the answer is a new key and the old one revoked &mdash; there is no
-        screen anywhere that can reveal it, including to you.
-      </Callout>
-
-      <SettingsCard title="Where vendors post">
-        <div className="flex flex-col gap-3.5">
-          <div className="rounded-[8px] border border-[var(--border)] bg-[var(--surface-sunken)] px-3.5 py-3 font-mono text-[14px] break-all text-[var(--ink)]">
-            POST {headerUrl} &nbsp;&middot;&nbsp; Authorization: Bearer &lt;key&gt;
-          </div>
-          <p className="m-0 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">
-            One URL per workspace. The key identifies the vendor and the campaign, so the same URL attributes every post correctly.
-          </p>
-          {/* Kept for vendors already posting: the global URL, and the key-in-path form for systems that cannot set a header. */}
-          <p className="m-0 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">
-            Vendors already set up on <span className="font-mono">{legacyUrl}</span>, or with the key in the path (
-            <span className="font-mono">{legacyUrl}/&lt;key&gt;</span>), keep working unchanged.
-          </p>
+      <SettingsCard title="Where vendors post" pad={20}>
+        <div className="rounded-[8px] border border-[var(--border)] bg-[var(--surface-sunken)] px-3.5 py-3 font-mono text-[14px] break-all text-[var(--ink)]">
+          POST {headerUrl} &nbsp;&middot;&nbsp; Authorization: Bearer &lt;key&gt;
         </div>
+        {/* Kept for vendors already posting: the global URL, and the key-in-path form for systems that cannot set a header. */}
+        <p className="mt-2 mb-0 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">
+          Also accepted: <span className="font-mono">{legacyUrl}</span> and <span className="font-mono">{legacyUrl}/&lt;key&gt;</span>.
+        </p>
       </SettingsCard>
 
-      <SettingsTableCard
+      <TableCard
         title="Posting keys"
-        actions={
-          <button type="button" className={btn("primary-sm")} onClick={() => setMinting(true)} disabled={loaded.vendors.length === 0}>
-            <PlusIcon /> Create a key
-          </button>
+        toolbar={
+          <DataToolbar
+            actions={
+              <>
+                <Button type="button" onClick={() => setMinting(true)} disabled={loaded.vendors.length === 0}>
+                  <Plus aria-hidden="true" />
+                  Create a key
+                </Button>
+                <RefreshButton onClick={() => void refresh()} refreshing={refreshing} />
+              </>
+            }
+          >
+            <ToolbarSearch value={keyQuery} onChange={setKeyQuery} placeholder="Search vendors or keys" />
+          </DataToolbar>
         }
       >
         {loaded.vendors.length === 0 ? (
-          <div className="p-4">
-            <DashedCard title="No vendors yet">
-              A posting key belongs to a vendor, so add one on Vendors &amp; campaigns first. Then come back and mint them a key.
-            </DashedCard>
-          </div>
+          <EmptyState title="No vendors yet" hint="A posting key belongs to a vendor, so add one on Vendors & campaigns first." />
         ) : loaded.keys.length === 0 ? (
-          <div className="p-4">
-            <DashedCard title="No posting keys yet">
-              Create one per vendor who delivers leads by API rather than by spreadsheet. They post to the URL above and
-              the leads arrive already attributed.
-            </DashedCard>
-          </div>
+          <EmptyState title="No posting keys yet" hint="Create one per vendor who delivers leads by API. The key is shown once, when it is created." />
+        ) : shownKeys.length === 0 ? (
+          <NoMatches noun="keys" onClear={() => setKeyQuery("")} />
         ) : (
           <table className={st.table}>
             <thead>
@@ -350,7 +345,7 @@ export function LeadPostKeysSettings() {
               </tr>
             </thead>
             <tbody>
-              {loaded.keys.map((key) => {
+              {shownKeys.map((key) => {
                 const stats = statsByKey.get(key.id);
                 const campaigns = campaignsByVendor(key.vendorId);
                 const campaignId = `key-campaign-${key.id}`;
@@ -409,18 +404,20 @@ export function LeadPostKeysSettings() {
                       {!!stats?.earlierRejected && <span className={st.sub}>+{fmt(stats.earlierRejected)} earlier</span>}
                     </td>
                     <td className={cn(st.td, "whitespace-nowrap text-right")}>
-                      <button type="button" className={btn("row")} disabled={busy === key.id} onClick={() => void act(key, "rotate")}>
-                        Rotate
-                      </button>
-                      {key.isActive ? (
-                        <button type="button" className={btn("row")} disabled={busy === key.id} onClick={() => openRevoke(key)}>
-                          Revoke
-                        </button>
-                      ) : (
-                        <button type="button" className={btn("row")} disabled={busy === key.id} onClick={() => void act(key, "activate")}>
-                          Enable
-                        </button>
-                      )}
+                      <span className="inline-flex gap-2">
+                        <Button type="button" variant="outline" size="sm" disabled={busy === key.id} onClick={() => void act(key, "rotate")}>
+                          Rotate
+                        </Button>
+                        {key.isActive ? (
+                          <Button type="button" variant="outline" size="sm" disabled={busy === key.id} onClick={() => openRevoke(key)}>
+                            Revoke
+                          </Button>
+                        ) : (
+                          <Button type="button" variant="outline" size="sm" disabled={busy === key.id} onClick={() => void act(key, "activate")}>
+                            Enable
+                          </Button>
+                        )}
+                      </span>
                     </td>
                   </tr>
                 );
@@ -428,17 +425,17 @@ export function LeadPostKeysSettings() {
             </tbody>
           </table>
         )}
-      </SettingsTableCard>
+      </TableCard>
 
       <SettingsGrid>
         <SettingsCard
           title={selectedKey ? <>Field map &middot; {selectedKey.vendorName}</> : "Field map"}
-          sub="Their names on the left, yours on the right. Set per vendor, because no two vendors agree."
+          sub="Their field names on the left, yours on the right."
           action={
             selectedKey && !editing ? (
-              <button type="button" className={btn("secondary")} onClick={() => setEditing(true)}>
+              <Button type="button" variant="outline" onClick={() => setEditing(true)}>
                 Edit
-              </button>
+              </Button>
             ) : undefined
           }
         >
@@ -452,16 +449,10 @@ export function LeadPostKeysSettings() {
                 </p>
               )}
               {vendorMapsDiffer && (
-                <Callout tone="warning" title={`${selectedKey.vendorName}'s keys have different maps`}>
-                  They were set one key at a time before maps were per vendor. This is the map on key{" "}
-                  <code className={code}>{selectedKey.keyPrefix}&hellip;</code>; Save changes applies it to every key of this vendor.
-                </Callout>
+                <Callout tone="warning" title={`${selectedKey.vendorName}'s keys have different maps — saving applies this one to all of them.`} />
               )}
               {inverted > 0 && (
-                <Callout tone="warning" title={`${inverted} ${inverted === 1 ? "field was" : "fields were"} saved the wrong way round`}>
-                  The old form asked for their name first and stored it where yours belongs. Posts already read{" "}
-                  {inverted === 1 ? "it" : "them"} the way shown below; Save changes stores {inverted === 1 ? "it" : "them"} the right way round.
-                </Callout>
+                <Callout tone="warning" title={`${inverted} ${inverted === 1 ? "field was" : "fields were"} stored the wrong way round — saving fixes ${inverted === 1 ? "it" : "them"}.`} />
               )}
               {saveError && <Callout tone="error" title="The field map was not saved">{saveError}</Callout>}
               <datalist id="lead-post-our-fields">
@@ -509,9 +500,9 @@ export function LeadPostKeysSettings() {
                             {problem && <span role="alert" className="mt-1 block text-[12px] text-[var(--error-ink)]">{problem}</span>}
                           </td>
                           <td className={cn(st.td, "align-top")}>
-                            <button type="button" className={btn("danger-row", "px-2")} aria-label={`Remove row ${index + 1}`} onClick={() => setDraft((rows) => rows.filter((item) => item.id !== row.id))}>
+                            <Button type="button" variant="outline" size="sm" className="text-[var(--error-ink)]" aria-label={`Remove row ${index + 1}`} onClick={() => setDraft((rows) => rows.filter((item) => item.id !== row.id))}>
                               Remove
-                            </button>
+                            </Button>
                           </td>
                         </tr>
                       ) : (
@@ -530,12 +521,10 @@ export function LeadPostKeysSettings() {
               )}
               {editing && (
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <button type="button" className={btn("secondary")} onClick={() => setDraft((rows) => [...rows, { id: nextRowId(), theirs: "", ours: "", note: "" }])}>
-                    <PlusIcon /> Add a field
-                  </button>
-                  <span className="text-[12px] text-[var(--muted)]">
-                    {loaded.schemaReady ? "Nothing changes until you save." : "Notes need a database update that has not been applied yet; the map itself saves."}
-                  </span>
+                  <Button type="button" variant="outline" onClick={() => setDraft((rows) => [...rows, { id: nextRowId(), theirs: "", ours: "", note: "" }])}>
+                    <Plus aria-hidden="true" /> Add a field
+                  </Button>
+                  {!loaded.schemaReady && <span className="text-[12px] text-[var(--muted)]">Notes need a database update; the map itself saves.</span>}
                 </div>
               )}
             </div>
@@ -560,9 +549,6 @@ export function LeadPostKeysSettings() {
               ))}
             </div>
           )}
-          <p className="mt-3.5 mb-0 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">
-            A rejected post is answered with the reason, so the vendor can fix it rather than re-send it.
-          </p>
         </SettingsCard>
       </SettingsGrid>
 
@@ -570,10 +556,7 @@ export function LeadPostKeysSettings() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Create a posting key</DialogTitle>
-            <DialogDescription>
-              The key appears once on the next screen. Copy it then &mdash; it cannot be shown again. Map their field
-              names afterwards, in Field map.
-            </DialogDescription>
+            <DialogDescription>The key is shown once, on the next screen.</DialogDescription>
           </DialogHeader>
           <form onSubmit={mint} className="flex flex-col gap-4">
             <Field label="Vendor" htmlFor="mint-vendor" required>
@@ -595,7 +578,7 @@ export function LeadPostKeysSettings() {
               htmlFor="mint-campaign"
               hint={
                 loaded.schemaReady
-                  ? "Optional. A bound key posts to this campaign only, and is refused while it is not active and scrubbed."
+                  ? "Optional. A bound key posts to this campaign only."
                   : "Campaign binding needs a database update that has not been applied yet; the key posts to the vendor's accepting campaign."
               }
             >
@@ -616,10 +599,10 @@ export function LeadPostKeysSettings() {
             </Field>
             {mintError && <span role="alert" className="text-[12px] text-[var(--error-ink)]">{mintError}</span>}
             <DialogFooter>
-              <button type="button" className={btn("ghost")} onClick={() => setMinting(false)}>Cancel</button>
-              <button type="submit" className={btn("primary")} disabled={busy === "mint" || !mintVendor}>
+              <Button type="button" variant="outline" onClick={() => setMinting(false)}>Cancel</Button>
+              <Button type="submit" disabled={busy === "mint" || !mintVendor}>
                 {busy === "mint" ? "Creating…" : "Create key"}
-              </button>
+              </Button>
             </DialogFooter>
           </form>
         </DialogContent>
@@ -660,23 +643,15 @@ export function LeadPostKeysSettings() {
                     {fact("Campaign", campaign)}
                     {fact("Created", when(revoking.createdAt) ?? "—")}
                   </div>
-                  <div>
-                    <p className="text-[14px] font-semibold text-[var(--ink)]">What does <em>not</em> happen</p>
-                    <ul className="mt-1.5 flex list-disc flex-col gap-1 pl-5 text-[14px] leading-normal text-[var(--body)]">
-                      <li>{posts ? `The ${fmt(posts)} leads already received stay exactly where they are.` : "Leads already received stay exactly where they are."}</li>
-                      <li>Their cost, campaign and True CPA figures are untouched.</li>
-                      <li>{revoking.vendorName}&rsquo;s vendor record and history remain, and stay visible for audit.</li>
-                    </ul>
-                  </div>
-                  <Field label="Type the vendor name to confirm" htmlFor="revoke-confirm-name" hint={<>Type <strong>{revoking.vendorName}</strong>. The change is logged against your name; the key can be enabled again from this table.</>}>
+                  <Field label="Type the vendor name to confirm" htmlFor="revoke-confirm-name" hint={<>Type <strong>{revoking.vendorName}</strong>. The key can be enabled again later.</>}>
                     <input id="revoke-confirm-name" className={control} autoComplete="off" value={revokeTyped} onChange={(event) => setRevokeTyped(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void confirmRevoke(); } }} />
                   </Field>
                 </div>
                 <DialogFooter>
-                  <button type="button" className={btn("ghost")} disabled={busy === revoking.id} onClick={() => setRevoking(null)}>Keep the key</button>
-                  <button type="button" className={btn("primary", "bg-[var(--error)] text-white hover:bg-[var(--error-ink)]")} disabled={!matches || busy === revoking.id} onClick={() => void confirmRevoke()}>
+                  <Button type="button" variant="outline" disabled={busy === revoking.id} onClick={() => setRevoking(null)}>Keep the key</Button>
+                  <Button type="button" variant="destructive" disabled={!matches || busy === revoking.id} onClick={() => void confirmRevoke()}>
                     {busy === revoking.id ? "Revoking…" : "Revoke the key"}
-                  </button>
+                  </Button>
                 </DialogFooter>
               </>
             );
@@ -688,10 +663,7 @@ export function LeadPostKeysSettings() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{revealed?.vendorName}&rsquo;s posting key</DialogTitle>
-            <DialogDescription>
-              This is the only time this key is shown. Send it to the vendor over a channel you trust; if it is lost,
-              rotate rather than ask us for it.
-            </DialogDescription>
+            <DialogDescription>This is the only time this key is shown. If it is lost, rotate it.</DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-3">
             <RevealLine label="Key" value={revealed?.key ?? ""} onCopy={copy} />
@@ -699,10 +671,17 @@ export function LeadPostKeysSettings() {
             <RevealLine label="Or, key in the path (the older URL)" value={`${legacyUrl}/${revealed?.key ?? ""}`} onCopy={copy} />
           </div>
           <DialogFooter>
-            <button type="button" className={btn("primary")} onClick={() => setRevealed(null)}>I have copied it</button>
+            <Button type="button" onClick={() => setRevealed(null)}>I have copied it</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {selectedKey && (
+        <SettingsSaveBar visible={dirty} note={vendorKeys.length > 1 ? `Saving writes this map to all ${vendorKeys.length} of ${selectedKey.vendorName}'s keys` : "Unsaved changes to the field map"}>
+          <Button type="button" variant="outline" onClick={discard} disabled={saving}>Discard</Button>
+          <Button type="button" onClick={() => void save()} disabled={saving || draftProblems.size > 0}>{saving ? "Saving…" : "Save changes"}</Button>
+        </SettingsSaveBar>
+      )}
     </SettingsStack>
   );
 }
@@ -713,9 +692,9 @@ function RevealLine({ label, value, onCopy }: { label: string; value: string; on
       <span className="text-[12px] font-semibold text-[var(--muted)]">{label}</span>
       <div className="mt-1 flex items-center gap-2">
         <code className="flex-1 rounded-[8px] border border-[var(--border)] bg-[var(--surface-sunken)] p-3 font-mono text-[14px] break-all text-[var(--ink)]">{value}</code>
-        <button type="button" className={btn("secondary", "px-2.5")} aria-label={`Copy ${label.toLowerCase()}`} onClick={() => void onCopy(value)}>
-          <Copy className="size-4" aria-hidden />
-        </button>
+        <Button type="button" variant="outline" size="icon" aria-label={`Copy ${label.toLowerCase()}`} onClick={() => void onCopy(value)}>
+          <Copy aria-hidden="true" />
+        </Button>
       </div>
     </div>
   );

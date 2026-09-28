@@ -22,8 +22,8 @@ import type { ReactNode } from "react";
 
 import { LinkArrow } from "@/components/ui/link-arrow";
 import { PageHeader } from "@/components/ui/page-header";
-import { sectionForPath } from "@/lib/menu/definition";
 import { StatusChip } from "@/components/ui/status-chip";
+import { SectionLoading } from "@/components/ui/page-states";
 
 /**
  * The dashboard is a frame for registered module tiles. It does not know how to render a carrier,
@@ -42,6 +42,70 @@ function overdueLabel(utc: string, now: number) {
   if (minutes < 60) return `${minutes} min overdue`;
   const hours = Math.floor(minutes / 60);
   return hours < 24 ? `${hours}h ${minutes % 60}m overdue` : `${Math.floor(hours / 24)}d overdue`;
+}
+
+/** "Callbacks due today": its own streamed block, so the page does not wait on this read. */
+async function CallbacksCard({ tenantId }: { tenantId: string }) {
+  const [callbacks, workspaceZone] = await Promise.all([
+    listDueCallbacks(tenantId),
+    getWorkspaceTimezone(tenantId).catch(() => null),
+  ]);
+  const agencyZone = workspaceZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+  // eslint-disable-next-line react-hooks/purity -- a server render: "48 min overdue" is as of this request.
+  const now = Date.now();
+  return (
+    <Card className="portal-dashboard-callbacks m-card h-full">
+      <CardContent className="flex h-full flex-col p-5">
+        <div className="flex items-baseline justify-between gap-3 pb-3">
+          <h2 className="text-sm font-semibold leading-normal tracking-[-0.01em]">Callbacks due today</h2>
+          <LinkArrow href="/app/callbacks" className="shrink-0 text-xs">Open calendar</LinkArrow>
+        </div>
+
+        {callbacks.length > 0 ? (
+          <div className="portal-dashboard-callback-list">
+            {/* Four, deliberately. This is the nudge; the calendar is the list. */}
+            {callbacks.slice(0, 4).map((callback, index) => (
+              <Link
+                key={callback.id}
+                href="/app/callbacks"
+                aria-label={`Open the callback for ${callback.customerName}`}
+                className={`m-row flex items-center gap-3 px-3 py-2 text-inherit no-underline ${index ? "border-t border-border" : ""}`}
+              >
+                <span className="inline-flex size-7 shrink-0 items-center justify-center rounded-full bg-[var(--surface-alt)] text-xs font-semibold" aria-hidden="true">
+                  {callback.customerName.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase()}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-semibold">{callback.customerName}</span>
+                  {/* Their clock first, then yours. An agent who reads only the first half
+                      still calls at a time that is civil where the customer is. */}
+                  <span className="block truncate text-xs tabular-nums text-muted-foreground">
+                    {shortTime(callback.scheduledAtUtc, callback.customerTimezone)} · {shortTimeNoZone(callback.scheduledAtUtc, agencyZone)} yours
+                  </span>
+                </span>
+                <StatusChip tone={callback.isOverdue ? "danger" : "neutral"} dot>
+                  {callback.isOverdue ? overdueLabel(callback.scheduledAtUtc, now) : "Scheduled"}
+                </StatusChip>
+              </Link>
+            ))}
+          </div>
+        ) : (
+          <div className="flex flex-1 flex-col items-center justify-center rounded-md border border-dashed border-border p-5 text-center">
+            <p className="text-sm font-semibold">No callbacks are due today</p>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function CallbacksCardSkeleton() {
+  return (
+    <Card className="portal-dashboard-callbacks m-card h-full">
+      <CardContent className="p-5">
+        <SectionLoading rows={4} columns={2} label="Loading callbacks" />
+      </CardContent>
+    </Card>
+  );
 }
 
 /**
@@ -80,13 +144,6 @@ export default async function AgentDashboardPage() {
   // respect, which is exactly why the divergence was invisible.
   const callbacksAvailable =
     available.includes("callback_calendar") && ["owner", "producer", "assistant"].includes(context.role);
-  const [callbacks, workspaceZone] = await Promise.all([
-    callbacksAvailable ? listDueCallbacks(context.tenantId) : Promise.resolve([]),
-    callbacksAvailable ? getWorkspaceTimezone(context.tenantId).catch(() => null) : Promise.resolve(null),
-  ]);
-  const agencyZone = workspaceZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
-  // eslint-disable-next-line react-hooks/purity -- a server render: "48 min overdue" is as of this request.
-  const now = Date.now();
   // Same shape as the callbacks gate above, and for the same reason: kill switches are consulted
   // before the entitlement. The close-out route admits owner and producer, so the strip does too —
   // recording whether somebody showed is the licensed agent's to do, never the setter being measured
@@ -95,62 +152,19 @@ export default async function AgentDashboardPage() {
     available.includes("outbound_dialing") && ["owner", "producer"].includes(context.role);
 
   // A producer has no team to rank, so the callbacks card sits beside the heatmap instead of the
-  // standings; an owner gets it in the bottom row with the setup checklist.
+  // standings; an owner gets it in the bottom row with the setup checklist. Streamed: the page shell
+  // no longer waits on the due-callbacks read (one more database round trip) before its first paint.
   const callbacksCard = callbacksAvailable ? (
-    <Card className="portal-dashboard-callbacks m-card h-full">
-      <CardContent className="flex h-full flex-col p-5">
-        <div className="flex items-baseline justify-between gap-3 pb-3">
-          <h2 className="text-sm font-semibold leading-normal tracking-[-0.01em]">Callbacks due today</h2>
-          <LinkArrow href="/app/callbacks" className="shrink-0 text-xs">Open calendar</LinkArrow>
-        </div>
-
-        {callbacks.length > 0 ? (
-          <div className="portal-dashboard-callback-list">
-            {/* Four, deliberately. This is the nudge; the calendar is the list. */}
-            {callbacks.slice(0, 4).map((callback, index) => (
-              <Link
-                key={callback.id}
-                href="/app/callbacks"
-                aria-label={`Open the callback for ${callback.customerName}`}
-                className={`m-row flex items-center gap-3 px-3 py-2 text-inherit no-underline ${index ? "border-t border-border" : ""}`}
-              >
-                <span className="inline-flex size-7 shrink-0 items-center justify-center rounded-full bg-[var(--surface-alt)] text-xs font-semibold" aria-hidden="true">
-                  {callback.customerName.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase()}
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-semibold">{callback.customerName}</span>
-                  {/* Their clock first, then yours. An agent who reads only the first half
-                      still calls at a time that is civil where the customer is. */}
-                  <span className="block truncate text-xs tabular-nums text-muted-foreground">
-                    {shortTime(callback.scheduledAtUtc, callback.customerTimezone)} · {shortTimeNoZone(callback.scheduledAtUtc, agencyZone)} yours
-                  </span>
-                </span>
-                <StatusChip tone={callback.isOverdue ? "danger" : "neutral"} dot>
-                  {callback.isOverdue ? overdueLabel(callback.scheduledAtUtc, now) : "Scheduled"}
-                </StatusChip>
-              </Link>
-            ))}
-          </div>
-        ) : (
-          <div className="flex flex-1 flex-col items-center justify-center rounded-md border border-dashed border-border p-5 text-center">
-            <p className="text-sm font-semibold">No callbacks are due today</p>
-            <p className="mt-1 text-xs text-muted-foreground">Scheduled callbacks appear here on the day they are due.</p>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+    <Suspense fallback={<CallbacksCardSkeleton />}>
+      <CallbacksCard tenantId={context.tenantId} />
+    </Suspense>
   ) : null;
   const isOwner = context.role === "owner";
 
   // m-stagger: the blocks arrive 32ms apart, capped at the eighth, then the rest land together.
   return (
     <div className="portal-dashboard m-stagger mx-auto flex w-full max-w-[1400px] flex-col gap-4">
-      <PageHeader
-        size="hero"
-        eyebrow={sectionForPath("/app/dashboard") ?? undefined}
-        title="Dashboard"
-        description="Today's numbers, what needs you, and how the week is going."
-      />
+      <PageHeader size="hero" title="Dashboard" />
 
       {/* Decision 12 puts this here and nowhere else: "anything with no activity goes to pending and
           appears in a short strip at the top of his dashboard the next morning: three appointments,
@@ -179,23 +193,10 @@ export default async function AgentDashboardPage() {
            plan full of features with no tile for this role is ours, and telling that reader to go
            and ask their owner sends them after a fix the owner cannot make. */
         <Card>
-          <CardContent className="space-y-2 py-8 text-center">
-            {available.length === 0 ? (
-              <>
-                <h2 className="text-lg font-semibold leading-[1.28] tracking-[-0.015em]">Your workspace is waiting for its first feature</h2>
-                <p className="mx-auto max-w-[52ch] text-sm text-muted-foreground">
-                  Ask your account owner to activate a workspace feature, then come back here to start using it.
-                </p>
-              </>
-            ) : (
-              <>
-                <h2 className="text-lg font-semibold leading-[1.28] tracking-[-0.015em]">Nothing pinned here yet</h2>
-                <p className="mx-auto max-w-[52ch] text-sm text-muted-foreground">
-                  Your plan is active and your workspace is open — this dashboard just has no shortcut
-                  for your role yet. Use the sidebar to reach the screens you work in.
-                </p>
-              </>
-            )}
+          <CardContent className="py-6 text-center text-sm text-muted-foreground">
+            {available.length === 0
+              ? "No workspace feature is active yet — ask your account owner to activate one."
+              : "No dashboard shortcuts for your role yet — use the sidebar to reach your screens."}
           </CardContent>
         </Card>
       )}

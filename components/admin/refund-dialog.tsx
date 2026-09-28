@@ -74,7 +74,7 @@ export function RefundDialog({
 
   return (
     <>
-      <Button variant="outline" className="h-10 w-full border-[var(--border-strong)]" onClick={() => setOpen(true)}>
+      <Button variant="outline" className="w-full" onClick={() => setOpen(true)}>
         Raise a credit note
       </Button>
 

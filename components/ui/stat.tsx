@@ -207,9 +207,12 @@ export function StatTile({
   meter,
   footnote,
   reserveFootnote,
+  valueSize = "figure",
   className,
 }: {
   label: string;
+  /** "text" for a strip of words (a name, a status) rather than numbers: 16px and truncated. */
+  valueSize?: "figure" | "text";
   /** Hover explanation for a label that needs one. The footnote is still the accessible answer. */
   labelTitle?: string;
   value: ReactNode;
@@ -237,7 +240,9 @@ export function StatTile({
   return (
     <div
       className={cn(
-        "rounded-lg border border-border bg-card px-[15px] py-[13px] shadow-[var(--shadow-rest)]",
+        // m-stat-tile: inside a <StatStrip> the tile loses its own border, radius and shadow and
+        // becomes one cell of the strip (app/globals.css).
+        "m-stat-tile rounded-lg border border-border bg-card px-4 pb-3 pt-3.5 shadow-[var(--shadow-rest)]",
         className
       )}
     >
@@ -245,12 +250,12 @@ export function StatTile({
           the smallest text the system allows, and a label is read before the figure it names. */}
       <div title={labelTitle} className="text-xs font-semibold leading-[1.33] uppercase tracking-[0.02em] text-muted-foreground">{label}</div>
 
-      {/* 30px, not 40. Five of these sit across a list page above the table they describe; at 40px
-          the strip competes with the rows it is meant to introduce, and a 6-figure count wraps. */}
-      <div className="mt-1.5 flex items-end justify-between gap-3">
-        <span className={cn("text-[30px] font-semibold leading-none tracking-[-0.03em] tabular-nums", valueTone && VALUE_TONE[valueTone])}>
+      {/* 24px, the dashboard strip's size (2026-09-28: "make it compact"). The figures introduce the
+          table below them; they should not compete with it. */}
+      <div className="mt-1 flex items-end justify-between gap-3">
+        <span className={cn(valueSize === "text" ? "min-w-0 truncate text-base font-semibold leading-[1.5]" : "text-2xl font-semibold leading-[1.2] tracking-[-0.025em] tabular-nums", valueTone && VALUE_TONE[valueTone])}>
           {value}
-          {unit && <span className="text-[17px] text-muted-foreground">{unit}</span>}
+          {unit && <span className="text-[15px] text-muted-foreground">{unit}</span>}
         </span>
         {trend && <Sparkline points={trend.points} tone={trend.tone} />}
       </div>
@@ -274,5 +279,25 @@ export function StatTile({
         </div>
       )}
     </div>
+  );
+}
+
+/* ── StatStrip ──────────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * The one way a row of figures sits above a list: a single bordered strip whose cells are split by
+ * hairlines, as the dashboard draws its numbers — not a row of separate boxes (2026-09-28 review:
+ * "make it compact"). Put StatTiles inside; they drop their own border, radius and shadow here.
+ * Columns follow the number of tiles on a wide screen, and wrap to two or three on a narrow one.
+ */
+export function StatStrip({ children, label, className }: { children: ReactNode; label?: string; className?: string }) {
+  return (
+    <section
+      aria-label={label}
+      className={cn("m-stat-strip overflow-hidden rounded-lg border border-border shadow-[var(--shadow-rest)]", className)}
+    >
+      {/* One-pixel gaps over the border colour draw the dividers at any column count. */}
+      <div className="grid grid-cols-2 gap-px bg-border sm:grid-cols-3 lg:auto-cols-fr lg:grid-flow-col lg:grid-cols-none">{children}</div>
+    </section>
   );
 }

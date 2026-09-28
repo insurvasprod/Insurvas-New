@@ -1,16 +1,19 @@
 "use client";
 
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, CalendarCheck, CheckCircle2, ChevronDown, FileText, Info, RefreshCw, Store, Upload } from "lucide-react";
+import { ChevronDown, FileText, Store, Upload } from "lucide-react";
 import { notify } from "@/lib/notify";
 
+import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
-import { Callout, DashedCard, Field, Pill, SettingsCard, SettingsMeter, btn, control, st } from "@/components/app/settings/primitives";
+import { PageLoading } from "@/components/ui/page-loading";
+import { StatStrip, StatTile } from "@/components/ui/stat";
+import { TableCard } from "@/components/ui/table-card";
+import { Callout, DashedCard, Field, Pill, SettingsCard, control, st } from "@/components/app/settings/primitives";
 import { ImportStepper, type ImportStep } from "@/components/app/import-stepper";
 import { ColumnMappingDialog, columnMappingStatus, type MappingRow } from "@/components/app/column-mapping-dialog";
-import { sectionForPath } from "@/lib/menu/definition";
 import { EMPTY_DATE_SCAN, inferredImportDateOrder, isImportDateOrder, parseCsv, previewLeadCsv, suggestLeadCsvMappings, type ImportDateOrder } from "@/lib/agentTemplates/csv";
 import { IMPORT_CSV_KEY, parseDollarsToCents, parseRecordCount } from "@/lib/agentTemplates/importReviewModel";
 import { isXlsxFile, readXlsxAsCsv, XLSX_TYPES } from "@/lib/agentTemplates/xlsx";
@@ -122,6 +125,8 @@ export function LeadImportWorkspace() {
   const [reading, setReading] = useState(false);
   /** Which worksheet of a multi-sheet workbook was read. */
   const [sheetNote, setSheetNote] = useState<string | null>(null);
+  /** The import settings could not be read; the page offers a retry instead of loading forever. */
+  const [loadFailed, setLoadFailed] = useState(false);
   const router = useRouter();
   const storageOk = useSyncExternalStore(noSubscription, sessionStorageWorks, () => true);
 
@@ -188,13 +193,17 @@ export function LeadImportWorkspace() {
   // Upload until the mapping is open or confirmed; Scrub from a confirmed mapping onwards.
   const step: ImportStep = !csv ? 1 : saving ? 3 : mapOpen && info && !preview.error ? 2 : mapConfirmed ? 3 : 1;
 
-  useEffect(() => {
+  const loadInfo = useCallback(() => {
+    setLoadFailed(false);
     void fetch("/api/app/leads/import", { cache: "no-store" }).then(async (response) => {
       const body = await response.json().catch(() => null);
       if (!response.ok) throw new Error(body?.error ?? "Could not load import settings");
       setInfo(body);
-    }).catch((error) => notify.fail("Could not load the import screen", { detail: error.message }));
+    }).catch((error) => { setLoadFailed(true); notify.fail("Could not load the import screen", { detail: error.message }); });
   }, []);
+  // The first read of the import settings; loadInfo owns the loading and failure state.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { loadInfo(); }, [loadInfo]);
 
   async function takeFile(chosen: File | undefined) {
     if (!chosen) return;
@@ -357,25 +366,45 @@ export function LeadImportWorkspace() {
   const vendorName = info?.vendors.find((vendor) => vendor.id === vendorId)?.name ?? null;
   const canMap = Boolean(csv && info && mappingRows.length > 0 && !preview.error);
 
+  if (!info && !loadFailed) return <PageLoading rows={6} />;
+
   return <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
-    <PageHeader eyebrow={sectionForPath("/app/import") ?? undefined} title="List import" description="Get a vendor CSV into your lead lists — mapped, validated and attributed." />
+    <PageHeader title="List import" />
+
+    {loadFailed && !info && <p role="alert" className="flex flex-wrap items-center gap-3 rounded-lg border border-[var(--error)]/30 bg-[var(--error-surface)] px-4 py-2.5 text-sm text-[var(--error-ink)]">
+      The import settings could not be loaded.
+      <Button type="button" variant="outline" onClick={loadInfo}>Try again</Button>
+    </p>}
+
+    {usage.length > 0 && <StatStrip label="Plan usage">
+      {usage.map((item) => {
+        const pct = item.limit === null ? 0 : Math.min(100, Math.round((item.usage / Math.max(1, item.limit)) * 100));
+        return <StatTile
+          key={item.key}
+          label={item.label}
+          value={item.usage.toLocaleString()}
+          meter={item.limit === null ? undefined : { value: item.usage, max: item.limit, tone: pct >= 90 ? "danger" : pct >= 75 ? "warning" : "info", label: `${item.label}: ${pct}% used` }}
+          footnote={item.limit === null ? "no cap on this plan" : `of ${item.limit.toLocaleString()} · ${pct}%`}
+        />;
+      })}
+    </StatStrip>}
 
     <ImportStepper current={step} />
 
     <form onSubmit={importFile} className="flex min-w-0 flex-col gap-5 lg:flex-row lg:items-start">
       <div className="flex min-w-0 flex-1 flex-col gap-5">
         {file
-          ? <div className="flex min-w-0 items-center gap-3 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
+          ? <div className="flex min-w-0 items-center gap-3 rounded-lg border border-border bg-card px-4 py-3">
               <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-[8px] bg-[var(--surface-alt)] text-[var(--muted)]"><FileText className="size-5" aria-hidden /></span>
               <span className="min-w-0 flex-1">
                 <strong className="block truncate text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">{file.name}</strong>
                 <span className="block text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)] tabular-nums">{fileRows.toLocaleString()} rows · {formatBytes(file.size)}</span>
                 {sheetNote && <span className="block text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">{sheetNote}</span>}
               </span>
-              <button type="button" className={btn("row")} onClick={reset}>Replace</button>
+              <Button type="button" variant="outline" onClick={reset}>Replace</Button>
             </div>
           : <div
-              className={cn("flex min-w-0 flex-col items-center rounded-[12px] border border-dashed bg-[var(--surface)] px-6 py-10 text-center", dragging ? "border-[var(--primary)] bg-[var(--brand-50)]" : "border-[var(--border-strong)]")}
+              className={cn("flex min-w-0 flex-col items-center rounded-lg border border-dashed bg-card px-6 py-10 text-center", dragging ? "border-[var(--primary)] bg-[var(--brand-50)]" : "border-[var(--border-strong)]")}
               onDragOver={(event) => { event.preventDefault(); setDragging(true); }}
               onDragLeave={() => setDragging(false)}
               onDrop={(event) => { event.preventDefault(); setDragging(false); void takeFile(event.dataTransfer.files?.[0]); }}
@@ -384,7 +413,9 @@ export function LeadImportWorkspace() {
               <p className="mt-2.5 text-[18px] leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]">Drop a vendor CSV or Excel file here</p>
               <p className="mt-1.5 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">{reading ? "Reading the workbook…" : `.csv or .xlsx · up to ${(info?.maxRows ?? 20000).toLocaleString()} rows per file`}</p>
               <input id="lead-csv" className="peer sr-only" type="file" accept={`.csv,text/csv,${XLSX_TYPES}`} disabled={reading} onChange={(event) => void takeFile(event.target.files?.[0])} />
-              <label htmlFor="lead-csv" className={btn("secondary", "mt-4 h-11 peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-[var(--ring-color)]")}>Choose file</label>
+              <Button asChild variant="outline" className="mt-4 cursor-pointer peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-focus-visible:ring-offset-2">
+                <label htmlFor="lead-csv">Choose file</label>
+              </Button>
             </div>}
 
         {/* Where the inline mapping table was: its summary, and the way back into the dialog. */}
@@ -393,17 +424,17 @@ export function LeadImportWorkspace() {
           title="Column mapping"
           sub={`${mappingSummary.mapped.toLocaleString()} mapped · ${mappingSummary.needsDecision.toLocaleString()} ${mappingSummary.needsDecision === 1 ? "needs" : "need"} a decision · ${requiredMapped} of ${requiredKeys.length} required fields mapped`}
           action={<span className="flex flex-wrap gap-2">
-            {vendorId && <button type="button" className={btn("secondary")} onClick={() => void saveMapping()}>Save mapping</button>}
-            <button type="button" className={btn(mapConfirmed ? "secondary" : "primary-sm")} onClick={() => setMapOpen(true)}>Map columns</button>
+            {vendorId && <Button type="button" variant="outline" onClick={() => void saveMapping()}>Save mapping</Button>}
+            <Button type="button" variant={mapConfirmed ? "outline" : "default"} onClick={() => setMapOpen(true)}>Map columns</Button>
           </span>}
           bodyClassName="flex flex-col gap-1.5"
         >
           <p className="m-0 flex items-center gap-2 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--body)]">
             {mapConfirmed
-              ? <><Pill tone="success" dot>Confirmed</Pill>The scrub reads the file with this mapping.</>
+              ? <Pill tone="success" dot>Confirmed</Pill>
               : <><Pill tone="warning" dot>Not confirmed</Pill>Check each column before the scrub.</>}
           </p>
-          {dateOrderToSend && (datePicked || dates.ambiguous === 0) && <p className="m-0 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">Slash dates are read {dateOrderToSend === "dmy" ? "day first" : "month first (US)"}{datePicked ? "" : ", the reading that fits this file's dates"}.</p>}
+          {dateOrderToSend && (datePicked || dates.ambiguous === 0) && <p className="m-0 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">Slash dates are read {dateOrderToSend === "dmy" ? "day first" : "month first (US)"}.</p>}
           {saveNote && <p role="status" className="m-0 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">{saveNote}</p>}
         </SettingsCard>}
 
@@ -429,50 +460,31 @@ export function LeadImportWorkspace() {
           busy={saving}
         />}
 
-        {csv && <SettingsCard pad={20} title="CSV preview" sub={`The first ${preview.rows.length} row${preview.rows.length === 1 ? "" : "s"} of the file, as it arrived.`}>
+        {csv && <TableCard title="CSV preview" description={`First ${preview.rows.length} row${preview.rows.length === 1 ? "" : "s"} of the file.`}>
           {preview.error
-            ? <p role="alert" className="text-[14px] leading-[1.5] text-[var(--error-ink)]">{preview.error}</p>
-            : <div className="min-w-0 overflow-x-auto rounded-[8px] border border-[var(--border)]">
-                <table className={st.table}>
-                  <thead><tr className={st.headRow}>{preview.headers.map((header, index) => <th scope="col" key={`${header}-${index}`} className={st.th}>{header}</th>)}</tr></thead>
-                  <tbody>{preview.rows.map((row, rowIndex) => <tr key={rowIndex}>{preview.headers.map((_, cellIndex) => <td key={cellIndex} className={cn(st.td, "whitespace-nowrap")}>{row[cellIndex] ?? ""}</td>)}</tr>)}</tbody>
-                </table>
-              </div>}
-        </SettingsCard>}
+            ? <p role="alert" className="border-t border-border px-4 py-3 text-[14px] leading-[1.5] text-[var(--error-ink)]">{preview.error}</p>
+            : <table className={st.table}>
+                <thead><tr className={st.headRow}>{preview.headers.map((header, index) => <th scope="col" key={`${header}-${index}`} className={st.th}>{header}</th>)}</tr></thead>
+                <tbody>{preview.rows.map((row, rowIndex) => <tr key={rowIndex}>{preview.headers.map((_, cellIndex) => <td key={cellIndex} className={cn(st.td, "whitespace-nowrap")}>{row[cellIndex] ?? ""}</td>)}</tr>)}</tbody>
+              </table>}
+        </TableCard>}
 
         {csv && validation && <SettingsCard pad={20} title="Validation summary">
           {validation.error
             ? <p role="alert" className="text-[14px] leading-[1.5] text-[var(--error-ink)]">{validation.error} Correct the file and choose it again.</p>
             : <div className="flex flex-col gap-3">
-                <div role="status" className="grid gap-3 sm:grid-cols-2">
-                  <div className="flex gap-3 rounded-[12px] border border-[var(--border)] bg-[var(--success-surface)] px-4 py-3">
-                    <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-[var(--success-ink)]" aria-hidden />
-                    <span className="min-w-0">
-                      <strong className="block text-[14px] leading-[1.5] font-semibold text-[var(--ink)]">{validation.validRows.toLocaleString()} row{validation.validRows === 1 ? "" : "s"} ready</strong>
-                      <span className="block text-[12px] leading-[1.5] text-[var(--body)]">These go on to be screened and de-duplicated on the next step.</span>
-                    </span>
-                  </div>
-                  {validation.rejectedRows > 0 && <div className="flex gap-3 rounded-[12px] border border-[var(--border)] bg-[var(--warning-surface)] px-4 py-3">
-                    <AlertTriangle className="mt-0.5 size-5 shrink-0 text-[var(--warning-ink)]" aria-hidden />
-                    <span className="min-w-0">
-                      <strong className="block text-[14px] leading-[1.5] font-semibold text-[var(--ink)]">{validation.rejectedRows.toLocaleString()} row{validation.rejectedRows === 1 ? " needs" : "s need"} attention</strong>
-                      <span className="block text-[12px] leading-[1.5] text-[var(--body)]">They are listed as Invalid on the review and left out. The rest of the file can still be imported.</span>
-                    </span>
-                  </div>}
+                <div role="status" className="flex flex-wrap items-center gap-2">
+                  <Pill tone="success" dot>{validation.validRows.toLocaleString()} row{validation.validRows === 1 ? "" : "s"} ready</Pill>
+                  {validation.rejectedRows > 0 && <Pill tone="warning" dot>{validation.rejectedRows.toLocaleString()} row{validation.rejectedRows === 1 ? " needs" : "s need"} attention · left out</Pill>}
+                  {validation.rowErrors.length > 0 && <Button type="button" variant="outline" className="ml-auto" aria-expanded={errorsOpen} onClick={() => setErrorsOpen((open) => !open)}>
+                    View errors ({validation.rejectedRows.toLocaleString()})
+                    <ChevronDown className={cn("size-4 transition-transform", errorsOpen && "rotate-180")} aria-hidden />
+                  </Button>}
                 </div>
-                {validation.rowErrors.length > 0 && <button type="button" className={btn("row", "self-start")} aria-expanded={errorsOpen} onClick={() => setErrorsOpen((open) => !open)}>
-                  View errors ({validation.rejectedRows.toLocaleString()})
-                  <ChevronDown className={cn("size-4 transition-transform", errorsOpen && "rotate-180")} aria-hidden />
-                </button>}
                 {errorsOpen && validation.rowErrors.length > 0 && <ul className="m-0 flex list-none flex-col gap-1 rounded-[8px] border border-[var(--border)] bg-[var(--surface-alt)] p-3 text-[14px] leading-[1.5] text-[var(--body)]">
                   {validation.rowErrors.map((item) => <li key={item.rowNumber}>{item.message}</li>)}
                   {validation.moreRowErrors > 0 && <li className="text-[var(--muted)]">and {validation.moreRowErrors.toLocaleString()} more row{validation.moreRowErrors === 1 ? "" : "s"} with problems</li>}
                 </ul>}
-                {/* Named, not implied. Ray is about to pay for rows this screen cannot judge:
-                    the scrub runs on the server against lists that change by the hour. The
-                    honest preflight says what it has NOT checked, rather than showing a clean
-                    bill of health and refusing 180 rows a minute later. */}
-                <p className="flex gap-2 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]"><Info className="mt-0.5 size-4 shrink-0" aria-hidden />Suppression screening runs on the next step. Numbers on a DNC, litigator or invalid list are recorded against this campaign for a vendor credit, so the imported total can be lower than {validation.validRows.toLocaleString()}.</p>
               </div>}
         </SettingsCard>}
       </div>
@@ -482,20 +494,20 @@ export function LeadImportWorkspace() {
           ? <DashedCard
               icon={<Store className="size-4" aria-hidden />}
               title="Create a campaign first"
-              action={info.canCreateCampaigns ? <Link href="/app/campaigns" className={btn("secondary", "h-11")}>Go to Vendors &amp; campaigns</Link> : undefined}
+              action={info.canCreateCampaigns ? <Button asChild variant="outline"><Link href="/app/campaigns">Go to Vendors &amp; campaigns</Link></Button> : undefined}
             >
               {info.canCreateCampaigns
-                ? "Every import is attributed to a campaign, which carries its vendor and what the list cost. Use New campaign on Vendors & campaigns, then come back to import."
-                : "Every import is attributed to a campaign, which carries its vendor and what the list cost. Ask an owner or producer to create one on Vendors & campaigns."}
+                ? "Every import is attributed to a campaign."
+                : "Every import is attributed to a campaign. Ask an owner or producer to create one."}
             </DashedCard>
-          : <SettingsCard pad={20} title="Attribution" sub="Chosen before review. New leads carry this campaign permanently. People you already have get it added as an extra source." bodyClassName="flex flex-col gap-3.5">
+          : <SettingsCard pad={20} title="Attribution" bodyClassName="flex flex-col gap-3.5">
               <Field label="Vendor" htmlFor="lead-vendor" hint={vendorId ? "Filters the campaigns below, and reuses its saved column mapping." : undefined}>
                 <select id="lead-vendor" className={control} value={vendorId} onChange={(event) => chooseVendor(event.target.value)}>
                   <option value="">Any vendor</option>
                   {activeVendors.map((vendor) => <option key={vendor.id} value={vendor.id}>{vendor.name}</option>)}
                 </select>
               </Field>
-              <Field label="Campaign" htmlFor="lead-campaign" required hint={campaign && campaign.status !== "active" ? `This campaign is ${campaign.status}. Its leads are imported but not dialled until it is active.` : undefined}>
+              <Field label="Campaign" htmlFor="lead-campaign" required hint={campaign && campaign.status !== "active" ? `This campaign is ${campaign.status}. Its leads are imported but not dialled until it is active.` : "New leads carry this campaign permanently."}>
                 <select id="lead-campaign" className={control} required value={campaignId} onChange={(event) => chooseCampaign(event.target.value)}>
                   <option value="">Choose a campaign</option>
                   {visibleCampaigns.map((item) => <option key={item.id} value={item.id}>{item.name}{STATUS_SUFFIX[item.status] ?? ""}</option>)}
@@ -513,58 +525,29 @@ export function LeadImportWorkspace() {
             </SettingsCard>}
 
         {!storageOk && <Callout tone="warning" title="This browser will not hold the file between pages">
-          Review is a separate page, so the file has to survive the navigation. Check that site data is enabled for this site.
+          Enable site data for this site to continue to review.
         </Callout>}
 
         <div>
-          <button type="submit" className={btn("primary", "h-11 w-full")} disabled={Boolean(blockedReason) || saving} aria-describedby="import-continue-note">
+          <Button type="submit" className="w-full" disabled={Boolean(blockedReason) || saving} aria-describedby={blockedReason ? "import-continue-note" : undefined}>
             {saving ? "Checking…" : "Continue to review"}
-          </button>
-          <p id="import-continue-note" className="mt-2 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">
-            {blockedReason ?? "Nothing is imported yet. The next screen shows what is clean, what is on a do-not-call or litigator list, and who you already have — and lets you decide what to do with each group."}
-          </p>
+          </Button>
+          {blockedReason && <p id="import-continue-note" className="mt-2 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">{blockedReason}</p>}
         </div>
       </div>
     </form>
 
-    <div className="grid min-w-0 gap-5 md:grid-cols-2 xl:grid-cols-4">
-      <SettingsCard pad={20} title="Plan usage" sub="Imports and scrubs stop before they exceed a hard cap." bodyClassName="flex flex-col gap-4">
-        {usage.length === 0 && <p className="text-[14px] text-[var(--muted)]">{info ? "No import limits on this plan." : "Loading…"}</p>}
-        {usage.map((item) => {
-          const pct = item.limit === null ? 0 : Math.min(100, Math.round((item.usage / Math.max(1, item.limit)) * 100));
-          return item.limit === null
-            ? <div key={item.key} className="flex justify-between gap-3 text-[12px] leading-[1.5] text-[var(--muted)] tabular-nums"><span>{item.label}</span><span>{item.usage.toLocaleString()} used</span></div>
-            : <SettingsMeter key={item.key} value={item.usage} max={item.limit} tone={pct >= 90 ? "error" : pct >= 75 ? "warning" : "primary"} label={item.label} valueLabel={`${item.usage.toLocaleString()} of ${item.limit.toLocaleString()}`} caption={`${pct}%`} ariaLabel={`${item.label}: ${pct}% used`} />;
-        })}
-      </SettingsCard>
-
-      <SettingsCard pad={20} title="Import rules" bodyClassName="flex flex-col gap-3.5">
-        {[
-          { icon: CheckCircle2, title: "Identity fields required", body: "Each row needs a valid phone, first name, and last name. State, email, and all other fields are optional." },
-          { icon: CheckCircle2, title: "Stage is automatic", body: "If the CSV has no stage column, leads start in the first active pipeline stage." },
-          { icon: CalendarCheck, title: "Maximum file size", body: `Up to ${(info?.maxRows ?? 20000).toLocaleString()} rows per file, committed as one transaction — all of it or none of it.` },
-          { icon: RefreshCw, title: "Deduplication", body: "We match on phone number. People you already have keep one lead and get this campaign added as an extra source; anyone already worked is not put back in the dialer." },
-        ].map((rule) => <div key={rule.title} className="flex gap-2.5">
-          <rule.icon className="mt-0.5 size-4 shrink-0 text-[var(--success-ink)]" aria-hidden />
-          <span className="min-w-0">
-            <strong className="block text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">{rule.title}</strong>
-            <span className="block text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">{rule.body}</span>
-          </span>
-        </div>)}
-      </SettingsCard>
-
-      <SettingsCard pad={20} title="Available stages" sub="Imported leads can start in any of these.">
-        <div className="flex flex-wrap gap-2">{info?.stages.map((stage) => <Pill key={stage.id}>{stage.name}</Pill>)}</div>
-      </SettingsCard>
-
-      <SettingsCard pad={20} title="Expected fields" sub={info ? `The ${info.product.name} lead record.` : undefined}>
-        <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
-          {info?.fields.map((field) => <li key={field.key} className="flex min-w-0 items-baseline justify-between gap-3">
-            <code className={cn(st.code, "truncate")}>{field.key}</code>
-            <span className="shrink-0 text-[12px] leading-[1.5] text-[var(--muted)]">{field.type}{field.required ? " · required" : ""}</span>
-          </li>)}
-        </ul>
-      </SettingsCard>
-    </div>
+    {info && info.fields.length > 0 && <TableCard title="Expected fields" description={`The ${info.product.name} lead record.`}>
+      <table className={st.table}>
+        <thead><tr className={st.headRow}><th scope="col" className={st.th}>Field</th><th scope="col" className={st.th}>Type</th><th scope="col" className={st.th}>Required</th></tr></thead>
+        <tbody>
+          {info.fields.map((field) => <tr key={field.key}>
+            <td className={st.td}><code className={st.code}>{field.key}</code></td>
+            <td className={st.td}>{field.type}</td>
+            <td className={st.td}>{field.required ? "Required" : "Optional"}</td>
+          </tr>)}
+        </tbody>
+      </table>
+    </TableCard>}
   </div>;
 }

@@ -14,19 +14,22 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { Plus } from "lucide-react";
 
 import { notify } from "@/lib/notify";
+import { Button } from "@/components/ui/button";
+import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { PageHeader } from "@/components/ui/page-header";
+import { PageLoading } from "@/components/ui/page-loading";
+import { EmptyState, NoMatches } from "@/components/ui/page-states";
+import { StatStrip, StatTile } from "@/components/ui/stat";
+import { TableCard } from "@/components/ui/table-card";
 import {
   Callout,
-  DashedCard,
-  DraftActions,
   Field,
   KeyValues,
   Pill,
-  PlusIcon,
   SettingsMeter,
-  SettingsTableCard,
   btn,
   control,
   st,
@@ -48,9 +51,8 @@ import {
   today,
   type SaveResult,
 } from "@/components/app/appointment-vault-parts";
-import { sectionForPath } from "@/lib/menu/definition";
 import type { CarrierRow } from "@/lib/carriers/constants";
-import { US_STATES, regionOf } from "@/lib/appointments/constants";
+import { US_REGIONS, US_STATES, regionOf } from "@/lib/appointments/constants";
 import { appointmentIsActiveAt } from "@/lib/appointments/eligibility";
 import { SCHEMA_PENDING_MESSAGE } from "@/lib/appointments/pendingSchema";
 import {
@@ -102,7 +104,7 @@ const MUTED = "text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]"
 /** The board's padded card, with the page's own h2 (SettingsCard draws an h3 for sections). */
 function Card({ title, sub, action, children, labelledBy }: { title: string; sub?: ReactNode; action?: ReactNode; children: ReactNode; labelledBy: string }) {
   return (
-    <section aria-labelledby={labelledBy} className="min-w-0 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] p-6">
+    <section aria-labelledby={labelledBy} className="min-w-0 rounded-lg border border-border bg-card p-5">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <h2 id={labelledBy} className={H2}>{title}</h2>
@@ -135,6 +137,10 @@ export function CarrierAppointmentsPage({ canEdit, isOwner }: { canEdit: boolean
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [effectiveFrom, setEffectiveFrom] = useState(today);
   const [stateFilter, setStateFilter] = useState("");
+  const [carrierQuery, setCarrierQuery] = useState("");
+  const [regionFilter, setRegionFilter] = useState("");
+  const [licenceQuery, setLicenceQuery] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
 
   const applyVault = useCallback((next: Vault) => {
     setVault(next);
@@ -231,35 +237,21 @@ export function CarrierAppointmentsPage({ canEdit, isOwner }: { canEdit: boolean
     if (!result.ok) notify.block(result.error);
   }
 
-  const headerActions = (
-    <>
-      {!canEdit && <Pill tone="neutral">View only</Pill>}
-      {isOwner && (
-        <Link href="/app/settings#carrier-library" className={btn("secondary", "h-11")}>
-          Connect a carrier
-        </Link>
-      )}
-    </>
-  );
   const header = (
     <PageHeader
-      eyebrow={sectionForPath("/app/appointments") ?? undefined}
       title="Appointments & licences"
       description="Whether you may legally write this product in this state today."
-      actions={headerActions}
+      actions={
+        isOwner ? (
+          <Button asChild variant="outline">
+            <Link href="/app/settings#carrier-library">Connect a carrier</Link>
+          </Button>
+        ) : undefined
+      }
     />
   );
 
-  if (!vault) {
-    return (
-      <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
-        {header}
-        <section className="rounded-[12px] border border-[var(--border)] bg-[var(--surface)] p-6">
-          <p role="status" className={MUTED}>Loading appointments and licences…</p>
-        </section>
-      </div>
-    );
-  }
+  if (!vault) return <PageLoading />;
 
   const extended = vault.extendedFields !== false;
   const detailsAvailable = vault.appointmentDetails !== false;
@@ -277,13 +269,20 @@ export function CarrierAppointmentsPage({ canEdit, isOwner }: { canEdit: boolean
       .map((id) => vault.carriers.find((carrier) => carrier.id === id) ?? ({ id, name: "Carrier" } as CarrierRow)),
   ];
   const footprint = appointmentFootprint(vault.appointments, vault.licenses);
-  const columns = footprint;
+  const columns = regionFilter ? footprint.filter((code) => regionOf(code) === regionFilter) : footprint;
+  const carrierNeedle = carrierQuery.trim().toLowerCase();
+  const shownCarriers = carrierNeedle ? tableCarriers.filter((carrier) => carrier.name.toLowerCase().includes(carrierNeedle)) : tableCarriers;
 
   const activeAppointments = vault.appointments.filter((row) => appointmentIsActiveAt(row, today));
   const appointedStates = new Set(activeAppointments.map((row) => row.state));
   const licencedStates = new Set(vault.licenses.map((row) => row.state));
   const licenceRows = [...vault.licenses].sort((a, b) => stateName(a.state).localeCompare(stateName(b.state)));
   const unlicensedAppointedStates = [...appointedStates].filter((state) => !licencedStates.has(state)).sort((a, b) => stateName(a).localeCompare(stateName(b)));
+  const licenceNeedle = licenceQuery.trim().toLowerCase();
+  const matchesState = (state: string, ...more: Array<string | null | undefined>) =>
+    !licenceNeedle || [state, stateName(state), ...more].some((value) => value?.toLowerCase().includes(licenceNeedle));
+  const shownLicences = licenceRows.filter((row) => matchesState(row.state, row.license_number));
+  const shownUnlicensed = unlicensedAppointedStates.filter((state) => matchesState(state));
 
   const eoPolicy = currentEoPolicy(vault.eoPolicies, today);
   const eoDays = eoPolicy ? daysUntilExpiry(eoPolicy.expires_at, today) : null;
@@ -291,46 +290,67 @@ export function CarrierAppointmentsPage({ canEdit, isOwner }: { canEdit: boolean
   const outstanding = trainings ? outstandingTrainings(trainings) : null;
   const overdueTrainings = outstanding ? outstanding.filter((row) => row.due_on < today).length : 0;
   const cellDialog = dialog && typeof dialog === "object" ? dialog : null;
+  const expiringLicences = licenceRows.filter((row) => licenceStatus(row.expires_at, today).tone !== "success").length;
 
   const closeEditor = () => {
     setEditing(false);
     setStateFilter("");
   };
+  const refresh = async () => {
+    setRefreshing(true);
+    try {
+      await load();
+    } finally {
+      setRefreshing(false);
+    }
+  };
+  const refreshButton = <RefreshButton onClick={() => void refresh()} refreshing={refreshing} />;
+  const noCarrier = (
+    <EmptyState title="Connect a carrier first" hint="Choose a carrier in Settings › Carrier library before recording appointments." />
+  );
 
   return (
     <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
       {header}
 
-      <section aria-labelledby="readiness-heading" className="min-w-0 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] p-6">
-        <div className="flex items-start justify-between gap-6">
-          <div className="min-w-0">
-            <h2 id="readiness-heading" className={H2}>Readiness</h2>
-            <p className={cn("mt-1", MUTED)}>Anything expired or expiring inside {READINESS_WINDOW_DAYS} days appears here, not only in its own section.</p>
-          </div>
-          <Pill tone={summary.tone} dot className="shrink-0">{summary.label}</Pill>
+      {!canEdit && (
+        <div role="status" className="rounded-lg border border-border border-l-[3px] border-l-[var(--info)] bg-[var(--info-surface)] px-4 py-3 text-sm text-[var(--info-ink)]">
+          View only. An owner with full access edits appointments and licences.
         </div>
-        {/* Every item, wrapping onto more rows: a fifth blocker is never dropped to keep the row tidy. */}
-        {items.length > 0 && (
-          <ul className="m-0 mt-[18px] grid list-none gap-4 p-0 sm:grid-cols-2 lg:grid-cols-4">
-            {items.map((item) => (
-              <li key={item.key} className="min-w-0">
-                <Callout tone={item.tone} title={item.title} className="h-full">
-                  {item.body}
-                </Callout>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+      )}
+
+      <StatStrip label="Readiness">
+        <StatTile label="Readiness" value={summary.label} valueTone={summary.tone === "error" ? "danger" : summary.tone === "warning" ? "warning" : "good"} footnote={`inside ${READINESS_WINDOW_DAYS} days`} />
+        <StatTile label="Appointed states" value={appointedStates.size} footnote={plural(activeAppointments.length, "active appointment")} />
+        <StatTile label="Licences" value={licenceRows.length} valueTone={unlicensedAppointedStates.length ? "danger" : undefined} footnote={unlicensedAppointedStates.length ? `${plural(unlicensedAppointedStates.length, "appointed state")} unlicensed` : expiringLicences ? `${expiringLicences} need attention` : "all current"} />
+        <StatTile label="E&O cover" value={eoPolicy ? (eoDays !== null && eoDays < 0 ? "Expired" : `${eoDays}d`) : "None"} valueTone={!eoPolicy || (eoDays !== null && eoDays < 0) ? "danger" : eoDays !== null && eoDays <= READINESS_WINDOW_DAYS ? "warning" : undefined} footnote={eoPolicy ? `until ${shortDate(eoPolicy.expires_at)}` : "no policy on file"} />
+        <StatTile label="CE credits" value={ceRecord ? `${ceRecord.credits_completed}/${ceRecord.credits_required}` : "—"} footnote={ceRecord ? `due ${shortDate(ceRecord.deadline)}` : "no cycle recorded"} />
+      </StatStrip>
+
+      {/* Every readiness item, one line each: a fifth blocker is never dropped to keep the page tidy. */}
+      {items.length > 0 && (
+        <ul className="m-0 flex list-none flex-col gap-2 p-0" aria-label="Readiness items">
+          {items.map((item) => (
+            <li
+              key={item.key}
+              className={cn(
+                "rounded-lg border border-border border-l-[3px] px-4 py-3 text-sm",
+                item.tone === "error"
+                  ? "border-l-[var(--error)] bg-[var(--error-surface)] text-[var(--error-ink)]"
+                  : "border-l-[var(--warning)] bg-[var(--warning-surface)] text-[var(--warning-ink)]",
+              )}
+            >
+              <span className="font-semibold">{item.title}</span> <span className="text-[var(--body)]">· {item.body}</span>
+            </li>
+          ))}
+        </ul>
+      )}
 
       {editing && canEdit ? (
         configuredCarriers.length === 0 ? (
-          <DashedCard
-            title="Connect a carrier first"
-            action={<button type="button" className={btn("secondary")} onClick={closeEditor}>Done editing</button>}
-          >
-            Choose a carrier in Settings &rsaquo; Carrier library before recording appointments.
-          </DashedCard>
+          <TableCard toolbar={<DataToolbar actions={<Button type="button" variant="outline" onClick={closeEditor}>Done editing</Button>} />}>
+            {noCarrier}
+          </TableCard>
         ) : (
           <AppointmentGrid
             carriers={configuredCarriers}
@@ -345,40 +365,40 @@ export function CarrierAppointmentsPage({ canEdit, isOwner }: { canEdit: boolean
             pending={{ additions: additions.length, removals: removals.length }}
             actions={
               <>
-                <DraftActions dirty={dirty} saving={saving === "appointments"} onDiscard={() => setSelected(new Set(saved))} onSave={() => void saveGrid()} />
-                <button type="button" className={btn("secondary")} onClick={closeEditor} disabled={dirty} title={dirty ? "Save or discard your changes first" : undefined}>
+                <Button type="button" variant="ghost" onClick={() => setSelected(new Set(saved))} disabled={!dirty || saving === "appointments"}>Discard</Button>
+                <Button type="button" onClick={() => void saveGrid()} disabled={!dirty || saving === "appointments"}>{saving === "appointments" ? "Saving…" : "Save changes"}</Button>
+                <Button type="button" variant="outline" onClick={closeEditor} disabled={dirty} title={dirty ? "Save or discard your changes first" : undefined}>
                   Done editing
-                </button>
+                </Button>
               </>
             }
           />
         )
-      ) : tableCarriers.length === 0 ? (
-        <DashedCard title="Connect a carrier first">
-          Choose a carrier in Settings &rsaquo; Carrier library before recording appointments.
-        </DashedCard>
       ) : (
-        <SettingsTableCard
+        <TableCard
           title="Carrier appointments by state"
-          actions={
-            <>
-              {columns.length > 0 && (
-                <Pill tone="neutral">
-                  {columns.length} of {footprint.length} states &middot; grouped by region
-                </Pill>
-              )}
-              {canEdit && (
-                <button type="button" className={btn("secondary")} onClick={() => setEditing(true)}>
-                  Edit appointments
-                </button>
-              )}
-            </>
+          toolbar={
+            <DataToolbar
+              actions={<>
+                {canEdit && tableCarriers.length > 0 && <Button type="button" variant="outline" onClick={() => setEditing(true)}>Edit appointments</Button>}
+                {refreshButton}
+              </>}
+            >
+              <ToolbarSearch value={carrierQuery} onChange={setCarrierQuery} placeholder="Search carriers" />
+              <select aria-label="Filter states by region" className={toolbarControl} value={regionFilter} onChange={(event) => setRegionFilter(event.target.value)}>
+                <option value="">All regions</option>
+                {US_REGIONS.map((region) => <option key={region.name} value={region.name}>{region.name}</option>)}
+              </select>
+            </DataToolbar>
           }
+          footer={tableCarriers.length > 0 && footprint.length > 0 ? <span>{shownCarriers.length} of {plural(tableCarriers.length, "carrier")} · {columns.length} of {footprint.length} states · grouped by region</span> : undefined}
         >
-          {columns.length === 0 ? (
-            <p className={cn("px-4 py-3", MUTED)}>
-              No appointment or licence is recorded yet.{canEdit ? " Choose Edit appointments to mark the states where each carrier has appointed you." : ""}
-            </p>
+          {tableCarriers.length === 0 ? (
+            noCarrier
+          ) : footprint.length === 0 ? (
+            <EmptyState title="No appointment or licence recorded yet" hint={canEdit ? "Choose Edit appointments to mark the states where each carrier has appointed you." : "Appointments appear here once an owner records them."} />
+          ) : shownCarriers.length === 0 || columns.length === 0 ? (
+            <NoMatches noun="appointments" onClear={() => { setCarrierQuery(""); setRegionFilter(""); }} />
           ) : (
             <table className={cn(st.table, "table-fixed")} style={{ minWidth: 170 + 110 * columns.length }}>
               <thead>
@@ -396,7 +416,7 @@ export function CarrierAppointmentsPage({ canEdit, isOwner }: { canEdit: boolean
                 </tr>
               </thead>
               <tbody className="m-seq">
-                {tableCarriers.map((carrier) => (
+                {shownCarriers.map((carrier) => (
                   <tr key={carrier.id}>
                     <th scope="row" className={cn(st.td, "truncate text-left font-normal")} title={carrier.name}>
                       {carrier.name}
@@ -432,66 +452,77 @@ export function CarrierAppointmentsPage({ canEdit, isOwner }: { canEdit: boolean
               </tbody>
             </table>
           )}
-        </SettingsTableCard>
+        </TableCard>
       )}
 
       <div className="flex min-w-0 flex-col gap-6 lg:flex-row lg:items-start">
         <div className="flex min-w-0 flex-1 flex-col gap-6">
-          <SettingsTableCard
+          <TableCard
             title="State licences"
-            actions={
-              canEdit ? (
-                <button type="button" className={btn("secondary")} onClick={() => setDialog("license")}>
-                  <PlusIcon />
-                  Add a licence
-                </button>
-              ) : undefined
+            toolbar={
+              <DataToolbar
+                actions={<>
+                  {canEdit && (
+                    <Button type="button" variant="outline" onClick={() => setDialog("license")}>
+                      <Plus aria-hidden="true" />
+                      Add a licence
+                    </Button>
+                  )}
+                  {refreshButton}
+                </>}
+              >
+                <ToolbarSearch value={licenceQuery} onChange={setLicenceQuery} placeholder="Search states, licences" />
+              </DataToolbar>
             }
           >
-            <table className={st.table}>
-              <thead>
-                <tr className={st.headRow}>
-                  <th scope="col" className={cn(st.th, "w-[90px]")}>State</th>
-                  <th scope="col" className={cn(st.th, "w-[150px]")}>Licence</th>
-                  <th scope="col" className={cn(st.th, "w-[170px]")}>Lines</th>
-                  <th scope="col" className={cn(st.th, "w-[130px]")}>Expires</th>
-                  {/* The board's 130px; left to take the remainder so 90+150+170+130+130 = 670px never
-                      forces a 2px scroll in the 668px the column has at 1440 wide. */}
-                  <th scope="col" className={st.th}><span className="sr-only">Status</span></th>
-                </tr>
-              </thead>
-              <tbody className="m-seq">
-                {licenceRows.map((row) => {
-                  const status = licenceStatus(row.expires_at, today);
-                  return (
-                    <tr key={row.id}>
-                      <td className={st.td}>{stateName(row.state)}</td>
-                      <td className={st.td}>{row.license_number}</td>
-                      <td className={st.td}>{row.lines_of_authority?.length ? row.lines_of_authority.join(", ") : <span className="text-[var(--muted)]">Not recorded</span>}</td>
-                      <td className={cn(st.td, "tabular-nums")}>{shortDate(row.expires_at)}</td>
-                      <td className={st.td}><Pill tone={status.tone} dot>{status.label}</Pill></td>
+            {licenceRows.length + unlicensedAppointedStates.length > 0 && shownLicences.length + shownUnlicensed.length === 0 ? (
+              <NoMatches noun="licences" onClear={() => setLicenceQuery("")} />
+            ) : (
+              <table className={st.table}>
+                <thead>
+                  <tr className={st.headRow}>
+                    <th scope="col" className={cn(st.th, "w-[90px]")}>State</th>
+                    <th scope="col" className={cn(st.th, "w-[150px]")}>Licence</th>
+                    <th scope="col" className={cn(st.th, "w-[170px]")}>Lines</th>
+                    <th scope="col" className={cn(st.th, "w-[130px]")}>Expires</th>
+                    {/* The board's 130px; left to take the remainder so 90+150+170+130+130 = 670px never
+                        forces a 2px scroll in the 668px the column has at 1440 wide. */}
+                    <th scope="col" className={st.th}><span className="sr-only">Status</span></th>
+                  </tr>
+                </thead>
+                <tbody className="m-seq">
+                  {shownLicences.map((row) => {
+                    const status = licenceStatus(row.expires_at, today);
+                    return (
+                      <tr key={row.id}>
+                        <td className={st.td}>{stateName(row.state)}</td>
+                        <td className={st.td}>{row.license_number}</td>
+                        <td className={st.td}>{row.lines_of_authority?.length ? row.lines_of_authority.join(", ") : <span className="text-[var(--muted)]">Not recorded</span>}</td>
+                        <td className={cn(st.td, "tabular-nums")}>{shortDate(row.expires_at)}</td>
+                        <td className={st.td}><Pill tone={status.tone} dot>{status.label}</Pill></td>
+                      </tr>
+                    );
+                  })}
+                  {shownUnlicensed.map((state) => (
+                    <tr key={`unlicensed-${state}`}>
+                      <td className={st.td}>{stateName(state)}</td>
+                      <td className={st.td}>&mdash;</td>
+                      <td className={st.td}>&mdash;</td>
+                      <td className={st.td}>&mdash;</td>
+                      <td className={st.td} title="The agency holds an active carrier appointment here but no licence, so no lead in this state can be assigned.">
+                        <Pill tone="error" dot>Not licensed</Pill>
+                      </td>
                     </tr>
-                  );
-                })}
-                {unlicensedAppointedStates.map((state) => (
-                  <tr key={`unlicensed-${state}`}>
-                    <td className={st.td}>{stateName(state)}</td>
-                    <td className={st.td}>&mdash;</td>
-                    <td className={st.td}>&mdash;</td>
-                    <td className={st.td}>&mdash;</td>
-                    <td className={st.td} title="The agency holds an active carrier appointment here but no licence, so no lead in this state can be assigned.">
-                      <Pill tone="error" dot>Not licensed</Pill>
-                    </td>
-                  </tr>
-                ))}
-                {licenceRows.length + unlicensedAppointedStates.length === 0 && (
-                  <tr>
-                    <td colSpan={5} className={cn(st.td, "text-[var(--muted)]")}>No licences recorded yet. Until one is, no lead can be assigned to an owner or producer.</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </SettingsTableCard>
+                  ))}
+                  {licenceRows.length + unlicensedAppointedStates.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className={cn(st.td, "text-[var(--muted)]")}>No licences recorded yet. Until one is, no lead can be assigned to an owner or producer.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            )}
+          </TableCard>
         </div>
 
         <div className="flex w-full min-w-0 flex-col gap-6 lg:w-[420px] lg:shrink-0">
@@ -502,8 +533,8 @@ export function CarrierAppointmentsPage({ canEdit, isOwner }: { canEdit: boolean
             action={
               canEdit ? (
                 <span className="flex shrink-0 gap-2">
-                  <button type="button" className={btn("secondary")} onClick={() => setDialog("training")}>Trainings</button>
-                  <button type="button" className={btn("secondary")} onClick={() => setDialog("ce")}>{ceRecord ? "Edit" : <><PlusIcon />Add a cycle</>}</button>
+                  <Button type="button" variant="outline" onClick={() => setDialog("training")}>Trainings</Button>
+                  <Button type="button" variant="outline" onClick={() => setDialog("ce")}>{ceRecord ? "Edit" : <><Plus aria-hidden="true" />Add a cycle</>}</Button>
                 </span>
               ) : undefined
             }
@@ -544,7 +575,7 @@ export function CarrierAppointmentsPage({ canEdit, isOwner }: { canEdit: boolean
           <Card
             labelledBy="eo-heading"
             title="Errors & omissions cover"
-            action={canEdit ? <button type="button" className={btn("secondary")} onClick={() => setDialog("eo")}>{eoPolicy ? "Edit" : <><PlusIcon />Add a policy</>}</button> : undefined}
+            action={canEdit ? <Button type="button" variant="outline" onClick={() => setDialog("eo")}>{eoPolicy ? "Edit" : <><Plus aria-hidden="true" />Add a policy</>}</Button> : undefined}
           >
             {eoPolicy ? (
               <KeyValues
@@ -565,10 +596,6 @@ export function CarrierAppointmentsPage({ canEdit, isOwner }: { canEdit: boolean
               <p className={MUTED}>No E&amp;O policy on file.</p>
             )}
           </Card>
-
-          <Callout tone="info" title="A producer reads this page. Only an owner with full access edits it.">
-            The edit permission is stricter than the page gate on purpose.
-          </Callout>
         </div>
       </div>
 

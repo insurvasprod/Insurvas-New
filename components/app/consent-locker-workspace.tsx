@@ -2,13 +2,18 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ExternalLink, Search, ShieldCheck, SlidersHorizontal } from "lucide-react";
+import { Download, ExternalLink, ShieldCheck } from "lucide-react";
 import { notify } from "@/lib/notify";
 
 import { Button } from "@/components/ui/button";
+import { DataToolbar, FilterButton, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { StatTile } from "@/components/ui/stat";
+import { PageHeader } from "@/components/ui/page-header";
+import { PageLoading } from "@/components/ui/page-loading";
+import { EmptyState, ErrorState, NoMatches, SectionLoading } from "@/components/ui/page-states";
+import { StatStrip, StatTile } from "@/components/ui/stat";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { TableCard } from "@/components/ui/table-card";
 import { CONSENT_STATUS_HINTS, CONSENT_STATUS_LABELS, type ConsentArtefact } from "@/lib/consent/constants";
 import { EVIDENCE_FILTER_LABEL, EVIDENCE_LABEL, EVIDENCE_TONE, evidenceTime, keptFor, type EvidenceFilter, type EvidenceLevel } from "@/lib/consent/evidence";
 
@@ -53,6 +58,7 @@ export function ConsentLockerWorkspace() {
   const [open, setOpen] = useState<Record_ | null>(null);
   const [opening, setOpening] = useState<string | null>(null);
   const [now] = useState(() => Date.now());
+  const [refreshing, setRefreshing] = useState(false);
 
   const query = useCallback((extra: Record<string, string> = {}) => {
     const params = new URLSearchParams({ view: "leads", evidence: filter, page: String(page), ...extra });
@@ -86,50 +92,67 @@ export function ConsentLockerWorkspace() {
     }
   }
 
+  async function refresh() {
+    setRefreshing(true);
+    try { await load(); } finally { setRefreshing(false); }
+  }
+
   function toggleSource(source: Source) {
     setSources((current) => current.includes(source) ? current.filter((item) => item !== source) : [...current, source]);
     setPage(0);
   }
 
   const tiles = loaded?.tiles;
-  const incomplete = tiles ? tiles.textMissing + tiles.noIp : 0;
   const first = loaded ? loaded.page * loaded.pageSize + 1 : 0;
   const last = loaded ? loaded.page * loaded.pageSize + loaded.rows.length : 0;
   const lastPage = loaded ? Math.max(0, Math.ceil(loaded.total / loaded.pageSize) - 1) : 0;
 
+  // The first read only; a filter or page change keeps the page drawn and swaps the rows.
+  if (!loaded && !error) return <PageLoading />;
+
   return (
-    <div className="portal-consent-view">
-      <div className="portal-consent-tiles">
+    <div className="m-stagger flex flex-col gap-6 text-[var(--ink)]">
+      <PageHeader title="Consent locker" />
+
+      <StatStrip label="Consent evidence totals">
         <StatTile label="Leads with full evidence" value={tiles ? tiles.full.toLocaleString() : "—"} valueTone={tiles && tiles.full > 0 ? "good" : undefined} footnote={tiles ? `${pct(tiles.full, tiles.leads)} of ${tiles.leads.toLocaleString()} leads` : " "} />
         <StatTile label="Consent text missing" value={tiles ? tiles.textMissing.toLocaleString() : "—"} valueTone={tiles && tiles.textMissing > 0 ? "danger" : undefined} footnote="flagged; still dialable" />
         <StatTile label="IP address missing" value={tiles ? tiles.noIp.toLocaleString() : "—"} valueTone={tiles && tiles.noIp > 0 ? "danger" : undefined} footnote="flagged; still dialable" />
         <StatTile label="Oldest record kept" value={tiles?.oldestCapturedAt ? keptFor(tiles.oldestCapturedAt, now) : "—"} footnote={tiles?.oldestCapturedAt ? `captured ${when(tiles.oldestCapturedAt).replace(/, .*$/, "")}` : "no certificates yet"} />
-      </div>
+      </StatStrip>
 
-      <div className="portal-consent-bar">
-        <select aria-label="Evidence status" value={filter} onChange={(event) => { setFilter(event.target.value as EvidenceFilter); setPage(0); }}>
-          {(Object.keys(EVIDENCE_FILTER_LABEL) as EvidenceFilter[]).map((key) => <option key={key} value={key}>{EVIDENCE_FILTER_LABEL[key]}</option>)}
-        </select>
-        <label className="portal-consent-search"><Search className="size-4" aria-hidden="true" /><input type="search" aria-label="Search leads" placeholder="Search name or phone" value={search} onChange={(event) => { setSearch(event.target.value); setPage(0); }} /></label>
-        <div className="portal-consent-filters">
-          <button type="button" aria-expanded={filtersOpen} onClick={() => setFiltersOpen((value) => !value)}><SlidersHorizontal className="size-4" aria-hidden="true" />Filters{sources.length > 0 && <span className="portal-consent-count">{sources.length}</span>}</button>
-          {filtersOpen && <div className="portal-consent-filter-panel" role="group" aria-label="Filter by source">
-            <span>Source</span>
-            {(Object.keys(SOURCE_LABEL) as Source[]).map((source) => <label key={source} className="portal-remember-me"><input type="checkbox" checked={sources.includes(source)} onChange={() => toggleSource(source)} />{SOURCE_LABEL[source]}</label>)}
-            {sources.length > 0 && <button type="button" className="portal-consent-clear" onClick={() => { setSources([]); setPage(0); }}>Clear filters</button>}
+      <TableCard
+        toolbar={<>
+          <DataToolbar actions={<>
+            <Button variant="outline" asChild><a href={`/api/app/consent?${query({ format: "csv" })}`}><Download aria-hidden="true" />Export</a></Button>
+            <RefreshButton onClick={() => void refresh()} refreshing={refreshing} />
+          </>}>
+            <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setPage(0); }} placeholder="Search name or phone" label="Search leads" />
+            <select aria-label="Evidence status" className={toolbarControl} value={filter} onChange={(event) => { setFilter(event.target.value as EvidenceFilter); setPage(0); }}>
+              {(Object.keys(EVIDENCE_FILTER_LABEL) as EvidenceFilter[]).map((key) => <option key={key} value={key}>{EVIDENCE_FILTER_LABEL[key]}</option>)}
+            </select>
+            <FilterButton open={filtersOpen} onClick={() => setFiltersOpen((value) => !value)} count={sources.length} />
+          </DataToolbar>
+          {filtersOpen && <div className="flex w-full flex-wrap items-center gap-x-4 gap-y-2 text-sm" role="group" aria-label="Filter by source">
+            <span className="text-xs font-semibold uppercase tracking-[0.02em] text-muted-foreground">Source</span>
+            {(Object.keys(SOURCE_LABEL) as Source[]).map((source) => <label key={source} className="inline-flex items-center gap-2"><input type="checkbox" className="size-4 accent-[var(--primary)]" checked={sources.includes(source)} onChange={() => toggleSource(source)} />{SOURCE_LABEL[source]}</label>)}
+            {sources.length > 0 && <button type="button" className="font-semibold text-[var(--accent-ink)] hover:underline" onClick={() => { setSources([]); setPage(0); }}>Clear filters</button>}
           </div>}
-        </div>
-        <span className="portal-consent-bar-spacer" />
-        <Button variant="outline" asChild><a href={`/api/app/consent?${query({ format: "csv" })}`}>Export</a></Button>
-        {tiles && <span className="portal-consent-complete">{tiles.full.toLocaleString()} of {tiles.leads.toLocaleString()} complete</span>}
-      </div>
-
-      <section className="portal-consent-panel" aria-label="Leads and their consent evidence">
-        {error ? <p className="portal-consent-empty is-error" role="alert">{error}</p>
-          : !loaded ? <p className="portal-consent-empty" role="status">Loading consent evidence…</p>
-          : loaded.rows.length === 0 ? <p className="portal-consent-empty">{search || filter !== "every" || sources.length ? "No leads match these filters." : "No leads yet. Evidence arrives with each posted or imported lead."}</p>
-          : <>
-            <Table>
+        </>}
+        footer={loaded && loaded.rows.length > 0 ? <>
+          <span>Showing {first.toLocaleString()}&ndash;{last.toLocaleString()} of {loaded.total.toLocaleString()} lead{loaded.total === 1 ? "" : "s"}</span>
+          <span className="flex gap-2">
+            <Button type="button" variant="outline" size="sm" disabled={loaded.page === 0} onClick={() => setPage(loaded.page - 1)}>Previous</Button>
+            <Button type="button" variant="outline" size="sm" disabled={loaded.page >= lastPage} onClick={() => setPage(loaded.page + 1)}>Next</Button>
+          </span>
+        </> : undefined}
+      >
+        {error ? <ErrorState title="The consent locker did not load" detail={error} action={<Button variant="outline" onClick={() => void refresh()}>Try again</Button>} />
+          : !loaded ? <SectionLoading rows={5} columns={5} label="Loading consent evidence" />
+          : loaded.rows.length === 0 ? (search || filter !== "every" || sources.length
+            ? <NoMatches noun="leads" onClear={() => { setSearch(""); setFilter("every"); setSources([]); setPage(0); }} />
+            : <EmptyState title="No leads yet" hint="Evidence arrives with each posted or imported lead." />)
+          : <Table>
               <TableHeader><TableRow>
                 <TableHead>Lead</TableHead>
                 <TableHead className="w-[200px]">Provider</TableHead>
@@ -141,38 +164,26 @@ export function ConsentLockerWorkspace() {
               <TableBody>
                 {loaded.rows.map((row) => (
                   <TableRow key={row.leadId}>
-                    <TableCell><strong className="portal-consent-name">{row.name}</strong>{row.phone && <small className="portal-consent-sub">{row.phone}</small>}</TableCell>
+                    <TableCell><strong className="block font-semibold text-[var(--ink)]">{row.name}</strong>{row.phone && <small className="block text-xs text-[var(--muted)]">{row.phone}</small>}</TableCell>
                     <TableCell>{row.providerName}</TableCell>
                     <TableCell className="tabular-nums">{when(row.consentGivenAt)}</TableCell>
                     <TableCell>{row.captured}</TableCell>
                     <TableCell><span className={`portal-status-chip is-${EVIDENCE_TONE[row.level]}`}><span aria-hidden="true" />{EVIDENCE_LABEL[row.level]}</span></TableCell>
                     <TableCell className="text-right">
                       {row.artefactId
-                        ? <Button type="button" variant="ghost" size="sm" disabled={opening === row.artefactId} onClick={() => void openRecord(row.artefactId!)}>{opening === row.artefactId ? "Opening…" : "Open"}</Button>
-                        : <Button variant="ghost" size="sm" asChild><Link href={`/app/leads/${row.leadId}`}>Open</Link></Button>}
+                        ? <Button type="button" variant="outline" size="sm" disabled={opening === row.artefactId} onClick={() => void openRecord(row.artefactId!)}>{opening === row.artefactId ? "Opening…" : "Open"}</Button>
+                        : <Button variant="outline" size="sm" asChild><Link href={`/app/leads/${row.leadId}`}>Open</Link></Button>}
                     </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
-            </Table>
-            <div className="portal-consent-pager">
-              <span>Showing {first.toLocaleString()}&ndash;{last.toLocaleString()} of {loaded.total.toLocaleString()} lead{loaded.total === 1 ? "" : "s"}</span>
-              <span>
-                <Button type="button" variant="outline" size="sm" disabled={loaded.page === 0} onClick={() => setPage(loaded.page - 1)}>Previous</Button>
-                <Button type="button" variant="outline" size="sm" disabled={loaded.page >= lastPage} onClick={() => setPage(loaded.page + 1)}>Next</Button>
-              </span>
-            </div>
-          </>}
-      </section>
+            </Table>}
+      </TableCard>
 
-      <div className="portal-consent-lower">
-        <section className="portal-consent-panel is-roomy" aria-labelledby="consent-coverage-heading">
-          <h2 id="consent-coverage-heading">Coverage by vendor</h2>
-          <p className="portal-consent-lede">A vendor whose bar is short is selling leads without the evidence to defend a call.</p>
-          {!loaded ? <p className="portal-consent-lede" role="status">Loading…</p>
-            : !loaded.coverageAvailable ? <p className="portal-consent-lede">Per-vendor coverage is unavailable on this deployment; the leads above are unaffected.</p>
-            : loaded.coverage.length === 0 ? <p className="portal-consent-lede">No vendor has supplied leads yet.</p>
-            : <div className="portal-consent-bars">
+      {loaded && loaded.coverageAvailable && (
+        <TableCard title="Coverage by vendor">
+          {loaded.coverage.length === 0 ? <EmptyState title="No vendor coverage yet" hint="No vendor has supplied leads yet." />
+            : <div className="grid gap-x-8 gap-y-3.5 px-4 py-4 md:grid-cols-2">
               {[...loaded.coverage].sort((a, b) => (b.claimedPct ?? -1) - (a.claimedPct ?? -1)).map((vendor) => (
                 <div key={vendor.vendorId}>
                   <div className="portal-consent-bar-label"><span>{vendor.vendorName}</span><span>{vendor.claimedPct === null ? "—" : `${vendor.claimedPct.toFixed(1)}%`}</span></div>
@@ -182,18 +193,8 @@ export function ConsentLockerWorkspace() {
                 </div>
               ))}
             </div>}
-        </section>
-        <div className="portal-consent-notes">
-          <div className="portal-consent-note is-error">
-            <strong>Missing evidence is flagged, and the calls still go out</strong>
-            <p>{incomplete.toLocaleString()} lead{incomplete === 1 ? " has" : "s have"} incomplete consent. The dialer does not refuse them — this workspace flags missing evidence rather than blocking it — so fix them at the vendor, or with the customer, before relying on them in a dispute.</p>
-          </div>
-          <div className="portal-consent-note is-info">
-            <strong>The words are stored exactly as the customer saw them</strong>
-            <p>For every certificate whose copy we claimed: not a summary, not a checkbox state &mdash; the literal text of the disclosure on the page they agreed to, which is the only version worth anything in a dispute.</p>
-          </div>
-        </div>
-      </div>
+        </TableCard>
+      )}
 
       <Dialog open={open !== null} onOpenChange={(next) => !next && setOpen(null)}>
         <DialogContent className="max-w-2xl">

@@ -101,6 +101,7 @@ export const AGENT_API_POLICIES: AgentApiPolicy[] = [
   { sourceFile: "app/api/app/deal-flow/funnel/route.ts", featureKey: "daily_deal_flow", allowedRoles: ["owner", "producer"] },
   { sourceFile: "app/api/app/partner-quality/route.ts", featureKey: "partner_quality", allowedRoles: ["owner", "producer", "bookkeeper"] },
   { sourceFile: "app/api/app/partner-quality/leads/route.ts", featureKey: "partner_quality", allowedRoles: ["owner", "producer", "bookkeeper"] },
+  { sourceFile: "app/api/app/partner-quality/[partnerId]/route.ts", featureKey: "partner_quality", allowedRoles: ["owner", "producer", "bookkeeper"] },
   { sourceFile: "app/api/app/true-cpa/route.ts", featureKey: "true_cpa", allowedRoles: ["owner", "producer", "bookkeeper"] },
   { sourceFile: "app/api/app/true-cpa/leads/route.ts", featureKey: "true_cpa", allowedRoles: ["owner", "producer", "bookkeeper"] },
   { sourceFile: "app/api/app/true-cpa/compare/route.ts", featureKey: "true_cpa", allowedRoles: ["owner", "producer", "bookkeeper"] },

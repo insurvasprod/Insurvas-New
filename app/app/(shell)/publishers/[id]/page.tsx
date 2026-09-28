@@ -2,7 +2,6 @@ import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { PartnersWorkspace } from "@/components/app/partners-workspace";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { guardPage } from "@/lib/entitlements/guardPage";
-import { sectionForPath } from "@/lib/menu/definition";
 
 export default async function PublisherDetailPage({
   params,
@@ -16,7 +15,6 @@ export default async function PublisherDetailPage({
         guard={guard}
         featureLabel="Partners"
         description="Manage publishers, marketing companies and affiliates without losing their history."
-        eyebrow={sectionForPath("/app/publishers") ?? undefined}
       />
     );
   }
@@ -25,7 +23,6 @@ export default async function PublisherDetailPage({
       <RoleGateNotice
         featureLabel="Partners"
         detail="Partner records are managed by the account owner or bookkeeper."
-        eyebrow={sectionForPath("/app/publishers") ?? undefined}
       />
     );
   }

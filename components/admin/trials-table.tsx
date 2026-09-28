@@ -1,18 +1,21 @@
 "use client";
 
-import { Fragment, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useId, useMemo, useRef, useState, useTransition, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { BoardTableFooter } from "@/components/admin/board-table-footer";
 import { EmptyState, NoMatches } from "@/components/admin/empty-state";
-import { Pill, SearchBox, btn, st, type PillTone } from "@/components/app/settings/primitives";
+import { Pill, st, type PillTone } from "@/components/app/settings/primitives";
+import { Button } from "@/components/ui/button";
+import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ErrorState } from "@/components/ui/page-states";
+import { TableCard } from "@/components/ui/table-card";
 import { notify } from "@/lib/notify";
 import type { TrialBoardRow, TrialEngagement } from "@/lib/trials/board";
 import { ENDING_SOON_DAYS, SIGNAL_KEYS, SIGNAL_LABELS, SIGNAL_MEANINGS } from "@/lib/trials/boardModel";
@@ -25,9 +28,6 @@ type SignalFilter = "any" | "no_leads" | "no_team" | "no_carrier" | "neither";
 type CardFilter = "any" | "card" | "no_card";
 type PendingAction = { trial: TrialBoardRow; kind: "extend" | "cancel" | "convert" } | null;
 
-const OUTLINE =
-  "inline-flex h-10 cursor-pointer items-center gap-2 rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] px-3.5 text-[14px] leading-[1.43] font-semibold tracking-[-0.01em] text-[var(--ink)] hover:bg-[var(--surface-alt)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]";
-
 const ENGAGEMENT_TONE: Record<TrialEngagement["level"], PillTone> = {
   at_risk: "error",
   quiet: "warning",
@@ -35,8 +35,7 @@ const ENGAGEMENT_TONE: Record<TrialEngagement["level"], PillTone> = {
 };
 
 /**
- * The trials list (board p-adm-trials): the toolbar card, then the table card with its footer.
- * Siblings, so the page's 24px rhythm spaces them as on the board.
+ * The trials list (board p-adm-trials): one TableCard, its toolbar inside, the pager at its foot.
  *
  * Every trial in flight is on the client already (there are tens, not thousands), so search,
  * filters and paging are instant and the counts exact. A row opens in place to show the owner, the
@@ -57,12 +56,12 @@ export function TrialsTable({
 }) {
   const router = useRouter();
   const id = useId();
+  const [refreshing, startRefresh] = useTransition();
   const [search, setSearch] = useState("");
   const [plan, setPlan] = useState("all");
   const [ends, setEnds] = useState<EndsFilter>("any");
   const [signal, setSignal] = useState<SignalFilter>("any");
   const [card, setCard] = useState<CardFilter>("any");
-  const [filtersOpen, setFiltersOpen] = useState(false);
   const [page, setPage] = useState(1);
   const [open, setOpen] = useState<string | null>(null);
 
@@ -98,19 +97,15 @@ export function TrialsTable({
   const pages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const current = Math.min(Math.max(page, 1), pages);
   const shown = filtered.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE);
-  const panelFilters = (ends === "any" ? 0 : 1) + (signal === "any" ? 0 : 1) + (card === "any" ? 0 : 1);
+  const anyFilter = ends !== "any" || signal !== "any" || card !== "any" || plan !== "all" || search.trim() !== "";
 
-  function clearPanel() {
+  function clearAll() {
     setEnds("any");
     setSignal("any");
     setCard("any");
-    setPage(1);
-  }
-
-  function clearAll() {
-    clearPanel();
     setSearch("");
     setPlan("all");
+    setPage(1);
   }
 
   function closeDialog() {
@@ -146,9 +141,18 @@ export function TrialsTable({
 
   return (
     <>
-      <div className="flex min-w-0 flex-col gap-3 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] p-3">
-        <div className="flex flex-wrap items-center gap-3">
-          <span className="relative inline-flex">
+      <TableCard
+        className="min-w-0"
+        toolbar={
+          <DataToolbar actions={<RefreshButton onClick={() => startRefresh(() => router.refresh())} refreshing={refreshing} />}>
+            <ToolbarSearch
+              value={search}
+              onChange={(value) => {
+                setSearch(value);
+                setPage(1);
+              }}
+              placeholder="Search tenant"
+            />
             <select
               aria-label="Plan"
               value={plan}
@@ -156,7 +160,7 @@ export function TrialsTable({
                 setPlan(event.target.value);
                 setPage(1);
               }}
-              className={cn(OUTLINE, "appearance-none pr-9")}
+              className={cn(toolbarControl, "max-w-56")}
             >
               <option value="all">All plans</option>
               {plans.map((name) => (
@@ -165,98 +169,57 @@ export function TrialsTable({
                 </option>
               ))}
             </select>
-            <Chevron className="pointer-events-none absolute top-1/2 right-3.5 -translate-y-1/2 text-[var(--ink)]" />
-          </span>
-          <SearchBox
-            value={search}
-            onChange={(value) => {
-              setSearch(value);
-              setPage(1);
-            }}
-            placeholder="Search tenant"
-            label="Search tenant"
-          />
-          <button
-            type="button"
-            aria-expanded={filtersOpen}
-            aria-controls={`${id}-filters`}
-            onClick={() => setFiltersOpen((value) => !value)}
-            className={OUTLINE}
-          >
-            <svg aria-hidden width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
-              <path d="M3 5h18M6 12h12M10 19h4" />
-            </svg>
-            Filters
-            {panelFilters > 0 && (
-              <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--surface-alt)] px-1.5 text-[12px] leading-[1.5] font-semibold tracking-[-0.01em] text-[var(--ink)] tabular-nums">
-                {panelFilters}
-              </span>
-            )}
-          </button>
-          <span className="grow" />
-        </div>
-
-        {filtersOpen && (
-          <div id={`${id}-filters`} className="flex flex-wrap items-end gap-4 border-t border-[var(--border)] pt-3">
-            <FilterSelect
-              id={`${id}-ends`}
-              label="Ends"
+            <select
+              aria-label="Ends"
               value={ends}
-              onChange={(value) => {
-                setEnds(value as EndsFilter);
+              onChange={(event) => {
+                setEnds(event.target.value as EndsFilter);
                 setPage(1);
               }}
-              options={[
-                { value: "any", label: "Any time" },
-                { value: "soon", label: `Within ${ENDING_SOON_DAYS} days` },
-                { value: "week", label: "Within 7 days" },
-              ]}
-            />
-            <FilterSelect
-              id={`${id}-signal`}
-              label="Activation"
+              className={toolbarControl}
+            >
+              <option value="any">Ends any time</option>
+              <option value="soon">Ends within {ENDING_SOON_DAYS} days</option>
+              <option value="week">Ends within 7 days</option>
+            </select>
+            <select
+              aria-label="Activation"
               value={signal}
               disabled={!signalsAvailable}
-              onChange={(value) => {
-                setSignal(value as SignalFilter);
+              title={!signalsAvailable ? "The activation signals could not be read" : undefined}
+              onChange={(event) => {
+                setSignal(event.target.value as SignalFilter);
                 setPage(1);
               }}
-              options={[
-                { value: "any", label: "Any" },
-                { value: "no_leads", label: "No leads imported" },
-                { value: "no_team", label: "No second user" },
-                { value: "no_carrier", label: "No carrier added" },
-                { value: "neither", label: "Neither leads nor a second user" },
-              ]}
-            />
-            <FilterSelect
-              id={`${id}-card`}
-              label="Card on file"
+              className={toolbarControl}
+            >
+              <option value="any">Any activation</option>
+              <option value="no_leads">No leads imported</option>
+              <option value="no_team">No second user</option>
+              <option value="no_carrier">No carrier added</option>
+              <option value="neither">Neither leads nor a second user</option>
+            </select>
+            <select
+              aria-label="Card on file"
               value={card}
-              onChange={(value) => {
-                setCard(value as CardFilter);
+              onChange={(event) => {
+                setCard(event.target.value as CardFilter);
                 setPage(1);
               }}
-              options={[
-                { value: "any", label: "Any" },
-                { value: "card", label: "Card on file" },
-                { value: "no_card", label: "No card on file" },
-              ]}
-            />
-            {panelFilters > 0 && (
-              <button type="button" className={btn("row")} onClick={clearPanel}>
-                Clear filters
-              </button>
+              className={toolbarControl}
+            >
+              <option value="any">Any card status</option>
+              <option value="card">Card on file</option>
+              <option value="no_card">No card on file</option>
+            </select>
+            {anyFilter && (
+              <Button type="button" variant="ghost" onClick={clearAll}>
+                Clear
+              </Button>
             )}
-          </div>
-        )}
-      </div>
-
-      <section
-        aria-label="Trials in flight"
-        className="flex min-w-0 flex-col overflow-hidden rounded-[12px] border border-[var(--border)] bg-[var(--surface)]"
+          </DataToolbar>
+        }
       >
-        <div className="min-w-0 overflow-x-auto">
           <table className={cn(st.table, "min-w-[860px]")}>
             <thead>
               <tr className={st.headRow}>
@@ -284,7 +247,7 @@ export function TrialsTable({
                   <td colSpan={6} className="border-t border-[var(--border)] p-0">
                     <EmptyState
                       title="No trials in flight"
-                      hint="A trial appears here the moment a tenant starts one, with the days left and what it has set up so far."
+                      hint="A trial appears here the moment a tenant starts one."
                     />
                   </td>
                 </tr>
@@ -356,8 +319,6 @@ export function TrialsTable({
               })}
             </tbody>
           </table>
-        </div>
-        <div className="grow" />
         <BoardTableFooter
           page={current}
           pageSize={PAGE_SIZE}
@@ -366,7 +327,7 @@ export function TrialsTable({
           order="fewest days remaining first"
           onPageChange={setPage}
         />
-      </section>
+      </TableCard>
 
       <Dialog open={pending !== null} onOpenChange={(value) => !value && closeDialog()}>
         <DialogContent>
@@ -415,12 +376,11 @@ export function TrialsTable({
           )}
 
           <DialogFooter>
-            <button type="button" className={btn("ghost")} onClick={closeDialog} disabled={busy}>
+            <Button type="button" variant="ghost" onClick={closeDialog} disabled={busy}>
               Close
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
-              className={btn("primary")}
               disabled={
                 busy ||
                 (pending?.kind === "extend" && (!reasonValid || !daysValid)) ||
@@ -444,7 +404,7 @@ export function TrialsTable({
                   : pending?.kind === "convert"
                     ? "Charge and convert"
                     : "Cancel trial"}
-            </button>
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -547,21 +507,22 @@ function TrialDetail({
       <div className="flex flex-wrap items-center gap-2">
         {canManage ? (
           <>
-            <button type="button" className={btn("secondary")} onClick={onExtend} disabled={busy}>
+            <Button type="button" variant="outline" size="sm" onClick={onExtend} disabled={busy}>
               Extend trial
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
-              className={btn("secondary")}
+              variant="outline"
+              size="sm"
               onClick={onConvert}
               disabled={busy || !row.hasPaymentMethod}
               aria-describedby={row.hasPaymentMethod ? undefined : `convert-reason-${row.subscriptionId}`}
             >
               Convert now
-            </button>
-            <button type="button" className={btn("secondary", "text-[var(--error-ink)]")} onClick={onCancel} disabled={busy}>
+            </Button>
+            <Button type="button" variant="outline" size="sm" className="text-[var(--error-ink)]" onClick={onCancel} disabled={busy}>
               Cancel trial
-            </button>
+            </Button>
           </>
         ) : (
           <span className="text-[12px] leading-[1.5] text-[var(--muted)]">Only super admins and billing admins can change a trial.</span>
@@ -595,51 +556,5 @@ function TrialDate({ iso, text, full }: { iso: string; text: string; full: strin
     <time ref={ref} dateTime={iso} title={full} className="whitespace-nowrap">
       {text}
     </time>
-  );
-}
-
-function Chevron({ className }: { className?: string }) {
-  return (
-    <svg aria-hidden width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <path d="m6 9 6 6 6-6" />
-    </svg>
-  );
-}
-
-function FilterSelect({
-  id,
-  label,
-  value,
-  onChange,
-  options,
-  disabled,
-}: {
-  id: string;
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  options: { value: string; label: string }[];
-  disabled?: boolean;
-}) {
-  return (
-    <span className="flex min-w-[200px] flex-col gap-1">
-      <label htmlFor={id} className="text-[12px] leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]">
-        {label}
-      </label>
-      <select
-        id={id}
-        value={value}
-        disabled={disabled}
-        title={disabled ? "The activation signals could not be read" : undefined}
-        onChange={(event) => onChange(event.target.value)}
-        className="h-10 rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] px-3 text-[14px] tracking-[-0.02em] text-[var(--ink)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)] disabled:cursor-not-allowed disabled:opacity-60"
-      >
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-    </span>
   );
 }

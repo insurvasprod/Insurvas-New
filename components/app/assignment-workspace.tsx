@@ -12,11 +12,16 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 
+import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
-import { Callout, Field, KeyValues, LockIcon, Pill, PlusIcon, SearchBox, SettingsCard, SettingsMeter, SettingsTableCard, btn, control, st, type PillTone } from "@/components/app/settings/primitives";
+import { PageLoading } from "@/components/ui/page-loading";
+import { ErrorState, SectionLoading } from "@/components/ui/page-states";
+import { StatStrip, StatTile } from "@/components/ui/stat";
+import { TableCard } from "@/components/ui/table-card";
+import { RefreshButton } from "@/components/ui/data-toolbar";
+import { Field, KeyValues, LockIcon, Pill, PlusIcon, SearchBox, SettingsCard, SettingsMeter, control, st } from "@/components/app/settings/primitives";
 import {
   CONDITION_TYPES,
-  LICENCE_REACH_WARNING_SHARE,
   LICENCE_WARNING_DAYS,
   MATCH_LABEL,
   MATCH_OPERATOR,
@@ -30,7 +35,6 @@ import {
   WEEKDAY_NAMES,
   daysUntil,
   lapseDay,
-  lapseLabel,
   nobodySentence,
   shortDate,
   shortName,
@@ -45,7 +49,6 @@ import {
   type RuleCondition,
   type RuleStrategy,
 } from "@/lib/assignment/constants";
-import { sectionForPath } from "@/lib/menu/definition";
 import { notify } from "@/lib/notify";
 import { weekdayDayMonth } from "@/lib/format/dates";
 import { cn } from "@/lib/utils";
@@ -73,8 +76,6 @@ type RuleDraft = {
 };
 
 type PreviewState = { rows: PreviewRow[] | null; pending: boolean; loading: boolean; error: string | null };
-
-const HEADER_DESCRIPTION = "Route each lead to someone who may legally and practically work it. Licence first, then the rules.";
 
 function listOf(values: Record<string, unknown>, ...keys: string[]) {
   for (const key of keys) {
@@ -468,14 +469,10 @@ export function AssignmentWorkspace({ canManage }: { canManage: boolean }) {
   const setters = members.filter((member) => member.role === "setter");
   const agencyReach = new Set(licensedMembers.flatMap((member) => member.eligibleStates ?? [])).size;
   const atCeiling = members.filter((member) => member.currentOpen >= member.capacity);
-  const licensedOnlyRules = (workspace?.rules ?? []).some((rule) => rule.is_active && rule.match_type === "product" && rule.match_values?.licensed_only === true);
 
   const routedFor = (ruleId: string | undefined) => (ruleId && workspace?.insights ? workspace.insights.routed[ruleId] ?? 0 : null);
   const capacitySkips = (workspace?.insights?.skippedLeads ?? []).filter((row) => row.reason === "capacity").sort((a, b) => b.leads - a.leads);
   const topCapacitySkip = capacitySkips[0] ?? null;
-  const topCapacityRule = topCapacitySkip
-    ? (workspace?.insights?.skips ?? []).filter((row) => row.reason === "capacity" && row.user_id === topCapacitySkip.user_id).sort((a, b) => b.count - a.count)[0] ?? null
-    : null;
 
   /** "skipped R. Alvarez 47× (full) · licence 12× · → rule 4 (40), whole roster (7)", from this week's skips. */
   function ruleSkipLine(ruleId: string | undefined): string | null {
@@ -553,20 +550,18 @@ export function AssignmentWorkspace({ canManage }: { canManage: boolean }) {
 
   const header = (
     <PageHeader
-      eyebrow={sectionForPath("/app/assignments") ?? undefined}
       title="Lead assignment"
-      description={HEADER_DESCRIPTION}
       actions={(
-        <div className="flex gap-3">
-          <button type="button" className={btn("secondary", "h-11")} onClick={openRestEditor} disabled={!workspace}>Rest days</button>
-          <button type="button" className={btn("primary", "h-11")} disabled={!workspace || busy === "action"} onClick={() => void post({ action: "assign" }, "Next eligible lead assigned")}>Assign next eligible lead</button>
-        </div>
+        <>
+          <Button type="button" variant="outline" onClick={openRestEditor} disabled={!workspace}>Rest days</Button>
+          <Button type="button" disabled={!workspace || busy === "action"} onClick={() => void post({ action: "assign" }, "Next eligible lead assigned")}>Assign next eligible lead</Button>
+        </>
       )}
     />
   );
 
-  if (loading) return <main className="m-stagger mx-auto flex w-full min-w-0 max-w-7xl flex-col gap-6">{header}<p className="rounded-[12px] border border-[var(--border)] bg-[var(--surface)] px-4 py-8 text-[14px] text-[var(--muted)]" role="status">Loading assignment workspace…</p></main>;
-  if (!workspace) return <main className="m-stagger mx-auto flex w-full min-w-0 max-w-7xl flex-col gap-6">{header}<p className="rounded-[12px] border border-[var(--border)] bg-[var(--surface)] px-4 py-8 text-[14px] text-[var(--error-ink)]" role="alert">Assignment workspace unavailable.</p></main>;
+  if (loading) return <PageLoading />;
+  if (!workspace) return <div className="m-stagger flex w-full min-w-0 flex-col gap-6">{header}<TableCard><ErrorState detail="The assignment workspace could not be loaded." action={<Button type="button" variant="outline" onClick={() => { void refresh(false).catch(() => undefined); }}>Try again</Button>} /></TableCard></div>;
 
   const inactiveRules = workspace.rules.filter((rule) => !drafts.some((draft) => draft.id === rule.id));
   const publishedActive = workspace.rules.filter((rule) => rule.is_active).map(draftFromRule);
@@ -579,53 +574,43 @@ export function AssignmentWorkspace({ canManage }: { canManage: boolean }) {
   const filteredCampaigns = workspace.campaigns.filter((campaign) => campaign.name.toLowerCase().includes(campaignFilter.trim().toLowerCase()));
 
   return (
-    <main className="m-stagger mx-auto flex w-full min-w-0 max-w-7xl flex-col gap-6">
+    <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
       {header}
 
-      {/* ── licence ─────────────────────────────────────────────────── */}
-      <section aria-labelledby="licence-title" className="rounded-[12px] border-[1.5px] border-[var(--error)] bg-[var(--error-surface)] px-[18px] py-4">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <span className="flex items-center gap-2.5">
-            <span className="text-[var(--error)]"><LockIcon /></span>
-            <span id="licence-title" className="text-[18px] leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--error-ink)]">Licence &mdash; a constraint, not a rule</span>
-          </span>
-          <Pill tone="error" dot>Evaluated before rule 1</Pill>
-        </div>
-        <p className="mt-2.5 max-w-[780px] text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--body)]">
-          A <strong>licensed agent</strong> &mdash; an owner or producer &mdash; is only handed a lead in a state where your agency holds an unexpired licence and an active appointment with a carrier you still work with, and, when their own licensed states are recorded on Team &amp; access, only in one of those that has not lapsed. A <strong>setter</strong> can be handed a lead in any state, because a setter qualifies and books &mdash; they do not sell &mdash; except term life{licensedOnlyRules ? " and products a rule marks licensed-only" : ""}. Assistants are never handed leads. This sits above the rule chain and no rule can override it.
-        </p>
-        <div className="mt-3 flex flex-wrap gap-2.5">
-          {licensedMembers.map((member) => {
-            const count = member.eligibleStates?.length ?? null;
-            const tone: PillTone = count === null ? "neutral" : count > 0 && agencyReach > 0 && count / agencyReach >= LICENCE_REACH_WARNING_SHARE ? "success" : "warning";
-            return (
-              <span key={member.id} title={member.eligibleStates?.length ? member.eligibleStates.join(", ") : undefined}>
-                <Pill tone={tone} dot>{shortName(member.name)} &middot; {count === null ? "states unknown" : `${count} state${count === 1 ? "" : "s"}`}</Pill>
-              </span>
-            );
-          })}
-          {licensedMembers.flatMap((member) => warnable(member).map((entry) => (
-            <span key={`${member.id}-${entry.state}-lapse`} title={`${member.name}'s own ${entry.state} licence is valid through ${shortDate(entry.expiresOn)}. From ${lapseDay(entry)} they are not handed or served ${entry.state} leads, and their open ones go back to the pool.`}>
-              <Pill tone={daysUntil(entry.expiresOn) < 0 ? "error" : "warning"} dot>{shortName(member.name)} &middot; {lapseLabel(entry)}</Pill>
-            </span>
-          )))}
-          {setters.length > 0 && <Pill tone="info" dot>{setters.length} setter{setters.length === 1 ? "" : "s"} &middot; any state except term life</Pill>}
-          {(workspace.insights?.unlicensedLeads ?? 0) > 0 && <Pill tone="error" dot>{workspace.insights!.unlicensedLeads!.toLocaleString()} lead{workspace.insights!.unlicensedLeads === 1 ? "" : "s"} match no licensed agent</Pill>}
-        </div>
-      </section>
+      <StatStrip label="Assignment totals">
+        <StatTile label="Licensed agents" value={licensedMembers.length} footnote={agencyReach ? `${agencyReach} state${agencyReach === 1 ? "" : "s"} covered` : "no licensed states recorded"} />
+        <StatTile label="Setters" value={setters.length} footnote="any state except term life" />
+        <StatTile label="At the ceiling" value={atCeiling.length} valueTone={atCeiling.length ? "danger" : undefined} footnote={ceilingChip} />
+        {workspace.insights && <StatTile label="Match no licensed agent" value={(workspace.insights.unlicensedLeads ?? 0).toLocaleString()} valueTone={(workspace.insights.unlicensedLeads ?? 0) > 0 ? "danger" : undefined} footnote="leads in the pool" />}
+        {workspace.insights && <StatTile label="Routed on arrival" value={workspace.insights.autoRouted.toLocaleString()} footnote={`since ${sinceLabel}`} />}
+      </StatStrip>
 
       {!workspace.boardSchema && (
-        <Callout tone="warning" title="Part of this page is waiting for a database update">
-          Real-time rules, language pairing, rest days off, rotation, routed and skipped counts and the routing preview need migration 20260924300000. Everything else works as before.
-        </Callout>
+        <p role="status" className="rounded-lg border border-[var(--warning)]/30 bg-[var(--warning-surface)] px-4 py-2.5 text-sm text-[var(--warning-ink)]">
+          Real-time rules, language pairing, rest days, rotation, routed counts and the preview need migration 20260924300000.
+        </p>
+      )}
+      {firstNobody && (
+        <p role="alert" className="rounded-lg border border-[var(--error)]/30 bg-[var(--error-surface)] px-4 py-2.5 text-sm text-[var(--error-ink)]">
+          <span className="font-semibold">{nobodyCount === 1 ? "One lead routed to nobody" : `${nobodyCount} leads routed to nobody`}:</span> {firstNobody.name}&rsquo;s lead is {firstNobody.state ? `in ${stateName(firstNobody.state)}` : "missing a state"}. {firstNobody.licence_reason ?? nobodySentence(firstNobody.detail)}{firstNobody.detail?.requires_licensed && setters.length > 0 ? " It needs a licensed agent, so no setter can take it either." : ""}
+        </p>
       )}
 
       <div className="flex flex-col gap-5 lg:flex-row">
         {/* ── left column ─────────────────────────────────────────────── */}
         <div className="flex min-w-0 flex-1 flex-col gap-4">
-          <SettingsTableCard title={<>Rules &mdash; evaluated top to bottom</>} actions={<Pill>order is the logic</Pill>}>
+          <TableCard
+            title="Rules"
+            description="Evaluated top to bottom; they apply to the next assignment."
+            footer={canManage ? (
+              <span className="ml-auto flex items-center gap-2">
+                {dirty && <Button type="button" variant="ghost" disabled={busy === "publish"} onClick={() => { adopt(workspace); setOpenKey(null); }}>Discard</Button>}
+                <Button type="button" disabled={!dirty || busy === "publish" || problems.some(Boolean)} onClick={() => void publish()}>{busy === "publish" ? "Publishing…" : "Publish rules"}</Button>
+              </span>
+            ) : undefined}
+          >
             <p className="sr-only" aria-live="polite">{moveNotice}</p>
-            <ol className="m-0 list-none p-0">
+            <ol className="m-0 list-none border-t border-[var(--border)] p-0">
               {/* Capacity: pinned, checked under every rule, never removable. */}
               <li className="m-row flex items-center gap-2.5 px-4 py-3" title="Checked under every rule">
                 <span className="w-[22px] text-center text-[var(--muted)]" aria-hidden><LockIcon /></span>
@@ -723,7 +708,7 @@ export function AssignmentWorkspace({ canManage }: { canManage: boolean }) {
             {!drafts.length && <p className="border-t border-[var(--border)] px-4 py-3 text-[14px] text-[var(--muted)]">No rules. Every lead goes round-robin across the whole roster, licence and capacity permitting.</p>}
             {canManage && (
               <div className="border-t border-dashed border-[var(--border-strong)] px-4 py-3">
-                <button type="button" className={btn("ghost", "h-9")} onClick={addCondition}><PlusIcon />Add condition</button>
+                <Button type="button" variant="ghost" onClick={addCondition}><PlusIcon />Add condition</Button>
               </div>
             )}
             {inactiveRules.length > 0 && (
@@ -733,35 +718,26 @@ export function AssignmentWorkspace({ canManage }: { canManage: boolean }) {
                   {inactiveRules.map((rule) => (
                     <li key={rule.id} className="flex items-center justify-between gap-3">
                       <span><strong className="font-semibold text-[var(--ink)]">{MATCH_LABEL[rule.match_type] ?? rule.match_type}</strong> <span className="text-[var(--muted)]">{MATCH_OPERATOR[rule.match_type] ?? ""}</span> {valueChip(draftFromRule(rule))}</span>
-                      {canManage && <button type="button" className={btn("row")} onClick={() => restore(rule)}>Restore</button>}
+                      {canManage && <Button type="button" variant="outline" size="sm" onClick={() => restore(rule)}>Restore</Button>}
                     </li>
                   ))}
                 </ul>
               </details>
             )}
-            <div className="flex flex-wrap items-center justify-between gap-4 border-t border-[var(--border)] bg-[var(--canvas)] px-4 py-3.5">
-              <span className="text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">Rules apply to the <strong>next</strong> assignment. Nothing already owned is re-routed.</span>
-              {canManage && (
-                <span className="flex items-center gap-2.5">
-                  {dirty && <button type="button" className={btn("ghost")} disabled={busy === "publish"} onClick={() => { adopt(workspace); setOpenKey(null); }}>Discard</button>}
-                  <button type="button" className={btn("primary")} disabled={!dirty || busy === "publish" || problems.some(Boolean)} onClick={() => void publish()}>{busy === "publish" ? "Publishing…" : "Publish rules"}</button>
-                </span>
-              )}
-            </div>
             {fallbackMoved && canManage && (
               <p className="m-0 border-t border-[var(--border)] px-4 py-2.5 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--warning-ink)]">
                 The published fallback sits above other rules, so they only see the leads it cannot place. It is shown last here; publish to apply.
               </p>
             )}
             {publishError && <p role="alert" className="border-t border-[var(--border)] px-4 py-2.5 text-[12px] leading-[1.5] text-[var(--error-ink)]">{publishError}</p>}
-          </SettingsTableCard>
+          </TableCard>
 
           {/* ── capacity ──────────────────────────────────────────────── */}
-          <SettingsTableCard
-            title="Capacity is real"
-            actions={atCeiling.length ? <Pill tone="error" dot>{atCeiling.length} agent{atCeiling.length === 1 ? "" : "s"} at the ceiling</Pill> : <Pill tone="success" dot>Nobody at the ceiling</Pill>}
+          <TableCard
+            title="Capacity"
+            action={atCeiling.length ? <Pill tone="error" dot>{atCeiling.length} agent{atCeiling.length === 1 ? "" : "s"} at the ceiling</Pill> : <Pill tone="success" dot>Nobody at the ceiling</Pill>}
           >
-            <table className={st.table}>
+            <table className={cn(st.table, "border-t border-[var(--border)]")}>
               <thead>
                 <tr className={st.headRow}>
                   <th className={st.th}>Agent</th>
@@ -799,7 +775,7 @@ export function AssignmentWorkspace({ canManage }: { canManage: boolean }) {
                               })}
                             </span>
                             {canManage && !editing && (
-                              <button type="button" className={btn("row", "px-2")} aria-label={`Edit ${member.name}'s capacity, languages and rest day`} onClick={() => { setEditingMember(member.id); setMemberError(null); setMemberForm({ capacity: String(member.capacity), languages: member.languages.join(", "), weekdayOff: member.weekdayOff === null ? "" : String(member.weekdayOff) }); }}>Edit</button>
+                              <Button type="button" variant="outline" size="sm" aria-label={`Edit ${member.name}'s capacity, languages and rest day`} onClick={() => { setEditingMember(member.id); setMemberError(null); setMemberForm({ capacity: String(member.capacity), languages: member.languages.join(", "), weekdayOff: member.weekdayOff === null ? "" : String(member.weekdayOff) }); }}>Edit</Button>
                             )}
                           </span>
                         </td>
@@ -837,8 +813,8 @@ export function AssignmentWorkspace({ canManage }: { canManage: boolean }) {
                             {!workspace.boardSchema && <p className="text-[12px] text-[var(--muted)]">{SCHEMA_PENDING_MESSAGE} Capacity can still be changed.</p>}
                             {memberError && <p role="alert" className="text-[12px] text-[var(--error-ink)]">{memberError}</p>}
                             <div className="mt-2 flex justify-end gap-2.5">
-                              <button type="button" className={btn("ghost")} onClick={() => setEditingMember(null)} disabled={busy === `member:${member.id}`}>Cancel</button>
-                              <button type="button" className={btn("primary")} onClick={() => void saveMember(member)} disabled={busy === `member:${member.id}`}>{busy === `member:${member.id}` ? "Saving…" : "Save"}</button>
+                              <Button type="button" variant="ghost" size="sm" onClick={() => setEditingMember(null)} disabled={busy === `member:${member.id}`}>Cancel</Button>
+                              <Button type="button" size="sm" onClick={() => void saveMember(member)} disabled={busy === `member:${member.id}`}>{busy === `member:${member.id}` ? "Saving…" : "Save"}</Button>
                             </div>
                           </td>
                         </tr>
@@ -846,43 +822,35 @@ export function AssignmentWorkspace({ canManage }: { canManage: boolean }) {
                     </Fragment>
                   );
                 })}
-                {!members.length && <tr><td colSpan={6} className={cn(st.td, "text-[var(--muted)]")}>Nobody on this workspace can be handed leads yet. Owners, producers and setters who have accepted their invitation appear here.</td></tr>}
+                {!members.length && <tr><td colSpan={6} className={cn(st.td, "text-[var(--muted)]")}>Nobody on this workspace can be handed leads yet.</td></tr>}
               </tbody>
             </table>
-            <p className="m-0 border-t border-[var(--border)] px-4 py-2.5 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">
-              Capacity counts open leads, not lifetime ones. A disposition frees the slot at once.
-            </p>
-            {topCapacitySkip && topCapacitySkip.leads > 0 && (
-              <p className="m-0 border-t border-[var(--border)] bg-[var(--canvas)] px-4 py-3 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--body)]">
-                {topCapacityRule?.rule_id && publishedOrder.get(topCapacityRule.rule_id) ? `Rule ${publishedOrder.get(topCapacityRule.rule_id)}` : "The router"} skipped {shortName(memberById.get(topCapacitySkip.user_id)?.name ?? "one agent")} <strong>{topCapacitySkip.leads} time{topCapacitySkip.leads === 1 ? "" : "s"} this week</strong> because they were full. Handing someone leads they will never reach is worse than leaving them unassigned, because they look owned.
-              </p>
-            )}
-          </SettingsTableCard>
+          </TableCard>
         </div>
 
         {/* ── right column ────────────────────────────────────────────── */}
         <div className="flex min-w-0 flex-col gap-4 lg:w-[460px] lg:shrink-0">
-          <SettingsTableCard
+          <TableCard
             title="Routing preview"
-            actions={(
+            action={(
               <>
                 {preview.rows && preview.rows.length > 0 && <Pill tone={routedCount === preview.rows.length ? "success" : "warning"} dot>{routedCount} of {preview.rows.length} routed</Pill>}
-                {canManage && <button type="button" className={btn("row", "px-2")} onClick={() => void loadPreview()} disabled={preview.loading}>Refresh</button>}
+                {canManage && <RefreshButton onClick={() => void loadPreview()} refreshing={preview.loading} />}
               </>
             )}
           >
             {!canManage ? (
-              <p className="m-0 px-4 py-3 text-[14px] text-[var(--muted)]">Owners and producers can preview where the next leads in the pool would go.</p>
+              <p className="m-0 border-t border-[var(--border)] px-4 py-3 text-[14px] text-[var(--muted)]">Owners and producers can preview where the next leads in the pool would go.</p>
             ) : preview.loading && !preview.rows ? (
-              <p className="m-0 px-4 py-3 text-[14px] text-[var(--muted)]" role="status">Working out where the next leads go…</p>
+              <div className="border-t border-[var(--border)]"><SectionLoading rows={4} columns={4} label="Loading the routing preview" /></div>
             ) : preview.error ? (
-              <p className="m-0 px-4 py-3 text-[14px] text-[var(--error-ink)]" role="alert">{preview.error}</p>
+              <p className="m-0 border-t border-[var(--border)] px-4 py-3 text-[14px] text-[var(--error-ink)]" role="alert">{preview.error}</p>
             ) : preview.pending ? (
-              <p className="m-0 px-4 py-3 text-[14px] text-[var(--muted)]">{SCHEMA_PENDING_MESSAGE}</p>
+              <p className="m-0 border-t border-[var(--border)] px-4 py-3 text-[14px] text-[var(--muted)]">{SCHEMA_PENDING_MESSAGE}</p>
             ) : !previewRows.length ? (
-              <p className="m-0 px-4 py-3 text-[14px] text-[var(--muted)]">Nothing is waiting in the pool.</p>
+              <p className="m-0 border-t border-[var(--border)] px-4 py-3 text-[14px] text-[var(--muted)]">Nothing is waiting in the pool.</p>
             ) : (
-              <table className={st.table}>
+              <table className={cn(st.table, "border-t border-[var(--border)]")}>
                 <thead>
                   <tr className={st.headRow}>
                     <th className={st.th}>Lead</th>
@@ -910,20 +878,13 @@ export function AssignmentWorkspace({ canManage }: { canManage: boolean }) {
               </table>
             )}
             {canManage && dirty && previewRows.length > 0 && <p className="m-0 border-t border-[var(--border)] px-4 py-2.5 text-[12px] text-[var(--muted)]">The preview uses the published rules, not your unpublished changes.</p>}
-          </SettingsTableCard>
-
-          {firstNobody && (
-            <Callout tone="error" title={nobodyCount === 1 ? "One lead routed to nobody" : `${nobodyCount} leads routed to nobody`}>
-              {firstNobody.name}&rsquo;s lead is {firstNobody.state ? `in ${stateName(firstNobody.state)}` : "missing a state"}. {firstNobody.licence_reason ?? nobodySentence(firstNobody.detail)}
-              {firstNobody.detail?.requires_licensed && setters.length > 0 ? " It needs a licensed agent, so no setter can take it either." : ""} So it stays <strong>unassigned and visible</strong> rather than silently owned. A rule that quietly starves a queue looks exactly like a slow day.
-            </Callout>
-          )}
+          </TableCard>
 
           <div ref={restCardRef} tabIndex={-1} className="outline-none">
             <SettingsCard
               title="Household rest days"
               pad={20}
-              action={canManage && !editingRest ? <button type="button" className={btn("secondary")} onClick={openRestEditor}>Edit</button> : undefined}
+              action={canManage && !editingRest ? <Button type="button" variant="outline" onClick={openRestEditor}>Edit</Button> : undefined}
             >
               {editingRest ? (
                 <div className="flex flex-col gap-4">
@@ -933,12 +894,11 @@ export function AssignmentWorkspace({ canManage }: { canManage: boolean }) {
                   <Field label="Attempts before rotate" htmlFor="rotate-attempts" hint="After this many unanswered calls by the same owner (no answer, voicemail, busy, dropped) since anyone last reached the household, the lead is offered to another eligible agent. Checked every 15 minutes, never during a call or a booked callback. Empty or 0 is off.">
                     <input id="rotate-attempts" className={control} type="number" min={0} max={50} value={restForm.attempts} disabled={!workspace.boardSchema} onChange={(event) => setRestForm({ ...restForm, attempts: event.target.value })} placeholder="Off" />
                   </Field>
-                  <p className="m-0 text-[12px] leading-[1.5] text-[var(--muted)]">Same household is always one agent at a time: while someone holds an open lead in a household, its other leads go only to them.</p>
                   {!workspace.boardSchema && <p className="m-0 text-[12px] text-[var(--muted)]">{SCHEMA_PENDING_MESSAGE} Rest between owners can still be changed.</p>}
                   {restError && <p role="alert" className="m-0 text-[12px] text-[var(--error-ink)]">{restError}</p>}
                   <div className="flex justify-end gap-2.5">
-                    <button type="button" className={btn("ghost")} disabled={busy === "settings"} onClick={() => setEditingRest(false)}>Cancel</button>
-                    <button type="button" className={btn("primary")} disabled={busy === "settings"} onClick={() => void saveRest()}>{busy === "settings" ? "Saving…" : "Save"}</button>
+                    <Button type="button" variant="ghost" disabled={busy === "settings"} onClick={() => setEditingRest(false)}>Cancel</Button>
+                    <Button type="button" disabled={busy === "settings"} onClick={() => void saveRest()}>{busy === "settings" ? "Saving…" : "Save"}</Button>
                   </div>
                 </div>
               ) : (
@@ -959,15 +919,15 @@ export function AssignmentWorkspace({ canManage }: { canManage: boolean }) {
             title="Posted leads"
             pad={20}
             action={canManage ? (
-              <button
+              <Button
                 type="button"
-                className={btn(workspace.settings.auto_route_posted ? "secondary" : "primary")}
+                variant={workspace.settings.auto_route_posted ? "outline" : "default"}
                 disabled={!workspace.routerSchema || busy === "auto-route"}
                 aria-describedby={!workspace.routerSchema ? "auto-route-pending" : undefined}
                 onClick={() => void saveAutoRoute(!workspace.settings.auto_route_posted)}
               >
                 {busy === "auto-route" ? "Saving…" : workspace.settings.auto_route_posted ? "Turn off" : "Turn on"}
-              </button>
+              </Button>
             ) : undefined}
           >
             <KeyValues
@@ -978,16 +938,13 @@ export function AssignmentWorkspace({ canManage }: { canManage: boolean }) {
                 ...(workspace.insights ? [{ label: "Routed on arrival this week", value: workspace.insights.autoRouted.toLocaleString() }] : []),
               ]}
             />
-            <p className="mt-3 mb-0 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">
-              When on, a lead a vendor posts is given to someone the moment it lands, through your Real-time lead rules only. Licence, capacity, day off, rest days and households still apply; if nobody on those rules may take it, it waits in the pool as it does when this is off. Every attempt is written to the audit log.
-            </p>
             {!workspace.routerSchema && <p id="auto-route-pending" className="mt-2 mb-0 text-[12px] leading-[1.5] text-[var(--muted)]">{SCHEMA_PENDING_MESSAGE}</p>}
           </SettingsCard>
         </div>
       </div>
 
       {/* ── pool actions ─────────────────────────────────────────────── */}
-      <SettingsCard title="Pool actions" sub="Anyone eligible can pull from the pool. Reassignments and returns require a reason.">
+      <SettingsCard title="Pool actions">
         <div className={cn("grid gap-6", canManage && "lg:grid-cols-2")}>
           {canManage && (
             <div className="flex flex-col gap-3">
@@ -999,7 +956,7 @@ export function AssignmentWorkspace({ canManage }: { canManage: boolean }) {
                 {members.map((member) => <option key={member.id} value={member.id}>{member.name} · {roleLabel(member.role)}</option>)}
               </select>
               <input className={cn(control, "mt-0")} value={reassignReason} onChange={(event) => setReassignReason(event.target.value)} placeholder="Reason for reassignment" aria-label="Reason for reassignment" />
-              <div><button type="button" className={btn("secondary", "h-10")} disabled={!reassignWorkItemId || !reassignTargetUserId || !reassignReason || busy === "action"} onClick={() => void post({ action: "assign", workItemId: reassignWorkItemId, targetUserId: reassignTargetUserId, reason: reassignReason }, "Lead reassigned")}>Reassign lead</button></div>
+              <div><Button type="button" variant="outline" disabled={!reassignWorkItemId || !reassignTargetUserId || !reassignReason || busy === "action"} onClick={() => void post({ action: "assign", workItemId: reassignWorkItemId, targetUserId: reassignTargetUserId, reason: reassignReason }, "Lead reassigned")}>Reassign lead</Button></div>
             </div>
           )}
           <div className="flex flex-col gap-3">
@@ -1007,11 +964,11 @@ export function AssignmentWorkspace({ canManage }: { canManage: boolean }) {
               <input id="return-work-item" className={control} value={workItemId} onChange={(event) => setWorkItemId(event.target.value)} placeholder="Work item ID" />
             </Field>
             <input className={cn(control, "mt-0")} value={returnReason} onChange={(event) => setReturnReason(event.target.value)} placeholder="Reason for returning to pool" aria-label="Reason for returning to pool" />
-            <div><button type="button" className={btn("secondary", "h-10")} disabled={!workItemId || !returnReason || busy === "action"} onClick={() => void post({ action: "return_to_pool", workItemId, reason: returnReason }, "Lead returned to assignment pool")}>Return to pool</button></div>
+            <div><Button type="button" variant="outline" disabled={!workItemId || !returnReason || busy === "action"} onClick={() => void post({ action: "return_to_pool", workItemId, reason: returnReason }, "Lead returned to assignment pool")}>Return to pool</Button></div>
           </div>
         </div>
       </SettingsCard>
-    </main>
+    </div>
   );
 }
 
@@ -1068,7 +1025,7 @@ function RuleEditor({
   return (
     <div id={id} className="border-t border-[var(--border)] bg-[var(--canvas)] px-4 py-4">
       <div className="grid gap-4 md:grid-cols-[180px_minmax(0,1fr)]">
-        <Field label="Match" htmlFor={`${id}-type`}>
+        <Field label="Match" htmlFor={`${id}-type`} hint={note[draft.matchType]}>
           <select id={`${id}-type`} className={control} value={draft.matchType} disabled={!canManage} onChange={(event) => onChange({ matchType: event.target.value as MatchType })}>
             {MATCH_TYPES.map((type) => <option key={type} value={type} disabled={type === "realtime" && !boardSchema && draft.matchType !== "realtime"}>{MATCH_LABEL[type]}</option>)}
           </select>
@@ -1152,12 +1109,11 @@ function RuleEditor({
           ))}
         </div>
       </fieldset>
-      <p className="mt-3 mb-0 text-[12px] leading-[1.5] text-[var(--muted)]">{note[draft.matchType]}</p>
       {canManage && (
         <div className="mt-3 flex flex-wrap justify-end gap-2.5">
-          <button type="button" className={btn("row")} disabled={draft.matchType === "fallback" || index === 0} title={draft.matchType === "fallback" ? "The fallback always runs last" : undefined} onClick={() => onMove(-1)}>Move up</button>
-          <button type="button" className={btn("row")} disabled={draft.matchType === "fallback" || index >= total - 1} title={draft.matchType === "fallback" ? "The fallback always runs last" : undefined} onClick={() => onMove(1)}>Move down</button>
-          <button type="button" className={btn("secondary", "h-[30px]")} onClick={onClose}>Done</button>
+          <Button type="button" variant="ghost" size="sm" disabled={draft.matchType === "fallback" || index === 0} title={draft.matchType === "fallback" ? "The fallback always runs last" : undefined} onClick={() => onMove(-1)}>Move up</Button>
+          <Button type="button" variant="ghost" size="sm" disabled={draft.matchType === "fallback" || index >= total - 1} title={draft.matchType === "fallback" ? "The fallback always runs last" : undefined} onClick={() => onMove(1)}>Move down</Button>
+          <Button type="button" variant="outline" size="sm" onClick={onClose}>Done</Button>
         </div>
       )}
     </div>
@@ -1231,22 +1187,22 @@ function ConditionsEditor({
               {problem && <span role="alert" className="mt-1.5 block text-[12px] text-[var(--error-ink)]">{problem}</span>}
             </div>
             {canManage && (
-              <button type="button" className={btn("row")} aria-label={`Remove condition ${position + 2}`} onClick={() => onChange(conditions.filter((item) => item.key !== condition.key))}>Remove</button>
+              <Button type="button" variant="ghost" size="sm" aria-label={`Remove condition ${position + 2}`} onClick={() => onChange(conditions.filter((item) => item.key !== condition.key))}>Remove</Button>
             )}
           </div>
         );
       })}
       {canManage && (
         <div className="mt-2">
-          <button
+          <Button
             type="button"
-            className={btn("ghost", "h-9")}
+            variant="ghost"
             disabled={full || !routerSchema}
             aria-describedby={`${id}-and-why`}
             onClick={add}
           >
             <PlusIcon />Add an AND condition
-          </button>
+          </Button>
           <span id={`${id}-and-why`} className="ml-2 text-[12px] text-[var(--muted)]">
             {!routerSchema ? SCHEMA_PENDING_MESSAGE : full ? `A rule has at most ${MAX_EXTRA_CONDITIONS + 1} conditions.` : ""}
           </span>

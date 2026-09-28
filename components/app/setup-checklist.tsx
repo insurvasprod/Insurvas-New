@@ -22,12 +22,7 @@ export function SetupChecklist({ checklist }: { checklist: SetupChecklistData })
     <Card className="portal-dashboard-setup m-card">
       <CardContent className="space-y-4 p-6">
         <div className="flex items-center justify-between gap-4">
-          <div className="min-w-0">
-            <h2 className="text-lg font-semibold leading-[1.28] tracking-[-0.015em]">Finish setting up</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Owner only. Each step opens the settings tab it belongs to.
-            </p>
-          </div>
+          <h2 className="min-w-0 text-lg font-semibold leading-[1.28] tracking-[-0.015em]">Finish setting up</h2>
           <span className="shrink-0 text-2xl font-semibold leading-[1.21] tracking-[-0.02em] tabular-nums">
             {checklist.completed}/{checklist.total}
           </span>

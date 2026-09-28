@@ -2,18 +2,23 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, ExternalLink, LayoutGrid, List, Lock, Search, SlidersHorizontal, X } from "lucide-react";
+import { ArrowRight, Download, ExternalLink, LayoutGrid, List, Lock, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { DataToolbar, FilterButton, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { PageHeader } from "@/components/ui/page-header";
-import { StatTile } from "@/components/ui/stat";
+import { PageLoading } from "@/components/ui/page-loading";
+import { EmptyState, ErrorState, NoMatches, SectionLoading } from "@/components/ui/page-states";
+import { Pager, paginate } from "@/components/ui/pager";
+import { StatStrip, StatTile } from "@/components/ui/stat";
+import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { TableCard } from "@/components/ui/table-card";
 import type { PartnerLeadDetail, PartnerLeadFacets, PartnerLeadRow, PartnerPipelineStage } from "@/lib/partnerLeads/types";
 import type { PartnerRole } from "@/lib/partnerAuth/roles";
 import { productLineLabel } from "@/lib/format/productLine";
 import { PARTNER_LANES, type PartnerLaneCounts } from "@/lib/partnerLeads/lanes";
+import { cn } from "@/lib/utils";
 
 type PipelineResponse = {
   rows: PartnerLeadRow[];
@@ -26,6 +31,15 @@ type PipelineResponse = {
 };
 type Filters = { date_from: string; date_to: string; closer_id: string; product: string; stage_id: string; outcome: string };
 const EMPTY_FILTERS: Filters = { date_from: "", date_to: "", closer_id: "", product: "", stage_id: "", outcome: "" };
+const PAGE_SIZE = 25;
+
+/** Each lane's header ground and ink, as the board draws them. */
+const LANE_TONE: Record<(typeof PARTNER_LANES)[number]["key"], string> = {
+  new: "bg-[var(--surface-alt)] text-[var(--body)]",
+  claimed: "bg-[var(--soft-orange-surface)] text-[var(--accent-ink)]",
+  verification: "bg-[var(--info-surface)] text-[var(--info-ink)]",
+  converted: "bg-[var(--success-surface)] text-[var(--success-ink)]",
+};
 
 function when(value: string) { return new Date(value).toLocaleString(); }
 /** "12 min", "3 hr", "yesterday", "4 d" — how long ago, the way the board's cards say it. */
@@ -37,34 +51,40 @@ function ageShort(value: string) {
   return `${Math.round(minutes / (24 * 60))} d`;
 }
 function stageLabel(row: PartnerLeadRow | PartnerLeadDetail) { return row.stageName || row.outcome || "Submitted"; }
-function stageTone(label: string) {
+function stageTone(label: string): StatusTone {
   const value = label.toLowerCase();
-  if (value.includes("won") || value.includes("application") || value.includes("complete")) return "lead-stage-won";
-  if (value.includes("lost") || value.includes("declined") || value.includes("not interested") || value.includes("closed")) return "lead-stage-lost";
-  if (value.includes("progress") || value.includes("claimed") || value.includes("review")) return "lead-stage-open";
-  return "lead-stage-neutral";
+  if (value.includes("won") || value.includes("application") || value.includes("complete")) return "good";
+  if (value.includes("lost") || value.includes("declined") || value.includes("not interested") || value.includes("closed")) return "danger";
+  if (value.includes("progress") || value.includes("claimed") || value.includes("review")) return "info";
+  return "neutral";
 }
 
 function LeadCard({ row, selected, onSelect }: { row: PartnerLeadRow; selected: boolean; onSelect: () => void }) {
-  return <article className={`lead-pipeline-card ${selected ? "is-selected" : ""}`}>
-    <button type="button" className="lead-card-main" onClick={onSelect}>
-      <span className="lead-card-topline"><span className="lead-card-name">{row.customer}</span><ArrowRight className="size-4 text-muted-foreground" /></span>
-      <span className="lead-card-meta">{productLineLabel(row.product)} · {ageShort(row.submittedAt)}</span>
-    </button>
-  </article>;
+  return <button
+    type="button"
+    aria-pressed={selected}
+    onClick={onSelect}
+    className={cn(
+      "block w-full rounded-md border bg-card p-3 text-left transition-colors hover:border-[var(--primary)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]",
+      selected ? "border-[var(--primary)]" : "border-border"
+    )}
+  >
+    <span className="flex items-center justify-between gap-2"><span className="truncate text-sm font-semibold text-foreground">{row.customer}</span><ArrowRight className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" /></span>
+    <span className="mt-0.5 block text-xs text-muted-foreground">{productLineLabel(row.product)} · {ageShort(row.submittedAt)}</span>
+  </button>;
 }
 
 function Preview({ detail, loading, onClose }: { detail: PartnerLeadDetail | null; loading: boolean; onClose: () => void }) {
   const [tab, setTab] = useState<"submission" | "timeline">("submission");
   return <aside className="lead-preview-panel partner-lead-preview">
-    <div className="lead-preview-header"><div><span className="eyebrow">LEAD PREVIEW · READ ONLY</span><h2>{detail?.customer ?? "Lead details"}</h2><p>{detail ? `${detail.product} · ${detail.submittedBy.name}` : "Partner submission"}</p></div><button type="button" className="lead-preview-close" aria-label="Close lead preview" onClick={onClose}><X className="size-5" /></button></div>
+    <div className="lead-preview-header"><div><h2>{detail?.customer ?? "Lead details"}</h2><p>{detail ? `${detail.product} · ${detail.submittedBy.name}` : "Partner submission"}</p></div><button type="button" className="lead-preview-close" aria-label="Close lead preview" onClick={onClose}><X className="size-5" /></button></div>
     <div className="lead-preview-tabs"><button type="button" className={tab === "submission" ? "is-active" : ""} onClick={() => setTab("submission")}>Submission</button><button type="button" className={tab === "timeline" ? "is-active" : ""} onClick={() => setTab("timeline")}>Timeline</button></div>
-    {loading || !detail ? <div className="lead-preview-state" role="status" aria-live="polite">Loading lead details…</div> : tab === "submission" ? <div className="lead-preview-scroll"><div className="lead-preview-banner"><span className={`lead-stage-pill ${stageTone(stageLabel(detail))}`}>{stageLabel(detail)}</span><span>{detail.outcome ?? "Awaiting update"}</span></div><div className="lead-preview-section"><div className="lead-preview-lock"><Lock className="size-3.5" aria-hidden="true" />Form as submitted — cannot be edited in the partner portal</div><div className="lead-form-snapshot">{Object.entries(detail.values).map(([key, value]) => <div className="lead-snapshot-row" key={key}><span>{key.replaceAll("_", " ")}</span><strong>{typeof value === "object" ? JSON.stringify(value) : String(value ?? "—")}</strong></div>)}</div></div><div className="lead-preview-section"><div className="lead-section-heading"><h3>Submission details</h3></div><dl className="lead-detail-list"><div><dt>Submitted</dt><dd>{when(detail.submittedAt)}</dd></div><div><dt>Submitted by</dt><dd>{detail.submittedBy.name}</dd></div><div><dt>Last updated</dt><dd>{when(detail.updatedAt)}</dd></div><div><dt>Outcome</dt><dd>{detail.outcome ?? "Awaiting update"}</dd></div></dl></div></div> : <div className="lead-preview-scroll"><div className="lead-preview-section"><div className="lead-section-heading"><h3>Submission timeline</h3></div><div className="lead-timeline">{detail.timeline.length ? detail.timeline.map((event, index) => <div className="lead-timeline-item" key={`${event.at}-${event.type}-${index}`}><span className="lead-timeline-dot" /><div><strong>{event.label}</strong><p>{event.detail ?? "Partner-visible update"}</p><time>{when(event.at)}</time></div></div>) : <p className="text-sm text-muted-foreground">No timeline events yet.</p>}</div></div></div>}
+    {loading || !detail ? <SectionLoading rows={6} columns={2} label="Loading lead details" /> : tab === "submission" ? <div className="lead-preview-scroll"><div className="lead-preview-banner"><StatusChip tone={stageTone(stageLabel(detail))}>{stageLabel(detail)}</StatusChip><span>{detail.outcome ?? "Awaiting update"}</span></div><div className="lead-preview-section"><div className="lead-preview-lock"><Lock className="size-3.5" aria-hidden="true" />Form as submitted — cannot be edited in the partner portal</div><div className="lead-form-snapshot">{Object.entries(detail.values).map(([key, value]) => <div className="lead-snapshot-row" key={key}><span>{key.replaceAll("_", " ")}</span><strong>{typeof value === "object" ? JSON.stringify(value) : String(value ?? "—")}</strong></div>)}</div></div><div className="lead-preview-section"><div className="lead-section-heading"><h3>Submission details</h3></div><dl className="lead-detail-list"><div><dt>Submitted</dt><dd>{when(detail.submittedAt)}</dd></div><div><dt>Submitted by</dt><dd>{detail.submittedBy.name}</dd></div><div><dt>Last updated</dt><dd>{when(detail.updatedAt)}</dd></div><div><dt>Outcome</dt><dd>{detail.outcome ?? "Awaiting update"}</dd></div></dl></div></div> : <div className="lead-preview-scroll"><div className="lead-preview-section"><div className="lead-section-heading"><h3>Submission timeline</h3></div><div className="lead-timeline">{detail.timeline.length ? detail.timeline.map((event, index) => <div className="lead-timeline-item" key={`${event.at}-${event.type}-${index}`}><span className="lead-timeline-dot" /><div><strong>{event.label}</strong><p>{event.detail ?? "Partner-visible update"}</p><time>{when(event.at)}</time></div></div>) : <p className="text-sm text-muted-foreground">No timeline events yet.</p>}</div></div></div>}
     <div className="lead-preview-footer"><Link href="/partner/pipeline" className="lead-full-link">Back to partner pipeline <ExternalLink className="size-4" /></Link></div>
   </aside>;
 }
 
-export function PartnerLeadPipeline({ partnerStatus, role, partnerName }: { partnerStatus: "draft" | "active" | "paused" | "offboarded"; role: PartnerRole; partnerName?: string | null }) {
+export function PartnerLeadPipeline({ role }: { partnerStatus: "draft" | "active" | "paused" | "offboarded"; role: PartnerRole; partnerName?: string | null }) {
   const [data, setData] = useState<PipelineResponse | null>(null);
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   const [search, setSearch] = useState("");
@@ -74,8 +94,11 @@ export function PartnerLeadPipeline({ partnerStatus, role, partnerName }: { part
   const [detail, setDetail] = useState<PartnerLeadDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [loading, setLoading] = useState(true);
+  // The first read draws the page skeleton; later reads (a filter change) keep the page and toolbar.
+  const [firstLoad, setFirstLoad] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
+  const [page, setPage] = useState(1);
   const loadedLimitRef = useRef(250);
 
   const query = useMemo(() => new URLSearchParams(Object.entries(filters).filter(([, value]) => Boolean(value))).toString(), [filters]);
@@ -97,7 +120,7 @@ export function PartnerLeadPipeline({ partnerStatus, role, partnerName }: { part
       });
       setError("");
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not load your lead pipeline"); }
-    finally { setLoading(false); setLoadingMore(false); }
+    finally { setLoading(false); setLoadingMore(false); setFirstLoad(false); }
   }, [query]);
   // Polls only while the tab is visible, catches up on return, and never stacks a tick on a slow one.
   useEffect(() => { loadedLimitRef.current = 250; let polling = false; const poll = () => { if (document.visibilityState !== "visible" || polling) return; polling = true; void load(0).finally(() => { polling = false; }); }; const kickoff = window.setTimeout(() => { setData(null); setLoading(true); void load(); }, 0); const timer = window.setInterval(poll, 5000); document.addEventListener("visibilitychange", poll); return () => { window.clearTimeout(kickoff); window.clearInterval(timer); document.removeEventListener("visibilitychange", poll); }; }, [load]);
@@ -121,22 +144,93 @@ export function PartnerLeadPipeline({ partnerStatus, role, partnerName }: { part
   const exportHref = `/api/partner/leads/export${query ? `?${query}` : ""}`;
   const hasFilters = Object.values(filters).some(Boolean);
   const selectLead = (id: string) => { setSelectedId((current) => current === id ? null : id); };
+  const setFilter = (key: keyof Filters, value: string) => { setFilters((current) => ({ ...current, [key]: value })); setPage(1); };
+  const clearAll = () => { setFilters(EMPTY_FILTERS); setSearch(""); setPage(1); };
+  const tablePage = paginate(visibleRows, page, PAGE_SIZE);
+  const canLoadMore = Boolean(data && data.rows.length < data.total);
 
-  return <div className={`m-stagger lead-workspace-page ${selectedId ? "has-preview" : ""}`}>
-    <PageHeader
-      className="mb-5"
-      eyebrow="Partner workspace"
-      title="Lead pipeline"
-      description={role === "partner_admin" ? `Only leads submitted by ${partnerName || "your organization"} are shown. Updates refresh automatically.` : "Only leads you submitted are shown. Updates refresh automatically."}
-      actions={<Button asChild variant="outline"><a href={exportHref}>Export CSV</a></Button>}
-    />
-    {partnerStatus !== "active" && <div className="mb-4 rounded-md border border-[var(--warning)]/40 bg-[var(--warning)]/10 p-3 text-sm" role="status"><strong>This partner account is {partnerStatus}.</strong><span className="ml-1">Lead history remains available to read.</span></div>}
-    {error && <Card className="mb-4"><CardContent className="p-4 text-sm text-destructive" role="alert">{error}<Button className="ml-3" size="sm" variant="outline" onClick={() => void load()}>Try again</Button></CardContent></Card>}
-    <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+  if (firstLoad) return <PageLoading />;
+
+  const toolbar = <>
+    <DataToolbar
+      actions={<>
+        <div role="group" aria-label="View" className="inline-flex h-9 items-center rounded-md border border-border bg-background p-0.5">
+          {([["board", "Board", LayoutGrid], ["table", "Table", List]] as const).map(([key, label, Icon]) => <button
+            key={key}
+            type="button"
+            aria-label={`${label} view`}
+            aria-pressed={view === key}
+            onClick={() => setView(key)}
+            className={cn("inline-flex h-full items-center gap-1.5 rounded-[5px] px-2.5 text-sm font-semibold transition-colors", view === key ? "bg-[var(--surface-alt)] text-foreground" : "text-muted-foreground hover:text-foreground")}
+          ><Icon className="size-4" aria-hidden="true" />{label}</button>)}
+        </div>
+        <Button asChild variant="outline"><a href={exportHref}><Download aria-hidden="true" />Export CSV</a></Button>
+        <RefreshButton onClick={() => { setLoading(true); void load(); }} refreshing={loading} />
+      </>}
+    >
+      <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Search customer" />
+      <select aria-label="Product" className={toolbarControl} value={filters.product} onChange={(event) => setFilter("product", event.target.value)}><option value="">All products</option>{data?.facets.products.map((item) => <option key={item} value={item}>{productLineLabel(item)}</option>)}</select>
+      <FilterButton open={moreFilters} onClick={() => setMoreFilters((value) => !value)} count={filterCount} />
+    </DataToolbar>
+    {moreFilters && <div className="flex w-full flex-wrap items-center gap-2">
+      <select aria-label="Stage" className={toolbarControl} value={filters.stage_id} onChange={(event) => setFilter("stage_id", event.target.value)}><option value="">All stages</option>{activeStages.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>
+      {role === "partner_admin" && <select aria-label="Submitted by" className={toolbarControl} value={filters.closer_id} onChange={(event) => setFilter("closer_id", event.target.value)}><option value="">Submitted by anyone</option>{data?.facets.closers.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>}
+      <select aria-label="Outcome" className={toolbarControl} value={filters.outcome} onChange={(event) => setFilter("outcome", event.target.value)}><option value="">Any outcome</option>{data?.facets.outcomes.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}</select>
+      <label className="flex items-center gap-1.5 text-sm text-muted-foreground">From<input type="date" className={toolbarControl} value={filters.date_from} onChange={(event) => setFilter("date_from", event.target.value)} /></label>
+      <label className="flex items-center gap-1.5 text-sm text-muted-foreground">To<input type="date" className={toolbarControl} value={filters.date_to} onChange={(event) => setFilter("date_to", event.target.value)} /></label>
+      <Button type="button" variant="ghost" disabled={!hasFilters} onClick={() => { setFilters(EMPTY_FILTERS); setPage(1); }}>Reset</Button>
+    </div>}
+  </>;
+
+  const empty = search.trim() || hasFilters
+    ? <NoMatches noun="leads" onClear={clearAll} />
+    : <EmptyState title="No leads yet" hint="Leads you submit appear here as they move through the pipeline." action={<Button asChild variant="outline"><a href="/partner/submit-lead">Submit a lead</a></Button>} />;
+
+  const body = !data
+    ? (error ? <ErrorState detail={error} action={<Button type="button" variant="outline" onClick={() => void load()}>Try again</Button>} /> : <SectionLoading rows={8} columns={5} />)
+    : view === "board"
+      ? <div className="flex h-[max(420px,calc(100vh-380px))] gap-3 overflow-x-auto p-3">
+        {PARTNER_LANES.map((lane) => {
+          const rows = laneRows.get(lane.key) ?? [];
+          return <section key={lane.key} data-lane={lane.key} aria-label={lane.label} className="flex min-h-0 min-w-[220px] flex-1 flex-col overflow-hidden rounded-md border border-border bg-[var(--canvas)]">
+            <header className={cn("flex items-center justify-between gap-2 border-b border-border px-3 py-2 text-sm font-semibold", LANE_TONE[lane.key])}><h3>{lane.label}</h3><span className="tabular-nums">{rows.length}</span></header>
+            <div className="grid min-h-0 flex-1 content-start gap-2 overflow-y-auto p-2">
+              {rows.map((row) => <LeadCard key={row.id} row={row} selected={selectedId === row.id} onSelect={() => selectLead(row.id)} />)}
+              {!rows.length && <p className="px-2 py-6 text-center text-xs text-muted-foreground">Nothing here right now</p>}
+            </div>
+          </section>;
+        })}
+      </div>
+      : !visibleRows.length ? empty : <Table>
+        <TableHeader><TableRow><TableHead>Lead</TableHead><TableHead>Product</TableHead><TableHead>Stage</TableHead>{role === "partner_admin" && <TableHead>Submitted by</TableHead>}<TableHead>Submitted</TableHead><TableHead className="text-right"><span className="sr-only">Action</span></TableHead></TableRow></TableHeader>
+        <TableBody>
+          {tablePage.rows.map((row) => <TableRow key={row.id} data-state={selectedId === row.id ? "selected" : undefined}>
+            <TableCell className="font-medium">{row.customer}</TableCell>
+            <TableCell className="text-muted-foreground">{productLineLabel(row.product)}</TableCell>
+            <TableCell><StatusChip tone={stageTone(stageLabel(row))}>{stageLabel(row)}</StatusChip></TableCell>
+            {role === "partner_admin" && <TableCell className="text-muted-foreground">{row.submittedBy.name}</TableCell>}
+            <TableCell className="tabular-nums text-muted-foreground">{when(row.submittedAt)}</TableCell>
+            <TableCell className="text-right"><Button type="button" variant="outline" size="sm" aria-expanded={selectedId === row.id} onClick={() => selectLead(row.id)}>{selectedId === row.id ? "Close" : "View"}</Button></TableCell>
+          </TableRow>)}
+        </TableBody>
+      </Table>;
+
+  const loadMore = canLoadMore && data
+    ? <Button type="button" variant="outline" size="sm" disabled={loadingMore || data.nextOffset == null} aria-busy={loadingMore} onClick={() => void load(data.nextOffset ?? data.rows.length, true)}>Load more</Button>
+    : null;
+  const footer = !data ? undefined : view === "table"
+    ? <><Pager page={tablePage.current} total={visibleRows.length} noun="leads" pageSize={PAGE_SIZE} onPage={setPage} suffix={canLoadMore ? `${data.rows.length.toLocaleString()} of ${data.total.toLocaleString()} loaded` : undefined} />{loadMore}</>
+    : canLoadMore ? <><span>Showing {data.rows.length.toLocaleString()} of {data.total.toLocaleString()} leads</span>{loadMore}</> : undefined;
+
+  return <div className="m-stagger space-y-6">
+    <PageHeader title="Lead pipeline" description={role === "partner_admin" ? undefined : "Only the leads you submitted."} />
+    {error && data && <p role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-[var(--error)] bg-[var(--error-surface)] px-4 py-2 text-sm text-[var(--error-ink)]">{error}<Button type="button" variant="outline" onClick={() => void load()}>Try again</Button></p>}
+    <StatStrip label="Leads by lane">
       {PARTNER_LANES.map((lane) => <StatTile key={lane.key} label={lane.label} value={data?.laneCounts ? data.laneCounts[lane.key] : "—"} footnote={data && !data.laneCounts ? "not shown for a stage or outcome filter" : lane.footnote} />)}
+    </StatStrip>
+    <div className={cn("grid items-start gap-4", selectedId && "lg:grid-cols-[minmax(0,1fr)_minmax(300px,34%)]")}>
+      <TableCard className="min-w-0" toolbar={toolbar} footer={footer}>{body}</TableCard>
+      {selectedId && <Preview detail={detail} loading={detailLoading} onClose={() => setSelectedId(null)} />}
     </div>
-    <Card className="lead-filter-card"><CardContent className="p-3"><form onSubmit={(event) => event.preventDefault()} className="lead-filter-row"><select aria-label="Product" className="lead-filter-product" value={filters.product} onChange={(event) => setFilters((current) => ({ ...current, product: event.target.value }))}><option value="">All products</option>{data?.facets.products.map((item) => <option key={item} value={item}>{productLineLabel(item)}</option>)}</select><div className="lead-search-wrap"><Search className="size-4" /><Input type="search" aria-label="Search customer" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search customer" /></div><Button type="button" variant="outline" onClick={() => setMoreFilters((value) => !value)}><SlidersHorizontal className="size-4" /> Filters{filterCount > 0 && <span className="lead-filter-count" aria-label={`${filterCount} active`}>{filterCount}</span>}</Button><div className="lead-view-toggle"><button type="button" aria-label="Board view" className={view === "board" ? "is-active" : ""} onClick={() => setView("board")}><LayoutGrid className="size-4" /> Board</button><button type="button" aria-label="Table view" className={view === "table" ? "is-active" : ""} onClick={() => setView("table")}><List className="size-4" /> Table</button></div></form>{moreFilters && <div className="lead-more-filters"><div><Label>Stage</Label><select value={filters.stage_id} onChange={(event) => setFilters((current) => ({ ...current, stage_id: event.target.value }))}><option value="">All stages</option>{activeStages.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></div>{role === "partner_admin" && <div><Label>Submitted by</Label><select value={filters.closer_id} onChange={(event) => setFilters((current) => ({ ...current, closer_id: event.target.value }))}><option value="">Everyone</option>{data?.facets.closers.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></div>}<div><Label>Outcome</Label><select value={filters.outcome} onChange={(event) => setFilters((current) => ({ ...current, outcome: event.target.value }))}><option value="">Any outcome</option>{data?.facets.outcomes.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}</select></div><div><Label>From</Label><Input type="date" value={filters.date_from} onChange={(event) => setFilters((current) => ({ ...current, date_from: event.target.value }))} /></div><div><Label>To</Label><Input type="date" value={filters.date_to} onChange={(event) => setFilters((current) => ({ ...current, date_to: event.target.value }))} /></div><Button type="button" variant="ghost" disabled={!hasFilters} onClick={() => setFilters(EMPTY_FILTERS)}>Reset</Button></div>}</CardContent></Card>
-    {loading && !data ? <div className="lead-preview-state" role="status" aria-live="polite">Loading your lead workspace…</div> : <div className="lead-workspace-grid">{view === "board" ? <div className="lead-pipeline-board">{PARTNER_LANES.map((lane) => <section className="lead-pipeline-column partner-lane" data-lane={lane.key} key={lane.key}><header className="lead-column-header partner-lane-header"><h3>{lane.label}</h3><span>{laneRows.get(lane.key)?.length ?? 0}</span></header><div className="lead-column-list">{(laneRows.get(lane.key) ?? []).map((row) => <LeadCard key={row.id} row={row} selected={selectedId === row.id} onSelect={() => selectLead(row.id)} />)}{!(laneRows.get(lane.key) ?? []).length && <div className="lead-column-empty">Nothing here right now</div>}</div></section>)}</div> : <div className="lead-table-wrap"><table><thead><tr><th>Lead</th><th>Product</th><th>Stage</th>{role === "partner_admin" && <th>Submitted by</th>}<th>Submitted</th><th>Action</th></tr></thead><tbody>{visibleRows.map((row) => <tr key={row.id} className={selectedId === row.id ? "is-selected" : ""}><td><button type="button" onClick={() => selectLead(row.id)}><strong>{row.customer}</strong><small>{row.submittedBy.name}</small></button></td><td>{productLineLabel(row.product)}</td><td><span className={`lead-stage-pill ${stageTone(stageLabel(row))}`}>{stageLabel(row)}</span></td>{role === "partner_admin" && <td>{row.submittedBy.name}</td>}<td>{when(row.submittedAt)}</td><td><button type="button" className="lead-table-action" onClick={() => selectLead(row.id)}>{selectedId === row.id ? "Close" : "View"} <ArrowRight className="size-4" /></button></td></tr>)}</tbody></table>{!visibleRows.length && <div className="lead-column-empty">No leads match these filters.</div>}</div>}{selectedId && <Preview detail={detail} loading={detailLoading} onClose={() => setSelectedId(null)} />}</div>}
-    {data && data.rows.length < data.total && <div className="flex flex-wrap items-center justify-center gap-3 py-3"><p className="text-sm text-muted-foreground">Showing {data.rows.length.toLocaleString()} of {data.total.toLocaleString()} leads</p><Button type="button" variant="outline" disabled={loadingMore || data.nextOffset == null} onClick={() => void load(data.nextOffset ?? data.rows.length, true)}>{loadingMore ? "Loading…" : "Load more"}</Button></div>}
   </div>;
 }

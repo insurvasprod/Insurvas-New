@@ -7,7 +7,9 @@ import { Check, Loader2 } from "lucide-react";
 
 import { OverlayFrame } from "@/components/app/dialer-overlay-frame";
 import { CallbackDetailsFields, OutcomeChoices, OutcomeEffects, QuestionAnswer, ReviewSummary } from "@/components/app/disposition-wizard";
-import { Callout, btn } from "@/components/app/settings/primitives";
+import { Callout } from "@/components/app/settings/primitives";
+import { Button } from "@/components/ui/button";
+import { SectionLoading } from "@/components/ui/page-states";
 import { CALLBACK_KEY, answerLabel, useDispositionWalk, type DispositionWalk, type WalkView } from "@/components/app/use-disposition-walk";
 import type { DispositionOption } from "@/lib/dispositions/types";
 import { cn } from "@/lib/utils";
@@ -65,7 +67,7 @@ function NextActionPreview({ walk, view }: { walk: DispositionWalk; view: WalkVi
       body = <><strong>{outcome.label}</strong> · {outcome.preview} You confirm it before it is recorded.</>;
     } else if (outcome) {
       const effects = extras(outcome);
-      body = <><strong>{outcome.label}</strong> · {outcome.description.charAt(0).toLowerCase()}{outcome.description.slice(1)}{effects.length ? `, ${effects.join(", ")}` : ""}. You confirm it before it is recorded; the stage and the outcome are then written in one transaction, so neither can exist without the other.</>;
+      body = <><strong>{outcome.label}</strong> · {outcome.description.charAt(0).toLowerCase()}{outcome.description.slice(1)}{effects.length ? `, ${effects.join(", ")}` : ""}. You confirm it before it is recorded.</>;
     } else if (nextNode) body = <>Your answer is saved and the next question is <strong>{nextNode.prompt || nextNode.label}</strong>. Nothing moves until you record the outcome.</>;
     else body = "Your answer is saved. Next you choose the outcome; nothing moves until you record it.";
   } else if (!view.completed && view.chosen) {
@@ -121,52 +123,52 @@ export function DispositionWizardDialog({
   // "Back" at the start of the walk: to verification when this transfer has a session, else to the
   // last answer (or out of the dialog when there is none).
   const backButton = hasVerification
-    ? <button type="button" onClick={toVerification} disabled={saving} className={btn("secondary", "h-10")}>Back to verification</button>
-    : <button type="button" onClick={() => (lastSequence !== null ? walk.beginEdit(lastSequence) : onOpenChange(false))} disabled={saving || (lastSequence !== null && readOnly)} className={btn("secondary", "h-10")}>Back</button>;
+    ? <Button type="button" variant="outline" onClick={toVerification} disabled={saving}>Back to verification</Button>
+    : <Button type="button" variant="outline" onClick={() => (lastSequence !== null ? walk.beginEdit(lastSequence) : onOpenChange(false))} disabled={saving || (lastSequence !== null && readOnly)}>Back</Button>;
 
   let actions: ReactNode = null;
   if (!wizard || !view) {
-    actions = <button type="button" onClick={() => onOpenChange(false)} className={btn("secondary", "h-10")}>Close</button>;
+    actions = <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Close</Button>;
   } else if (view.completed) {
     actions = <>
-      <button type="button" onClick={() => onOpenChange(false)} className={btn("secondary", "h-10")}>Close</button>
-      <Link href={`/app/deal-flow?focus_lead_id=${encodeURIComponent(wizard.lead.id)}`} className={btn("primary")}>Open Daily deal flow</Link>
+      <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Close</Button>
+      <Button asChild><Link href={`/app/deal-flow?focus_lead_id=${encodeURIComponent(wizard.lead.id)}`}>Open Daily deal flow</Link></Button>
     </>;
   } else if (view.node) {
     const node = view.node;
     actions = <>
       {editingSequence !== null
-        ? <button type="button" onClick={walk.cancelEdit} disabled={saving} className={btn("secondary", "h-10")}>Cancel</button>
+        ? <Button type="button" variant="outline" onClick={walk.cancelEdit} disabled={saving}>Cancel</Button>
         : backButton}
-      <button type="button" onClick={() => void walk.saveAnswer(node, editingSequence ?? wizard.steps.length)} disabled={readOnly || saving || (view.multi ? view.selected.length === 0 : !walk.answer)} className={btn("primary")}>
+      <Button type="button" onClick={() => void walk.saveAnswer(node, editingSequence ?? wizard.steps.length)} disabled={readOnly || saving || (view.multi ? view.selected.length === 0 : !walk.answer)}>
         {saving && <Loader2 aria-hidden className="size-4 animate-spin" />}{editingSequence !== null ? "Save answer" : "Continue"}
-      </button>
+      </Button>
     </>;
   } else if (phase === "outcome") {
-    actions = <>{backButton}<button type="button" onClick={walk.next} disabled={readOnly || !view.chosen} className={btn("primary")}>Continue</button></>;
+    actions = <>{backButton}<Button type="button" onClick={walk.next} disabled={readOnly || !view.chosen}>Continue</Button></>;
   } else if (phase === "details") {
     actions = <>
-      <button type="button" onClick={walk.back} className={btn("secondary", "h-10")}>Back</button>
-      <button type="button" onClick={walk.next} disabled={readOnly || !walk.callbackLocal} className={btn("primary")}>Continue</button>
+      <Button type="button" variant="outline" onClick={walk.back}>Back</Button>
+      <Button type="button" onClick={walk.next} disabled={readOnly || !walk.callbackLocal}>Continue</Button>
     </>;
   } else {
     actions = <>
-      <button type="button" onClick={walk.back} disabled={saving} className={btn("secondary", "h-10")}>Back</button>
-      <button type="button" onClick={walk.record} disabled={readOnly || saving || !view.chosen || (view.isCallback && !walk.callbackLocal)} className={btn("primary")}>
+      <Button type="button" variant="outline" onClick={walk.back} disabled={saving}>Back</Button>
+      <Button type="button" onClick={walk.record} disabled={readOnly || saving || !view.chosen || (view.isCallback && !walk.callbackLocal)}>
         {saving && <Loader2 aria-hidden className="size-4 animate-spin" />}Record outcome
-      </button>
+      </Button>
     </>;
   }
 
   let body: ReactNode;
   if (loading && !wizard) {
-    body = <p role="status" className="m-0 inline-flex items-center gap-2 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]"><Loader2 aria-hidden className="size-4 animate-spin" />Loading call outcome…</p>;
+    body = <SectionLoading rows={4} columns={3} label="Loading call outcome" />;
   } else if (!wizard || !view) {
-    body = <Callout tone="error" title="The call outcome wizard is unavailable">{error || "The call outcome wizard is unavailable."} <button type="button" onClick={() => void walk.load()} className={btn("secondary", "ml-2")}>Try again</button></Callout>;
+    body = <Callout tone="error" title="The call outcome wizard is unavailable">{error || "The call outcome wizard is unavailable."} <Button type="button" variant="outline" className="ml-2" onClick={() => void walk.load()}>Try again</Button></Callout>;
   } else {
     const { node, completed, orderedSteps, nodesById } = view;
     body = <>
-      {readOnly && <Callout tone="info" title="Read-only access">Your account is read-only. You can review the call path, but cannot change its outcome.</Callout>}
+      {readOnly && <Callout tone="info" title="Read-only access: you can review the call path, but cannot change its outcome." />}
       {error && <Callout tone="error" title="The outcome was not recorded">{error}</Callout>}
       <div className="flex min-w-0 flex-col gap-[22px] md:flex-row">
         <section aria-label="Answered so far" className="min-w-0 md:w-[300px] md:shrink-0">
@@ -193,9 +195,9 @@ export function DispositionWizardDialog({
           )}
           {callMode?.earlierWalk && orderedSteps.length > 0 && <p className="mt-2 mb-0 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">These questions belong to this lead&rsquo;s earlier call and are not asked again. Choose this call&rsquo;s outcome.</p>}
           {orderedSteps.length > 0 && !callMode?.earlierWalk && (
-            <button type="button" onClick={() => setEditing((on) => !on)} disabled={readOnly || saving} aria-pressed={editing} className={btn("ghost", "mt-1 h-[34px]")}>
+            <Button type="button" variant="ghost" className="mt-1" onClick={() => setEditing((on) => !on)} disabled={readOnly || saving} aria-pressed={editing}>
               {editing ? "Done choosing" : "Edit an earlier answer"}
-            </button>
+            </Button>
           )}
         </section>
 
@@ -204,7 +206,7 @@ export function DispositionWizardDialog({
             <>
               <div>
                 <h3 className={h3}>Outcome recorded</h3>
-                <p className={help}>This call is closed. The answers, note and outcome are kept for audit.</p>
+                <p className={help}>This call is closed.</p>
               </div>
               <div className="flex items-start gap-3 rounded-[8px] border border-[var(--border)] bg-[var(--canvas)] px-4 py-3.5">
                 <Check aria-hidden className="mt-1 size-4 shrink-0 text-[var(--success-ink)]" />
@@ -216,18 +218,12 @@ export function DispositionWizardDialog({
             </>
           ) : node ? (
             <>
-              <div>
-                <h3 className={h3}>{node.prompt || node.label}</h3>
-                <p className={help}>{editingSequence !== null ? "Correct the answer and the walk continues from here." : "Your answer decides the next question."}</p>
-              </div>
+              <h3 className={h3}>{node.prompt || node.label}</h3>
               <QuestionAnswer walk={walk} view={view} readOnly={readOnly} consequence={(option) => consequence(option, walk, view)} />
             </>
           ) : phase === "outcome" ? (
             <>
-              <div>
-                <h3 className={h3}>What was the outcome?</h3>
-                <p className={help}>Only the dispositions mapped to a stage in your pipelines are offered.</p>
-              </div>
+              <h3 className={h3}>What was the outcome?</h3>
               <OutcomeChoices walk={walk} readOnly={readOnly} card />
             </>
           ) : phase === "details" ? (
@@ -240,10 +236,7 @@ export function DispositionWizardDialog({
             </>
           ) : (
             <>
-              <div>
-                <h3 className={h3}>Review</h3>
-                <p className={help}>Check the outcome before you record it.</p>
-              </div>
+              <h3 className={h3}>Review</h3>
               <div>
                 <ReviewSummary
                   walk={walk}

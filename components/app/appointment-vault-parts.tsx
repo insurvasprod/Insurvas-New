@@ -11,8 +11,11 @@
  */
 
 import { useState, type FormEvent, type ReactNode } from "react";
+import { Button } from "@/components/ui/button";
+import { DataToolbar, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Field, KeyValues, Pill, SearchBox, SettingsMeter, SettingsTableCard, btn, control, st } from "@/components/app/settings/primitives";
+import { TableCard } from "@/components/ui/table-card";
+import { Field, KeyValues, Pill, SettingsMeter, control, st } from "@/components/app/settings/primitives";
 import type { CarrierRow } from "@/lib/carriers/constants";
 import { US_STATES } from "@/lib/appointments/constants";
 import { dayMonthYear } from "@/lib/format/dates";
@@ -114,50 +117,53 @@ export function AppointmentGrid({
     });
   const pendingLabel = [pending.additions && `${pending.additions} to add`, pending.removals && `${pending.removals} to end`].filter(Boolean).join(", ");
   return (
-    <SettingsTableCard
+    <TableCard
       title="Carrier appointments by state"
-      actions={
-        <>
-          <span className="text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)] tabular-nums">
-            {plural(selected.size, "appointment")} selected{pendingLabel ? ` · ${pendingLabel}, unsaved` : ""}
-          </span>
-          {actions}
-        </>
+      toolbar={
+        <DataToolbar
+          actions={
+            <>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={!canEdit}
+                onClick={() => setSelected((current) => new Set([...current, ...carriers.flatMap((carrier) => states.map(([state]) => keyFor(carrier.id, state)))]))}
+              >
+                Select visible states
+              </Button>
+              <Button type="button" variant="ghost" disabled={!canEdit} onClick={() => setSelected(new Set())}>
+                Clear
+              </Button>
+              {actions}
+            </>
+          }
+        >
+          <ToolbarSearch value={stateFilter} onChange={setStateFilter} placeholder="Arizona or AZ" label="Find a state" />
+          <label
+            htmlFor="appointment-effective"
+            className="flex items-center gap-2 text-sm text-muted-foreground"
+            title="New appointments start, and unchecked ones end, on this date when you save."
+          >
+            Effective from
+            <input
+              id="appointment-effective"
+              type="date"
+              value={effectiveFrom}
+              onChange={(event) => setEffectiveFrom(event.currentTarget.value)}
+              onInput={(event) => setEffectiveFrom(event.currentTarget.value)}
+              disabled={!canEdit}
+              required
+              className={toolbarControl}
+            />
+          </label>
+        </DataToolbar>
+      }
+      footer={
+        <span className="tabular-nums">
+          {plural(selected.size, "appointment")} selected{pendingLabel ? ` · ${pendingLabel}, unsaved` : ""}
+        </span>
       }
     >
-      <div className="flex flex-wrap items-end gap-3 border-b border-[var(--border)] px-4 py-3">
-        <SearchBox value={stateFilter} onChange={setStateFilter} placeholder="Arizona or AZ" label="Find a state" />
-        <span className="min-w-[180px]">
-          <label htmlFor="appointment-effective" className="text-[12px] leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]">
-            Effective from
-          </label>
-          <input
-            id="appointment-effective"
-            type="date"
-            value={effectiveFrom}
-            onChange={(event) => setEffectiveFrom(event.currentTarget.value)}
-            onInput={(event) => setEffectiveFrom(event.currentTarget.value)}
-            disabled={!canEdit}
-            required
-            className={cn(control, "mt-1 h-10 text-[14px]")}
-          />
-        </span>
-        <span className="flex-1" />
-        <button
-          type="button"
-          className={btn("secondary")}
-          disabled={!canEdit}
-          onClick={() => setSelected((current) => new Set([...current, ...carriers.flatMap((carrier) => states.map(([state]) => keyFor(carrier.id, state)))]))}
-        >
-          Select visible states
-        </button>
-        <button type="button" className={btn("row")} disabled={!canEdit} onClick={() => setSelected(new Set())}>
-          Clear
-        </button>
-      </div>
-      <p className="px-4 pt-3 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">
-        Check the states where you hold an active appointment with each carrier. Unchecking one ends that appointment on the effective date when you save.
-      </p>
       <div className="hidden max-w-full overflow-x-auto [contain:paint] sm:block">
         <table className={cn(st.table, "min-w-[980px]")}>
           <thead>
@@ -225,7 +231,7 @@ export function AppointmentGrid({
           </fieldset>
         ))}
       </div>
-    </SettingsTableCard>
+    </TableCard>
   );
 }
 
@@ -265,13 +271,13 @@ export function FormFooter({ saving, label, error, onCancel }: { saving: boolean
           {error}
         </p>
       )}
-      <div className="flex justify-end gap-2.5">
-        <button type="button" className={btn("ghost")} onClick={onCancel}>
+      <div className="flex justify-end gap-2">
+        <Button type="button" variant="outline" onClick={onCancel}>
           Cancel
-        </button>
-        <button type="submit" className={btn("primary")} disabled={saving}>
+        </Button>
+        <Button type="submit" disabled={saving}>
           {saving ? "Saving…" : label}
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -344,7 +350,7 @@ export function LicenceDialog({
         onOpenChange(next);
       }}
       title={existing ? `Update the ${stateName(form.state)} licence` : "Add a licence"}
-      description="One licence per state. Choosing a state you already hold updates that licence; an expired licence blocks assignment in that state until renewed."
+      description="One licence per state; choosing a state you already hold updates it."
     >
       <form onSubmit={(event) => void submit(event)} className="grid gap-4 sm:grid-cols-2">
         <Field label="State" htmlFor="license-state">
@@ -480,7 +486,7 @@ export function EoDialog({
         onOpenChange(next);
       }}
       title="Errors & omissions cover"
-      description="Keep one current errors-and-omissions policy on file. Saving a policy number you already hold updates it; a new number adds a policy."
+      description="Saving a policy number you already hold updates it; a new number adds a policy."
     >
       <form onSubmit={(event) => void submit(event)} className="grid gap-4 sm:grid-cols-2">
         <Field label="E&O carrier" htmlFor="eo-carrier" required>
@@ -559,7 +565,7 @@ export function CeDialog({
         onOpenChange(next);
       }}
       title="Continuing education"
-      description="One cycle per state: required and completed credits, the ethics credits inside them, and the state's deadline."
+      description="One cycle per state, with its credits and deadline."
     >
       <form onSubmit={(event) => void submit(event)} className="grid gap-4 sm:grid-cols-2">
         <Field label="State" htmlFor="ce-state">

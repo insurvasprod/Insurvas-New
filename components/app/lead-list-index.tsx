@@ -1,16 +1,18 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ChevronDown, Search, SlidersHorizontal, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { StatTile } from "@/components/ui/stat";
+import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
+import { EmptyState, NoMatches } from "@/components/ui/page-states";
+import { Pager, paginate } from "@/components/ui/pager";
+import { StatStrip, StatTile } from "@/components/ui/stat";
 import { TableCard } from "@/components/ui/table-card";
 
 /**
- * The lead-list index, as the board draws it: what each bought list is worth, whether it can be
- * dialled at all, how much of it sits outside the agency's licences, and how far through it the
- * team is — with the two things that cost money said out loud underneath.
+ * The lead-list index: what each bought list is worth, whether it can be dialled at all, how much
+ * of it sits outside the agency's licences, and how far through it the team is. One strip of
+ * figures, then the table with its toolbar inside (docs/design/UI-CONSISTENCY.md).
  *
  * Everything here is counted from rows (lib/leadLists/service.ts), never stored: a stored "usable"
  * is wrong the moment somebody dials one.
@@ -35,9 +37,6 @@ const STATE_UI: Record<ListState, { label: string; chip: string; dot: string }> 
   exhausted: { label: "Exhausted", chip: "bg-[var(--surface-alt)] text-[var(--body)]", dot: "bg-[var(--muted)]" },
   blocked: { label: "Cannot be dialed", chip: "bg-[var(--error-surface)] text-[var(--error-ink)]", dot: "bg-[var(--error)]" },
   empty: { label: "Nothing imported", chip: "bg-[var(--surface-alt)] text-[var(--body)]", dot: "bg-[var(--muted)]" },
-};
-const FILTER_LABEL: Record<StateFilter, string> = {
-  all: "all", not_exhausted: "not exhausted", working: "working", stalling: "stalling", exhausted: "exhausted", blocked: "cannot be dialed", empty: "nothing imported",
 };
 
 const money = (cents: number) => `$${(cents / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -70,17 +69,6 @@ function Chip({ className, dot, children }: { className: string; dot: string; ch
   );
 }
 
-function FilterChip({ label, onRemove }: { label: string; onRemove: () => void }) {
-  return (
-    <span className="inline-flex items-center gap-2 rounded-full border border-border bg-card py-1 pl-3 pr-2 text-xs font-semibold leading-normal tracking-[-0.01em] text-[var(--body)]">
-      {label}
-      <button type="button" onClick={onRemove} aria-label={`Remove ${label}`} className="inline-flex size-4 items-center justify-center rounded-full bg-[var(--surface-alt)] text-[var(--body)]">
-        <X className="size-2.5" aria-hidden="true" />
-      </button>
-    </span>
-  );
-}
-
 /** Worked through: closed, still in cadence, exhausted, and what nobody has dialled yet — as one bar. */
 function WorkedThrough({ list }: { list: LeadListIndexRow }) {
   const total = Math.max(1, list.leadsReceived);
@@ -100,17 +88,19 @@ function WorkedThrough({ list }: { list: LeadListIndexRow }) {
   );
 }
 
-export function LeadListIndex({ lists, licensedStates, onOpen, nowAt }: {
+export function LeadListIndex({ lists, licensedStates, onOpen, nowAt, onRefresh }: {
   lists: LeadListIndexRow[];
   licensedStates: string[];
   onOpen: (list: LeadListIndexRow) => void;
   nowAt: number;
+  /** Reloads the lists. The toolbar's Refresh button is drawn only when the parent passes it. */
+  onRefresh?: () => Promise<unknown> | void;
 }) {
   const [vendor, setVendor] = useState("");
   const [stateFilter, setStateFilter] = useState<StateFilter>("not_exhausted");
   const [search, setSearch] = useState("");
-  const [showFilters, setShowFilters] = useState(false);
   const [page, setPage] = useState(1);
+  const [refreshing, setRefreshing] = useState(false);
 
   const vendors = useMemo(() => [...new Set(lists.map((list) => list.vendorName))].sort(), [lists]);
   const rows = useMemo(() => lists.map((list) => ({ list, state: stateOf(list, nowAt) })), [lists, nowAt]);
@@ -120,9 +110,7 @@ export function LeadListIndex({ lists, licensedStates, onOpen, nowAt }: {
     (!vendor || list.vendorName === vendor) &&
     (stateFilter === "all" || (stateFilter === "not_exhausted" ? state !== "exhausted" : state === stateFilter)) &&
     (!needle || `${list.campaignName} ${list.vendorName}`.toLowerCase().includes(needle)));
-  const pages = Math.max(1, Math.ceil(shown.length / PAGE_SIZE));
-  const current = Math.min(page, pages);
-  const pageRows = shown.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE);
+  const { current, rows: pageRows } = paginate(shown, page, PAGE_SIZE);
 
   // Figures across every list, not just the filtered page: the strip is the whole inventory.
   const usableLeft = lists.reduce((n, list) => n + live(list), 0);
@@ -133,50 +121,41 @@ export function LeadListIndex({ lists, licensedStates, onOpen, nowAt }: {
   const offTotal = lists.reduce((n, list) => n + (list.offTerritory ?? 0), 0);
   const claimableCents = lists.reduce((n, list) => n + list.claimable * (costPerUsable(list) ?? 0), 0);
 
+  // The scrub gate is the one thing on this screen somebody must act on: an unscrubbed list is never served.
   const blocked = rows.filter(({ state }) => state === "blocked").map(({ list }) => list);
-  const worstOff = [...lists].filter((list) => (list.offTerritory ?? 0) > 0).sort((a, b) => (b.offTerritory ?? 0) - (a.offTerritory ?? 0))[0] ?? null;
-  const offCostCents = lists.reduce((n, list) => n + (list.offTerritory ?? 0) * (costPerUsable(list) ?? 0), 0);
 
-  const filters = [
-    vendor && { key: "vendor", label: `Vendor: ${vendor}`, clear: () => setVendor("") },
-    stateFilter !== "all" && { key: "state", label: `State: ${FILTER_LABEL[stateFilter]}`, clear: () => setStateFilter("all") },
-  ].filter(Boolean) as { key: string; label: string; clear: () => void }[];
-
-  const field = "mt-1.5 block h-10 w-full rounded-lg border border-[var(--border-strong)] bg-card px-3 text-sm font-normal normal-case tracking-normal text-foreground";
-  const labelClass = "text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] text-muted-foreground";
+  const filtered = Boolean(vendor) || stateFilter !== "all" || Boolean(needle);
+  const clearFilters = () => { setVendor(""); setStateFilter("all"); setSearch(""); setPage(1); };
+  async function refresh() {
+    if (!onRefresh) return;
+    setRefreshing(true);
+    try { await onRefresh(); } finally { setRefreshing(false); }
+  }
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <StatStrip label="Lead list totals">
         <StatTile label="Usable leads left" value={usableLeft.toLocaleString()} valueTone={usableLeft > 0 ? "warning" : undefined} footnote="never dialed or mid-cadence" />
         <StatTile label="Spend on open lists" value={wholeMoney(openSpend)} footnote={`${openVendors} ${openVendors === 1 ? "vendor" : "vendors"}`} />
         <StatTile label="Off-territory leads" value={territoryKnown ? offTotal.toLocaleString() : "—"} valueTone={offTotal > 0 ? "danger" : undefined} footnote={territoryKnown ? "states you are not licensed in" : "no licensed states recorded"} />
         <StatTile label="Claimable back" value={money(claimableCents)} valueTone={claimableCents > 0 ? "good" : undefined} footnote="return windows still open" />
-      </div>
+      </StatStrip>
 
-      <div className="portal-lead-lists-filters flex flex-wrap items-center gap-2.5 rounded-lg border border-border bg-card px-3 py-2.5 shadow-[0_1px_2px_rgba(16,20,26,.05)]">
-        <span className="relative inline-flex items-center">
-          <select aria-label="Vendor" value={vendor} onChange={(event) => { setVendor(event.target.value); setPage(1); }} className="h-[2.125rem] appearance-none rounded-lg border border-[var(--border-strong)] bg-card pl-3.5 pr-9 text-sm font-semibold text-foreground">
-            <option value="">All vendors</option>
-            {vendors.map((name) => <option key={name} value={name}>{name}</option>)}
-          </select>
-          <ChevronDown className="pointer-events-none absolute right-3 size-4 text-muted-foreground" aria-hidden="true" />
-        </span>
-        <span className="relative flex w-full items-center sm:w-[248px]">
-          <Search className="pointer-events-none absolute left-3 size-4 text-muted-foreground" aria-hidden="true" />
-          <input type="search" aria-label="Search file, vendor, campaign" placeholder="Search file, vendor, campaign" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} className="h-[2.125rem] w-full rounded-lg border border-[var(--border-strong)] bg-card pl-9 pr-3 text-sm text-foreground placeholder:text-muted-foreground" />
-        </span>
-        <Button type="button" variant="outline" aria-expanded={showFilters} onClick={() => setShowFilters((open) => !open)} className="h-[2.125rem] border-[var(--border-strong)] px-3.5">
-          <SlidersHorizontal aria-hidden="true" />Filters
-          {filters.length > 0 && <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--surface-alt)] px-1.5 text-xs font-semibold">{filters.length}</span>}
-        </Button>
-      </div>
+      {blocked.length > 0 && (
+        <p role="alert" className="rounded-lg border border-[var(--error)]/30 bg-[var(--error-surface)] px-4 py-2.5 text-sm text-[var(--error-ink)]">
+          <strong>{blocked.length === 1 ? blocked[0].campaignName : `${blocked.length} lists`}</strong> {blocked.length === 1 ? "is" : "are"} not scrubbed, so {blocked.length === 1 ? "its" : "their"} leads cannot be dialed.
+        </p>
+      )}
 
-      {showFilters && (
-        <div className="grid gap-3 rounded-lg border border-border bg-card p-4 sm:grid-cols-2 lg:grid-cols-4">
-          <label className={labelClass}>
-            State
-            <select value={stateFilter} onChange={(event) => { setStateFilter(event.target.value as StateFilter); setPage(1); }} className={field}>
+      <TableCard
+        toolbar={
+          <DataToolbar actions={onRefresh ? <RefreshButton onClick={() => void refresh()} refreshing={refreshing} /> : undefined}>
+            <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Search file, vendor, campaign" />
+            <select aria-label="Vendor" value={vendor} onChange={(event) => { setVendor(event.target.value); setPage(1); }} className={toolbarControl}>
+              <option value="">All vendors</option>
+              {vendors.map((name) => <option key={name} value={name}>{name}</option>)}
+            </select>
+            <select aria-label="List state" value={stateFilter} onChange={(event) => { setStateFilter(event.target.value as StateFilter); setPage(1); }} className={toolbarControl}>
               <option value="all">Every list</option>
               <option value="not_exhausted">Not exhausted</option>
               <option value="working">Working</option>
@@ -185,103 +164,68 @@ export function LeadListIndex({ lists, licensedStates, onOpen, nowAt }: {
               <option value="blocked">Cannot be dialed</option>
               <option value="empty">Nothing imported</option>
             </select>
-          </label>
-        </div>
-      )}
-
-      <div className="flex flex-wrap items-center gap-2">
-        {filters.map((filter) => <FilterChip key={filter.key} label={filter.label} onRemove={() => { filter.clear(); setPage(1); }} />)}
-        {(filters.length > 0 || needle) && (
-          <button type="button" onClick={() => { setVendor(""); setStateFilter("all"); setSearch(""); setPage(1); }} className="bg-transparent p-1 text-xs font-semibold text-foreground">Clear all</button>
-        )}
-        <span className="text-xs leading-normal tracking-[-0.01em] text-muted-foreground">{shown.length} of {lists.length} lists</span>
-      </div>
-
-      <TableCard
-        footer={
-          <>
-            <span>{shown.length === 0 ? "No lists" : `Showing ${(current - 1) * PAGE_SIZE + 1}–${Math.min(current * PAGE_SIZE, shown.length)} of ${shown.length} lists · newest upload first`}</span>
-            <span className="flex gap-2">
-              <Button type="button" variant="outline" size="sm" className="border-[var(--border-strong)] px-4" disabled={current <= 1} onClick={() => setPage(current - 1)}>Previous</Button>
-              <Button type="button" variant="outline" size="sm" className="border-[var(--border-strong)] px-4" disabled={current >= pages} onClick={() => setPage(current + 1)}>Next</Button>
-            </span>
-          </>
+            {filtered && <Button type="button" variant="ghost" onClick={clearFilters}>Clear</Button>}
+          </DataToolbar>
         }
+        footer={<Pager page={current} total={shown.length} noun="lists" pageSize={PAGE_SIZE} onPage={setPage} suffix={shown.length < lists.length ? `${lists.length} in all · newest upload first` : "newest upload first"} />}
       >
-        <table className="portal-lead-table w-full min-w-[980px] text-left text-sm">
-          <thead>
-            <tr>
-              <th>List</th>
-              <th className="w-[78px] text-right">Usable</th>
-              <th className="w-[104px] text-right">Cost / usable</th>
-              <th className="w-[150px]">Territory</th>
-              <th className="w-[170px]">Health</th>
-              <th className="w-[158px]">State</th>
-              <th className="w-[140px]">Worked through</th>
-            </tr>
-          </thead>
-          <tbody className="m-seq">
-            {pageRows.map(({ list, state }) => {
-              const cost = costPerUsable(list);
-              const ui = STATE_UI[state];
-              const fresh = list.byState.fresh ?? 0;
-              return (
-                <tr key={list.campaignId} className="m-row cursor-pointer" onClick={() => onOpen(list)}>
-                  <td className="max-w-[340px]">
-                    <button type="button" onClick={(event) => { event.stopPropagation(); onOpen(list); }} className="block max-w-full truncate text-left text-sm font-semibold leading-normal tracking-[-0.02em] text-foreground hover:underline">
-                      {list.campaignName}
-                    </button>
-                    <span className="block truncate text-xs leading-normal text-muted-foreground">
-                      {[list.vendorName, `${list.recordsPurchased.toLocaleString()} bought`, shortDate(list.createdAt)].filter(Boolean).join(" · ")}
-                    </span>
-                  </td>
-                  <td className="text-right tabular-nums">{state === "blocked" || state === "empty" ? "—" : list.leadsReceived.toLocaleString()}</td>
-                  <td className="text-right tabular-nums">{cost == null || state === "blocked" ? "—" : `$${(cost / 100).toFixed(3)}`}</td>
-                  <td>
-                    {list.offTerritory == null || state === "empty" ? (
-                      <span className="text-muted-foreground">—</span>
-                    ) : list.offTerritory === 0 ? (
-                      <Chip className="bg-[var(--success-surface)] text-[var(--success-ink)]" dot="bg-[var(--success)]">All in licence</Chip>
-                    ) : (
-                      <Chip className="bg-[var(--error-surface)] text-[var(--error-ink)]" dot="bg-[var(--error)]">{list.offTerritory.toLocaleString()} off-territory</Chip>
-                    )}
-                  </td>
-                  <td>{list.scrubStatus !== "scrubbed" && state !== "empty" ? (list.scrubStatus === "failed" ? "scrub failed" : "not scrubbed") : fresh > 0 ? `${fresh.toLocaleString()} never dialed` : "—"}</td>
-                  <td><Chip className={ui.chip} dot={ui.dot}>{ui.label}</Chip></td>
-                  <td>{state === "blocked" ? <span className="text-xs text-[var(--error-ink)]">Leads are not servable</span> : state === "empty" ? <span className="text-xs text-muted-foreground">Import a file against it</span> : <WorkedThrough list={list} />}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
         {lists.length === 0 ? (
-          <p className="px-4 py-8 text-center text-sm text-muted-foreground">No lead lists yet. A list is a campaign — create one under Vendors &amp; campaigns, then import a CSV against it.</p>
+          <EmptyState title="No lead lists yet" hint="A list is a campaign. Create one under Vendors & campaigns, then import a CSV against it." />
         ) : shown.length === 0 ? (
-          <p className="px-4 py-8 text-center text-sm text-muted-foreground">No list matches these filters.</p>
-        ) : null}
+          <NoMatches noun="lists" onClear={clearFilters} />
+        ) : (
+          <table className="portal-lead-table w-full min-w-[1040px] text-left text-sm">
+            <thead>
+              <tr>
+                <th>List</th>
+                <th className="w-[78px] text-right">Usable</th>
+                <th className="w-[104px] text-right">Cost / usable</th>
+                <th className="w-[150px]">Territory</th>
+                <th className="w-[170px]">Health</th>
+                <th className="w-[158px]">State</th>
+                <th className="w-[140px]">Worked through</th>
+                <th className="w-[84px] text-right"><span className="sr-only">Actions</span></th>
+              </tr>
+            </thead>
+            <tbody className="m-seq">
+              {pageRows.map(({ list, state }) => {
+                const cost = costPerUsable(list);
+                const ui = STATE_UI[state];
+                const fresh = list.byState.fresh ?? 0;
+                return (
+                  <tr key={list.campaignId} className="m-row cursor-pointer" onClick={() => onOpen(list)}>
+                    <td className="max-w-[340px]">
+                      <button type="button" onClick={(event) => { event.stopPropagation(); onOpen(list); }} className="block max-w-full truncate text-left text-sm font-semibold leading-normal tracking-[-0.02em] text-foreground hover:underline">
+                        {list.campaignName}
+                      </button>
+                      <span className="block truncate text-xs leading-normal text-muted-foreground">
+                        {[list.vendorName, `${list.recordsPurchased.toLocaleString()} bought`, shortDate(list.createdAt)].filter(Boolean).join(" · ")}
+                      </span>
+                    </td>
+                    <td className="text-right tabular-nums">{state === "blocked" || state === "empty" ? "—" : list.leadsReceived.toLocaleString()}</td>
+                    <td className="text-right tabular-nums">{cost == null || state === "blocked" ? "—" : `$${(cost / 100).toFixed(3)}`}</td>
+                    <td>
+                      {list.offTerritory == null || state === "empty" ? (
+                        <span className="text-muted-foreground">—</span>
+                      ) : list.offTerritory === 0 ? (
+                        <Chip className="bg-[var(--success-surface)] text-[var(--success-ink)]" dot="bg-[var(--success)]">All in licence</Chip>
+                      ) : (
+                        <Chip className="bg-[var(--error-surface)] text-[var(--error-ink)]" dot="bg-[var(--error)]">{list.offTerritory.toLocaleString()} off-territory</Chip>
+                      )}
+                    </td>
+                    <td>{list.scrubStatus !== "scrubbed" && state !== "empty" ? (list.scrubStatus === "failed" ? "scrub failed" : "not scrubbed") : fresh > 0 ? `${fresh.toLocaleString()} never dialed` : "—"}</td>
+                    <td><Chip className={ui.chip} dot={ui.dot}>{ui.label}</Chip></td>
+                    <td>{state === "blocked" ? <span className="text-xs text-[var(--error-ink)]">Leads are not servable</span> : state === "empty" ? <span className="text-xs text-muted-foreground">Import a file against it</span> : <WorkedThrough list={list} />}</td>
+                    <td className="text-right">
+                      <Button type="button" variant="outline" size="sm" aria-label={`Open ${list.campaignName}`} onClick={(event) => { event.stopPropagation(); onOpen(list); }}>Open</Button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
       </TableCard>
-
-      {(blocked.length > 0 || (worstOff && offTotal > 0)) && (
-        <div className="grid gap-5 md:grid-cols-2">
-          {blocked.length > 0 && (
-            <div className="rounded-lg border border-border border-l-[3px] border-l-[var(--error)] bg-[var(--error-surface)] px-4 py-3.5 text-sm leading-normal tracking-[-0.02em]">
-              <p className="font-semibold text-[var(--error-ink)]">The scrub is a gate, not a badge</p>
-              <p className="mt-1.5 text-[var(--body)]">
-                {blocked.length === 1 ? <strong>{blocked[0].campaignName}</strong> : <><strong>{blocked.length} lists</strong> ({blocked.slice(0, 3).map((list) => list.campaignName).join(", ")}{blocked.length > 3 ? ", …" : ""})</>}{" "}
-                {blocked.length === 1 ? "has" : "have"} not been scrubbed, so {blocked.length === 1 ? "its" : "their"} leads are <strong>not servable</strong> — the queue will not hand one out. Federal DNC carries $500–$1,500 per call and a purchased list is exactly where those numbers hide. If the scrub vendor is down, dialing waits.
-              </p>
-            </div>
-          )}
-          {worstOff && offTotal > 0 && (
-            <div className="rounded-lg border border-border border-l-[3px] border-l-[var(--warning)] bg-[var(--warning-surface)] px-4 py-3.5 text-sm leading-normal tracking-[-0.02em]">
-              <p className="font-semibold text-[var(--warning-ink)]">{offTotal.toLocaleString()} leads you cannot legally sell to</p>
-              <p className="mt-1.5 text-[var(--body)]">
-                {worstOff.vendorName}’s {worstOff.campaignName} holds {(worstOff.offTerritory ?? 0).toLocaleString()} leads in {worstOff.offTerritoryStates} {worstOff.offTerritoryStates === 1 ? "state" : "states"} outside your {licensedStates.length} licensed {licensedStates.length === 1 ? "state" : "states"}. Across every list they cost <strong>{money(offCostCents)}</strong>, they can never convert, and they are worth raising with the vendor.
-              </p>
-            </div>
-          )}
-        </div>
-      )}
     </div>
   );
 }

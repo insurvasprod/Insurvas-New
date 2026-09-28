@@ -1,13 +1,15 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { ArrowLeft, Check } from "lucide-react";
+import { ChevronLeft } from "lucide-react";
 
 import { LeadListAssignDrawer } from "@/components/app/lead-list-assign-drawer";
 import { LeadListClaimButton } from "@/components/app/lead-list-claim-button";
 import { Button } from "@/components/ui/button";
 import { LinkArrow } from "@/components/ui/link-arrow";
 import { PageHeader } from "@/components/ui/page-header";
-import { Meter, StatTile, type MeterTone } from "@/components/ui/stat";
+import { Meter, StatStrip, StatTile, type MeterTone } from "@/components/ui/stat";
+import { EmptyState } from "@/components/ui/page-states";
+import { TableCard } from "@/components/ui/table-card";
 import type { LeadListDetail, PoolBlocker, PoolBlockers, RemovalReason } from "@/lib/leadLists/detail";
 import { cn } from "@/lib/utils";
 
@@ -49,17 +51,10 @@ function longDay(iso: string, timeZone: string | null) {
   const p = parts(iso, timeZone);
   return p ? `${Number(p.day)} ${MONTHS[p.month]}` : "";
 }
-/** "18 Aug 09:14" — the time only when the agency's clock is known; a UTC time would mislead. */
-function stamp(iso: string, timeZone: string | null) {
-  const p = parts(iso, timeZone);
-  if (!p) return "";
-  return `${Number(p.day)} ${MONTHS[p.month].slice(0, 3)}${timeZone ? ` ${p.time}` : ` ${p.year}`}`;
-}
 function fullDay(iso: string, timeZone: string | null) {
   const p = parts(iso, timeZone);
   return p ? `${Number(p.day)} ${MONTHS[p.month].slice(0, 3)} ${p.year}` : "—";
 }
-const pct = (part: number, whole: number) => (whole > 0 ? Math.round((100 * part) / whole) : 0);
 
 function Chip({ tone, dot, children }: { tone: "error" | "neutral" | "good"; dot?: boolean; children: ReactNode }) {
   const look = {
@@ -72,54 +67,6 @@ function Chip({ tone, dot, children }: { tone: "error" | "neutral" | "good"; dot
       {dot && <span className={cn("size-1.5 shrink-0 rounded-full", look.dot)} aria-hidden="true" />}
       {children}
     </span>
-  );
-}
-
-/** The card with the grey title bar the board gives every table on this screen. */
-function BarCard({ title, action, footnote, children }: { title: string; action?: ReactNode; footnote?: ReactNode; children: ReactNode }) {
-  return (
-    <section className="flex shrink-0 flex-col overflow-hidden rounded-lg border border-border bg-card shadow-[0_1px_2px_rgba(16,20,26,.05)]">
-      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border bg-[var(--surface-alt)] px-4 py-3">
-        <h2 className="text-sm font-semibold leading-normal tracking-[-0.02em] text-foreground">{title}</h2>
-        {action && <div className="flex items-center gap-2.5">{action}</div>}
-      </div>
-      <div className="overflow-x-auto">{children}</div>
-      {footnote && <div className="border-t border-border bg-[var(--canvas)] px-4 py-3 text-xs leading-normal tracking-[-0.01em] text-[var(--body)]">{footnote}</div>}
-    </section>
-  );
-}
-
-type Step = { label: string; detail: string; state: "done" | "here" | "open" };
-
-function Chain({ steps }: { steps: Step[] }) {
-  return (
-    <div className="rounded-lg border border-border bg-card p-[18px] shadow-[0_1px_2px_rgba(16,20,26,.05)]">
-      {/* One line from lg up, as the board draws it; below that the six steps sit two to a row and
-          the connectors, which no longer connect anything, are dropped. */}
-      <ol className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:flex lg:items-center lg:gap-0" aria-label="Where this list is">
-        {steps.map((step, index) => (
-          <li key={step.label} className={cn("flex min-w-0 items-center", index > 0 && "lg:flex-grow")} aria-current={step.state === "here" ? "step" : undefined}>
-            {index > 0 && <span className="m-track mx-2.5 hidden h-0.5 min-w-6 flex-grow bg-border lg:block" aria-hidden="true" />}
-            <span className="flex min-w-0 items-center gap-2.5">
-              <span
-                className={cn(
-                  "inline-flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
-                  step.state === "done" && "bg-[var(--success)] text-white",
-                  step.state === "here" && "bg-[var(--primary)] text-[var(--primary-foreground)]",
-                  step.state === "open" && "bg-[var(--surface-alt)] text-[var(--body)]",
-                )}
-              >
-                {step.state === "done" ? <Check className="size-[13px]" strokeWidth={3} aria-label="done" /> : index + 1}
-              </span>
-              <span>
-                <span className={cn("block text-sm font-semibold leading-normal tracking-[-0.02em]", step.state === "here" ? "text-[var(--accent-ink)]" : "text-foreground")}>{step.label}</span>
-                <span className="block text-xs leading-normal tracking-[-0.01em] tabular-nums text-muted-foreground">{step.detail}</span>
-              </span>
-            </span>
-          </li>
-        ))}
-      </ol>
-    </div>
   );
 }
 
@@ -239,14 +186,9 @@ function PoolBlockersCard({ pool }: { pool: PoolBlockers }) {
   });
   const held = pool.total - (rows.find((row) => row.blocker === "ready")?.leads ?? 0);
   return (
-    <BarCard
+    <TableCard
       title="Why these aren't being served"
       action={<Chip tone={held > 0 ? "error" : "good"}>{count(pool.total)} in the pool{held > 0 ? ` · ${count(held)} held` : ""}</Chip>}
-      footnote={
-        <>
-          Pool leads are served by Serve next without being assigned, so nothing here needs releasing — a list is paused on Vendors &amp; campaigns. Each lead is counted once, under the first check Serve next would refuse it on, as of now.
-        </>
-      }
     >
       <table className="portal-lead-table w-full min-w-[620px]! text-left text-sm">
         <thead>
@@ -271,20 +213,18 @@ function PoolBlockersCard({ pool }: { pool: PoolBlockers }) {
           ))}
         </tbody>
       </table>
-    </BarCard>
+    </TableCard>
   );
 }
 
 export function LeadListDetailView({
   detail,
-  eyebrow,
   money: canSeeMoney,
   timeZone,
   assign = { manager: false, blocked: null },
   claimBlocked = null,
 }: {
   detail: LeadListDetail;
-  eyebrow?: string;
   money: boolean;
   timeZone: string | null;
   /** manager: owner or producer. blocked: why assigning is off for them (plan, read-only), or null. */
@@ -301,7 +241,6 @@ export function LeadListDetailView({
   const windowOpen = d.returnDaysLeft == null || d.returnDaysLeft > 0;
   const netSpend = d.totalSpendCents - d.creditsReceivedCents;
   const contactRate = d.dialed > 0 ? (100 * d.contacted) / d.dialed : null;
-  const settled = d.leadsReceived > 0 && d.workable === 0;
   const exportHref = `/api/app/vendor-returns/import-removals?campaign_id=${d.campaignId}`;
   // What each usable record costs once the credit still being argued lands: net spend less that
   // credit, over the same usable rows. Not "back to the invoice price" — rows on your own list are
@@ -314,79 +253,51 @@ export function LeadListDetailView({
     `${money(d.totalSpendCents)} for ${count(d.recordsPurchased)} records${d.firstImportAt ? `, imported ${longDay(d.firstImportAt, timeZone)}` : ", nothing imported yet"}`,
   ].filter(Boolean).join(" · ");
 
-  const steps: Step[] = [
-    {
-      label: "CSV import",
-      detail: d.firstImportAt ? `Committed ${stamp(d.firstImportAt, timeZone)} · ${d.imports > 1 ? `${d.imports} files` : "transactional"}` : "Nothing committed yet",
-      state: d.firstImportAt ? "done" : "open",
-    },
-    { label: "Lead list", detail: `${count(d.recordsUsable)} usable · ${perRecord(d.costPerUsableCents)} each`, state: "here" },
-    {
-      label: "Assignment",
-      detail: `${count(d.assigned)} routed · licence checked first`,
-      state: d.leadsReceived > 0 && unassigned === 0 ? "done" : "open",
-    },
-    {
-      label: "Dialer",
-      detail: `${count(d.dialed)} dialed · ${count(d.neverDialed)} never tried`,
-      state: d.leadsReceived > 0 && d.neverDialed === 0 ? "done" : "open",
-    },
-    { label: "Disposition", detail: `${count(d.outcomesRecorded)} outcomes recorded`, state: settled ? "done" : "open" },
-    {
-      label: "Pipeline",
-      detail: d.outcome
-        ? `${count(d.outcome.issued)} issued · ${d.outcome.costPerIssuedCents == null ? "no policy yet" : `${money(d.outcome.costPerIssuedCents)} per policy`}`
-        : "Outcomes live in True CPA",
-      state: settled ? "done" : "open",
-    },
-  ];
-
   return (
     <div className="m-stagger flex flex-col gap-6">
-      <div>
-        <div className="mb-2.5 flex items-center gap-2 text-sm font-semibold leading-[1.43] tracking-[-0.01em] text-foreground">
-          <ArrowLeft className="size-[13px]" strokeWidth={2.4} aria-hidden="true" />
-          <Link href="/app/lead-lists" className="text-inherit no-underline hover:underline">Back to lead lists</Link>
-        </div>
-        <PageHeader
-          eyebrow={eyebrow}
-          title={d.campaignName}
-          description={subtitle}
-          actions={
-            <>
-              {canSeeMoney && d.claims.supported && d.claims.unclaimedRows > 0 && (
-                <LeadListClaimButton campaignId={d.campaignId} rows={d.claims.unclaimedRows} amount={money(d.claims.unclaimedCents)} blocked={claimBlocked} />
-              )}
-              {canSeeMoney && claimableRows > 0 && (
-                <Button asChild type="button" variant="outline" className="h-11 border-[var(--border-strong)] px-4">
-                  <a href={exportHref} download>Export claimable rows</a>
-                </Button>
-              )}
-              {/* Owners and producers assign the whole pool remainder at once in the drawer. Everyone
-                  else — and any list whose unassigned leads are not in the pool — keeps the per-lead
-                  view, which the index opens from the hash (lead-list-workspace). */}
-              {assign.manager && d.assignable > 0 && !assign.blocked && (
-                <LeadListAssignDrawer campaignId={d.campaignId} listName={d.campaignName} assignable={d.assignable} />
-              )}
-              {assign.manager && d.assignable > 0 && assign.blocked && (
-                <span className="flex flex-col items-end gap-1">
-                  <Button type="button" className="h-11 px-4" disabled aria-describedby="assign-blocked">Assign the {count(d.assignable)}</Button>
-                  <span id="assign-blocked" className="max-w-[260px] text-right text-xs leading-normal tracking-[-0.01em] text-muted-foreground">{assign.blocked}</span>
-                </span>
-              )}
-              {(!assign.manager || d.assignable === 0) && unassigned > 0 && (
-                <Button asChild type="button" variant="outline" className="h-11 border-[var(--border-strong)] px-4">
-                  <Link href={`/app/lead-lists#${d.campaignId}`}>See the {count(unassigned)} unassigned</Link>
-                </Button>
-              )}
-            </>
-          }
-        />
-      </div>
+      <Link
+        href="/app/lead-lists"
+        className="-mb-3 inline-flex w-fit items-center gap-1.5 text-sm font-semibold tracking-[-0.01em] text-muted-foreground transition-colors hover:text-foreground"
+      >
+        <ChevronLeft className="size-4" aria-hidden="true" />
+        Lead lists
+      </Link>
+      <PageHeader
+        title={d.campaignName}
+        description={subtitle}
+        actions={
+          <>
+            {canSeeMoney && d.claims.supported && d.claims.unclaimedRows > 0 && (
+              <LeadListClaimButton campaignId={d.campaignId} rows={d.claims.unclaimedRows} amount={money(d.claims.unclaimedCents)} blocked={claimBlocked} />
+            )}
+            {canSeeMoney && claimableRows > 0 && (
+              <Button asChild type="button" variant="outline">
+                <a href={exportHref} download>Export claimable rows</a>
+              </Button>
+            )}
+            {/* Owners and producers assign the whole pool remainder at once in the drawer. Everyone
+                else — and any list whose unassigned leads are not in the pool — keeps the per-lead
+                view, which the index opens from the hash (lead-list-workspace). */}
+            {assign.manager && d.assignable > 0 && !assign.blocked && (
+              <LeadListAssignDrawer campaignId={d.campaignId} listName={d.campaignName} assignable={d.assignable} />
+            )}
+            {assign.manager && d.assignable > 0 && assign.blocked && (
+              <Button type="button" disabled aria-describedby="assign-blocked">Assign the {count(d.assignable)}</Button>
+            )}
+            {(!assign.manager || d.assignable === 0) && unassigned > 0 && (
+              <Button asChild type="button" variant="outline">
+                <Link href={`/app/lead-lists#${d.campaignId}`}>See the {count(unassigned)} unassigned</Link>
+              </Button>
+            )}
+          </>
+        }
+      />
 
-      <Chain steps={steps} />
+      {assign.manager && d.assignable > 0 && assign.blocked && (
+        <p id="assign-blocked" role="status" className="rounded-lg border border-[var(--warning)]/30 bg-[var(--warning-surface)] px-4 py-2.5 text-sm text-[var(--warning-ink)]">{assign.blocked}</p>
+      )}
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+      <StatStrip label="List economics">
         <StatTile label="Paid per record" value={perRecord(d.costPerRecordCents)} footnote={`${wholeMoney(d.totalSpendCents)} / ${count(d.recordsPurchased)} rows`} />
         <StatTile
           label="Cost per usable record"
@@ -411,13 +322,13 @@ export function LeadListDetailView({
           label="Cost per issued policy"
           value={d.outcome?.costPerIssuedCents != null ? money(d.outcome.costPerIssuedCents) : "—"}
           valueTone={d.outcome?.costPerIssuedCents != null ? "primary" : undefined}
-          footnote="the number that decides the re-buy"
+          reserveFootnote
         />
-      </div>
+      </StatStrip>
 
-      <div className="flex flex-col gap-6 xl:flex-row">
+      <div className="flex flex-col gap-6 xl:flex-row xl:items-start">
         <div className="flex min-w-0 flex-grow flex-col gap-6">
-          <BarCard
+          <TableCard
             title={`Where the ${count(removed)} went`}
             action={
               claimableCents > 0 ? (
@@ -427,18 +338,15 @@ export function LeadListDetailView({
                 </Chip>
               ) : undefined
             }
-            footnote={
+            footer={
               removed > 0 && d.costPerRecordCents != null && d.costPerUsableCents != null ? (
-                <>
-                  Until credits are tracked the cost per lead is fiction. Paying {wholeMoney(d.totalSpendCents)} for {count(d.recordsPurchased)} records of which {count(removed)} were never usable makes the real cost of the usable ones <strong>{perRecord(d.costPerUsableCents)}</strong>, not {perRecord(d.costPerRecordCents)}
+                <span>
+                  Each usable record cost <strong className="text-foreground">{perRecord(d.costPerUsableCents)}</strong>, not {perRecord(d.costPerRecordCents)}
                   {postCreditCents != null && d.claims.pendingCents > 0
-                    ? <> — and if the {money(d.claims.pendingCents)} still claimable is credited it falls to <strong>{perRecord(postCreditCents)}</strong>.</>
-                    : "."}
-                  <span className="mt-1 block">Repeats inside a file count as removed and claimable from {REPEATS_COUNTED_FROM}; duplicates of leads you already had stay usable.</span>
-                </>
-              ) : (
-                <>Nothing was removed at import, so what you paid per record is what each usable one cost. Repeats inside a file count as removed from {REPEATS_COUNTED_FROM}; duplicates of leads you already had stay usable and are not counted here.</>
-              )
+                    ? <> · <strong className="text-foreground">{perRecord(postCreditCents)}</strong> if the {money(d.claims.pendingCents)} still claimable is credited</>
+                    : null}
+                </span>
+              ) : undefined
             }
           >
             <table className="portal-lead-table w-full min-w-[620px]! text-left text-sm">
@@ -479,23 +387,18 @@ export function LeadListDetailView({
                 </tr>
               </tfoot>
             </table>
-          </BarCard>
+          </TableCard>
 
           {d.poolBlockers && d.poolBlockers.total > 0 && <PoolBlockersCard pool={d.poolBlockers} />}
 
-          <BarCard
+          <TableCard
             title="Column mapping"
             action={
               <>
                 {d.mapping.saved && <Chip tone="good">Saved for {d.vendorName}</Chip>}
-                <Button asChild type="button" variant="outline" size="sm" className="h-8 border-[var(--border-strong)] px-4">
+                <Button asChild type="button" variant="outline">
                   <Link href="/app/import">Edit mapping</Link>
                 </Button>
-              </>
-            }
-            footnote={
-              <>
-                Remembered per vendor, so the next {d.vendorName} file is one click. The commit is transactional: all {count(d.leadsReceived)} rows land or none do — a half-imported list with no way to tell which rows made it is the failure this prevents.
               </>
             }
           >
@@ -521,38 +424,24 @@ export function LeadListDetailView({
                 </tbody>
               </table>
             ) : (
-              <p className="px-4 py-6 text-sm text-muted-foreground">
-                No mapping is saved for {d.vendorName}. Save one on the import screen and every later file from them maps itself.
-              </p>
+              <EmptyState title={`No mapping saved for ${d.vendorName}`} hint="Save one on the import screen and later files from this vendor map themselves." />
             )}
-          </BarCard>
+          </TableCard>
         </div>
 
-        <div className="flex w-full shrink-0 flex-col gap-6 xl:w-[460px]">
-          <section className="rounded-lg border border-border bg-card p-6 shadow-[0_1px_2px_rgba(16,20,26,.05)]">
-            <h2 className="text-lg font-semibold leading-[1.28] tracking-[-0.015em]">List health</h2>
-            <p className="mt-1 text-sm leading-normal tracking-[-0.02em] text-muted-foreground">The view that shows a list has stalled before the cost per policy says so.</p>
-            <div className="mt-1.5">
+        <div className="flex w-full shrink-0 flex-col gap-6 xl:w-[420px]">
+          <TableCard title="List health">
+            <div className="px-4 pb-1.5">
               <HealthRow label="Dialed at least once" value={d.dialed} of={d.leadsReceived} tone="info" />
               <HealthRow label="Never dialed" value={d.neverDialed} of={d.leadsReceived} tone="warning" />
               <HealthRow label="Stuck outside their window" value={d.outsideWindow} of={d.leadsReceived} tone={d.outsideWindow ? "warning" : "good"} />
               <HealthRow label={`Exhausted at ${(d.attemptCeilings ?? [d.attemptCeiling]).join(" or ")} attempts`} value={d.exhausted} of={d.leadsReceived} tone="neutral" />
               <HealthRow label="Contacted" value={d.contacted} of={d.leadsReceived} tone="good" />
             </div>
-          </section>
+          </TableCard>
 
-          {d.neverDialed > 0 && (
-            <div className="rounded-lg border border-border border-l-[3px] border-l-[var(--warning)] bg-[var(--warning-surface)] px-4 py-3.5 text-sm leading-normal tracking-[-0.02em]">
-              <p className="font-semibold text-[var(--warning-ink)]">{count(d.neverDialed)} {d.neverDialed === 1 ? "has" : "have"} never been dialed</p>
-              <p className="mt-1.5 text-[var(--body)]">
-                {d.neverDialed === 1 ? "It is" : "They are"} {pct(d.neverDialed, d.recordsPurchased || d.leadsReceived)}% of what you paid for. A list where a third is unreachable looks identical to one that is working, right up until the cost per policy comes in wrong.
-              </p>
-            </div>
-          )}
-
-          <section className="rounded-lg border border-border bg-card p-5 shadow-[0_1px_2px_rgba(16,20,26,.05)]">
-            <h2 className="text-lg font-semibold leading-[1.28] tracking-[-0.015em]">Consent artefacts</h2>
-            <dl className="mt-3.5 grid grid-cols-2 gap-x-6 gap-y-4">
+          <TableCard title="Consent artefacts">
+            <dl className="grid grid-cols-2 gap-x-6 gap-y-4 border-t border-border px-4 py-4">
               {[
                 ["TrustedForm present", `${count(d.consent.trustedForm)} of ${count(d.leadsReceived)}`],
                 ["Missing", count(Math.max(0, d.leadsReceived - d.consent.supplied))],
@@ -565,10 +454,7 @@ export function LeadListDetailView({
                 </div>
               ))}
             </dl>
-            <p className="mt-3 text-xs leading-normal tracking-[-0.01em] text-muted-foreground">
-              This is what you are asked to produce when a complaint arrives. A vendor who cannot supply them is selling something different from what they claim.
-            </p>
-          </section>
+          </TableCard>
         </div>
       </div>
     </div>

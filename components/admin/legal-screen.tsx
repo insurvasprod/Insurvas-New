@@ -13,7 +13,10 @@ import Link from "next/link";
 import { notify } from "@/lib/notify";
 
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
+import { EmptyState } from "@/components/ui/page-states";
+import { TableCard } from "@/components/ui/table-card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { btn, Callout, control, Field, KeyValues, Pill, st } from "@/components/app/settings/primitives";
 import { LEGAL_DOC_LABELS, LEGAL_DOC_TYPES, type LegalDocType } from "@/lib/legal/constants";
@@ -280,11 +283,7 @@ export function LegalScreen({
 
   return (
     <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
-      <PageHeader
-        title="Legal"
-        description="Author documents, publish versions, and look up who accepted what."
-        actions={<DocSwitch value={doc} onChange={switchDoc} />}
-      />
+      <PageHeader title="Legal" actions={<DocSwitch value={doc} onChange={switchDoc} />} />
 
       <div className="flex min-w-0 flex-col gap-6 lg:flex-row">
         {/* ── left column ───────────────────────────────────────────────────────────────── */}
@@ -459,7 +458,7 @@ export function LegalScreen({
 
 function DocSwitch({ value, onChange }: { value: LegalDocType; onChange: (next: LegalDocType) => void }) {
   return (
-    <div role="group" aria-label="Document" className="inline-flex h-11 items-center gap-0.5 rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] p-[3px]">
+    <div role="group" aria-label="Document" className="inline-flex h-9 items-center gap-0.5 rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] p-[3px]">
       {LEGAL_DOC_TYPES.map((type) => (
         <button
           key={type}
@@ -529,9 +528,6 @@ function LookupCard({ doc, lookup }: { doc: LegalDocType; lookup: Lookup | null 
   return (
     <section className="min-w-0 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] p-5">
       <h2 className="m-0 text-[18px] leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]">Acceptance lookup</h2>
-      <p className="mt-1 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">
-        Readable by every admin role &mdash; support needs it in a dispute.
-      </p>
 
       <form onSubmit={submit} className="mt-4 flex flex-col gap-3">
         <Field label="User email" htmlFor="legal-lookup-email">
@@ -545,9 +541,9 @@ function LookupCard({ doc, lookup }: { doc: LegalDocType; lookup: Lookup | null 
             className={control}
           />
         </Field>
-        <button type="submit" className={btn("secondary", "h-10 w-full")}>
+        <Button type="submit" variant="outline" className="w-full">
           Look up
-        </button>
+        </Button>
       </form>
 
       {lookup && !lookup.found && (
@@ -766,7 +762,7 @@ function DraftSummaryCard({
           className={cn(control, "mt-0 h-auto resize-y py-2.5")}
         />
         <span className="mt-1.5 block text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">
-          Shown to users on the acceptance screen, so write it for them.
+          Shown to users on the acceptance screen.
         </span>
       </div>
 
@@ -780,52 +776,26 @@ function DraftSummaryCard({
         />
         <span className="text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--body)]">
           <span className="font-semibold text-[var(--ink)]">This is a material change.</span> Every user is blocked from the product until
-          they accept it. Leave unticked for a typo fix &mdash; interrupting every customer over a comma teaches them to click through
-          without reading.
+          they accept it.
         </span>
       </label>
 
-      <div className="mt-4">
-        {editor.requiresReacceptance ? (
-          <Callout tone="error" title="Publishing interrupts every customer at once">
-            Every user will be required to accept this before using the product. It is the single action in the admin surface that stops{" "}
-            {eligible} of them simultaneously. A published version&rsquo;s text is never edited, and no version is ever deleted.
-          </Callout>
-        ) : (
-          <Callout tone="info" title="Publishing interrupts nobody">
-            This is not marked as a material change, so nobody is asked to accept it. Existing users keep the version they accepted; new
-            signups accept version {version}. A published version&rsquo;s text is never edited, and no version is ever deleted.
-          </Callout>
-        )}
-      </div>
+      {editor.requiresReacceptance && (
+        <Callout tone="error" title={`Publishing stops ${eligible} users until they accept version ${version}.`} className="mt-4" />
+      )}
 
       <div className="mt-4 flex flex-wrap items-center justify-end gap-3">
         {(draft || !saved) && (
-          <button
-            type="button"
-            onClick={onDiscard}
-            disabled={busy !== null}
-            className={cn(btn("ghost"), "mr-auto h-11")}
-          >
+          <Button type="button" variant="ghost" onClick={onDiscard} disabled={busy !== null} className="mr-auto">
             {busy === "discard" ? "Discarding…" : draft ? "Discard draft" : "Reset"}
-          </button>
+          </Button>
         )}
-        <button
-          type="button"
-          onClick={onSave}
-          disabled={busy !== null || saveBlocker !== null || saved}
-          className={cn(btn("secondary"), "h-11")}
-        >
+        <Button type="button" variant="outline" onClick={onSave} disabled={busy !== null || saveBlocker !== null || saved}>
           {busy === "save" ? "Saving…" : saved ? "Draft saved" : "Save draft"}
-        </button>
-        <button
-          type="button"
-          onClick={onPublish}
-          disabled={busy !== null || publishBlocker !== null}
-          className={cn(btn("primary"), "h-11")}
-        >
+        </Button>
+        <Button type="button" onClick={onPublish} disabled={busy !== null || publishBlocker !== null}>
           Publish version {version}
-        </button>
+        </Button>
       </div>
 
       {(saveBlocker || publishBlocker) && (
@@ -920,22 +890,19 @@ function VersionView({
         />
 
         {version.is_draft && (
-          <div className="mt-5">
-            <Callout tone="warning" title="This version is unreviewed text">
-              It was seeded so signup could work and has not been reviewed by counsel. Customers reading it are told it is a draft. Replace it
-              by publishing a new version with reviewed copy.
-            </Callout>
-          </div>
+          <Callout tone="warning" title="Unreviewed text. Replace it by publishing a reviewed version." className="mt-5" />
         )}
 
         {canStop && (
-          <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] pt-4">
-            <span className="min-w-0 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">
-              Published by mistake? This stops it blocking anyone. The text stays exactly as it is.
-            </span>
-            <button type="button" onClick={onClear} className={btn("danger-row")}>
+          <div className="mt-5 flex justify-end border-t border-[var(--border)] pt-4">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onClear}
+              title="Stops this version blocking anyone. The text stays exactly as it is."
+            >
               Stop requiring acceptance
-            </button>
+            </Button>
           </div>
         )}
       </section>
@@ -947,11 +914,7 @@ function VersionView({
 
 function HistoryTable({ versions, stats }: { versions: AdminLegalVersion[]; stats: Stat[] }) {
   return (
-    <section className="flex min-w-0 flex-col overflow-hidden rounded-[12px] border border-[var(--border)] bg-[var(--surface)]">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] bg-[var(--surface-alt)] px-4 py-3">
-        <span className="text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">Every published version</span>
-        <span className="text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">Newest first, by document</span>
-      </div>
+    <TableCard title="Every published version">
       <div className="min-w-0 overflow-x-auto">
         <table className={st.table}>
           <thead>
@@ -967,11 +930,8 @@ function HistoryTable({ versions, stats }: { versions: AdminLegalVersion[]; stat
           <tbody>
             {versions.length === 0 ? (
               <tr>
-                <td colSpan={6} className={cn(st.td, "py-6 text-center")}>
-                  <span className="block font-semibold text-[var(--ink)]">Nothing published yet</span>
-                  <span className={st.sub}>
-                    Publishing a version is what users are asked to accept. Until one exists, no one has agreed to anything.
-                  </span>
+                <td colSpan={6} className={cn(st.td, "p-0")}>
+                  <EmptyState title="Nothing published yet" hint="Published versions of every document appear here." />
                 </td>
               </tr>
             ) : (
@@ -1000,7 +960,7 @@ function HistoryTable({ versions, stats }: { versions: AdminLegalVersion[]; stat
           </tbody>
         </table>
       </div>
-    </section>
+    </TableCard>
   );
 }
 
@@ -1118,12 +1078,12 @@ function PublishDialog({
         </div>
 
         <DialogFooter>
-          <button type="button" onClick={() => change(false)} disabled={busy} className={btn("ghost")}>
+          <Button type="button" variant="ghost" onClick={() => change(false)} disabled={busy}>
             Cancel
-          </button>
-          <button type="button" onClick={confirm} disabled={busy} className={btn("primary")}>
+          </Button>
+          <Button type="button" onClick={confirm} disabled={busy}>
             {busy ? "Publishing…" : `Publish version ${version}`}
-          </button>
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -1198,12 +1158,12 @@ function ClearDialog({
             />
           </Field>
           <DialogFooter>
-            <button type="button" onClick={close} disabled={saving} className={btn("ghost")}>
+            <Button type="button" variant="ghost" onClick={close} disabled={saving}>
               Cancel
-            </button>
-            <button type="submit" disabled={saving} className={btn("primary")}>
+            </Button>
+            <Button type="submit" disabled={saving}>
               {saving ? "Clearing…" : "Stop requiring acceptance"}
-            </button>
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>

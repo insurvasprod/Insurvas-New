@@ -25,7 +25,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Callout, KeyValues, Pill, btn, st, type PillTone } from "@/components/app/settings/primitives";
+import { Callout, KeyValues, Pill, st, type PillTone } from "@/components/app/settings/primitives";
 import {
   AssignDialog,
   CancelDialog,
@@ -73,7 +73,7 @@ const STATUS_TONE: Record<SubscriptionStatus, PillTone> = {
 
 const ACCESS_NOTE = {
   read_only:
-    "Read-only: they can still open their book of business, but cannot dial, import or sell. Suspend the doing, preserve the seeing.",
+    "Read-only: they can still open their book of business, but cannot dial, import or sell.",
   none: "No access.",
 } as const;
 
@@ -96,9 +96,6 @@ function BoardCard({ title, sub, action, children }: { title: string; sub?: Reac
 const Sub = ({ children }: { children: ReactNode }) => (
   <span className="mt-0.5 block text-[12px] leading-[1.5] font-normal tracking-[-0.01em] text-[var(--muted)]">{children}</span>
 );
-
-/** Outline button, 40px — the board's Change plan / Adjust seats. */
-const outline40 = btn("secondary", "h-10");
 
 export function SubscriptionCards(props: SubscriptionCardsProps) {
   const { tenantId, subscription, plans, canManage } = props;
@@ -142,9 +139,9 @@ export function SubscriptionCards(props: SubscriptionCardsProps) {
           </p>
           {canManage && (
             <div className="flex gap-2.5">
-              <button type="button" className={btn("primary")} onClick={() => setDialog("assign")}>
+              <Button type="button" onClick={() => setDialog("assign")}>
                 Assign a plan
-              </button>
+              </Button>
             </div>
           )}
         </BoardCard>
@@ -204,15 +201,9 @@ export function SubscriptionCards(props: SubscriptionCardsProps) {
       {
         label: "Billing",
         value: props.billing.methodLabel ? (
-          <>
-            {props.billing.methodLabel}
-            <Sub>Recorded by staff</Sub>
-          </>
+          props.billing.methodLabel
         ) : (
-          <>
-            Not recorded
-            <Sub>Record the card label under Payment provider</Sub>
-          </>
+          "Not recorded"
         ),
       },
       { label: "Collection", value: props.billing.collection === "manual" ? "Manual — invoiced" : "Automatic" },
@@ -253,9 +244,10 @@ export function SubscriptionCards(props: SubscriptionCardsProps) {
         {access !== "full" && <Callout tone="warning" title={ACCESS_NOTE[access]} />}
         <KeyValues items={items} />
         {subscription.pending_plan_name && (
-          <Callout tone="warning" title={`Queued change — takes effect ${subscription.current_period_end ? fullDate(subscription.current_period_end) : "at period end"}`}>
-            Moving to <strong>{subscription.pending_plan_name}</strong>. Nothing is prorated because the change was scheduled rather than applied now.
-          </Callout>
+          <Callout
+            tone="warning"
+            title={`Queued change to ${subscription.pending_plan_name}, takes effect ${subscription.current_period_end ? fullDate(subscription.current_period_end) : "at period end"}`}
+          />
         )}
         {subscription.cancel_at_period_end && (
           <Callout tone="error" title={`Cancelling — ends ${subscription.current_period_end ? fullDate(subscription.current_period_end) : "at period end"}`}>
@@ -267,21 +259,21 @@ export function SubscriptionCards(props: SubscriptionCardsProps) {
           <div className="flex flex-wrap gap-2.5">
             {actions.canChangePlan && (
               <>
-                <button type="button" className={outline40} disabled={busy} onClick={() => setDialog("change")}>
+                <Button type="button" variant="outline" disabled={busy} onClick={() => setDialog("change")}>
                   Change plan
-                </button>
-                <button type="button" className={outline40} disabled={busy} onClick={() => setDialog("seats")}>
+                </Button>
+                <Button type="button" variant="outline" disabled={busy} onClick={() => setDialog("seats")}>
                   Adjust seats
-                </button>
+                </Button>
               </>
             )}
             {menu.length > 0 && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <button type="button" className={btn("ghost")} disabled={busy}>
+                  <Button type="button" variant="ghost" disabled={busy}>
                     More
                     <ChevronDown aria-hidden className="size-4" />
-                  </button>
+                  </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start">
                   {menu.map((item, i) => (
@@ -298,7 +290,7 @@ export function SubscriptionCards(props: SubscriptionCardsProps) {
           </div>
         ) : (
           <p className="m-0 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">
-            Read-only for your role. Plan, seat and billing changes are made by billing staff.
+            Read-only for your role.
           </p>
         )}
       </BoardCard>
@@ -361,7 +353,7 @@ export function SubscriptionCards(props: SubscriptionCardsProps) {
 
 function VersionPinningCard({ pinning, periodEnd }: { pinning: VersionPinning | null; periodEnd: string | null }) {
   return (
-    <BoardCard title="Version pinning" sub="A tenant stays on the plan version it bought until it is moved.">
+    <BoardCard title="Version pinning">
       {!pinning || pinning.rows.length === 0 ? (
         <p className="m-0 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">No plan, so no version to pin.</p>
       ) : (
@@ -407,10 +399,9 @@ function MoveCallout({ move, periodEnd }: { move: NonNullable<VersionPinning["mo
           ? `${to} removes ${listOf(move.removes)}.`
           : `${to} grants the same features as v${move.fromVersion}.`;
   return (
-    <Callout tone="warning" title="Moving a version changes what they can reach">
-      {what} A move that costs more applies at once and is prorated; one at the same price or less waits until{" "}
-      {periodEnd ? fullDate(periodEnd) : "the end of the period"} unless you choose to apply it now. Use Change plan to move them.
-    </Callout>
+    <p className="m-0 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">
+      {what} A move at the same price or less waits until {periodEnd ? fullDate(periodEnd) : "the end of the period"} unless applied now.
+    </p>
   );
 }
 

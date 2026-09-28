@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { X } from "lucide-react";
 
 import {
   Dialog,
@@ -9,16 +10,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectSeparator,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
+import { DataToolbar, FilterButton, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
+import { TableCard } from "@/components/ui/table-card";
 import { EmptyState, ErrorState, NoMatches } from "@/components/ui/page-states";
-import { SearchBox, btn, st } from "@/components/app/settings/primitives";
+import { st } from "@/components/app/settings/primitives";
 import { BoardTableFooter } from "@/components/admin/board-table-footer";
 import { AUDIT_ACTIONS, AUDIT_ACTION_LABELS } from "@/lib/audit/actions";
 import {
@@ -43,12 +39,6 @@ type Query = {
 
 const DEBOUNCE_MS = 300;
 
-// The board's 40px toolbar controls: strong edge, 8px radius, 14px semibold.
-const CONTROL =
-  "box-border h-10 rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] px-3 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--ink)] outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]";
-const TRIGGER =
-  "h-10 data-[size=default]:h-10 gap-2 rounded-[8px] border-[var(--border-strong)] bg-[var(--surface)] px-3.5 text-[14px] leading-[1.43] font-semibold tracking-[-0.01em] text-[var(--ink)] shadow-none dark:bg-[var(--surface)]";
-const FIELD_LABEL = "text-[12px] leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]";
 // Break inside long codes, emails and ids rather than widening the column.
 const WRAP = "[overflow-wrap:anywhere]";
 
@@ -98,17 +88,6 @@ function targetText(entry: AuditLogEntry): string {
 
 function targetRaw(entry: AuditLogEntry): string | undefined {
   return entry.target_type || entry.target_id ? `${entry.target_type ?? "record"}:${entry.target_id ?? ""}` : undefined;
-}
-
-function SlidersIcon() {
-  return (
-    <svg aria-hidden width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
-      <path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0" />
-      <circle cx="16" cy="6" r="2" />
-      <circle cx="10" cy="12" r="2" />
-      <circle cx="18" cy="18" r="2" />
-    </svg>
-  );
 }
 
 export function AuditLogTable({
@@ -221,123 +200,101 @@ export function AuditLogTable({
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
-      <div className="rounded-[12px] border border-[var(--border)] bg-[var(--surface)] p-3">
-        <div className="flex flex-wrap items-center gap-3">
-          {isSuperAdmin && (
-            <Select value={actor} onValueChange={onFilter(setActor)}>
-              <SelectTrigger aria-label="Actor" className={TRIGGER}>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All actors</SelectItem>
-                <SelectItem value="type:admin">Staff</SelectItem>
-                <SelectItem value="type:tenant">Agency users</SelectItem>
-                <SelectItem value="type:system">System</SelectItem>
-                {allAdmins.length > 0 && <SelectSeparator />}
-                {allAdmins.map((a) => (
-                  <SelectItem key={a.id} value={`id:${a.id}`}>
-                    {a.name} ({a.email})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-
-          <SearchBox
-            value={qInput}
-            onChange={onFilter(setQInput)}
-            placeholder="Search action, target"
-            label="Search by action code or name, or an exact target id"
-          />
-
-          <button
-            type="button"
-            onClick={() => setFiltersOpen((open) => !open)}
-            aria-expanded={filtersOpen}
-            aria-controls="audit-log-filters"
-            className="inline-flex h-10 items-center gap-2 rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] px-3.5 text-[14px] leading-[1.43] font-semibold tracking-[-0.01em] text-[var(--ink)] hover:bg-[var(--surface-alt)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
-          >
-            <SlidersIcon />
-            Filters
-            {filterCount > 0 && (
-              <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--surface-alt)] px-1.5 text-[12px] leading-[1.5] font-semibold tracking-[-0.01em] text-[var(--ink)]">
-                {filterCount}
-                <span className="sr-only"> active</span>
-              </span>
-            )}
-          </button>
-          <span className="grow" />
-        </div>
-
-        {filtersOpen && (
-          <div id="audit-log-filters" className="mt-3 flex flex-wrap items-end gap-4 border-t border-[var(--border)] pt-3">
-            <div className="flex flex-col gap-1.5">
-              <span id="audit-filter-action" className={FIELD_LABEL}>
-                Action
-              </span>
-              <Select value={action} onValueChange={onFilter(setAction)}>
-                <SelectTrigger aria-labelledby="audit-filter-action" className={cn(TRIGGER, "w-[260px] font-normal")}>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All actions</SelectItem>
-                  {actionOptions.map((a) => (
-                    <SelectItem key={a.value} value={a.value}>
-                      {a.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <label className="flex flex-col gap-1.5">
-              <span className={FIELD_LABEL}>From (UTC)</span>
-              <input type="date" value={from} onChange={(e) => onFilter(setFrom)(e.target.value)} className={CONTROL} />
-            </label>
-            <label className="flex flex-col gap-1.5">
-              <span className={FIELD_LABEL}>To (UTC, inclusive)</span>
-              <input type="date" value={to} onChange={(e) => onFilter(setTo)(e.target.value)} className={CONTROL} />
-            </label>
-            <label className="flex flex-col gap-1.5">
-              <span className={FIELD_LABEL}>Target ID</span>
-              <input
-                type="text"
-                value={targetInput}
-                onChange={(e) => onFilter(setTargetInput)(e.target.value)}
-                placeholder="Paste a user, tenant or invoice id"
-                title="Paste a user, tenant or invoice id to see only what happened to that record."
-                className={cn(CONTROL, "w-[280px] placeholder:text-[var(--muted)]")}
+      <TableCard
+        toolbar={
+          <>
+            <DataToolbar actions={<RefreshButton onClick={() => setReloadNonce((n) => n + 1)} refreshing={busy} />}>
+              <ToolbarSearch
+                value={qInput}
+                onChange={onFilter(setQInput)}
+                placeholder="Search action, target"
+                label="Search by action code or name, or an exact target id"
               />
-            </label>
-            {anyFilter && (
-              <button type="button" onClick={clearAll} className={btn("ghost")}>
-                Clear all filters
-              </button>
+              {isSuperAdmin && (
+                <select aria-label="Actor" className={cn(toolbarControl, "w-[220px]")} value={actor} onChange={(e) => onFilter(setActor)(e.target.value)}>
+                  <option value="all">All actors</option>
+                  <option value="type:admin">Staff</option>
+                  <option value="type:tenant">Agency users</option>
+                  <option value="type:system">System</option>
+                  {allAdmins.length > 0 && (
+                    <optgroup label="Staff members">
+                      {allAdmins.map((a) => (
+                        <option key={a.id} value={`id:${a.id}`}>
+                          {a.name} ({a.email})
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                </select>
+              )}
+              <FilterButton open={filtersOpen} onClick={() => setFiltersOpen((open) => !open)} count={filterCount} />
+              {target && (
+                <span className="inline-flex h-9 max-w-full items-center gap-2 rounded-md border border-border bg-background pr-1.5 pl-3 text-xs text-muted-foreground">
+                  <span className="truncate">
+                    Target <code className="font-mono text-foreground">{target}</code>
+                    {busy || failed ? "" : ` · ${approximate ? "about " : ""}${total.toLocaleString()} found`}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => onFilter(setTargetInput)("")}
+                    aria-label="Clear target"
+                    className="inline-flex size-6 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+                  >
+                    <X className="size-3.5" aria-hidden="true" />
+                  </button>
+                </span>
+              )}
+            </DataToolbar>
+            {filtersOpen && (
+              <div id="audit-log-filters" className="flex w-full flex-wrap items-center gap-2 border-t border-border pt-3">
+                <select
+                  aria-label="Action"
+                  className={cn(toolbarControl, "w-[260px]")}
+                  value={action}
+                  onChange={(e) => onFilter(setAction)(e.target.value)}
+                >
+                  <option value="all">All actions</option>
+                  {actionOptions.map((a) => (
+                    <option key={a.value} value={a.value}>
+                      {a.label}
+                    </option>
+                  ))}
+                </select>
+                <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                  From (UTC)
+                  <input type="date" value={from} onChange={(e) => onFilter(setFrom)(e.target.value)} className={toolbarControl} />
+                </label>
+                <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                  To (UTC, inclusive)
+                  <input type="date" value={to} onChange={(e) => onFilter(setTo)(e.target.value)} className={toolbarControl} />
+                </label>
+                <input
+                  type="text"
+                  aria-label="Target ID"
+                  value={targetInput}
+                  onChange={(e) => onFilter(setTargetInput)(e.target.value)}
+                  placeholder="Target ID: user, tenant or invoice"
+                  title="Paste a user, tenant or invoice id to see only what happened to that record."
+                  className={cn(toolbarControl, "w-[280px] placeholder:text-muted-foreground")}
+                />
+                {anyFilter && (
+                  <Button type="button" variant="ghost" onClick={clearAll}>
+                    Clear all filters
+                  </Button>
+                )}
+              </div>
             )}
-          </div>
-        )}
-      </div>
-
-      {target && (
-        <p className="-mt-3 flex flex-wrap items-center gap-2 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">
-          <span>
-            Showing only entries whose target is <code className="font-mono text-[13px] text-[var(--ink)]">{target}</code>.{" "}
-            {busy || failed ? "" : `${approximate ? "About " : ""}${total.toLocaleString()} found.`}
-          </span>
-          <button type="button" onClick={() => onFilter(setTargetInput)("")} className={btn("secondary")}>
-            Clear target
-          </button>
-        </p>
-      )}
-
-      <section className="flex min-w-0 flex-col overflow-hidden rounded-[12px] border border-[var(--border)] bg-[var(--surface)]">
+          </>
+        }
+      >
         {failed ? (
           <ErrorState
             title="The audit log did not load"
             detail="Nothing is shown rather than rows that do not match these filters. Try again; if it keeps failing, the log's database is unreachable."
             action={
-              <button type="button" onClick={() => setReloadNonce((n) => n + 1)} className={btn("secondary")}>
+              <Button type="button" variant="outline" onClick={() => setReloadNonce((n) => n + 1)}>
                 Try again
-              </button>
+              </Button>
             }
           />
         ) : (
@@ -418,7 +375,6 @@ export function AuditLogTable({
             </table>
           </div>
         )}
-        <div className="grow" />
         {!failed && (
           <BoardTableFooter
             page={page}
@@ -431,7 +387,7 @@ export function AuditLogTable({
             busy={busy}
           />
         )}
-      </section>
+      </TableCard>
 
       <Dialog open={selected !== null} onOpenChange={(open) => !open && setSelected(null)}>
         <DialogContent>

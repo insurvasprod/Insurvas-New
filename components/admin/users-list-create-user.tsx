@@ -9,7 +9,7 @@ import type { PlanListRow } from "@/lib/plans/constants";
  */
 export const USERS_LIST_CHANGED_EVENT = "admin-users-list:changed";
 
-/** The Users board's header action: a 44px primary "Create user" that opens the existing dialog. */
+/** The Users board's header action: a default-size primary "Create user" that opens the existing dialog. */
 export function UsersListCreateUser({ tenants, plans }: { tenants: TenantOption[]; plans: PlanListRow[] }) {
   return (
     <CreateUserDialog
@@ -17,7 +17,6 @@ export function UsersListCreateUser({ tenants, plans }: { tenants: TenantOption[
       plans={plans}
       onCreated={() => window.dispatchEvent(new Event(USERS_LIST_CHANGED_EVENT))}
       triggerLabel="Create user"
-      triggerClassName="inline-flex h-11 cursor-pointer items-center justify-center gap-2 rounded-[8px] border border-transparent bg-[var(--primary)] px-4 text-[14px] leading-[1.43] font-semibold tracking-[-0.01em] text-[var(--on-primary)] hover:bg-[var(--accent-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
     />
   );
 }

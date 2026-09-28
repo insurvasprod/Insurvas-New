@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, Lock } from "lucide-react";
 import { notify } from "@/lib/notify";
 
+import { Callout } from "@/components/app/settings/primitives";
+import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusChip } from "@/components/admin/status-chip";
 import type { FeatureModuleGroup } from "@/lib/features/constants";
@@ -24,9 +26,8 @@ function centsFromInput(value: string): { cents: number | null; invalid: boolean
 const card = "min-w-0 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] p-5";
 const h2 = "text-[18px] leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]";
 const label = "text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]";
-const input = "mt-1.5 box-border h-11 w-full rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] px-3 text-[16px] leading-[1.5] tracking-[-0.02em] text-[var(--ink)] outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)] aria-[invalid=true]:border-[var(--error)]";
+const input = "mt-1.5 box-border h-9 w-full rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] px-3 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--ink)] outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)] aria-[invalid=true]:border-[var(--error)]";
 const hint = "mt-1.5 block text-[12px] leading-[1.5] text-[var(--muted)]";
-const primary = "inline-flex h-11 items-center justify-center rounded-[8px] border border-transparent bg-[var(--primary)] px-4 text-[14px] font-semibold text-[var(--on-primary)] hover:bg-[var(--accent-hover)] disabled:cursor-not-allowed disabled:opacity-50";
 
 const EDITABLE_LIMITS: Array<[keyof PlanLimits, string]> = [
   ["max_publishers", "Publishers"],
@@ -158,10 +159,10 @@ export function PlanVersionEditor({
     router.refresh();
   }
 
-  const saveButton = (className?: string) => (
-    <button type="button" className={cn(primary, className)} onClick={() => void save()} disabled={saving || !canSave}>
+  const saveButton = (
+    <Button type="button" onClick={() => void save()} disabled={saving || !canSave}>
       {saving ? "Saving…" : actionLabel}
-    </button>
+    </Button>
   );
 
   return (
@@ -172,20 +173,26 @@ export function PlanVersionEditor({
         </Link>
         <PageHeader
           title={`${planName} — version ${planVersion}`}
-          description={`Compose a plan version: price, limits, features. Code ${planCode}; features and pricing save together, so one edit produces at most one new version.`}
-          actions={saveButton()}
+          actions={saveButton}
         />
         <div className="mt-3 flex flex-wrap gap-2">
           {isArchived ? <StatusChip tone="neutral">Archived</StatusChip> : <StatusChip tone="good" dot>Live</StatusChip>}
+          <StatusChip tone="neutral"><code className="font-mono">{planCode}</code></StatusChip>
           <StatusChip tone={publishes ? "warning" : "neutral"}>{subscriberCount.toLocaleString()} live {subscriberCount === 1 ? "subscriber" : "subscribers"} on this version</StatusChip>
         </div>
       </div>
+
+      {publishes && (
+        <Callout
+          tone="warning"
+          title={`Saving publishes version ${planVersion + 1}; the ${subscriberCount.toLocaleString()} existing ${subscriberCount === 1 ? "subscriber stays" : "subscribers stay"} on version ${planVersion}.`}
+        />
+      )}
 
       <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">
         <div className="flex min-w-0 flex-col gap-6">
           <section className={card} aria-labelledby="plan-pricing">
             <h2 id="plan-pricing" className={h2}>Pricing</h2>
-            <p className="mt-1 text-[14px] text-[var(--muted)]">A blank price means the cycle is not sold. Zero is a price, and a free plan is still buyable. USD, stored as whole cents.</p>
             <div className="mt-4 grid gap-4 sm:grid-cols-3">
               {(["monthly", "yearly", "quarterly"] as const).map((cycle) => {
                 const value = cycle === "monthly" ? monthly : cycle === "yearly" ? yearly : quarterly;
@@ -217,7 +224,6 @@ export function PlanVersionEditor({
 
           <section className={card} aria-labelledby="plan-capacity">
             <h2 id="plan-capacity" className={h2}>Capacity limits</h2>
-            <p className="mt-1 text-[14px] text-[var(--muted)]">Blank means unlimited. Enforced for active records only.</p>
             <div className="mt-4 grid gap-4 sm:grid-cols-3">
               {EDITABLE_LIMITS.map(([key, name]) => (
                 <label key={key} className="block">
@@ -227,7 +233,7 @@ export function PlanVersionEditor({
               ))}
             </div>
             <p className="mt-4 border-t border-[var(--border)] pt-3 text-[12px] leading-normal text-[var(--muted)]">
-              Seats: <strong className="font-semibold text-[var(--ink)] tabular-nums">{initialLimits?.max_seats ?? "unlimited"}</strong> · Carriers: <strong className="font-semibold text-[var(--ink)] tabular-nums">{initialLimits?.max_carriers ?? "unlimited"}</strong>. Shown, not editable here — the version save does not carry them. Monthly allowances such as lead imports are set on Credits &amp; limits.
+              Seats: <strong className="font-semibold text-[var(--ink)] tabular-nums">{initialLimits?.max_seats ?? "unlimited"}</strong> · Carriers: <strong className="font-semibold text-[var(--ink)] tabular-nums">{initialLimits?.max_carriers ?? "unlimited"}</strong> (not editable here).
             </p>
           </section>
 
@@ -242,7 +248,7 @@ export function PlanVersionEditor({
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <h2 id={`module-${group.module.key}`} className={h2}>{group.module.label} <span className="text-[14px] font-normal text-[var(--muted)] tabular-nums">{on} of {visible.length}</span></h2>
                   {selectable.length > 0 && (
-                    <button type="button" onClick={() => toggleModule(group)} className="inline-flex h-8 items-center rounded-[8px] px-3 text-[14px] font-semibold text-[var(--ink)] hover:bg-[var(--surface-alt)]">{allOn ? "Clear all" : "Select all"}</button>
+                    <Button type="button" variant="ghost" onClick={() => toggleModule(group)}>{allOn ? "Clear all" : "Select all"}</Button>
                   )}
                 </div>
                 <div className="mt-3 grid gap-2 sm:grid-cols-2">
@@ -270,10 +276,7 @@ export function PlanVersionEditor({
 
         <aside className="flex min-w-0 flex-col gap-4 lg:sticky lg:top-[calc(var(--top-bar-h)+1.5rem)]">
           <section className={card} aria-labelledby="menu-preview">
-            <div className="flex items-baseline justify-between gap-3">
-              <h2 id="menu-preview" className={h2}>An owner will see</h2>
-              <span className="text-[12px] text-[var(--muted)]">same function as the real menu</span>
-            </div>
+            <h2 id="menu-preview" className={h2}>An owner will see</h2>
             {/* Named for the role it renders: buildAgentMenu defaults to "owner", the widest menu the plan can produce; other roles see a subset. */}
             <div className="mt-3 rounded-[8px] bg-[var(--nav-bg)] p-3">
               {previewMenu.length === 0 && <p className="text-[14px] text-[var(--nav-muted)]">Nothing — no feature granted.</p>}
@@ -284,17 +287,7 @@ export function PlanVersionEditor({
                 </div>
               ))}
             </div>
-            <p className="mt-2 text-[12px] text-[var(--muted)]">Producers, assistants, setters and bookkeepers see a subset. <span className="tabular-nums">{grantedCount} {grantedCount === 1 ? "feature" : "features"}</span>{grantedCount === 0 && <span className="font-semibold text-[var(--error-ink)]"> — at least one required</span>}.</p>
-          </section>
-
-          <section className={cn(card, publishes && "border-l-[3px] border-l-[var(--warning)] bg-[var(--warning-surface)]")} aria-labelledby="publish-impact">
-            <h2 id="publish-impact" className="text-[14px] font-semibold text-[var(--ink)]">{publishes ? `Saving publishes version ${planVersion + 1}` : "Saving edits this version in place"}</h2>
-            <p className="mt-1.5 text-[14px] leading-normal text-[var(--body)]">
-              {publishes
-                ? <>Publishing affects <strong className="font-semibold">{subscriberCount.toLocaleString()} existing {subscriberCount === 1 ? "subscriber" : "subscribers"}</strong> only by leaving them where they are: they keep version {planVersion}&rsquo;s features and price until someone moves them. New subscriptions take version {planVersion + 1}.</>
-                : <>Nobody is on version {planVersion}, so no new version is needed. Once anyone subscribes, the next save publishes a new version instead.</>}
-            </p>
-            {saveButton("mt-3 w-full")}
+            <p className="mt-2 text-[12px] text-[var(--muted)]"><span className="tabular-nums">{grantedCount} {grantedCount === 1 ? "feature" : "features"}</span>{grantedCount === 0 && <span className="font-semibold text-[var(--error-ink)]"> — at least one required</span>}</p>
           </section>
         </aside>
       </div>

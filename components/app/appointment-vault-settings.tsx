@@ -2,22 +2,23 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { notify } from "@/lib/notify";
+import { Plus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { DataToolbar, RefreshButton, ToolbarSearch } from "@/components/ui/data-toolbar";
 import { PageHeader } from "@/components/ui/page-header";
+import { EmptyState, NoMatches, SectionLoading } from "@/components/ui/page-states";
+import { SettingsSaveBar } from "@/components/ui/settings-layout";
+import { StatStrip, StatTile } from "@/components/ui/stat";
+import { TableCard } from "@/components/ui/table-card";
 import {
   Callout,
-  DashedCard,
-  DraftActions,
   KeyValues,
   Pill,
-  PlusIcon,
   SettingsCard,
   SettingsGrid,
   SettingsSectionHeader,
   SettingsStack,
-  SettingsTableCard,
-  StatTile,
-  btn,
   st,
   type PillTone,
 } from "@/components/app/settings/primitives";
@@ -36,7 +37,6 @@ import {
   today,
   type SaveResult,
 } from "@/components/app/appointment-vault-parts";
-import { sectionForPath } from "@/lib/menu/definition";
 import type { CarrierRow } from "@/lib/carriers/constants";
 import { US_STATES } from "@/lib/appointments/constants";
 import { daysUntilExpiry, dueExpiryWarnings } from "@/lib/appointments/warnings";
@@ -87,6 +87,8 @@ export function AppointmentVaultSettings({
   const [stateFilter, setStateFilter] = useState("");
   const [saving, setSaving] = useState<string | null>(null);
   const [dialog, setDialog] = useState<null | "license" | "eo" | "ce">(null);
+  const [licenceQuery, setLicenceQuery] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
 
   const applyVault = useCallback((next: Vault) => {
     setVault(next);
@@ -197,28 +199,36 @@ export function AppointmentVaultSettings({
     if (!result.ok) notify.block(result.error);
   }
 
-  const draftActions = canEdit ? (
-    <DraftActions dirty={dirty} saving={saving === "appointments"} onDiscard={() => setSelected(new Set(saved))} onSave={() => void saveGrid()} />
-  ) : undefined;
   const header = inSettings ? (
-    <SettingsSectionHeader actions={draftActions} />
+    <SettingsSectionHeader />
   ) : (
     <PageHeader
       className="portal-appointments-header"
-      eyebrow={sectionForPath("/app/appointments") ?? undefined}
       title="Appointments & licences"
       description="Whether you may legally write this product in this state today."
-      actions={!canEdit ? <Badge variant="outline" className="portal-appointments-view-only">View only</Badge> : draftActions}
+      actions={!canEdit ? <Badge variant="outline" className="portal-appointments-view-only">View only</Badge> : undefined}
     />
   );
+  const saveBar = canEdit ? (
+    <SettingsSaveBar
+      visible={dirty}
+      note={[additions.length && plural(additions.length, "appointment") + " to add", removals.length && plural(removals.length, "appointment") + " to end"].filter(Boolean).join(", ")}
+    >
+      <Button type="button" variant="outline" onClick={() => setSelected(new Set(saved))} disabled={saving === "appointments"}>Discard</Button>
+      <Button type="button" onClick={() => void saveGrid()} disabled={saving === "appointments"}>{saving === "appointments" ? "Saving…" : "Save changes"}</Button>
+    </SettingsSaveBar>
+  ) : null;
+
+  async function refresh() {
+    setRefreshing(true);
+    try { await load(); } finally { setRefreshing(false); }
+  }
 
   if (!vault)
     return (
       <SettingsStack className="overflow-x-clip">
         {header}
-        <SettingsCard>
-          <p role="status" className="text-[14px] text-[var(--muted)]">Loading appointment vault…</p>
-        </SettingsCard>
+        <TableCard><SectionLoading label="Loading the appointment vault" /></TableCard>
       </SettingsStack>
     );
 
@@ -233,8 +243,10 @@ export function AppointmentVaultSettings({
       return Number.isFinite(days) && days >= 0 && days <= 90;
     })
     .sort((a, b) => a.expires_at.localeCompare(b.expires_at));
-  const licenceRows = [...vault.licenses].sort((a, b) => stateName(a.state).localeCompare(stateName(b.state)));
-  const unlicensedAppointedStates = [...appointedStates].filter((state) => !licencedStates.has(state)).sort((a, b) => stateName(a).localeCompare(stateName(b)));
+  const licenceNeedle = licenceQuery.trim().toLowerCase();
+  const matchesLicence = (state: string, number = "") => !licenceNeedle || stateName(state).toLowerCase().includes(licenceNeedle) || state.toLowerCase() === licenceNeedle || number.toLowerCase().includes(licenceNeedle);
+  const licenceRows = [...vault.licenses].sort((a, b) => stateName(a.state).localeCompare(stateName(b.state))).filter((row) => matchesLicence(row.state, row.license_number));
+  const unlicensedAppointedStates = [...appointedStates].filter((state) => !licencedStates.has(state)).sort((a, b) => stateName(a).localeCompare(stateName(b))).filter((state) => matchesLicence(state));
 
   // Active appointments at carriers whose contract requires E&O (Carrier library); null = not recordable yet.
   const eoRequiredCarriers = vault.carrierRequirements ? new Set(vault.carrierRequirements.filter((row) => row.requires_eo).map((row) => row.carrier_id)) : null;
@@ -251,41 +263,75 @@ export function AppointmentVaultSettings({
     null;
   const ceTotals = vault.ceRecords.reduce((totals, row) => ({ required: totals.required + row.credits_required, completed: totals.completed + row.credits_completed }), { required: 0, completed: 0 });
 
+  const eoAlert = eoLapsed || (eoDays !== null && eoDays <= 90);
+  const eoRequiredText = eoRequiredAppointments ? ` · ${capitalise(inWords(eoRequiredAppointments))} carrier appointment${eoRequiredAppointments === 1 ? " requires" : "s require"} it` : "";
+
   return (
     <SettingsStack className="overflow-x-clip">
       {header}
 
-      {/* True as written: lead assignment skips (assignment_candidate_is_eligible) and the dialer
-          refuses (lib/dialerScripts/licence.ts, and serve_next_lead once 20260924220200 is applied). */}
-      <Callout tone="error" title="This page is what the router reads before it assigns a lead">
-        An agent without an active licence in the lead&rsquo;s state is skipped by lead assignment and refused by the dialer. It is not a
-        warning banner somewhere else &mdash; it is a condition, and it is read from here.
-      </Callout>
+      {!canEdit && <Callout tone="info" title="View only — the account owner manages appointments and licences." />}
 
-      {!canEdit && (
-        <Callout tone="info" title="View only">
-          Appointment and licence changes are managed by the account owner.
+      <StatStrip label="Readiness">
+        <StatTile
+          label="State licences"
+          value={vault.licenses.length}
+          valueTone={expiringLicences.length ? "warning" : undefined}
+          footnote={expiringLicences[0] ? `${expiringLicences.length} expiring · next ${shortDate(expiringLicences[0].expires_at)}` : "None expire within 90 days"}
+        />
+        <StatTile
+          label="E&O insurance"
+          value={!eoPolicy ? "None" : eoLapsed ? "Expired" : "Active"}
+          valueTone={eoLapsed ? "warning" : undefined}
+          footnote={eoPolicy ? `${eoLapsed ? "Expired" : "Expires"} ${shortDate(eoPolicy.expires_at)}` : "No policy on file"}
+        />
+        <StatTile
+          label="Continuing education"
+          value={`${ceTotals.completed}/${ceTotals.required}`}
+          footnote={ceTotals.required ? `Credits across ${plural(vault.ceRecords.length, "state")}` : "No CE cycle recorded"}
+        />
+        <StatTile label="Carrier appointments" value={activeAppointments.length} footnote={`Across ${plural(configuredCarriers.length, "configured carrier")}`} />
+      </StatStrip>
+
+      {warnings.length > 0 && (
+        <Callout tone="warning" title="Records need attention">
+          <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
+            {warnings.map((warning) => (
+              <li key={`${warning.source}-${warning.sourceId}`} className="flex flex-wrap items-center gap-2">
+                <Pill tone={warning.days === 90 ? "warning" : "error"}>{plural(warning.daysLeft, "day")}</Pill>
+                <span className="font-semibold text-[var(--ink)]">{warning.label}</span>
+                <span className="text-[var(--muted)]">expires {shortDate(warning.expiresAt)}</span>
+              </li>
+            ))}
+          </ul>
         </Callout>
       )}
 
-      <SettingsTableCard
+      <TableCard
         title="Licences"
-        actions={
-          <>
-            {expiringLicences.length > 0 && (
-              <Pill tone="warning" dot>
-                {expiringLicences.length} expire{expiringLicences.length === 1 ? "s" : ""} within 90 days
-              </Pill>
-            )}
-            {canEdit && (
-              <button type="button" className={btn("secondary")} onClick={() => setDialog("license")}>
-                <PlusIcon />
-                Add a licence
-              </button>
-            )}
-          </>
+        toolbar={
+          <DataToolbar
+            actions={
+              <>
+                {canEdit && (
+                  <Button type="button" onClick={() => setDialog("license")}>
+                    <Plus aria-hidden="true" />
+                    Add a licence
+                  </Button>
+                )}
+                <RefreshButton onClick={() => void refresh()} refreshing={refreshing} />
+              </>
+            }
+          >
+            <ToolbarSearch value={licenceQuery} onChange={setLicenceQuery} placeholder="Search state or number" />
+          </DataToolbar>
         }
       >
+        {vault.licenses.length + [...appointedStates].filter((state) => !licencedStates.has(state)).length === 0 ? (
+          <EmptyState title="No licences recorded yet" hint="Until one is, no lead can be assigned to an owner or producer." />
+        ) : licenceRows.length + unlicensedAppointedStates.length === 0 ? (
+          <NoMatches noun="licences" onClear={() => setLicenceQuery("")} />
+        ) : (
         <table className={cn(st.table, "min-w-[760px]")}>
           <thead>
             <tr className={st.headRow}>
@@ -325,19 +371,15 @@ export function AppointmentVaultSettings({
                 </td>
               </tr>
             ))}
-            {licenceRows.length + unlicensedAppointedStates.length === 0 && (
-              <tr>
-                <td colSpan={6} className={cn(st.td, "text-[var(--muted)]")}>No licences recorded yet. Until one is, no lead can be assigned to an owner or producer.</td>
-              </tr>
-            )}
           </tbody>
         </table>
-      </SettingsTableCard>
+        )}
+      </TableCard>
 
       <SettingsGrid cols={2}>
         <SettingsCard
           title="Errors & omissions cover"
-          action={canEdit ? <button type="button" className={btn("secondary")} onClick={() => setDialog("eo")}>{eoPolicy ? "Edit" : <><PlusIcon />Add a policy</>}</button> : undefined}
+          action={canEdit ? <Button type="button" variant="outline" onClick={() => setDialog("eo")}>{eoPolicy ? "Edit" : <><Plus aria-hidden="true" />Add a policy</>}</Button> : undefined}
         >
           {eoPolicy ? (
             <KeyValues
@@ -357,75 +399,24 @@ export function AppointmentVaultSettings({
           ) : (
             <p className="text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">No E&amp;O policy on file.</p>
           )}
-          <Callout
-            className="mt-4"
-            tone={eoLapsed || (eoDays !== null && eoDays <= 60) ? "error" : eoDays !== null && eoDays <= 90 ? "warning" : "info"}
-            title={
-              eoRequiredAppointments !== null
-                ? eoRequiredAppointments > 0
-                  ? `${capitalise(inWords(eoRequiredAppointments))} carrier appointment${eoRequiredAppointments === 1 ? " requires" : "s require"} E&O in force`
-                  : "No carrier appointment is marked as requiring E&O"
-                : "Carrier appointments rely on E&O in force"
-            }
-          >
-            {eoRequiredAppointments === 0
-              ? "Mark each carrier whose contract requires errors & omissions cover in Settings › Carrier library, and this counts the appointments that lapse with it."
-              : <>If it lapses, those appointments go inactive on the carrier&rsquo;s side and new business stops being accepted &mdash; before anything in this product notices.</>}
-          </Callout>
+          {eoAlert && (
+            <Callout className="mt-4" tone={eoLapsed || (eoDays !== null && eoDays <= 60) ? "error" : "warning"} title={`${eoLapsed ? "E&O cover has lapsed" : `E&O expires in ${plural(eoDays ?? 0, "day")}`}${eoRequiredText}`} />
+          )}
         </SettingsCard>
 
         <SettingsCard
           title="Continuing education"
           sub={ceRecord ? `${stateName(ceRecord.state)}, ${ceRecord.deadline >= today ? "current cycle" : "last recorded cycle"}` : undefined}
-          action={canEdit ? <button type="button" className={btn("secondary")} onClick={() => setDialog("ce")}>{ceRecord ? "Edit" : <><PlusIcon />Add a cycle</>}</button> : undefined}
+          action={canEdit ? <Button type="button" variant="outline" onClick={() => setDialog("ce")}>{ceRecord ? "Edit" : <><Plus aria-hidden="true" />Add a cycle</>}</Button> : undefined}
         >
           {ceRecord ? <CeSummary record={ceRecord} /> : <p className="text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">No continuing-education cycle recorded.</p>}
         </SettingsCard>
       </SettingsGrid>
 
-      {warnings.length > 0 && (
-        <Callout tone="warning" title="Records need attention">
-          <span className="block">Renew these records before they affect your ability to write business.</span>
-          <ul className="mt-2 flex list-none flex-col gap-1.5 p-0">
-            {warnings.map((warning) => (
-              <li key={`${warning.source}-${warning.sourceId}`} className="flex flex-wrap items-center gap-2">
-                <Pill tone={warning.days === 90 ? "warning" : "error"}>{plural(warning.daysLeft, "day")}</Pill>
-                <span className="font-semibold text-[var(--ink)]">{warning.label}</span>
-                <span className="text-[var(--muted)]">expires {shortDate(warning.expiresAt)}</span>
-              </li>
-            ))}
-          </ul>
-        </Callout>
-      )}
-
-      <section aria-labelledby="readiness-heading" id="readiness">
-        <h3 id="readiness-heading" className="sr-only">Readiness</h3>
-        <SettingsGrid cols={4}>
-          <StatTile
-            label="State licences"
-            value={vault.licenses.length}
-            tone={expiringLicences.length ? "warning" : undefined}
-            foot={expiringLicences[0] ? `${expiringLicences.length} expiring · next ${shortDate(expiringLicences[0].expires_at)}` : "No licence expires within 90 days"}
-          />
-          <StatTile
-            label="E&O insurance"
-            value={!eoPolicy ? "None" : eoLapsed ? "Expired" : "Active"}
-            tone={eoLapsed ? "warning" : undefined}
-            foot={eoPolicy ? `${eoLapsed ? "Expired" : "Expires"} ${shortDate(eoPolicy.expires_at)}` : "Add a policy to protect eligibility"}
-          />
-          <StatTile
-            label="Continuing education"
-            value={`${ceTotals.completed}/${ceTotals.required}`}
-            foot={ceTotals.required ? `Credits across ${plural(vault.ceRecords.length, "state")}` : "No CE cycle recorded"}
-          />
-          <StatTile label="Carrier appointments" value={activeAppointments.length} foot={`Across ${plural(configuredCarriers.length, "configured carrier")}`} />
-        </SettingsGrid>
-      </section>
-
       {configuredCarriers.length === 0 ? (
-        <DashedCard title="Connect a carrier first">
-          Choose a carrier in Settings &rsaquo; Carrier library before recording appointments.
-        </DashedCard>
+        <TableCard title="Carrier appointments">
+          <EmptyState title="Connect a carrier first" hint="Choose a carrier in Settings › Carrier library before recording appointments." />
+        </TableCard>
       ) : (
         <AppointmentGrid
           carriers={configuredCarriers}
@@ -439,13 +430,6 @@ export function AppointmentVaultSettings({
           canEdit={canEdit}
           pending={{ additions: additions.length, removals: removals.length }}
         />
-      )}
-
-      {/* Only where a producer can actually be reading: /app/appointments. Settings is owner-only. */}
-      {!inSettings && (
-        <Callout tone="info" title="A producer reads this page. Only an owner with full access edits it.">
-          The edit permission is stricter than the page gate on purpose.
-        </Callout>
       )}
 
       {canEdit && (
@@ -478,6 +462,8 @@ export function AppointmentVaultSettings({
           />}
         </>
       )}
+
+      {saveBar}
     </SettingsStack>
   );
 }

@@ -44,12 +44,9 @@ async function agencyFacts(tenantId: string) {
 export async function RoleGateNotice({
   featureLabel,
   detail,
-  eyebrow,
 }: {
   featureLabel: string;
   detail: string;
-  /** The menu section the closed page belongs to, when the caller knows it. */
-  eyebrow?: string;
 }) {
   const context = await resolveTenantContext();
   const role: TenantRole | null = context?.role ?? null;
@@ -69,7 +66,7 @@ export async function RoleGateNotice({
 
   return (
     <div className="m-stagger flex min-h-0 flex-grow flex-col gap-6">
-      <PageHeader eyebrow={eyebrow} title={featureLabel} />
+      <PageHeader title={featureLabel} />
 
       <div className="flex min-h-0 flex-grow items-center justify-center">
         <div className="portal-gate-card">

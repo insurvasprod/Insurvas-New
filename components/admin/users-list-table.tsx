@@ -2,15 +2,17 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowDown, ArrowUp, MoreHorizontal, TriangleAlert } from "lucide-react";
+import { ArrowDown, ArrowUp, MoreHorizontal, TriangleAlert, X } from "lucide-react";
 
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
-import { Callout, Pill, btn, st } from "@/components/app/settings/primitives";
+import { Pill, btn, st } from "@/components/app/settings/primitives";
 import { BoardStatGrid, BoardStatTile } from "@/components/admin/board-stat-tile";
 import { BoardTableFooter } from "@/components/admin/board-table-footer";
 import { DashboardUtcTime } from "@/components/admin/dashboard-utc-time";
 import { Button } from "@/components/ui/button";
+import { DataToolbar, FilterButton, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
+import { TableCard } from "@/components/ui/table-card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   DropdownMenu,
@@ -19,11 +21,11 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { EmptyState, ErrorState, LoadingRows, NoMatches } from "@/components/ui/page-states";
+import { EmptyState, ErrorState, NoMatches, SectionLoading } from "@/components/ui/page-states";
 import { TENANT_ROLES, TENANT_ROLE_LABELS, type TenantRole } from "@/lib/tenantAuth/roles";
 import { USERS_PAGE_SIZE, userStatusLabel, type UserSortColumn } from "@/lib/users/constants";
 import type { UserListRow } from "@/lib/users/list";
-import { LIFECYCLE_TONES, USER_LIFECYCLES, USER_LIFECYCLE_LABELS, isUserLifecycle } from "@/lib/adminUsersList/lifecycle";
+import { LIFECYCLE_TONES, USER_LIFECYCLES, USER_LIFECYCLE_LABELS } from "@/lib/adminUsersList/lifecycle";
 import { EMPTY_FACETS, activeFilterCount, usersListSearchParams, type UsersListFacets } from "@/lib/adminUsersList/query";
 import { SORT_OPTIONS, dayCell, loginCell, orderLabel, tileText } from "@/lib/adminUsersList/present";
 import type { UsersListRow, UsersListStats } from "@/lib/adminUsersList/types";
@@ -51,12 +53,6 @@ const COLUMNS: Column[] = [
   { key: "status", label: "Status", width: "w-[150px]" },
   { key: "last_login_at", label: "Last login", width: "w-[150px]" },
 ];
-
-const TOOL_BUTTON =
-  "inline-flex h-10 cursor-pointer items-center gap-2 rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] px-3.5 text-[14px] leading-[1.43] font-semibold tracking-[-0.01em] text-[var(--ink)] hover:bg-[var(--surface-alt)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]";
-const FIELD =
-  "h-10 rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] px-3 text-[14px] tracking-[-0.02em] text-[var(--ink)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]";
-const LABEL = "text-[12px] leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]";
 
 type Tenant = { id: string; name: string };
 
@@ -207,24 +203,16 @@ export function UsersListTable({
   const tiles = tileText(stats);
   const filterCount = activeFilterCount(facets);
   const anythingSet = filterCount > 0 || Boolean(facets.tenant) || searchInput.trim() !== "";
-  const tenantName = (id: string) => (id === "none" ? "No agency" : tenants.find((t) => t.id === id)?.name ?? "Unknown tenant");
   const colSpan = COLUMNS.length + 1;
 
-  // Status, Plan and Role are always shown (the board's chip row); the rest only once set.
-  const chips: Array<{ key: string; label: string; clear?: () => void }> = [
-    {
-      key: "state",
-      label: `Status: ${isUserLifecycle(facets.state) ? USER_LIFECYCLE_LABELS[facets.state] : "any"}`,
-      clear: facets.state ? () => setFacet("state", "") : undefined,
-    },
-    { key: "plan", label: `Plan: ${facets.plan || "any"}`, clear: facets.plan ? () => setFacet("plan", "") : undefined },
-    {
-      key: "role",
-      label: `Role: ${facets.role ? TENANT_ROLE_LABELS[facets.role as TenantRole] ?? facets.role : "any"}`,
-      clear: facets.role ? () => setFacet("role", "") : undefined,
-    },
-  ];
-  if (facets.tenant) chips.push({ key: "tenant", label: `Tenant: ${tenantName(facets.tenant)}`, clear: () => setFacet("tenant", "") });
+  // The filters behind the Filters button show as removable chips once set, so they stay visible
+  // with the panel closed. Tenant and status have their own controls in the toolbar.
+  const panelCount = filterCount - (facets.state ? 1 : 0);
+  const chips: Array<{ key: string; label: string; clear: () => void }> = [];
+  if (facets.plan) chips.push({ key: "plan", label: `Plan: ${facets.plan}`, clear: () => setFacet("plan", "") });
+  if (facets.role) {
+    chips.push({ key: "role", label: `Role: ${TENANT_ROLE_LABELS[facets.role as TenantRole] ?? facets.role}`, clear: () => setFacet("role", "") });
+  }
   if (facets.signupFrom || facets.signupTo) {
     chips.push({
       key: "signup",
@@ -267,206 +255,131 @@ export function UsersListTable({
         />
       </BoardStatGrid>
 
-      <div className="flex min-w-0 flex-col rounded-[12px] border border-[var(--border)] bg-[var(--surface)]">
-        <div className="flex flex-wrap items-center gap-3 p-3">
-          <span className="relative inline-flex max-w-full">
-            <label htmlFor={`${ids}-tenant`} className="sr-only">
-              Tenant
-            </label>
-            <select
-              id={`${ids}-tenant`}
-              value={facets.tenant}
-              onChange={(event) => setFacet("tenant", event.target.value)}
-              className={cn(TOOL_BUTTON, "max-w-[260px] appearance-none truncate pr-9")}
+      <TableCard
+        toolbar={
+          <>
+            <DataToolbar
+              actions={
+                <>
+                  {anythingSet && (
+                    <Button type="button" variant="ghost" onClick={clearAll}>
+                      Clear all
+                    </Button>
+                  )}
+                  <RefreshButton onClick={() => setRefreshKey((k) => k + 1)} refreshing={loading} />
+                </>
+              }
             >
-              <option value="">All tenants</option>
-              <option value="none">No agency</option>
-              {tenants.map((tenant) => (
-                <option key={tenant.id} value={tenant.id}>
-                  {tenant.name}
-                </option>
+              <ToolbarSearch value={searchInput} onChange={setSearchInput} placeholder="Search name, email" />
+              <select
+                aria-label="Tenant"
+                value={facets.tenant}
+                onChange={(event) => setFacet("tenant", event.target.value)}
+                className={cn(toolbarControl, "max-w-[260px] truncate")}
+              >
+                <option value="">All tenants</option>
+                <option value="none">No agency</option>
+                {tenants.map((tenant) => (
+                  <option key={tenant.id} value={tenant.id}>
+                    {tenant.name}
+                  </option>
+                ))}
+              </select>
+              <select aria-label="Status" value={facets.state} onChange={(event) => setFacet("state", event.target.value)} className={toolbarControl}>
+                <option value="">Any status</option>
+                {USER_LIFECYCLES.map((state) => (
+                  <option key={state} value={state}>
+                    {USER_LIFECYCLE_LABELS[state]}
+                  </option>
+                ))}
+              </select>
+              <FilterButton open={filtersOpen} onClick={() => setFiltersOpen((open) => !open)} count={panelCount} />
+              {chips.map((chip) => (
+                <span
+                  key={chip.key}
+                  className="inline-flex h-7 items-center gap-2 rounded-full border border-border bg-background pr-1.5 pl-3 text-xs font-semibold text-foreground"
+                >
+                  {chip.label}
+                  <button
+                    type="button"
+                    aria-label={`Remove ${chip.label}`}
+                    onClick={chip.clear}
+                    className="inline-flex size-4 cursor-pointer items-center justify-center rounded-full bg-muted text-muted-foreground hover:text-foreground"
+                  >
+                    <X className="size-2.5" aria-hidden="true" />
+                  </button>
+                </span>
               ))}
-            </select>
-            <svg
-              aria-hidden
-              width="13"
-              height="13"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.4"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="pointer-events-none absolute top-[13px] right-3.5 text-[var(--ink)]"
-            >
-              <path d="m6 9 6 6 6-6" />
-            </svg>
-          </span>
-
-          <span className="relative inline-flex w-[248px] max-w-full">
-            <svg
-              aria-hidden
-              width="15"
-              height="15"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.2"
-              strokeLinecap="round"
-              className="pointer-events-none absolute top-[12px] left-3 text-[var(--muted)]"
-            >
-              <circle cx="11" cy="11" r="7" />
-              <path d="m20 20-3.2-3.2" />
-            </svg>
-            <input
-              type="search"
-              aria-label="Search name, email"
-              placeholder="Search name, email"
-              value={searchInput}
-              onChange={(event) => setSearchInput(event.target.value)}
-              className="box-border h-10 w-full rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] pr-3 pl-9 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--ink)] outline-none placeholder:text-[var(--muted)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
-            />
-          </span>
-
-          <button
-            type="button"
-            aria-expanded={filtersOpen}
-            aria-controls={`${ids}-filters`}
-            onClick={() => setFiltersOpen((open) => !open)}
-            className={TOOL_BUTTON}
-          >
-            <svg aria-hidden width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
-              <path d="M3 5h18M6 12h12M10 19h4" />
-            </svg>
-            Filters
-            {filterCount > 0 && (
-              <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--surface-alt)] px-1.5 text-[12px] leading-[1.5] font-semibold tracking-[-0.01em] text-[var(--ink)] tabular-nums">
-                {filterCount}
+              <span className="text-xs text-muted-foreground tabular-nums" aria-live="polite">
+                {total.toLocaleString("en-US")} of {stats.rows.toLocaleString("en-US")} users
               </span>
-            )}
-          </button>
-          <span className="grow" />
-        </div>
-
-        {filtersOpen && (
-          <div id={`${ids}-filters`} className="flex flex-wrap items-end gap-4 border-t border-[var(--border)] px-3 py-3">
-            <FilterSelect
-              id={`${ids}-state`}
-              label="Status"
-              value={facets.state}
-              onChange={(v) => setFacet("state", v)}
-              options={[{ value: "", label: "Any status" }, ...USER_LIFECYCLES.map((s) => ({ value: s, label: USER_LIFECYCLE_LABELS[s] }))]}
-            />
-            <FilterSelect
-              id={`${ids}-plan`}
-              label="Plan"
-              value={facets.plan}
-              onChange={(v) => setFacet("plan", v)}
-              options={[{ value: "", label: "Any plan" }, ...planCodes.map((code) => ({ value: code, label: code }))]}
-            />
-            <FilterSelect
-              id={`${ids}-role`}
-              label="Role"
-              value={facets.role}
-              onChange={(v) => setFacet("role", v)}
-              options={[{ value: "", label: "Any role" }, ...TENANT_ROLES.map((role) => ({ value: role, label: TENANT_ROLE_LABELS[role] }))]}
-            />
-            <DateRange
-              id={`${ids}-joined`}
-              label="Joined"
-              from={facets.signupFrom}
-              to={facets.signupTo}
-              onFrom={(v) => setFacet("signupFrom", v)}
-              onTo={(v) => setFacet("signupTo", v)}
-            />
-            <DateRange
-              id={`${ids}-login`}
-              label="Last login"
-              from={facets.lastLoginFrom}
-              to={facets.lastLoginTo}
-              onFrom={(v) => setFacet("lastLoginFrom", v)}
-              onTo={(v) => setFacet("lastLoginTo", v)}
-            />
-            <span className="flex flex-col gap-1">
-              <label htmlFor={`${ids}-sort`} className={LABEL}>
-                Sort by
-              </label>
-              <span className="flex gap-2">
+            </DataToolbar>
+            {filtersOpen && (
+              <div id={`${ids}-filters`} className="flex w-full flex-wrap items-center gap-2 border-t border-border pt-3">
+                <select aria-label="Plan" value={facets.plan} onChange={(event) => setFacet("plan", event.target.value)} className={toolbarControl}>
+                  <option value="">Any plan</option>
+                  {planCodes.map((code) => (
+                    <option key={code} value={code}>
+                      {code}
+                    </option>
+                  ))}
+                </select>
+                <select aria-label="Role" value={facets.role} onChange={(event) => setFacet("role", event.target.value)} className={toolbarControl}>
+                  <option value="">Any role</option>
+                  {TENANT_ROLES.map((role) => (
+                    <option key={role} value={role}>
+                      {TENANT_ROLE_LABELS[role]}
+                    </option>
+                  ))}
+                </select>
+                <DateRange
+                  id={`${ids}-joined`}
+                  label="Joined"
+                  from={facets.signupFrom}
+                  to={facets.signupTo}
+                  onFrom={(v) => setFacet("signupFrom", v)}
+                  onTo={(v) => setFacet("signupTo", v)}
+                />
+                <DateRange
+                  id={`${ids}-login`}
+                  label="Last login"
+                  from={facets.lastLoginFrom}
+                  to={facets.lastLoginTo}
+                  onFrom={(v) => setFacet("lastLoginFrom", v)}
+                  onTo={(v) => setFacet("lastLoginTo", v)}
+                />
                 <select
-                  id={`${ids}-sort`}
+                  aria-label="Sort by"
                   value={sort}
                   onChange={(event) => {
                     setSort(event.target.value as UserSortColumn);
                     setPage(1);
                   }}
-                  className={cn(FIELD, "min-w-[150px]")}
+                  className={toolbarControl}
                 >
                   {SORT_OPTIONS.map((option) => (
                     <option key={option.value} value={option.value}>
-                      {option.label}
+                      Sort: {option.label}
                     </option>
                   ))}
                 </select>
-                <label htmlFor={`${ids}-dir`} className="sr-only">
-                  Direction
-                </label>
                 <select
-                  id={`${ids}-dir`}
+                  aria-label="Direction"
                   value={dir}
                   onChange={(event) => {
                     setDir(event.target.value as "asc" | "desc");
                     setPage(1);
                   }}
-                  className={FIELD}
+                  className={toolbarControl}
                 >
                   <option value="desc">Descending</option>
                   <option value="asc">Ascending</option>
                 </select>
-              </span>
-            </span>
-          </div>
-        )}
-      </div>
-
-      <div className="flex flex-wrap items-center gap-2">
-        {chips.map((chip) => (
-          <span
-            key={chip.key}
-            className={cn(
-              "inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] py-1 text-[12px] leading-[1.5] font-semibold tracking-[-0.01em] text-[var(--body)]",
-              chip.clear ? "pr-2 pl-3" : "px-3",
+              </div>
             )}
-          >
-            {chip.label}
-            {chip.clear && (
-              <button
-                type="button"
-                aria-label={`Remove ${chip.label}`}
-                onClick={chip.clear}
-                className="inline-flex size-4 cursor-pointer items-center justify-center rounded-full border-0 bg-[var(--surface-alt)] text-[var(--body)]"
-              >
-                <svg aria-hidden width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round">
-                  <path d="M6 6l12 12M18 6 6 18" />
-                </svg>
-              </button>
-            )}
-          </span>
-        ))}
-        {anythingSet && (
-          <button
-            type="button"
-            onClick={clearAll}
-            className="cursor-pointer border-0 bg-transparent p-1 text-[12px] leading-[1.5] font-semibold tracking-[-0.01em] text-[var(--ink)] underline"
-          >
-            Clear all
-          </button>
-        )}
-        <span className="text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)] tabular-nums" aria-live="polite">
-          {total.toLocaleString("en-US")} of {stats.rows.toLocaleString("en-US")} users
-        </span>
-      </div>
-
-      <section className="flex min-w-0 flex-col overflow-hidden rounded-[12px] border border-[var(--border)] bg-[var(--surface)]">
+          </>
+        }
+      >
         <div className="min-w-0 overflow-x-auto">
           <table className={cn(st.table, "min-w-[860px]")}>
             <thead>
@@ -504,14 +417,14 @@ export function UsersListTable({
                     {/* Loading, a failed read, nothing on the platform and nothing matching are four
                         different facts; each gets its own sentence. */}
                     {loading ? (
-                      <LoadingRows rows={5} columns={COLUMNS.length} />
+                      <SectionLoading rows={5} columns={COLUMNS.length} label="Loading users" />
                     ) : failed ? (
                       <ErrorState
                         detail="The user list could not be read. Nothing was changed."
                         action={
-                          <button type="button" className={btn("secondary")} onClick={() => setRefreshKey((k) => k + 1)}>
+                          <Button type="button" variant="outline" onClick={() => setRefreshKey((k) => k + 1)}>
                             Try again
-                          </button>
+                          </Button>
                         }
                       />
                     ) : anythingSet ? (
@@ -643,7 +556,6 @@ export function UsersListTable({
             </tbody>
           </table>
         </div>
-        <span className="grow" />
         <BoardTableFooter
           page={page}
           pageSize={USERS_PAGE_SIZE}
@@ -653,15 +565,7 @@ export function UsersListTable({
           onPageChange={setPage}
           busy={loading}
         />
-      </section>
-
-      <Callout tone="error" title="A reset issues a link. It never displays a password.">
-        <p className="m-0">
-          Nobody on this console sees or sets a customer&apos;s password: new users and resets both get a link that expires.
-          Suspending asks for a reason, which goes into the audit log, and signs the person out on their next request while
-          their seat is kept. Deactivating ends access in every agency the person belongs to and frees the seat.
-        </p>
-      </Callout>
+      </TableCard>
 
       {canManage && (
         <>
@@ -707,35 +611,6 @@ export function UsersListTable({
   );
 }
 
-function FilterSelect({
-  id,
-  label,
-  value,
-  onChange,
-  options,
-}: {
-  id: string;
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  options: { value: string; label: string }[];
-}) {
-  return (
-    <span className="flex min-w-[170px] flex-col gap-1">
-      <label htmlFor={id} className={LABEL}>
-        {label}
-      </label>
-      <select id={id} value={value} onChange={(event) => onChange(event.target.value)} className={FIELD}>
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-    </span>
-  );
-}
-
 function DateRange({
   id,
   label,
@@ -753,17 +628,18 @@ function DateRange({
 }) {
   return (
     <fieldset className="m-0 flex flex-col gap-1 border-0 p-0">
-      <legend className={cn(LABEL, "mb-1 p-0")}>{label} (UTC)</legend>
-      <span className="flex items-center gap-2">
+      <legend className="sr-only">{label} (UTC)</legend>
+      <span className="flex items-center gap-2 text-xs text-muted-foreground">
+        {label}
         <label htmlFor={`${id}-from`} className="sr-only">
           {label} from
         </label>
-        <input id={`${id}-from`} type="date" value={from} onChange={(event) => onFrom(event.target.value)} className={FIELD} />
-        <span className="text-[14px] text-[var(--muted)]">to</span>
+        <input id={`${id}-from`} type="date" value={from} onChange={(event) => onFrom(event.target.value)} className={toolbarControl} />
+        <span>to</span>
         <label htmlFor={`${id}-to`} className="sr-only">
           {label} to
         </label>
-        <input id={`${id}-to`} type="date" value={to} onChange={(event) => onTo(event.target.value)} className={FIELD} />
+        <input id={`${id}-to`} type="date" value={to} onChange={(event) => onTo(event.target.value)} className={toolbarControl} />
       </span>
     </fieldset>
   );

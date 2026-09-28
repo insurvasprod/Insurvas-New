@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 
-import { AdminPageHeader } from "@/components/admin/page-header";
 import { subscriptionTone, type StatusTone } from "@/components/admin/status-chip";
 import { Pill, type PillTone } from "@/components/app/settings/primitives";
+import { PageHeader } from "@/components/ui/page-header";
+import { StatStrip, StatTile } from "@/components/ui/stat";
 import { TenantSuspensionControl } from "@/components/admin/tenant-record/suspension-control";
 import { TENANT_TABS, type TenantTabKey } from "@/components/admin/tenant-record/types";
 import { formatCentsAsCurrency } from "@/lib/money";
@@ -11,8 +12,9 @@ import { SUBSCRIPTION_STATUS_LABELS } from "@/lib/subscriptions/access";
 import type { TenantRecordFrame as FrameData } from "@/lib/tenants/recordFrame";
 import { recordDate, sentenceCase } from "@/lib/tenants/recordFormat";
 import { isTenantSuspended } from "@/lib/tenants/suspension";
-import { seatsLabel } from "@/lib/tenantTeam/seats";
 import { cn } from "@/lib/utils";
+
+const FACT = "block truncate text-lg leading-[1.33]";
 
 const PILL_FOR: Record<StatusTone, PillTone> = {
   neutral: "neutral",
@@ -25,8 +27,8 @@ const PILL_FOR: Record<StatusTone, PillTone> = {
 
 /**
  * The frame every tab of the admin tenant record shares (boards p-adm-tenant-subscription / users /
- * features): back link, header with its actions, the chip row, the five-fact card and the page-level
- * tab strip. Server-rendered; the only island is the Suspend / Unsuspend control.
+ * features): back link, header with the state chips and its actions, the five-fact strip and the
+ * page-level tab strip. Server-rendered; the only island is the Suspend / Unsuspend control.
  *
  * Tabs are links (`?tab=`), not a JS tablist: each is its own server render, fetches only its own
  * data, and can be bookmarked, opened in a new tab and reached with the back button.
@@ -63,18 +65,6 @@ export function TenantRecordFrame({
     mrr = formatCentsAsCurrency(0);
   }
 
-  const facts = [
-    { label: "Owner", value: owner?.name ?? "No owner yet", title: owner ? `${owner.name} · ${owner.email}` : undefined },
-    { label: "Plan", value: planLabel ?? "No subscription" },
-    {
-      label: "Seats",
-      value: seats.used === null ? "—" : seats.max === null ? `${seats.used} · no limit` : `${seats.used} of ${seats.max}`,
-      title: seatsTitle,
-    },
-    { label: "MRR", value: mrr },
-    { label: "Joined", value: recordDate(tenant.createdAt) },
-  ];
-
   const base = `/admin/tenants/${tenant.id}`;
 
   return (
@@ -87,67 +77,54 @@ export function TenantRecordFrame({
           <ArrowLeft className="size-[13px] stroke-[2.4]" aria-hidden="true" />
           Back to tenants
         </Link>
-        <AdminPageHeader
-          path="/admin/tenants"
+        <PageHeader
           title={tenant.name}
-          subtitle="One agency, what it pays for, who is in it, and what has been done to it."
           actions={
-            canSuspend && tenant.status !== "cancelled" ? (
-              <TenantSuspensionControl tenantId={tenant.id} tenantName={tenant.name} suspended={suspended} />
-            ) : undefined
+            <>
+              <span role="group" className="flex flex-wrap items-center gap-2" aria-label="Agency state">
+                {tenant.status !== "active" && (
+                  <span title={suspended && suspensionReason ? `Reason: ${suspensionReason}` : undefined}>
+                    <Pill tone={suspended || tenant.status === "cancelled" ? "error" : "info"} dot>
+                      {sentenceCase(tenant.status)}
+                    </Pill>
+                  </span>
+                )}
+                {subscription ? (
+                  <Pill tone={PILL_FOR[subscriptionTone(subscription.status)]} dot>
+                    {statusLabel}
+                  </Pill>
+                ) : (
+                  <Pill tone="neutral">No subscription</Pill>
+                )}
+              </span>
+              {canSuspend && tenant.status !== "cancelled" && (
+                <TenantSuspensionControl tenantId={tenant.id} tenantName={tenant.name} suspended={suspended} />
+              )}
+            </>
           }
         />
       </div>
 
-      <div role="group" className="flex flex-wrap gap-2" aria-label="Agency state">
-        {tenant.status !== "active" && (
-          <span title={suspended && suspensionReason ? `Reason: ${suspensionReason}` : undefined}>
-            <Pill tone={suspended || tenant.status === "cancelled" ? "error" : "info"} dot>
-              {sentenceCase(tenant.status)}
-            </Pill>
-          </span>
-        )}
-        {subscription ? (
-          <Pill tone={PILL_FOR[subscriptionTone(subscription.status)]} dot>
-            {statusLabel}
-          </Pill>
-        ) : (
-          <Pill tone="neutral">No subscription</Pill>
-        )}
-        {subscription?.plan_name && (
-          <Pill tone="neutral">
-            {subscription.plan_name} &middot; v{subscription.plan_version ?? "?"}
-          </Pill>
-        )}
-        {seats.used === null ? (
-          <span title={seatsTitle}>
-            <Pill tone="warning">Seats not counted</Pill>
-          </span>
-        ) : (
-          <Pill tone={seatsFull ? "warning" : "neutral"}>{seatsLabel(seats.used, seats.max)}</Pill>
-        )}
-      </div>
-
-      <section
-        aria-label="Key facts"
-        className="min-w-0 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] p-5"
-      >
-        <dl className="m-0 grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-3 lg:grid-cols-5">
-          {facts.map((fact) => (
-            <div key={fact.label} className="min-w-0">
-              <dt className="text-[12px] leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]">
-                {fact.label}
-              </dt>
-              <dd
-                className="m-0 truncate text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)] tabular-nums"
-                title={fact.title ?? fact.value}
-              >
-                {fact.value}
-              </dd>
-            </div>
-          ))}
-        </dl>
-      </section>
+      {/* Mostly names and dates rather than counts, so the values are set at 18px (FACT) and truncate,
+          instead of the strip's 24px figure. */}
+      <StatStrip label="Key facts">
+        <StatTile
+          label="Owner"
+          value={<span className={FACT} title={owner ? `${owner.name} · ${owner.email}` : undefined}>{owner?.name ?? "No owner yet"}</span>}
+          footnote={owner ? <span className="block truncate">{owner.email}</span> : undefined}
+          reserveFootnote
+        />
+        <StatTile label="Plan" value={<span className={FACT} title={planLabel ?? undefined}>{planLabel ?? "None"}</span>} footnote={statusLabel ?? "no subscription"} />
+        <StatTile
+          label="Seats"
+          labelTitle={seatsTitle}
+          value={<span className={FACT}>{seats.used === null ? "—" : seats.used.toLocaleString("en-US")}</span>}
+          valueTone={seatsFull ? "warning" : undefined}
+          footnote={seats.used === null ? "not counted" : seats.max === null ? "no limit" : `of ${seats.max.toLocaleString("en-US")}`}
+        />
+        <StatTile label="MRR" value={<span className={FACT}>{mrr}</span>} reserveFootnote />
+        <StatTile label="Joined" value={<span className={FACT}>{recordDate(tenant.createdAt)}</span>} reserveFootnote />
+      </StatStrip>
 
       <nav aria-label="Tenant record" className="min-w-0 overflow-x-auto">
         <ul className="m-0 flex w-max min-w-full list-none gap-6 border-b border-[var(--border)] p-0">

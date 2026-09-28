@@ -46,7 +46,7 @@ export function SettingsSectionHeader({ actions }: { actions?: ReactNode }) {
   );
 }
 
-/** Discard + Save changes, 40px, wired to a section's own draft. */
+/** Discard + Save changes, 36px (the Button height), wired to a section's own draft. */
 export function DraftActions({
   dirty,
   saving,
@@ -91,8 +91,8 @@ type BtnKind = "primary" | "ghost" | "secondary" | "row" | "primary-sm" | "dange
 const BTN_BASE =
   "inline-flex items-center justify-center gap-2 rounded-[8px] border px-4 text-[14px] leading-[1.43] font-semibold tracking-[-0.01em] whitespace-nowrap cursor-pointer disabled:cursor-not-allowed disabled:opacity-50";
 const BTN: Record<BtnKind, string> = {
-  primary: "h-10 border-transparent bg-[var(--primary)] text-[var(--on-primary)] hover:bg-[var(--accent-hover)]",
-  ghost: "h-10 border-transparent bg-transparent text-[var(--ink)] hover:bg-[var(--surface-alt)]",
+  primary: "h-9 border-transparent bg-[var(--primary)] text-[var(--on-primary)] hover:bg-[var(--accent-hover)]",
+  ghost: "h-9 border-transparent bg-transparent text-[var(--ink)] hover:bg-[var(--surface-alt)]",
   secondary: "h-8 border-[var(--border-strong)] bg-[var(--surface)] text-[var(--ink)] hover:bg-[var(--surface-alt)]",
   "primary-sm": "h-8 border-transparent bg-[var(--primary)] text-[var(--on-primary)] hover:bg-[var(--accent-hover)]",
   row: "h-[30px] border-transparent bg-transparent px-3 text-[var(--ink)] hover:bg-[var(--surface-alt)]",
@@ -232,9 +232,9 @@ export function Pill({ tone = "neutral", dot, children, className }: { tone?: Pi
 
 /* ── fields ─────────────────────────────────────────────────────────────── */
 
-/** 44px, 16px type, strong edge: the boards' one control height. */
+/** 36px, 14px type (16px on phones, so iOS does not zoom), strong edge: the same height as a Button and the shared Input (UI standard §5, 2026-09-28). */
 export const control =
-  "mt-1.5 box-border h-11 w-full rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] px-3 text-[16px] leading-[1.5] tracking-[-0.02em] text-[var(--ink)] outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)] disabled:cursor-not-allowed disabled:opacity-60";
+  "mt-1.5 box-border h-9 w-full rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] px-3 text-[16px] md:text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--ink)] outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)] disabled:cursor-not-allowed disabled:opacity-60";
 
 export function Field({
   label,
@@ -436,7 +436,7 @@ export function SearchBox({ value, onChange, placeholder, label }: { value: stri
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="box-border h-10 w-full rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] pr-3 pl-9 text-[14px] tracking-[-0.02em] text-[var(--ink)] outline-none placeholder:text-[var(--muted)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
+        className="box-border h-9 w-full rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] pr-3 pl-9 text-[14px] tracking-[-0.02em] text-[var(--ink)] outline-none placeholder:text-[var(--muted)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
       />
     </span>
   );

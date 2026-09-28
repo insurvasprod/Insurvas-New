@@ -2,10 +2,10 @@ import { redirect } from "next/navigation";
 
 import { getCurrentAdmin } from "@/lib/adminAuth/getCurrentAdmin";
 import { canAccessConfigurationSection } from "@/lib/configuration/sections";
-import { AdminPageHeader } from "@/components/admin/page-header";
 import { PaymentStatusPanel } from "@/components/admin/payment-status-panel";
 import { getProviderStatus } from "@/lib/payments/status";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
+import { PageHeader } from "@/components/ui/page-header";
 
 export default async function PaymentsPage() {
   const admin = await getCurrentAdmin();
@@ -26,7 +26,7 @@ export default async function PaymentsPage() {
 
   return (
     <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
-      <AdminPageHeader title="Payment setup" subtitle="Provider, mode, keys and payment health. Live credentials are super-admin only." />
+      <PageHeader title="Payment setup" />
       <PaymentStatusPanel
         status={status}
         webhooks={{ lastReceivedAt: lastReceived.data?.received_at ?? null, lastProcessedAt: lastProcessed.data?.processed_at ?? null, stuck: stuck.count ?? 0 }}

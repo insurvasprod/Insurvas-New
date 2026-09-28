@@ -48,8 +48,8 @@ export function PartnerLoginForm() {
       const response = await fetch("/api/partner/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password, remember }) });
       const body = await response.json().catch(() => null);
       if (!response.ok) { setError(body?.error ?? "Something went wrong"); return; }
-      router.push(body?.redirectTo ?? "/partner");
-      router.refresh();
+      // One navigation, not push + refresh (which rendered the portal twice after sign-in).
+      router.replace(body?.redirectTo ?? "/partner");
     } catch {
       setError("Could not sign in. Check your connection and try again.");
     } finally {

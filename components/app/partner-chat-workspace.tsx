@@ -3,18 +3,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { notify } from "@/lib/notify";
 import type { RealtimeChannel } from "@supabase/supabase-js";
-import { FileText, MessageCircle, Paperclip, Search, X } from "lucide-react";
+import { FileText, MessageCircle, Paperclip, Plus, Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { toolbarControl } from "@/components/ui/data-toolbar";
 import { PageHeader } from "@/components/ui/page-header";
-import { sectionForPath } from "@/lib/menu/definition";
+import { SectionLoading } from "@/components/ui/page-states";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { cardTitle, type PartnerMessage } from "@/lib/partnerChat/cards";
 import { cn } from "@/lib/utils";
 import { MONTHS } from "@/lib/format/dates";
 
 /**
- * Partner chat, as the board draws it: conversations on the left, the thread in the middle with
- * automatic updates set apart from typed messages, and the channel's facts on the right.
+ * Partner chat: a full-height, three-pane chat under the top bar. Conversations on the left, the
+ * thread in the middle (automatic updates set apart from typed messages, the composer pinned to the
+ * bottom), and the conversation's details on the right. Each pane scrolls on its own; below lg the
+ * details pane folds away and the page is the list and the thread.
  *
  * Everything the page did before still works — search, unread counts, new direct and team
  * conversations, attachments, realtime refresh and read receipts — plus Archive / Restore for
@@ -68,7 +71,7 @@ function Fact({ label, children }: { label: string; children: React.ReactNode })
 
 function BarHeader({ title, children }: { title: string; children?: React.ReactNode }) {
   return (
-    <div className="flex items-center justify-between gap-4 border-b border-border bg-[var(--surface-alt)] px-4 py-3">
+    <div className="flex min-h-14 shrink-0 items-center justify-between gap-4 border-b border-border bg-[var(--surface-alt)] px-4 py-2.5">
       <h2 className="truncate text-sm font-semibold leading-normal tracking-[-0.02em]">{title}</h2>
       {children && <span className="flex shrink-0 items-center gap-2.5">{children}</span>}
     </div>
@@ -160,32 +163,38 @@ export function AgentPartnerChatWorkspace() {
     try { const response = await fetch("/api/app/partner-chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: next ? "archive_channel" : "restore_channel", channel_id: selected.id }) }); const body = await response.json().catch(() => null); if (!response.ok) throw new Error(body?.error ?? "Could not change the channel"); notify.done(next ? "Channel archived" : "Channel restored"); await load(); } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not change the channel"); } finally { setBusy(false); }
   }
 
-  const field = "h-10 w-full rounded-lg border border-[var(--border-strong)] bg-card px-3 text-sm";
+  const field = cn(toolbarControl, "w-full");
 
   return (
-    <div className="m-stagger flex flex-col gap-6">
+    /* The chat fills the viewport under the top bar and the page itself never scrolls: each pane
+       scrolls on its own. The heights subtract the shell's padding (sm:p-6, lg:pt-6 lg:pb-8). Below
+       md the shell's own menu header stacks over the bar, so the page scrolls and the panes get
+       fixed heights instead. */
+    <div className="m-stagger flex min-w-0 flex-col gap-4 md:h-[calc(100dvh-var(--top-bar-h)-48px)] lg:h-[calc(100dvh-var(--top-bar-h)-56px)]">
       <PageHeader
-        eyebrow={sectionForPath("/app/partner-chat") ?? undefined}
         title="Partner chat"
-        description="One partner-only channel carrying conversation and automatic lead updates."
-        actions={<Button type="button" className="h-11 px-4" onClick={() => setNewConversationOpen(true)}>New conversation</Button>}
+        actions={<Button type="button" onClick={() => setNewConversationOpen(true)}><Plus aria-hidden="true" />New conversation</Button>}
       />
+      {error && <p role="alert" className="m-0 rounded-md border border-[var(--error)]/40 bg-[var(--error-surface)] px-3 py-2 text-sm text-[var(--error-ink)]">{error}</p>}
 
-      <div className="flex flex-col gap-5 xl:min-h-[640px] xl:flex-row">
+      <div className="grid min-h-0 flex-1 overflow-hidden rounded-lg border border-border bg-card shadow-[0_1px_2px_rgba(16,20,26,.05)] md:grid-cols-[260px_minmax(0,1fr)] lg:grid-cols-[280px_minmax(0,1fr)_300px]">
         {/* Conversations */}
-        <section className="flex w-full shrink-0 flex-col overflow-hidden rounded-lg border border-border bg-card shadow-[0_1px_2px_rgba(16,20,26,.05)] xl:w-[280px]" aria-label="Conversations">
-          <BarHeader title="Conversations"><span className="text-xs text-muted-foreground">{data.channels.length}</span></BarHeader>
-          <label className="relative flex items-center border-b border-border px-3 py-2">
-            <Search className="pointer-events-none absolute left-5 size-4 text-muted-foreground" aria-hidden="true" />
-            <span className="sr-only">Search conversations</span>
-            <input value={conversationSearch} onChange={(event) => setConversationSearch(event.target.value)} placeholder="Search conversations" className="h-9 w-full rounded-lg border border-border bg-card pl-8 pr-2 text-sm" />
-          </label>
-          <div className="max-h-[520px] overflow-y-auto xl:max-h-none xl:flex-1">
-            {!loaded ? <p className="px-4 py-6 text-sm text-muted-foreground">Loading conversations…</p> : filteredChannels.length === 0 ? <p className="px-4 py-6 text-sm text-muted-foreground">{data.channels.length ? "No conversation matches that." : "No conversations yet."}</p> : filteredChannels.map((channel) => {
+        <section className="flex max-h-72 min-h-0 min-w-0 flex-col border-b border-border md:max-h-none md:border-r md:border-b-0" aria-label="Conversations">
+          <div className="flex shrink-0 items-center gap-2 border-b border-border bg-[var(--surface-alt)] px-3 py-2.5">
+            <label className="relative block min-w-0 flex-1">
+              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+              <span className="sr-only">Search conversations</span>
+              <input type="search" value={conversationSearch} onChange={(event) => setConversationSearch(event.target.value)} placeholder="Search conversations" className={cn(toolbarControl, "w-full pl-9")} />
+            </label>
+            <span className="shrink-0 text-xs tabular-nums text-muted-foreground" aria-label={`${data.channels.length} conversations`}>{data.channels.length}</span>
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            {!loaded ? <SectionLoading rows={6} columns={2} label="Loading conversations" /> : filteredChannels.length === 0 ? <p className="px-4 py-6 text-center text-sm text-muted-foreground">{data.channels.length ? "No conversation matches that." : "No conversations yet."}</p> : filteredChannels.map((channel) => {
               const active = channel.id === selectedId;
               const last = channel.messages.at(-1);
+              const facts = channel.channel_type === "partner" && channel.partner_id ? factsLine(data.facts[channel.partner_id]) : null;
               return (
-                <button type="button" key={channel.id} onClick={() => { setSelectedId(channel.id); setNewConversationOpen(false); }} aria-current={active ? "true" : undefined} className={cn("block w-full border-t border-border px-3.5 py-3 text-left first:border-t-0", active ? "bg-[var(--soft-orange-surface)] shadow-[inset_2px_0_0_var(--primary)]" : "hover:bg-[var(--surface-alt)]")}>
+                <button type="button" key={channel.id} onClick={() => { setSelectedId(channel.id); setNewConversationOpen(false); }} aria-current={active ? "true" : undefined} className={cn("block w-full border-t border-border px-3 py-2.5 text-left first:border-t-0", active ? "bg-[var(--soft-orange-surface)] shadow-[inset_2px_0_0_var(--primary)]" : "hover:bg-[var(--surface-alt)]")}>
                   <span className="flex items-center justify-between gap-2">
                     <span className="truncate text-sm font-semibold text-foreground">{channel.name}</span>
                     <span className="flex shrink-0 items-center gap-1.5">
@@ -193,35 +202,34 @@ export function AgentPartnerChatWorkspace() {
                       <span className="text-xs text-muted-foreground">{last ? listTime(last.createdAt) : "—"}</span>
                     </span>
                   </span>
-                  <span className="mt-[3px] block truncate text-xs text-muted-foreground">{channel.status === "active" ? "" : "Archived · "}{channelPreview(channel)}</span>
-                  {channel.channel_type === "partner" && channel.partner_id && factsLine(data.facts[channel.partner_id]) && <span className="mt-0.5 block truncate text-xs tabular-nums text-[var(--body)]">{factsLine(data.facts[channel.partner_id])}</span>}
+                  <span className="mt-0.5 block truncate text-xs text-muted-foreground">{channel.status === "active" ? "" : "Archived · "}{channelPreview(channel)}</span>
+                  {facts && <span className="block truncate text-xs tabular-nums text-[var(--body)]">{facts}</span>}
                 </button>
               );
             })}
           </div>
         </section>
 
-        {/* Thread */}
-        <section className="flex min-h-[520px] min-w-0 flex-grow flex-col overflow-hidden rounded-lg border border-border bg-card shadow-[0_1px_2px_rgba(16,20,26,.05)]" aria-label="Selected conversation">
+        {/* Thread: the messages scroll, the composer stays at the bottom of the pane. */}
+        <section className="flex h-[70dvh] min-h-0 min-w-0 flex-col md:h-auto" aria-label="Selected conversation">
           {newConversationOpen ? (
             <>
               <BarHeader title="New conversation"><button type="button" onClick={() => setNewConversationOpen(false)} aria-label="Close new conversation" className="rounded p-1 text-muted-foreground hover:text-foreground"><X className="size-4" /></button></BarHeader>
-              <div className="flex flex-col gap-4 p-5">
-                <p className="text-sm text-muted-foreground">Choose a partner user, an agent or a team member. Access is checked on the server.</p>
+              <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-5">
                 <div className="grid gap-4 sm:grid-cols-2">
                   <label className="text-sm font-semibold">Conversation type<select value={newType} onChange={(event) => setNewType(event.target.value as "direct" | "group")} className={cn(field, "mt-1.5 font-normal")}><option value="direct">Direct message</option><option value="group">Team channel</option></select></label>
                   <label className="text-sm font-semibold">Channel name <span className="font-normal text-muted-foreground">optional</span><input maxLength={160} value={channelName} onChange={(event) => setChannelName(event.target.value)} placeholder={newType === "direct" ? "Direct message" : "e.g. Morning transfers"} className={cn(field, "mt-1.5 font-normal")} /></label>
                 </div>
                 <label className="text-sm font-semibold">{newType === "direct" ? "Recipient" : "Participants"}
-                  <select multiple value={recipientIds} onChange={(event) => setRecipientIds(Array.from(event.target.selectedOptions, (option) => option.value))} className="mt-1.5 min-h-40 w-full rounded-lg border border-[var(--border-strong)] bg-card p-2 text-sm font-normal">
+                  <select multiple value={recipientIds} onChange={(event) => setRecipientIds(Array.from(event.target.selectedOptions, (option) => option.value))} className="mt-1.5 min-h-40 w-full rounded-md border border-input bg-background p-2 text-sm font-normal">
                     {data.directory.map((user) => <option value={user.id} key={user.id}>{user.label}</option>)}
                   </select>
                   <span className="mt-1 block text-xs font-normal text-muted-foreground">{selectedUsers.length ? selectedUsers.map((user) => user.name).join(", ") : "Choose at least one person"}</span>
                 </label>
-                {mixedPartners && <p role="alert" className="m-0 rounded-lg bg-[var(--warning-surface)] px-3 py-2 text-sm text-[var(--warning-ink)]">These people belong to different partners. Partners never see each other&rsquo;s messages, so start a separate conversation for each partner.</p>}
-                <div className="flex justify-end gap-3">
-                  <Button type="button" variant="outline" className="h-10 border-[var(--border-strong)] px-4" onClick={() => setNewConversationOpen(false)}>Cancel</Button>
-                  <Button type="button" className="h-10 px-4" disabled={busy || recipientIds.length === 0 || mixedPartners} onClick={() => void createChannel()}>{busy ? "Creating…" : newType === "direct" ? "Start direct message" : "Create team channel"}</Button>
+                {mixedPartners && <p role="alert" className="m-0 rounded-md bg-[var(--warning-surface)] px-3 py-2 text-sm text-[var(--warning-ink)]">These people belong to different partners: start a separate conversation for each partner.</p>}
+                <div className="flex justify-end gap-2">
+                  <Button type="button" variant="outline" onClick={() => setNewConversationOpen(false)}>Cancel</Button>
+                  <Button type="button" disabled={busy || recipientIds.length === 0 || mixedPartners} onClick={() => void createChannel()}>{busy ? "Creating…" : newType === "direct" ? "Start direct message" : "Create team channel"}</Button>
                 </div>
               </div>
             </>
@@ -233,11 +241,12 @@ export function AgentPartnerChatWorkspace() {
                 </span>
                 {selectedFacts?.payout && <span className="hidden whitespace-nowrap text-xs text-muted-foreground sm:inline">{selectedFacts.payout}</span>}
                 {selectedFacts?.status === "paused" && <span className="inline-flex whitespace-nowrap rounded-full bg-[var(--warning-surface)] px-2.5 py-[3px] text-xs font-semibold text-[var(--warning-ink)]">Partner paused</span>}
+                {/* A partner channel is never archived here: the automatic lead updates land in it. */}
                 {selected.channel_type !== "partner" && (
-                  <Button type="button" variant="outline" size="sm" className="h-8 border-[var(--border-strong)] px-4" disabled={busy} onClick={() => void setArchived(!archived)}>{archived ? "Restore" : "Archive"}</Button>
+                  <Button type="button" variant="outline" disabled={busy} onClick={() => void setArchived(!archived)}>{archived ? "Restore" : "Archive"}</Button>
                 )}
               </BarHeader>
-              <div ref={threadRef} className="flex max-h-[560px] min-h-0 flex-grow flex-col gap-[18px] overflow-y-auto p-5" aria-live="polite">
+              <div ref={threadRef} className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-5" aria-live="polite">
                 {selected.messages.length === 0 ? (
                   <div className="m-auto text-center text-sm text-muted-foreground"><MessageCircle className="mx-auto mb-2 size-6" aria-hidden="true" />No messages yet. Send the first one.</div>
                 ) : selected.messages.map((item) => {
@@ -262,14 +271,14 @@ export function AgentPartnerChatWorkspace() {
                   );
                 })}
               </div>
-              <form className="flex flex-col gap-2 border-t border-border bg-[var(--canvas)] px-5 py-3.5" onSubmit={(event) => { event.preventDefault(); void send(); }}>
-                <div className="flex gap-3">
-                  <input aria-label="Write a message" maxLength={2000} placeholder={archived ? "This channel is archived — restore it to write" : "Write a message"} value={draft} disabled={archived} onChange={(event) => setDraft(event.target.value)} className="h-11 min-w-0 flex-grow rounded-lg border border-[var(--border-strong)] bg-card px-3.5 text-base disabled:opacity-60" />
-                  <label className={cn("inline-flex h-11 shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border border-[var(--border-strong)] bg-card px-3 text-sm font-semibold", archived && "pointer-events-none opacity-60")} title="Attach up to three files">
+              <form className="flex shrink-0 flex-col gap-2 border-t border-border bg-[var(--canvas)] px-4 py-3" onSubmit={(event) => { event.preventDefault(); void send(); }}>
+                <div className="flex gap-2">
+                  <input aria-label="Write a message" maxLength={2000} placeholder={archived ? "This channel is archived — restore it to write" : "Write a message"} value={draft} disabled={archived} onChange={(event) => setDraft(event.target.value)} className={cn(toolbarControl, "min-w-0 flex-grow")} />
+                  <label className={cn("inline-flex h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-md border border-input bg-background px-3 text-sm font-semibold hover:bg-accent", archived && "pointer-events-none opacity-60")} title="Attach up to three files">
                     <Paperclip className="size-4" aria-hidden="true" /><span className="sr-only">Attach files</span>
                     <input className="sr-only" type="file" multiple disabled={archived} accept="image/jpeg,image/png,image/gif,application/pdf,text/plain,.docx,.xlsx" onChange={(event) => setFiles(Array.from(event.target.files ?? []).slice(0, 3))} />
                   </label>
-                  <Button type="submit" className="h-11 shrink-0 px-4" disabled={busy || archived || !draft.trim()}>{busy ? "Sending…" : "Send"}</Button>
+                  <Button type="submit" disabled={busy || archived || !draft.trim()}>{busy ? "Sending…" : "Send"}</Button>
                 </div>
                 {(files.length > 0 || draft.length > 1800) && (
                   <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
@@ -279,18 +288,20 @@ export function AgentPartnerChatWorkspace() {
                 )}
               </form>
             </>
+          ) : loaded ? (
+            <div className="m-auto p-10 text-center text-sm text-muted-foreground"><MessageCircle className="mx-auto mb-2 size-6" aria-hidden="true" />Choose a conversation, or start a new one.</div>
           ) : (
-            <div className="m-auto p-10 text-center text-sm text-muted-foreground"><MessageCircle className="mx-auto mb-2 size-6" aria-hidden="true" />{loaded ? "Choose a conversation, or start a new one." : "Loading…"}</div>
+            <SectionLoading rows={6} columns={3} label="Loading the conversation" />
           )}
         </section>
 
-        {/* Channel facts */}
-        <div className="flex w-full shrink-0 flex-col gap-4 xl:w-[300px]">
-          <section className="rounded-lg border border-border bg-card p-5 shadow-[0_1px_2px_rgba(16,20,26,.05)]">
-            <h2 className="text-lg font-semibold leading-[1.28] tracking-[-0.015em]">Channel</h2>
+        {/* Conversation details */}
+        <aside className="hidden min-h-0 min-w-0 flex-col border-l border-border lg:flex" aria-label="Conversation details">
+          <BarHeader title="Details" />
+          <div className="min-h-0 flex-1 overflow-y-auto p-4">
             {selected ? (
               <>
-                <div className="mt-3.5 grid grid-cols-2 gap-x-6 gap-y-4">
+                <div className="grid grid-cols-2 gap-x-6 gap-y-4">
                   <Fact label={selected.channel_type === "partner" ? "Partner" : "Channel"}>{selected.name}</Fact>
                   <Fact label="Type">{channelType(selected)}</Fact>
                   <Fact label="Linked leads">{linkedLeads}</Fact>
@@ -308,17 +319,11 @@ export function AgentPartnerChatWorkspace() {
                     <ul className="mt-2 space-y-1.5 text-sm">{sharedAttachments.slice(0, 5).map((attachment) => <li key={attachment.id} className="flex justify-between gap-2"><span className="truncate">{attachment.fileName}</span><span className="shrink-0 text-xs text-muted-foreground">{kb(attachment.sizeBytes)}</span></li>)}</ul>
                   </div>
                 )}
-                {selected.channel_type === "partner" && <p className="mt-4 text-xs text-muted-foreground">A partner channel carries the automatic lead updates, so it follows the partner and is never archived from here.</p>}
               </>
-            ) : <p className="mt-3 text-sm text-muted-foreground">Choose a conversation to see its details.</p>}
-          </section>
-          <div className="rounded-lg border border-border border-l-[3px] border-l-[var(--warning)] bg-[var(--warning-surface)] px-4 py-3.5 text-sm leading-normal tracking-[-0.02em]">
-            <p className="font-semibold text-[var(--warning-ink)]">An automatic update is a record of fact</p>
-            <p className="mt-1.5 text-[var(--body)]">It is tinted, labelled and cannot be edited. A system event styled as a typed message destroys the audit value.</p>
+            ) : <p className="m-0 text-sm text-muted-foreground">Choose a conversation to see its details.</p>}
           </div>
-        </div>
+        </aside>
       </div>
-      {error && <p className="text-sm font-semibold text-[var(--error-ink)]" role="alert">{error}</p>}
     </div>
   );
 }

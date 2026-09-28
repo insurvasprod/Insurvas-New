@@ -3,14 +3,16 @@ import "server-only";
 import { fetchMetrics, fetchFunnel, fetchSnapshotFreshness, biggestDropOff, type MetricsDay } from "@/lib/metrics/queries";
 import { computeChurn, formatRate } from "@/lib/metrics/churn";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
-import { AdminPageHeader } from "@/components/admin/page-header";
 import { BillingTabs } from "@/components/admin/billing-tabs";
 import { BoardStatGrid, BoardStatTile } from "@/components/admin/board-stat-tile";
+import { Callout } from "@/components/app/settings/primitives";
 import { EmptyState } from "@/components/ui/page-states";
+import { PageHeader } from "@/components/ui/page-header";
+import { TableCard } from "@/components/ui/table-card";
 import { formatCentsAsCurrency } from "@/lib/money";
 import { cn } from "@/lib/utils";
 
-const card = "min-w-0 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] p-6";
+const card = "min-w-0 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] p-5";
 const h2 = "text-[18px] leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]";
 const sub = "mt-1 text-[14px] text-[var(--muted)]";
 const th = "px-3 py-2 text-left text-[12px] leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]";
@@ -18,15 +20,6 @@ const td = "border-t border-[var(--border)] px-3 py-2 text-[14px] leading-[1.5] 
 const LONG = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
 const SHORT = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
 const signed = (cents: number) => `${cents > 0 ? "+" : cents < 0 ? "−" : ""}${formatCentsAsCurrency(Math.abs(cents))}`;
-
-function Callout({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div role="status" className="rounded-[12px] border border-[var(--border)] border-l-[3px] border-l-[var(--warning)] bg-[var(--warning-surface)] px-4 py-3.5">
-      <p className="text-[14px] font-semibold text-[var(--warning-ink)]">{title}</p>
-      <p className="mt-1.5 text-[14px] leading-normal text-[var(--body)]">{children}</p>
-    </div>
-  );
-}
 
 /** Gross revenue churn over one run of snapshot days: what was lost ÷ MRR on the first day. */
 function grossChurn(window: MetricsDay[]) {
@@ -101,18 +94,8 @@ export async function RevenueView() {
 
   return (
     <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
-      <AdminPageHeader title="Revenue" subtitle="Contracted revenue, collections, churn and plan mix. Every figure is derived from real data." />
+      <PageHeader title="Revenue" />
       <BillingTabs />
-
-      {snapshotDate === null ? (
-        <Callout title="No metrics have been computed yet">
-          Every figure on this page reads the nightly snapshot, and it is empty — so the numbers below are absent, not zero. Run <code className="font-mono text-[14px]">npm run metrics:build</code> to populate it.
-        </Callout>
-      ) : snapshotIsStale ? (
-        <Callout title={`These figures are ${snapshotAgeDays} days old`}>
-          The last snapshot is from {snapshotDate}. The nightly job has not run since, so nothing below reflects the last {snapshotAgeDays} days of signups, cancellations or payments. Run <code className="font-mono text-[14px]">npm run metrics:build</code> to catch up.
-        </Callout>
-      ) : null}
 
       <BoardStatGrid>
         <BoardStatTile label="MRR" value={formatCentsAsCurrency(mrr)} footnote={snapshotLabel ? `contracted, ${snapshotLabel}` : "contracted"} />
@@ -127,10 +110,15 @@ export async function RevenueView() {
         )}
       </BoardStatGrid>
 
+      {/* The page reads a nightly snapshot: absent or old numbers must not pass for current ones. */}
+      {snapshotDate === null ? (
+        <Callout tone="warning" title="No metrics have been computed yet — the figures are absent, not zero. Run npm run metrics:build." />
+      ) : snapshotIsStale ? (
+        <Callout tone="warning" title={`These figures are ${snapshotAgeDays} days old (last snapshot ${snapshotDate}). Run npm run metrics:build to catch up.`} />
+      ) : null}
+
       {mrr === 0 && collected > 0 && (
-        <Callout title="Money is being collected but no subscription is recorded">
-          {formatCentsAsCurrency(collected)} was received in the last 30 days, and contracted MRR is {formatCentsAsCurrency(mrr)}. A customer who bought through provider checkout does not get a subscription on our side automatically, so they are invisible to every figure on this page except the collected one.
-        </Callout>
+        <Callout tone="warning" title={`${formatCentsAsCurrency(collected)} collected in 30 days with no subscription recorded — provider-checkout customers need a subscription on our side.`} />
       )}
 
       <div className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1fr)_520px] xl:items-start">
@@ -148,16 +136,11 @@ export async function RevenueView() {
               </div>
             ))}
           </div>
-          <p className="mt-4 text-[12px] leading-normal text-[var(--muted)]">
-            A single MRR number without its movement is not management information.{" "}
-            {!movementMeasured && "Expansion and contraction are not recorded yet, so plan changes land in the unexplained remainder rather than disappearing. "}
-            {collected !== newMrr && `Collected differs from new contracted revenue by ${formatCentsAsCurrency(Math.abs(collected - newMrr))} over this window.`}
-          </p>
         </section>
 
         <section className={card} aria-labelledby="activation-funnel">
           <h2 id="activation-funnel" className={h2}>Activation funnel</h2>
-          <p className={sub}>Last 90 days{signups !== null ? ` · ${signups.toLocaleString()} signups` : ""}. Each stage&rsquo;s definition is stated.</p>
+          <p className={sub}>Last 90 days{signups !== null ? ` · ${signups.toLocaleString()} signups` : ""}</p>
           <ol className="mt-2">
             {funnel.map((step) => {
               const share = signups && step.measured && step.count !== null ? step.count / signups : null;
@@ -185,12 +168,10 @@ export async function RevenueView() {
       </div>
 
       <div className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1fr)_520px] xl:items-start">
-        <section className="min-w-0 overflow-hidden rounded-[12px] border border-[var(--border)] bg-[var(--surface)]" aria-labelledby="plan-mix">
-          <div className="border-b border-[var(--border)] bg-[var(--surface-alt)] px-4 py-3"><h2 id="plan-mix" className="text-[14px] font-semibold text-[var(--ink)]">Plan mix{snapshotLabel ? ` · ${snapshotLabel}` : ""}</h2></div>
+        <TableCard className="min-w-0" title={`Plan mix${snapshotLabel ? ` · ${snapshotLabel}` : ""}`}>
           {planRows.length === 0 ? (
-            <EmptyState title="No revenue to break down yet" hint="This table splits recognised revenue by plan. It fills in once a subscription has billed at least once." />
+            <EmptyState title="No revenue to break down yet" hint="It fills in once a subscription has billed at least once." />
           ) : (
-            <div className="overflow-x-auto">
               <table className="w-full min-w-[420px] border-collapse">
                 <thead><tr className="bg-[var(--surface-alt)]"><th scope="col" className={th}>Plan</th><th scope="col" className={cn(th, "text-right")}>Customers</th><th scope="col" className={cn(th, "text-right")}>MRR</th><th scope="col" className={cn(th, "text-right")}>Share</th></tr></thead>
                 <tbody>
@@ -204,9 +185,8 @@ export async function RevenueView() {
                   ))}
                 </tbody>
               </table>
-            </div>
           )}
-        </section>
+        </TableCard>
 
         <section className={card} aria-labelledby="customers-churn">
           <h2 id="customers-churn" className={h2}>Customers &amp; churn</h2>
@@ -226,7 +206,6 @@ export async function RevenueView() {
               </div>
             ))}
           </dl>
-          {churn.netRevenueChurnRate < 0 && <p className="mt-2 text-[12px] text-[var(--success-ink)]">Negative net revenue churn — expansion is outrunning churn.</p>}
         </section>
       </div>
     </div>

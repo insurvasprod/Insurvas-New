@@ -10,13 +10,16 @@ import { needsSecondApprover } from "@/lib/credits/rules";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { formatUtcDateTime } from "@/lib/adminDashboard/figures";
 import { AdminPageHeader } from "@/components/admin/page-header";
-import { BillingTabs } from "@/components/admin/billing-tabs";
+import { BoardStatGrid } from "@/components/admin/board-stat-tile";
 import { InvoiceDetailTabs } from "@/components/admin/invoice-detail-tabs";
 import { VoidInvoiceDialog } from "@/components/admin/void-invoice-dialog";
 import { MarkPaidDialog } from "@/components/admin/mark-paid-dialog";
 import { RefundDialog } from "@/components/admin/refund-dialog";
 import { StatusChip, invoiceTone, reconciliationTone } from "@/components/admin/status-chip";
 import { fullDate, periodRange } from "@/components/admin/tenant-record/billing-format";
+import { Callout } from "@/components/app/settings/primitives";
+import { Button } from "@/components/ui/button";
+import { StatTile } from "@/components/ui/stat";
 import { formatCentsAsCurrency } from "@/lib/money";
 import { INVOICE_LINE_KIND_LABELS, INVOICE_STATUS_LABELS } from "@/lib/invoices/constants";
 import { cn } from "@/lib/utils";
@@ -25,8 +28,6 @@ const th = "px-3 py-2 text-left text-[12px] leading-[1.33] font-semibold trackin
 const td = "border-t border-[var(--border)] px-3 py-2 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--body)]";
 const tf = "border-t border-[var(--border-strong)] px-3 py-2.5 text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]";
 const card = "min-w-0 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] p-5";
-const eyebrow = "text-[12px] leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]";
-const disabledAction = "inline-flex h-10 w-full cursor-not-allowed items-center justify-center rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] px-4 text-[14px] font-semibold text-[var(--ink)] opacity-50";
 
 const CREDIT_TONE: Record<string, "warning" | "info" | "neutral" | "good" | "danger"> = {
   pending_approval: "warning", approved: "info", processing: "neutral", succeeded: "good", failed: "danger", rejected: "neutral",
@@ -64,31 +65,21 @@ export async function InvoiceDetailView({ id, canAct }: { id: string; canAct: bo
 
   // What to do about a mismatch, from what is actually true of this invoice: once the provider has
   // collected it cannot be voided, so the remedy is a credit note; before that, void and re-raise.
-  // "Needs a second approver" is said only when the credit note's amount would need one.
+  // "Needs a second approver" is said only when the credit note's amount would need one. When the
+  // provider charged MORE than we billed, the usual cause is a coupon or offer applied here but not
+  // to the membership in Whop (user decision 25 Sep: keep applying, say the gap plainly).
   const collected = invoice.status === "paid" || Boolean(invoice.provider_payment_id);
   const remedyCents = difference !== null ? Math.abs(difference) : null;
-  // The likely cause, named when the data points at it. Whop's API cannot attach a promo code to an
-  // existing membership, so a coupon or offer applied here discounts OUR invoice while Whop still
-  // charges full price (user decision 25 Sep: keep applying, say the gap plainly). That shows up as
-  // the provider charging more than we billed, on an invoice that carries a discount line.
-  const hasDiscountLine = lines.some((line) => line.kind === "discount" && line.amount_cents < 0);
   const providerChargedMore = difference !== null && difference < 0;
-  const cause = providerChargedMore
-    ? hasDiscountLine
-      ? <>Likely cause: this invoice carries a discount that was never applied to the membership in Whop&rsquo;s dashboard. A coupon or offer applied here changes our invoice only — Whop cannot take a code on an existing membership through its API.</>
-      : <>Check whether a coupon or offer was applied to this subscription here without the same code being applied in Whop&rsquo;s dashboard.</>
-    : difference !== null && difference > 0
-      ? <>Likely cause: a discount applied at Whop that this invoice does not carry.</>
-      : null;
   const remedy = providerChargedMore
     ? collected
-      ? <>The customer paid Whop&rsquo;s price. Apply the same code to the membership in Whop&rsquo;s dashboard so the next charge matches, and decide whether the difference of {formatCentsAsCurrency(remedyCents ?? 0)} is owed back. A credit note against this invoice would not settle it.</>
-      : <>Apply the same code to the membership in Whop&rsquo;s dashboard before it charges, or void this invoice and re-raise it at Whop&rsquo;s price.</>
+      ? `Apply the same code to the membership in Whop so the next charge matches, and decide whether ${formatCentsAsCurrency(remedyCents ?? 0)} is owed back.`
+      : "Apply the same code to the membership in Whop before it charges, or void this invoice and re-raise it at Whop's price."
     : collected
       ? remedyCents
-        ? <>Raise a credit note for {formatCentsAsCurrency(remedyCents)}{needsSecondApprover("refund", remedyCents, approvalThresholdCents) ? " — which needs a second approver" : ""}.</>
-        : <>Check the provider record before raising anything.</>
-      : <>Void it and re-raise at the amount the provider will charge.</>;
+        ? `Raise a credit note for ${formatCentsAsCurrency(remedyCents)}${needsSecondApprover("refund", remedyCents, approvalThresholdCents) ? " (needs a second approver)" : ""}.`
+        : "Check the provider record before raising anything."
+      : "Void it and re-raise at the amount the provider will charge.";
 
   const activity = [
     ...payments.map((payment) => ({
@@ -125,7 +116,6 @@ export async function InvoiceDetailView({ id, canAct }: { id: string; canAct: bo
   );
 
   const lineItems = (
-    <div>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[620px] border-collapse">
           <thead>
@@ -166,17 +156,6 @@ export async function InvoiceDetailView({ id, canAct }: { id: string; canAct: bo
           </tfoot>
         </table>
       </div>
-      {mismatched && (
-        <div className="p-5">
-          <div className="rounded-[12px] border border-[var(--border)] border-l-[3px] border-l-[var(--error)] bg-[var(--error-surface)] px-4 py-3.5">
-            <p className="text-[14px] font-semibold text-[var(--error-ink)]">The provider and our ledger disagree</p>
-            <p className="mt-1.5 text-[14px] leading-normal text-[var(--body)]">
-              Our lines total {formatCentsAsCurrency(invoice.total_cents)}; the provider charged {invoice.provider_total_cents === null ? "an amount we have not received" : formatCentsAsCurrency(invoice.provider_total_cents)}. The card was charged the provider&rsquo;s figure, not ours. {cause && <>{cause} </>}<strong className="font-semibold text-[var(--ink)]">Do not edit this invoice.</strong> {remedy}
-            </p>
-          </div>
-        </div>
-      )}
-    </div>
   );
 
   const creditPanel = creditNotes.length === 0 ? (
@@ -207,16 +186,15 @@ export async function InvoiceDetailView({ id, canAct }: { id: string; canAct: bo
         backHref="/admin/invoices"
         backLabel="Back to invoices"
         title={invoice.number}
-        subtitle="One invoice, its lines, and what the provider says happened."
+        subtitle=""
         actions={
-          <Link href={`/admin/invoices/${invoice.id}/print`} className="inline-flex h-11 items-center justify-center rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] px-4 text-[14px] font-semibold text-[var(--ink)] no-underline hover:bg-[var(--surface-alt)]">
-            Print view
-          </Link>
+          <Button asChild variant="outline">
+            <Link href={`/admin/invoices/${invoice.id}/print`}>Print view</Link>
+          </Button>
         }
       />
-      <BillingTabs />
 
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="-mt-3 flex flex-wrap items-center gap-2">
         {mismatched
           ? <StatusChip tone="danger" dot>Mismatched</StatusChip>
           : <StatusChip tone={reconciliationTone(invoice.reconciliation)}>{invoice.reconciliation.replace(/_/g, " ")}</StatusChip>}
@@ -225,23 +203,28 @@ export async function InvoiceDetailView({ id, canAct }: { id: string; canAct: bo
         <StatusChip tone="neutral">{invoice.currency.toUpperCase()}</StatusChip>
       </div>
 
-      <div className={card}>
-        <dl className="m-0 grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-3 lg:grid-cols-5">
-          {[
-            { label: "Issued", value: fullDate(invoice.issued_at) },
-            { label: "Due", value: fullDate(invoice.due_at) },
-            { label: "Our total", value: formatCentsAsCurrency(invoice.total_cents) },
-            { label: "Provider charged", value: invoice.provider_total_cents === null ? "—" : formatCentsAsCurrency(invoice.provider_total_cents) },
-            { label: "Difference", value: difference === null ? "—" : difference === 0 ? "None" : formatCentsAsCurrency(Math.abs(difference)), tone: difference ? "text-[var(--error-ink)]" : undefined },
-          ].map((item) => (
-            <div key={item.label} className="min-w-0">
-              <dt className={eyebrow}>{item.label}</dt>
-              <dd className={cn("m-0 mt-1 text-[14px] font-semibold tabular-nums text-[var(--ink)]", item.tone)}>{item.value}</dd>
-            </div>
-          ))}
-        </dl>
-        {invoice.paid_at && <p className="mt-3 text-[12px] text-[var(--muted)]">Paid {formatUtcDateTime(invoice.paid_at)}{invoice.provider_payment_id ? ` · provider payment ${invoice.provider_payment_id}` : ""}</p>}
-      </div>
+      <BoardStatGrid>
+        <StatTile label="Issued" value={fullDate(invoice.issued_at)} />
+        <StatTile label="Due" value={fullDate(invoice.due_at)} />
+        <StatTile label="Our total" value={formatCentsAsCurrency(invoice.total_cents)} footnote={invoice.paid_at ? `Paid ${formatUtcDateTime(invoice.paid_at)}` : undefined} />
+        <StatTile
+          label="Provider charged"
+          value={invoice.provider_total_cents === null ? "—" : formatCentsAsCurrency(invoice.provider_total_cents)}
+          footnote={invoice.provider_payment_id ? <span className="break-all">{invoice.provider_payment_id}</span> : undefined}
+        />
+        <StatTile
+          label="Difference"
+          value={difference === null ? "—" : difference === 0 ? "None" : formatCentsAsCurrency(Math.abs(difference))}
+          valueTone={difference ? "danger" : undefined}
+        />
+      </BoardStatGrid>
+
+      {mismatched && (
+        <Callout
+          tone="error"
+          title={`The provider charged ${invoice.provider_total_cents === null ? "an amount we have not received" : formatCentsAsCurrency(invoice.provider_total_cents)}, we billed ${formatCentsAsCurrency(invoice.total_cents)} — do not edit this invoice. ${remedy}`}
+        />
+      )}
 
       <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">
         <InvoiceDetailTabs
@@ -253,10 +236,6 @@ export async function InvoiceDetailView({ id, canAct }: { id: string; canAct: bo
         />
 
         <div className="flex min-w-0 flex-col gap-4">
-          <section className={card} aria-labelledby="provider-activity">
-            <h2 id="provider-activity" className="text-[18px] leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]">Provider activity</h2>
-            <div className="mt-3.5">{timeline}</div>
-          </section>
           <section className={card} aria-labelledby="invoice-actions">
             <h2 id="invoice-actions" className="text-[18px] leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]">Actions</h2>
             {canAct ? (
@@ -265,7 +244,7 @@ export async function InvoiceDetailView({ id, canAct }: { id: string; canAct: bo
                   <MarkPaidDialog invoiceId={invoice.id} number={invoice.number} remainingCents={remainingCents} />
                 ) : (
                   <div>
-                    <span className={disabledAction} aria-disabled="true">Mark paid</span>
+                    <Button variant="outline" className="w-full" disabled>Mark paid</Button>
                     <p className="mt-1.5 text-[12px] text-[var(--muted)]">{invoice.status === "void" ? "A voided invoice cannot be paid." : "Already paid in full."}</p>
                   </div>
                 )}
@@ -280,8 +259,8 @@ export async function InvoiceDetailView({ id, canAct }: { id: string; canAct: bo
                   />
                 ) : (
                   <div>
-                    <span className={disabledAction} aria-disabled="true">Raise a credit note</span>
-                    <p className="mt-1.5 text-[12px] text-[var(--muted)]">A credit note gives back money that was collected; this invoice is {INVOICE_STATUS_LABELS[invoice.status].toLowerCase()}, not paid.</p>
+                    <Button variant="outline" className="w-full" disabled>Raise a credit note</Button>
+                    <p className="mt-1.5 text-[12px] text-[var(--muted)]">Only a paid invoice can be credited; this one is {INVOICE_STATUS_LABELS[invoice.status].toLowerCase()}.</p>
                   </div>
                 )}
                 <VoidInvoiceDialog invoiceId={invoice.id} number={invoice.number} refusalReason={voidRefusalReason(invoice.status)} />

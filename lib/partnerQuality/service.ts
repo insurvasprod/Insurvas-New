@@ -137,7 +137,13 @@ export async function listPartnerQuality(tenantId: string, filters: { from?: unk
   const { data, error } = await getSupabaseServiceClient().rpc("partner_quality_report", { p_tenant_id: tenantId, p_from_date: from, p_to_date: to });
   if (error) throw new Error(`Could not load partner quality: ${error.message}`);
   const report = normalizeReport(data, readOnly);
-  return { ...report, team: await loadTeamMetrics(tenantId, report) };
+  const [team, types] = await Promise.all([
+    loadTeamMetrics(tenantId, report),
+    report.rows.length ? getSupabaseServiceClient().from("partners").select("id, partner_type").eq("tenant_id", tenantId) : Promise.resolve({ data: [], error: null }),
+  ]);
+  if (types.error) throw new Error(`Could not load partner types: ${types.error.message}`);
+  const typeById = new Map(((types.data ?? []) as { id: string; partner_type: string | null }[]).map((partner) => [partner.id, partner.partner_type]));
+  return { ...report, rows: report.rows.map((row) => ({ ...row, partner_type: typeById.get(row.partner_id) ?? null })), team };
 }
 
 export async function listPartnerQualityLeads(tenantId: string, filters: { from: unknown; to: unknown; partnerId: unknown; partnerUserId?: unknown; metric: unknown; disposition?: unknown; page?: unknown; pageSize?: unknown }) {

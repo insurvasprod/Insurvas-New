@@ -1,21 +1,20 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
-import { MoreHorizontal, SlidersHorizontal } from "lucide-react";
+import { MoreHorizontal } from "lucide-react";
 
 import { notify } from "@/lib/notify";
-import { AdminPageHeader } from "@/components/admin/page-header";
+import { PageHeader } from "@/components/ui/page-header";
+import { Button } from "@/components/ui/button";
+import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
+import { TableCard } from "@/components/ui/table-card";
 import { BoardStatGrid, BoardStatTile } from "@/components/admin/board-stat-tile";
 import { BoardTableFooter } from "@/components/admin/board-table-footer";
-import { btn, Callout, Pill, SearchBox, st } from "@/components/app/settings/primitives";
+import { btn, Pill, st } from "@/components/app/settings/primitives";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
@@ -34,8 +33,6 @@ import { CarrierDialog } from "./carrier-dialog";
 import { CarrierDeactivateDialog } from "./carrier-deactivate-dialog";
 
 const PAGE_SIZE = 25;
-const TOOL_BUTTON =
-  "inline-flex h-10 shrink-0 items-center gap-2 rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] px-3.5 text-[14px] leading-[1.43] font-semibold tracking-[-0.01em] text-[var(--ink)] hover:bg-[var(--surface-alt)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]";
 const MENU_ITEM = "text-[14px] tracking-[-0.02em] text-[var(--ink)]";
 
 type StateFilter = "all" | "active" | "inactive";
@@ -52,8 +49,8 @@ const USAGE_OPTIONS: { value: UsageFilter; label: string }[] = [
 ];
 
 /**
- * The Carriers board (p-adm-carriers): header, four figures, toolbar, the platform library table,
- * its footer and the deactivation callout. Rows, usage and figures are refreshed from
+ * The Carriers board (p-adm-carriers): header, four figures, and the platform library table with
+ * its toolbar and footer. Rows, usage and figures are refreshed from
  * /api/admin/carriers after every change.
  */
 export function CarriersTable({
@@ -76,6 +73,7 @@ export function CarriersTable({
   const [editing, setEditing] = useState<CarrierRow | null>(null);
   const [blocked, setBlocked] = useState<{ carrier: CarrierRow; usage: CarrierBlockingUsage | null } | null>(null);
   const [pending, setPending] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   const refresh = useCallback(async () => {
     const response = await fetch("/api/admin/carriers", { cache: "no-store" }).catch(() => null);
@@ -84,6 +82,12 @@ export function CarriersTable({
     setCarriers(body.carriers);
     setUsage(body.usage);
   }, []);
+
+  async function reload() {
+    setRefreshing(true);
+    await refresh();
+    setRefreshing(false);
+  }
 
   const usageFor = (id: string) => (usage.available ? usage.byCarrier[id] : undefined);
 
@@ -142,7 +146,6 @@ export function CarriersTable({
   const pages = Math.max(1, Math.ceil(visible.length / PAGE_SIZE));
   const current = Math.min(page, pages);
   const rows = visible.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE);
-  const changedFilters = (stateFilter !== "all" ? 1 : 0) + (usageFilter !== "any" ? 1 : 0);
 
   function clearAll() {
     setSearch("");
@@ -161,13 +164,12 @@ export function CarriersTable({
 
   return (
     <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
-      <AdminPageHeader
+      <PageHeader
         title="Carriers"
-        subtitle="The platform carrier library agents pick from when configuring their contracts."
         actions={
-          <button type="button" className={btn("primary", "h-11")} onClick={() => setCreating(true)}>
+          <Button type="button" onClick={() => setCreating(true)}>
             New carrier
-          </button>
+          </Button>
         }
       />
 
@@ -201,68 +203,53 @@ export function CarriersTable({
         />
       </BoardStatGrid>
 
-      <div className="flex w-full flex-wrap items-center gap-3 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] p-3">
-        <SearchBox
-          value={search}
-          onChange={(value) => {
-            setSearch(value);
-            setPage(1);
-          }}
-          placeholder="Search carriers"
-          label="Search carriers by name or code"
-        />
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button type="button" className={TOOL_BUTTON} aria-label={changedFilters > 0 ? `Filters, ${changedFilters} changed` : "Filters"}>
-              <SlidersHorizontal className="size-[15px]" strokeWidth={2.2} aria-hidden="true" />
-              Filters
-              {changedFilters > 0 && (
-                <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--surface-alt)] px-1.5 text-[12px] leading-[1.5] font-semibold tracking-[-0.01em] text-[var(--ink)] tabular-nums">
-                  {changedFilters}
-                </span>
-              )}
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="min-w-[220px]">
-            <DropdownMenuLabel className="text-[12px]">State</DropdownMenuLabel>
-            <DropdownMenuRadioGroup
+      <TableCard
+        toolbar={
+          <DataToolbar actions={<RefreshButton onClick={() => void reload()} refreshing={refreshing} />}>
+            <ToolbarSearch
+              value={search}
+              onChange={(value) => {
+                setSearch(value);
+                setPage(1);
+              }}
+              placeholder="Search carriers"
+              label="Search carriers by name or code"
+            />
+            <select
+              aria-label="State"
+              className={toolbarControl}
               value={stateFilter}
-              onValueChange={(value) => {
-                setStateFilter(value as StateFilter);
+              onChange={(event) => {
+                setStateFilter(event.target.value as StateFilter);
                 setPage(1);
               }}
             >
               {STATE_OPTIONS.map((option) => (
-                <DropdownMenuRadioItem key={option.value} value={option.value} className={MENU_ITEM}>
+                <option key={option.value} value={option.value}>
                   {option.label}
-                </DropdownMenuRadioItem>
+                </option>
               ))}
-            </DropdownMenuRadioGroup>
+            </select>
             {usage.available && (
-              <>
-                <DropdownMenuSeparator />
-                <DropdownMenuLabel className="text-[12px]">Usage</DropdownMenuLabel>
-                <DropdownMenuRadioGroup
-                  value={usageFilter}
-                  onValueChange={(value) => {
-                    setUsageFilter(value as UsageFilter);
-                    setPage(1);
-                  }}
-                >
-                  {USAGE_OPTIONS.map((option) => (
-                    <DropdownMenuRadioItem key={option.value} value={option.value} className={MENU_ITEM}>
-                      {option.label}
-                    </DropdownMenuRadioItem>
-                  ))}
-                </DropdownMenuRadioGroup>
-              </>
+              <select
+                aria-label="Usage"
+                className={toolbarControl}
+                value={usageFilter}
+                onChange={(event) => {
+                  setUsageFilter(event.target.value as UsageFilter);
+                  setPage(1);
+                }}
+              >
+                {USAGE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
             )}
-          </DropdownMenuContent>
-        </DropdownMenu>
-        <span className="flex-1" />
-      </div>
-
-      <section className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-[12px] border border-[var(--border)] bg-[var(--surface)]">
+          </DataToolbar>
+        }
+      >
         <div className="min-w-0 overflow-x-auto">
           <table className={cn(st.table, "min-w-[860px]")}>
             <thead>
@@ -344,7 +331,6 @@ export function CarriersTable({
             </tbody>
           </table>
         </div>
-        <div className="flex-1" />
         <BoardTableFooter
           page={current}
           pageSize={PAGE_SIZE}
@@ -353,13 +339,7 @@ export function CarriersTable({
           order="by sort order, then name"
           onPageChange={setPage}
         />
-      </section>
-
-      <Callout tone="warning" title="Deactivating hides a carrier from every tenant">
-        This library is what an agent picks from in Settings › Carrier library, so deactivating a carrier affects live tenants.
-        One that tenants still use — an active contract or an open appointment — can only be deactivated by a super admin with a
-        recorded reason. Carriers are never deleted here.
-      </Callout>
+      </TableCard>
 
       <CarrierDialog open={creating} onClose={() => setCreating(false)} onSaved={refresh} />
       <CarrierDialog key={editing?.id ?? "edit-none"} open={Boolean(editing)} carrier={editing} onClose={() => setEditing(null)} onSaved={refresh} />

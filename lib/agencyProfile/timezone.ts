@@ -24,13 +24,24 @@ function knownZone(value: unknown): string | null {
   }
 }
 
+// The read in flight per tenant, so two callers in the same render (the dashboard asks for the zone
+// in the page and again in its streamed "today" section) share one round trip instead of both
+// missing the cache while the first is still on the wire.
+const pending = new Map<string, Promise<string | null>>();
+
 export async function getWorkspaceTimezone(tenantId: string): Promise<string | null> {
   const hit = cache.get(tenantId);
   if (hit && Date.now() - hit.at < TTL_MS) return hit.zone;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- agency_profiles is not in the shared generated types yet
-  const { data, error } = await (getSupabaseServiceClient() as any).from("agency_profiles").select("timezone").eq("tenant_id", tenantId).maybeSingle();
-  const zone = error ? null : knownZone((data as { timezone?: string | null } | null)?.timezone);
-  cache.set(tenantId, { zone, at: Date.now() });
-  if (cache.size > 2000) cache.clear();
-  return zone;
+  const inFlight = pending.get(tenantId);
+  if (inFlight) return inFlight;
+  const read = (async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- agency_profiles is not in the shared generated types yet
+    const { data, error } = await (getSupabaseServiceClient() as any).from("agency_profiles").select("timezone").eq("tenant_id", tenantId).maybeSingle();
+    const zone = error ? null : knownZone((data as { timezone?: string | null } | null)?.timezone);
+    cache.set(tenantId, { zone, at: Date.now() });
+    if (cache.size > 2000) cache.clear();
+    return zone;
+  })().finally(() => pending.delete(tenantId));
+  pending.set(tenantId, read);
+  return read;
 }

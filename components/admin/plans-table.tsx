@@ -1,16 +1,19 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronDown, MoreHorizontal, Search } from "lucide-react";
+import { MoreHorizontal } from "lucide-react";
 import { notify } from "@/lib/notify";
 
 import { BoardStatGrid, BoardStatTile } from "@/components/admin/board-stat-tile";
 import { BoardTableFooter } from "@/components/admin/board-table-footer";
 import { EmptyState, NoMatches } from "@/components/admin/empty-state";
 import { StatusChip } from "@/components/admin/status-chip";
+import { Button } from "@/components/ui/button";
+import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { PageHeader } from "@/components/ui/page-header";
+import { TableCard } from "@/components/ui/table-card";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { PLAN_TYPES, PLAN_TYPE_LABELS, type PlanListRow, type PlanType } from "@/lib/plans/constants";
 import { availableBillingCycles, formatCentsAsCurrency, priceForCycle, type PlanPrices } from "@/lib/money";
@@ -19,10 +22,8 @@ import { PlanDialog } from "./plan-dialog";
 
 const PAGE = 25;
 const CYCLE_SHORT = { monthly: "mo", quarterly: "qtr", yearly: "yr" } as const;
-const control = "h-10 rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] px-3.5 text-[14px] leading-[1.43] font-semibold tracking-[-0.01em] text-[var(--ink)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]";
 const th = "px-3 py-2 text-left text-[12px] leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]";
 const td = "border-t border-[var(--border)] px-3 py-2 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--body)]";
-const primary44 = "inline-flex h-11 items-center justify-center rounded-[8px] border border-transparent bg-[var(--primary)] px-4 text-[14px] font-semibold text-[var(--on-primary)] hover:bg-[var(--accent-hover)]";
 
 /** The cheapest offered cycle, with the others on hover. A plan with no price on any cycle cannot be sold. */
 function PriceCell({ prices }: { prices: PlanPrices | null }) {
@@ -38,7 +39,7 @@ function PriceCell({ prices }: { prices: PlanPrices | null }) {
 }
 
 /**
- * The plans board (p-adm-plans): header with New plan, four figures, one control bar, the table.
+ * The plans board (p-adm-plans): header with New plan, the figure strip, then one TableCard with its toolbar inside.
  *
  * Reads its rows from the page (server props) and refreshes through the router after a change, so
  * the figures, the table and a plan created from the header can never disagree.
@@ -55,6 +56,7 @@ export function PlansTable({
   latestSubscribers: Record<string, number>;
 }) {
   const router = useRouter();
+  const [refreshing, startRefresh] = useTransition();
   const [includeArchived, setIncludeArchived] = useState(false);
   const [query, setQuery] = useState("");
   const [type, setType] = useState<"" | PlanType>("");
@@ -112,8 +114,8 @@ export function PlansTable({
     <div className="flex min-w-0 flex-col gap-6">
       <PageHeader
         title="Plans"
-        description="What the business sells. Each plan is versioned; existing subscribers keep the version they bought."
-        actions={<button type="button" className={primary44} onClick={() => setCreating(true)}>New plan</button>}
+        description="Existing subscribers keep the version they bought."
+        actions={<Button type="button" onClick={() => setCreating(true)}>New plan</Button>}
       />
 
       <BoardStatGrid>
@@ -123,27 +125,23 @@ export function PlansTable({
         <BoardStatTile label="On an old version" value={onOld.toLocaleString()} footnote={subscribers > 0 ? `${((onOld / subscribers) * 100).toFixed(1)}%` : "nobody subscribed yet"} />
       </BoardStatGrid>
 
-      <div className="flex flex-wrap items-center gap-3 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] p-3">
-        <button type="button" aria-pressed={includeArchived} onClick={() => { setIncludeArchived((v) => !v); setPage(1); }} className={cn(control, includeArchived && "border-[var(--primary)] bg-[var(--brand-50)]")}>
-          Including archived{archivedCount > 0 ? ` (${archivedCount})` : ""}
-        </button>
-        <span className="flex h-10 w-full items-center gap-2 rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] px-3 text-[var(--muted)] sm:w-[248px]">
-          <Search className="size-4 shrink-0" aria-hidden />
-          <input type="search" aria-label="Search plan or code" placeholder="Search plan or code" value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} className="min-w-0 flex-grow border-0 bg-transparent text-[14px] text-[var(--ink)] outline-none placeholder:text-[var(--muted)]" />
-        </span>
-        <span className="relative inline-flex">
-          <select aria-label="Plan type" value={type} onChange={(event) => { setType(event.target.value as "" | PlanType); setPage(1); }} className={cn(control, "appearance-none pr-9")}>
-            <option value="">Every type</option>
-            {PLAN_TYPES.map((value) => <option key={value} value={value}>{PLAN_TYPE_LABELS[value]}</option>)}
-          </select>
-          <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-[var(--muted)]" aria-hidden />
-        </span>
-        <span className="flex-grow" />
-        {anyFilter && <button type="button" onClick={() => { setQuery(""); setType(""); setPage(1); }} className="text-[14px] font-semibold text-[var(--ink)] hover:underline">Clear</button>}
-      </div>
-
-      <div className="relative min-w-0 overflow-hidden rounded-[12px] border border-[var(--border)] bg-[var(--surface)]">
-        <div className="overflow-x-auto">
+      <TableCard
+        className="min-w-0"
+        toolbar={
+          <DataToolbar actions={<RefreshButton onClick={() => startRefresh(() => router.refresh())} refreshing={refreshing} />}>
+            <ToolbarSearch value={query} onChange={(value) => { setQuery(value); setPage(1); }} placeholder="Search plan or code" />
+            <select aria-label="Plan type" value={type} onChange={(event) => { setType(event.target.value as "" | PlanType); setPage(1); }} className={toolbarControl}>
+              <option value="">Every type</option>
+              {PLAN_TYPES.map((value) => <option key={value} value={value}>{PLAN_TYPE_LABELS[value]}</option>)}
+            </select>
+            <select aria-label="Archived plans" value={includeArchived ? "include" : "hide"} onChange={(event) => { setIncludeArchived(event.target.value === "include"); setPage(1); }} className={toolbarControl}>
+              <option value="hide">Hide archived</option>
+              <option value="include">Including archived{archivedCount > 0 ? ` (${archivedCount})` : ""}</option>
+            </select>
+            {anyFilter && <Button type="button" variant="ghost" onClick={() => { setQuery(""); setType(""); setPage(1); }}>Clear</Button>}
+          </DataToolbar>
+        }
+      >
           <table className="w-full min-w-[880px] border-collapse">
             <thead>
               <tr className="bg-[var(--surface-alt)]">
@@ -160,7 +158,7 @@ export function PlansTable({
               {shown.length === 0 ? (
                 <tr><td colSpan={7} className="p-0">
                   {anyFilter ? <NoMatches noun="plans" onClear={() => { setQuery(""); setType(""); }} /> : (
-                    <EmptyState title="No plans yet" hint="A plan is what a tenant subscribes to: the features it grants, the meters it allows and the price on each cycle. Nothing can be sold until one exists." />
+                    <EmptyState title="No plans yet" hint="Nothing can be sold until one exists. Create the first with New plan." />
                   )}
                 </td></tr>
               ) : shown.map((plan) => {
@@ -187,9 +185,9 @@ export function PlansTable({
                     <td className={cn(td, "text-right")}>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <button type="button" aria-label={`Actions for ${plan.name}`} disabled={pendingId === plan.id} className="inline-flex size-8 items-center justify-center rounded-[8px] text-[var(--muted)] hover:bg-[var(--surface-alt)] hover:text-[var(--ink)] disabled:opacity-50">
-                            <MoreHorizontal className="size-4" aria-hidden />
-                          </button>
+                          <Button type="button" variant="ghost" size="icon-sm" aria-label={`Actions for ${plan.name}`} disabled={pendingId === plan.id}>
+                            <MoreHorizontal aria-hidden />
+                          </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem asChild><Link href={`/admin/plans/${plan.id}/edit`}>Edit features &amp; pricing</Link></DropdownMenuItem>
@@ -209,14 +207,8 @@ export function PlansTable({
               })}
             </tbody>
           </table>
-        </div>
         {rows.length > 0 && <BoardTableFooter page={current} pageSize={PAGE} total={rows.length} itemLabel={rows.length === 1 ? "plan" : "plans"} order="most subscribers first" onPageChange={setPage} />}
-      </div>
-
-      <div className="rounded-[12px] border border-[var(--border)] border-l-[3px] border-l-[var(--info)] bg-[var(--info-surface)] px-4 py-3.5">
-        <p className="text-[14px] font-semibold text-[var(--info-ink)]">Publishing a version never moves anyone</p>
-        <p className="mt-1.5 text-[14px] leading-normal text-[var(--body)]">A new version is for new and renewing subscriptions; everyone already subscribed keeps the version they bought. A published version is never changed afterwards, and a plan anyone has ever been on is archived, never deleted.</p>
-      </div>
+      </TableCard>
 
       <PlanDialog mode="create" open={creating} onClose={() => setCreating(false)} onSaved={() => router.refresh()} />
       <PlanDialog key={`edit-${editing?.id ?? "none"}`} mode="edit" open={editing !== null} plan={editing} onClose={() => setEditing(null)} onSaved={() => router.refresh()} />

@@ -5,9 +5,12 @@ import { ShieldCheck } from "lucide-react";
 import { notify } from "@/lib/notify";
 
 import { Button } from "@/components/ui/button";
+import { DataToolbar, RefreshButton, ToolbarSearch } from "@/components/ui/data-toolbar";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { ErrorState, LoadingRows } from "@/components/ui/page-states";
+import { EmptyState, ErrorState, NoMatches, SectionLoading } from "@/components/ui/page-states";
+import { Pager, paginate } from "@/components/ui/pager";
 import { StatusChip } from "@/components/ui/status-chip";
+import { TableCard } from "@/components/ui/table-card";
 import { formatPhone, normalizeDigits } from "@/lib/suppression/constants";
 import {
   CLEARED_LIST_LABELS,
@@ -54,8 +57,9 @@ const STATE_CHIP: Record<DncExemption["state"], { tone: "good" | "neutral" | "wa
 
 const th = "bg-[var(--surface-alt)] px-3 py-2 text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] text-muted-foreground";
 const td = "border-t border-border px-3 py-2 text-sm leading-normal tracking-[-0.02em] text-[var(--body)] align-top";
-const field = "h-10 w-full rounded-lg border border-[var(--border-strong)] bg-card px-3 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring";
+const field = "h-9 w-full rounded-lg border border-[var(--border-strong)] bg-card px-3 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring";
 const today = () => new Date().toISOString().slice(0, 10);
+const PAGE_SIZE = 10;
 
 type Draft = { phone: string; basis: DncExemptionBasis; consentArtefactId: string; relationshipKind: RelationshipKind; relationshipDate: string; note: string };
 const EMPTY: Draft = { phone: "", basis: "existing_business_relationship", consentArtefactId: "", relationshipKind: "purchase", relationshipDate: "", note: "" };
@@ -71,6 +75,9 @@ export function TcpaDncExemptions({ onChanged }: { onChanged?: () => void }) {
   const [certificatesFor, setCertificatesFor] = useState<string | null>(null);
   const [revoking, setRevoking] = useState<DncExemption | null>(null);
   const [reason, setReason] = useState("");
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     let live = true;
@@ -80,7 +87,8 @@ export function TcpaDncExemptions({ onChanged }: { onChanged?: () => void }) {
         if (!response.ok) throw new Error(body?.error ?? "Could not load DNC exemptions");
         if (live) { setLoaded(body as Loaded); setError(null); }
       })
-      .catch((failure: unknown) => { if (live) setError(failure instanceof Error ? failure.message : "Could not load DNC exemptions"); });
+      .catch((failure: unknown) => { if (live) setError(failure instanceof Error ? failure.message : "Could not load DNC exemptions"); })
+      .finally(() => { if (live) setRefreshing(false); });
     return () => { live = false; };
   }, [reload]);
 
@@ -144,21 +152,31 @@ export function TcpaDncExemptions({ onChanged }: { onChanged?: () => void }) {
   const canSave = Boolean(typedDigits) && (draft.basis === "written_consent" ? Boolean(draft.consentArtefactId) && certificatesFor === typedDigits : Boolean(draft.relationshipDate));
   const exemptions = loaded?.exemptions ?? [];
   const numberOf = new Map(exemptions.map((row) => [row.id, row.phoneDigits]));
+  const query = search.replace(/\D/g, "");
+  const matching = query ? exemptions.filter((row) => row.phoneDigits.includes(query)) : exemptions;
+  const { current, rows: shown } = paginate(matching, page, PAGE_SIZE);
 
   return (
-    <section className="relative overflow-hidden rounded-xl border border-border bg-card" aria-labelledby="tcpa-exemptions-heading">
-      <div className="flex flex-wrap items-center gap-3 border-b border-border bg-[var(--surface-alt)] px-4 py-3">
-        <div className="min-w-0 flex-grow">
-          <h2 id="tcpa-exemptions-heading" className="text-sm font-semibold leading-normal tracking-[-0.02em] text-foreground">DNC exemptions</h2>
-          <p className="text-xs leading-normal text-muted-foreground">Recorded consent or an existing business relationship clears federal and state DNC for one number. It never clears your own list or a litigator.</p>
-        </div>
-        {loaded?.canEdit && loaded.schemaReady && <Button variant="outline" className="h-10 border-[var(--border-strong)] px-4" onClick={() => setOpen(true)}><ShieldCheck className="size-4" aria-hidden="true" />Record an exemption</Button>}
-      </div>
+    <TableCard
+      title="DNC exemptions"
+      toolbar={
+        <DataToolbar
+          actions={<>
+            {loaded?.canEdit && loaded.schemaReady && <Button variant="outline" onClick={() => setOpen(true)}><ShieldCheck aria-hidden="true" />Record an exemption</Button>}
+            <RefreshButton onClick={() => { setRefreshing(true); setReload((value) => value + 1); }} refreshing={refreshing} />
+          </>}
+        >
+          <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Search numbers" label="Search exemptions by number" />
+        </DataToolbar>
+      }
+      footer={loaded?.schemaReady && matching.length > 0 ? <Pager page={current} total={matching.length} noun={matching.length === 1 ? "exemption" : "exemptions"} onPage={setPage} pageSize={PAGE_SIZE} /> : undefined}
+    >
       {error ? <ErrorState title="DNC exemptions did not load" detail={error} action={<Button variant="outline" onClick={() => setReload((value) => value + 1)}>Try again</Button>} />
-        : !loaded ? <LoadingRows rows={2} columns={6} />
-        : !loaded.schemaReady ? <p className="px-4 py-6 text-sm leading-normal text-muted-foreground">DNC exemptions need a database update that has not been applied yet. Until it is, a federal or state DNC number cannot be cleared.</p>
-        : exemptions.length === 0 ? <p className="px-4 py-6 text-center text-sm leading-normal text-muted-foreground">No exemption is recorded. A number on federal or state DNC is refused until an owner records written consent or an existing business relationship for it.</p>
-        : <div className="overflow-x-auto">
+        : !loaded ? <SectionLoading rows={2} columns={6} label="Loading DNC exemptions" />
+        : !loaded.schemaReady ? <p className="px-4 py-3 text-sm text-[var(--warning-ink)]" role="note">DNC exemptions need a database update — until it is applied, federal and state DNC numbers cannot be cleared.</p>
+        : exemptions.length === 0 ? <EmptyState title="No exemptions recorded" hint="Federal and state DNC numbers are refused until an owner records consent or a business relationship." />
+        : matching.length === 0 ? <NoMatches noun="exemptions" onClear={() => { setSearch(""); setPage(1); }} />
+        : <>
           <table className="w-full min-w-[900px] table-fixed border-collapse text-left">
             <thead><tr>
               <th className={`${th} w-[150px]`}>Number</th>
@@ -168,7 +186,7 @@ export function TcpaDncExemptions({ onChanged }: { onChanged?: () => void }) {
               <th className={`${th} w-[130px] text-right`}>Uses</th>
               <th className={`${th} w-[100px] text-right`}><span className="sr-only">Action</span></th>
             </tr></thead>
-            <tbody>{exemptions.map((row) => <tr key={row.id} className="m-row">
+            <tbody>{shown.map((row) => <tr key={row.id} className="m-row">
               <td className={`${td} font-semibold tabular-nums text-foreground`}>{formatPhone(row.phoneDigits)}</td>
               <td className={td}>
                 {DNC_EXEMPTION_BASIS_LABELS[row.basis]}
@@ -185,7 +203,7 @@ export function TcpaDncExemptions({ onChanged }: { onChanged?: () => void }) {
               </td>
               <td className={`${td} tabular-nums`}>{day(row.recordedAt)}<span className="block text-xs text-muted-foreground">{row.recordedByName ?? "—"}</span></td>
               <td className={`${td} text-right tabular-nums`}>{row.uses.toLocaleString()}{row.lastUsedAt && <span className="block text-xs text-muted-foreground">last {stamp(row.lastUsedAt)}</span>}</td>
-              <td className={`${td} text-right`}>{loaded.canEdit && row.state !== "revoked" ? <button type="button" className="text-sm font-semibold text-[var(--error-ink)] hover:underline" onClick={() => { setRevoking(row); setReason(""); }}>Revoke</button> : null}</td>
+              <td className={`${td} text-right`}>{loaded.canEdit && row.state !== "revoked" ? <Button type="button" variant="outline" size="sm" className="text-[var(--error-ink)]" onClick={() => { setRevoking(row); setReason(""); }}>Revoke</Button> : null}</td>
             </tr>)}</tbody>
           </table>
           {loaded.uses.length > 0 && <div className="border-t border-border px-4 py-3">
@@ -197,13 +215,13 @@ export function TcpaDncExemptions({ onChanged }: { onChanged?: () => void }) {
               </li>)}
             </ul>
           </div>}
-        </div>}
+        </>}
 
       <Dialog open={open} onOpenChange={(next) => { setOpen(next); if (!next) { setCertificates(null); setCertificatesFor(null); } }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Record a DNC exemption</DialogTitle>
-            <DialogDescription>Clears federal and state DNC for this one number. Your own do-not-call list and the litigator list still refuse it. Every dial it allows is recorded.</DialogDescription>
+            <DialogDescription>Clears federal and state DNC for this one number — never your own list or a litigator.</DialogDescription>
           </DialogHeader>
           <form onSubmit={record} className="grid gap-4">
             <label className="grid gap-1.5">
@@ -218,7 +236,7 @@ export function TcpaDncExemptions({ onChanged }: { onChanged?: () => void }) {
               </label>)}
             </fieldset>
             {draft.basis === "written_consent" ? <div className="grid gap-2">
-              <Button type="button" variant="outline" className="h-10 justify-self-start border-[var(--border-strong)] px-4" disabled={!typedDigits} onClick={() => void findCertificates()}>Find consent certificates</Button>
+              <Button type="button" variant="outline" className="justify-self-start" disabled={!typedDigits} onClick={() => void findCertificates()}>Find consent certificates</Button>
               {certificatesFor && certificatesFor !== typedDigits && <p className="text-xs text-[var(--warning-ink)]">The number changed. Find its certificates again.</p>}
               {certificates && certificates.length === 0 && <p className="text-sm text-[var(--warning-ink)]">No lead with this number has a consent certificate on file, so written consent cannot be recorded for it.</p>}
               {certificates && certificates.length > 0 && <div className="grid gap-1.5" role="radiogroup" aria-label="Consent certificate">
@@ -272,6 +290,6 @@ export function TcpaDncExemptions({ onChanged }: { onChanged?: () => void }) {
           </form>
         </DialogContent>
       </Dialog>
-    </section>
+    </TableCard>
   );
 }

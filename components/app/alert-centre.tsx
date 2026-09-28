@@ -1,11 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { CircleCheck, TriangleAlert } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { RefreshButton } from "@/components/ui/data-toolbar";
 import { EmptyState } from "@/components/ui/page-states";
+import { TableCard } from "@/components/ui/table-card";
 import type { CentreEntry } from "@/lib/agentAlerts/centre";
 import { KBD_ITEM_ATTRIBUTE, KBD_LIST_ATTRIBUTE } from "@/lib/keyboard/listNavigation";
 import { notify } from "@/lib/notify";
@@ -98,27 +100,28 @@ function ResolvedAlert({ entry }: { entry: CentreEntry }) {
 }
 
 export function AlertCentre({ open, resolved, canClaim }: { open: CentreEntry[]; resolved: CentreEntry[]; canClaim: boolean }) {
+  const router = useRouter();
+  const [refreshing, startRefresh] = useTransition();
   return (
-    <div className="flex flex-col gap-6">
-      <section aria-labelledby="alert-centre-open" className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]">
-        <header className="flex items-center justify-between gap-3 border-b border-[var(--border)] px-3.5 py-3">
-          <h2 id="alert-centre-open" className="text-sm font-semibold text-[var(--ink)]">Open</h2>
+    <>
+      <TableCard
+        title="Open"
+        action={<>
           <span className="text-xs text-[var(--muted)]">{open.length === 1 ? "1 alert open" : `${open.length} alerts open`}</span>
-        </header>
+          {/* The lists are server-rendered; Refresh re-reads them. */}
+          <RefreshButton onClick={() => startRefresh(() => router.refresh())} refreshing={refreshing} />
+        </>}
+      >
         {open.length
-          ? <ul {...{ [KBD_LIST_ATTRIBUTE]: "" }}>{open.map((entry) => <OpenAlert key={entry.leadId} entry={entry} canClaim={canClaim} />)}</ul>
-          : <EmptyState title="Nothing is wrong with the queue" hint="Unclaimed leads and escalations appear here the moment they are raised, and leave when somebody claims the work." />}
-      </section>
+          ? <ul className="border-t border-[var(--border)]" {...{ [KBD_LIST_ATTRIBUTE]: "" }}>{open.map((entry) => <OpenAlert key={entry.leadId} entry={entry} canClaim={canClaim} />)}</ul>
+          : <EmptyState title="Nothing is wrong with the queue" hint="Unclaimed leads and escalations appear here the moment they are raised." />}
+      </TableCard>
 
-      <section aria-labelledby="alert-centre-resolved" className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]">
-        <header className="flex items-center justify-between gap-3 border-b border-[var(--border)] px-3.5 py-3">
-          <h2 id="alert-centre-resolved" className="text-sm font-semibold text-[var(--ink)]">Resolved this week</h2>
-          <span className="text-xs text-[var(--muted)]">Last 7 days</span>
-        </header>
+      <TableCard title="Resolved this week" action={<span className="text-xs text-[var(--muted)]">Last 7 days</span>}>
         {resolved.length
-          ? <ul {...{ [KBD_LIST_ATTRIBUTE]: "" }}>{resolved.map((entry) => <ResolvedAlert key={entry.leadId} entry={entry} />)}</ul>
-          : <EmptyState title="Nothing resolved this week" hint="When an alert is fixed — the lead claimed, closed or expired — it moves here with what resolved it." />}
-      </section>
-    </div>
+          ? <ul className="border-t border-[var(--border)]" {...{ [KBD_LIST_ATTRIBUTE]: "" }}>{resolved.map((entry) => <ResolvedAlert key={entry.leadId} entry={entry} />)}</ul>
+          : <EmptyState title="Nothing resolved this week" hint="A fixed alert moves here with what resolved it." />}
+      </TableCard>
+    </>
   );
 }

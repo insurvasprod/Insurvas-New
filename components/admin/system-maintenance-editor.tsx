@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { btn, Callout, control, Field, SettingsCard, type Tone } from "@/components/app/settings/primitives";
+import { Button } from "@/components/ui/button";
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 import {
@@ -191,10 +192,7 @@ export function SystemMaintenanceEditor({
   return (
     <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1fr)_420px]">
       {/* ── Level ───────────────────────────────────────────────────────── */}
-      <SettingsCard
-        title="Level"
-        sub="Read only and locked are very different acts, so each is its own choice and every change is confirmed with a reason."
-      >
+      <SettingsCard title="Level">
         <fieldset className="m-0 flex min-w-0 flex-col gap-2.5 border-0 p-0" disabled={!canChange}>
           <legend className="sr-only">Maintenance level</legend>
           {LEVEL_CARDS.map((card) => {
@@ -282,37 +280,32 @@ export function SystemMaintenanceEditor({
 
         <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] pt-4">
           <span className="text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">
-            {canChange
-              ? dirty
-                ? "Nothing changes for customers until you confirm."
-                : "Choose a level or edit the message to make a change."
-              : "Only a super admin can change maintenance mode."}
+            {canChange ? null : "Read-only. Only a super admin can change maintenance mode."}
           </span>
           <span className="flex items-center gap-2">
             {canChange && dirty && (
-              <button type="button" className={btn("ghost")} onClick={() => { setDraft(baseline); setFormError(null); }}>
+              <Button type="button" variant="ghost" onClick={() => { setDraft(baseline); setFormError(null); }}>
                 Discard
-              </button>
+              </Button>
             )}
-            <button type="button" className={btn("primary")} onClick={review} disabled={!canChange || !dirty}>
+            <Button type="button" onClick={review} disabled={!canChange || !dirty}>
               Review change
-            </button>
+            </Button>
           </span>
         </div>
       </SettingsCard>
 
       {/* ── Preview column ──────────────────────────────────────────────── */}
-      <div className="flex min-w-0 flex-col gap-6">
-        <SettingsCard
-          title="Customer preview"
-          sub={
-            draft.level === "locked"
-              ? "What a customer sees at /maintenance."
-              : off
-                ? "Customers see nothing while maintenance is off."
-                : "What a customer sees at the top of every page in the app."
-          }
-        />
+      <SettingsCard
+        title="Customer preview"
+        sub={
+          draft.level === "locked"
+            ? "What a customer sees at /maintenance."
+            : off
+              ? "Customers see nothing while maintenance is off."
+              : "What a customer sees at the top of every page in the app."
+        }
+      >
         <div className="rounded-[12px] border border-[var(--border)] bg-[var(--surface-alt)] p-5 text-center" aria-live="polite">
           {draft.level === "locked" ? (
             <>
@@ -355,11 +348,7 @@ export function SystemMaintenanceEditor({
             </p>
           )}
         </div>
-        <Callout tone="error" title="Locked is never one click">
-          Turning it on asks for a typed confirmation naming the effect: every customer is shut out of the product until it is
-          turned off.
-        </Callout>
-      </div>
+      </SettingsCard>
 
       <Dialog open={open} onOpenChange={(next) => !saving && setOpen(next)}>
         <DialogContent className="sm:max-w-[560px]">

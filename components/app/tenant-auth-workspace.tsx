@@ -187,8 +187,10 @@ export function TenantAuthWorkspace({
       const response = await fetch("/api/app/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: loginEmail, password: loginPassword }) });
       const body = await response.json().catch(() => null);
       if (!response.ok) { setLoginError(body?.error ?? "Something went wrong"); return; }
-      router.push(body?.redirectTo ?? "/app");
-      router.refresh();
+      // Straight to the landing page, once. The old push("/app") + refresh() rendered the landing page
+      // twice and bounced through /app's redirect — the slowest part of "11 seconds after login".
+      // Nothing above the shell reads the session, so no refresh is needed for the new cookie.
+      router.replace(body?.redirectTo ?? "/app/dashboard");
     } catch {
       setLoginError("Could not sign in. Check your connection and try again.");
     } finally {
@@ -215,8 +217,7 @@ export function TenantAuthWorkspace({
       const response = await fetch("/api/app/signup", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ workspaceName, fullName, email: signupEmail, password: signupPassword, planId, billingCycle }) });
       const body = await response.json().catch(() => null);
       if (!response.ok) { setSignupError(body?.error ?? "We could not create your workspace. Check the form and try again."); return; }
-      router.push(body?.redirectTo ?? "/app/dashboard");
-      router.refresh();
+      router.replace(body?.redirectTo ?? "/app/dashboard");
     } catch {
       setSignupError("Could not create your workspace. Check your connection and try again.");
     } finally {

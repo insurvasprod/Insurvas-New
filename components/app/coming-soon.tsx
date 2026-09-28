@@ -1,6 +1,6 @@
-import { Card, CardContent } from "@/components/ui/card";
 import { LinkArrow } from "@/components/ui/link-arrow";
 import { PageHeader } from "@/components/ui/page-header";
+import { TableCard } from "@/components/ui/table-card";
 import type { MenuItem } from "@/lib/menu/definition";
 
 /**
@@ -16,9 +16,7 @@ import type { MenuItem } from "@/lib/menu/definition";
  * A 404 is the worst of the three because it is indistinguishable from a broken product. The
  * customer is paying for this feature, the sidebar promises it, and the link goes nowhere.
  *
- * Two rules for what this says. It never gives a date — we do not have one, and a missed date is
- * worse than no date. And it always offers somewhere to go, because a dead end that apologises is
- * still a dead end.
+ * It never gives a date, and it always offers somewhere to go.
  */
 export function ComingSoon({
   item,
@@ -40,63 +38,44 @@ export function ComingSoon({
     : nearby.length > 0 ? nearby : available.filter((i) => i.key !== item.key).slice(0, 3);
 
   return (
-    <div className="m-stagger portal-section-page flex min-h-0 flex-grow flex-col gap-6">
-      <PageHeader eyebrow={item.sectionLabel} title={item.label} />
+    <div className="m-stagger portal-section-page flex flex-col gap-6">
+      <PageHeader
+        title={item.label}
+        description={item.blurb ?? "This is part of your plan and we are still building it."}
+      />
 
-      <div className="flex min-h-0 flex-grow items-center justify-center">
-        <div className="w-full max-w-[620px]">
-          <Card className="portal-section-card py-8">
-            <CardContent className="px-8">
-              <div className="text-center">
-                <span className="portal-section-icon mx-auto inline-flex size-13 items-center justify-center rounded-full bg-[var(--surface-alt)] text-muted-foreground">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
-                </span>
-                <h2 className="mt-4 text-2xl font-semibold leading-[1.21] tracking-[-0.02em]">
-                  {item.label} is on the way
-                </h2>
-                <p className="mt-2.5 text-base leading-[1.5] tracking-[-0.02em] text-muted-foreground">
-                  {item.blurb ?? "This is part of your plan and we are still building it."}
-                </p>
-                {/* The reassurance that matters: this is not something they have lost or must buy. */}
-                <p className="mt-2.5 text-base leading-[1.5] tracking-[-0.02em] text-muted-foreground">
-                  <span className="font-semibold text-foreground">
-                    Your plan includes this. Nothing to buy and nothing to switch on.
-                  </span>{" "}
-                  We do not give a date, because a missed date is worse than no date.
-                </p>
-              </div>
-
-              {fallbackNearby.length > 0 && (
-                <div className="mt-7 text-left">
-                  <h2 className="text-lg font-semibold leading-[1.28] tracking-[-0.015em]">In the meantime</h2>
-                  <ul>
-                    {fallbackNearby.map((other) => (
-                      <li
-                        key={other.key}
-                        className="flex items-center gap-3 border-t border-border py-3"
-                      >
-                        <span className="min-w-0 flex-grow">
-                          <span className="block text-sm font-semibold leading-[1.5] tracking-[-0.02em] text-foreground">
-                            {other.label}
-                          </span>
-                          <span className="block text-xs leading-[1.5] tracking-[-0.01em] text-muted-foreground">
-                            {/* A page's own line says why it is worth opening; a same-section page
-                                without one says where it lives. */}
-                            {other.blurb ?? (other.sectionLabel === item.sectionLabel ? `Also under ${item.sectionLabel}` : other.sectionLabel)}
-                          </span>
-                        </span>
-                        <LinkArrow href={other.path} className="shrink-0">
-                          Open
-                        </LinkArrow>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+      <TableCard>
+        <div className="flex items-center gap-3 px-4 py-4">
+          <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-[var(--surface-alt)] text-muted-foreground">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+          </span>
+          <p className="text-sm leading-[1.5] tracking-[-0.02em] text-muted-foreground">
+            <span className="font-semibold text-foreground">{item.label} is on the way.</span>{" "}
+            Your plan includes this. Nothing to buy and nothing to switch on.
+          </p>
         </div>
-      </div>
+
+        {fallbackNearby.length > 0 && (
+          <div className="border-t border-border">
+            <h2 className="px-4 pt-3 text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] text-muted-foreground">In the meantime</h2>
+            <ul>
+              {fallbackNearby.map((other) => (
+                <li key={other.key} className="flex items-center gap-3 border-t border-border px-4 py-3 first:border-t-0">
+                  <span className="min-w-0 flex-grow">
+                    <span className="block text-sm font-semibold leading-[1.5] tracking-[-0.02em] text-foreground">{other.label}</span>
+                    <span className="block text-xs leading-[1.5] tracking-[-0.01em] text-muted-foreground">
+                      {other.blurb ?? (other.sectionLabel === item.sectionLabel ? `Also under ${item.sectionLabel}` : other.sectionLabel)}
+                    </span>
+                  </span>
+                  <LinkArrow href={other.path} className="shrink-0">
+                    Open
+                  </LinkArrow>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </TableCard>
     </div>
   );
 }

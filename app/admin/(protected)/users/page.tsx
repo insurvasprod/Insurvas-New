@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { getCurrentAdmin } from "@/lib/adminAuth/getCurrentAdmin";
-import { AdminPageHeader } from "@/components/admin/page-header";
+import { PageHeader } from "@/components/ui/page-header";
 import { UsersListTable } from "@/components/admin/users-list-table";
 import { UsersListCreateUser } from "@/components/admin/users-list-create-user";
 import { canViewUsers } from "@/lib/users/permissions";
@@ -32,9 +32,8 @@ export default async function UsersPage() {
 
   return (
     <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
-      <AdminPageHeader
+      <PageHeader
         title="Users"
-        subtitle="Every user across every tenant. Search, filter, and manage account status."
         actions={canManage ? <UsersListCreateUser tenants={tenants} plans={plans} /> : undefined}
       />
       <UsersListTable

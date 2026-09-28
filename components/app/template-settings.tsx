@@ -4,8 +4,8 @@
  * Settings → Form templates, drawn from p-set-form-templates.
  *
  * The whole form is one draft. Every edit — a field, a section, an age limit, a stage, the name — is
- * held in this browser and listed under "Changes before commit"; the header's Save changes and the
- * card's Commit both write it as one new immutable form version. Partner drafts already in
+ * held in this browser and listed under "Changes before commit"; the save bar writes it as one new
+ * immutable form version. Partner drafts already in
  * progress stay pinned to the version they started on (the RPC's contract, unchanged).
  */
 
@@ -13,21 +13,23 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
+import { Plus } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { DataToolbar, toolbarControl } from "@/components/ui/data-toolbar";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { SectionLoading } from "@/components/ui/page-states";
+import { SettingsSaveBar } from "@/components/ui/settings-layout";
+import { TableCard } from "@/components/ui/table-card";
 import {
   Callout,
-  DraftActions,
   Field,
   Pill,
-  PlusIcon,
   SettingsCard,
   SettingsGrid,
   SettingsSectionHeader,
   SettingsStack,
-  SettingsTableCard,
   Timeline,
   ToggleRow,
-  btn,
   control,
   st,
 } from "@/components/app/settings/primitives";
@@ -88,7 +90,7 @@ const PREVIEW_MARKET = { carrier_id: "", carrier_name: "", state: "" };
 
 function PartnerViewPreview({ source, productCode, productName }: { source: PartnerFormPreviewSource; productCode: string; productName: string }) {
   return (
-    <SettingsCard title="Partner view preview" sub="The partner submit form, drawn by the same component partners use, from this draft. Phone screening is simulated as clear, and nothing is saved or submitted.">
+    <SettingsCard title="Partner view preview" sub="Drawn from this draft. Nothing is saved or submitted.">
       <div className="portal-partner-submit-page">
         <PartnerLeadForm productCode={productCode} productName={productName} partnerStatus="active" market={PREVIEW_MARKET} preview={source} />
       </div>
@@ -103,7 +105,7 @@ function SectionAvailabilityCard({ form, fields, onChange }: { form: TemplateFor
   const governed = sectionsByGroup(form);
   const problem = sectionAvailabilityError(form, fields);
   return (
-    <SettingsCard title="Form sections" sub="Switch a whole group of sections off for this product. A section belongs to a group by its name; one that matches no group always shows.">
+    <SettingsCard title="Form sections" sub="Switch a whole group of sections off for this product.">
       <div className="flex flex-col gap-3.5">
         {TEMPLATE_SECTION_GROUPS.map((group) => {
           const sections = governed[group];
@@ -260,12 +262,14 @@ export function TemplateSettings() {
       <SettingsStack>
         <SettingsSectionHeader />
         {error ? (
-          <Callout tone="error" title="Form templates could not be loaded">
-            {error}
-            <div className="mt-3"><button type="button" className={btn("secondary")} onClick={() => void load()}>Try again</button></div>
-          </Callout>
+          <>
+            <Callout tone="error" title={error} />
+            <div><Button type="button" variant="outline" onClick={() => void load()}>Try again</Button></div>
+          </>
+        ) : loading ? (
+          <TableCard><SectionLoading label="Loading form templates" /></TableCard>
         ) : (
-          <SettingsCard><p className="m-0 text-[14px] text-[var(--muted)]">{loading ? "Loading form templates…" : "No form is configured."}</p></SettingsCard>
+          <Callout tone="info" title="No form is configured." />
         )}
       </SettingsStack>
     );
@@ -355,7 +359,7 @@ export function TemplateSettings() {
       <td className={st.td}>{field ? TEMPLATE_FIELD_TYPE_TABLE_LABELS[field.type] ?? field.type : "—"}</td>
       <td className={st.td}>{required ? <Pill tone="success">Yes</Pill> : <Pill tone="neutral">No</Pill>}</td>
       <td className={st.td}>{field?.help_text ? field.help_text : <span className="text-[var(--muted)]">—</span>}</td>
-      <td className={st.td}><button type="button" className={btn("row")} onClick={onEdit} aria-label={`Edit ${field?.label ?? fieldKey}`}>Edit</button></td>
+      <td className={cn(st.td, st.num)}><Button type="button" variant="outline" size="sm" onClick={onEdit} aria-label={`Edit ${field?.label ?? fieldKey}`}>Edit</Button></td>
     </tr>
   );
   const sectionRow = (key: string, label: ReactNode, onEdit?: () => void) => (
@@ -364,34 +368,38 @@ export function TemplateSettings() {
       <td className={cn(st.td, "text-[var(--muted)]")}>—</td>
       <td className={cn(st.td, "text-[var(--muted)]")}>—</td>
       <td className={cn(st.td, "text-[var(--muted)]")}>—</td>
-      <td className={st.td}>{onEdit ? <button type="button" className={btn("row")} onClick={onEdit} aria-label={`Edit section ${typeof label === "string" ? label : ""}`}>Edit</button> : <span className="text-[var(--muted)]">—</span>}</td>
+      <td className={cn(st.td, st.num)}>{onEdit ? <Button type="button" variant="outline" size="sm" onClick={onEdit} aria-label={`Edit section ${typeof label === "string" ? label : ""}`}>Edit</Button> : <span className="text-[var(--muted)]">—</span>}</td>
     </tr>
   );
 
   return (
     <SettingsStack>
-      <SettingsSectionHeader actions={<DraftActions dirty={dirty} saving={saving} onDiscard={discard} onSave={() => void commit()} />} />
+      <SettingsSectionHeader />
 
-      <SettingsGrid>
-        <Callout tone="info" title="A template is a contract with whoever fills it">
-          Adding a required field changes what every partner must send from the moment it is committed; forms already in progress keep the version they started on. Draft changes are held in this browser until you commit them, and the count of pending changes is shown so a half-edited form is never live.
-        </Callout>
-        <SettingsCard pad={18}>
-          <Field label="Template" htmlFor="template-product" hint={dirty ? "Commit or discard the pending changes to switch product." : "Each product has its own. A field added here is not added to the others."}>
-            <select id="template-product" className={control} value={current.assignment.product_code} disabled={dirty || loading} onChange={(event) => void load(event.target.value)}>
+      <TableCard
+        title="Sections and fields"
+        toolbar={
+          <DataToolbar
+            actions={
+              <>
+                <Button type="button" variant="outline" onClick={() => addNewField(null)}><Plus aria-hidden="true" />Add a lead field</Button>
+                <Button type="button" onClick={addSection}><Plus aria-hidden="true" />Add a section</Button>
+              </>
+            }
+          >
+            <label htmlFor="template-product" className="sr-only">Template</label>
+            <select
+              id="template-product"
+              className={toolbarControl}
+              value={current.assignment.product_code}
+              disabled={dirty || loading}
+              title={dirty ? "Commit or discard the pending changes to switch product." : "Each product has its own form."}
+              onChange={(event) => void load(event.target.value)}
+            >
               {productOptions.map((product) => <option key={product.code} value={product.code}>{product.name}</option>)}
             </select>
-          </Field>
-        </SettingsCard>
-      </SettingsGrid>
-
-      <SettingsTableCard
-        title="Sections and fields"
-        actions={
-          <>
             {dirty && <Pill tone="warning" dot>{changes.length} {changes.length === 1 ? "change" : "changes"} before commit</Pill>}
-            <button type="button" className={btn("secondary")} onClick={addSection}>Add a section</button>
-          </>
+          </DataToolbar>
         }
       >
         <table className={st.table}>
@@ -421,10 +429,7 @@ export function TemplateSettings() {
             ]}
           </tbody>
         </table>
-        <div className="border-t border-[var(--border)] px-4 py-3">
-          <button type="button" className={btn("row", "-ml-3")} onClick={() => addNewField(null)}><PlusIcon />Add a lead field</button>
-        </div>
-      </SettingsTableCard>
+      </TableCard>
 
       <SettingsGrid>
         <SettingsCard title="Eligibility limits" sub="Enforced when a lead is submitted, and again when leads are imported.">
@@ -442,7 +447,7 @@ export function TemplateSettings() {
           )}
         </SettingsCard>
 
-        <SettingsCard title="Changes before commit" sub={dirty ? "Held in this browser, by you, this session. Nothing here is live yet." : undefined}>
+        <SettingsCard title="Changes before commit">
           {dirty ? (
             <div className="flex flex-col gap-4">
               <Timeline
@@ -452,11 +457,7 @@ export function TemplateSettings() {
                   return { title: change.title, sub: change.sub ? `${change.sub} · ${by}` : `${by.charAt(0).toUpperCase()}${by.slice(1)}`, tone: "warning" as const };
                 })}
               />
-              {saveError && <Callout tone="error" title="Nothing was committed">{saveError}</Callout>}
-              <div className="flex flex-wrap gap-2.5">
-                <button type="button" className={btn("primary")} onClick={() => void commit()} disabled={saving}>{saving ? "Committing…" : commitLabel}</button>
-                <button type="button" className={cn(btn("ghost"), "border-[var(--border-strong)] bg-[var(--surface)]")} onClick={discard} disabled={saving}>Discard</button>
-              </div>
+              {saveError && <Callout tone="error" title={`Nothing was committed: ${saveError}`} />}
             </div>
           ) : (
             <p className="m-0 text-[14px] leading-[1.5] text-[var(--muted)]">No pending changes. This is the live form, version {current.assignment.definition_version}.</p>
@@ -471,7 +472,7 @@ export function TemplateSettings() {
         <SettingsCard
           title="Your active product form"
           action={current.latest ? (
-            <button type="button" className={btn("secondary")} onClick={() => { const latest = available.find((template) => template.id === current.latest?.id && template.version === current.latest?.version) ?? null; setSelected(`${current.latest!.id}:${current.latest!.version}`); void showPreview(latest); }}>Review platform update</button>
+            <Button type="button" variant="outline" onClick={() => { const latest = available.find((template) => template.id === current.latest?.id && template.version === current.latest?.version) ?? null; setSelected(`${current.latest!.id}:${current.latest!.version}`); void showPreview(latest); }}>Review platform update</Button>
           ) : undefined}
         >
           <div className="flex flex-col gap-4">
@@ -482,14 +483,10 @@ export function TemplateSettings() {
             <Field label="Template name" htmlFor="copy-name">
               <input id="copy-name" className={control} maxLength={120} value={draft.name} onChange={(event) => { const name = event.target.value; update((d) => ({ ...d, name })); }} />
             </Field>
-            <p className="m-0 flex flex-wrap items-center gap-2 text-[12px] leading-[1.5] text-[var(--muted)]">
-              <Pill tone="neutral">Tenant-owned copy</Pill>
-              Partner preview and submission read the same saved definition.
-            </p>
           </div>
         </SettingsCard>
 
-        <SettingsCard title="Platform templates" sub="Only products included in your subscription are shown. Applying adds what is missing; your customised fields, stages and form versions stay.">
+        <SettingsCard title="Platform templates" sub="Applying adds what is missing; your own fields and stages stay.">
           <div className="flex flex-col gap-3">
             <Field label="Template" htmlFor="platform-template">
               <select id="platform-template" className={control} value={selected} onChange={(event) => { setSelected(event.target.value); setPreview(null); }}>
@@ -497,9 +494,9 @@ export function TemplateSettings() {
                 {productTemplates.map((template) => <option key={`${template.id}-${template.version}`} value={`${template.id}:${template.version}`}>{template.name} · v{template.version}</option>)}
               </select>
             </Field>
-            <div className="flex flex-wrap gap-2.5">
-              <button type="button" className={btn("secondary")} disabled={!chosen} onClick={() => void showPreview()}>Preview</button>
-              <button type="button" className={btn("primary-sm")} disabled={!chosen || !preview || applying || dirty} onClick={() => void apply()}>{applying ? "Applying…" : "Apply"}</button>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="outline" disabled={!chosen} onClick={() => void showPreview()}>Preview</Button>
+              <Button type="button" disabled={!chosen || !preview || applying || dirty} onClick={() => void apply()}>{applying ? "Applying…" : "Apply"}</Button>
             </div>
             {dirty && chosen && <p className="m-0 text-[12px] text-[var(--muted)]">Commit or discard the pending changes before applying a platform template.</p>}
             {chosen && preview && (
@@ -517,8 +514,7 @@ export function TemplateSettings() {
       <SettingsGrid>
       <SettingsCard
         title="Pipeline stages"
-        sub="The stages this product's leads move through. Part of the same draft."
-        action={<button type="button" className={btn("secondary")} onClick={() => update((d) => ({ ...d, stages: [...d.stages, { stage_key: uniqueKey("custom_stage", new Set(d.stages.map((stage) => stage.stage_key))), label: "New stage", stage_type: "open", color: defaultStageColor() ?? d.stages[d.stages.length - 1]?.color ?? "", sort_order: d.stages.length }] }))}><PlusIcon />Add a stage</button>}
+        action={<Button type="button" variant="outline" onClick={() => update((d) => ({ ...d, stages: [...d.stages, { stage_key: uniqueKey("custom_stage", new Set(d.stages.map((stage) => stage.stage_key))), label: "New stage", stage_type: "open", color: defaultStageColor() ?? d.stages[d.stages.length - 1]?.color ?? "", sort_order: d.stages.length }] }))}><Plus aria-hidden="true" />Add a stage</Button>}
       >
         <div className="flex flex-col gap-4">
           {draft.stages.map((stage) => (
@@ -531,7 +527,7 @@ export function TemplateSettings() {
                 </select>
               </Field>
               <Field label="Colour" htmlFor={`stage-color-${stage.stage_key}`}><input id={`stage-color-${stage.stage_key}`} className={cn(small, "font-mono")} maxLength={7} value={stage.color} onChange={(event) => { const color = event.target.value; update((d) => ({ ...d, stages: d.stages.map((item) => (item.stage_key === stage.stage_key ? { ...item, color } : item)) })); }} /></Field>
-              <button type="button" className={btn("danger-row", "mb-1.5")} onClick={() => update((d) => ({ ...d, stages: d.stages.filter((item) => item.stage_key !== stage.stage_key) }))} aria-label={`Remove stage ${stage.label}`}>Remove</button>
+              <Button type="button" variant="ghost" className="mb-0.5 text-[var(--error-ink)]" onClick={() => update((d) => ({ ...d, stages: d.stages.filter((item) => item.stage_key !== stage.stage_key) }))} aria-label={`Remove stage ${stage.label}`}>Remove</Button>
             </div>
             {/* The key was a read-only input; it reads as what it is, a fact about the stage. */}
             <span className="text-[12px] leading-[1.5] text-[var(--muted)]">Key <code className="font-mono text-[12px]">{stage.stage_key}</code></span>
@@ -549,7 +545,12 @@ export function TemplateSettings() {
 
       {previewSource && <PartnerViewPreview source={previewSource} productCode={current.assignment.product_code} productName={current.template.product_name} />}
 
-      <SettingsDialog open={Boolean(editingField)} onOpenChange={(open) => { if (!open) setEditing(null); }} title={editingField ? `Edit “${editingField.label}”` : "Edit field"} description="Edits join the draft as you make them. Commit to make them live.">
+      <SettingsSaveBar visible={dirty} note="Commits a new form version; forms already in progress keep theirs">
+        <Button type="button" variant="outline" onClick={discard} disabled={saving}>Discard</Button>
+        <Button type="button" onClick={() => void commit()} disabled={saving}>{saving ? "Committing…" : commitLabel}</Button>
+      </SettingsSaveBar>
+
+      <SettingsDialog open={Boolean(editingField)} onOpenChange={(open) => { if (!open) setEditing(null); }} title={editingField ? `Edit “${editingField.label}”` : "Edit field"} description="Edits join the draft; commit to make them live.">
         {editingField && (
           <div className="flex flex-col gap-4">
             <div className="grid gap-3 sm:grid-cols-2">
@@ -627,22 +628,22 @@ export function TemplateSettings() {
                   </div>
                 )}
                 <div className="flex flex-wrap gap-2">
-                  <button type="button" className={btn("secondary")} onClick={() => moveField(editingPlacementSection.section_key, editingField.field_key, -1)}>Move up</button>
-                  <button type="button" className={btn("secondary")} onClick={() => moveField(editingPlacementSection.section_key, editingField.field_key, 1)}>Move down</button>
-                  <button type="button" className={btn("danger-row")} onClick={() => { unplaceField(editingPlacementSection.section_key, editingField.field_key); setEditing({ kind: "field", fieldKey: editingField.field_key, sectionKey: null }); }}>Remove from this section</button>
+                  <Button type="button" variant="outline" onClick={() => moveField(editingPlacementSection.section_key, editingField.field_key, -1)}>Move up</Button>
+                  <Button type="button" variant="outline" onClick={() => moveField(editingPlacementSection.section_key, editingField.field_key, 1)}>Move down</Button>
+                  <Button type="button" variant="ghost" className="text-[var(--error-ink)]" onClick={() => { unplaceField(editingPlacementSection.section_key, editingField.field_key); setEditing({ kind: "field", fieldKey: editingField.field_key, sectionKey: null }); }}>Remove from this section</Button>
                 </div>
               </fieldset>
             )}
 
             <div className="flex flex-wrap justify-between gap-2.5">
-              <button type="button" className={btn("danger-row")} onClick={() => deleteField(editingField.field_key)}>Delete the field</button>
-              <button type="button" className={btn("primary")} onClick={() => setEditing(null)}>Done</button>
+              <Button type="button" variant="ghost" className="text-[var(--error-ink)]" onClick={() => deleteField(editingField.field_key)}>Delete the field</Button>
+              <Button type="button" onClick={() => setEditing(null)}>Done</Button>
             </div>
           </div>
         )}
       </SettingsDialog>
 
-      <SettingsDialog open={Boolean(editingSection)} onOpenChange={(open) => { if (!open) setEditing(null); }} title={editingSection ? `Edit section “${editingSection.label}”` : "Edit section"} description="Edits join the draft as you make them. Commit to make them live.">
+      <SettingsDialog open={Boolean(editingSection)} onOpenChange={(open) => { if (!open) setEditing(null); }} title={editingSection ? `Edit section “${editingSection.label}”` : "Edit section"} description="Edits join the draft; commit to make them live.">
         {editingSection && (
           <div className="flex flex-col gap-4">
             <div className="grid gap-3 sm:grid-cols-2">
@@ -655,7 +656,7 @@ export function TemplateSettings() {
               {editingSection.fields.map((formField) => (
                 <div key={formField.field_key} className="flex items-center justify-between gap-3 rounded-[8px] bg-[var(--surface-alt)] px-3 py-2 text-[14px]">
                   <span>{fieldMap.get(formField.field_key)?.label ?? formField.field_key}</span>
-                  <button type="button" className={btn("row")} onClick={() => setEditing({ kind: "field", fieldKey: formField.field_key, sectionKey: editingSection.section_key })}>Edit</button>
+                  <Button type="button" variant="outline" size="sm" onClick={() => setEditing({ kind: "field", fieldKey: formField.field_key, sectionKey: editingSection.section_key })}>Edit</Button>
                 </div>
               ))}
             </div>
@@ -666,11 +667,11 @@ export function TemplateSettings() {
                   {draft.fields.filter((field) => !editingSection.fields.some((item) => item.field_key === field.field_key)).map((field) => <option key={field.field_key} value={field.field_key}>{field.label}</option>)}
                 </select>
               </Field>
-              <button type="button" className={btn("secondary", "mb-1")} onClick={() => addNewField(editingSection.section_key)}><PlusIcon />New field</button>
+              <Button type="button" variant="outline" className="mb-0.5" onClick={() => addNewField(editingSection.section_key)}><Plus aria-hidden="true" />New field</Button>
             </div>
             <div className="flex flex-wrap justify-between gap-2.5">
-              <button type="button" className={btn("danger-row")} onClick={() => removeSection(editingSection.section_key)} disabled={draft.form.sections.length <= 1}>Remove the section</button>
-              <button type="button" className={btn("primary")} onClick={() => setEditing(null)}>Done</button>
+              <Button type="button" variant="ghost" className="text-[var(--error-ink)]" onClick={() => removeSection(editingSection.section_key)} disabled={draft.form.sections.length <= 1}>Remove the section</Button>
+              <Button type="button" onClick={() => setEditing(null)}>Done</Button>
             </div>
           </div>
         )}

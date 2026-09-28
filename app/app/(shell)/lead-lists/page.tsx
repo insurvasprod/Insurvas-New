@@ -7,7 +7,6 @@ import { LeadListWorkspace } from "@/components/app/lead-list-workspace";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
-import { sectionForPath } from "@/lib/menu/definition";
 
 export default async function LeadListsPage() {
   const guard = await guardPage("lead_import");
@@ -27,19 +26,17 @@ export default async function LeadListsPage() {
   return (
     <div className="m-stagger space-y-6">
       <PageHeader
-        eyebrow={sectionForPath("/app/lead-lists") ?? undefined}
         title="Lead lists"
-        description="Every list you bought: what survived the scrub, what you cannot legally sell to, and how far through it you are."
         actions={
           <>
             {/* Offered only to people Vendor returns will open for — its own feature and roles —
                 so the button never leads to a locked door. */}
             {guard.entitlement.features.includes("true_cpa") && ["owner", "producer"].includes(guard.role) && (
-              <Button asChild type="button" variant="outline" className="h-11 border-[var(--border-strong)] px-4">
+              <Button asChild type="button" variant="outline">
                 <Link href="/app/vendor-returns">Claim credits</Link>
               </Button>
             )}
-            <Button asChild type="button" className="h-11 px-4">
+            <Button asChild type="button">
               <Link href="/app/import"><ListPlus aria-hidden="true" />Import a list</Link>
             </Button>
           </>

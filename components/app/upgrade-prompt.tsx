@@ -25,7 +25,6 @@ export async function UpgradePrompt({
   limitKey,
   usage,
   limit,
-  eyebrow,
   seats,
   grantedFeatures,
 }: {
@@ -37,7 +36,6 @@ export async function UpgradePrompt({
   limitKey?: string;
   usage?: number;
   limit?: number;
-  eyebrow?: string;
   seats?: number | null;
   /** The account's granted feature keys, so "What you have today" can show the page's neighbours. */
   grantedFeatures?: readonly string[];
@@ -60,7 +58,7 @@ export async function UpgradePrompt({
 
   return (
     <div className="m-stagger flex min-h-0 flex-grow flex-col gap-6">
-      <PageHeader eyebrow={eyebrow} title={featureLabel} />
+      <PageHeader title={featureLabel} />
 
       <div className="flex min-h-0 flex-grow items-center justify-center">
         <div className="portal-gate-card">

@@ -1,12 +1,18 @@
 "use client";
 
 import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
-import { AlertCircle, Clock, X } from "lucide-react";
+import { AlertCircle, Clock } from "lucide-react";
 import { notify } from "@/lib/notify";
 
 import { Button } from "@/components/ui/button";
+import { DataToolbar, RefreshButton, ToolbarSearch } from "@/components/ui/data-toolbar";
+import { NoMatches } from "@/components/ui/page-states";
+import { Pager, paginate } from "@/components/ui/pager";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { TableCard } from "@/components/ui/table-card";
 import { CampaignSpeedToLead } from "@/components/app/campaign-speed-to-lead";
+import { Field, control } from "@/components/app/settings/primitives";
+import { cn } from "@/lib/utils";
 import {
   VENDOR_STATUS_LABEL,
   vendorCampaignWarning,
@@ -73,6 +79,7 @@ function calendarDate(value: string | null | undefined) {
 }
 const plural = (n: number, one: string, many = `${one}s`) => `${n.toLocaleString()} ${n === 1 ? one : many}`;
 const LEAD_TYPE: Record<string, string> = { list: "List", realtime: "Real-time", aged: "Aged" };
+const PAGE_SIZE = 25;
 
 function contactOf(vendor: Vendor): VendorContact {
   const raw = (vendor.contact ?? {}) as Record<string, unknown>;
@@ -131,21 +138,21 @@ function payloadOf(draft: Draft) {
 function VendorFields({ draft, onChange, idPrefix, allowInactive }: { draft: Draft; onChange: (next: Draft) => void; idPrefix: string; allowInactive: boolean }) {
   const set = (key: keyof Draft) => (event: { target: { value: string } }) => onChange({ ...draft, [key]: event.target.value });
   const id = (key: string) => `${idPrefix}-${key}`;
-  return <div className="portal-campaigns-form-grid">
-    <label className="portal-campaigns-field" htmlFor={id("name")}><span>Name</span><input id={id("name")} value={draft.name} onChange={set("name")} placeholder="Apex Data" /></label>
-    <label className="portal-campaigns-field" htmlFor={id("category")}><span>Category</span><input id={id("category")} value={draft.category} onChange={set("category")} maxLength={80} placeholder="Aged & ping-post" /></label>
-    <label className="portal-campaigns-field" htmlFor={id("type")}><span>Lead type</span><select id={id("type")} value={draft.lead_type} onChange={set("lead_type")}><option value="list">List — a spreadsheet</option><option value="realtime">Real-time — posted by API</option><option value="aged">Aged — old and cheap</option></select></label>
-    <label className="portal-campaigns-field" htmlFor={id("status")}><span>Status</span><select id={id("status")} value={draft.status} onChange={set("status")}>
+  return <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(11rem,1fr))]">
+    <Field label="Name" htmlFor={id("name")}><input id={id("name")} className={control} value={draft.name} onChange={set("name")} placeholder="Apex Data" /></Field>
+    <Field label="Category" htmlFor={id("category")}><input id={id("category")} className={control} value={draft.category} onChange={set("category")} maxLength={80} placeholder="Aged & ping-post" /></Field>
+    <Field label="Lead type" htmlFor={id("type")}><select id={id("type")} className={control} value={draft.lead_type} onChange={set("lead_type")}><option value="list">List — a spreadsheet</option><option value="realtime">Real-time — posted by API</option><option value="aged">Aged — old and cheap</option></select></Field>
+    <Field label="Status" htmlFor={id("status")}><select id={id("status")} className={control} value={draft.status} onChange={set("status")}>
       <option value="active">{VENDOR_STATUS_LABEL.active}</option>
       <option value="under_review">{VENDOR_STATUS_LABEL.under_review}</option>
       {allowInactive && <option value="inactive">{VENDOR_STATUS_LABEL.inactive}</option>}
-    </select></label>
-    <label className="portal-campaigns-field" htmlFor={id("window")}><span>Return window (days)</span><input id={id("window")} inputMode="numeric" value={draft.return_window_days} onChange={set("return_window_days")} /></label>
-    <label className="portal-campaigns-field" htmlFor={id("renews")}><span>Renews on</span><input id={id("renews")} type="date" value={draft.renews_on} onChange={set("renews_on")} /></label>
-    <label className="portal-campaigns-field" htmlFor={id("contact")}><span>Contact name</span><input id={id("contact")} value={draft.contact_name} onChange={set("contact_name")} maxLength={120} placeholder="Tom Reilly" /></label>
-    <label className="portal-campaigns-field" htmlFor={id("email")}><span>Contact email</span><input id={id("email")} type="email" value={draft.contact_email} onChange={set("contact_email")} maxLength={200} placeholder="accounts@apexdata.io" /></label>
-    <label className="portal-campaigns-field" htmlFor={id("phone")}><span>Contact phone</span><input id={id("phone")} type="tel" value={draft.contact_phone} onChange={set("contact_phone")} maxLength={40} /></label>
-    <label className="portal-campaigns-field is-wide" htmlFor={id("terms")}><span>Terms</span><input id={id("terms")} value={draft.terms} onChange={set("terms")} placeholder="Net 15, credits disconnects and DNC within the window" /></label>
+    </select></Field>
+    <Field label="Return window (days)" htmlFor={id("window")} hint="From the contract: the clock on a credit claim."><input id={id("window")} className={control} inputMode="numeric" value={draft.return_window_days} onChange={set("return_window_days")} /></Field>
+    <Field label="Renews on" htmlFor={id("renews")}><input id={id("renews")} className={control} type="date" value={draft.renews_on} onChange={set("renews_on")} /></Field>
+    <Field label="Contact name" htmlFor={id("contact")}><input id={id("contact")} className={control} value={draft.contact_name} onChange={set("contact_name")} maxLength={120} placeholder="Tom Reilly" /></Field>
+    <Field label="Contact email" htmlFor={id("email")}><input id={id("email")} className={control} type="email" value={draft.contact_email} onChange={set("contact_email")} maxLength={200} placeholder="accounts@apexdata.io" /></Field>
+    <Field label="Contact phone" htmlFor={id("phone")}><input id={id("phone")} className={control} type="tel" value={draft.contact_phone} onChange={set("contact_phone")} maxLength={40} /></Field>
+    <Field label="Terms" htmlFor={id("terms")} className="col-span-full"><input id={id("terms")} className={control} value={draft.terms} onChange={set("terms")} placeholder="Net 15, credits disconnects and DNC within the window" /></Field>
   </div>;
 }
 
@@ -173,12 +180,14 @@ export function NewVendorPanel({ onClose, onCreated }: { onClose: () => void; on
     } finally { setSaving(false); }
   }
 
-  return <section className="portal-campaigns-panel is-padded" aria-labelledby="new-vendor-heading">
-    <div className="portal-campaigns-form-head"><h2 id="new-vendor-heading">New vendor</h2><Button type="button" variant="ghost" size="sm" onClick={onClose}><X className="size-4" aria-hidden="true" />Cancel</Button></div>
-    <p className="portal-campaigns-form-note">Who sells you the list. The return window is the clock on a vendor credit claim, so it is worth getting from the contract rather than guessing.</p>
+  return <section className="flex flex-col gap-4 rounded-lg border border-border bg-card p-5" aria-labelledby="new-vendor-heading">
+    <h2 id="new-vendor-heading" className="m-0 text-lg font-semibold leading-[1.28] tracking-[-0.015em] text-foreground">New vendor</h2>
     <VendorFields draft={draft} onChange={setDraft} idPrefix="new-vendor" allowInactive={false} />
-    {error && <p className="text-sm text-[var(--error-ink)]" role="alert">{error}</p>}
-    <div className="portal-campaigns-form-actions"><Button type="button" disabled={!draft.name.trim() || saving} onClick={() => void createVendor()}>{saving ? "Saving…" : "Add vendor"}</Button></div>
+    {error && <p className="m-0 text-sm text-[var(--error-ink)]" role="alert">{error}</p>}
+    <div className="flex flex-wrap items-center justify-end gap-2">
+      <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
+      <Button type="button" disabled={!draft.name.trim() || saving} onClick={() => void createVendor()}>{saving ? "Saving…" : "Add vendor"}</Button>
+    </div>
   </section>;
 }
 
@@ -224,6 +233,14 @@ export function VendorRoster({ vendors, rollup, speed, consent, onChanged, onNew
   const [draft, setDraft] = useState<Draft | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const [refreshing, setRefreshing] = useState(false);
+
+  async function refresh() {
+    setRefreshing(true);
+    try { await onChanged(); } finally { setRefreshing(false); }
+  }
 
   // Refetched whenever the page reloads its rollup: a spend edit or a new campaign changes cost
   // per policy and trialling, and a stale fact line is worse than a late one.
@@ -273,10 +290,19 @@ export function VendorRoster({ vendors, rollup, speed, consent, onChanged, onNew
   }
 
   const best = facts?.best ?? null;
+  const query = search.trim().toLowerCase();
+  const matching = query ? rollup.filter((vendor) => vendor.vendor_name.toLowerCase().includes(query)) : rollup;
+  const { current, rows: shown } = paginate(matching, page, PAGE_SIZE);
+  const bad = "font-semibold text-[var(--error-ink)]";
 
-  return <section className="portal-campaigns-panel" aria-labelledby="vendor-rollup-heading">
-    <div className="portal-campaigns-panel-bar"><h2 id="vendor-rollup-heading">Vendor rollup</h2><span>Cost, speed and consent evidence, each over the vendor&rsquo;s own leads{facts?.true_cpa ? " · cost per issued policy over the vendor’s whole history" : ""}</span></div>
-    <Table>
+  return <TableCard
+    title="Vendor rollup"
+    toolbar={<DataToolbar actions={<RefreshButton onClick={() => void refresh()} refreshing={refreshing} />}>
+      <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Search vendors" />
+    </DataToolbar>}
+    footer={matching.length > 0 ? <Pager page={current} total={matching.length} noun={matching.length === 1 ? "vendor" : "vendors"} onPage={setPage} pageSize={PAGE_SIZE} /> : undefined}
+  >
+    {matching.length === 0 ? <NoMatches noun="vendors" onClear={() => { setSearch(""); setPage(1); }} /> : <Table className="[&_td]:text-[var(--body)]">
       <TableHeader><TableRow>
         <TableHead scope="col">Vendor</TableHead>
         <TableHead scope="col" className="text-right">Spend</TableHead>
@@ -289,7 +315,7 @@ export function VendorRoster({ vendors, rollup, speed, consent, onChanged, onNew
         <TableHead scope="col" className="text-right">Consent claimed</TableHead>
       </TableRow></TableHeader>
       <TableBody>
-        {rollup.map((vendor) => {
+        {shown.map((vendor) => {
           const fast = speedByVendor.get(vendor.vendor_id);
           const certificates = consentByVendor.get(vendor.vendor_id);
           const row = vendorById.get(vendor.vendor_id);
@@ -325,14 +351,14 @@ export function VendorRoster({ vendors, rollup, speed, consent, onChanged, onNew
               </TableCell>
               <TableCell className="text-right tabular-nums">{money(vendor.total_spend_cents)}</TableCell>
               <TableCell className="text-right tabular-nums">{vendor.records_purchased.toLocaleString()}</TableCell>
-              <TableCell className={`text-right tabular-nums${(vendor.records_rejected ?? 0) > 0 ? " is-bad" : ""}`}>{count(vendor.records_rejected)}</TableCell>
+              <TableCell className={cn("text-right tabular-nums", (vendor.records_rejected ?? 0) > 0 && bad)}>{count(vendor.records_rejected)}</TableCell>
               <TableCell className="text-right tabular-nums"><strong>{money2(vendor.cost_per_usable_record_cents)}</strong></TableCell>
-              <TableCell className={`text-right tabular-nums${costFlagged ? " is-bad" : ""}`} title={fact?.trialling ? "Not ranked: still trialling" : best && best.vendor_id === vendor.vendor_id ? "Lowest cost per issued policy of the ranked vendors" : undefined}>
+              <TableCell className={cn("text-right tabular-nums", costFlagged && bad)} title={fact?.trialling ? "Not ranked: still trialling" : best && best.vendor_id === vendor.vendor_id ? "Lowest cost per issued policy of the ranked vendors" : undefined}>
                 {fact ? <strong className={best && best.vendor_id === vendor.vendor_id ? "text-[var(--success-ink)]" : undefined}>{money2(fact.cost_per_policy_cents)}</strong> : "—"}
               </TableCell>
               <TableCell className="text-right tabular-nums">{fast?.posted_leads ? duration(fast.median_seconds) : "—"}</TableCell>
               <TableCell className="text-right tabular-nums">{fast?.posted_leads ? percent(fast.dialled_within_60s_pct) : "—"}</TableCell>
-              <TableCell className={`text-right tabular-nums${certificates && Number(certificates.claimed_coverage_pct ?? 0) < 50 ? " is-bad" : ""}`}>{certificates ? percent(certificates.claimed_coverage_pct) : "—"}</TableCell>
+              <TableCell className={cn("text-right tabular-nums", certificates && Number(certificates.claimed_coverage_pct ?? 0) < 50 && bad)}>{certificates ? percent(certificates.claimed_coverage_pct) : "—"}</TableCell>
             </TableRow>
             {lines.length > 0 && <TableRow className="portal-campaigns-detail-row"><TableCell colSpan={9}><div className="flex flex-col gap-2 px-4 pb-3">{lines}</div></TableCell></TableRow>}
             {open && <TableRow className="portal-campaigns-detail-row"><TableCell colSpan={9}>
@@ -364,10 +390,9 @@ export function VendorRoster({ vendors, rollup, speed, consent, onChanged, onNew
           </Fragment>;
         })}
       </TableBody>
-    </Table>
-    {(factsError || (facts?.pending.length ?? 0) > 0) && <div className="border-t border-border px-4 py-3 text-xs leading-normal text-muted-foreground" role="status">
-      {factsError ? <p className="m-0">Cost per policy, claimable returns and trial status could not be loaded, so their absence here is not a statement about any vendor. {factsError}</p>
-        : <ul className="m-0 list-disc pl-4">{facts?.pending.map((item) => <li key={item.missing.join(",")}>{item.detail}</li>)}</ul>}
-    </div>}
-  </section>;
+    </Table>}
+    {(factsError || (facts?.pending.length ?? 0) > 0) && <p className="m-0 border-t border-border px-4 py-2.5 text-xs leading-normal text-muted-foreground" role="status">
+      {factsError ? `Cost per policy, claimable returns and trial status did not load: ${factsError}` : facts?.pending.map((item) => item.detail).join(" ")}
+    </p>}
+  </TableCard>;
 }

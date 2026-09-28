@@ -2,17 +2,18 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, CheckCircle2, ChevronDown, Clock3, GitBranch, Hand, Loader2 } from "lucide-react";
+import { CheckCircle2, ChevronDown, ChevronLeft, Hand, Loader2 } from "lucide-react";
 import { notify } from "@/lib/notify";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/ui/page-header";
-import { sectionForPath } from "@/lib/menu/definition";
+import { PageLoading } from "@/components/ui/page-loading";
+import { TableCard } from "@/components/ui/table-card";
 import { MONTHS } from "@/lib/format/dates";
-import { ErrorState, LoadingRows } from "@/components/ui/page-states";
+import { ErrorState } from "@/components/ui/page-states";
 import type { LeadLineage, LeadNextAction } from "@/lib/leadWorkspace/lineage";
 import { LeadAttemptsTab, LeadCallbacksTab, LeadNurtureTab } from "@/components/app/lead-record-tabs";
 import { DispositionWizardDialog } from "@/components/app/disposition-wizard-dialog";
@@ -26,7 +27,7 @@ type Workspace = { lead: { id: string; values: Record<string, unknown>; product_
 function ExistingCustomerPreflight({ data, onRecheck, busy }: { data: Workspace; onRecheck: () => void; busy: boolean }) {
   const matches = data.preflight.matches ?? [];
   const label = data.preflight.status === "already_customer" ? "Already a customer" : data.preflight.status === "spoken_before" ? "Spoken before" : data.preflight.status === "not_checked" ? "Pre-flight unavailable" : "New household";
-  return <Card className={data.preflight.status === "already_customer" ? "border-[var(--error)]/50 bg-[var(--error)]/5" : data.preflight.status === "spoken_before" ? "border-[var(--warning)]/50 bg-[var(--warning)]/5" : ""}><CardContent className="space-y-3 p-4"><div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Existing-customer pre-flight</p><p className="mt-1 font-semibold">{label}</p>{data.preflight.soldByMultiplePartners && <p className="mt-1 text-sm font-semibold text-[var(--error-ink)]">Sold by {data.preflight.soldByPartners?.length ?? 2} partners: {(data.preflight.soldByPartners ?? []).map((partner) => partner.partnerName).join(", ")}</p>}</div><div className="flex items-center gap-2">{data.preflight.soldByMultiplePartners && <Badge variant="destructive">Sold by two partners</Badge>}<Badge variant={data.preflight.status === "already_customer" ? "destructive" : data.preflight.status === "spoken_before" ? "outline" : "secondary"}>{matches.length} prior match{matches.length === 1 ? "" : "es"}</Badge><Button type="button" size="sm" variant="outline" disabled={busy} onClick={onRecheck}>{busy ? "Checking…" : "Re-check"}</Button></div></div>{matches.length > 0 && <div className="space-y-2">{matches.slice(0, 5).map((match, index) => <div key={`${match.leadId ?? match.contactId ?? "match"}-${index}`} className="rounded-md border bg-background/60 p-3 text-sm"><p className="font-medium">{match.sourceType === "contact" ? "Contact on file" : `Prior lead${match.partnerName ? ` from ${match.partnerName}` : ""}`}</p><p className="mt-1 text-xs text-muted-foreground">{match.productLine ? `${match.productLine} · ` : ""}{match.outcome ?? "No outcome recorded"} · {when(match.submittedAt)}</p><p className="mt-1 text-xs text-muted-foreground">Matched on {match.matchedOn.join(", ") || "household details"}.</p></div>)}</div>}{data.preflight.policyMatchingNote && <p className="text-xs text-muted-foreground">{data.preflight.policyMatchingNote}</p>}</CardContent></Card>;
+  return <Card className={data.preflight.status === "already_customer" ? "border-[var(--error)]/50 bg-[var(--error)]/5" : data.preflight.status === "spoken_before" ? "border-[var(--warning)]/50 bg-[var(--warning)]/5" : ""}><CardContent className="space-y-3 p-4"><div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Existing-customer pre-flight</p><p className="mt-1 font-semibold">{label}</p>{data.preflight.soldByMultiplePartners && <p className="mt-1 text-sm font-semibold text-[var(--error-ink)]">Sold by {data.preflight.soldByPartners?.length ?? 2} partners: {(data.preflight.soldByPartners ?? []).map((partner) => partner.partnerName).join(", ")}</p>}</div><div className="flex items-center gap-2">{data.preflight.soldByMultiplePartners && <Badge variant="destructive">Sold by two partners</Badge>}<Badge variant={data.preflight.status === "already_customer" ? "destructive" : data.preflight.status === "spoken_before" ? "outline" : "secondary"}>{matches.length} prior match{matches.length === 1 ? "" : "es"}</Badge><Button type="button" variant="outline" disabled={busy} onClick={onRecheck}>{busy ? "Checking…" : "Re-check"}</Button></div></div>{matches.length > 0 && <div className="space-y-2">{matches.slice(0, 5).map((match, index) => <div key={`${match.leadId ?? match.contactId ?? "match"}-${index}`} className="rounded-md border bg-background/60 p-3 text-sm"><p className="font-medium">{match.sourceType === "contact" ? "Contact on file" : `Prior lead${match.partnerName ? ` from ${match.partnerName}` : ""}`}</p><p className="mt-1 text-xs text-muted-foreground">{match.productLine ? `${match.productLine} · ` : ""}{match.outcome ?? "No outcome recorded"} · {when(match.submittedAt)}</p><p className="mt-1 text-xs text-muted-foreground">Matched on {match.matchedOn.join(", ") || "household details"}.</p></div>)}</div>}{data.preflight.policyMatchingNote && <p className="text-xs text-muted-foreground">{data.preflight.policyMatchingNote}</p>}</CardContent></Card>;
 }
 
 function display(value: unknown) { return Array.isArray(value) ? value.join(", ") : value === null || value === undefined || value === "" ? "Not provided" : String(value); }
@@ -35,8 +36,8 @@ function visible(field: { show_when: { field_key: string; equals: string } | nul
 function stateVariant(state: string) { return state === "outstanding" ? "destructive" : state === "corrected" ? "outline" : "secondary"; }
 
 function VerificationTab({ data }: { data: Workspace }) {
-  if (!data.verification) return <Card><CardContent className="p-6 text-sm text-muted-foreground">Verification has not started for this lead. Claim the transfer from the inbox or Floor to begin.</CardContent></Card>;
-  return <div className="space-y-4"><Card><CardContent className="space-y-3 p-5"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Verification progress</p><p className="mt-1 text-2xl font-semibold">{data.verification.session.progress_percentage}%</p></div><Badge variant={data.verification.session.progress_percentage === 100 ? "secondary" : "outline"}>{data.verification.session.status}</Badge></div><div className="h-3 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${data.verification.session.progress_percentage}%` }} /></div><p className="text-xs text-muted-foreground">Started {when(data.verification.session.started_at)}{data.verification.session.completed_at ? ` · completed ${when(data.verification.session.completed_at)}` : ""}</p></CardContent></Card><Card><CardHeader className="pb-3"><CardTitle className="text-base">Field confirmation</CardTitle></CardHeader><CardContent className="space-y-2">{data.verification.fields.map((field) => <div key={field.field_key} className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-3 text-sm"><span>{field.field_key}</span><div className="flex items-center gap-2"><Badge variant={stateVariant(field.state)}>{field.state}</Badge>{field.state === "corrected" && <span className="text-xs text-muted-foreground">{display(field.old_value)} → {display(field.new_value)}</span>}</div></div>)}</CardContent></Card>{data.queue && data.queue.owner_user_id === data.currentUserId && <Button asChild><Link href={`/app/inbound/${data.queue.id}/verification`}>Open live verification</Link></Button>}</div>;
+  if (!data.verification) return <p className="text-sm text-muted-foreground">Verification has not started for this lead.</p>;
+  return <div className="space-y-5"><div className="space-y-3"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Verification progress</p><p className="mt-1 text-2xl font-semibold">{data.verification.session.progress_percentage}%</p></div><div className="flex items-center gap-2"><Badge variant={data.verification.session.progress_percentage === 100 ? "secondary" : "outline"}>{data.verification.session.status}</Badge>{data.queue && data.queue.owner_user_id === data.currentUserId && <Button asChild><Link href={`/app/inbound/${data.queue.id}/verification`}>Open live verification</Link></Button>}</div></div><div className="h-3 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${data.verification.session.progress_percentage}%` }} /></div><p className="text-xs text-muted-foreground">Started {when(data.verification.session.started_at)}{data.verification.session.completed_at ? ` · completed ${when(data.verification.session.completed_at)}` : ""}</p></div><div><h3 className="text-sm font-semibold">Field confirmation</h3><div className="mt-2 divide-y rounded-md border">{data.verification.fields.map((field) => <div key={field.field_key} className="flex flex-wrap items-center justify-between gap-3 px-3 py-2.5 text-sm"><span>{field.field_key}</span><div className="flex items-center gap-2"><Badge variant={stateVariant(field.state)}>{field.state}</Badge>{field.state === "corrected" && <span className="text-xs text-muted-foreground">{display(field.old_value)} → {display(field.new_value)}</span>}</div></div>)}</div></div></div>;
 }
 
 // "18 Sep 4:19 pm", as the board stamps a note.
@@ -90,10 +91,9 @@ function NotesTab({ data, refresh }: { data: Workspace; refresh: () => Promise<v
         <div className="mt-3 flex flex-wrap items-center gap-3">
           <label className="text-sm leading-normal tracking-[-0.02em] text-[var(--body)]" htmlFor="note-visibility">Visibility</label>
           <select id="note-visibility" aria-label="Note visibility" value={noteVisibility} onChange={(event) => setNoteVisibility(event.target.value as "internal" | "shared")} disabled={!canWrite || busy} className={`${FIELD} h-9 px-2.5 text-sm`}><option value="internal">Internal — team only</option><option value="shared">Shared — partner can see</option></select>
-          <span className="text-xs leading-normal text-muted-foreground">Internal is the default.</span>
           <span className="flex-grow" />
-          {editing && <Button type="button" variant="ghost" className="h-9" onClick={reset}>Cancel</Button>}
-          <Button type="button" className="h-9 px-4" disabled={!canWrite || busy || !body.trim()} onClick={() => void save()}>{busy ? <Loader2 className="size-4 animate-spin" /> : null}{editing ? "Save changes" : "Save note"}</Button>
+          {editing && <Button type="button" variant="ghost" onClick={reset}>Cancel</Button>}
+          <Button type="button" disabled={!canWrite || busy || !body.trim()} onClick={() => void save()}>{busy ? <Loader2 className="size-4 animate-spin" /> : null}{editing ? "Save changes" : "Save note"}</Button>
         </div>
         {data.teammates.length > 1 && (
           <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
@@ -101,13 +101,12 @@ function NotesTab({ data, refresh }: { data: Workspace; refresh: () => Promise<v
             {data.teammates.filter((user) => user.id !== data.currentUserId).map((user) => <label key={user.id} className="inline-flex items-center gap-2 text-sm text-[var(--body)]"><input type="checkbox" checked={mentions.includes(user.id)} onChange={() => toggleMention(user.id)} disabled={!canWrite || busy} className="size-4 accent-primary" />{user.name}{user.role ? ` (${user.role})` : ""}</label>)}
           </div>
         )}
-        <div className="mt-3.5 rounded-lg border border-border border-l-[3px] border-l-[var(--warning)] bg-[var(--warning-surface)] px-4 py-3.5"><p className="text-sm font-semibold leading-normal tracking-[-0.02em] text-[var(--warning-ink)]">Shared means the partner reads it, now</p><p className="mt-1.5 text-sm leading-normal tracking-[-0.02em] text-[var(--body)]">A shared note appears in the partner&rsquo;s channel immediately and cannot be unshared &mdash; only made internal going forward, which leaves what they already read. The default is internal for that reason.</p></div>
       </div>
       <div className="flex flex-wrap items-center gap-2 border-t border-border px-5 py-3">
         <label className="text-sm leading-normal tracking-[-0.02em] text-[var(--body)]" htmlFor="note-search">Search notes across leads</label>
         <input id="note-search" value={search} onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void runSearch(); }} placeholder="Search note text" className={`${FIELD} h-9 w-full max-w-xs px-3 text-sm`} />
-        <Button type="button" variant="outline" className="h-9 border-[var(--border-strong)]" onClick={() => void runSearch()}>Search</Button>
-        {searchResults && <Button type="button" variant="ghost" className="h-9" onClick={() => { setSearchResults(null); setSearch(""); }}>Clear</Button>}
+        <Button type="button" variant="outline" onClick={() => void runSearch()}>Search</Button>
+        {searchResults && <Button type="button" variant="ghost" onClick={() => { setSearchResults(null); setSearch(""); }}>Clear</Button>}
       </div>
       {shown.map((note) => {
         const related = [note.visibility === "shared" && !note.deletedAt ? `Posted to ${data.partner?.name ? `the ${data.partner.name}` : "the partner's"} channel` : null, note.mentions.length ? `${note.mentions.length} mention${note.mentions.length === 1 ? "" : "s"}` : null].filter(Boolean).join(" · ");
@@ -205,15 +204,14 @@ function LeadDetailTab({ data, onAllNotes }: { data: Workspace; onAllNotes: () =
         })}
       </div>
       {shown.length === 0 && <p className="text-sm text-muted-foreground">This form version has no fields to show.</p>}
-      <p className="mt-4 text-xs text-muted-foreground">As submitted on form version {data.lead.definition_version}. A correction made on the call is shown against the field it changed.</p>
+      <p className="mt-4 text-xs text-muted-foreground">As submitted on form version {data.lead.definition_version}.</p>
       {/* Under the fields: the answers are about finishing this application. Setters cannot sell. */}
       <LeadSignatureReadiness leadId={data.lead.id} readOnly={data.readOnly || data.role === "setter"} />
 
       {data.screening.warning && (
-        <div className={`mt-5 rounded-lg border border-border border-l-[3px] px-4 py-3.5 text-sm leading-normal tracking-[-0.02em] ${blocked ? "border-l-[var(--error)] bg-[var(--error-surface)]" : "border-l-[var(--warning)] bg-[var(--warning-surface)]"}`}>
-          <p className={`font-semibold ${blocked ? "text-[var(--error-ink)]" : "text-[var(--warning-ink)]"}`}>{blocked ? "Screening blocked this lead" : "Screening needs review"}</p>
-          <p className="mt-1.5 text-[var(--body)]">{data.screening.warning}</p>
-        </div>
+        <p role={blocked ? "alert" : "status"} className={`mt-5 rounded-lg border px-4 py-2.5 text-sm ${blocked ? "border-[var(--error)]/30 bg-[var(--error-surface)] text-[var(--error-ink)]" : "border-[var(--warning)]/30 bg-[var(--warning-surface)] text-[var(--warning-ink)]"}`}>
+          <span className="font-semibold">{blocked ? "Screening blocked this lead" : "Screening needs review"}:</span> {data.screening.warning}
+        </p>
       )}
 
       <div className="mt-5">
@@ -305,24 +303,12 @@ export function LeadDetailWorkspace({ leadId }: { leadId: string }) {
 
   if (error)
     return (
-      <Card>
-        <CardContent className="p-0">
-          <ErrorState detail={error} action={<Button variant="outline" onClick={() => void load()}>Try again</Button>} />
-        </CardContent>
-      </Card>
+      <TableCard>
+        <ErrorState detail={error} action={<Button type="button" variant="outline" onClick={() => void load()}>Try again</Button>} />
+      </TableCard>
     );
 
-  if (!data)
-    return (
-      <div className="space-y-6">
-        <span role="status" className="sr-only">Loading lead workspace</span>
-        <div aria-hidden="true" className="space-y-3">
-          <div className="h-4 w-32 animate-pulse rounded-full bg-muted motion-reduce:animate-none" />
-          <div className="h-9 w-72 animate-pulse rounded-md bg-muted motion-reduce:animate-none" />
-        </div>
-        <Card><CardContent className="p-0"><LoadingRows rows={4} columns={3} /></CardContent></Card>
-      </div>
-    );
+  if (!data) return <PageLoading strip={false} rows={6} />;
 
   const readOnly = data.readOnly;
   // Attempts and Callbacks are tabs rather than a cramped rail card and a line buried in the
@@ -343,17 +329,6 @@ export function LeadDetailWorkspace({ leadId }: { leadId: string }) {
   const inMore = more.find((item) => item.key === tab);
 
   const leadName = display(data.lead.values.full_name ?? data.lead.values.name ?? ([data.lead.values.first_name, data.lead.values.last_name].filter(Boolean).join(" ") || "Unnamed lead"));
-  // Each tab's artboard gives the page its own one-liner, because the question a reader arrives
-  // with on Attempts is not the one they arrive with on Notes.
-  const TAB_DESCRIPTION: Record<TabKey, string> = {
-    application: "One lead, its whole history, and every action available on it right now.",
-    attempts: "Every dial on this lead, what the server checked before it, and what came back.",
-    notes: "What people wrote down, who can see it, and what was changed after the fact.",
-    callbacks: "Times they asked for, in their timezone, and what the product did about each one.",
-    nurture: "If they stop answering, this is the cadence they fall into, and when it stops.",
-    verification: "Every required field, who confirmed it, and what was corrected on the call.",
-    timeline: "The immutable record of everything that has happened to this lead.",
-  };
   const screeningTone = data.screening.outcome === "blocked" ? "danger" : data.screening.warning ? "warning" : "good";
   const screeningLabel = data.screening.outcome === "blocked" ? "blocked" : data.screening.warning ? "needs review" : data.screening.outcome ?? "pending";
   const stageTone = data.stage?.stage_type === "won" ? "good" : data.stage?.stage_type === "lost" ? "danger" : "accent";
@@ -364,23 +339,16 @@ export function LeadDetailWorkspace({ leadId }: { leadId: string }) {
   const expired = data.queue?.status === "expired";
   const anyAction = data.actions.canClaim || data.actions.canAcceptHandoff || Boolean(data.queue) || canDisposition || canVerify || Boolean(data.stage && data.actions.canChangeStage);
   const tabClass = (active: boolean) => `-mb-px inline-flex h-10 items-center gap-1 border-b-2 px-1 text-sm font-semibold leading-[1.43] tracking-[-0.01em] outline-none focus-visible:ring-2 focus-visible:ring-ring ${active ? "border-[var(--primary)] text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`;
-  const outline = "h-10 w-full border-[var(--border-strong)]";
+  const outline = "w-full";
 
   return (
     <div className="m-stagger flex flex-col gap-6">
-      <div>
-        {/* The way back, then the record's own title: the lead's name is the first 32px thing on the page. */}
-        <div className="mb-2.5 flex items-center gap-2 text-sm font-semibold leading-[1.43] tracking-[-0.01em] text-foreground">
-          <ArrowLeft className="size-[13px]" strokeWidth={2.4} aria-hidden="true" />
-          <Link href="/app/leads" className="text-inherit no-underline hover:underline">Back to leads</Link>
-        </div>
-        <PageHeader
-          eyebrow={sectionForPath("/app/leads") ?? undefined}
-          title={leadName}
-          description={TAB_DESCRIPTION[tab]}
-          actions={<Button asChild variant="outline" className="h-11 border-[var(--border-strong)] px-4"><Link href="/app/leads">Back to leads</Link></Button>}
-        />
-      </div>
+      {/* The way back, then the record's own title: the lead's name is the first 32px thing on the page. */}
+      <Link href="/app/leads" className="-mb-3 inline-flex w-fit items-center gap-1.5 text-sm font-semibold tracking-[-0.01em] text-muted-foreground transition-colors hover:text-foreground">
+        <ChevronLeft className="size-4" aria-hidden="true" />
+        Leads
+      </Link>
+      <PageHeader title={leadName} description={identityLine(data) || undefined} />
 
       <div className="flex flex-wrap gap-2">
         <Chip tone={screeningTone} dot>Screening: {screeningLabel}</Chip>
@@ -389,7 +357,6 @@ export function LeadDetailWorkspace({ leadId }: { leadId: string }) {
         <Chip tone="neutral">{data.template.product_name}</Chip>
         {data.activeCall && <LiveCallChip startedAt={data.activeCall.startedAt} agentName={data.activeCall.agentName} />}
       </div>
-      {identityLine(data) && <p className="-mt-3 text-sm tabular-nums text-muted-foreground">{identityLine(data)}</p>}
 
       <section className="rounded-lg border border-border bg-card p-5 shadow-[0_1px_2px_rgba(16,20,26,.05)]">
         <div className="grid grid-cols-2 gap-x-6 gap-y-4 md:grid-cols-4 xl:grid-cols-7">
@@ -440,7 +407,6 @@ export function LeadDetailWorkspace({ leadId }: { leadId: string }) {
               {tab === "verification" && <VerificationTab data={data} />}
               {tab === "timeline" && (
                 <div>
-                  <div className="mb-4 flex items-center gap-2"><Clock3 className="size-4" aria-hidden="true" /><p className="font-semibold">Immutable lead timeline</p></div>
                   <ol className="space-y-4 border-l border-border pl-5">
                     {data.timeline.map((event) => (
                       <li key={event.id} className="relative">
@@ -452,7 +418,6 @@ export function LeadDetailWorkspace({ leadId }: { leadId: string }) {
                     ))}
                   </ol>
                   {data.timeline.length === 0 && <p className="text-sm text-muted-foreground">No events recorded yet.</p>}
-                  <p className="mt-5 flex items-center gap-2 text-xs text-muted-foreground"><GitBranch className="size-3" aria-hidden="true" />Events are append-only audit records.</p>
                 </div>
               )}
             </div>
@@ -462,16 +427,15 @@ export function LeadDetailWorkspace({ leadId }: { leadId: string }) {
         <div className="flex w-full shrink-0 flex-col gap-4 xl:w-[360px]">
           <section className="rounded-lg border border-border bg-card p-5 shadow-[0_1px_2px_rgba(16,20,26,.05)]">
             <h2 className="text-lg font-semibold leading-[1.28] tracking-[-0.015em]">Actions</h2>
-            <p className="mt-1 text-sm text-muted-foreground">What you can do on this lead right now.</p>
             <div className="mt-3.5 flex flex-col gap-2">
               {data.actions.canClaim && (
-                <Button className="h-10 w-full" disabled={readOnly || saving === "claim"} onClick={claim}>
+                <Button type="button" className="w-full" disabled={readOnly || saving === "claim"} onClick={claim}>
                   {saving === "claim" ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}{readOnly ? "Read-only" : "Claim"}
                 </Button>
               )}
-              {data.actions.canAcceptHandoff && <Button className="h-10 w-full" disabled={readOnly || saving === "accept"} onClick={acceptHandoff}>Accept handoff</Button>}
+              {data.actions.canAcceptHandoff && <Button type="button" className="w-full" disabled={readOnly || saving === "accept"} onClick={acceptHandoff}>Accept handoff</Button>}
               {data.queue && data.actions.canHandoff && (
-                <div className="flex flex-col gap-2 rounded-lg border border-border p-2.5">
+                <div className="flex flex-col gap-2">
                   <select aria-label="Licensed agent for handoff" disabled={readOnly || saving === "handoff"} value={handoffTarget || data.licensedAgents[0]?.id || ""} onChange={(event) => setHandoffTarget(event.target.value)} className="h-9 rounded-md border border-input bg-background px-2 text-sm">
                     <option value="">Choose agent…</option>
                     {data.licensedAgents.map((agent) => <option key={agent.id} value={agent.id}>{agent.name} ({agent.role})</option>)}
@@ -479,7 +443,7 @@ export function LeadDetailWorkspace({ leadId }: { leadId: string }) {
                   <Button variant="outline" className={outline} disabled={readOnly || saving === "handoff"} onClick={handoff}><Hand className="size-4" />Hand off to a licensed agent</Button>
                 </div>
               )}
-              {data.queue && data.actions.canRequeue && <Button className="h-10 w-full" disabled={readOnly || saving === "requeue"} onClick={() => void release("requeue")}>{saving === "requeue" && <Loader2 className="size-4 animate-spin" />}Put back in the queue</Button>}
+              {data.queue && data.actions.canRequeue && <Button type="button" className="w-full" disabled={readOnly || saving === "requeue"} onClick={() => void release("requeue")}>{saving === "requeue" && <Loader2 className="size-4 animate-spin" />}Put back in the queue</Button>}
               {data.queue && data.actions.canEndBufferInvolvement && <Button variant="outline" className={outline} disabled={readOnly || saving === "end_buffer"} onClick={() => void release("end_buffer")}>{saving === "end_buffer" && <Loader2 className="size-4 animate-spin" />}End buffer involvement</Button>}
               {data.queue && data.actions.canUnassign && <Button variant="outline" className={outline} disabled={readOnly || saving === "unassign"} onClick={() => void release("unassign")}>{saving === "unassign" && <Loader2 className="size-4 animate-spin" />}Unassign</Button>}
               {data.queue && <Button variant="outline" className={outline} disabled={readOnly || saving === "nudge"} onClick={nudge}>Nudge team</Button>}
@@ -496,10 +460,9 @@ export function LeadDetailWorkspace({ leadId }: { leadId: string }) {
                   </select>
                 </div>
               )}
-              {data.stage && !data.actions.canChangeStage && canDisposition && <p className="text-xs text-muted-foreground">The stage moves with the call outcome: record it with Disposition.</p>}
               {!anyAction && <p className="text-sm text-muted-foreground">Nothing can be done on this lead from here right now.</p>}
             </div>
-            {expired && <p className="mt-3 text-xs text-muted-foreground">This lead expired unclaimed. It stays readable; reopening puts it back in the active queue.</p>}
+            {expired && <p className="mt-3 text-xs text-muted-foreground">Expired unclaimed.</p>}
             {data.queue && <p className="mt-3 text-xs text-muted-foreground">Work item: {data.transfer?.phaseLabel ?? data.queue.status.replace(/_/g, " ")}{data.disposition ? ` · ${data.disposition.label}` : ""}</p>}
             {data.transfer?.buffer?.onCall && <p className="mt-1 text-xs text-muted-foreground">Buffer {data.transfer.buffer.name} is still on the call.</p>}
           </section>
@@ -530,7 +493,6 @@ export function LeadDetailWorkspace({ leadId }: { leadId: string }) {
               </ul>
               {lineage.money && lineage.totalCostCents != null && <p className="mt-2 text-xs text-muted-foreground tabular-nums">All sources together: ${(lineage.totalCostCents / 100).toFixed(2)}</p>}
             </div>}
-            <p className="mt-3 text-xs text-muted-foreground">Cost is hidden from assistants and setters.</p>
           </section>
 
           <ExistingCustomerPreflight data={data} busy={saving === "preflight"} onRecheck={recheckPreflight} />

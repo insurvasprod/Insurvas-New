@@ -3,7 +3,7 @@
 import { useMemo, useState, type KeyboardEvent } from "react";
 import { notify } from "@/lib/notify";
 
-import { Callout, DashedCard, Field, LockIcon, Pill, btn, control } from "@/components/app/settings/primitives";
+import { Callout, Field, Pill, btn, control } from "@/components/app/settings/primitives";
 import { LoginProtectionPanel } from "@/components/admin/login-protection-panel";
 import { SETTING_DEFS, settingRefusalReason, type SettingDef, type SettingValue } from "@/lib/settings/constants";
 import {
@@ -25,8 +25,8 @@ const STORE_INPUT =
   "box-border h-[38px] w-[140px] rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] px-3 text-right text-[16px] leading-[1.5] tracking-[-0.02em] tabular-nums text-[var(--ink)] outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)] aria-[invalid=true]:border-[var(--error)] disabled:cursor-not-allowed disabled:opacity-60";
 
 /**
- * The Advanced screen (p-adm-advanced): the raw settings store, the login-protection knobs, and the
- * warnings for any abuse control that has been loosened.
+ * The Advanced screen (p-adm-advanced): a warning for any abuse control that has been loosened, the
+ * raw settings store, and the login-protection knobs.
  *
  * Every row still saves on its own. SA-4.3 requires every section to save independently, and a
  * whole-form submit means one refused value discards three good ones — so a row's Save appears
@@ -162,6 +162,14 @@ export function SettingsForm({
 
   return (
     <div className="flex w-full min-w-0 flex-col gap-6">
+      {loosened.map((def) => (
+        <Callout
+          key={def.key}
+          tone="warning"
+          title={`${def.key} is raised to ${Number(live[def.key]).toLocaleString("en-US")}${def.unit ? ` ${def.unit}` : ""}, above its default of ${Number(def.default).toLocaleString("en-US")}.`}
+        />
+      ))}
+
       <section className="flex min-w-0 flex-col overflow-hidden rounded-[12px] border border-[var(--border)] bg-[var(--surface)]">
         <div className="flex items-center justify-between gap-4 border-b border-[var(--border)] bg-[var(--surface-alt)] px-4 py-3">
           <h2 className="m-0 text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">Settings store</h2>
@@ -230,75 +238,44 @@ export function SettingsForm({
             </div>
           );
         })}
-
-        <div className="border-t border-[var(--border)] bg-[var(--canvas)] px-4 py-3 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--body)]">
-          Every key carries a description — a raw key with no explanation is a trap. An override you cannot undo is a worse one, so
-          each has its own reset.
-        </div>
       </section>
 
-      <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
-        <div className="flex min-w-0 flex-col gap-6">
-          {canManageLoginProtection && loginDefs.length > 0 ? (
-            <section className="min-w-0 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] p-6">
-              <div>
-                <h2 className="m-0 text-[18px] leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]">Login protection</h2>
-                <p className="mt-1 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">Super admin only.</p>
-              </div>
-              <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-                {loginDefs.map((def) => {
-                  const key = def.key as (typeof LOGIN_PROTECTION_KEYS)[number];
-                  const error = errors[def.key];
-                  return (
-                    <div key={def.key} className="min-w-0">
-                      <Field label={LOGIN_PROTECTION_LABELS[key]} htmlFor={def.key} hint={def.help} error={error}>
-                        <input
-                          id={def.key}
-                          type="text"
-                          inputMode="numeric"
-                          className={control}
-                          value={draft[def.key]}
-                          aria-invalid={Boolean(error)}
-                          onChange={(e) => setValue(def, e.target.value)}
-                          onKeyDown={(e) => onFieldKey(def, e)}
-                        />
-                      </Field>
-                      <div className="mt-2 flex flex-wrap items-center gap-2.5">
-                        <code className="font-mono text-[12px] text-[var(--muted)]">{def.key}</code>
-                        <span className="flex-1" aria-hidden="true" />
-                        {rowActions(def)}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </section>
-          ) : (
-            <DashedCard icon={<LockIcon />} title="Login protection is managed by a super admin">
-              Password attempt limits and account lockouts decide how hard anyone can push on sign-in, so only a super admin sees or
-              changes them.
-            </DashedCard>
-          )}
+      {canManageLoginProtection && loginDefs.length > 0 ? (
+        <section className="min-w-0 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] p-6">
+          <h2 className="m-0 text-[18px] leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]">Login protection</h2>
+          <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {loginDefs.map((def) => {
+              const key = def.key as (typeof LOGIN_PROTECTION_KEYS)[number];
+              const error = errors[def.key];
+              return (
+                <div key={def.key} className="min-w-0">
+                  <Field label={LOGIN_PROTECTION_LABELS[key]} htmlFor={def.key} hint={def.help} error={error}>
+                    <input
+                      id={def.key}
+                      type="text"
+                      inputMode="numeric"
+                      className={control}
+                      value={draft[def.key]}
+                      aria-invalid={Boolean(error)}
+                      onChange={(e) => setValue(def, e.target.value)}
+                      onKeyDown={(e) => onFieldKey(def, e)}
+                    />
+                  </Field>
+                  <div className="mt-2 flex flex-wrap items-center gap-2.5">
+                    <code className="font-mono text-[12px] text-[var(--muted)]">{def.key}</code>
+                    <span className="flex-1" aria-hidden="true" />
+                    {rowActions(def)}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      ) : (
+        <Callout tone="info" title="Login protection is managed by a super admin." />
+      )}
 
-          {canManageLoginProtection && <LoginProtectionPanel />}
-        </div>
-
-        <div className="flex min-w-0 flex-col gap-6">
-          {loosened.length > 0 ? (
-            loosened.map((def) => (
-              <Callout key={def.key} tone="warning" title={`${def.key} is an abuse-control threshold`}>
-                It is set to {Number(live[def.key]).toLocaleString("en-US")}
-                {def.unit ? ` ${def.unit}` : ""}, above its default of {Number(def.default).toLocaleString("en-US")}. A higher value lets
-                one caller do more before protection engages.
-              </Callout>
-            ))
-          ) : (
-            <Callout tone="info" title="Abuse-control thresholds are at their defaults or stricter">
-              When one is raised above its default, a warning here names the key and both values.
-            </Callout>
-          )}
-        </div>
-      </div>
+      {canManageLoginProtection && <LoginProtectionPanel />}
     </div>
   );
 }

@@ -1,13 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { DataToolbar, toolbarControl } from "@/components/ui/data-toolbar";
+import { TableCard } from "@/components/ui/table-card";
 import type { CampaignComparison, ComparisonMetricKey, VendorScorecardRow } from "@/lib/vendorScorecard/types";
-import { Callout } from "@/components/app/settings/primitives";
 import type { CadenceCaveat } from "@/lib/cadence/history";
 import { checkComparisonPeriods, periodDays, periodLabel, type ComparisonPeriod } from "@/lib/vendorScorecard/comparePeriods";
 
@@ -29,6 +27,13 @@ const CADENCE_TONE: Record<CadenceCaveat["status"], "info" | "warning" | "succes
   pending: "warning",
   same: "success",
 };
+
+const TONE_TEXT: Record<"info" | "warning" | "success", string> = {
+  info: "text-[var(--info-ink)]",
+  warning: "text-[var(--warning-ink)]",
+  success: "text-[var(--success-ink)]",
+};
+const fact = "text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] text-muted-foreground";
 
 const label: Record<ComparisonMetricKey, string> = { contact_rate: "Contact rate", conversion_rate: "Issued conversion", cost_per_issued: "Cost per issued policy" };
 function dollars(cents: number | null) { return cents == null ? "—" : new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100); }
@@ -78,27 +83,54 @@ export function CampaignComparisonWorkspace({ rows, defaultFrom, defaultTo }: { 
     else setError(null);
   }
 
-  return <Card><CardHeader><CardTitle className="text-base">Compare campaigns honestly</CardTitle><CardDescription>Match the number of days and starting weekday before deciding whether a difference is real. No automatic winner or budget shift is applied.</CardDescription></CardHeader><CardContent className="space-y-4">
-    <form className="grid gap-3 md:grid-cols-2 xl:grid-cols-4" onSubmit={compare}>
-      <div className="space-y-1.5"><Label htmlFor="comparison-campaign-a">Campaign A</Label><select id="comparison-campaign-a" required className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm" value={campaignA} onChange={(event) => setCampaignA(event.target.value)}><option value="">Choose campaign</option>{rows.map((row) => <option key={`a-${row.campaign_id}`} value={row.campaign_id}>{row.campaign_name} · {row.vendor_name}</option>)}</select></div>
-      <div className="space-y-1.5"><Label htmlFor="comparison-campaign-b">Campaign B</Label><select id="comparison-campaign-b" required className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm" value={campaignB} onChange={(event) => setCampaignB(event.target.value)}><option value="">Choose campaign</option>{rows.map((row) => <option key={`b-${row.campaign_id}`} value={row.campaign_id}>{row.campaign_name} · {row.vendor_name}</option>)}</select></div>
-      <div className="space-y-1.5"><Label htmlFor="comparison-metric">Metric</Label><select id="comparison-metric" className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm" value={metric} onChange={(event) => setMetric(event.target.value as ComparisonMetricKey)}>{Object.entries(label).map(([key, value]) => <option key={key} value={key}>{value}</option>)}</select></div>
-      <div className="flex items-end"><Button type="submit" disabled={loading || rows.length < 2}>{loading ? "Comparing…" : "Compare campaigns"}</Button></div>
-      <fieldset className="rounded-md border p-3 md:col-span-2"><legend className="px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Campaign A period</legend><div className="grid grid-cols-2 gap-3"><Input aria-label="Campaign A from" type="date" value={fromA} onChange={(event) => setFromA(event.target.value)} /><Input aria-label="Campaign A to" type="date" value={toA} onChange={(event) => setToA(event.target.value)} /></div></fieldset>
-      <fieldset className="rounded-md border p-3 md:col-span-2"><legend className="px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Campaign B period</legend><div className="grid grid-cols-2 gap-3"><Input aria-label="Campaign B from" type="date" value={fromB} onChange={(event) => setFromB(event.target.value)} /><Input aria-label="Campaign B to" type="date" value={toB} onChange={(event) => setToB(event.target.value)} /></div></fieldset>
-    </form>
-    {!check.ok && check.problem !== "order" && !error && <Callout tone="info" title="These periods are not matched yet">{check.message}</Callout>}
-    {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-    {offer && <div className="flex flex-wrap items-center gap-3 rounded-md border border-border bg-[var(--surface-alt)] p-3 text-sm">
+  return <TableCard
+    title="Compare campaigns"
+    toolbar={<form className="w-full" onSubmit={compare}>
+      <DataToolbar actions={<Button type="submit" disabled={loading || rows.length < 2}>{loading ? "Comparing…" : "Compare"}</Button>}>
+        <select id="comparison-campaign-a" aria-label="Campaign A" required className={`${toolbarControl} max-w-[240px]`} value={campaignA} onChange={(event) => setCampaignA(event.target.value)}><option value="">Campaign A</option>{rows.map((row) => <option key={`a-${row.campaign_id}`} value={row.campaign_id}>{row.campaign_name} · {row.vendor_name}</option>)}</select>
+        <input aria-label="Campaign A from" type="date" className={toolbarControl} value={fromA} onChange={(event) => setFromA(event.target.value)} />
+        <input aria-label="Campaign A to" type="date" className={toolbarControl} value={toA} onChange={(event) => setToA(event.target.value)} />
+        <select id="comparison-campaign-b" aria-label="Campaign B" required className={`${toolbarControl} max-w-[240px]`} value={campaignB} onChange={(event) => setCampaignB(event.target.value)}><option value="">Campaign B</option>{rows.map((row) => <option key={`b-${row.campaign_id}`} value={row.campaign_id}>{row.campaign_name} · {row.vendor_name}</option>)}</select>
+        <input aria-label="Campaign B from" type="date" className={toolbarControl} value={fromB} onChange={(event) => setFromB(event.target.value)} />
+        <input aria-label="Campaign B to" type="date" className={toolbarControl} value={toB} onChange={(event) => setToB(event.target.value)} />
+        <select id="comparison-metric" aria-label="Metric" className={toolbarControl} value={metric} onChange={(event) => setMetric(event.target.value as ComparisonMetricKey)}>{Object.entries(label).map(([key, value]) => <option key={key} value={key}>{value}</option>)}</select>
+      </DataToolbar>
+    </form>}
+  >
+    {!rows.length && <p className="px-4 py-6 text-sm text-muted-foreground">Load at least two campaign rows to compare.</p>}
+    {!check.ok && check.problem !== "order" && !error && <p className={`border-b border-border px-4 py-2.5 text-sm ${TONE_TEXT.info}`}>{check.message}</p>}
+    {error && <p role="alert" className="border-b border-border px-4 py-2.5 text-sm text-[var(--error-ink)]">{error}</p>}
+    {offer && <div className="flex flex-wrap items-center gap-3 border-b border-border px-4 py-2.5 text-sm">
       <span>Matched period for B: <strong className="tabular-nums">{periodLabel(offer)}</strong> &middot; {periodDays(offer)} days, starting on the same weekday as A.</span>
-      <Button type="button" variant="outline" size="sm" disabled={loading} onClick={() => takeMatched(offer)}>{campaignA && campaignB ? "Compare with this period" : "Use this period"}</Button>
+      <Button type="button" variant="outline" disabled={loading} onClick={() => takeMatched(offer)}>{campaignA && campaignB ? "Compare with this period" : "Use this period"}</Button>
     </div>}
-    {!rows.length && <p className="text-sm text-muted-foreground">Load at least two campaign rows to compare.</p>}
-    {result && <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border bg-muted/20 p-4"><div><p className="text-sm font-semibold">{result.confidence.statement}</p>{result.confidence.size_warning && <p className="mt-1 text-sm text-[var(--warning-ink)]">{result.confidence.size_warning}</p>}<p className="mt-1 text-xs text-muted-foreground">{result.matched_periods.days} matched days · {result.confidence.sample_a} observations in A · {result.confidence.sample_b} in B</p></div><Badge variant={result.confidence.level === "strong" ? "secondary" : result.confidence.level === "insufficient" ? "destructive" : "outline"}>{result.confidence.level.replaceAll("_", " ")}</Badge></div>
-      {result.cadence && <Callout tone={CADENCE_TONE[result.cadence.status]} title={CADENCE_TITLE[result.cadence.status]}>{result.cadence.message}</Callout>}
-      <div className="grid gap-4 md:grid-cols-3"><Card><CardContent className="pt-5"><p className="text-xs font-semibold uppercase text-muted-foreground">Metric</p><p className="mt-2 text-lg font-semibold">{label[result.metric.key]}</p><p className="mt-1 text-sm text-muted-foreground">A {metricValue(result.metric.a_value, result.metric.unit)} · B {metricValue(result.metric.b_value, result.metric.unit)}</p></CardContent></Card><Card><CardContent className="pt-5"><p className="text-xs font-semibold uppercase text-muted-foreground">Difference B − A</p><p className="mt-2 text-lg font-semibold">{metricValue(result.metric.difference, result.metric.unit)}</p><p className="mt-1 text-sm text-muted-foreground">Negative cost is better; positive rates are better.</p></CardContent></Card><Card><CardContent className="pt-5"><p className="text-xs font-semibold uppercase text-muted-foreground">Allocated spend</p><p className="mt-2 text-lg font-semibold">{dollars(result.campaign_a.allocated_spend_cents)} · {dollars(result.campaign_b.allocated_spend_cents)}</p><p className="mt-1 text-sm text-muted-foreground">A · B, allocated from campaign unit cost.</p></CardContent></Card></div>
-      <div className="overflow-x-auto"><table className="w-full min-w-[720px] text-left text-sm"><caption className="mb-2 text-left text-sm font-semibold">Side-by-side funnel volumes</caption><thead className="border-b text-xs uppercase tracking-wide text-muted-foreground"><tr><th className="p-3">Stage</th><th className="p-3">A volume</th><th className="p-3">B volume</th><th className="p-3">Difference</th><th className="p-3">A rate</th><th className="p-3">B rate</th></tr></thead><tbody>{result.funnel.map((stage) => <tr key={stage.stage} className="border-b last:border-0"><td className="p-3 font-medium">{stage.stage.replaceAll("_", " ")}</td><td className="p-3">{stage.a_count.toLocaleString()}</td><td className="p-3">{stage.b_count.toLocaleString()}</td><td className="p-3">{stage.difference > 0 ? "+" : ""}{stage.difference.toLocaleString()}</td><td className="p-3">{stage.a_rate_percent == null ? "—" : `${stage.a_rate_percent}%`}</td><td className="p-3">{stage.b_rate_percent == null ? "—" : `${stage.b_rate_percent}%`}</td></tr>)}</tbody></table></div>
-    </div>}
-  </CardContent></Card>;
+    {result && <>
+      <div className="flex flex-wrap items-start justify-between gap-3 px-4 py-3">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold">{result.confidence.statement}</p>
+          {result.confidence.size_warning && <p className="mt-0.5 text-sm text-[var(--warning-ink)]">{result.confidence.size_warning}</p>}
+          <p className="mt-0.5 text-xs text-muted-foreground">{result.matched_periods.days} matched days · {result.confidence.sample_a} observations in A · {result.confidence.sample_b} in B</p>
+          {result.cadence && <p className={`mt-0.5 text-xs ${TONE_TEXT[CADENCE_TONE[result.cadence.status]]}`}><strong className="font-semibold">{CADENCE_TITLE[result.cadence.status]}.</strong> {result.cadence.message}</p>}
+        </div>
+        <Badge variant={result.confidence.level === "strong" ? "secondary" : result.confidence.level === "insufficient" ? "destructive" : "outline"}>{result.confidence.level.replaceAll("_", " ")}</Badge>
+      </div>
+      <dl className="grid gap-x-6 gap-y-3 border-t border-border px-4 py-3 sm:grid-cols-3">
+        <div><dt className={fact}>{label[result.metric.key]}</dt><dd className="mt-1 text-sm font-semibold tabular-nums">A {metricValue(result.metric.a_value, result.metric.unit)} · B {metricValue(result.metric.b_value, result.metric.unit)}</dd></div>
+        <div><dt className={fact}>Difference B − A</dt><dd className="mt-1 text-sm font-semibold tabular-nums">{metricValue(result.metric.difference, result.metric.unit)} <span className="text-xs font-normal text-muted-foreground">{result.metric.unit === "cents" ? "lower is better" : "higher is better"}</span></dd></div>
+        <div><dt className={fact}>Allocated spend</dt><dd className="mt-1 text-sm font-semibold tabular-nums">A {dollars(result.campaign_a.allocated_spend_cents)} · B {dollars(result.campaign_b.allocated_spend_cents)}</dd></div>
+      </dl>
+      <table className="portal-lead-table w-full min-w-[720px] border-t border-border text-left">
+        <caption className="sr-only">Side-by-side funnel volumes</caption>
+        <thead><tr><th scope="col">Stage</th><th scope="col" className="!text-right">A volume</th><th scope="col" className="!text-right">B volume</th><th scope="col" className="!text-right">Difference</th><th scope="col" className="!text-right">A rate</th><th scope="col" className="!text-right">B rate</th></tr></thead>
+        <tbody>{result.funnel.map((stage) => <tr key={stage.stage}>
+          <td className="font-medium capitalize">{stage.stage.replaceAll("_", " ")}</td>
+          <td className="text-right tabular-nums">{stage.a_count.toLocaleString()}</td>
+          <td className="text-right tabular-nums">{stage.b_count.toLocaleString()}</td>
+          <td className="text-right tabular-nums">{stage.difference > 0 ? "+" : ""}{stage.difference.toLocaleString()}</td>
+          <td className="text-right tabular-nums">{stage.a_rate_percent == null ? "—" : `${stage.a_rate_percent}%`}</td>
+          <td className="text-right tabular-nums">{stage.b_rate_percent == null ? "—" : `${stage.b_rate_percent}%`}</td>
+        </tr>)}</tbody>
+      </table>
+    </>}
+  </TableCard>;
 }

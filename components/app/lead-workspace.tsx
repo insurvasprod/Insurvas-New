@@ -2,17 +2,18 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ChevronDown, ExternalLink, Search, SlidersHorizontal, X } from "lucide-react";
+import { ExternalLink, X } from "lucide-react";
 import { notify } from "@/lib/notify";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/ui/page-header";
-import { sectionForPath } from "@/lib/menu/definition";
-import { DispositionLibrary, PipelineCreateDialog, PipelineStageManager } from "@/components/app/pipeline-stage-manager";
+import { PageLoading } from "@/components/ui/page-loading";
+import { ErrorState, NoMatches, SectionLoading } from "@/components/ui/page-states";
+import { TableCard } from "@/components/ui/table-card";
+import { DataToolbar, FilterButton, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import type { TemplateField, TemplateRow } from "@/lib/templates/constants";
 import type { PipelineStage } from "@/lib/pipelines/types";
 import { pruneHiddenTemplateValues, templateFormFieldVisible } from "@/lib/templates/visibility";
@@ -26,8 +27,6 @@ type LeadDetail = { lead: Lead & { product_line: string; definition_version: num
 
 /** The combined view. A sentinel rather than a pipeline id, because it is not one. */
 const ALL = "all";
-/** The pipeline menu's "New pipeline…" entry. Not a pipeline either. */
-const NEW_PIPELINE = "__new";
 /** Leads whose stage is archived or belongs to no stage on this board. */
 const UNMAPPED = "__unmapped";
 
@@ -113,7 +112,7 @@ function PipelineCard({ lead, selected, readOnly, now, money, late, onSelect, on
   );
 }
 
-function PipelineBoard({ stages, leads, selectedId, readOnly, now, money, context, onSelect, onStageChange, onManageStages }: { stages: PipelineStage[]; leads: Lead[]; selectedId: string | null; readOnly: boolean; now: number; money: boolean; context: ViewContext | null; onSelect: (lead: Lead) => void; onStageChange: (lead: Lead, stage: string) => void; onManageStages: (() => void) | null }) {
+function PipelineBoard({ stages, leads, selectedId, readOnly, now, money, context, onSelect, onStageChange }: { stages: PipelineStage[]; leads: Lead[]; selectedId: string | null; readOnly: boolean; now: number; money: boolean; context: ViewContext | null; onSelect: (lead: Lead) => void; onStageChange: (lead: Lead, stage: string) => void }) {
   const [draggedId, setDraggedId] = useState<string | null>(null); const [dragOver, setDragOver] = useState<string | null>(null);
   // A terminal "closed" column is history, not work: collapsed until asked for.
   const [openTerminal, setOpenTerminal] = useState<Record<string, boolean>>({});
@@ -149,10 +148,7 @@ function PipelineBoard({ stages, leads, selectedId, readOnly, now, money, contex
             <header className="border-b-2 bg-card p-3" style={{ borderBottomColor: column.color }}>
               <div className="flex items-center justify-between gap-2">
                 <h3 className="truncate text-sm font-semibold leading-normal tracking-[-0.02em] text-foreground">{column.name}</h3>
-                <span className="flex items-center gap-1.5">
-                  <span className="text-sm font-semibold tabular-nums text-muted-foreground">{columnLeads.length.toLocaleString()}</span>
-                  {onManageStages && column.stage && <button type="button" aria-label={`Edit the stages on this board`} title="Edit stages" className="rounded px-1 text-xs tracking-[0.08em] text-muted-foreground hover:text-foreground" onClick={onManageStages}>•••</button>}
-                </span>
+                <span className="text-sm font-semibold tabular-nums text-muted-foreground">{columnLeads.length.toLocaleString()}</span>
               </div>
               <div className={cn("mt-[3px] text-xs leading-normal tracking-[-0.01em] tabular-nums", late ? "font-semibold text-[var(--error-ink)]" : "text-muted-foreground")}>
                 {column.id === UNMAPPED ? "stage retired or moved" : late ? `${late} past the ${durationLabel((allowed ?? 0) * 60_000)} allowed` : money ? `${premium > 0 ? compactAnnual(premium) : "—"} annualised` : `${columnLeads.length === 1 ? "1 lead" : `${columnLeads.length.toLocaleString()} leads`}`}
@@ -160,12 +156,9 @@ function PipelineBoard({ stages, leads, selectedId, readOnly, now, money, contex
             </header>
             <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-2.5">
               {collapsed ? (
-                <div className="flex flex-col gap-2 p-1 text-xs text-muted-foreground">
-                  <p>Closed leads are history, not work, so this column starts collapsed.</p>
-                  <Button type="button" variant="outline" size="sm" className="h-8 border-[var(--border-strong)]" onClick={() => setOpenTerminal((state) => ({ ...state, [column.id]: true }))}>Show the {columnLeads.length.toLocaleString()}</Button>
-                </div>
+                <Button type="button" variant="outline" size="sm" onClick={() => setOpenTerminal((state) => ({ ...state, [column.id]: true }))}>Show {columnLeads.length.toLocaleString()} closed</Button>
               ) : columnLeads.map((lead) => <PipelineCard key={lead.id} lead={lead} selected={lead.id === selectedId} readOnly={readOnly} now={now} money={money} late={isOverdue(lead, context, now)} onSelect={() => onSelect(lead)} onDragStart={() => setDraggedId(lead.id)} />)}
-              {columnLeads.length === 0 && <div className="lead-column-empty">{readOnly ? "No leads here" : column.stage && context && !enterable ? "No disposition lands here" : "Drop to move here — you will be asked which disposition"}</div>}
+              {columnLeads.length === 0 && <div className="lead-column-empty">{readOnly ? "No leads here" : column.stage && context && !enterable ? "No disposition lands here" : "Drop a lead here"}</div>}
             </div>
           </section>
         );
@@ -181,20 +174,18 @@ function LeadPreviewPanel({ lead, stages, readOnly, onMove, onClose }: { lead: L
   useEffect(() => { let cancelled = false; setData(null); setError(""); void fetch(`/api/app/leads/${encodeURIComponent(lead.id)}`, { cache: "no-store" }).then(async (response) => ({ response, body: await response.json().catch(() => null) })).then(({ response, body }) => { if (cancelled) return; if (!response.ok) { setError(body?.error ?? "Could not load this lead"); return; } setData(body); }).catch(() => { if (!cancelled) setError("Could not load this lead"); }); return () => { cancelled = true; }; }, [lead.id, lead.stage_id]);
   const fieldEntries = data ? Object.entries(data.lead.values) : [];
   const liveStages = stages.filter((item) => !item.is_archived).sort((a, b) => a.position - b.position);
-  return <aside className="lead-preview-panel"><div className="lead-preview-header"><div><span className="eyebrow">LEAD PREVIEW</span><h2>{leadName(lead)}</h2><p>{data?.lead.product_line ?? productOf(lead)} · {data?.partner?.name ?? "Partner submission"}</p></div><button type="button" className="lead-preview-close" aria-label="Close lead preview" onClick={onClose}><X className="size-5" /></button></div>
+  return <aside className="lead-preview-panel"><div className="lead-preview-header"><div className="min-w-0"><h2>{leadName(lead)}</h2><p>{data?.lead.product_line ?? productOf(lead)} · {data?.partner?.name ?? "Partner submission"}</p></div><button type="button" className="lead-preview-close" aria-label="Close lead preview" onClick={onClose}><X className="size-5" /></button></div>
     {/* Moving a lead from the keyboard: the board's cards are drag-only, so the move lives here too —
         as a disposition, the same as a drop. */}
-    <div className="flex items-center gap-2 border-b border-border px-4 py-2.5"><span className="text-xs text-muted-foreground">Stage</span><span className="flex-1 truncate text-sm font-semibold">{liveStages.find((item) => item.id === lead.stage_id)?.name ?? "Unmapped"}</span><Button type="button" variant="outline" size="sm" className="h-8 border-[var(--border-strong)] px-3" aria-label={`Move ${leadName(lead)} to stage`} disabled={readOnly} onClick={onMove}>Move</Button></div>
-    <div className="lead-preview-tabs"><button type="button" className={tab === "submission" ? "is-active" : ""} onClick={() => setTab("submission")}>Submission</button><button type="button" className={tab === "timeline" ? "is-active" : ""} onClick={() => setTab("timeline")}>Timeline</button></div>{error ? <div className="lead-preview-state text-destructive">{error}</div> : !data ? <div className="lead-preview-state">Loading lead detail…</div> : tab === "submission" ? <div className="lead-preview-scroll"><div className="lead-preview-banner"><span className={`lead-stage-pill ${stageTone(data.stage ?? undefined)}`}>{data.stage?.name ?? "Open"}</span><span>{data.screening.outcome ?? "Screening pending"}</span></div><div className="lead-preview-section"><div className="lead-section-heading"><h3>Form as submitted</h3><span>Version {data.lead.definition_version}</span></div><div className="lead-form-snapshot">{fieldEntries.map(([key, value]) => <div key={key} className="lead-snapshot-row"><span>{data.template.fields.find((field) => field.field_key === key)?.label ?? key}</span><strong>{display(value)}</strong></div>)}</div></div><div className="lead-preview-section"><div className="lead-section-heading"><h3>Submission details</h3></div><dl className="lead-detail-list"><div><dt>Submitted</dt><dd>{when(data.lead.created_at)}</dd></div><div><dt>Submitted by</dt><dd>{data.submitter?.name ?? lead.submitter_name ?? "Workspace"}</dd></div><div><dt>Owner</dt><dd>{data.owner?.name ?? "Unclaimed"}</dd></div><div><dt>Queue status</dt><dd>{data.queue?.status ?? "Not queued"}</dd></div></dl></div></div> : <div className="lead-preview-scroll"><div className="lead-preview-section"><div className="lead-section-heading"><h3>Submission timeline</h3></div><div className="lead-timeline">{data.timeline.length ? data.timeline.map((event) => <div key={event.id} className="lead-timeline-item"><span className="lead-timeline-dot" /><div><strong>{event.label}</strong><p>{event.detail ?? event.actor}</p><time>{when(event.at)}</time></div></div>) : <p className="text-sm text-muted-foreground">No timeline events yet.</p>}</div></div></div>}<div className="lead-preview-footer"><Link href={`/app/leads/${lead.id}`} className="lead-full-link">Open full lead workspace <ExternalLink className="size-4" /></Link></div></aside>;
+    <div className="flex items-center gap-2 border-b border-border px-4 py-2.5"><span className="text-xs text-muted-foreground">Stage</span><span className="flex-1 truncate text-sm font-semibold">{liveStages.find((item) => item.id === lead.stage_id)?.name ?? "Unmapped"}</span><Button type="button" variant="outline" size="sm" aria-label={`Move ${leadName(lead)} to stage`} disabled={readOnly} onClick={onMove}>Move</Button></div>
+    <div className="lead-preview-tabs"><button type="button" className={tab === "submission" ? "is-active" : ""} onClick={() => setTab("submission")}>Submission</button><button type="button" className={tab === "timeline" ? "is-active" : ""} onClick={() => setTab("timeline")}>Timeline</button></div>{error ? <div className="lead-preview-state text-destructive">{error}</div> : !data ? <div className="flex-1"><SectionLoading rows={6} columns={2} label="Loading lead" /></div> : tab === "submission" ? <div className="lead-preview-scroll"><div className="lead-preview-banner"><span className={`lead-stage-pill ${stageTone(data.stage ?? undefined)}`}>{data.stage?.name ?? "Open"}</span><span>{data.screening.outcome ?? "Screening pending"}</span></div><div className="lead-preview-section"><div className="lead-section-heading"><h3>Form as submitted</h3><span>Version {data.lead.definition_version}</span></div><div className="lead-form-snapshot">{fieldEntries.map(([key, value]) => <div key={key} className="lead-snapshot-row"><span>{data.template.fields.find((field) => field.field_key === key)?.label ?? key}</span><strong>{display(value)}</strong></div>)}</div></div><div className="lead-preview-section"><div className="lead-section-heading"><h3>Submission details</h3></div><dl className="lead-detail-list"><div><dt>Submitted</dt><dd>{when(data.lead.created_at)}</dd></div><div><dt>Submitted by</dt><dd>{data.submitter?.name ?? lead.submitter_name ?? "Workspace"}</dd></div><div><dt>Owner</dt><dd>{data.owner?.name ?? "Unclaimed"}</dd></div><div><dt>Queue status</dt><dd>{data.queue?.status ?? "Not queued"}</dd></div></dl></div></div> : <div className="lead-preview-scroll"><div className="lead-preview-section"><div className="lead-section-heading"><h3>Submission timeline</h3></div><div className="lead-timeline">{data.timeline.length ? data.timeline.map((event) => <div key={event.id} className="lead-timeline-item"><span className="lead-timeline-dot" /><div><strong>{event.label}</strong><p>{event.detail ?? event.actor}</p><time>{when(event.at)}</time></div></div>) : <p className="text-sm text-muted-foreground">No timeline events yet.</p>}</div></div></div>}<div className="lead-preview-footer"><Link href={`/app/leads/${lead.id}`} className="lead-full-link">Open full lead workspace <ExternalLink className="size-4" /></Link></div></aside>;
 }
 
 const VIEW_LABEL = { stages: "Stages", board: "Board", table: "Table", list: "List" } as const;
 
-const barButton = "inline-flex h-10 items-center gap-2 rounded-lg border border-[var(--border-strong)] bg-card px-3.5 text-sm font-semibold leading-[1.43] tracking-[-0.01em] text-foreground";
-
 export function LeadWorkspace() {
   const [data, setData] = useState<PageData | null>(null); const [error, setError] = useState(""); const [search, setSearch] = useState(""); const [query, setQuery] = useState(""); const [view, setView] = useState<"stages" | "board" | "table" | "list">("board"); const [selected, setSelected] = useState<Lead | null>(null); const [moreFilters, setMoreFilters] = useState(false); const [product, setProduct] = useState(""); const [stageFilter, setStageFilter] = useState(""); const [submitter, setSubmitter] = useState(""); const [outcome, setOutcome] = useState(""); const [fromDate, setFromDate] = useState(""); const [toDate, setToDate] = useState("");
-  const [pipelineId, setPipelineId] = useState(""); const [managingStages, setManagingStages] = useState(false); const [creatingPipeline, setCreatingPipeline] = useState(false); const [libraryOpen, setLibraryOpen] = useState(false); const [adding, setAdding] = useState(false);
+  const [pipelineId, setPipelineId] = useState(""); const [adding, setAdding] = useState(false); const [refreshing, setRefreshing] = useState(false);
   // Ages and "today" are measured against the moment the data arrived, read in the browser.
   const [now, setNow] = useState(0);
   // Stage rules, the dispositions that land on each stage, unmapped outcomes: the pipeline views'
@@ -236,14 +227,6 @@ export function LeadWorkspace() {
   // One lookup across every pipeline, so the table and stage filter can resolve a
   // stage id without knowing which board it came from.
   const stageIndex = useMemo(() => { const map = new Map<string, { stage: PipelineStage; pipelineName: string }>(); for (const pipeline of pipelines) for (const stage of pipeline.stages) map.set(stage.id, { stage, pipelineName: pipeline.name }); return map; }, [pipelines]);
-  // Every stage by name and pipeline, and where leads sit now: for the stage manager's counts, its
-  // "past the time allowed" preview, and naming the stage a disposition would be moved from.
-  const stageList = useMemo(() => [...stageIndex.values()].map((entry) => ({ id: entry.stage.id, name: entry.stage.name, pipelineName: entry.pipelineName })), [stageIndex]);
-  const stageLeads = useMemo(() => {
-    const counts: Record<string, number> = {}; const entries: Record<string, Array<string | null>> = {};
-    for (const lead of data?.leads ?? []) { counts[lead.stage_id] = (counts[lead.stage_id] ?? 0) + 1; (entries[lead.stage_id] ??= []).push(lead.stage_entered_at ?? null); }
-    return { counts, entries };
-  }, [data]);
   const filterStages = useMemo(() => (isAll ? [...stageIndex.values()].filter((entry) => !entry.stage.is_archived) : allStages.filter((stage) => !stage.is_archived).map((stage) => ({ stage, pipelineName: "" }))), [isAll, stageIndex, allStages]);
   const isOwner = data?.role === "owner";
   // Scoped to the pipeline on screen, so the filter menus never offer a value that would return
@@ -253,6 +236,7 @@ export function LeadWorkspace() {
   const activeFilters = [product, stageFilter, submitter, outcome, fromDate, toDate].filter(Boolean).length;
   function applySearch(event: React.FormEvent) { event.preventDefault(); const params = new URLSearchParams(); if (search.trim()) params.set("q", search.trim()); const next = params.toString(); setQuery(next); void load(next); }
   function resetFilters() { setSearch(""); setQuery(""); setProduct(""); setStageFilter(""); setSubmitter(""); setOutcome(""); setFromDate(""); setToDate(""); void load(""); }
+  async function refresh() { setRefreshing(true); try { await Promise.all([load(query), loadContext()]); } finally { setRefreshing(false); } }
   // Switching pipeline clears the stage filter and any open preview. A stage id belongs to exactly
   // one pipeline, so carrying the filter across would silently show an empty board, and the
   // previewed lead is not on the new board at all.
@@ -279,122 +263,140 @@ export function LeadWorkspace() {
       setMoving(false);
     }
   }
-  if (error) return <Card><CardContent className="p-6"><p className="text-sm text-destructive">{error}</p><Button className="mt-4" variant="outline" onClick={() => void load(query)}>Try again</Button></CardContent></Card>;
-  if (!data || !template) return <p className="text-sm text-muted-foreground">Loading your lead workspace…</p>;
+  if (error && !data) return <div className="flex flex-col gap-6"><PageHeader title="Lead workspace" /><TableCard><ErrorState detail={error} action={<Button type="button" variant="outline" onClick={() => void load(query)}>Try again</Button>} /></TableCard></div>;
+  if (!data || !template) return <PageLoading strip={false} />;
   const exportParams = query ? `?${query}` : "";
   const toggle = (lead: Lead) => setSelected((current) => (current?.id === lead.id ? null : lead));
   const selectedStages = selected ? pipelines.find((item) => item.id === selected.pipeline_id)?.stages ?? [] : [];
 
+  const stageLabel = (stageId: string) => { const entry = stageIndex.get(stageId); return entry ? (entry.pipelineName && isAll ? `${entry.pipelineName} · ${entry.stage.name}` : entry.stage.name) : "Unknown stage"; };
+  const filterChips: Array<{ key: string; label: string; clear: () => void }> = [
+    ...(product ? [{ key: "product", label: product, clear: () => setProduct("") }] : []),
+    ...(stageFilter ? [{ key: "stage", label: stageLabel(stageFilter), clear: () => setStageFilter("") }] : []),
+    ...(submitter ? [{ key: "submitter", label: `By ${submitter}`, clear: () => setSubmitter("") }] : []),
+    ...(outcome ? [{ key: "outcome", label: outcome === "clear" ? "Clear" : outcome === "blocked" ? "Blocked" : outcome, clear: () => setOutcome("") }] : []),
+    ...(fromDate ? [{ key: "from", label: `From ${fromDate}`, clear: () => setFromDate("") }] : []),
+    ...(toDate ? [{ key: "to", label: `To ${toDate}`, clear: () => setToDate("") }] : []),
+  ];
+
   return (
     <div className={cn("m-stagger lead-workspace-page flex flex-col gap-6", selected && "has-preview")}>
       <PageHeader
-        eyebrow={sectionForPath("/app/leads") ?? undefined}
         title="Lead workspace"
-        description="Board for moving stages, table for scanning and export. One page, one filter set."
         actions={
           <>
-            {data.template.latest && <Button variant="outline" className="h-11 border-[var(--border-strong)] px-4" onClick={async () => { const response = await fetch("/api/app/templates/assignment", { method: "POST" }); if (!response.ok) notify.block("Could not update the template"); else { notify.done("Template updated"); void load(query); } }}>Update template</Button>}
-            <Button asChild variant="outline" className="h-11 border-[var(--border-strong)] px-4"><a href={`/api/app/leads/export${exportParams}`}>Export CSV</a></Button>
-            <Button type="button" className="h-11 px-4" disabled={data.readOnly || formStages.length === 0} onClick={() => setAdding(true)}>Add lead</Button>
+            {data.template.latest && <Button type="button" variant="outline" onClick={async () => { const response = await fetch("/api/app/templates/assignment", { method: "POST" }); if (!response.ok) notify.block("Could not update the template"); else { notify.done("Template updated"); void load(query); } }}>Update template</Button>}
+            <Button asChild variant="outline"><a href={`/api/app/leads/export${exportParams}`}>Export CSV</a></Button>
+            <Button type="button" disabled={data.readOnly || formStages.length === 0} onClick={() => setAdding(true)}>Add lead</Button>
           </>
         }
       />
 
-      <div className="flex flex-col gap-2.5">
-        <form onSubmit={applySearch} className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-card p-3 shadow-[0_1px_2px_rgba(16,20,26,.05)]">
-          {pipelines.length > 0 && (
-            <span className="relative inline-flex items-center">
-              <select
-                aria-label="Pipeline"
-                value={isAll ? ALL : activePipeline?.id ?? ""}
-                onChange={(event) => { if (event.target.value === NEW_PIPELINE) { setCreatingPipeline(true); return; } selectPipeline(event.target.value); }}
-                className={cn(barButton, "appearance-none pr-9")}
+      {error && <p role="alert" className="rounded-lg border border-[var(--error)]/30 bg-[var(--error-surface)] px-4 py-2.5 text-sm text-[var(--error-ink)]">{error}</p>}
+
+      <div className="lead-workspace-grid">
+        <TableCard
+          className="min-w-0"
+          toolbar={
+            // Enter in the search box searches (server side); the hidden submit is for screen readers
+            // that announce the form.
+            <form onSubmit={applySearch} className="w-full">
+              <DataToolbar
+                actions={
+                  <>
+                    <span role="group" aria-label="View" className="inline-flex h-9 gap-0.5 rounded-md bg-[var(--canvas)] p-0.5">
+                      {(["stages", "board", "table", "list"] as const).map((option) => (
+                        <button key={option} type="button" aria-pressed={view === option} onClick={() => { setView(option); if (option === "stages" || option === "list") setSelected(null); }} className={cn("inline-flex h-8 items-center rounded-md border px-3 text-sm font-semibold tracking-[-0.01em]", view === option ? "border-border bg-card text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}>{VIEW_LABEL[option]}</button>
+                      ))}
+                    </span>
+                    <RefreshButton onClick={() => void refresh()} refreshing={refreshing} />
+                  </>
+                }
               >
-                <option value={ALL}>All pipelines ({data.leads.length})</option>
-                {pipelines.map((item) => <option key={item.id} value={item.id}>{item.name} ({countFor(item.id)})</option>)}
-                {isOwner && <option value={NEW_PIPELINE}>New pipeline…</option>}
-              </select>
-              <ChevronDown className="pointer-events-none absolute right-3 size-4 text-muted-foreground" aria-hidden="true" />
-            </span>
-          )}
-          <span className="relative flex h-10 w-full items-center sm:w-[248px]">
-            <Search className="pointer-events-none absolute left-3 size-4 text-muted-foreground" aria-hidden="true" />
-            <input type="search" aria-label="Search name, phone, policy" placeholder="Search name, phone, policy" value={search} onChange={(event) => setSearch(event.target.value)} className="h-10 w-full rounded-lg border border-[var(--border-strong)] bg-card pl-9 pr-3 text-sm text-foreground placeholder:text-muted-foreground" />
-          </span>
-          <button type="button" aria-expanded={moreFilters} onClick={() => setMoreFilters((value) => !value)} className={barButton}>
-            <SlidersHorizontal className="size-4" aria-hidden="true" />Filters
-            {activeFilters > 0 && <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--surface-alt)] px-1.5 text-xs font-semibold tabular-nums">{activeFilters}</span>}
-          </button>
-          <span className="hidden flex-grow sm:block" />
-          <span role="group" aria-label="View" className="inline-flex gap-[3px] rounded-lg bg-[var(--surface-alt)] p-[3px]">
-            {/* Four views of the same leads and the same filters. */}
-            {(["stages", "board", "table", "list"] as const).map((option) => (
-              <button key={option} type="button" aria-pressed={view === option} onClick={() => { setView(option); if (option === "stages" || option === "list") setSelected(null); }} className={cn("inline-flex h-8 items-center rounded-lg border px-[13px] text-sm font-semibold leading-[1.43] tracking-[-0.01em]", view === option ? "border-border bg-card text-foreground" : "border-transparent text-muted-foreground")}>{VIEW_LABEL[option]}</button>
-            ))}
-          </span>
-          <button type="button" onClick={resetFilters} className={cn(barButton, "px-4")}>Reset</button>
-          {/* Enter searches; the button is for the mouse and for screen readers that announce the form. */}
-          <button type="submit" className="sr-only">Search</button>
-        </form>
-
-        {moreFilters && <div className="lead-more-filters rounded-lg border border-border bg-card p-4"><div><Label>Product</Label><select value={product} onChange={(event) => setProduct(event.target.value)}><option value="">All products</option>{products.map((item) => <option key={item} value={item}>{item}</option>)}</select></div><div><Label>Stage</Label><select value={stageFilter} onChange={(event) => setStageFilter(event.target.value)}><option value="">All stages</option>{filterStages.map((entry) => <option key={entry.stage.id} value={entry.stage.id}>{entry.pipelineName ? `${entry.pipelineName} · ${entry.stage.name}` : entry.stage.name}</option>)}</select></div><div><Label>Submitted by</Label><select value={submitter} onChange={(event) => setSubmitter(event.target.value)}><option value="">Everyone</option>{submitters.map((item) => <option key={item} value={item}>{item}</option>)}</select></div><div><Label>Outcome</Label><select value={outcome} onChange={(event) => setOutcome(event.target.value)}><option value="">Any outcome</option><option value="clear">Clear</option><option value="blocked">Blocked</option></select></div><div><Label>From</Label><Input type="date" value={fromDate} onChange={(event) => setFromDate(event.target.value)} /></div><div><Label>To</Label><Input type="date" value={toDate} onChange={(event) => setToDate(event.target.value)} /></div></div>}
-      </div>
-
-      {view === "stages" && (
-        <StagesView
-          pipelines={isAll ? pipelines : activePipeline ? [activePipeline] : []}
-          leads={visibleLeads}
-          context={context}
-          isOwner={isOwner}
-          now={now}
-          onEditStages={isOwner ? (id) => { selectPipeline(id); setManagingStages(true); } : null}
-          onOpenLibrary={isOwner ? () => setLibraryOpen(true) : null}
-          onNewPipeline={isOwner ? () => setCreatingPipeline(true) : null}
-        />
-      )}
-      {view === "list" && (
-        <ListView
-          pipelines={isAll ? pipelines : activePipeline ? [activePipeline] : []}
-          leads={visibleLeads}
-          context={context}
-          now={now}
-          readOnly={data.readOnly}
-          onMove={(lead, key) => moveLeads([lead.id], key, "list")}
-        />
-      )}
-      <div className={cn("lead-workspace-grid", (view === "stages" || view === "list") && "hidden")}>
-        {view === "board" ? (
-          isAll ? (
-            <div className="flex flex-col gap-6">
-              {pipelines.filter((item) => visibleLeads.some((lead) => lead.pipeline_id === item.id)).map((item) => {
-                const owned = visibleLeads.filter((lead) => lead.pipeline_id === item.id);
-                return (
-                  <section key={item.id} className="flex flex-col gap-2">
-                    <header className="flex items-baseline gap-2"><h2 className="text-sm font-semibold">{item.name}</h2><span className="text-xs text-muted-foreground">{owned.length} {owned.length === 1 ? "lead" : "leads"}</span></header>
-                    <PipelineBoard stages={item.stages} leads={owned} selectedId={selected?.id ?? null} readOnly={data.readOnly} now={now} money={money} context={context} onSelect={toggle} onStageChange={updateStage} onManageStages={isOwner ? () => { selectPipeline(item.id); setManagingStages(true); } : null} />
-                  </section>
-                );
-              })}
-              {visibleLeads.length === 0 && <div className="lead-column-empty">No leads match these filters.</div>}
-            </div>
-          ) : (
-            <PipelineBoard stages={allStages} leads={visibleLeads} selectedId={selected?.id ?? null} readOnly={data.readOnly} now={now} money={money} context={context} onSelect={toggle} onStageChange={updateStage} onManageStages={isOwner && activePipeline ? () => setManagingStages(true) : null} />
-          )
-        ) : view === "table" ? (
-          <TableView
-            leads={visibleLeads}
-            // Resolved through the cross-pipeline stage index: in the All view there is no active
-            // board, and a lead's stage belongs to whichever pipeline it is in.
-            stageName={(stageId) => { const entry = stageIndex.get(stageId); return { name: entry ? (entry.stage.is_archived ? `${entry.stage.name} (archived)` : entry.stage.name) : "Unmapped", color: entry?.stage.color ?? "var(--muted-foreground)", pipeline: entry?.pipelineName ?? "" }; }}
-            context={context}
-            now={now}
-            money={money}
-            currentUserId={data.currentUserId ?? null}
-            readOnly={data.readOnly}
-            onOpen={(lead) => setSelected(lead as Lead)}
-            onBulkMove={(leadIds) => setPicker({ leads: visibleLeads.filter((lead) => leadIds.includes(lead.id)), stageId: null, source: "table" })}
-          />
-        ) : null}
+                <ToolbarSearch value={search} onChange={setSearch} placeholder="Search name, phone, policy" />
+                {pipelines.length > 0 && (
+                  <select aria-label="Pipeline" className={toolbarControl} value={isAll ? ALL : activePipeline?.id ?? ""} onChange={(event) => selectPipeline(event.target.value)}>
+                    <option value={ALL}>All pipelines ({data.leads.length})</option>
+                    {pipelines.map((item) => <option key={item.id} value={item.id}>{item.name} ({countFor(item.id)})</option>)}
+                  </select>
+                )}
+                <FilterButton open={moreFilters} onClick={() => setMoreFilters((value) => !value)} count={activeFilters} />
+                {moreFilters && (
+                  <>
+                    <select aria-label="Product" className={toolbarControl} value={product} onChange={(event) => setProduct(event.target.value)}><option value="">All products</option>{products.map((item) => <option key={item} value={item}>{item}</option>)}</select>
+                    <select aria-label="Stage" className={toolbarControl} value={stageFilter} onChange={(event) => setStageFilter(event.target.value)}><option value="">All stages</option>{filterStages.map((entry) => <option key={entry.stage.id} value={entry.stage.id}>{entry.pipelineName ? `${entry.pipelineName} · ${entry.stage.name}` : entry.stage.name}</option>)}</select>
+                    <select aria-label="Submitted by" className={toolbarControl} value={submitter} onChange={(event) => setSubmitter(event.target.value)}><option value="">Everyone</option>{submitters.map((item) => <option key={item} value={item}>{item}</option>)}</select>
+                    <select aria-label="Outcome" className={toolbarControl} value={outcome} onChange={(event) => setOutcome(event.target.value)}><option value="">Any outcome</option><option value="clear">Clear</option><option value="blocked">Blocked</option></select>
+                    <input type="date" aria-label="Submitted from" className={toolbarControl} value={fromDate} onChange={(event) => setFromDate(event.target.value)} />
+                    <input type="date" aria-label="Submitted to" className={toolbarControl} value={toDate} onChange={(event) => setToDate(event.target.value)} />
+                  </>
+                )}
+                {!moreFilters && filterChips.map((chip) => (
+                  <button key={chip.key} type="button" onClick={chip.clear} aria-label={`Remove filter ${chip.label}`} className="inline-flex h-7 items-center gap-1 rounded-full border border-border bg-card px-2.5 text-xs font-semibold text-foreground hover:bg-muted">
+                    {chip.label}<X className="size-3" aria-hidden="true" />
+                  </button>
+                ))}
+                {(activeFilters > 0 || query) && <Button type="button" variant="ghost" onClick={resetFilters}>Clear</Button>}
+                <button type="submit" className="sr-only">Search</button>
+              </DataToolbar>
+            </form>
+          }
+        >
+          {/* The board's columns sit inset; Stages, Table and List render bare, edge to edge in the card. */}
+          <div className={view === "board" ? "p-3" : undefined}>
+            {view === "stages" && (
+              <StagesView
+                pipelines={isAll ? pipelines : activePipeline ? [activePipeline] : []}
+                leads={visibleLeads}
+                context={context}
+                isOwner={isOwner}
+                now={now}
+              />
+            )}
+            {view === "list" && (
+              <ListView
+                pipelines={isAll ? pipelines : activePipeline ? [activePipeline] : []}
+                leads={visibleLeads}
+                context={context}
+                now={now}
+                readOnly={data.readOnly}
+                onMove={(lead, key) => moveLeads([lead.id], key, "list")}
+              />
+            )}
+            {view === "board" ? (
+              isAll ? (
+                <div className="flex flex-col gap-6">
+                  {pipelines.filter((item) => visibleLeads.some((lead) => lead.pipeline_id === item.id)).map((item) => {
+                    const owned = visibleLeads.filter((lead) => lead.pipeline_id === item.id);
+                    return (
+                      <section key={item.id} className="flex flex-col gap-2">
+                        <header className="flex items-baseline gap-2"><h2 className="text-sm font-semibold">{item.name}</h2><span className="text-xs text-muted-foreground">{owned.length} {owned.length === 1 ? "lead" : "leads"}</span></header>
+                        <PipelineBoard stages={item.stages} leads={owned} selectedId={selected?.id ?? null} readOnly={data.readOnly} now={now} money={money} context={context} onSelect={toggle} onStageChange={updateStage} />
+                      </section>
+                    );
+                  })}
+                  {visibleLeads.length === 0 && <NoMatches noun="leads" onClear={resetFilters} />}
+                </div>
+              ) : (
+                <PipelineBoard stages={allStages} leads={visibleLeads} selectedId={selected?.id ?? null} readOnly={data.readOnly} now={now} money={money} context={context} onSelect={toggle} onStageChange={updateStage} />
+              )
+            ) : view === "table" ? (
+              <TableView
+                leads={visibleLeads}
+                // Resolved through the cross-pipeline stage index: in the All view there is no active
+                // board, and a lead's stage belongs to whichever pipeline it is in.
+                stageName={(stageId) => { const entry = stageIndex.get(stageId); return { name: entry ? (entry.stage.is_archived ? `${entry.stage.name} (archived)` : entry.stage.name) : "Unmapped", color: entry?.stage.color ?? "var(--muted-foreground)", pipeline: entry?.pipelineName ?? "" }; }}
+                context={context}
+                now={now}
+                money={money}
+                currentUserId={data.currentUserId ?? null}
+                readOnly={data.readOnly}
+                onOpen={(lead) => setSelected(lead as Lead)}
+                onBulkMove={(leadIds) => setPicker({ leads: visibleLeads.filter((lead) => leadIds.includes(lead.id)), stageId: null, source: "table" })}
+              />
+            ) : null}
+          </div>
+        </TableCard>
         {selected && (view === "board" || view === "table") && <LeadPreviewPanel lead={selected} stages={selectedStages} readOnly={data.readOnly} onMove={() => setPicker({ leads: [selected], stageId: null, source: "board" })} onClose={() => setSelected(null)} />}
       </div>
 
@@ -419,15 +421,7 @@ export function LeadWorkspace() {
         );
       })()}
 
-      <div className="rounded-lg border border-border border-l-[3px] border-l-[var(--info)] bg-[var(--info-surface)] px-4 py-3.5 text-sm leading-normal tracking-[-0.02em]">
-        <p className="font-semibold text-[var(--info-ink)]">An unknown stage never disappears</p>
-        <p className="mt-1.5 text-[var(--body)]">If the pipeline template changes, leads on a retired stage collect in a visible <strong>unmapped</strong> column rather than being silently reassigned. A half-typed new lead survives a reload through the draft autosave.</p>
-      </div>
-
       <LeadFormDialog open={adding} onOpenChange={setAdding} template={template} stages={formStages} readOnly={data.readOnly} onCreated={() => void load(query)} />
-      {isOwner && activePipeline && <PipelineStageManager open={managingStages} onOpenChange={setManagingStages} pipelineId={activePipeline.id} pipelineName={activePipeline.name} stages={allStages} leadCounts={stageLeads.counts} stageEntries={stageLeads.entries} context={context} allStages={stageList} onChanged={() => { void load(query); void loadContext(); }} />}
-      {isOwner && <PipelineCreateDialog open={creatingPipeline} onOpenChange={setCreatingPipeline} pipelines={pipelines} context={context} onCreated={(id) => { if (id) selectPipeline(id); void load(query); void loadContext(); }} />}
-      {isOwner && <DispositionLibrary open={libraryOpen} onOpenChange={setLibraryOpen} pipelines={pipelines} context={context} onChanged={() => void loadContext()} />}
     </div>
   );
 }

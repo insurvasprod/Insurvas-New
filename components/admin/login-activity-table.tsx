@@ -34,6 +34,7 @@ export function LoginActivityTable({
   busy = false,
   hideActor = false,
   minWidth = 980,
+  framed = true,
 }: {
   events: LoginEventRow[];
   showActor?: boolean;
@@ -48,8 +49,10 @@ export function LoginActivityTable({
   hideActor?: boolean;
   /** Board layout only: the width below which the table scrolls inside its card. */
   minWidth?: number;
+  /** Board layout only: false when a TableCard already draws the card around the table. */
+  framed?: boolean;
 }) {
-  if (layout === "board") return <BoardLoginTable events={events} footer={footer} empty={empty} busy={busy} hideActor={hideActor} minWidth={minWidth} />;
+  if (layout === "board") return <BoardLoginTable events={events} footer={footer} empty={empty} busy={busy} hideActor={hideActor} minWidth={minWidth} framed={framed} />;
 
   return (
     <div className={tableShell}>
@@ -127,6 +130,7 @@ function BoardLoginTable({
   busy,
   hideActor,
   minWidth,
+  framed,
 }: {
   events: LoginEventRow[];
   footer?: React.ReactNode;
@@ -134,9 +138,10 @@ function BoardLoginTable({
   busy: boolean;
   hideActor: boolean;
   minWidth: number;
+  framed: boolean;
 }) {
   return (
-    <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-[12px] border border-[var(--border)] bg-[var(--surface)]">
+    <div className={cn("flex min-w-0 flex-1 flex-col", framed && "overflow-hidden rounded-[12px] border border-[var(--border)] bg-[var(--surface)]")}>
       <div className="min-w-0 overflow-x-auto">
         <table className={cn("w-full table-fixed border-collapse transition-opacity", busy && "opacity-60")} style={{ minWidth }} aria-busy={busy || undefined}>
           <thead>
