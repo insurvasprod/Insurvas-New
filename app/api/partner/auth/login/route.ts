@@ -6,6 +6,7 @@ import { PARTNER_SESSION_COOKIE, partnerSessionCookie, signPartnerSessionToken }
 import { TENANT_SESSION_COOKIE, tenantSessionCookieOptions } from "@/lib/tenantAuth/session";
 import { verifyPassword } from "@/lib/password";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
+import { AGENT_ACCOUNT_AT_PARTNER_SIGN_IN, holdsAgencyMembership, WRONG_PORTAL_CODE } from "@/lib/auth/planeSeparation";
 import { recordLastLogin, recordLoginEvent } from "@/lib/loginEvents/record";
 import { checkLoginAllowed, clearLoginFailures, logBlockedLoginAttempt, loginRateLimitResponse, recordLoginFailure } from "@/lib/authProtection";
 import { isTenantSuspended, TENANT_SUSPENDED_CODE, TENANT_SUSPENDED_MESSAGE } from "@/lib/tenants/suspension";
@@ -53,6 +54,13 @@ export async function POST(request: NextRequest) {
       recordLoginFailure("user", email, request),
     ]);
     return NextResponse.json(GENERIC_ERROR, { status: 401 });
+  }
+
+  // An agency's own account never gets a partner session (lib/auth/planeSeparation.ts). Past the
+  // password, so naming the right door reveals nothing the caller could not know.
+  if (await holdsAgencyMembership(user.id)) {
+    await recordLoginEvent({ request, email, success: false, userId: user.id, actorType: "user", failureReason: "no_membership" });
+    return NextResponse.json({ error: AGENT_ACCOUNT_AT_PARTNER_SIGN_IN, code: WRONG_PORTAL_CODE }, { status: 403 });
   }
 
   // The agency this partner works for must not be suspended (decision 4). Past the password, so

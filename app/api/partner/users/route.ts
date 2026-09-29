@@ -44,6 +44,7 @@ export async function POST(request: NextRequest) {
     const limit = message.match(/max_partner_users:(\d+):(\d+)/);
     if (limit) return NextResponse.json({ error: `Every seat is in use (${limit[1]} of ${limit[2]}). Deactivate a member or ask your agent for more seats.` }, { status: 409 });
     if (message.includes("account_not_active")) return NextResponse.json({ error: "This account is not active and cannot be invited" }, { status: 409 });
+    if (message.includes("agency_account")) return NextResponse.json({ error: "This email belongs to an agency account. Use a separate email." }, { status: 409 });
     return NextResponse.json({ error: "Could not invite user" }, { status: 500 });
   }
 }

@@ -6,6 +6,7 @@ import { NextResponse } from "next/server";
 import { isTenantRole, type TenantRole } from "./roles";
 import { TENANT_SESSION_COOKIE, verifyTenantSessionToken, type TenantSessionPayload } from "./session";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
+import { holdsPartnerMembership } from "@/lib/auth/planeSeparation";
 import { isTenantSuspended, TENANT_SUSPENDED_CODE, TENANT_SUSPENDED_MESSAGE } from "@/lib/tenants/suspension";
 
 /** The verified cookie only — identity, no authorisation. Use resolveTenantContext for the role. */
@@ -58,7 +59,9 @@ const readTenantAccess = cache(async (): Promise<{ context: TenantContext | null
 
   // The agency's own state is read on every request with the person's, in the same round trip:
   // suspending an agency ends every session in it on the next request, not at token expiry.
-  const [{ data: membership }, { data: user }, { data: tenant }] = await Promise.all([
+  // …and whether the account belongs to a partner organisation, in the same round trip: a partner
+  // account never opens the agent app, whatever tenant_users says (lib/auth/planeSeparation.ts).
+  const [{ data: membership }, { data: user }, { data: tenant }, isPartnerAccount] = await Promise.all([
     supabase
       .from("tenant_users")
       .select("role")
@@ -67,8 +70,10 @@ const readTenantAccess = cache(async (): Promise<{ context: TenantContext | null
       .maybeSingle<{ role: string }>(),
     supabase.from("users").select("status, session_version").eq("id", session.sub).maybeSingle<{ status: string; session_version: number }>(),
     supabase.from("tenants").select("status").eq("id", session.tenantId).maybeSingle<{ status: string }>(),
+    holdsPartnerMembership(session.sub),
   ]);
 
+  if (isPartnerAccount) return none;
   // Membership revoked, account no longer active, or an unrecognised role — all mean "no session".
   if (!membership || !isTenantRole(membership.role)) return none;
   if (!user || user.status !== "active") return none;
