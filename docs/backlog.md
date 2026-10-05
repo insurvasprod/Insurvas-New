@@ -467,6 +467,7 @@ agent/admin cookie boundary.
 ---
 
 ### 75. The entitlement blob should carry the plan's display name
+**Status:** built in LA-4.10 — `20261003100000_la_4_10_plan_display_names.sql` (awaiting apply).
 **From:** agent app design pass, 2026-08-31 Â· Minor
 
 `planDisplayName()` tidies `plan_c` into "Plan C" because that is all it can honestly do. The real
@@ -3782,3 +3783,51 @@ been raised first.
 Note for anyone hitting this: the **deep** check still cannot run read-only, because it creates a
 temporary PL/pgSQL function to hold the per-statement exception boundary. Use `--fast`, which uses
 savepoints and works.
+
+---
+
+### 206. 🔴 AI / document provider — needed for PDF statements, LA-3.3 and the AI half of LA-3.13
+
+Decision 4 (provider and health-data terms) is still open. LA-4 ships CSV and XLSX parsing and sends PDFs to a manual-entry queue with no AI, so PDF statements stay manual until this is decided. **From:** roadmap 2026-10-02 (docs/roadmap/ROADMAP.md §5).
+
+---
+
+### 207. 🔴 HTTP email provider with bounce webhooks
+
+Delivery is SMTP only, so asynchronous bounces never come back (LA-3.20 partial) and SA-4.11 email templates still lack their tables. Choose a provider before LA-5 notifications (draft failed, day-25 digest).
+
+---
+
+### 208. 🔴 Telephony vendor
+
+The dialer hands calls to `tel:` links; there is no Twilio/Telnyx integration. Blocks the real dialer, the live-transfer screen pop, call recording (LA-6.2) and recordings in the litigation packet (LA-6.1).
+
+---
+
+### 209. 🔴 Chrome Web Store publishing of the carrier extension
+
+The extension (LA-3.12–3.14) works when sideloaded; publishing is pending.
+
+---
+
+### 210. 🔴 Is persistency a Ledger feature or Advanced only?
+
+Today `cohort_persistency` is on `advance` only. The product docs make persistency the core idea for every agent, and the *Four Tiers* brief says not to cripple outcome-improving features. Decide before LA-4.8 ships; it is a plan-feature data change, not code.
+
+---
+
+### 211. 🔴 Grace period before a policy counts as "never paid"
+
+LA-4.4 proposes 45 days after issue, and only when a statement from that carrier covers a later period. Confirm, or make it a per-carrier setting.
+
+---
+
+### 212. 🔴 Does "suspended can still read" cover a suspended agency, or only a suspended subscription?
+
+A suspended subscription keeps read access (`requireFeature(..., {write:true})` refuses writes). A suspended tenant (`tenants.status`) closes every session in `requireTenant.ts`. The product rule is "never lock a customer out of his own book"; decide whether a tenant suspension should follow it.
+
+---
+
+### 213. 🔴 Database compute size
+
+The NANO instance ran out of memory and took the API down on 2026-09-30 (PGRST002). Upgrade to Micro or above before LA-4's statement storage and discrepancy refresh add load.
