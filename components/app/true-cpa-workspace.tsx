@@ -6,12 +6,14 @@ import { Button } from "@/components/ui/button";
 import { DataToolbar, FilterButton, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageLoading } from "@/components/ui/page-loading";
+import { Pager } from "@/components/ui/pager";
 import { ErrorState, NoMatches, SectionLoading } from "@/components/ui/page-states";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 import type { ScorecardStage, VendorScorecardLeadResult, VendorScorecardReport, VendorScorecardRow, VendorScorecardVendorRow } from "@/lib/vendorScorecard/types";
 import { CampaignComparisonWorkspace } from "./campaign-comparison-workspace";
+import { CampaignSpeedToLead } from "@/components/app/campaign-speed-to-lead";
 
 const PAGE_SIZE = 25;
 /** The persistency toggle's window. User decision: 60 days. Mirrors SCORECARD_PERSIST_DAYS on the server. */
@@ -331,13 +333,14 @@ export function TrueCpaWorkspace({ initialReport = null }: { initialReport?: Ven
           </div>}
         </DataToolbar>
       }
-      footer={<>
-        <span>{lines.length ? `Showing ${currentPage * PAGE_SIZE + 1}–${currentPage * PAGE_SIZE + shown.length} of ${plural(lines.length, noun)} · ${sort === "cost" ? "cheapest policy first, test batches last" : "highest spend first"}` : "Nothing to show"}{report ? ` · computed ${new Date(report.generated_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` : ""}</span>
-        <span className="flex gap-2">
-          <Button type="button" variant="outline" size="sm" disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}>Previous</Button>
-          <Button type="button" variant="outline" size="sm" disabled={currentPage >= pageCount - 1} onClick={() => setPage(currentPage + 1)}>Next</Button>
-        </span>
-      </>}
+      footer={<Pager
+        page={currentPage + 1}
+        total={lines.length}
+        noun={`${noun}s`}
+        pageSize={PAGE_SIZE}
+        onPage={(next) => setPage(next - 1)}
+        suffix={`${sort === "cost" ? "cheapest policy first, test batches last" : "highest spend first"}${report ? ` · computed ${new Date(report.generated_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` : ""}`}
+      />}
     >
       {error && !report ? <ErrorState title="The scorecard did not load" detail={error} action={<Button variant="outline" onClick={refresh}>Try again</Button>} />
         : loading ? <SectionLoading rows={6} columns={8} />
@@ -430,13 +433,14 @@ export function TrueCpaWorkspace({ initialReport = null }: { initialReport?: Ven
         // The whole selection's sums, so the rows reconcile with the figure that was clicked.
         description={drillResult?.sums ? `All ${plural(drillResult.sums.leads, "lead")} here: ${plural(drillResult.sums.attempts, "attempt")} in the period · ${number(drillResult.sums.dialed_leads)} dialled · ${number(drillResult.sums.contacted_leads)} contacted · ${number(drillResult.sums.quoted_leads)} quoted · ${plural(drillResult.sums.applications, "application")} · ${plural(drillResult.sums.issued_policies, "issued policy", "issued policies")}` : undefined}
         action={<Button type="button" variant="outline" onClick={() => { setDrillSpec(null); setDrillResult(null); setDrillError(null); }}>Close</Button>}
-        footer={drillResult && drillResult.drillReady && (drillResult.offset > 0 || drillResult.has_more) ? <>
-          <span className="tabular-nums">Showing {(drillResult.offset + 1).toLocaleString()}–{(drillResult.offset + drillResult.rows.length).toLocaleString()} of {number(drillResult.total)}</span>
-          <span className="flex gap-2">
-            <Button type="button" variant="outline" size="sm" disabled={drillResult.offset === 0 || detailLoading} onClick={() => void loadDrill(drillSpec, Math.max(0, drillResult.offset - drillResult.limit))}>Previous</Button>
-            <Button type="button" variant="outline" size="sm" disabled={!drillResult.has_more || detailLoading} onClick={() => void loadDrill(drillSpec, drillResult.offset + drillResult.limit)}>Next</Button>
-          </span>
-        </> : undefined}
+        // Server-side pages of the drill: the shared Pager, page n is offset (n-1) x limit.
+        footer={drillResult && drillResult.drillReady && drillResult.total != null ? <Pager
+          page={Math.floor(drillResult.offset / drillResult.limit) + 1}
+          total={drillResult.total}
+          noun="leads"
+          pageSize={drillResult.limit}
+          onPage={(next) => { if (!detailLoading) void loadDrill(drillSpec, (next - 1) * drillResult.limit); }}
+        /> : undefined}
       >
         {drillResult && !drillResult.drillReady && <p className="border-t border-border bg-[var(--warning-surface)] px-4 py-2.5 text-xs leading-normal text-[var(--warning-ink)]">
           {drillResult.has_more ? "Only the newest 500 leads are listed. " : ""}Attempts and contacts are all time until a pending database update is applied.
@@ -484,6 +488,8 @@ export function TrueCpaWorkspace({ initialReport = null }: { initialReport?: Ven
               <span className="tabular-nums"><strong className={`font-semibold ${row.speed_median_seconds != null && row.speed_median_seconds <= 60 ? "text-[var(--success-ink)]" : "text-foreground"}`}>{clock(row.speed_median_seconds)}</strong> <span className="text-xs text-muted-foreground">{percent(row.speed_within_60s_pct)} within a minute</span></span>
             </div>
             <span className="mt-1.5 block h-1.5 overflow-hidden rounded-full bg-[var(--surface-alt)]"><span className="block h-full rounded-full bg-[var(--primary)]" style={{ width: `${Math.min(100, (100 * (row.speed_median_seconds ?? 0)) / slowest)}%` }} /></span>
+            {/* LA-2.5-5: the vendor's campaigns, one line each, under its row (builder S's component). */}
+            <CampaignSpeedToLead vendorId={row.vendor_id} />
           </div>) : <p className="border-t border-border px-4 py-6 text-sm text-muted-foreground">No real-time posted leads yet.</p>}
       </TableCard>
 

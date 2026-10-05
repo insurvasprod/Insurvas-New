@@ -17,6 +17,7 @@ import {
 } from "@/lib/ledger/statementConstants";
 
 const STATUS: Record<StatementStatus, { label: string; chip: string }> = {
+  awaiting_entry: { label: "Lines to type in", chip: "bg-[var(--info-surface)] text-[var(--info-ink)]" },
   review: { label: "Waiting for review", chip: "bg-[var(--soft-orange-surface)] text-[var(--accent-ink)]" },
   reviewed: { label: "Reviewed", chip: "bg-[var(--success-surface)] text-[var(--success-ink)]" },
   voided: { label: "Voided", chip: "bg-[var(--surface-alt)] text-[var(--body)]" },
@@ -100,7 +101,7 @@ export function StatementsTable({ statements, emptyTitle, emptyHint }: { stateme
                 </td>
                 <td className="text-right">
                   <Button asChild type="button" variant="outline" size="sm">
-                    <Link href={`/app/statements/${statement.id}`}>{statement.status === "review" ? "Review" : "Open"}</Link>
+                    <Link href={`/app/statements/${statement.id}`}>{statement.status === "review" ? "Review" : statement.status === "awaiting_entry" ? "Enter lines" : "Open"}</Link>
                   </Button>
                 </td>
               </tr>

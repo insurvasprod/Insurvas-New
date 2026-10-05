@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
-import { announceTransferClaim, claimNextTransfer, ClaimNextError } from "@/lib/transferInbox/service";
+import { announceTransferClaim, claimNextTransfer, ClaimNextError, claimWasResumed } from "@/lib/transferInbox/service";
 
 const safeFilter = (label: string, max: number) => z.string().trim().min(1).max(max).regex(/^[^\u0000-\u001f\u007f<>]+$/, `${label} contains unsupported characters`);
 
@@ -36,7 +36,8 @@ export async function POST(request: Request) {
       screeningOutcome: parsed.data.screening_outcome,
     });
     const { chatPosted } = await announceTransferClaim({ tenantId: auth.context.tenantId, userId: auth.context.userId, role: auth.context.role, workItemId: claim.work_item_id, claim, request, via: "claim_next" });
-    return NextResponse.json({ claim, chatPosted });
+    // resumed: this re-claim reopened the verification the transfer had when it was given back (LA-1.11-6).
+    return NextResponse.json({ claim, chatPosted, resumed: claimWasResumed(claim) });
   } catch (error) {
     if (error instanceof ClaimNextError) {
       const status = error.code === "no_transfer_waiting" ? 404 : error.code === "role_not_allowed" ? 403 : error.code === "language_not_spoken" ? 409 : error.code === "schema_pending" ? 503 : 500;

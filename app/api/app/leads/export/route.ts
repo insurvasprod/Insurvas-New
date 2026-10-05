@@ -10,6 +10,9 @@ import { listPipelines } from "@/lib/pipelines/service";
 // adds one refusal and takes nobody's access away.
 const NOT_SETTER = ["owner", "producer", "assistant", "bookkeeper"] as const;
 
+// A whole book is many pages of leads and certificates (LA-2.6-6); give the export room to finish.
+export const maxDuration = 300;
+
 export async function GET(request: NextRequest) {
   const auth = await requireFeatureRole("book_of_business", NOT_SETTER);
   if (auth instanceof NextResponse) return auth;

@@ -14,7 +14,7 @@ import { PARTNER_TYPES, PARTNER_TYPE_LABELS } from "@/lib/partners/constants";
 import { defaultPartnerQualityPeriod, percentChange, percentOf, pointChange, screeningFlags, screeningPassRate } from "@/lib/partnerQuality/metrics";
 import type { PartnerQualityMetric, PartnerQualityReport, PartnerQualityRow } from "@/lib/partnerQuality/types";
 import { cn } from "@/lib/utils";
-import { count, downloadCsv, MetricCell, metricLabel, paginate, Pager, partnerTypeLabel, percent, PeriodInputs, periodQuery, Prior, SortButton, useDrilldown, type Period } from "./partner-quality-parts";
+import { count, downloadCsv, MetricCell, metricLabel, paginate, Pager, partnerTypeLabel, percent, NO_COST_HINT, PeriodInputs, periodQuery, Prior, SortButton, useDrilldown, type Period } from "./partner-quality-parts";
 
 type SortKey = "partner_name" | "sent" | "claimed" | "worked" | "submitted" | "screening_pass" | "duplicates" | "conversion_rate" | "disqualification_rate";
 
@@ -114,7 +114,7 @@ export function PartnerQualityWorkspace({ initialPeriod }: { initialPeriod?: Per
       shown.map((row) => [row.partner_name, partnerTypeLabel(row.partner_type), row.sent, row.claimed, row.worked, row.submitted, screeningPassRate(row), row.duplicates, row.duplicate_rate, row.conversion_rate, row.disqualification_rate, row.previous.sent, row.previous.submitted, row.previous.conversion_rate]));
   }
 
-  const th = (key: SortKey, label: string, width: string) => <th className={cn(width, "text-right")}><SortButton label={label} active={sort.key === key} onClick={() => toggleSort(key)} /></th>;
+  const th = (key: SortKey, label: string, width: string, hint?: string) => <th className={cn(width, "text-right")} title={hint}><SortButton label={label} active={sort.key === key} onClick={() => toggleSort(key)} /></th>;
 
   return <div className="m-stagger portal-partner-quality-page flex flex-col gap-6">
     <PageHeader title="Partner quality" description="Lead quality and conversion by partner, against the prior period." />
@@ -164,7 +164,7 @@ export function PartnerQualityWorkspace({ initialPeriod }: { initialPeriod?: Per
                   {th("submitted", "Submitted", "w-[110px]")}
                   {th("screening_pass", "Screening pass", "w-[130px]")}
                   {th("duplicates", "Duplicates", "w-[110px]")}
-                  {th("conversion_rate", "Conversion", "w-[116px]")}
+                  {th("conversion_rate", "Conversion", "w-[116px]", NO_COST_HINT)}
                   {th("disqualification_rate", "DQ %", "w-[90px]")}
                   <th className="w-[84px] text-right"><span className="sr-only">View</span></th>
                 </tr>

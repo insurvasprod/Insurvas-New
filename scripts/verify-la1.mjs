@@ -1,3 +1,4 @@
+import "./lib/refuseProduction.mjs";
 /** Run every LA-1 ticket verifier without hiding later failures behind the first broken suite. */
 import { spawn } from "node:child_process";
 import process from "node:process";

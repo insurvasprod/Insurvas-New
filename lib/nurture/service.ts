@@ -109,7 +109,8 @@ export async function screenRecycleChunk(tenantId: string, actorId: string, batc
   let blocked = 0;
   let failed = 0;
   for (const item of items) {
-    const screening = await screenPartnerPhone({ tenantId, partnerId: null, userId: actorId, phone: item.phone });
+    // LA-2.3-9: a recycle re-screens a known lead, so its audit row names it.
+    const screening = await screenPartnerPhone({ tenantId, partnerId: null, userId: actorId, phone: item.phone, leadId: item.lead_id });
     let status: "cleared" | "blocked" | "failed";
     if (screening.outcome === "unavailable" || screening.outcome === "invalid_phone") {
       status = "failed";

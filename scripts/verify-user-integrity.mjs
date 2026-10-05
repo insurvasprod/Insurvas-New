@@ -1,3 +1,4 @@
+import "./lib/refuseProduction.mjs";
 // M1-3/M1-4/M1-5/M1-6/M1-8/M1-9 live verification.
 import assert from "node:assert/strict";
 import { SignJWT } from "jose";

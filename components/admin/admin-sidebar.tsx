@@ -41,6 +41,7 @@ import {
 
 import { usePersistedState } from "./use-persisted-state";
 import { groupIdForPath, isLinkActive, type SidebarIconKey, type SidebarNode } from "@/lib/adminNav/types";
+import { InsurvasLogo } from "@/components/shared/insurvas-logo";
 
 // Icon components are functions with methods and cannot cross the server->client boundary as props,
 // so the server sends a key and it is resolved here.
@@ -256,13 +257,7 @@ export function AdminSidebar({ nodes, adminName, roleLabel }: Props) {
 
   const brand = (
     <div className="flex items-center gap-2.5">
-      <span
-        aria-hidden="true"
-        className="inline-flex size-[26px] shrink-0 items-center justify-center rounded-lg bg-[var(--primary)] text-xs font-semibold text-[var(--on-primary)]"
-      >
-        I
-      </span>
-      <span className="text-sm font-semibold tracking-[-0.01em]">Insurvas staff</span>
+      <InsurvasLogo size="sidebar" />
     </div>
   );
 
@@ -342,12 +337,7 @@ export function AdminSidebar({ nodes, adminName, roleLabel }: Props) {
           style={{ borderBottom: "1px solid var(--nav-line)" }}
         >
           {collapsed ? (
-            <span
-              aria-label="Insurvas staff"
-              className="inline-flex size-[26px] items-center justify-center rounded-lg bg-[var(--primary)] text-xs font-semibold text-[var(--on-primary)]"
-            >
-              I
-            </span>
+            <InsurvasLogo size="compact" variant="symbol" alt="Insurvas staff" />
           ) : (
             brand
           )}

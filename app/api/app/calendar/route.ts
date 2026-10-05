@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { appointmentsInRange } from "@/lib/appointments/calendar";
+import { appointmentsInRange, redactCalendarForSetter } from "@/lib/appointments/calendar";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 
 /**
@@ -32,8 +32,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: `Choose a range of ${MAX_DAYS} days or fewer` }, { status: 400 });
 
   try {
+    const appointments = await appointmentsInRange(auth.context.tenantId, new Date(fromAt).toISOString(), new Date(toAt).toISOString());
     return NextResponse.json(
-      { appointments: await appointmentsInRange(auth.context.tenantId, new Date(fromAt).toISOString(), new Date(toAt).toISOString()) },
+      // LA-2.12-2: a setter sees another setter's booking as a taken slot, never its lead or notes.
+      { appointments: auth.context.role === "setter" ? redactCalendarForSetter(appointments, auth.context.userId) : appointments },
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch (error) {

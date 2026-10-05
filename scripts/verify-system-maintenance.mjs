@@ -1,3 +1,4 @@
+import "./lib/refuseProduction.mjs";
 // SA-4.12 · End-to-end verification through the real HTTP routes.
 //
 // Run with the development server running on NEXT_PUBLIC_APP_URL (default http://localhost:3000).

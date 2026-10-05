@@ -68,15 +68,15 @@ export async function GET(request: NextRequest) {
   }
 
   // `?audit=1`: LA-2.3-9, every screening check (who, when, vendor, raw response, outcome, cached),
-  // newest first. `phone`, `outcome` and `before` (a timestamp, for the next page) narrow it.
+  // newest first. `phone` and `outcome` narrow it, `page` (1-based) pages it.
   if (params.get("audit")) {
     try {
       const page = await listScreeningAudit({
         tenantId: auth.context.tenantId,
         phone: params.get("phone"),
         outcome: params.get("outcome"),
-        before: params.get("before"),
-        limit: Number(params.get("limit")) || undefined,
+        page: Number(params.get("page")) || 1,
+        pageSize: Number(params.get("limit")) || undefined,
       });
       return NextResponse.json(page, { headers: { "Cache-Control": "no-store" } });
     } catch (error) {

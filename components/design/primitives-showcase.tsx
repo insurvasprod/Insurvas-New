@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -203,11 +202,12 @@ export function PrimitivesShowcase() {
       </Section>
 
       <Section title="Badge" note="Labels a fact — a plan, a role, a count. Accent is for automation moments and stays rare.">
-        <Badge>Pro</Badge>
-        <Badge variant="secondary">Agency</Badge>
-        <Badge variant="accent">Automated</Badge>
-        <Badge variant="outline">Draft</Badge>
-        <Badge variant="destructive">Over limit</Badge>
+        <StatusChip tone="action">Needs action</StatusChip>
+        <StatusChip tone="good">Active</StatusChip>
+        <StatusChip tone="info">Scheduled</StatusChip>
+        <StatusChip>Draft</StatusChip>
+        <StatusChip tone="warning">Past due</StatusChip>
+        <StatusChip tone="danger">Over limit</StatusChip>
       </Section>
 
       <Section title="StatusChip" note="Reports a state that changes. Tone says what it means; the dot carries it where hue alone will not.">

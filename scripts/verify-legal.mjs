@@ -1,3 +1,4 @@
+import "./lib/refuseProduction.mjs";
 // SA-5.4 acceptance: versioned legal documents, the signup gate, re-acceptance, and immutability.
 //
 // Drives the real HTTP routes against the running app. The interesting part is the middle: it

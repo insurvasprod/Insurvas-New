@@ -409,7 +409,14 @@ export function NurtureWorkspace() {
           footnote={contactRate?.fresh == null ? "no fresh dials to compare" : `vs ${contactRate.fresh.toFixed(1)}% fresh`}
           action={<Link href="/app/activity" className="text-xs font-semibold text-foreground hover:underline">Scorecard</Link>}
         />
-        {recycledAllTime && <StatTile label="Recycled all time" value={count(recycledAllTime.recycled)} footnote={`${percent(recycledAllTime.contactRate)} contact · ${plural(recycledAllTime.policies, "policy", "policies")}`} />}
+        {/* LA-2.20-6 / W3.5: conversion, recycled against fresh, all time — policies per 100 leads worked on each side. */}
+        {data.conversion
+          ? <StatTile
+              label="Recycled conversion"
+              value={percent(data.conversion.recycled.percent)}
+              footnote={`vs ${percent(data.conversion.fresh.percent)} fresh · ${plural(data.conversion.recycled.policies, "policy", "policies")} from ${count(data.conversion.recycled.leads)} recycled${recycledAllTime ? ` · ${percent(recycledAllTime.contactRate)} contact` : ""}`}
+            />
+          : recycledAllTime && <StatTile label="Recycled all time" value={count(recycledAllTime.recycled)} footnote={`${percent(recycledAllTime.contactRate)} contact · ${plural(recycledAllTime.policies, "policy", "policies")}`} />}
       </StatStrip>
 
       {!batchesReady && (

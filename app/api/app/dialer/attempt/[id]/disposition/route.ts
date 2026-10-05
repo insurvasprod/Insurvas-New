@@ -1,7 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 
-import { DialerWorkflowError, attemptWorkItemId, recordDisposition, recordCallbackDisposition } from "@/lib/dialerScripts/service";
+import { DialerWorkflowError, attemptWorkItemId, loadDialerVocabulary, recordDisposition, recordCallbackDisposition } from "@/lib/dialerScripts/service";
+import { APPLICATION_OUTCOME, fallbackOutcomeKeys, INBOUND_RETURN_CALL } from "@/lib/dialerScripts/outcomes";
 import { callModeWorkItem, getCallModeWizard, linkWalkToAttempt, loadDialOutcomeRow } from "@/lib/dialerScripts/callOutcome";
 import { DIAL_OUTCOME_KEY_PATTERN, decideDialOutcomeKey, setterMayRecord, type DialOutcomeRow } from "@/lib/dialerScripts/dialOutcomeKey";
 import { applicationOutcomeFor, assertApplicationOutcomeVerified } from "@/lib/dispositions/applicationGate";
@@ -15,17 +16,15 @@ import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 // because the money-route guard reads these lists statically; a test pins it to rolesWith("dialer.use").
 const DIALER_ROLES = ["owner", "producer", "setter"] as const;
 
-// The call outcomes this route has always recorded, whatever the tenant's own list holds.
-//   do_not_call: complete_existing_dial_disposition already suppresses the number on the agency's
-//   internal list and closes the lead (suppress_phone, list "internal"); the dialer never offered it.
-//   inbound_return_call: the customer rang back and was found through search; recorded without
-//   spending a cadence attempt or touching the queue (the SQL branch exists since 20260917145000).
-// Beside these, any ACTIVE outcome in the tenant's dispositions table (user decision 2026-09-24,
-// linking the call-outcome walk to the call); see lib/dialerScripts/dialOutcomeKey.ts.
-//   wrong_number, disconnected (user decision 2026-09-25): close the lead; one bought from a vendor
-//   campaign inside its return window becomes claimable (vendor_claimable_leads reads the attempt).
-const BUILT_IN_OUTCOMES = ["no_answer", "voicemail", "busy", "call_dropped", "not_interested", "callback_scheduled", "application_submitted", "do_not_call", "wrong_number", "disconnected", "inbound_return_call"] as const;
-const INBOUND_RETURN_CALL = "inbound_return_call";
+// The outcomes this route records are the tenant's own (M1 LA-1.12-4, one vocabulary): any ACTIVE
+// row in its dispositions table (lib/dialerScripts/dialOutcomeKey.ts). Since 20260929200000 the
+// dialer's outcomes are seeded there too — no answer, voicemail, busy, wrong number, disconnected and
+// the inbound return call — with the effects they always had, so archiving or retiming one in
+// Settings › Dispositions is what the dialer does. Until that migration is applied (no row carries a
+// dialer position) the pre-migration keys in lib/dialerScripts/outcomes.ts are still accepted.
+//   do_not_call: complete_existing_dial_disposition suppresses the number on the internal list.
+//   inbound_return_call: recorded without spending a cadence attempt (decision 1).
+//   wrong_number, disconnected: close the lead; one inside its vendor return window becomes claimable.
 
 const recordSchema = z
   .object({
@@ -104,7 +103,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const parsed = recordSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Choose a valid disposition" }, { status: 400 });
   const key = parsed.data.disposition;
-  const builtIn = (BUILT_IN_OUTCOMES as readonly string[]).includes(key);
+  // Before 20260929200000 only: the pre-migration keys, accepted without a tenant row.
+  const vocabulary = await loadDialerVocabulary(auth.context.tenantId);
+  const fallbackKeys = fallbackOutcomeKeys(vocabulary);
+  const builtIn = fallbackKeys.includes(key);
 
   // The built-in outcomes or an active tenant outcome; anything else is refused (400).
   let row: DialOutcomeRow = null;
@@ -114,7 +116,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     // A built-in outcome never needed the table, so a failed read does not stall the call loop.
     if (!builtIn) return failure(error, "Could not read this outcome.");
   }
-  const decision = decideDialOutcomeKey({ key, builtIn: BUILT_IN_OUTCOMES, row });
+  const decision = decideDialOutcomeKey({ key, builtIn: fallbackKeys, row });
   if (!decision.ok) return NextResponse.json({ error: decision.error, code: decision.code }, { status: decision.status });
 
   // LA-2.12: a setter books and never sells, so an application is not theirs to record — the
@@ -142,7 +144,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         return NextResponse.json({ error: error.message, code: "verification_incomplete" }, { status: 409 });
       // The gate could not be read. The application itself fails closed; every other outcome is
       // recorded as it was before the gate existed, so a failed read never stalls the call loop.
-      if (key === "application_submitted")
+      if (key === APPLICATION_OUTCOME)
         return NextResponse.json({ error: "Verification could not be checked, so the application was not recorded. Try again in a moment.", code: "verification_unavailable" }, { status: 503 });
       console.error(`[dialer] application gate unavailable: ${error instanceof Error ? error.message : "unknown"}`);
     }

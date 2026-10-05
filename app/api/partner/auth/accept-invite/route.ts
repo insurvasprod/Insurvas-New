@@ -7,6 +7,7 @@ import { partnerExistingInviteSchema } from "@/lib/partnerAuth/schemas";
 import { isPartnerRole } from "@/lib/partnerAuth/roles";
 import { TENANT_SESSION_COOKIE, tenantSessionCookieOptions } from "@/lib/tenantAuth/session";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
+import { AGENT_ACCOUNT_AT_PARTNER_SIGN_IN, holdsAgencyMembership, WRONG_PORTAL_CODE } from "@/lib/auth/planeSeparation";
 import { hashInviteToken } from "@/lib/users/invitations";
 import { verifyPassword } from "@/lib/password";
 import { recordLastLogin, recordLoginEvent } from "@/lib/loginEvents/record";
@@ -72,6 +73,13 @@ export async function POST(request: NextRequest) {
   if (!account || account.status !== "active" || !account.password_hash || account.email !== parsed.data.email || !passwordOk) {
     if (account) await recordLoginEvent({ request, email: parsed.data.email, success: false, userId: account.id, actorType: "user", failureReason: "invalid_credentials" });
     return NextResponse.json({ error: "Invalid email or password" }, { status: 401 });
+  }
+
+  // One account, one portal (lib/auth/planeSeparation.ts): an agency's own account cannot accept a
+  // partner invite. Refused before the invite is consumed, so it is not used up by a sign-in that
+  // requirePartner would then reject.
+  if (await holdsAgencyMembership(account.id)) {
+    return NextResponse.json({ error: AGENT_ACCOUNT_AT_PARTNER_SIGN_IN, code: WRONG_PORTAL_CODE }, { status: 403 });
   }
 
   const { data: result, error } = await getSupabaseServiceClient().rpc("consume_existing_partner_invite", { p_token_hash: hashInviteToken(parsed.data.token) });

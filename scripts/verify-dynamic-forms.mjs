@@ -1,3 +1,4 @@
+import "./lib/refuseProduction.mjs";
 // LA-1.4 live acceptance check. Fixtures are disposable and removed in finally.
 import { createServer } from "node:http";
 import { randomUUID } from "node:crypto";

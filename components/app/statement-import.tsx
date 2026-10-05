@@ -3,11 +3,14 @@
 /**
  * "Import statement": the three steps from a carrier's file to lines waiting for a person.
  *
- *   1 · File, carrier and period.
+ *   1 · File, carrier and period. CSV, Excel (.xlsx) or PDF (LA-4.1). An Excel workbook is read in
+ *       the browser into the same CSV text the server reads, so the columns and the preview are the
+ *       file's own. A PDF skips steps 2 and 3: it is stored, and its lines are typed in on the
+ *       statement (LA-4.2). No AI reads it.
  *   2 · Columns. The mapping last used for this carrier is offered first; otherwise it is guessed
  *       from the headers. Policy number and amount are required.
- *   3 · Preview. The server reads the whole file, proposes exact matches (policy number + carrier)
- *       and refuses a file already imported for this carrier and period. Importing records the
+ *   3 · Preview. The server reads the whole file, proposes matches (policy number + carrier, else
+ *       insured name + carrier) and refuses a file already imported for this carrier and period. Importing records the
  *       statement and its proposals — nothing posts until someone accepts a match on the review
  *       screen, where this dialog sends them.
  *
@@ -23,8 +26,9 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { isXlsxFile, readXlsxAsCsv } from "@/lib/agentTemplates/xlsx";
+import { STATEMENT_FILE_ACCEPT, statementFileKind, statementFileProblem } from "@/lib/ledger/statementFile";
 import {
-  MAX_STATEMENT_BYTES,
   STATEMENT_FIELDS,
   STATEMENT_FIELD_LABELS,
   STATEMENT_KIND_LABELS,
@@ -38,6 +42,7 @@ import {
 import { readStatementHeaders, sanitizeStatementMapping, statementMappingProblem, suggestStatementMapping } from "@/lib/ledger/statementParse";
 
 type Step = "file" | "map" | "preview";
+type FileKind = "csv" | "xlsx" | "pdf";
 
 function lastMonth(): { start: string; end: string } {
   const now = new Date();
@@ -53,6 +58,49 @@ async function postJson<T>(url: string, body: unknown): Promise<T> {
   return data;
 }
 
+async function postForm<T>(url: string, form: FormData): Promise<T> {
+  const response = await fetch(url, { method: "POST", body: form });
+  const data = (await response.json().catch(() => ({}))) as T & { error?: string };
+  if (!response.ok) throw new Error(data.error ?? "Something went wrong; nothing was imported.");
+  return data;
+}
+
+/**
+ * Which column holds what — the import's step 2, and re-processing a stored statement (LA-4.3).
+ * Policy number and amount are required; every other field is optional.
+ */
+export function StatementMappingFields({ headers, mapping, onChange, idPrefix = "statement-map" }: {
+  headers: string[];
+  mapping: StatementMapping;
+  onChange: (next: StatementMapping) => void;
+  idPrefix?: string;
+}) {
+  return (
+    <>
+      {STATEMENT_FIELDS.map((field) => {
+        const required = REQUIRED_STATEMENT_FIELDS.includes(field);
+        return (
+          <div key={field} className="grid gap-1.5 sm:grid-cols-[180px_minmax(0,1fr)] sm:items-start sm:gap-4">
+            <div>
+              <Label htmlFor={`${idPrefix}-${field}`}>{STATEMENT_FIELD_LABELS[field].label}{required ? "" : " (optional)"}</Label>
+              <p className="mt-0.5 text-xs text-muted-foreground">{STATEMENT_FIELD_LABELS[field].hint}</p>
+            </div>
+            <select
+              id={`${idPrefix}-${field}`}
+              className="portal-import-select"
+              value={mapping[field] ?? ""}
+              onChange={(event) => onChange({ ...mapping, [field]: event.target.value || undefined })}
+            >
+              <option value="">{required ? "Choose a column…" : "Not in this file"}</option>
+              {headers.map((header) => <option key={header} value={header}>{header}</option>)}
+            </select>
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
 export function StatementImportButton({
   carriers,
   savedMappings,
@@ -66,6 +114,9 @@ export function StatementImportButton({
   const [open, setOpen] = useState(autoOpen);
   const [step, setStep] = useState<Step>("file");
   const [fileName, setFileName] = useState("");
+  const [file, setFile] = useState<File | null>(null);
+  const [fileKind, setFileKind] = useState<FileKind | null>(null);
+  const [sheetName, setSheetName] = useState<string | null>(null);
   const [csvText, setCsvText] = useState("");
   const [headers, setHeaders] = useState<string[]>([]);
   const [carrierId, setCarrierId] = useState("");
@@ -78,10 +129,10 @@ export function StatementImportButton({
 
   const carrier = carriers.find((option) => option.id === carrierId) ?? null;
   const mappingProblem = useMemo(() => (headers.length ? statementMappingProblem(mapping, headers) : "Choose a file first."), [mapping, headers]);
-  const fileProblem = !csvText ? "Choose the carrier's statement file (CSV)." : !carrierId ? "Choose the carrier this statement is from." : !period.start || !period.end ? "Enter the period the statement covers." : period.end < period.start ? "The period ends before it starts." : null;
+  const fileProblem = !file || (fileKind !== "pdf" && !csvText) ? "Choose the carrier's statement file: CSV, Excel or PDF." : !carrierId ? "Choose the carrier this statement is from." : !period.start || !period.end ? "Enter the period the statement covers." : period.end < period.start ? "The period ends before it starts." : null;
 
   function reset() {
-    setStep("file"); setFileName(""); setCsvText(""); setHeaders([]); setCarrierId(""); setPeriod(lastMonth());
+    setStep("file"); setFileName(""); setFile(null); setFileKind(null); setSheetName(null); setCsvText(""); setHeaders([]); setCarrierId(""); setPeriod(lastMonth());
     setMapping({}); setMappingSource(null); setPreview(null); setBusy(false); setError(null);
   }
 
@@ -95,15 +146,32 @@ export function StatementImportButton({
     }
   }
 
-  async function chooseFile(file: File | undefined) {
+  async function chooseFile(next: File | undefined) {
     setError(null); setPreview(null);
-    if (!file) return;
-    if (file.size > MAX_STATEMENT_BYTES) { setError("The file is larger than 5 MB. Split it by period and import each part."); return; }
-    const text = await file.text();
+    setFile(null); setFileKind(null); setSheetName(null); setCsvText(""); setHeaders([]); setFileName("");
+    if (!next) return;
+    const problem = statementFileProblem(next);
+    if (problem) { setError(problem); return; }
+    const kind = statementFileKind(next) as FileKind;
+    if (kind === "pdf") {
+      setFile(next); setFileKind("pdf"); setFileName(next.name);
+      return;
+    }
+    let text = "";
+    try {
+      if (kind === "xlsx" || isXlsxFile(next)) {
+        const read = await readXlsxAsCsv(await next.arrayBuffer());
+        text = read.csv; setSheetName(read.sheetName);
+      } else {
+        text = (await next.text()).replace(/^\uFEFF/, "");
+      }
+    } catch (reason) {
+      setError(reason instanceof Error ? `The file could not be read: ${reason.message}` : "The file could not be read."); return;
+    }
     let nextHeaders: string[] = [];
     try { nextHeaders = readStatementHeaders(text); } catch (reason) { setError(reason instanceof Error ? reason.message : "The file could not be read."); return; }
     if (!nextHeaders.length) { setError("The file has no header row."); return; }
-    setFileName(file.name); setCsvText(text); setHeaders(nextHeaders);
+    setFile(next); setFileKind(kind); setFileName(next.name); setCsvText(text); setHeaders(nextHeaders);
     chooseMapping(nextHeaders, carrierId);
   }
 
@@ -127,9 +195,17 @@ export function StatementImportButton({
   }
 
   async function runImport() {
+    if (!file || !fileKind) return;
     setBusy(true); setError(null);
     try {
-      const data = await postJson<{ statementId: string }>("/api/app/statements", body());
+      // The file itself travels (LA-4.1): the server keeps the original and reads it the same way.
+      const form = new FormData();
+      form.set("file", file);
+      form.set("carrier_id", carrierId);
+      form.set("period_start", period.start);
+      form.set("period_end", period.end);
+      form.set("mapping", JSON.stringify(fileKind === "pdf" ? {} : mapping));
+      const data = await postForm<{ statementId: string }>("/api/app/statements", form);
       setOpen(false); reset();
       router.push(`/app/statements/${data.statementId}`);
     } catch (reason) {
@@ -148,7 +224,7 @@ export function StatementImportButton({
           <DialogHeader>
             <DialogTitle className="text-base">Import a carrier statement</DialogTitle>
             <DialogDescription>
-              {step === "file" && "Step 1 of 3 · The file, the carrier and the period it covers."}
+              {step === "file" && (fileKind === "pdf" ? "A PDF statement is stored as it is, and you type its lines in on the next screen." : "Step 1 of 3 · The file, the carrier and the period it covers.")}
               {step === "map" && "Step 2 of 3 · Which column holds what. Remembered for this carrier after the import."}
               {step === "preview" && "Step 3 of 3 · What will be recorded. Nothing posts to the ledger until a person accepts a match."}
             </DialogDescription>
@@ -157,9 +233,10 @@ export function StatementImportButton({
           {step === "file" && (
             <div className="grid gap-4 text-sm">
               <div className="grid gap-1.5">
-                <Label htmlFor="statement-file">Statement file (CSV)</Label>
-                <Input id="statement-file" type="file" accept=".csv,text/csv" onChange={(event) => void chooseFile(event.target.files?.[0])} />
-                {fileName && <p className="text-xs text-muted-foreground">{fileName} · {headers.length} columns</p>}
+                <Label htmlFor="statement-file">Statement file (CSV, Excel or PDF)</Label>
+                <Input id="statement-file" type="file" accept={STATEMENT_FILE_ACCEPT} onChange={(event) => void chooseFile(event.target.files?.[0])} />
+                {fileName && fileKind === "pdf" && <p className="text-xs text-muted-foreground">{fileName} · PDF, kept as it is; its lines are typed in after import</p>}
+                {fileName && fileKind !== "pdf" && <p className="text-xs text-muted-foreground">{fileName}{sheetName ? ` · sheet “${sheetName}”` : ""} · {headers.length} columns</p>}
               </div>
               <div className="grid gap-1.5">
                 <Label htmlFor="statement-carrier">Carrier</Label>
@@ -186,26 +263,7 @@ export function StatementImportButton({
             <div className="grid gap-3 text-sm">
               {mappingSource === "saved" && carrier && <p className="rounded-md bg-[var(--info-surface)] px-3 py-2 text-[var(--info-ink)]">Using the columns from your last {carrier.name} statement. Change any that moved.</p>}
               {mappingSource === "guessed" && <p className="rounded-md bg-[var(--surface-alt)] px-3 py-2 text-[var(--body)]">Guessed from the column names. Check each one before previewing.</p>}
-              {STATEMENT_FIELDS.map((field) => {
-                const required = REQUIRED_STATEMENT_FIELDS.includes(field);
-                return (
-                  <div key={field} className="grid gap-1.5 sm:grid-cols-[180px_minmax(0,1fr)] sm:items-start sm:gap-4">
-                    <div>
-                      <Label htmlFor={`statement-map-${field}`}>{STATEMENT_FIELD_LABELS[field].label}{required ? "" : " (optional)"}</Label>
-                      <p className="mt-0.5 text-xs text-muted-foreground">{STATEMENT_FIELD_LABELS[field].hint}</p>
-                    </div>
-                    <select
-                      id={`statement-map-${field}`}
-                      className="portal-import-select"
-                      value={mapping[field] ?? ""}
-                      onChange={(event) => setMapping((current) => ({ ...current, [field]: event.target.value || undefined }))}
-                    >
-                      <option value="">{required ? "Choose a column…" : "Not in this file"}</option>
-                      {headers.map((header) => <option key={header} value={header}>{header}</option>)}
-                    </select>
-                  </div>
-                );
-              })}
+              <StatementMappingFields headers={headers} mapping={mapping} onChange={setMapping} />
               {mappingProblem && <p className="text-xs font-medium text-[var(--warning-ink)]">{mappingProblem}</p>}
             </div>
           )}
@@ -263,7 +321,7 @@ export function StatementImportButton({
                           ) : line.proposal ? (
                             <>
                               <span className="block font-semibold text-foreground">{line.proposal.policyNumber}</span>
-                              <span className="block text-xs text-muted-foreground">{line.proposal.insuredName} · waits for acceptance</span>
+                              <span className="block text-xs text-muted-foreground">{line.proposal.insuredName} · {line.proposalMethod === "name" ? "by insured name, check it" : "waits for acceptance"}</span>
                             </>
                           ) : (
                             <span className="text-xs text-muted-foreground">{line.reason}</span>
@@ -290,9 +348,14 @@ export function StatementImportButton({
                 Back
               </Button>
             )}
-            {step === "file" && (
+            {step === "file" && fileKind !== "pdf" && (
               <Button type="button" disabled={Boolean(fileProblem)} title={fileProblem ?? undefined} onClick={() => { setError(null); setStep("map"); }}>
                 Next: columns
+              </Button>
+            )}
+            {step === "file" && fileKind === "pdf" && (
+              <Button type="button" disabled={Boolean(fileProblem) || busy} title={fileProblem ?? undefined} onClick={() => void runImport()}>
+                {busy ? "Storing…" : "Store PDF and enter its lines"}
               </Button>
             )}
             {step === "map" && (

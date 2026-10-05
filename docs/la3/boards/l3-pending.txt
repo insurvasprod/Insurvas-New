@@ -1,0 +1,220 @@
+<div> {flex-direction:column;padding:24px 32px 32px}
+  <div .m-stagger> {flex-direction:column;gap:24px}
+    <div> {justify-content:space-between;gap:24px}
+        <div> {fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+          "Sell"
+        <h1> {fsize:32px;fweight:600;color:#15191e}
+          "Pending cases"
+        <p> {fsize:16px;fweight:400;color:#60646c}
+          "What each submitted application is waiting on, oldest first."
+      <div> {gap:12px}
+        <button type="button"> {justify-content:center;gap:8px;height:44px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+          "Export"
+        <button type="button"> {justify-content:center;gap:8px;height:44px;padding:0 16px;bd-radius:8px;bg:#ff5900;color:#15191e;bd:1px solid transparent;fsize:14px;fweight:600}
+          "Chase everything overdue"
+    <div> {gap:24px;bd-bottom:1px solid #d5dbe3}
+      <button type="button"> {height:40px;padding:0 4px;bd:0;bg:transparent;fsize:14px;fweight:600;color:#15191e;bd-bottom:2px solid #ff5900}
+        "Requirements"
+      <button type="button"> {height:40px;padding:0 4px;bd:0;bg:transparent;fsize:14px;fweight:600;color:#60646c;bd-bottom:2px solid transparent}
+        "Counteroffers"
+      <button type="button"> {height:40px;padding:0 4px;bd:0;bg:transparent;fsize:14px;fweight:600;color:#60646c;bd-bottom:2px solid transparent}
+        "Awaiting policy number"
+    <div> {grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}
+      <div> {bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff;padding:16px 18px}
+        <div> {fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+          "Waiting on the client"
+        <div> {fsize:32px;fweight:600;color:#9a4f00}
+          "11"
+        <div> {fsize:12px;fweight:400;color:#60646c}
+          "a call or a signature"
+      <div> {bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff;padding:16px 18px}
+        <div> {fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+          "Overdue"
+        <div> {fsize:32px;fweight:600;color:#b02020}
+          "4"
+        <div> {fsize:12px;fweight:400;color:#60646c}
+          "older than 10 days"
+      <div> {bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff;padding:16px 18px}
+        <div> {fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+          "Counteroffers expiring"
+        <div> {fsize:32px;fweight:600;color:#9a4f00}
+          "2"
+        <div> {fsize:12px;fweight:400;color:#60646c}
+          "inside 5 days"
+      <div> {bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff;padding:16px 18px}
+        <div> {fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+          "Missing carrier reference"
+        <div> {fsize:32px;fweight:600;color:#15191e}
+          "6"
+        <div> {fsize:12px;fweight:400;color:#60646c}
+          "cannot be matched yet"
+    <div> {flex-direction:column;bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff}
+      <table> {width:100%}
+        <thead>
+          <tr> {bg:#e4e8ee}
+            <th> {width:150px;padding:8px 12px;fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+              "Client"
+            <th> {width:138px;padding:8px 12px;fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+              "Carrier"
+            <th> {width:186px;padding:8px 12px;fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+              "Requirement"
+            <th> {width:150px;padding:8px 12px;fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+              "Waiting on"
+            <th> {width:100px;padding:8px 12px;fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+              "Age"
+            <th> {width:152px;padding:8px 12px;fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+              "Last chased"
+            <th> {width:128px;padding:8px 12px;fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+        <tbody .m-seq>
+          <tr .m-row> {bg:#fff3ec}
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "Tomas Herrera"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "Americo"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "APS"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "Dr. Ruiz’s office"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#fdeaea;color:#b02020;fsize:12px;fweight:400;fweight:600}
+                "18 days"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "25 Sep · Priya S."
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              <button type="button"> {justify-content:center;gap:8px;height:30px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+                "Log a chase"
+          <tr .m-row>
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "Alonzo Pike"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "Mutual of Omaha"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "Phone health interview"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "The client"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#fdeaea;color:#b02020;fsize:12px;fweight:400;fweight:600}
+                "14 days"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "24 Sep · Rinor G."
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              <button type="button"> {justify-content:center;gap:8px;height:30px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+                "Log a chase"
+          <tr .m-row>
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "Curtis Bramlett"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "Mutual of Omaha"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "Paramed exam"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "ExamOne"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#fdeaea;color:#b02020;fsize:12px;fweight:400;fweight:600}
+                "11 days"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "22 Sep · Dwayne A."
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              <button type="button"> {justify-content:center;gap:8px;height:30px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+                "Log a chase"
+          <tr .m-row>
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "Harold Pettigrew"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "Foresters"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "APS"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "Valley Clinic"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#fcefdf;color:#9a4f00;fsize:12px;fweight:400;fweight:600}
+                "9 days"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "23 Sep · Priya S."
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              <button type="button"> {justify-content:center;gap:8px;height:30px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+                "Log a chase"
+          <tr .m-row>
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "Grace Oyelaran"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "Gerber Life"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "Amendment"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "The client"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#fcefdf;color:#9a4f00;fsize:12px;fweight:400;fweight:600}
+                "7 days"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "26 Sep · Rinor G."
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              <button type="button"> {justify-content:center;gap:8px;height:30px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+                "Log a chase"
+          <tr .m-row>
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "Delores Whitley"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "Gerber Life"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "Missing information"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "The carrier"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#fcefdf;color:#9a4f00;fsize:12px;fweight:400;fweight:600}
+                "6 days"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "25 Sep · Rinor G."
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              <button type="button"> {justify-content:center;gap:8px;height:30px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+                "Log a chase"
+          <tr .m-row>
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "Ella Rosario"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "Americo"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "Missing information"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "The client"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              <span> {color:#60646c}
+                "4 days"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "28 Sep · Dwayne A."
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              <button type="button"> {justify-content:center;gap:8px;height:30px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+                "Log a chase"
+          <tr .m-row>
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "Mary E Morgan"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "Foresters"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "Voice verification"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "The client"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              <span> {color:#60646c}
+                "3 days"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "27 Sep · Priya S."
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              <button type="button"> {justify-content:center;gap:8px;height:30px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+                "Log a chase"
+      <div> {justify-content:space-between;gap:16px;padding:12px 16px;bd-top:1px solid #d5dbe3;bg:#f1f3f7}
+        <span> {fsize:12px;fweight:400;color:#60646c}
+          "Showing 1–8 of 34 open requirements · oldest first"
+        <span> {gap:8px}
+          <button type="button"> {justify-content:center;gap:8px;height:32px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+            "Previous"
+          <button type="button"> {justify-content:center;gap:8px;height:32px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+            "Next"
+    <div> {padding:14px 16px;bd:1px solid #d5dbe3;bd-left:3px solid #00708a;bd-radius:12px;bg:#e0f2f6}
+      <div> {fsize:14px;fweight:400;fweight:600;color:#005e75}
+        "Age is the only thing that turns this list red"
+      <p> {fsize:14px;fweight:400;color:#33383f}
+        "A requirement goes amber at 5 days and red at 10, counted from the day the carrier asked for it, not the day someone noticed."
+        <strong>
+          "Log a chase"
+        "writes who called and what was said, and can put a callback on the agent’s own list. Nothing on this page marks a policy issued — that only happens when a policy number is typed in or arrives on a carrier feed."

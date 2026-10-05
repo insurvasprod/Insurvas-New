@@ -102,14 +102,13 @@ export function PartnerPortalOverview({ role, partnerStatus, partnerName }: { ro
   return <div className="m-stagger space-y-6">
     <PageHeader
       title="Overview"
-      actions={<Button asChild><a href="/partner/submit-lead"><Send aria-hidden="true" />Submit a new lead</a></Button>}
+      actions={partnerStatus === "active" ? <Button asChild><a href="/partner/submit-lead"><Send aria-hidden="true" />Submit a new lead</a></Button> : undefined}
     />
-    {partnerStatus === "paused" && <p role="status" className="rounded-md border border-[var(--warning)] bg-[var(--warning-surface)] px-4 py-2.5 text-sm text-[var(--warning-ink)]">This partner account is paused — new lead submissions are disabled until the agent resumes it.</p>}
     {error && <p role="alert" className="rounded-md border border-[var(--error)] bg-[var(--error-surface)] px-4 py-2.5 text-sm text-[var(--error-ink)]">{error}</p>}
     {!error && stale && updatedAt !== null && <p role="status" className="text-xs text-muted-foreground">Updates paused · last updated {freshness(updatedAt, now)}</p>}
     <StatStrip label={`${partnerName ?? "Your organization"} at a glance`}>
       <StatTile label="Submitted today" value={pipeline?.counters.submittedToday ?? 0} footnote="since 00:00 your time" />
-      <StatTile label="In progress" value={pipeline?.counters.claimed ?? 0} footnote="claimed or verifying" />
+      <StatTile label="Claimed" value={pipeline?.counters.claimed ?? 0} footnote="with a closer or on a call" />
       <StatTile label="Converted" value={pipeline?.counters.converted ?? 0} footnote="last 30 days" />
       <StatTile label="Still open" value={pipeline?.counters.stillOpen ?? 0} footnote={oldestOpenLabel(pipeline?.counters.stillOpen ?? 0, pipeline?.oldestOpenAt, now)} />
       {role === "partner_admin" && <StatTile label="Team" value={loading ? "—" : activeUsers} footnote={loading ? "" : `${pendingUsers} pending invitation${pendingUsers === 1 ? "" : "s"}`} />}

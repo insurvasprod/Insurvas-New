@@ -13,6 +13,7 @@
  */
 
 import { createContext, useContext, type ReactNode } from "react";
+import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 
 import { cn } from "@/lib/utils";
 
@@ -204,29 +205,17 @@ export const st = {
 /* ── pill ───────────────────────────────────────────────────────────────── */
 
 export type PillTone = "success" | "warning" | "error" | "info" | "neutral" | "brand";
-const PILL: Record<PillTone, { ground: string; ink: string; dot: string }> = {
-  success: { ground: "bg-[var(--success-surface)]", ink: "text-[var(--success-ink)]", dot: "bg-[var(--success)]" },
-  warning: { ground: "bg-[var(--warning-surface)]", ink: "text-[var(--warning-ink)]", dot: "bg-[var(--warning)]" },
-  error: { ground: "bg-[var(--error-surface)]", ink: "text-[var(--error-ink)]", dot: "bg-[var(--error)]" },
-  info: { ground: "bg-[var(--info-surface)]", ink: "text-[var(--info-ink)]", dot: "bg-[var(--info)]" },
-  neutral: { ground: "bg-[var(--surface-alt)]", ink: "text-[var(--body)]", dot: "bg-[var(--muted)]" },
-  brand: { ground: "bg-[var(--brand-50)]", ink: "text-[var(--accent-ink)]", dot: "bg-[var(--primary)]" },
-};
+const PILL_TONE: Record<PillTone, StatusTone> = { success: "good", warning: "warning", error: "danger", info: "info", neutral: "neutral", brand: "action" };
 
+/**
+ * @deprecated UX-5: use `StatusChip` from components/ui/status-chip. A thin alias kept while its call
+ * sites move; the ratchet counts them down. Unlike StatusChip, a Pill shows no dot unless asked.
+ */
 export function Pill({ tone = "neutral", dot, children, className }: { tone?: PillTone; dot?: boolean; children: ReactNode; className?: string }) {
-  const t = PILL[tone];
   return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1.5 rounded-full px-2.5 py-[3px] text-[12px] leading-[1.5] font-semibold tracking-[-0.01em] whitespace-nowrap",
-        t.ground,
-        t.ink,
-        className
-      )}
-    >
-      {dot && <span aria-hidden className={cn("size-1.5 shrink-0 rounded-full", t.dot)} />}
+    <StatusChip tone={PILL_TONE[tone]} dot={dot ?? false} className={className}>
       {children}
-    </span>
+    </StatusChip>
   );
 }
 
@@ -383,25 +372,6 @@ export function SettingsMeter({
   );
 }
 
-/* ── stat tile ──────────────────────────────────────────────────────────── */
-
-export function StatTile({ label, value, foot, tone }: { label: ReactNode; value: ReactNode; foot?: ReactNode; tone?: "warning" }) {
-  return (
-    <div className="min-w-0 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] px-[18px] py-4">
-      <div className="text-[12px] leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]">{label}</div>
-      <div
-        className={cn(
-          "mt-1.5 text-[32px] leading-[1.13] font-semibold tracking-[-0.025em] tabular-nums",
-          tone === "warning" ? "text-[var(--warning-ink)]" : "text-[var(--ink)]"
-        )}
-      >
-        {value}
-      </div>
-      {foot && <div className="mt-1.5 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">{foot}</div>}
-    </div>
-  );
-}
-
 /* ── timeline ───────────────────────────────────────────────────────────── */
 
 export function Timeline({ items }: { items: { title: ReactNode; sub?: ReactNode; tone?: "primary" | "success" | "warning" | "error" | "muted" }[] }) {
@@ -419,32 +389,6 @@ export function Timeline({ items }: { items: { title: ReactNode; sub?: ReactNode
       ))}
     </ul>
   );
-}
-
-/* ── search box (client-side filter) ────────────────────────────────────── */
-
-export function SearchBox({ value, onChange, placeholder, label }: { value: string; onChange: (v: string) => void; placeholder: string; label: string }) {
-  return (
-    <span className="relative inline-flex w-[248px] max-w-full">
-      <svg aria-hidden width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" className="pointer-events-none absolute top-[12px] left-3 text-[var(--muted)]">
-        <circle cx="11" cy="11" r="7" />
-        <path d="m20 20-3.2-3.2" />
-      </svg>
-      <input
-        type="search"
-        aria-label={label}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        className="box-border h-9 w-full rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] pr-3 pl-9 text-[14px] tracking-[-0.02em] text-[var(--ink)] outline-none placeholder:text-[var(--muted)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
-      />
-    </span>
-  );
-}
-
-/** A toolbar box inside a table card's bar: search on the left, the primary action on the right. */
-export function TableToolbar({ children }: { children: ReactNode }) {
-  return <div className="flex w-full flex-wrap items-center gap-3 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] p-3">{children}</div>;
 }
 
 export function PlusIcon() {

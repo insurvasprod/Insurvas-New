@@ -1,0 +1,198 @@
+<div> {justify-content:space-between;gap:16px;padding:10px 32px;bd-bottom:1px solid #d5dbe3;bg:#ffffff}
+  <span> {fsize:14px;fweight:400;color:#33383f}
+    "Northline Insurance · Growth plan · Owner"
+  <span> {gap:8px}
+    <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e4e8ee;color:#33383f;fsize:12px;fweight:400;fweight:600}
+      "Owner only"
+    <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e0f3e7;color:#0d7038;fsize:12px;fweight:400;fweight:600}
+      <span> {width:6px;height:6px;bd-radius:9999px;bg:#138a43}
+      "Effective-dated and audited"
+<div> {flex-direction:column;padding:24px 32px 32px}
+  <div .m-stagger> {flex-direction:column;gap:24px}
+    <div> {justify-content:space-between;gap:24px}
+        <div> {fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+          "Settings · Sales"
+        <h1> {fsize:32px;fweight:600;color:#15191e}
+          "AI assistant"
+        <p> {fsize:16px;fweight:400;color:#60646c}
+          "The suggestion panel beside the interview: whether it runs at all, and exactly what it would see if it did."
+      <div> {gap:12px}
+    <div> {gap:24px}
+      <div> {width:236px}
+        <div> {flex-direction:column;bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff}
+          <div> {padding:10px}
+            <a href="#"> {gap:8px;height:36px;padding:0 12px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              "Carriers and products"
+            <a href="#"> {gap:8px;height:36px;padding:0 12px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              "Appointments"
+            <a href="#"> {gap:8px;height:36px;padding:0 12px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              "Underwriting templates"
+            <a href="#"> {gap:8px;height:36px;padding:0 12px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              "Quotation templates"
+            <a href="#"> {gap:8px;height:36px;padding:0 12px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              "Application field sets"
+            <a href="#"> {gap:8px;height:36px;padding:0 12px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              "Carrier field maps"
+            <a href="#"> {gap:8px;height:36px;padding:0 12px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              "Disclosures"
+            <a href="#"> {gap:8px;height:36px;padding:0 12px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              "Quote and QA preferences"
+            <a href="#"> {gap:8px;height:36px;padding:0 12px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              "Welcome pack"
+            <a href="#"> {gap:8px;height:36px;padding:0 12px;bd-radius:8px;bg:#fff3ec;color:#a63800;fweight:600;fsize:14px;fweight:400}
+              "AI assistant"
+            <a href="#"> {gap:8px;height:36px;padding:0 12px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              "Extension"
+            <a href="#"> {gap:8px;height:36px;padding:0 12px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              "Pipeline sync"
+        <div> {flex-direction:column;bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff}
+          <div> {justify-content:space-between;gap:16px;padding:12px 16px;bg:#e4e8ee;bd-bottom:1px solid #d5dbe3}
+            <span> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+              "AI assistant"
+            <span> {gap:10px}
+              <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e4e8ee;color:#33383f;fsize:12px;fweight:400;fweight:600}
+                "Owner only"
+          <div> {padding:20px 24px;bd-bottom:1px solid #d5dbe3}
+              <h2> {fsize:18px;fweight:600;color:#15191e}
+                "Availability"
+              <p> {fsize:14px;fweight:400;color:#60646c}
+                "One switch. There is no per-agent override and no trial mode."
+              <div> {bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff;padding:18px 20px;flex-direction:column;gap:18px}
+                <div> {justify-content:space-between;gap:16px}
+                    <span> {fsize:14px;fweight:400;fweight:600;color:#33383f}
+                      "The assistant is available on the Interview step"
+                    <span> {fsize:12px;fweight:400;color:#60646c}
+                      "Off. With this off the assistant panel is not rendered, no request is made, and nothing leaves this tenant."
+                  <span role="img" aria-label="Off"> {width:38px;height:22px;padding:2px;bd-radius:9999px;bg:#7a828e;justify-content:flex-start}
+                    <span> {width:18px;height:18px;bd-radius:9999px;bg:#ffffff}
+                <div> {grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+                  <label>
+                    <span> {fsize:14px;fweight:400;fweight:600;color:#33383f}
+                      "Provider"
+                    <select> {width:100%;height:44px;padding:0 12px;bd:1px solid #7a828e;bd-radius:8px;bg:#ffffff;fsize:16px;fweight:400;color:#15191e}
+                      <option>
+                        "Not chosen"
+                      <option>
+                        "Anthropic"
+                      <option>
+                        "OpenAI"
+                      <option>
+                        "Azure OpenAI"
+                      <option>
+                        "Self-hosted"
+                    <span> {fsize:12px;fweight:400;color:#60646c}
+                      "Choosing one does not switch anything on. It records which contract the agency intends to sign."
+                  <label>
+                    <span> {fsize:14px;fweight:400;fweight:600;color:#33383f}
+                      "Data region"
+                    <select> {width:100%;height:44px;padding:0 12px;bd:1px solid #7a828e;bd-radius:8px;bg:#ffffff;fsize:16px;fweight:400;color:#15191e}
+                      <option>
+                        "United States"
+                      <option>
+                        "European Union"
+                    <span> {fsize:12px;fweight:400;color:#60646c}
+                      "Fixed once the switch is on, because moving it would move health answers across a border."
+          <div> {padding:20px 24px;bd-bottom:1px solid #d5dbe3}
+              <h2> {fsize:18px;fweight:600;color:#15191e}
+                "What is sent, and what is not"
+              <p> {fsize:14px;fweight:400;color:#60646c}
+                "This list is fixed in code. An owner cannot add a field to the left column or remove one from the right."
+              <div> {grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
+                <div> {bd:1px solid #d5dbe3;bd-left:3px solid #138a43;bd-radius:12px;bg:#ffffff}
+                  <div> {padding:11px 16px;bg:#e0f3e7;bd-bottom:1px solid #d5dbe3}
+                    <span> {fsize:14px;fweight:400;fweight:600;color:#0d7038}
+                      "Sent with every request"
+                  <div> {padding:4px 16px 14px}
+                    <div> {gap:10px;padding:10px 0;bd-top:1px solid #d5dbe3}
+                      <span> {color:#138a43}
+                        <svg/>
+                        <span> {fsize:14px;fweight:400;color:#33383f}
+                          "The question text"
+                        <span> {fsize:12px;fweight:400;color:#60646c}
+                          "“Have you been treated for congestive heart failure…”"
+                    <div> {gap:10px;padding:10px 0;bd-top:1px solid #d5dbe3}
+                      <span> {color:#138a43}
+                        <svg/>
+                        <span> {fsize:14px;fweight:400;color:#33383f}
+                          "The answer text"
+                        <span> {fsize:12px;fweight:400;color:#60646c}
+                          "“Yes, twice in 2024”"
+                    <div> {gap:10px;padding:10px 0;bd-top:1px solid #d5dbe3}
+                      <span> {color:#138a43}
+                        <svg/>
+                        <span> {fsize:14px;fweight:400;color:#33383f}
+                          "Medication names and doses"
+                        <span> {fsize:12px;fweight:400;color:#60646c}
+                          "Metformin 500 mg, Lisinopril 10 mg"
+                    <div> {gap:10px;padding:10px 0;bd-top:1px solid #d5dbe3}
+                      <span> {color:#138a43}
+                        <svg/>
+                        <span> {fsize:14px;fweight:400;color:#33383f}
+                          "The product"
+                        <span> {fsize:12px;fweight:400;color:#60646c}
+                          "Final Expense"
+                    <div> {gap:10px;padding:10px 0;bd-top:1px solid #d5dbe3}
+                      <span> {color:#138a43}
+                        <svg/>
+                        <span> {fsize:14px;fweight:400;color:#33383f}
+                          "The state"
+                        <span> {fsize:12px;fweight:400;color:#60646c}
+                          "Arizona"
+                <div> {bd:1px solid #d5dbe3;bd-left:3px solid #c92a2a;bd-radius:12px;bg:#ffffff}
+                  <div> {padding:11px 16px;bg:#fdeaea;bd-bottom:1px solid #d5dbe3}
+                    <span> {fsize:14px;fweight:400;fweight:600;color:#b02020}
+                      "Never sent, and not configurable"
+                  <div> {padding:4px 16px 14px}
+                    <div> {gap:10px;padding:10px 0;bd-top:1px solid #d5dbe3}
+                      <span> {color:#b02020}
+                        <svg/>
+                      <span> {fsize:14px;fweight:400;color:#33383f}
+                        "Name"
+                    <div> {gap:10px;padding:10px 0;bd-top:1px solid #d5dbe3}
+                      <span> {color:#b02020}
+                        <svg/>
+                      <span> {fsize:14px;fweight:400;color:#33383f}
+                        "Social Security number"
+                    <div> {gap:10px;padding:10px 0;bd-top:1px solid #d5dbe3}
+                      <span> {color:#b02020}
+                        <svg/>
+                      <span> {fsize:14px;fweight:400;color:#33383f}
+                        "Bank routing and account numbers"
+                    <div> {gap:10px;padding:10px 0;bd-top:1px solid #d5dbe3}
+                      <span> {color:#b02020}
+                        <svg/>
+                      <span> {fsize:14px;fweight:400;color:#33383f}
+                        "Home address"
+                    <div> {gap:10px;padding:10px 0;bd-top:1px solid #d5dbe3}
+                      <span> {color:#b02020}
+                        <svg/>
+                      <span> {fsize:14px;fweight:400;color:#33383f}
+                        "Phone number"
+                    <div> {gap:10px;padding:10px 0;bd-top:1px solid #d5dbe3}
+                      <span> {color:#b02020}
+                        <svg/>
+                      <span> {fsize:14px;fweight:400;color:#33383f}
+                        "Email address"
+                    <div> {gap:10px;padding:10px 0;bd-top:1px solid #d5dbe3}
+                      <span> {color:#b02020}
+                        <svg/>
+                      <span> {fsize:14px;fweight:400;color:#33383f}
+                        "Date of birth"
+                    <div> {gap:10px;padding:10px 0;bd-top:1px solid #d5dbe3}
+                      <span> {color:#b02020}
+                        <svg/>
+                      <span> {fsize:14px;fweight:400;color:#33383f}
+                        "Screenshots of any kind"
+                <div> {padding:14px 16px;bd:1px solid #d5dbe3;bd-left:3px solid #c92a2a;bd-radius:12px;bg:#fdeaea}
+                  <div> {fsize:14px;fweight:400;fweight:600;color:#b02020}
+                    "This is off until the provider question is settled"
+                  <p> {fsize:14px;fweight:400;color:#33383f}
+                    "Whether a provider’s terms permit health data is a contract question, not a setting. Nothing reaches an AI provider while this switch is off."
+          <div> {justify-content:space-between;gap:16px;padding:14px 24px;bd-top:1px solid #d5dbe3;bg:#f1f3f7}
+            <span> {fsize:12px;fweight:400;color:#60646c}
+              "Changes are audited — who, when, and what the value was before. Publishing a new version leaves the old one readable, because an application submitted under it still points at it."
+            <span> {gap:12px}
+              <button type="button"> {justify-content:center;gap:8px;height:40px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+                "Discard"
+              <button type="button"> {justify-content:center;gap:8px;height:40px;padding:0 16px;bd-radius:8px;bg:#ff5900;color:#15191e;bd:1px solid transparent;fsize:14px;fweight:600}
+                "Save changes"

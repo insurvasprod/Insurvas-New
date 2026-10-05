@@ -95,6 +95,9 @@ export function buildAdminNav(role: AdminRole): SidebarNode[] {
       // the platform plumbing.
       section("products", "/admin/products", "Products", "products"),
       section("carriers", "/admin/carriers", "Carriers", "carriers"),
+      // LA-3.13 · the platform's carrier field maps. Same permission as the carrier library it
+      // belongs to: whoever may change a carrier may review where its application fields go.
+      section("carriers", "/admin/field-maps", "Field maps", "carriers"),
       section("templates", "/admin/templates", "Templates", "templates"),
     ]),
 
@@ -106,6 +109,7 @@ export function buildAdminNav(role: AdminRole): SidebarNode[] {
     ...group("platform", "Platform", "platform", [
       section("compliance-sources", "/admin/compliance-sources", "Compliance", "compliance"),
       section("state-disclosures", "/admin/state-disclosures", "Disclosures", "compliance"),
+      isSuperAdmin ? link("/admin/calling-rules", "Calling rules", "compliance") : null,
       section("email", "/admin/email", "Mail Setup", "email"),
       section("system", "/admin/system", "Maintenance", "system"),
       section("advanced", "/admin/advanced", "Advanced", "advanced"),

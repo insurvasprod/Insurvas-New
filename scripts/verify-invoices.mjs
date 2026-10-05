@@ -1,3 +1,4 @@
+import "./lib/refuseProduction.mjs";
 // SA-3.2 acceptance, against the real database with the client the app uses.
 //
 // The immutability checks matter most: they run as service_role, so they prove the RUNNING

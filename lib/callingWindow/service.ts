@@ -152,6 +152,8 @@ export async function getCallingWindows(tenantId: string): Promise<CallingWindow
     // Reporting an empty list would tell an owner their agency is federal-only, which is a claim
     // about compliance and not one to make from a missing function.
     stateRulesAvailable: !rules.error,
+    // 20260929201000 is what makes the state check read the federal calendar too.
+    stateCheckReadsFederalHolidays: ruleRows.length > 0 && "start_minute" in ruleRows[0],
     stateRules: ruleRows
       .map((row) => ({
         state: text(row.state),
@@ -159,6 +161,15 @@ export async function getCallingWindows(tenantId: string): Promise<CallingWindow
         endHour: Number(row.end_hour),
         noSunday: row.no_sunday === true,
         noHolidays: row.no_holidays === true,
+        // 20260929201000: minutes and the Sunday window. Absent before it, and the hours stand.
+        ...("start_minute" in row
+          ? {
+              startMinute: int(row.start_minute),
+              endMinute: int(row.end_minute),
+              sundayStartMinute: int(row.sunday_start_minute),
+              sundayEndMinute: int(row.sunday_end_minute),
+            }
+          : {}),
       }))
       .sort((a, b) => a.state.localeCompare(b.state)),
     options: options.data

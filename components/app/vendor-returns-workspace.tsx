@@ -27,6 +27,7 @@ import {
   type ReturnCandidateRow,
   type VendorReturnsPageData,
 } from "@/lib/vendorScorecard/returnModel";
+import { Pager } from "@/components/ui/pager";
 
 const PAGE_SIZE = 25;
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -433,18 +434,14 @@ export function VendorReturnsWorkspace({ initialVendorId }: { initialVendorId?: 
         </DataToolbar>
       }
       footer={<>
-        <span>{rows.length ? `Showing ${currentPage * PAGE_SIZE + 1}–${currentPage * PAGE_SIZE + shown.length} of ${rows.length} claim${rows.length === 1 ? "" : "s"} · oldest unreconciled first` : "Nothing to show"}</span>
-        <span className="flex gap-2">
-          <Button type="button" variant="outline" size="sm" disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}>Previous</Button>
-          <Button type="button" variant="outline" size="sm" disabled={currentPage >= pageCount - 1} onClick={() => setPage(currentPage + 1)}>Next</Button>
-        </span>
+        <Pager page={currentPage + 1} total={rows.length} pageSize={PAGE_SIZE} noun={rows.length === 1 ? "claim" : "claims"} suffix="oldest unreconciled first" onPage={(next) => setPage(next - 1)} />
       </>}
     >
       {error && !report ? <ErrorState title="Vendor returns did not load" detail={error} action={<Button variant="outline" onClick={() => void refresh()}>Try again</Button>} />
         : rows.length === 0 ? (claims.length
           ? <NoMatches noun="claims" onClear={clearFilters} />
           : <EmptyState title="No claims yet" hint={draftable.length ? "Review one from the claimable rows below, or with New claim." : "A row becomes claimable when a scrub flags it or a call is dispositioned wrong number or disconnected."} />)
-        : <table className="w-full min-w-[860px] table-fixed border-collapse text-left">
+        : <table className="w-full min-w-[1010px] table-fixed border-collapse text-left">
           <thead><tr>
             <th scope="col" className={th}>Vendor</th>
             <th scope="col" className={`${th} w-[130px]`}>Period</th>

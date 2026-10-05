@@ -1,3 +1,4 @@
+import "./lib/refuseProduction.mjs";
 /**
  * End-to-end verification of the period billing run (backlog #41, #44, #46).
  *

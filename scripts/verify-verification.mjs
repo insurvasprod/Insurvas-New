@@ -1,3 +1,4 @@
+import "./lib/refuseProduction.mjs";
 // LA-1.11 live acceptance check. All fixture rows are disposable and removed in finally.
 import { randomUUID } from "node:crypto";
 import { SignJWT } from "jose";
@@ -14,6 +15,9 @@ const json = (body) => ({ headers: { "content-type": "application/json" }, body:
 async function token(userId, expired = false, secret = process.env.TENANT_SESSION_SECRET) { return new SignJWT({ tenantId }).setProtectedHeader({ alg: "HS256" }).setSubject(userId).setIssuedAt().setExpirationTime(expired ? Math.floor(Date.now() / 1000) - 1 : "10m").sign(new TextEncoder().encode(secret)); }
 async function cookie(userId, expired = false, secret) { return `insurvas_tenant_session=${await token(userId, expired, secret)}`; }
 async function api(path, sessionCookie, options = {}) { return fetch(`${BASE}${path}`, { ...options, headers: { cookie: sessionCookie, ...(options.headers ?? {}) }, redirect: "manual" }); }
+/** A function a pending migration adds is not there yet (PostgREST PGRST202 / Postgres 42883). The probe's random ids make it refuse before it writes. */
+async function schemaPending(name, args) { const result = await db.rpc(name, args); return Boolean(result.error && (result.error.code === "PGRST202" || result.error.code === "42883")); }
+const skip = (label, reason) => console.log(`  skip ${label} — schema pending: ${reason}`);
 function valueFor(field, index) {
   if (field.type === "number") return 65 + index;
   if (field.type === "currency") return 10000 + index;
@@ -80,6 +84,23 @@ async function main() {
     const reclaimed = await api("/api/app/inbound/claim", loserCookie, { method: "POST", ...json({ work_item_id: workItemId }) }); check("a re-claim resumes the same session for the next agent", reclaimed.status === 200);
     const resumed = await api(`/api/app/inbound/verification?work_item_id=${workItemId}`, loserCookie); const resumedBody = await resumed.json(); const resumedLead = await db.from("agent_leads").select("values").eq("id", leadId).single(); check("reclaimed panel keeps prior correction and progress point", resumed.status === 200 && resumedLead.data?.values?.[correctionKey] === "Corrected QA Name" && resumedBody.lead?.values?.[correctionKey] === "Corrected QA Name" && resumedBody.session.progress_percentage < 100);
     const oldOwner = await api(`/api/app/inbound/verification?work_item_id=${workItemId}`, winnerCookie); check("previous claimant cannot keep writing after handoff", oldOwner.status === 403);
+    // LA-1.11-6 through the real path (20260925709860): the call drops, the transfer goes back in the
+    // queue, and the next claim reopens the SAME closed session with its answers and progress.
+    if (await schemaPending("return_transfer_to_queue", { p_tenant_id: randomUUID(), p_work_item_id: randomUUID(), p_actor: randomUUID(), p_reason: "requeue" })) {
+      skip("resume after a dropped call and requeue (LA-1.11-6)", "20260925709860 is not applied");
+    } else {
+      const open = await db.from("tenant_verification_sessions").select("id, progress_percentage").eq("work_item_id", workItemId).is("ended_at", null).single();
+      // What complete_disposition leaves for a 'dropped' outcome: the work item dropped, the call ended, the session closed.
+      const endedAt = new Date().toISOString();
+      await db.from("lead_queue").update({ status: "dropped", disposition: "dropped", disposition_at: endedAt, disposition_by: loserId }).eq("id", workItemId);
+      await db.from("active_calls").update({ ended_at: endedAt }).eq("work_item_id", workItemId).is("ended_at", null);
+      await db.from("tenant_verification_sessions").update({ status: "closed", ended_at: endedAt, completed_at: endedAt }).eq("id", open.data.id);
+      const requeued = await api("/api/app/inbound/release", loserCookie, { method: "POST", ...json({ action: "requeue", work_item_id: workItemId }) });
+      const again = await api("/api/app/inbound/claim", winnerCookie, { method: "POST", ...json({ work_item_id: workItemId }) }); const againBody = await again.json();
+      const reopened = await api(`/api/app/inbound/verification?work_item_id=${workItemId}`, winnerCookie); const reopenedBody = await reopened.json();
+      const reopenedLead = await db.from("agent_leads").select("values").eq("id", leadId).single();
+      check("after a drop and requeue the next claim resumes the same session, answers and progress intact", requeued.status === 200 && again.status === 200 && againBody.resumed === true && againBody.claim?.verification_session_id === open.data.id && reopened.status === 200 && reopenedBody.session?.progress_percentage === open.data.progress_percentage && reopenedLead.data?.values?.[correctionKey] === "Corrected QA Name", JSON.stringify({ requeued: requeued.status, claim: againBody, session: reopenedBody.session, expected: open.data }).slice(0, 600));
+    }
     const assistant = await api(`/api/app/inbound/verification?work_item_id=${workItemId}`, assistantCookie); const assistantPost = await api("/api/app/inbound/verification", assistantCookie, { method: "POST", ...json({ work_item_id: workItemId, field_key: correctionKey, state: "confirmed" }) }); check("assistant role is denied on both read and write", assistant.status === 403 && assistantPost.status === 403);
     const forged = await api(`/api/app/inbound/verification?work_item_id=${workItemId}`, await cookie(loserId, false, `${process.env.TENANT_SESSION_SECRET}-forged`)); const expired = await api(`/api/app/inbound/verification?work_item_id=${workItemId}`, await cookie(loserId, true)); check("forged and expired sessions fail closed", forged.status === 401 && expired.status === 401);
     const hostile = await api("/api/app/inbound/verification", loserCookie, { method: "POST", ...json({ work_item_id: workItemId, field_key: "<script>alert(1)</script>", state: "confirmed" }) }); check("hostile field keys are rejected before any write", hostile.status === 400);

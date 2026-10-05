@@ -1,0 +1,145 @@
+<div> {justify-content:space-between;gap:16px;padding:10px 32px;bd-bottom:1px solid #d5dbe3;bg:#ffffff}
+  <span> {fsize:14px;fweight:400;color:#33383f}
+    "Northline Insurance · Growth plan · Owner"
+  <span> {gap:8px}
+    <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e0f3e7;color:#0d7038;fsize:12px;fweight:400;fweight:600}
+      <span> {width:6px;height:6px;bd-radius:9999px;bg:#138a43}
+      "All systems normal"
+    <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e4e8ee;color:#33383f;fsize:12px;fweight:400;fweight:600}
+      "Read-write"
+<div> {flex-direction:column;padding:24px 32px 32px}
+  <div .m-stagger> {flex-direction:column;gap:24px}
+    <div> {justify-content:space-between;gap:24px}
+        <div> {fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+          "Sell · Application"
+        <h1> {fsize:32px;fweight:600;color:#15191e}
+          "Grace Oyelaran"
+        <p> {fsize:16px;fweight:400;color:#60646c}
+          "Attempt 2 · Gerber Life · submitted 28 Sep, reference GL-40771902."
+      <div> {gap:12px}
+        <button type="button"> {justify-content:center;gap:8px;height:44px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+          "Case timeline"
+    <div> {flex-direction:column;bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff}
+      <div> {justify-content:space-between;gap:16px;padding:12px 16px;bg:#e4e8ee;bd-bottom:1px solid #d5dbe3}
+        <span> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+          "Pending requirements"
+        <span> {gap:10px}
+          <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#fcefdf;color:#9a4f00;fsize:12px;fweight:400;fweight:600}
+            <span> {width:6px;height:6px;bd-radius:9999px;bg:#b35c00}
+            "2 waiting on the client"
+      <div> {padding:16px 22px;fsize:14px;fweight:400;color:#33383f}
+        "Attending physician statement · 11 days. Phone health interview · 6 days."
+    <div> {flex-direction:column;bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff}
+      <div> {justify-content:space-between;gap:16px;padding:12px 16px;bg:#e4e8ee;bd-bottom:1px solid #d5dbe3}
+        <span> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+          "Outcome"
+        <span> {gap:10px}
+          <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e4e8ee;color:#33383f;fsize:12px;fweight:400;fweight:600}
+            <span> {width:6px;height:6px;bd-radius:9999px;bg:#60646c}
+            "Not recorded"
+      <div> {padding:16px 22px;fsize:14px;fweight:400;color:#60646c}
+        "Nothing here marks a policy issued on its own."
+--- beside main (overlay) ---
+<div> {bg:rgba(10,12,16,.55);justify-content:center;padding:84px 0 0 0}
+  <div .m-swap> {width:840px;flex-direction:column;bd:1px solid #7a828e;bd-radius:12px;bg:#ffffff}
+    <div> {justify-content:space-between;gap:16px;padding:18px 22px;bd-bottom:1px solid #d5dbe3}
+        <h2> {fsize:18px;fweight:600;color:#15191e}
+          "Gerber Life has come back with a different policy"
+        <p> {fsize:14px;fweight:400;color:#60646c}
+          "Attempt 2 · offered 30 Sep · expires 2 Oct"
+      <div> {gap:14px}
+        <span> {fsize:12px;fweight:400;fweight:600;color:#a63800}
+          <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#fcefdf;color:#9a4f00;fsize:12px;fweight:400;fweight:600}
+            <span> {width:6px;height:6px;bd-radius:9999px;bg:#b35c00}
+            "Expires in 4 days"
+        <button type="button" aria-label="Close"> {width:30px;height:30px;justify-content:center;bd:1px solid #d5dbe3;bd-radius:8px;bg:#ffffff;color:#60646c;padding:0}
+          <svg/>
+    <div> {padding:22px;flex-direction:column;gap:18px}
+      <div> {fsize:14px;fweight:400;color:#33383f}
+        "She applied for one thing and has been offered another. Read her the right-hand column, not the left."
+      <div> {flex-direction:column;bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff}
+        <table> {width:100%}
+          <thead>
+            <tr> {bg:#e4e8ee}
+              <th> {width:150px;padding:8px 12px;fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+              <th> {padding:8px 12px;fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+                "Applied for"
+              <th> {padding:8px 12px;fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+                "Offered"
+              <th> {width:168px;padding:8px 12px;fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+                "Difference"
+          <tbody .m-seq>
+            <tr .m-row>
+              <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                <strong>
+                  "Face amount"
+              <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "$15,000"
+              <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "$10,000"
+              <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                <span> {fsize:14px;fweight:400;fweight:600;color:#b02020}
+                  "−$5,000"
+                <span> {fsize:12px;fweight:400;color:#60646c}
+                  "−33.3%"
+            <tr .m-row>
+              <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                <strong>
+                  "Monthly premium"
+              <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "$71.20"
+              <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "$58.40"
+              <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                <span> {fsize:14px;fweight:400;fweight:600;color:#b02020}
+                  "−$12.80"
+                <span> {fsize:12px;fweight:400;color:#60646c}
+                  "−18.0%"
+            <tr .m-row>
+              <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                <strong>
+                  "Product"
+              <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "Final Expense · level"
+              <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "Final Expense · graded"
+              <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                <span> {fsize:12px;fweight:400;color:#9a4f00;fweight:600}
+                  "Two-year wait added"
+            <tr .m-row>
+              <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                <strong>
+                  "Rating class"
+              <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "Standard"
+              <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "Graded"
+              <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                <span> {fsize:12px;fweight:400;color:#60646c}
+                  "One class down"
+            <tr .m-row>
+              <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                <strong>
+                  "Effective date"
+              <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "1 Oct 2026"
+              <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "1 Nov 2026"
+              <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                <span> {fsize:14px;fweight:400;fweight:600;color:#9a4f00}
+                  "+31 days"
+                <span> {fsize:12px;fweight:400;color:#60646c}
+                  "First draft 23 Nov"
+      <div> {padding:14px 16px;bd:1px solid #d5dbe3;bd-left:3px solid #00708a;bd-radius:12px;bg:#e0f2f6}
+        <div> {fsize:14px;fweight:400;fweight:600;color:#005e75}
+          "The original is untouched"
+        <p> {fsize:14px;fweight:400;color:#33383f}
+          "This is a separate record stored beside it. Nothing is overwritten, whichever way she answers."
+    <div> {justify-content:space-between;gap:16px;padding:14px 22px;bd-top:1px solid #d5dbe3;bg:#f1f3f7}
+      <span> {fsize:12px;fweight:400;color:#60646c}
+        "Accepting updates the coverage, reissues the welcome pack and recalculates the commission."
+      <span> {gap:10px}
+        <button type="button"> {justify-content:center;gap:8px;height:40px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+          "Client declined"
+        <button type="button"> {justify-content:center;gap:8px;height:40px;padding:0 16px;bd-radius:8px;bg:#ff5900;color:#15191e;bd:1px solid transparent;fsize:14px;fweight:600}
+          "Accept the offer"

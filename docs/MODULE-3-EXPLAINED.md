@@ -238,6 +238,9 @@ Settings → Sales
 **Everything is versioned.** An application already in progress keeps the version it started on —
 so editing a template never silently rewrites something half-finished.
 
+**Who can change what:** all of this is set per agency by the owner, never per agent. The full
+list, including what is locked on purpose, is in [la3/CUSTOMIZATION.md](la3/CUSTOMIZATION.md).
+
 ---
 
 ## 8. All 26 tasks, in plain words

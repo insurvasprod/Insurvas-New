@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 
 import { audit } from "@/lib/audit/log";
-import { BOOKING_REFUSALS, bookAppointment, bookableContext, rebookAppointment, redactBlocksForSetter, rescheduleAppointment } from "@/lib/appointments/booking";
+import { BOOKING_REFUSALS, appointmentFacts, bookAppointment, bookableContext, confirmAppointment, rebookAppointment, redactBlocksForSetter, rescheduleAppointment } from "@/lib/appointments/booking";
 import { SCHEMA_GAP_MESSAGE, SchemaGapError } from "@/lib/appointments/schemaGap";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 
@@ -42,6 +42,24 @@ const rebookSchema = z.object({
   agent_user_id: z.string().uuid().nullable().optional(),
 }).strict();
 
+// booked -> confirmed (LA-2.11-5, 20260929202000). The agent, or the setter who booked it.
+const confirmSchema = z.object({
+  action: z.literal("confirm"),
+  appointment_id: z.string().uuid(),
+}).strict();
+
+/**
+ * LA-2.12-2 · a setter changes only the appointments they booked. The database refuses the same
+ * (APPOINTMENT_NOT_YOURS, 20260929202000); this answers it before that migration is applied, and
+ * without telling the setter anything about the booking beyond "not yours".
+ */
+async function notTheSettersOwn(role: string, tenantId: string, userId: string, appointmentId: string) {
+  if (role !== "setter") return null;
+  const facts = await appointmentFacts(tenantId, appointmentId);
+  if (!facts) return refusal(new Error("APPOINTMENT_NOT_FOUND"));
+  return facts.bookedBy === userId ? null : refusal(new Error("APPOINTMENT_NOT_YOURS"));
+}
+
 /** Maps a raised database code to its status and the sentence a setter can act on. */
 function refusal(error: unknown) {
   const message = error instanceof Error ? error.message : "";
@@ -50,11 +68,25 @@ function refusal(error: unknown) {
   // caller's, and telling a setter to fix their input would be wrong.
   const code = message.split(/[\s:]/)[0] ?? "";
   const known = BOOKING_REFUSALS[code];
-  if (!known)
+  // Postgres 57014: the booking ran past the statement timeout (seen 2026-09-29/30 while the database
+  // was IO-starved: the same call answered in ~1.5 s, then over 8 s). Nothing was booked, since the
+  // whole function rolled back, and trying again is the right answer, so the message says so.
+  if (!known && /statement timeout/i.test(message)) {
+    console.error("[appointments] booking timed out", message);
+    return NextResponse.json(
+      { error: "The calendar took too long to answer, so nothing was booked. Try again in a moment.", code: "booking_timeout" },
+      { status: 503 },
+    );
+  }
+  if (!known) {
+    // Logged, because the answer hides it: an unmapped failure is either a new refusal code that
+    // needs a sentence or a fault of ours, and neither can be told apart from the 503 alone.
+    console.error("[appointments] unmapped booking failure", message || error);
     return NextResponse.json(
       { error: "Booking is temporarily unavailable.", code: "booking_unavailable" },
       { status: 503 },
     );
+  }
   const [status, text] = known;
   return NextResponse.json({ error: text, code: code.toLowerCase() }, { status });
 }
@@ -65,8 +97,9 @@ export async function GET() {
   try {
     const context = await bookableContext(auth.context.tenantId);
     // Decided 2026-09-25: a setter sees blocked time as "Unavailable", never its reason. The time
-    // itself stays in the payload, because the picker has to know it is not bookable.
-    return NextResponse.json(auth.context.role === "setter" ? redactBlocksForSetter(context) : context, {
+    // itself stays in the payload, because the picker has to know it is not bookable. LA-2.12-2: and
+    // another setter's booking is a taken slot, without its lead or notes.
+    return NextResponse.json(auth.context.role === "setter" ? redactBlocksForSetter(context, auth.context.userId) : context, {
       headers: { "Cache-Control": "no-store" },
     });
   } catch (error) {
@@ -123,12 +156,34 @@ export async function PATCH(request: NextRequest) {
   const auth = await requireFeatureRole("outbound_dialing", BOOKING_ROLES, { write: true });
   if (auth instanceof NextResponse) return auth;
   const body = await request.json().catch(() => null);
+  const action = body && typeof body === "object" ? (body as { action?: unknown }).action : undefined;
 
-  if (body && typeof body === "object" && (body as { action?: unknown }).action === "rebook") {
+  if (action === "confirm") {
+    const confirm = confirmSchema.safeParse(body);
+    if (!confirm.success) return NextResponse.json({ error: "Choose the appointment to confirm" }, { status: 400 });
+    try {
+      const mine = await notTheSettersOwn(auth.context.role, auth.context.tenantId, auth.context.userId, confirm.data.appointment_id);
+      if (mine) return mine;
+      await confirmAppointment({ tenantId: auth.context.tenantId, appointmentId: confirm.data.appointment_id, actorId: auth.context.userId });
+      await audit({
+        actorType: "tenant", actorId: auth.context.userId, action: "tenant.appointment_outcome_recorded",
+        targetType: "tenant_appointment", targetId: confirm.data.appointment_id,
+        metadata: { outcome: "confirmed" }, request,
+      });
+      return NextResponse.json({ ok: true, status: "confirmed" });
+    } catch (error) {
+      if (error instanceof SchemaGapError) return NextResponse.json({ error: SCHEMA_GAP_MESSAGE, code: "schema_pending" }, { status: 503 });
+      return refusal(error);
+    }
+  }
+
+  if (action === "rebook") {
     const rebook = rebookSchema.safeParse(body);
     if (!rebook.success)
       return NextResponse.json({ error: "Choose the no-show to rebook and a valid time" }, { status: 400 });
     try {
+      const mine = await notTheSettersOwn(auth.context.role, auth.context.tenantId, auth.context.userId, rebook.data.appointment_id);
+      if (mine) return mine;
       const booked = await rebookAppointment({
         tenantId: auth.context.tenantId,
         appointmentId: rebook.data.appointment_id,
@@ -155,6 +210,8 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: "Choose a valid appointment and time" }, { status: 400 });
 
   try {
+    const mine = await notTheSettersOwn(auth.context.role, auth.context.tenantId, auth.context.userId, parsed.data.appointment_id);
+    if (mine) return mine;
     await rescheduleAppointment({
       tenantId: auth.context.tenantId,
       appointmentId: parsed.data.appointment_id,

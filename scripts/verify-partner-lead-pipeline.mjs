@@ -1,3 +1,4 @@
+import "./lib/refuseProduction.mjs";
 // LA-1.17 live acceptance checks. Creates and removes disposable partner pipeline data.
 import { randomUUID } from "node:crypto";
 import { SignJWT } from "jose";

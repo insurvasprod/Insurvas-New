@@ -1,3 +1,4 @@
+import "./lib/refuseProduction.mjs";
 // LA-1.8 live acceptance check. Uses a disposable tenant and the real public route.
 import { randomUUID } from "node:crypto";
 import { createServer } from "node:http";

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  ArrowRightLeft, Bell, Check, ChevronDown, KeyboardIcon, LogOut, Search, SlidersHorizontal,
+  ArrowRightLeft, Bell, BellOff, Check, ChevronDown, KeyboardIcon, LogOut, Search, SlidersHorizontal,
   TriangleAlert, UserRound,
 } from "lucide-react";
 
@@ -100,6 +100,11 @@ export type TopBarFeed = {
   alertCentreHref: string | null;
   notificationsEmptyBody: string;
   alertsEmpty: { head: string; body: string };
+  /**
+   * LA-1.25-6: do not disturb is on (sound and browser alerts muted, the escalation email still
+   * sent). The bar shows it next to the bell, so it is never on without the agent seeing it.
+   */
+  doNotDisturb?: boolean;
 };
 
 export type TopBarUser = {
@@ -492,15 +497,16 @@ export function TopBarShell({
 
       {/* ------------------------------------------------------- the right */}
       <div className="portal-top-actions">
+        {feed?.doNotDisturb && <span className="hidden text-[12px] leading-[1.5] font-semibold text-[var(--warning-ink)] sm:inline" title="Sound and browser alerts are muted. Escalation emails are still sent.">Do not disturb</span>}
         {feed && <button
           type="button"
-          aria-label={`Notifications${notifications.length ? `, ${notifications.length} unread` : ""}`}
+          aria-label={`Notifications${notifications.length ? `, ${notifications.length} unread` : ""}${feed.doNotDisturb ? ", do not disturb is on" : ""}`}
           aria-haspopup="true"
           aria-expanded={bellOpen}
           onClick={() => toggle("notifications")}
           className="portal-top-icon"
         >
-          <Bell className="size-4" aria-hidden="true" />
+          {feed.doNotDisturb ? <BellOff className="size-4 text-[var(--warning-ink)]" aria-hidden="true" /> : <Bell className="size-4" aria-hidden="true" />}
           {notifications.length > 0 && <span className="portal-top-badge">{notifications.length}</span>}
         </button>}
 
@@ -802,6 +808,7 @@ export function AppTopBar({ user }: { user: TopBarUser }) {
     preferences: <AgentAlertPreferences feed={source} />,
     preferencesHint: "Which events reach you, and how",
     alertCentreHref: "/app/alerts",
+    doNotDisturb: source.settings?.do_not_disturb === true,
     notificationsEmptyBody: "Handoffs, mentions, partner messages and callbacks due appear here as they happen.",
     alertsEmpty: {
       head: "Nothing is wrong with the queue",

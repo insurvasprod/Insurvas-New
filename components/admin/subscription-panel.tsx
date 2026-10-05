@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { TriangleAlert } from "lucide-react";
 import { notify } from "@/lib/notify";
 
-import { Badge } from "@/components/ui/badge";
+import { StatusChip, subscriptionTone } from "@/components/admin/status-chip";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -25,7 +25,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  SUBSCRIPTION_STATUS_BADGE_CLASS,
   SUBSCRIPTION_STATUS_LABELS,
   accessLevelForStatus,
   availableActions,
@@ -138,9 +137,9 @@ export function SubscriptionPanel({
                 Every control here moves money, so each one confirms with its effective date.
               </p>
             </div>
-            <Badge variant="outline" className={SUBSCRIPTION_STATUS_BADGE_CLASS[status]}>
+            <StatusChip tone={subscriptionTone(status)}>
               {SUBSCRIPTION_STATUS_LABELS[status]}
-            </Badge>
+            </StatusChip>
           </div>
 
           {access !== "full" && (

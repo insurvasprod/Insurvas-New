@@ -1,0 +1,163 @@
+<div> {flex-direction:column;padding:24px 32px 32px}
+  <div .m-stagger> {flex-direction:column;gap:24px}
+    <div> {justify-content:space-between;gap:24px}
+        <div> {fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+          "Sell · Application"
+        <h1> {fsize:32px;fweight:600;color:#15191e}
+          "Grace Oyelaran"
+        <div> {gap:8px}
+          <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#fdeaea;color:#b02020;fsize:12px;fweight:400;fweight:600}
+            <span> {width:6px;height:6px;bd-radius:9999px;bg:#c92a2a}
+            "Blocked by QA"
+          <button type="button"> {gap:7px;height:28px;padding:0 10px;bd:1px solid #7a828e;bd-radius:8px;bg:#ffffff;color:#15191e;fsize:12px;fweight:400;fweight:600}
+            "Attempt 2 · Mutual of Omaha"
+            <svg/>
+          <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e4e8ee;color:#33383f;fsize:12px;fweight:400;fweight:600}
+            <span> {width:6px;height:6px;bd-radius:9999px;bg:#60646c}
+            "Final Expense · $15,000"
+          <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e0f2f6;color:#005e75;fsize:12px;fweight:400;fweight:600}
+            <span> {width:6px;height:6px;bd-radius:9999px;bg:#00708a}
+            "Household · 2 applications"
+      <div> {gap:12px}
+        <button type="button"> {justify-content:center;gap:8px;height:40px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+          "Open portal"
+        <button type="button"> {justify-content:center;gap:8px;height:40px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+          "Add spouse"
+    <div> {gap:20px}
+      <div> {width:186px}
+        <div> {flex-direction:column;bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff}
+          <div> {padding:10px}
+            <a href="#"> {gap:9px;height:34px;padding:0 10px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              <span> {width:18px;height:18px;justify-content:center;bd-radius:9999px;bg:#138a43;color:#ffffff}
+                <svg/>
+              "Verify"
+            <a href="#"> {gap:9px;height:34px;padding:0 10px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              <span> {width:18px;height:18px;justify-content:center;bd-radius:9999px;bg:#138a43;color:#ffffff}
+                <svg/>
+              "Interview"
+            <a href="#"> {gap:9px;height:34px;padding:0 10px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              <span> {width:18px;height:18px;justify-content:center;bd-radius:9999px;bg:#138a43;color:#ffffff}
+                <svg/>
+              "Quote"
+            <a href="#"> {gap:9px;height:34px;padding:0 10px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              <span> {width:18px;height:18px;justify-content:center;bd-radius:9999px;bg:#138a43;color:#ffffff}
+                <svg/>
+              "Application"
+            <a href="#"> {gap:9px;height:34px;padding:0 10px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              <span> {width:18px;height:18px;justify-content:center;bd-radius:9999px;bg:#138a43;color:#ffffff}
+                <svg/>
+              "Beneficiaries"
+            <a href="#"> {gap:9px;height:34px;padding:0 10px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              <span> {width:18px;height:18px;justify-content:center;bd-radius:9999px;bg:#138a43;color:#ffffff}
+                <svg/>
+              "Payment"
+            <a href="#"> {gap:9px;height:34px;padding:0 10px;bd-radius:8px;bg:#fff3ec;color:#a63800;fweight:600;fsize:14px;fweight:400}
+              <span> {width:18px;height:18px;justify-content:center;bd-radius:9999px;bg:#ff5900;color:#15191e;fsize:12px;fweight:400;fweight:600}
+                "7"
+              "Disclosures"
+            <a href="#"> {gap:9px;height:34px;padding:0 10px;bd-radius:8px;bg:transparent;color:#60646c;fsize:14px;fweight:400}
+              <span> {width:18px;height:18px;justify-content:center;bd-radius:9999px;bg:#e4e8ee;color:#60646c;fsize:12px;fweight:400;fweight:600}
+                "8"
+              "Review"
+            <a href="#"> {gap:9px;height:34px;padding:0 10px;bd-radius:8px;bg:transparent;color:#60646c;fsize:14px;fweight:400}
+              <span> {width:18px;height:18px;justify-content:center;bd-radius:9999px;bg:#e4e8ee;color:#60646c;fsize:12px;fweight:400;fweight:600}
+                "9"
+              "Submit"
+            <a href="#"> {gap:9px;height:34px;padding:0 10px;bd-radius:8px;bg:transparent;color:#60646c;fsize:14px;fweight:400}
+              <span> {width:18px;height:18px;justify-content:center;bd-radius:9999px;bg:#e4e8ee;color:#60646c;fsize:12px;fweight:400;fweight:600}
+                "10"
+              "After submit"
+            <a href="#"> {gap:9px;height:34px;padding:0 10px;bd-top:1px solid #d5dbe3;bd-radius:0;color:#33383f;fsize:14px;fweight:400;height:auto}
+              "Case timeline"
+      <div> {flex-direction:column;gap:20px}
+        <div> {flex-direction:column;bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff}
+          <div> {justify-content:space-between;gap:16px;padding:12px 16px;bg:#e4e8ee;bd-bottom:1px solid #d5dbe3}
+            <span> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+              "Disclosures"
+            <span> {gap:10px}
+              <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#fdeaea;color:#b02020;fsize:12px;fweight:400;fweight:600}
+                <span> {width:6px;height:6px;bd-radius:9999px;bg:#c92a2a}
+                "1 required, not acknowledged"
+          <div> {padding:16px 22px;bd-top:1px solid #d5dbe3}
+            <div> {justify-content:space-between;gap:16px}
+                <span> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+                  "Replacement of life insurance notice"
+                <span> {fsize:12px;fweight:400;color:#60646c}
+                  "Required because Q4 said there is coverage in force."
+              <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#fdeaea;color:#b02020;fsize:12px;fweight:400;fweight:600}
+                <span> {width:6px;height:6px;bd-radius:9999px;bg:#c92a2a}
+                "Required"
+            <div> {gap:8px}
+              <button type="button"> {justify-content:center;gap:8px;height:32px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+                "Read aloud"
+              <button type="button"> {justify-content:center;gap:8px;height:32px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+                "Email it"
+              <button type="button"> {justify-content:center;gap:8px;height:32px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+                "Mail it"
+              <button type="button"> {justify-content:center;gap:8px;height:32px;padding:0 16px;bd-radius:8px;bg:transparent;color:#15191e;bd:1px solid transparent;fsize:14px;fweight:600}
+                "Not applicable…"
+          <div> {padding:16px 22px;bd-top:1px solid #d5dbe3}
+            <div> {justify-content:space-between;gap:16px}
+                <span> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+                  "1035 exchange notice"
+                <span> {fsize:12px;fweight:400;color:#60646c}
+                  "Not triggered: no cash value is being moved."
+                <div> {fsize:12px;fweight:400;color:#60646c}
+                  "Acknowledged by reason recorded · 28 Sep 2026, 2:14 pm"
+              <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e4e8ee;color:#33383f;fsize:12px;fweight:400;fweight:600}
+                <span> {width:6px;height:6px;bd-radius:9999px;bg:#60646c}
+                "Not applicable"
+          <div> {padding:16px 22px;bd-top:1px solid #d5dbe3}
+            <div> {justify-content:space-between;gap:16px}
+                <span> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+                  "Accelerated death benefit disclosure"
+                <span> {fsize:12px;fweight:400;color:#60646c}
+                  "Gerber includes this rider on every Final Expense policy."
+                <div> {fsize:12px;fweight:400;color:#60646c}
+                  "Acknowledged by read aloud · 28 Sep 2026, 2:14 pm"
+              <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e0f3e7;color:#0d7038;fsize:12px;fweight:400;fweight:600}
+                <span> {width:6px;height:6px;bd-radius:9999px;bg:#138a43}
+                "Acknowledged"
+          <div> {justify-content:space-between;gap:16px;padding:14px 20px;bd-top:1px solid #d5dbe3;bg:#f1f3f7}
+            <span> {fsize:12px;fweight:400;color:#60646c}
+              "A required disclosure that is not acknowledged blocks “ready”. That is a block, not a warning."
+            <span> {gap:12px}
+              <button type="button"> {justify-content:center;gap:8px;height:40px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+                "Back to Payment"
+              <button type="button" disabled> {justify-content:center;gap:8px;height:40px;padding:0 16px;bd-radius:8px;bg:#e4e8ee;color:#60646c;bd:1px solid #d5dbe3;fsize:14px;fweight:600}
+                "Continue to Review"
+      <div> {width:268px}
+        <div> {flex-direction:column;bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff}
+          <div> {padding:14px;bg:#fdeaea;bd-bottom:1px solid #d5dbe3}
+            <div> {fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+              "Pre-submission QA"
+            <div> {fsize:18px;fweight:600;color:#b02020}
+              "2 must be fixed"
+            <div> {fsize:12px;fweight:400;color:#33383f}
+              "Runs as you type. Every line goes to the field it is about."
+          <a href="#" .m-row> {gap:9px;padding:9px 14px;bd-top:1px solid #d5dbe3}
+            <span> {width:7px;height:7px;bd-radius:9999px;bg:#c92a2a}
+              <span> {fsize:12px;fweight:400;color:#33383f}
+                "Replacement notice not acknowledged"
+              <span> {fsize:12px;fweight:400;color:#60646c;fsize:11px}
+                "disclosures.replacement"
+          <a href="#" .m-row> {gap:9px;padding:9px 14px;bd-top:1px solid #d5dbe3}
+            <span> {width:7px;height:7px;bd-radius:9999px;bg:#c92a2a}
+              <span> {fsize:12px;fweight:400;color:#33383f}
+                "Mutual of Omaha: no appointment in Arizona"
+              <span> {fsize:12px;fweight:400;color:#60646c;fsize:11px}
+                "appointment.mutual.az"
+          <a href="#" .m-row> {gap:9px;padding:9px 14px;bd-top:1px solid #d5dbe3}
+            <span> {width:7px;height:7px;bd-radius:9999px;bg:#b35c00}
+              <span> {fsize:12px;fweight:400;color:#33383f}
+                "Rate per $1,000 is outside the usual band"
+              <span> {fsize:12px;fweight:400;color:#60646c;fsize:11px}
+                "quote.premium_cents"
+          <a href="#" .m-row> {gap:9px;padding:9px 14px;bd-top:1px solid #d5dbe3}
+            <span> {width:7px;height:7px;bd-radius:9999px;bg:#138a43}
+              <span> {fsize:12px;fweight:400;color:#33383f}
+                "1035 marked not applicable, with a reason"
+              <span> {fsize:12px;fweight:400;color:#60646c;fsize:11px}
+                "disclosures.1035"
+          <div> {padding:12px 14px;bd-top:1px solid #d5dbe3;bg:#f1f3f7;fsize:12px;fweight:400;color:#60646c}
+            "Two must be fixed. Until they are, Submit and the extension stay closed."

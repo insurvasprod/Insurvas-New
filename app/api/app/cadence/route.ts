@@ -4,12 +4,14 @@ import { z } from "zod";
 import { audit } from "@/lib/audit/log";
 import {
   CadenceCampaignError,
+  CadenceLimitsPendingError,
   CadenceSchemaPendingError,
   campaignBelongsToTenant,
   getCadence,
   saveCadence,
+  saveMaxAttempts,
 } from "@/lib/cadence/service";
-import { PREFERRED_TIMES, parseInterval, type PreferredTime } from "@/lib/cadence/engine";
+import { MAX_ATTEMPTS_RANGE, PREFERRED_TIMES, parseInterval, type PreferredTime } from "@/lib/cadence/engine";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 
 /**
@@ -40,6 +42,9 @@ const saveSchema = z
   .object({
     campaignId: z.string().uuid().nullable(),
     rows: z.array(rowSchema).max(50),
+    // LA-2.7-8 · max attempts for this scope. A number sets it, null clears it back to what the
+    // scope inherits (the tenant default, else seven), absent leaves it as it is.
+    maxAttempts: z.number().int().min(MAX_ATTEMPTS_RANGE.min).max(MAX_ATTEMPTS_RANGE.max).nullable().optional(),
   })
   .strict();
 
@@ -132,6 +137,17 @@ export async function PUT(request: NextRequest) {
   }
 
   try {
+    // Max attempts first: before 20260929201100 it cannot be stored, and refusing then leaves the
+    // rules untouched rather than saving half of what was asked.
+    const maxAttempts =
+      parsed.data.maxAttempts === undefined
+        ? undefined
+        : await saveMaxAttempts({
+            tenantId: auth.context.tenantId,
+            campaignId: parsed.data.campaignId,
+            maxAttempts: parsed.data.maxAttempts,
+            userId: auth.context.userId,
+          });
     const rows = await saveCadence({
       tenantId: auth.context.tenantId,
       scope: { campaignId: parsed.data.campaignId },
@@ -151,14 +167,15 @@ export async function PUT(request: NextRequest) {
         // An empty save is a real decision — it puts the tenant back on the built-in cadence — so
         // the audit trail records it as that rather than as "0 attempts".
         revertedToDefaults: rows.length === 0,
+        ...(maxAttempts === undefined ? {} : { maxAttempts: parsed.data.maxAttempts, maxAttemptsInForce: maxAttempts }),
       },
       request,
     });
-    return NextResponse.json({ rows, usingDefaults: rows.length === 0 });
+    return NextResponse.json({ rows, usingDefaults: rows.length === 0, ...(maxAttempts === undefined ? {} : { maxAttempts }) });
   } catch (error) {
     if (error instanceof CadenceCampaignError)
       return NextResponse.json({ error: error.message, code: "campaign_not_found" }, { status: 404 });
-    if (error instanceof CadenceSchemaPendingError)
+    if (error instanceof CadenceSchemaPendingError || error instanceof CadenceLimitsPendingError)
       return NextResponse.json({ error: error.message, code: "schema_pending" }, { status: 503 });
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Could not save the cadence" },

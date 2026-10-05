@@ -264,6 +264,8 @@ export function LeadPostKeysSettings() {
   const legacyUrl = `${origin}/api/leads/post`;
 
   async function refresh() {
+    // Reloading resets the field-map draft, so ask first — the same question switching keys asks.
+    if (dirty && !window.confirm("Discard the unsaved changes to this field map?")) return;
     setRefreshing(true);
     try { await load(selectedKeyId); } finally { setRefreshing(false); }
   }

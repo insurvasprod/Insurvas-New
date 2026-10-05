@@ -1,3 +1,4 @@
+import "./lib/refuseProduction.mjs";
 import { createClient } from "@supabase/supabase-js";
 import { SignJWT } from "jose";
 import { randomUUID } from "node:crypto";

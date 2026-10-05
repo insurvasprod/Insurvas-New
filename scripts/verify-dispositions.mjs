@@ -1,3 +1,4 @@
+import "./lib/refuseProduction.mjs";
 // LA-1.12 live acceptance and failure-path check. Creates only disposable tenants and removes them.
 import { randomUUID } from "node:crypto";
 import { SignJWT } from "jose";
@@ -73,6 +74,20 @@ async function main() {
       db.from("partner_messages").select("id").eq("work_item_id", ids.queueA),
       db.from("audit_log").select("id").eq("target_id", ids.queueA).eq("action", "tenant.dispositioned"),
     ]); check("queue, active call, deal flow, partner channel and audit targets reconcile", rows[0].data?.disposition === "not_interested" && rows[0].data?.status === "completed" && rows[0].data?.disposition_by === ownerA && rows[1].data?.ended_at && rows[2].data?.call_result === "not_interested" && rows[2].data?.status === "completed" && rows[2].data?.disposition_by === ownerA && (rows[3].data?.length ?? 0) >= 1 && (rows[4].data?.length ?? 0) >= 1);
+    // LA-1.12-10 (20260925709870): the two targets that were missing, the stage history and the activity row.
+    // The file also adds buffer_agent to the deal-flow report, which is how its presence is probed.
+    const reportProbe = await db.rpc("list_deal_flow_report", { p_tenant_id: tenantA });
+    if (reportProbe.error || !reportProbe.data?.rows?.length || !("buffer_agent" in reportProbe.data.rows[0])) {
+      console.log("  skip stage history and activity written by an inbound disposition (LA-1.12-10) — schema pending: 20260925709870 is not applied");
+    } else {
+      const [moves, activity] = await Promise.all([
+        db.from("tenant_lead_stage_events").select("source, disposition_key, actor_user_id, from_stage_id, to_stage_id").eq("tenant_id", tenantA).eq("lead_id", ids.leadA),
+        db.from("tenant_lead_activity").select("disposition, dispositioned_at, agent_user_id").eq("tenant_id", tenantA).eq("work_item_id", ids.queueA),
+      ]);
+      const inboundMoves = (moves.data ?? []).filter((row) => row.source === "inbound");
+      check("an inbound disposition that moves the lead writes stage history with source 'inbound', the outcome and who", inboundMoves.length >= 1 && inboundMoves.every((row) => row.actor_user_id === ownerA && ["do_not_call", "not_interested"].includes(row.disposition_key) && row.from_stage_id !== row.to_stage_id), JSON.stringify(moves.data));
+      check("and records the outcome on the activity row deal flow's history reads", (activity.data ?? []).some((row) => row.disposition === "not_interested" && row.dispositioned_at && row.agent_user_id === ownerA), JSON.stringify(activity.data));
+    }
     const producerWrong = await api(`/api/app/inbound/disposition?work_item_id=${ids.queueA}`, otherCookie); check("another tenant's user cannot read the work item", producerWrong.status === 404);
   } finally { await cleanup(); }
   console.log(failures ? `\n${failures} LA-1.12 verification check(s) FAILED.` : "\nAll LA-1.12 disposition checks passed."); return failures ? 1 : 0;

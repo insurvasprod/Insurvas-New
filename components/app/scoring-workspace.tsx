@@ -13,7 +13,7 @@ import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 import { cn } from "@/lib/utils";
 import { compareHoldout, pts, VERDICT_CHIP } from "@/lib/scoring/holdout";
-import { heldBackSentence, leadLine, scoreShare, shareLabel, type QueuePreview } from "@/lib/scoring/preview";
+import { breakdownLine, heldBackSentence, leadLine, scoreShare, shareLabel, type QueuePreview } from "@/lib/scoring/preview";
 
 type Weight = { signal: string; label: string; blurb: string; weight: number; isDefault: boolean; defaultWeight: number | null };
 type Cohort = { cohort: string; served: number; contacted: number; contactRatePct: number | null; averageScore: number | null; since: string | null };
@@ -60,6 +60,8 @@ function QueuePreviewCard({ onClose }: { onClose: () => void }) {
   const [error, setError] = useState<string | null>(null);
   // True from the start: the first load runs from the effect, and a setState there would cascade.
   const [loading, setLoading] = useState(true);
+  // LA-2.13-2: the lead whose per-signal breakdown is open.
+  const [openRow, setOpenRow] = useState<string | null>(null);
 
   const load = useCallback((agent: string) => {
     const query = agent ? `?agent=${encodeURIComponent(agent)}` : "";
@@ -129,14 +131,46 @@ function QueuePreviewCard({ onClose }: { onClose: () => void }) {
                   const share = scoreShare(row.score, preview.totalWeight);
                   const why = [row.tierReason, ...row.reasons.map(sentence)].filter(Boolean).join(" · ");
                   return (
-                    <li key={row.workItemId} className="flex items-start gap-4 border-t border-border px-4 py-3 first:border-t-0">
-                      <span className="w-6 shrink-0 pt-0.5 text-right text-sm font-semibold tabular-nums text-muted-foreground">{row.position}</span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block text-sm font-semibold leading-normal tracking-[-0.02em] text-foreground">{leadLine(row)}</span>
-                        <span className="mt-0.5 block text-xs leading-normal text-muted-foreground">{why}</span>
-                      </span>
-                      {row.cohort === "control" && <StatusChip tone="neutral" dot={false}>Holdout</StatusChip>}
-                      <span className="shrink-0 pt-0.5 text-sm font-semibold tabular-nums text-foreground" title={row.score === null ? "No score" : `${row.score.toFixed(1)} of ${preview.totalWeight.toFixed(0)} weight points`}>{shareLabel(share)}</span>
+                    <li key={row.workItemId} className="border-t border-border px-4 py-3 first:border-t-0">
+                      <div className="flex items-start gap-4">
+                        <span className="w-6 shrink-0 pt-0.5 text-right text-sm font-semibold tabular-nums text-muted-foreground">{row.position}</span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block text-sm font-semibold leading-normal tracking-[-0.02em] text-foreground">{leadLine(row)}</span>
+                          <span className="mt-0.5 block text-xs leading-normal text-muted-foreground">{why}</span>
+                        </span>
+                        {row.cohort === "control" && <StatusChip tone="neutral" dot={false}>Holdout</StatusChip>}
+                        <span className="shrink-0 pt-0.5 text-sm font-semibold tabular-nums text-foreground" title={row.score === null ? "No score" : `${row.score.toFixed(1)} of ${preview.totalWeight.toFixed(0)} weight points`}>{shareLabel(share)}</span>
+                        {row.breakdown && row.breakdown.length > 0 && (
+                          <Button type="button" variant="outline" size="sm" aria-expanded={openRow === row.workItemId} aria-controls={`breakdown-${row.workItemId}`} onClick={() => setOpenRow(openRow === row.workItemId ? null : row.workItemId)}>
+                            {openRow === row.workItemId ? "Hide" : "Breakdown"}
+                          </Button>
+                        )}
+                      </div>
+                      {openRow === row.workItemId && row.breakdown && (
+                        <table id={`breakdown-${row.workItemId}`} className="mt-2 ml-10 w-[calc(100%-2.5rem)] max-w-[560px] text-xs leading-normal" aria-label={`Score breakdown for ${row.name ?? "this lead"}`}>
+                          <thead>
+                            <tr className="text-left text-muted-foreground">
+                              <th scope="col" className="py-1 pr-3 font-semibold">Signal</th>
+                              <th scope="col" className="py-1 pr-3 text-right font-semibold">Factor</th>
+                              <th scope="col" className="py-1 text-right font-semibold">Points</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {row.breakdown.map((part) => (
+                              <tr key={part.signal} className="border-t border-border">
+                                <td className="py-1 pr-3 text-foreground">{part.label}</td>
+                                <td className="py-1 pr-3 text-right tabular-nums text-foreground">{part.factor.toFixed(2)}</td>
+                                <td className="py-1 text-right tabular-nums text-foreground">{breakdownLine(part)}</td>
+                              </tr>
+                            ))}
+                            <tr className="border-t border-border font-semibold">
+                              <td className="py-1 pr-3 text-foreground">Score</td>
+                              <td className="py-1 pr-3" />
+                              <td className="py-1 text-right tabular-nums text-foreground">{/* The scorer's own total (its factors are shown rounded to three places). */}{(row.score ?? row.breakdown.reduce((sum, part) => sum + part.points, 0)).toFixed(1)} of {preview.totalWeight.toFixed(0)} pts</td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      )}
                     </li>
                   );
                 })}

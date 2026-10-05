@@ -122,3 +122,31 @@ export function perUnitCents(costCents: number | null, units: number) {
   if (costCents === null || units <= 0) return null;
   return costCents / units;
 }
+
+/* ── cost per usable record ─────────────────────────────────────────────────────────────────── */
+
+/**
+ * The cost per usable record this file's leads should carry, counting this file's own rejections
+ * BEFORE they are written — they now land in the same transaction as the leads, so the campaign's
+ * cost view cannot be read after them. The same arithmetic as tenant_campaign_costs:
+ * (spend − credits) ÷ (purchased − rejected), falling back to the purchased basis when no usable
+ * record is left. A rejection the ledger already holds is counted twice here, which errs towards a
+ * HIGHER cost per lead, the safe direction (LA-2.17).
+ */
+export function projectedUsableCostCents(
+  campaign: {
+    total_spend_cents?: number | null;
+    credits_received_cents?: number | null;
+    records_purchased?: number | null;
+    records_rejected?: number | null;
+    cost_per_record_cents?: number | null;
+    cost_per_usable_record_cents?: number | null;
+  },
+  newRejections: number,
+): number {
+  const spend = Number(campaign.total_spend_cents ?? NaN) - Number(campaign.credits_received_cents ?? 0);
+  const usable = Number(campaign.records_purchased ?? NaN) - Number(campaign.records_rejected ?? 0) - newRejections;
+  if (Number.isFinite(spend) && Number.isFinite(usable))
+    return Math.max(0, Math.round(usable > 0 ? spend / usable : Number(campaign.cost_per_record_cents ?? 0)));
+  return Math.max(0, Math.round(Number(campaign.cost_per_usable_record_cents ?? campaign.cost_per_record_cents ?? 0)));
+}

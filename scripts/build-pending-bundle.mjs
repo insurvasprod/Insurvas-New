@@ -28,7 +28,10 @@ const files = names.map((name) => path.basename(name)).sort();
 for (const file of files) {
   const text = fs.readFileSync(path.join(DIR, file), "utf8");
   // Nothing that cannot run inside a transaction, and no transaction control of its own.
-  if (/^\s*(begin|commit|rollback)\s*;/im.test(text) || /\bconcurrently\b/i.test(text) || /^\s*vacuum\b/im.test(text)) {
+  // Judged on top-level SQL only: a comment, or a function body that refreshes a view concurrently
+  // when it is later called, controls nothing while the file runs.
+  const topLevel = text.replace(/--[^\n]*/g, "").replace(/\$([A-Za-z_]*)\$[\s\S]*?\$\1\$/g, "''");
+  if (/^\s*(begin|commit|rollback)\s*;/im.test(topLevel) || /\bconcurrently\b/i.test(topLevel) || /^\s*vacuum\b/im.test(topLevel)) {
     console.error(`${file} controls its own transaction or cannot run inside one; bundle it by hand.`);
     process.exit(1);
   }
@@ -40,7 +43,8 @@ for (const file of files) {
     if (match[1]) continue;
     let depth = 0; let end = match.index + match[0].length - 1;
     for (; end < sql.length; end += 1) { if (sql[end] === "(") depth += 1; else if (sql[end] === ")" && --depth === 0) break; }
-    if (/\b(select|exists)\b/i.test(sql.slice(match.index, end))) {
+    // Quoted text is not SQL: a jsonpath predicate such as '$[*] ? (!exists(@.field))' is a string.
+    if (/\b(select|exists)\b/i.test(sql.slice(match.index, end).replace(/'(?:[^']|'')*'/g, "''"))) {
       console.error(`${file} has a subquery inside a CHECK constraint, which Postgres refuses (0A000). Fix the file first.`);
       process.exit(1);
     }

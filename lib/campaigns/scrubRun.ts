@@ -284,7 +284,8 @@ export async function stepScrubRun(input: {
     }
 
     const decisions: ScreeningDecision[] = await mapLimited(leads, SCREEN_CONCURRENCY, (lead) =>
-      screenPartnerPhone({ tenantId: input.tenantId, partnerId: null, userId: input.userId, phone: phoneOf(lead) }),
+      // LA-2.3-9: a re-scrub is for a known lead, so its audit row names it.
+      screenPartnerPhone({ tenantId: input.tenantId, partnerId: null, userId: input.userId, phone: phoneOf(lead), leadId: lead.id }),
     );
 
     // Everything before the first outage is settled; the outage and anything after it are screened

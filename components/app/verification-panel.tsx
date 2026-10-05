@@ -125,6 +125,8 @@ export function VerificationPanel({ workItemId, readOnly, canHandoff }: { workIt
   const [showAllHistory, setShowAllHistory] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const [outcomeOpen, setOutcomeOpen] = useState(false);
+  const [continuing, setContinuing] = useState(false);
+  const [continueError, setContinueError] = useState<string | null>(null);
   // Sections the agent opened again after they completed. Everything else complete stays folded.
   const [reopened, setReopened] = useState<Record<string, boolean>>({});
 
@@ -229,6 +231,20 @@ export function VerificationPanel({ workItemId, readOnly, canHandoff }: { workIt
 
   const labels = useMemo(() => new Map((panel?.sections ?? []).flatMap((section) => section.fields.map((field) => [field.field_key, field.label] as const))), [panel?.sections]);
 
+  async function continueToUnderwriting() {
+    setContinuing(true);
+    try {
+      const response = await fetch("/api/app/applications/start", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ work_item_id: workItemId }) });
+      const result = await response.json().catch(() => null) as { href?: string; error?: string } | null;
+      if (!response.ok || !result?.href) { setContinueError(result?.error ?? "Could not open the application."); return; }
+      window.location.assign(result.href);
+    } catch {
+      setContinueError("Could not open the application — check your connection.");
+    } finally {
+      setContinuing(false);
+    }
+  }
+
   const actions = (
     <>
       {!readOnly && panel && (
@@ -238,6 +254,12 @@ export function VerificationPanel({ workItemId, readOnly, canHandoff }: { workIt
       )}
       {/* Opens the call-outcome dialog over this panel; "Back to verification" in it just closes it.
           /app/inbound/[id]/disposition stays for deep links. */}
+      {/* LA-3: the same application workspace the dialer opens. Assistants verify; the licensed agent underwrites. */}
+      {!readOnly && panel && !canHandoff && (
+        <Button type="button" variant="outline" onClick={() => void continueToUnderwriting()} disabled={continuing}>
+          {continuing && <Loader2 aria-hidden className="animate-spin" />}Continue to underwriting
+        </Button>
+      )}
       <Button type="button" onClick={() => setOutcomeOpen(true)}>Record call outcome</Button>
       <DispositionWizardDialog workItemId={workItemId} open={outcomeOpen} onOpenChange={setOutcomeOpen} readOnly={readOnly} onBackToVerification={() => setOutcomeOpen(false)} />
     </>
@@ -282,6 +304,7 @@ export function VerificationPanel({ workItemId, readOnly, canHandoff }: { workIt
     <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
       {backLink}
       <PageHeader title={`Verification — ${leadName}`} actions={actions} />
+      {continueError && <Callout tone="error" title={continueError} />}
 
       <section aria-label="Call" className="grid min-w-0 gap-4 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] px-[18px] py-4 sm:grid-cols-3 lg:grid-cols-5">
         {[["Customer", leadName], ["State", leadState], ["Product", panel.template.product_name || productLineLabel(panel.workItem.productLine)], ["Lead source", source], ["Session status", requiredDone ? "Complete" : "In progress"]].map(([label, value]) => (

@@ -19,6 +19,8 @@ export type EntitlementMeter = {
 export type Entitlement = {
   tenant_id: string;
   plan_code: string | null;
+  /** The plan's display name (plans.name) since 20261003100000; absent in a blob computed before it. */
+  plan_name?: string | null;
   plan_version: number | null;
   status: SubscriptionStatus | null;
   access: AccessLevel;
@@ -69,6 +71,7 @@ export function canWrite(entitlement: Entitlement): boolean {
 
 export const EMPTY_ENTITLEMENT: Omit<Entitlement, "tenant_id"> = {
   plan_code: null,
+  plan_name: null,
   plan_version: null,
   status: null,
   access: "none",

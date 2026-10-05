@@ -1,4 +1,5 @@
-import { Badge } from "@/components/ui/badge";
+import { TableCard } from "@/components/ui/table-card";
+import { StatusChip } from "@/components/ui/status-chip";
 import {
   Table,
   TableBody,
@@ -85,24 +86,15 @@ export function LoginActivityTable({
                   <span className="flex items-center gap-2">
                     <span className="font-medium">{event.email}</span>
                     {event.actor_type === "admin" && (
-                      <Badge variant="outline" className="text-[12px]">
-                        Admin
-                      </Badge>
+                      <StatusChip>Admin</StatusChip>
                     )}
                   </span>
                 </TableCell>
               )}
               <TableCell>
-                <Badge
-                  variant="outline"
-                  className={
-                    event.success
-                      ? "border-transparent bg-[var(--color-success)]/10 text-[var(--color-success)]"
-                      : "border-transparent bg-[var(--color-danger)]/10 text-[var(--color-danger)]"
-                  }
-                >
+                <StatusChip tone={event.success ? "good" : "danger"}>
                   {event.success ? "Success" : loginFailureLabel(event.failure_reason)}
-                </Badge>
+                </StatusChip>
               </TableCell>
               <TableCell className="text-muted-foreground">{event.ip ?? "—"}</TableCell>
               <TableCell
@@ -141,7 +133,7 @@ function BoardLoginTable({
   framed: boolean;
 }) {
   return (
-    <div className={cn("flex min-w-0 flex-1 flex-col", framed && "overflow-hidden rounded-[12px] border border-[var(--border)] bg-[var(--surface)]")}>
+    <Shell framed={framed}>
       <div className="min-w-0 overflow-x-auto">
         <table className={cn("w-full table-fixed border-collapse transition-opacity", busy && "opacity-60")} style={{ minWidth }} aria-busy={busy || undefined}>
           <thead>
@@ -192,6 +184,13 @@ function BoardLoginTable({
       </div>
       <div className="flex-1" />
       {footer}
-    </div>
+    </Shell>
   );
+}
+
+/** The board table's card: the shared TableCard, or nothing when the caller's card already is one. */
+function Shell({ framed, children }: { framed: boolean; children: React.ReactNode }) {
+  return framed
+    ? <TableCard className="flex min-w-0 flex-1 flex-col">{children}</TableCard>
+    : <div className="flex min-w-0 flex-1 flex-col">{children}</div>;
 }

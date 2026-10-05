@@ -1,7 +1,7 @@
 import "server-only";
 
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
-import { languageName } from "./constants";
+import { languageName, type ReleaseAction } from "./constants";
 
 /**
  * Giving a transfer back, and a buffer leaving a call (20260925709860).
@@ -12,7 +12,7 @@ import { languageName } from "./constants";
  *   end_buffer  the buffer assistant leaves a call the licensed agent already owns. Ownership, the
  *               call and the verification do not move (LA-1.14-9). It is not an unassign.
  */
-export type ReleaseAction = "unassign" | "requeue" | "end_buffer";
+export type { ReleaseAction };
 
 export class TransferReleaseError extends Error {
   constructor(public code: string, message: string, public status: number, public detail: string | null = null) { super(message); }
@@ -37,6 +37,7 @@ function mapError(error: RpcError): TransferReleaseError {
     case "NOT_DROPPED": return new TransferReleaseError("not_dropped", "Only a transfer whose call dropped goes back in the queue this way.", 409);
     case "NO_BUFFER_INVOLVED": return new TransferReleaseError("no_buffer", "No buffer assistant is on this transfer.", 409);
     case "BUFFER_OWNS_CALL": return new TransferReleaseError("buffer_owns_call", "The buffer still has this call. Hand it off to a licensed agent, or unassign it.", 409);
+    case "CALL_ENDED": return new TransferReleaseError("call_ended", "This call has already ended, so there is no buffer involvement to end.", 409);
     case "LANGUAGE_COVER_REQUIRED": return new TransferReleaseError("language_cover_required", `The caller asked for ${languageName(detail)} and the licensed agent does not list it. Confirm to leave the call anyway.`, 409, detail);
     case "INVALID_RELEASE_REASON": return new TransferReleaseError("invalid_input", "Choose a valid action.", 400);
     default: return new TransferReleaseError("release_failed", "Could not update this transfer.", 500);

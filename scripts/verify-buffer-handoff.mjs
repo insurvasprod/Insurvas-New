@@ -1,3 +1,4 @@
+import "./lib/refuseProduction.mjs";
 // LA-1.14 live acceptance check. Uses disposable tenant data and real app routes.
 import { randomUUID } from "node:crypto";
 import { SignJWT } from "jose";
@@ -19,7 +20,11 @@ async function cookie(userId, currentTenantId = tenantId, expired = false, secre
 }
 async function api(path, sessionCookie, options = {}) { return fetch(`${BASE}${path}`, { ...options, headers: { cookie: sessionCookie, ...(options.headers ?? {}) }, redirect: "manual" }); }
 async function body(response) { return response.json().catch(() => ({})); }
+/** A function a pending migration adds is not there yet (PostgREST PGRST202 / Postgres 42883). The probe's random ids make it refuse before it writes. */
+async function schemaPending(name, args) { const result = await db.rpc(name, args); return Boolean(result.error && (result.error.code === "PGRST202" || result.error.code === "42883")); }
+const skip = (label, reason) => console.log(`  skip ${label} — schema pending: ${reason}`);
 async function cleanup() {
+  await db.from("agent_capacity").delete().eq("tenant_id", tenantId);
   await db.from("buffer_handoffs").delete().eq("tenant_id", tenantId);
   await db.from("partner_messages").delete().eq("tenant_id", tenantId);
   await db.from("active_calls").delete().eq("tenant_id", tenantId);
@@ -81,6 +86,35 @@ async function main() {
     const bufferAfterAccept = await api(`/api/app/inbound/verification?work_item_id=${workItemIds[0]}`, assistantCookie); const producerAfterAccept = await api(`/api/app/inbound/verification?work_item_id=${workItemIds[0]}`, producerCookie); check("ownership follows the accepted handoff", bufferAfterAccept.status === 403 && producerAfterAccept.status === 200);
     const timeoutClaim = await api("/api/app/inbound/claim", assistantCookie, { method: "POST", ...json({ work_item_id: workItemIds[1] }) }); const timeoutOffer = await api("/api/app/inbound/handoff", assistantCookie, { method: "POST", ...json({ action: "offer", work_item_id: workItemIds[1], target_user_id: producerId }) }); const timeoutOfferBody = await body(timeoutOffer); await db.from("buffer_handoffs").update({ expires_at: new Date(Date.now() - 1000).toISOString() }).eq("id", timeoutOfferBody.handoff.handoff_id); const afterTimeout = await api("/api/app/inbound/handoff", producerCookie); const afterTimeoutBodyValue = await body(afterTimeout); const timeoutQueue = await db.from("lead_queue").select("status, owner_user_id").eq("id", workItemIds[1]).single(); const timeoutHandoff = await db.from("buffer_handoffs").select("status, returned_at").eq("id", timeoutOfferBody.handoff.handoff_id).single(); const timeoutCall = await db.from("active_calls").select("user_id").eq("work_item_id", workItemIds[1]).is("ended_at", null).single(); check("an unaccepted handoff returns to the buffer without losing the call", timeoutClaim.status === 200 && timeoutOffer.status === 200 && afterTimeout.status === 200 && !afterTimeoutBodyValue.handoffs?.some((handoff) => handoff.id === timeoutOfferBody.handoff.handoff_id) && timeoutQueue.data?.status === "buffer_active" && timeoutQueue.data.owner_user_id === assistantId && timeoutHandoff.data?.status === "returned" && timeoutHandoff.data.returned_at && timeoutCall.data?.user_id === assistantId);
     const wrongRoleOffer = await api("/api/app/inbound/handoff", producerCookie, { method: "POST", ...json({ action: "offer", work_item_id: workItemIds[1], target_user_id: ownerId }) }); const hostile = await api("/api/app/inbound/handoff", assistantCookie, { method: "POST", ...json({ action: "offer", work_item_id: "not-a-uuid", target_user_id: ownerId }) }); const forged = await api("/api/app/inbound/handoff", "insurvas_tenant_session=forged"); const expired = await api("/api/app/inbound/handoff", expiredCookie); const crossTenant = await api("/api/app/inbound/handoff", otherCookie, { method: "POST", ...json({ action: "accept", handoff_id: offerBody.handoff.handoff_id }) }); check("wrong role, hostile input, forged/expired sessions and cross-tenant acceptance fail closed", wrongRoleOffer.status === 403 && hostile.status === 400 && forged.status === 401 && expired.status === 401 && crossTenant.status === 404);
+    // LA-1.14-9 / LA-1.14-10 (20260925709850 + 709860): the buffer stays on the call after the handoff
+    // until they end it, which is not an unassign; and a caller's language is covered by whoever speaks it.
+    if (await schemaPending("end_buffer_involvement", { p_tenant_id: randomUUID(), p_work_item_id: randomUUID(), p_actor: randomUUID(), p_acknowledge_language: false })) {
+      skip("buffer involvement and language cover (LA-1.14-9, LA-1.14-10)", "20260925709850 / 20260925709860 are not applied");
+    } else {
+      const kept = await db.from("lead_queue").select("status, owner_user_id, buffer_user_id, buffer_ended_at").eq("id", workItemIds[0]).single();
+      check("after the handoff the buffer is still involved: buffer kept, not ended", kept.data?.status === "la_active" && kept.data.owner_user_id === producerId && kept.data.buffer_user_id === assistantId && kept.data.buffer_ended_at === null, JSON.stringify(kept.data));
+      const tooEarly = await api("/api/app/inbound/release", assistantCookie, { method: "POST", ...json({ action: "end_buffer", work_item_id: workItemIds[1] }) }); const tooEarlyBody = await body(tooEarly);
+      check("a buffer who still owns the call cannot 'end involvement' (they hand off or unassign)", tooEarly.status === 409 && tooEarlyBody.code === "buffer_owns_call", JSON.stringify({ status: tooEarly.status, body: tooEarlyBody }));
+      const ended = await api("/api/app/inbound/release", assistantCookie, { method: "POST", ...json({ action: "end_buffer", work_item_id: workItemIds[0] }) }); const endedBody = await body(ended);
+      const afterEnd = await db.from("lead_queue").select("status, owner_user_id, buffer_user_id, buffer_ended_at").eq("id", workItemIds[0]).single();
+      const sessionAfterEnd = await db.from("tenant_verification_sessions").select("user_id").eq("work_item_id", workItemIds[0]).is("ended_at", null).maybeSingle();
+      const callAfterEnd = await db.from("active_calls").select("user_id").eq("work_item_id", workItemIds[0]).is("ended_at", null).maybeSingle();
+      check("ending buffer involvement keeps the licensed agent's ownership, call and verification", ended.status === 200 && endedBody.result?.duplicate === false && afterEnd.data?.status === "la_active" && afterEnd.data.owner_user_id === producerId && afterEnd.data.buffer_ended_at !== null && sessionAfterEnd.data?.user_id === producerId && callAfterEnd.data?.user_id === producerId, JSON.stringify({ status: ended.status, body: endedBody, queue: afterEnd.data, session: sessionAfterEnd.data, call: callAfterEnd.data }).slice(0, 700));
+      const endedAgain = await api("/api/app/inbound/release", producerCookie, { method: "POST", ...json({ action: "end_buffer", work_item_id: workItemIds[0] }) }); const endedAgainBody = await body(endedAgain);
+      check("ending it again is an idempotent no-op", endedAgain.status === 200 && endedAgainBody.result?.duplicate === true);
+      // A Spanish-speaking caller: the buffer lists Spanish, the licensed agent does not.
+      await db.from("agent_capacity").upsert({ tenant_id: tenantId, user_id: assistantId, languages: ["spanish"] }, { onConflict: "tenant_id,user_id" });
+      await db.from("agent_leads").update({ values: { ...prepared.values, language: "es-MX" } }).eq("id", leadIds[2]);
+      const producerRefused = await api("/api/app/inbound/claim", producerCookie, { method: "POST", ...json({ work_item_id: workItemIds[2] }) }); const producerRefusedBody = await body(producerRefused);
+      check("a licensed agent who does not list the caller's language is refused with a clear message", producerRefused.status === 409 && producerRefusedBody.code === "language_not_spoken" && /Spanish/.test(producerRefusedBody.error ?? ""), JSON.stringify({ status: producerRefused.status, body: producerRefusedBody }));
+      const spanishClaim = await api("/api/app/inbound/claim", assistantCookie, { method: "POST", ...json({ work_item_id: workItemIds[2] }) });
+      const spanishOffer = await api("/api/app/inbound/handoff", assistantCookie, { method: "POST", ...json({ action: "offer", work_item_id: workItemIds[2], target_user_id: producerId }) }); const spanishOfferBody = await body(spanishOffer);
+      const spanishAccept = await api("/api/app/inbound/handoff", producerCookie, { method: "POST", ...json({ action: "accept", handoff_id: spanishOfferBody.handoff?.handoff_id }) });
+      check("a buffer who speaks it claims, and may hand to a licensed agent who does not, staying on the call", spanishClaim.status === 200 && spanishOffer.status === 200 && spanishAccept.status === 200, JSON.stringify({ claim: spanishClaim.status, offer: spanishOffer.status, body: spanishOfferBody, accept: spanishAccept.status }));
+      const coverAsk = await api("/api/app/inbound/release", producerCookie, { method: "POST", ...json({ action: "end_buffer", work_item_id: workItemIds[2] }) }); const coverAskBody = await body(coverAsk);
+      const coverAck = await api("/api/app/inbound/release", producerCookie, { method: "POST", ...json({ action: "end_buffer", work_item_id: workItemIds[2], acknowledge_language: true }) });
+      check("ending the only Spanish cover asks first, and goes through once acknowledged", coverAsk.status === 409 && coverAskBody.code === "language_cover_required" && coverAskBody.language === "spanish" && coverAck.status === 200, JSON.stringify({ ask: coverAsk.status, body: coverAskBody, ack: coverAck.status }));
+    }
     const audits = await db.from("audit_log").select("action").in("actor_id", [assistantId, producerId]).in("action", ["tenant.transfer_claimed", "tenant.buffer_handoff_offered", "tenant.buffer_handoff_accepted", "tenant.buffer_handoff_returned", "tenant.verification_field_updated"]); check("claim, verification, offer, accept and timeout return leave audit evidence", (audits.data ?? []).some((row) => row.action === "tenant.buffer_handoff_offered") && (audits.data ?? []).some((row) => row.action === "tenant.buffer_handoff_accepted") && (audits.data ?? []).some((row) => row.action === "tenant.buffer_handoff_returned"));
   } finally { await cleanup(); }
   console.log(failures ? `\n${failures} buffer handoff check(s) FAILED.` : "\nAll LA-1.14 buffer handoff checks passed."); return failures ? 1 : 0;

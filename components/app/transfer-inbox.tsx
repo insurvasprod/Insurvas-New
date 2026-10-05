@@ -18,8 +18,9 @@ import { TableCard } from "@/components/ui/table-card";
 import { productLineLabel } from "@/lib/format/productLine";
 import { notify } from "@/lib/notify";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
-import { isWithAgent, SCREENING_FILTER_OPTIONS, screeningSignal, type InboxSummary, type ScreeningSignal } from "@/lib/transferInbox/constants";
+import { claimedMessage, isWithAgent, releaseConfirmation, SCREENING_FILTER_OPTIONS, screeningSignal, type InboxSummary, type ScreeningSignal } from "@/lib/transferInbox/constants";
 import { cn } from "@/lib/utils";
+import { Pager } from "@/components/ui/pager";
 
 type Item = {
   id: string;
@@ -313,9 +314,9 @@ export function TransferInbox({ readOnly, role }: { readOnly: boolean; role: str
   function clearFilters() { setFilters(CLEARED_FILTERS); setSearch(""); setPage(1); }
   async function refresh() { setRefreshing(true); try { await load(); } finally { setRefreshing(false); } }
 
-  // LA-1.10-8 / LA-1.14-9: give a transfer back, or put a dropped call back in the queue.
+  // LA-1.10-8 / LA-1.14-9: give a transfer back, or put a dropped call back in the queue. Both ask first.
   async function release(item: Item, action: "unassign" | "requeue") {
-    if (action === "unassign" && !window.confirm(`Give ${item.customer} back to the queue? Nobody will own it until someone claims it. The verification so far is kept.`)) return;
+    if (!window.confirm(releaseConfirmation(action, { customer: item.customer }))) return;
     setClaiming(item.id);
     const response = await fetch("/api/app/inbound/release", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, work_item_id: item.id }) });
     const body = await response.json().catch(() => null);
@@ -332,7 +333,7 @@ export function TransferInbox({ readOnly, role }: { readOnly: boolean; role: str
     setClaiming(null);
     if (response.status === 409) { notify.block(body?.error ?? "This transfer was already claimed"); void load(); return; }
     if (!response.ok) { notify.block(body?.error ?? "Could not claim this transfer"); return; }
-    notify.arrive(body?.chatPosted === false ? "Transfer claimed; partner update could not be posted" : "Transfer claimed and call opened");
+    notify.arrive(claimedMessage(body));
     router.push(`/app/inbound/${id}/verification`);
   }
 
@@ -348,7 +349,7 @@ export function TransferInbox({ readOnly, role }: { readOnly: boolean; role: str
     setClaimingNext(false);
     if (!response.ok) { notify.block(body?.error ?? "Could not claim the next transfer"); void load(); return; }
     const workItemId = body?.claim?.work_item_id as string | undefined;
-    notify.arrive(body?.chatPosted === false ? "Transfer claimed; partner update could not be posted" : "Transfer claimed and call opened");
+    notify.arrive(claimedMessage(body));
     if (workItemId) router.push(`/app/inbound/${workItemId}/verification`);
   }
 
@@ -393,8 +394,6 @@ export function TransferInbox({ readOnly, role }: { readOnly: boolean; role: str
   const pages = Math.max(1, Math.ceil(shown.length / PAGE_SIZE));
   const currentPage = Math.min(page, pages);
   const pageRows = shown.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
-  const first = shown.length === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1;
-  const last = (currentPage - 1) * PAGE_SIZE + pageRows.length;
   const popoverCount = [filters.status !== "all", filters.productLine, filters.state, filters.screeningOutcome, filters.claimedBy].filter(Boolean).length;
   const partnerName = (id: string) => options.partners.get(id) ?? data.partners.find((partner) => partner.id === id)?.name ?? "Selected partner";
   const userName = (id: string) => (id === "me" ? "Me" : options.users.get(id) ?? "Selected agent");
@@ -499,17 +498,20 @@ export function TransferInbox({ readOnly, role }: { readOnly: boolean; role: str
         }
         footer={
           <>
-            <span>
-              {shown.length === 0 ? "No transfers" : `Showing ${first}–${last} of ${shown.length} transfers`}{search.trim() ? ` · ${data.items.length} loaded` : ""}{data.truncated ? " · newest 500" : ""} · longest wait first
-              <span className="ml-3 inline-flex items-center gap-1.5" role="status">
-                <span aria-hidden className={cn("size-1.5 rounded-full", realtime === "connected" ? "bg-[var(--success)]" : realtime === "connecting" ? "bg-[var(--muted)]" : "bg-[var(--warning)]")} />
-                {realtimeText}
-              </span>
-            </span>
-            <span className="flex gap-2">
-              <Button type="button" variant="outline" size="sm" onClick={() => setPage(currentPage - 1)} disabled={currentPage <= 1}>Previous</Button>
-              <Button type="button" variant="outline" size="sm" onClick={() => setPage(currentPage + 1)} disabled={currentPage >= pages}>Next</Button>
-            </span>
+            <Pager
+              page={currentPage}
+              total={shown.length}
+              pageSize={PAGE_SIZE}
+              noun="transfers"
+              onPage={setPage}
+              suffix={<>
+                {search.trim() ? `${data.items.length} loaded · ` : ""}{data.truncated ? "newest 500 · " : ""}longest wait first
+                <span className="ml-3 inline-flex items-center gap-1.5" role="status">
+                  <span aria-hidden className={cn("size-1.5 rounded-full", realtime === "connected" ? "bg-[var(--success)]" : realtime === "connecting" ? "bg-[var(--muted)]" : "bg-[var(--warning)]")} />
+                  {realtimeText}
+                </span>
+              </>}
+            />
           </>
         }
       >
@@ -590,6 +592,7 @@ export function TransferInbox({ readOnly, role }: { readOnly: boolean; role: str
         item={selected}
         sla={sla}
         currentUserId={currentUserId}
+        isOwner={role === "owner"}
         readOnly={readOnly}
         claiming={claiming}
         onClaim={(id) => void claim(id)}
@@ -612,7 +615,7 @@ function FilterField({ id, label, children }: { id: string; label: string; child
  * The row's detail, as a drawer: what the old side panel held (facts, screening, preflight,
  * claimed-by) plus the SLA meter that used to sit on every row, and Claim transfer.
  */
-function TransferDrawer({ item, sla, currentUserId, readOnly, claiming, onClaim, onRelease, onClose }: { item: Item | null; sla: Sla | null; currentUserId?: string; readOnly: boolean; claiming: string | null; onClaim: (id: string) => void; onRelease: (item: Item, action: "unassign" | "requeue") => void; onClose: () => void }) {
+function TransferDrawer({ item, sla, currentUserId, isOwner, readOnly, claiming, onClaim, onRelease, onClose }: { item: Item | null; sla: Sla | null; currentUserId?: string; isOwner: boolean; readOnly: boolean; claiming: string | null; onClaim: (id: string) => void; onRelease: (item: Item, action: "unassign" | "requeue") => void; onClose: () => void }) {
   const open = item !== null;
   const signal = item ? signalOf(item) : null;
   const wait = item ? waitOf(item) : null;
@@ -713,7 +716,8 @@ function TransferDrawer({ item, sla, currentUserId, readOnly, claiming, onClaim,
                     <>
                       {mine && isWithAgent(item.status) && <Button asChild><Link href={`/app/inbound/${item.id}/verification`}>Resume verification</Link></Button>}
                       {item.status === "dropped" && <Button type="button" onClick={() => onRelease(item, "requeue")} disabled={readOnly || claiming === item.id}>{claiming === item.id ? "Putting back…" : "Put back in the queue"}</Button>}
-                      {mine && isWithAgent(item.status) && item.status !== "handed_pending" && <Button type="button" variant="outline" onClick={() => onRelease(item, "unassign")} disabled={readOnly || claiming === item.id}>Unassign</Button>}
+                      {/* The agent who has it, or the account owner (return_transfer_to_queue checks the same). */}
+                      {(mine || isOwner) && isWithAgent(item.status) && item.status !== "handed_pending" && <Button type="button" variant="outline" onClick={() => onRelease(item, "unassign")} disabled={readOnly || claiming === item.id}>Unassign</Button>}
                       <Button asChild variant="outline"><Link href={`/app/leads/${item.leadId}`}>Open lead</Link></Button>
                     </>
                   )}

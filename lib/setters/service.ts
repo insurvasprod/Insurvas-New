@@ -1,5 +1,6 @@
 import "server-only";
 
+import { getWorkspaceTimezone } from "@/lib/agencyProfile/timezone";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { hasTenantPermission } from "@/lib/tenantAuth/permissions";
 import type { TenantRole } from "@/lib/tenantAuth/roles";
@@ -37,6 +38,8 @@ export type RosterRow = {
   timezone: string;
   localLabel: string;
   onShiftNow: boolean;
+  /** False for a member with no working hours: the clock is the agency's and "on shift" is unknown. */
+  hasHours: boolean;
 };
 
 type ViewRow = {
@@ -62,7 +65,8 @@ type RosterViewRow = {
   role: string;
   timezone: string;
   local_label: string;
-  on_shift_now: boolean;
+  /** Null for a member with no working hours (20260929202000). */
+  on_shift_now: boolean | null;
 };
 
 /**
@@ -135,23 +139,65 @@ export async function getRoster(tenantId: string): Promise<RosterRow[]> {
     .returns<RosterViewRow[]>();
   if (error) throw new Error(`Could not load the roster: ${error.message}`);
 
-  const names = await namesFor(tenantId, (data ?? []).map((row) => row.user_id));
+  // LA-2.12-6: every accepted setter (and calendar holder) is on the roster, with or without working
+  // hours. The view does this itself from 20260929202000; before it, the members it drops are added
+  // here with the agency's clock, so the roster is right either way.
+  const members = await getSupabaseServiceClient()
+    .from("tenant_users")
+    .select("user_id, role, accepted_at")
+    .eq("tenant_id", tenantId)
+    .in("role", [...ROSTER_ROLES])
+    .returns<Array<{ user_id: string; role: string; accepted_at: string | null }>>();
+  if (members.error) throw new Error(`Could not load the roster: ${members.error.message}`);
+  const listed = new Set((data ?? []).map((row) => row.user_id));
+  const missing = (members.data ?? []).filter((row) => row.accepted_at && !listed.has(row.user_id));
+  const agencyZone = missing.length ? (await getWorkspaceTimezone(tenantId).catch(() => null)) ?? "UTC" : "UTC";
+
+  const names = await namesFor(tenantId, [...(data ?? []).map((row) => row.user_id), ...missing.map((row) => row.user_id)]);
   // One row per member: the view has a row per weekday of availability, and only the day that is
   // current in that member's own zone can be the one they are on shift for.
   const byUser = new Map<string, RosterRow>();
   for (const row of data ?? []) {
     const existing = byUser.get(row.user_id);
     if (existing && !row.on_shift_now) continue;
+    // A null on_shift_now is the view's "no working hours" row (20260929202000).
     byUser.set(row.user_id, {
       userId: row.user_id,
       name: names.get(row.user_id) ?? "Unknown member",
       role: row.role,
       timezone: row.timezone,
       localLabel: row.local_label,
-      onShiftNow: row.on_shift_now,
+      onShiftNow: row.on_shift_now === true,
+      hasHours: row.on_shift_now !== null,
+    });
+  }
+  for (const row of missing) {
+    byUser.set(row.user_id, {
+      userId: row.user_id,
+      name: names.get(row.user_id) ?? "Unknown member",
+      role: row.role,
+      timezone: agencyZone,
+      localLabel: rosterClock(new Date(), agencyZone),
+      onShiftNow: false,
+      hasHours: false,
     });
   }
   return [...byUser.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/** The roles on the roster: whoever works the phones or holds the calendar they book into. */
+const ROSTER_ROLES = ["owner", "producer", "setter"] as const;
+
+/** "Tue 14:05" in a zone, the view's to_char(…, 'Dy HH24:MI'). Built from parts, never locale text. */
+export function rosterClock(at: Date, zone: string): string {
+  let parts: Intl.DateTimeFormatPart[];
+  try {
+    parts = new Intl.DateTimeFormat("en-US", { timeZone: zone, weekday: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(at);
+  } catch {
+    parts = new Intl.DateTimeFormat("en-US", { timeZone: "UTC", weekday: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(at);
+  }
+  const get = (type: string) => parts.find((part) => part.type === type)?.value ?? "";
+  return `${get("weekday")} ${get("hour").padStart(2, "0")}:${get("minute").padStart(2, "0")}`;
 }
 
 async function namesFor(tenantId: string, userIds: string[]): Promise<Map<string, string>> {

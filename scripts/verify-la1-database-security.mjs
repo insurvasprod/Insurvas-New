@@ -1,3 +1,4 @@
+import "./lib/refuseProduction.mjs";
 import pg from "pg";
 
 const { Client } = pg;

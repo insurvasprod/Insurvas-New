@@ -2,6 +2,10 @@
 
 Which image is authoritative for which route, and which to ignore.
 
+> **Rules beat images (UX-1, 2026-10-03).** A mockup decides a page's content and arrangement. Where it
+> shows an eyebrow, a metric-card grid, a blue accent outside the admin console, a filter card above a table or a control taller
+> than 36px, [`UI-CONSISTENCY.md`](UI-CONSISTENCY.md) wins.
+
 There are **two** mockup collections and they do not agree with each other.
 
 | Set | Location | Count | Status |

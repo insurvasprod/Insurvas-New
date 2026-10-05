@@ -51,6 +51,11 @@ export function SortButton({ label, active, onClick }: { label: string; active: 
 }
 
 /** From – To, as two toolbar-height date inputs. Applies as soon as both dates form a valid range. */
+/** Tooltip on the period inputs: the reporting calendar (PARTNER_QUALITY_TIME_ZONE, Etc/GMT+5). */
+export const REPORTING_CALENDAR_HINT = "Days run on a fixed EST (UTC−5) calendar all year, whoever is reading.";
+/** Tooltip on the conversion figures: this report has no cost data. */
+export const NO_COST_HINT = "Quality and conversion only. Cost data is not included yet; spend and CPA come from accounting.";
+
 export function PeriodInputs({ value, onChange }: { value: Period; onChange: (period: Period) => void }) {
   const [draft, setDraft] = useState(value);
   // Follow an outside change (e.g. the parent resetting the period) without fighting the user's typing.
@@ -59,7 +64,7 @@ export function PeriodInputs({ value, onChange }: { value: Period; onChange: (pe
   const update = (next: Period) => { setDraft(next); const valid = validPeriod(next.from, next.to); if (valid) onChange(valid); };
   const invalid = !validPeriod(draft.from, draft.to);
   return (
-    <span className="inline-flex items-center gap-1.5">
+    <span className="inline-flex items-center gap-1.5" title={REPORTING_CALENDAR_HINT}>
       <input type="date" aria-label="From date" value={draft.from} max={draft.to || undefined} onChange={(event) => update({ ...draft, from: event.target.value })} className={cn(toolbarControl, invalid && "border-destructive")} />
       <span className="text-sm text-muted-foreground" aria-hidden="true">–</span>
       <input type="date" aria-label="To date" value={draft.to} min={draft.from || undefined} onChange={(event) => update({ ...draft, to: event.target.value })} className={cn(toolbarControl, invalid && "border-destructive")} />

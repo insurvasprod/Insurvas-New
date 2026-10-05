@@ -97,9 +97,13 @@ export function useAgentAlertFeed() {
   // The poll schedules itself AFTER each answer instead of firing on a fixed interval. A fixed 2.5s
   // interval never waited for the previous request, so on a slow server the polls stacked into the
   // hundreds, used up the tab's connections and held every page's own requests behind them (the
-  // "pages take 11 seconds" report, 2026-09-28). Now: one request at a time; paused while the tab
-  // is hidden and re-checked the moment it is shown; the first poll waits until the page's own
-  // reads have had the network; and a slow answer stretches the next wait instead of piling on.
+  // "pages take 11 seconds" report, 2026-09-28). Now: one request at a time; the first poll waits
+  // until the page's own reads have had the network; and a slow answer stretches the next wait
+  // instead of piling on.
+  //
+  // A HIDDEN tab keeps polling (LA-1.25: a transfer arriving while the agent is in another tab must
+  // still raise a browser notification and a sound — that is what the feature is for), on the same
+  // one-at-a-time loop; the moment the tab is shown again it re-checks at once.
   useEffect(() => {
     let cancelled = false;
     let timer: number | undefined;
@@ -111,7 +115,6 @@ export function useAgentAlertFeed() {
     };
     async function tick() {
       if (cancelled || inFlight) return;
-      if (document.visibilityState === "hidden") return; // resumed by the visibility listener
       inFlight = true;
       const started = performance.now();
       await load();

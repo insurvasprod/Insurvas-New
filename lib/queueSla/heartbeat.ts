@@ -16,3 +16,13 @@ export function heartbeatState(row: HeartbeatRow | null, nowMs: number, maxAgeSe
   if (ageSeconds > maxAgeSeconds) return { healthy: false, reason: "stale", lastRunAt: row.created_at, ageSeconds, lastReport: row.metadata };
   return { healthy: true, reason: "ok", lastRunAt: row.created_at, ageSeconds, lastReport: row.metadata };
 }
+
+/** pg_cron's run row (unclaimed_sla_job_runs, source 'database', 20260925709910) as a heartbeat row. */
+export function databaseHeartbeatRow(run: { ok: boolean; report: unknown; error: string | null; started_at: string; finished_at: string | null } | null): HeartbeatRow | null {
+  if (!run) return null;
+  return {
+    action: run.ok ? "system.unclaimed_sla_run_succeeded" : "system.unclaimed_sla_run_failed",
+    metadata: { source: "database", report: run.report, error: run.error },
+    created_at: run.finished_at ?? run.started_at,
+  };
+}

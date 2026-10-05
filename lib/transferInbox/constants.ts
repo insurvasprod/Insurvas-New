@@ -34,10 +34,48 @@ export function transferPhase(status: string): TransferPhase {
   return "closed";
 }
 
-/** "Spanish" for a language key the database returns ("spanish"), for refusal messages. */
+/** Two- and three-letter codes a form or a capacity row may carry instead of the name. */
+export const LANGUAGE_CODES: Record<string, string> = { es: "spanish", en: "english", fr: "french", pt: "portuguese", zh: "chinese", vi: "vietnamese", ko: "korean", tl: "tagalog", ar: "arabic", ru: "russian", ht: "haitian creole" };
+
+/**
+ * One spelling for a language, whichever way it was written: "Spanish", "spanish", "es", "es-MX"
+ * all read "spanish". The same reading as public.language_key (20260925709850), which decides who
+ * may claim a caller (LA-1.14-10), so the Agent Floor's pairing hint and the database agree.
+ */
+export function languageKey(value: string | null | undefined): string | null {
+  const v = (value ?? "").trim().toLowerCase();
+  if (!v) return null;
+  if (/^[a-z]{2,3}([-_][a-z0-9]{2,8})?$/.test(v)) return LANGUAGE_CODES[v.split("-")[0].split("_")[0]] ?? v;
+  return v;
+}
+
+/** "Spanish" for a language key the database returns ("spanish") or a code ("es"), for messages. */
 export function languageName(key: string | null | undefined) {
-  const value = (key ?? "").trim();
+  const value = languageKey(key);
   return value ? value.replace(/\b\w/g, (letter) => letter.toUpperCase()) : "another language";
+}
+
+/**
+ * The toast after a claim. `resumed` (the claim routes, 20260925709860) means the transfer had been
+ * given back and this claim reopened the same verification session (LA-1.11-6).
+ */
+export function claimedMessage(body: { chatPosted?: boolean; resumed?: boolean } | null | undefined) {
+  if (body?.resumed) return body.chatPosted === false ? "Transfer claimed and verification resumed; partner update could not be posted" : "Transfer claimed; verification resumed where it stopped";
+  return body?.chatPosted === false ? "Transfer claimed; partner update could not be posted" : "Transfer claimed and call opened";
+}
+
+/** The three ways a transfer changes hands by hand (lib/transferInbox/release.ts, 20260925709860). */
+export type ReleaseAction = "unassign" | "requeue" | "end_buffer";
+
+/**
+ * The confirmation each action asks for first, one wording for the inbox, the Agent Floor and the
+ * lead page (LA-1.10-8, LA-1.14-9). Unassign and end-buffer are different acts and say so.
+ */
+export function releaseConfirmation(action: ReleaseAction, names: { customer?: string | null; bufferName?: string | null; agentName?: string | null } = {}) {
+  const customer = names.customer?.trim() || "this transfer";
+  if (action === "unassign") return `Give ${customer} back to the queue? Nobody will own it until someone claims it. The verification so far is kept for them.`;
+  if (action === "requeue") return `Put ${customer} back in the queue? It waits again from now, and whoever claims it picks up the verification where it stopped.`;
+  return `End ${names.bufferName?.trim() || "the buffer"}'s involvement? ${names.agentName?.trim() || "The licensed agent"} keeps the call and the verification. This does not unassign the transfer.`;
 }
 
 export function isWithAgent(status: string) {

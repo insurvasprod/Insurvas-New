@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { X } from "lucide-react";
 import { notify } from "@/lib/notify";
 
-import { Badge } from "@/components/ui/badge";
+import { StatusChip } from "@/components/ui/status-chip";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -116,13 +116,9 @@ export function AddonsPanel({
                   <span className="font-medium">{item.name}</span>
                   <span className="text-muted-foreground">{formatCentsAsCurrency(item.price_cents)}</span>
                   {item.availability_overridden && (
-                    <Badge
-                      variant="outline"
-                      className="border-transparent bg-[var(--color-warning)]/10 text-xs text-[var(--color-warning)]"
-                      title="Attached despite not being offered by this plan"
-                    >
+                    <StatusChip tone="warning" title="Attached despite not being offered by this plan">
                       Off-plan
-                    </Badge>
+                    </StatusChip>
                   )}
                 </span>
                 <Button variant="ghost" size="icon-sm" disabled={busy} onClick={() => detach(item)}>

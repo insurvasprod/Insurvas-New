@@ -1,3 +1,4 @@
+import "./lib/refuseProduction.mjs";
 // LA-1.16 failure-path and live contract checks. Uses disposable tenants and real app routes.
 import { randomUUID } from "node:crypto";
 import { SignJWT } from "jose";

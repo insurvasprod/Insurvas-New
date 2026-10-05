@@ -1379,6 +1379,12 @@ a.portal-top-foot-action { text-decoration: none; }
 .portal-partner-submit-stepper button.is-current, .portal-partner-submit-stepper button.is-complete { color: var(--ink); }
 .portal-partner-submit-stepper button.is-current .portal-partner-submit-step-dot { background: var(--primary); color: var(--on-primary); }
 .portal-partner-submit-stepper button.is-complete .portal-partner-submit-step-dot { background: var(--success); color: #fff; }
+/* LA-1.6-11: five steps do not fit a tablet-width card (768px cut off step 4 and hid step 5, with
+   nothing to scroll). The row scrolls whenever it does not fit; steps keep their width and labels
+   stay on one line, and the connecting lines take up whatever room is left. */
+.portal-partner-submit-stepper { overflow-x: auto; }
+.portal-partner-submit-stepper > li:not(.portal-partner-submit-step-line) { flex-shrink: 0; }
+.portal-partner-submit-stepper button > span:last-of-type { white-space: nowrap; }
 
 /* the two columns */
 .portal-partner-submit-body { display: flex; align-items: flex-start; gap: 24px; }
@@ -1746,6 +1752,25 @@ html.theme-switching *, html.theme-switching *::before, html.theme-switching *::
   color: var(--ink);
   font-size: .98rem;
 }
+.insurvas-logo {
+  position: relative;
+  display: inline-block;
+  flex: 0 0 auto;
+  overflow: hidden;
+  vertical-align: middle;
+}
+.insurvas-logo-image { object-fit: contain; object-position: center; }
+.insurvas-logo-wordmark.insurvas-logo-sidebar { width: 126px; height: 26px; }
+.insurvas-logo-wordmark.insurvas-logo-auth { width: 148px; height: 31px; }
+.insurvas-logo-wordmark.insurvas-logo-public { width: 142px; height: 29px; }
+.insurvas-logo-symbol.insurvas-logo-compact { width: 28px; height: 28px; }
+.insurvas-logo-symbol.insurvas-logo-sidebar { width: 28px; height: 28px; }
+.insurvas-agent-brand-compact,
+.insurvas-partner-brand-compact { display: none; }
+.portal-agent-sidebar-desktop.is-collapsed .insurvas-agent-brand-full,
+.portal-agent-sidebar-desktop.is-collapsed .insurvas-partner-brand-full { display: none; }
+.portal-agent-sidebar-desktop.is-collapsed .insurvas-agent-brand-compact,
+.portal-agent-sidebar-desktop.is-collapsed .insurvas-partner-brand-compact { display: inline-block; }
 .portal-agent-sidebar-brand > div { display: flex; align-items: center; min-width: 0; gap: .625rem; }
 .portal-agent-sidebar-collapse { display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; }
 .portal-agent-nav { display: grid; gap: 0; min-width: 0; }
@@ -2273,12 +2298,16 @@ html.theme-switching *, html.theme-switching *::before, html.theme-switching *::
 .portal-agent-module-button > .portal-agent-nav-chevron.is-open,
 .portal-agent-nav-section:not(.portal-agent-nav-business-group) > .portal-agent-nav-disclosure > .portal-agent-nav-chevron.is-open { transform: none; }
 
-/* Headings carry no icon on the open rail. The collapsed 76px rail is nothing but icons, so there
-   they stay — it is the one place a heading has no room for its words. */
+/* On the open rail a heading's icon is a bare 16px glyph after the arrow — no tile. The collapsed
+   76px rail keeps the tile, since there the icon is all the heading has. */
 .portal-agent-sidebar-desktop:not(.is-collapsed) .portal-agent-module-icon,
-.portal-agent-sidebar-mobile-drawer .portal-agent-module-icon,
-.portal-agent-sidebar-desktop:not(.is-collapsed) .portal-agent-nav-section:not(.portal-agent-nav-business-group) > .portal-agent-nav-disclosure .portal-agent-nav-disclosure-copy > .portal-agent-nav-icon,
-.portal-agent-sidebar-mobile-drawer .portal-agent-nav-section:not(.portal-agent-nav-business-group) > .portal-agent-nav-disclosure .portal-agent-nav-disclosure-copy > .portal-agent-nav-icon { display: none; }
+.portal-agent-sidebar-mobile-drawer .portal-agent-module-icon {
+  width: auto;
+  height: auto;
+  border: 0;
+  background: none;
+  color: inherit;
+}
 .portal-agent-nav-section.is-active > .portal-agent-nav-disclosure { color: var(--nav-ink); }
 .portal-agent-nav-section.is-active > .portal-agent-nav-disclosure .portal-agent-nav-icon { color: var(--nav-ink); }
 

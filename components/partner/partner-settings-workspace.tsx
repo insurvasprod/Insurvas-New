@@ -5,7 +5,6 @@ import { MessageSquare } from "lucide-react";
 
 import { PartnerNotificationPreferences } from "@/components/partner/partner-notification-preferences";
 import { NotificationSoundSettings } from "@/components/app/notification-sound-settings";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
@@ -111,7 +110,7 @@ export function PartnerSettingsWorkspace({ role, partnerStatus, partnerId, partn
     <div className="grid items-start gap-4 lg:grid-cols-2">
       <div className="space-y-4">
         <Card>
-          <CardHeader><CardTitle className="flex items-center justify-between gap-3">Partner account<Badge variant={status === "active" ? "secondary" : "outline"}>{status[0].toUpperCase() + status.slice(1)}</Badge></CardTitle></CardHeader>
+          <CardHeader><CardTitle className="flex items-center justify-between gap-3">Partner account<StatusChip tone={status === "active" ? "good" : "neutral"}>{status[0].toUpperCase() + status.slice(1)}</StatusChip></CardTitle></CardHeader>
           <CardContent>
             <dl className="text-sm">
               <div className={detailRow}><dt className="text-muted-foreground">Partner</dt><dd className="truncate font-medium">{name}</dd></div>

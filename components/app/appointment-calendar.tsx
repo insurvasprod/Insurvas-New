@@ -33,7 +33,10 @@ type Appointment = {
   customerTimezone: string; status: string; notes: string | null; bookedByName: string | null;
   // LA-2 §11 concept (lib/appointments/calendar.ts): from the lead, and the reminder / rebook state.
   product?: string | null; faceAmountCents?: number | null; reminderSentAt?: string | null; rebookedAs?: string | null;
+  // LA-2.12-2: a setter sees another setter's booking as a taken slot, with no lead behind it.
+  bookedByUserId?: string | null; redacted?: boolean;
 };
+type Step = "confirm" | "showed" | "no_show";
 type Context = Omit<PickerContext, "blocks"> & {
   agents: Array<{ userId: string; name: string; timezone: string | null }>;
   blocks: Array<{ userId: string; startsAt: string; endsAt: string; reason?: string | null; repeats?: BlockRepeat }>;
@@ -119,6 +122,8 @@ export function AppointmentCalendar({ highlightId }: { highlightId?: string }) {
   const [now, setNow] = useState<number | null>(null);
   const [context, setContext] = useState<Context | null>(null);
   const [me, setMe] = useState<string | null>(null);
+  const [role, setRole] = useState<string | null>(null);
+  const [stepping, setStepping] = useState<string | null>(null);
   const [agentId, setAgentId] = useState<string>("");
   const [status, setStatus] = useState("");
   const [search, setSearch] = useState("");
@@ -147,6 +152,7 @@ export function AppointmentCalendar({ highlightId }: { highlightId?: string }) {
     const mine = await meResponse.json().catch(() => null);
     setContext(body as Context);
     setMe(mine?.user?.id ?? null);
+    setRole(typeof mine?.role === "string" ? mine.role : null);
   }, []);
 
   // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -317,6 +323,31 @@ export function AppointmentCalendar({ highlightId }: { highlightId?: string }) {
     void load();
   };
 
+  // LA-2.11-5 · the walk from the list: confirm before the slot, showed / no-show after it. Showed and
+  // no-show are the agent's (the setter is the one measured by them); a setter confirms their own.
+  const holdsCalendar = role === "owner" || role === "producer";
+  const stepsFor = (item: Appointment): Step[] => {
+    if (item.redacted || now == null) return [];
+    const started = Date.parse(item.startsAtUtc) <= now;
+    if (!started) return item.status === "booked" && (holdsCalendar || (role === "setter" && item.bookedByUserId === me)) ? ["confirm"] : [];
+    return holdsCalendar && ["booked", "confirmed", "pending"].includes(item.status) ? ["showed", "no_show"] : [];
+  };
+  const STEP_LABEL: Record<Step, string> = { confirm: "Confirm", showed: "Showed", no_show: "No-show" };
+  async function takeStep(item: Appointment, step: Step) {
+    if (!window.confirm(`${STEP_LABEL[step]}: ${item.customerName}?`)) return;
+    setStepping(item.appointmentId);
+    const response = await fetch(step === "confirm" ? "/api/app/appointments" : "/api/app/appointments/close-out", {
+      method: step === "confirm" ? "PATCH" : "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(step === "confirm" ? { action: "confirm", appointment_id: item.appointmentId } : { appointment_id: item.appointmentId, outcome: step }),
+    }).catch(() => null);
+    const body = await response?.json().catch(() => null);
+    setStepping(null);
+    if (!response || !response.ok) { setError(body?.error ?? "Could not record that step. Try again."); return; }
+    setError("");
+    void load();
+  }
+
   return (
     <div className="m-stagger flex flex-col gap-6">
       <PageHeader
@@ -431,6 +462,8 @@ export function AppointmentCalendar({ highlightId }: { highlightId?: string }) {
                       const visible = cell.items.filter(matches);
                       if (visible.length === 0) return <Slot key={index} title={<span className="text-muted-foreground">Booked</span>} tone="bg-card border border-border border-l-[3px] border-l-[var(--border-strong)]" />;
                       const item = visible[0];
+                      // Another setter's booking: the slot is taken, and that is all a setter learns.
+                      if (item.redacted) return <Slot key={index} title={<span className="text-muted-foreground">Booked</span>} sub={visible.length > 1 ? `+${visible.length - 1} more` : STATUS_LABEL[item.status]} tone="bg-card border border-border border-l-[3px] border-l-[var(--border-strong)]" />;
                       const purpose = [item.notes, item.agentName.split(/\s+/)[0]].filter(Boolean).join(" · ");
                       const theirs = theirTime(item.startsAtUtc, item.customerTimezone, zone);
                       // With double-booking on, a slot holds two — never three — so a slot with one live
@@ -476,7 +509,9 @@ export function AppointmentCalendar({ highlightId }: { highlightId?: string }) {
                     <tr key={item.appointmentId} className={item.appointmentId === highlightId ? "bg-[var(--soft-orange-surface)]" : ""}>
                       <td className="whitespace-nowrap tabular-nums">{WEEKDAY[clock.weekday]} {clock.day} · {clockLabel(clock.minutes)}</td>
                       <td>
-                        <Link href={`/app/leads/${item.leadId}`} className="font-semibold text-foreground hover:underline">{item.customerName}</Link>
+                        {item.redacted
+                          ? <span className="text-muted-foreground">Booked by another setter</span>
+                          : <Link href={`/app/leads/${item.leadId}`} className="font-semibold text-foreground hover:underline">{item.customerName}</Link>}
                         {(item.product || item.faceAmountCents) && <span className="block text-xs text-muted-foreground">{[item.product, faceLabel(item.faceAmountCents ?? null)].filter(Boolean).join(" · ")}</span>}
                       </td>
                       <td className="whitespace-nowrap tabular-nums">{theirTime(item.startsAtUtc, item.customerTimezone, zone)?.replace("their time ", "") ?? "Same as yours"}</td>
@@ -484,7 +519,16 @@ export function AppointmentCalendar({ highlightId }: { highlightId?: string }) {
                       <td>
                         {STATUS_LABEL[item.status] ?? item.status}
                         {item.reminderSentAt && (item.status === "booked" || item.status === "confirmed") && <span className="block text-xs text-muted-foreground">Reminder sent</span>}
-                        {item.status === "no_show" && (
+                        {stepsFor(item).length > 0 && (
+                          <span className="mt-1 flex flex-wrap items-center gap-2">
+                            {stepsFor(item).map((step) => (
+                              <Button key={step} type="button" size="sm" variant={step === "no_show" ? "outline" : "default"} disabled={stepping === item.appointmentId} onClick={() => void takeStep(item, step)}>
+                                {stepping === item.appointmentId ? "Saving…" : STEP_LABEL[step]}
+                              </Button>
+                            ))}
+                          </span>
+                        )}
+                        {item.status === "no_show" && !item.redacted && (
                           <span className="mt-1 flex flex-wrap items-center gap-2">
                             {/* Decided 2026-09-25: the dialer opens on this lead and checks the calling window when it dials. */}
                             <Button asChild size="sm"><Link href={`/app/dialer?lead=${item.leadId}`}>Call now</Link></Button>

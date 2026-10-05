@@ -1,3 +1,4 @@
+import "./lib/refuseProduction.mjs";
 // LA-1.20 live contract checks. Every fixture row is disposable and removed in finally.
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
@@ -36,6 +37,9 @@ async function partnerCookie() {
 async function api(path, cookie, options = {}) {
   return fetch(`${BASE}${path}`, { ...options, headers: { cookie, ...(options.headers ?? {}) }, redirect: "manual" });
 }
+/** A function a pending migration adds is not there yet (PostgREST PGRST202 / Postgres 42883). The probe's random ids make it refuse before it writes. */
+async function schemaPending(name, args) { const result = await db.rpc(name, args); return Boolean(result.error && (result.error.code === "PGRST202" || result.error.code === "42883")); }
+const skip = (label, reason) => console.log(`  skip ${label} — schema pending: ${reason}`);
 function valueFor(field, index) {
   if (field.type === "number") return 65 + index;
   if (field.type === "currency") return 10000 + index;
@@ -160,7 +164,11 @@ async function main() {
     const workspaceEndpoints = await endpoints("components/app/lead-detail-workspace.tsx");
     // The inbox's own list endpoint is a listing, not an action -- the workspace shows one lead and
     // has no reason to call it.
-    const listings = new Set(["/api/app/inbound"]);
+    // Likewise not lead actions (added with the 20260925709850 inbox): `today` is the inbox's
+    // today-by-partner read and the recovery of LOST transfers, which have no lead to open;
+    // `claim-next` takes whichever transfer is next in the queue (the per-lead equivalent, `claim`,
+    // is required below); `screening` is a read of the ordered screening ladder for the drawer.
+    const listings = new Set(["/api/app/inbound", "/api/app/inbound/today", "/api/app/inbound/claim-next", "/api/app/inbound/screening"]);
     const missingActions = [...new Set([...inboxEndpoints, ...floorEndpoints])].filter((path) => !listings.has(path) && !workspaceEndpoints.has(path));
     check("every inbox and Floor action is also offered on the workspace", missingActions.length === 0 && workspaceEndpoints.has("/api/app/inbound/claim") && workspaceEndpoints.has("/api/app/inbound/handoff"), missingActions.length ? `the workspace never calls: ${missingActions.join(", ")}` : "");
     const correction = await api("/api/app/inbound/verification", ownerCookie, { method: "POST", ...json({ work_item_id: workItemId, field_key: prepared.correctionKey, state: "corrected", value: "Corrected LA-1.20 Name" }) });
@@ -187,6 +195,23 @@ async function main() {
     const detailAfterStage = await api(`/api/app/leads/${leadId}`, ownerCookie);
     const stagedBody = await detailAfterStage.json();
     check("stage change is reflected and appears in timeline", detailAfterStage.status === 200 && stagedBody.lead.stage_id === nextStageId && stagedBody.timeline.some((event) => event.label === "Lead Stage Changed" && event.immutable === true));
+
+    // LA-1.10-8 / LA-1.11-6 / LA-1.14-9 (20260925709860): the workspace gives the transfer back, and a
+    // re-claim resumes the same verification with the correction made above intact.
+    if (await schemaPending("return_transfer_to_queue", { p_tenant_id: randomUUID(), p_work_item_id: randomUUID(), p_actor: randomUUID(), p_reason: "unassign" })) {
+      skip("unassign and resume from the workspace (LA-1.10-8, LA-1.11-6, LA-1.14-9)", "20260925709860 is not applied");
+    } else {
+      const beforeRelease = await (await api(`/api/app/leads/${leadId}`, ownerCookie)).json();
+      check("the workspace offers Unassign on a transfer being worked", beforeRelease.actions?.canUnassign === true && beforeRelease.actions?.canRequeue === false && beforeRelease.transfer?.requeueCount === 0, JSON.stringify({ actions: beforeRelease.actions, transfer: beforeRelease.transfer }));
+      const sessionBefore = beforeRelease.verification?.session;
+      const released = await api("/api/app/inbound/release", ownerCookie, { method: "POST", ...json({ action: "unassign", work_item_id: workItemId }) });
+      const afterRelease = await (await api(`/api/app/leads/${leadId}`, ownerCookie)).json();
+      check("unassign puts it back in the queue, counted, and claimable again", released.status === 200 && afterRelease.queue?.status === "unclaimed" && afterRelease.transfer?.requeueCount === 1 && afterRelease.actions?.canClaim === true, JSON.stringify({ status: released.status, queue: afterRelease.queue?.status, transfer: afterRelease.transfer }));
+      const reclaim = await api("/api/app/inbound/claim", ownerCookie, { method: "POST", ...json({ work_item_id: workItemId }) }); const reclaimBody = await reclaim.json();
+      const afterReclaim = await (await api(`/api/app/leads/${leadId}`, ownerCookie)).json();
+      const field = afterReclaim.verification?.fields?.find((item) => item.field_key === prepared.correctionKey);
+      check("the re-claim resumes the same verification session with its correction intact", reclaim.status === 200 && reclaimBody.resumed === true && afterReclaim.verification?.session?.status === "open" && afterReclaim.verification?.session?.started_at === sessionBefore?.started_at && field?.state === "corrected", JSON.stringify({ status: reclaim.status, resumed: reclaimBody.resumed, session: afterReclaim.verification?.session, field }).slice(0, 500));
+    }
 
     const isolated = await api(`/api/app/leads/${leadId}`, otherCookie);
     check("another tenant cannot open the lead workspace", isolated.status === 404);

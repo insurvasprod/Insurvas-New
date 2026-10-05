@@ -2,17 +2,17 @@ import "server-only";
 
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { assertPartnerQualityDate, assertPartnerQualityUuid } from "./service";
+import { partnerQualityEvidence } from "./evidence";
 import { dailyVolume, defaultPartnerQualityPeriod, dispositionBreakdown, percentOf, periodMetrics, previousPartnerQualityPeriod, screeningLabel } from "./metrics";
 import type { PartnerQualityAgentRow, PartnerQualityDetail, PartnerQualityDetailLead, PartnerQualityEvidence, PartnerQualityMember, PartnerQualityPeriod, PartnerQualityPeriodMetrics } from "./types";
 
 // One partner, every figure: the /app/partner-quality/[partnerId] page. Everything is counted from
-// partner_quality_evidence — the same rows the list's partner_quality_report aggregates — so a
+// the partner-quality evidence (evidence.ts) — the same rows the list counts — so a
 // figure here always equals the partner's row on the list for the same period. No cost data.
 
 /** A partner id that does not belong to the caller's tenant. The route answers 404. */
 export class PartnerQualityNotFoundError extends Error {}
 
-const EVIDENCE_PAGE = 1000;
 const EVIDENCE_MAX = 20_000;
 const DETAIL_LEAD_LIMIT = 5_000;
 const IN_CHUNK = 200;
@@ -32,21 +32,10 @@ type TeamMembership = {
 };
 
 /** partner_quality_evidence is tenant-wide; filter it to one partner in PostgREST and page past max-rows. */
-async function partnerEvidence(db: ServiceClient, tenantId: string, partnerId: string, from: string, to: string): Promise<PartnerQualityEvidence[]> {
-  const rows: PartnerQualityEvidence[] = [];
-  for (let offset = 0; offset < EVIDENCE_MAX; offset += EVIDENCE_PAGE) {
-    const { data, error } = await db
-      .rpc("partner_quality_evidence", { p_tenant_id: tenantId, p_from_date: from, p_to_date: to })
-      .eq("partner_id", partnerId)
-      .order("lead_date", { ascending: false })
-      .order("lead_id", { ascending: true })
-      .range(offset, offset + EVIDENCE_PAGE - 1);
-    if (error) throw new Error(`Could not load partner quality evidence: ${error.message}`);
-    const page = (data ?? []) as PartnerQualityEvidence[];
-    rows.push(...page);
-    if (page.length < EVIDENCE_PAGE) break;
-  }
-  return rows;
+// The same evidence rows as the list (evidence.ts), newest day first as the page lists them.
+async function partnerEvidence(_db: ServiceClient, tenantId: string, partnerId: string, from: string, to: string): Promise<PartnerQualityEvidence[]> {
+  const rows = await partnerQualityEvidence(tenantId, from, to, partnerId);
+  return rows.sort((a, b) => b.lead_date.localeCompare(a.lead_date) || a.lead_id.localeCompare(b.lead_id)).slice(0, EVIDENCE_MAX);
 }
 
 /** Runs an `.in(ids)` lookup in chunks so a busy partner never builds an over-long query string. */

@@ -1,3 +1,4 @@
+import "./lib/refuseProduction.mjs";
 // SA-3.7 acceptance: custom invoices and manual billing.
 //
 // The settle-and-activate path runs through the real HTTP route with a minted admin session, not

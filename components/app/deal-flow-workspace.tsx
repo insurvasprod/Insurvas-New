@@ -41,6 +41,7 @@ import {
 import { formatCentsAsCurrency, parseDollarsToCents } from "@/lib/money";
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
+import { Pager } from "@/components/ui/pager";
 
 type Data = DealFlowReport & { readOnly: boolean };
 type Filters = { from: string; to: string; partner_id: string; product_line: string; agent_id: string; stage_type: string; status: string };
@@ -379,14 +380,14 @@ export function DealFlowWorkspace({ focusLeadId, timeZone = null }: { focusLeadI
 
   const kpis = data.kpis;
   const isToday = active.from === today && active.to === today;
-  const firstShown = data.total === 0 ? 0 : (data.page - 1) * data.pageSize + 1;
-  const lastShown = data.total === 0 ? 0 : firstShown + data.rows.length - 1;
   const hasNarrowing = extraFilters > 0 || !!search;
   const update = (key: keyof Draft, value: string) => setDraft((current) => (current ? { ...current, [key]: value } : current));
   const oldest = kpis.oldest_in_progress_days;
   const inProgressFoot = kpis.in_progress === 0 ? "none open" : oldest == null ? "no start time recorded" : oldest < 1 ? "oldest under a day" : `oldest ${oldest} ${oldest === 1 ? "day" : "days"}`;
   const wonFoot = `${formatCentsAsCurrency(kpis.won_annualised_cents)} annualised${kpis.won_unpriced > 0 ? ` · ${kpis.won_unpriced} with no premium` : ""}`;
   const dayTitle = `Dates are the agent’s local day${timeZone ? `; today is ${formatDay(today)} in ${timeZone}` : ""}`;
+  // applyFilter holds an incomplete or reversed range without applying it; say so while it is held.
+  const rangeProblem = !filters.from || !filters.to ? "Choose both a From and a To date" : filters.from > filters.to ? "From must be on or before To" : null;
 
   return (
     <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
@@ -441,6 +442,7 @@ export function DealFlowWorkspace({ focusLeadId, timeZone = null }: { focusLeadI
               <ToolbarSearch value={searchTerm} onChange={setSearchTerm} placeholder="Customer, phone, campaign, ID…" label="Search deals" />
               <input type="date" aria-label="From" title={dayTitle} className={toolbarControl} value={filters.from} max={filters.to || undefined} onChange={(event) => setDate("from", event.target.value)} />
               <input type="date" aria-label="To" title={dayTitle} className={toolbarControl} value={filters.to} min={filters.from || undefined} onChange={(event) => setDate("to", event.target.value)} />
+              {rangeProblem && <span role="alert" className="text-[12px] leading-[1.5] font-semibold text-[var(--error-ink)]">{rangeProblem}</span>}
               {!isToday && <Button type="button" variant="outline" onClick={resetToToday} aria-label="Show today’s deals">Today</Button>}
               <select aria-label="Filter by partner" className={cn(toolbarControl, "max-w-[200px]")} value={filters.partner_id} onChange={(event) => applyFilter({ partner_id: event.target.value })}>
                 <option value="">All partners</option>
@@ -469,14 +471,7 @@ export function DealFlowWorkspace({ focusLeadId, timeZone = null }: { focusLeadI
           </>
         }
         footer={<>
-          <span role="status">
-            {loading ? "" : data.total === 0 ? "No deals" : `Showing ${firstShown}–${lastShown} of ${data.total} ${data.total === 1 ? "deal" : "deals"}`}
-            {!loading && focusedRow ? ` · focused on ${customerName(focusedRow)}` : ""}
-          </span>
-          <span className="flex gap-2">
-            <Button type="button" variant="outline" size="sm" disabled={loading || data.page <= 1} onClick={() => setPage(data.page - 1)}>Previous</Button>
-            <Button type="button" variant="outline" size="sm" disabled={loading || lastShown >= data.total} onClick={() => setPage(data.page + 1)}>Next</Button>
-          </span>
+          <Pager page={data.page} total={data.total} pageSize={data.pageSize} noun={data.total === 1 ? "deal" : "deals"} suffix={!loading && focusedRow ? `focused on ${customerName(focusedRow)}` : undefined} disabled={loading} onPage={setPage} />
         </>}
       >
         {loading ? <SectionLoading rows={6} columns={7} label="Loading deals" /> : (

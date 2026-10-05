@@ -1,3 +1,4 @@
+import "./lib/refuseProduction.mjs";
 // Verifies the public-endpoint rate limits added after the SA-5.1 review.
 //
 // The HTTP half deliberately uses a plan code that does not exist: the limiter runs BEFORE the

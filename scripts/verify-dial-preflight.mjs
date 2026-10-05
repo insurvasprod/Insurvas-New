@@ -1,3 +1,4 @@
+import "./lib/refuseProduction.mjs";
 // SA-4.8 agent-side compliance consumer verification. Temporary tenant data is removed in finally.
 import { SignJWT } from "jose";
 import { createClient } from "@supabase/supabase-js";

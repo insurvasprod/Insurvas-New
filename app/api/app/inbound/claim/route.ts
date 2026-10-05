@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
-import { announceTransferClaim } from "@/lib/transferInbox/service";
+import { announceTransferClaim, claimWasResumed } from "@/lib/transferInbox/service";
 import { languageRefusal } from "@/lib/transferInbox/release";
 
 const bodySchema = z.object({ work_item_id: z.string().uuid() }).strict();
@@ -42,5 +42,7 @@ export async function POST(request: Request) {
 
   // Partner card + audit row, shared with Claim next so the two claim paths cannot drift.
   const { chatPosted } = await announceTransferClaim({ tenantId: auth.context.tenantId, userId: auth.context.userId, role: auth.context.role, workItemId: parsed.data.work_item_id, claim: data, request });
-  return NextResponse.json({ claim: data, chatPosted });
+  // LA-1.11-6: true when this re-claim reopened the verification session the transfer had when it
+  // was given back (20260925709860); false for a first claim, and before that migration.
+  return NextResponse.json({ claim: data, chatPosted, resumed: claimWasResumed(data) });
 }

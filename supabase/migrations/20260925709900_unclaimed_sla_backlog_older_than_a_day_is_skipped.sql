@@ -27,6 +27,11 @@
 --      alert or nurture work item was written by it.
 --
 -- Additive. Re-running it skips only what has become more than a day old since.
+--
+-- Reviewed against the live catalog on 2026-09-29: tenant_lead_sla_events had none of these columns
+-- and no trigger (so an UPDATE of it can write nothing else), and 34,735 events were pending, every
+-- one older than 24 hours. The skip is one statement whose per-tenant counts are collected first and
+-- then written to the audit log, rather than a loop over a data-modifying WITH.
 -- ---------------------------------------------------------------------------
 
 alter table public.tenant_lead_sla_events
@@ -71,44 +76,56 @@ grant select, insert, update on public.tenant_lead_sla_events to service_role;
 do $$
 declare
   r record;
+  v_rows jsonb;
   v_total integer := 0;
   v_alerts_before bigint;
   v_messages_before bigint;
-  v_partner_alerts_before bigint;
-  v_nurture_before bigint;
 begin
   if not has_schema_privilege(current_user, 'public', 'CREATE') then
     raise notice '20260925709900: backlog skip not run, % cannot create in public', current_user;
     return;
   end if;
 
+  -- The skip only marks events. It can write nowhere else because nothing fires on the table: a
+  -- trigger added here later would have to be reviewed against this rule first.
+  if exists (select 1 from pg_trigger where tgrelid = 'public.tenant_lead_sla_events'::regclass and not tgisinternal) then
+    raise exception 'tenant_lead_sla_events has a trigger; review it before skipping the backlog';
+  end if;
+
+  -- The only writers of these keys are the SLA side effects (lib/queueSla, 20260925709910).
   select count(*) into v_alerts_before from public.agent_notifications where source_key like 'unclaimed-sla:%';
   select count(*) into v_messages_before from public.partner_messages where event_key like 'unclaimed-sla:%';
-  select count(*) into v_partner_alerts_before from public.partner_notifications;
-  select count(*) into v_nurture_before from public.lead_queue where nurtured_from_work_item_id is not null;
 
-  for r in
-    with skipped as (
-      update public.tenant_lead_sla_events e
-         set processed_at = now(),
-             handled_by = 'skipped',
-             skipped_reason = 'older_than_24_hours',
-             outcome = jsonb_build_object('sent', false, 'skippedAt', now()),
-             last_error = null
-       where e.processed_at is null
-         and e.occurred_at < now() - interval '24 hours'
-      returning e.tenant_id, e.rung
-    )
-    select s.tenant_id, t.name,
+  with skipped as (
+    update public.tenant_lead_sla_events e
+       set processed_at = now(),
+           handled_by = 'skipped',
+           skipped_reason = 'older_than_24_hours',
+           outcome = jsonb_build_object('sent', false, 'skippedAt', now()),
+           last_error = null
+     where e.processed_at is null
+       and e.occurred_at < now() - interval '24 hours'
+    returning e.tenant_id, e.rung
+  ), counted as (
+    select s.tenant_id,
            count(*)::integer as skipped,
            count(*) filter (where s.rung = 'warn')::integer as warn,
            count(*) filter (where s.rung = 'escalate')::integer as escalate,
            count(*) filter (where s.rung = 'partner')::integer as partner,
            count(*) filter (where s.rung = 'expire')::integer as expire
       from skipped s
-      left join public.tenants t on t.id = s.tenant_id
-     group by s.tenant_id, t.name
-     order by count(*) desc
+     group by s.tenant_id
+  )
+  select coalesce(jsonb_agg(jsonb_build_object('tenant_id', c.tenant_id, 'name', t.name, 'skipped', c.skipped,
+                                               'warn', c.warn, 'escalate', c.escalate, 'partner', c.partner,
+                                               'expire', c.expire) order by c.skipped desc), '[]'::jsonb)
+    into v_rows
+    from counted c
+    left join public.tenants t on t.id = c.tenant_id;
+
+  for r in
+    select * from jsonb_to_recordset(v_rows)
+      as x(tenant_id uuid, name text, skipped integer, warn integer, escalate integer, partner integer, expire integer)
   loop
     v_total := v_total + r.skipped;
     raise notice '20260925709900: tenant % (%) skipped % (warn %, escalate %, partner %, expire %)',
@@ -122,15 +139,39 @@ begin
   end loop;
   raise notice '20260925709900: % side effects older than 24 hours skipped, none sent', v_total;
 
-  -- Nothing was sent: the skip wrote no alert, no partner message, no partner alert, no nurture item.
+  -- Nothing was sent: no SLA alert and no partner notice was written by the skip.
   if (select count(*) from public.agent_notifications where source_key like 'unclaimed-sla:%') <> v_alerts_before
-     or (select count(*) from public.partner_messages where event_key like 'unclaimed-sla:%') <> v_messages_before
-     or (select count(*) from public.partner_notifications) <> v_partner_alerts_before
-     or (select count(*) from public.lead_queue where nurtured_from_work_item_id is not null) <> v_nurture_before then
+     or (select count(*) from public.partner_messages where event_key like 'unclaimed-sla:%') <> v_messages_before then
     raise exception 'the backlog skip wrote a side effect; it must only mark events';
   end if;
   if exists (select 1 from public.tenant_lead_sla_events
               where processed_at is null and occurred_at < now() - interval '24 hours') then
     raise exception 'an unprocessed SLA event older than 24 hours is left';
   end if;
+end $$;
+
+-- ── check ──────────────────────────────────────────────────────────────────
+do $$
+begin
+  if not has_schema_privilege(current_user, 'public', 'CREATE') then
+    raise notice '20260925709900: assertions skipped, % cannot create in public', current_user;
+    return;
+  end if;
+  if (select count(*) from information_schema.columns
+       where table_schema = 'public' and table_name = 'tenant_lead_sla_events'
+         and column_name in ('handled_by', 'skipped_reason', 'outcome', 'email_due_at', 'email_done_at', 'email_outcome')) <> 6 then
+    raise exception '20260925709900 check failed: a tenant_lead_sla_events column is missing';
+  end if;
+  if (select count(*) from pg_constraint where conrelid = 'public.tenant_lead_sla_events'::regclass
+       and conname in ('tenant_lead_sla_events_handled_by_check', 'tenant_lead_sla_events_skipped_reason_check',
+                       'tenant_lead_sla_events_email_outcome_check')) <> 3 then
+    raise exception '20260925709900 check failed: a tenant_lead_sla_events check constraint is missing';
+  end if;
+  if to_regclass('public.tenant_lead_sla_events_email_due_idx') is null then
+    raise exception '20260925709900 check failed: tenant_lead_sla_events_email_due_idx is missing';
+  end if;
+  if exists (select 1 from public.tenant_lead_sla_events where skipped_reason is not null and processed_at is null) then
+    raise exception '20260925709900 check failed: a skipped event is not marked processed';
+  end if;
+  raise notice '20260925709900: columns, constraints and index present; no day-old event left pending';
 end $$;

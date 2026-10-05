@@ -13,7 +13,11 @@
  *     a chargeback and a positive one commission. Words that name none of the four are an error;
  *   · a chargeback is always negative, whatever sign the carrier printed it with, so a sum over
  *     lines is the money that moved;
- *   · a row that cannot be read is kept with its error. It stays visible and never posts.
+ *   · a row that cannot be read is kept with its error. It stays visible and never posts;
+ *   · premium and rate (LA-4.3) are optional. A premium is read like an amount, always positive. A
+ *     rate is read as basis points of premium: "110%" and "110" are 11,000; "1.10" is 11,000 too,
+ *     because a bare number of 3 or less is a fraction of premium. A cell that names neither is an
+ *     error on the line, as an unreadable date is.
  *
  * Pure and client-safe: the import dialog uses the header and suggestion helpers; the server parses
  * the whole file again on preview and on import.
@@ -40,6 +44,10 @@ export type ParsedStatementLine = {
   /** Where the kind came from: the mapped column, or the amount's sign. */
   kindFrom: "column" | "sign" | null;
   lineDate: string | null;
+  /** The premium the line was paid on, when the carrier shows it (LA-4.3). */
+  premiumCents: number | null;
+  /** The commission rate paid, in basis points of premium (110% = 11,000). */
+  rateBp: number | null;
   error: string | null;
 };
 
@@ -107,6 +115,18 @@ export function parseStatementDate(input: string): string | null {
   return null;
 }
 
+/** Basis points of premium from a rate cell ("110%", "110", "1.10"), or null when it is not a rate. */
+export function parseRateBp(input: string): number | null {
+  const text = input.replace(/\s+/g, "");
+  if (!text) return null;
+  const percent = text.endsWith("%");
+  const number = percent ? text.slice(0, -1) : text;
+  if (!/^\d+(?:\.\d+)?$/.test(number)) return null;
+  const value = Number(number);
+  const bp = Math.round(percent || value > 3 ? value * 100 : value * 10_000);
+  return Number.isSafeInteger(bp) && bp <= 100_000 ? bp : null;
+}
+
 /**
  * The kind a carrier's wording names, or null for words that name none of the four. Chargeback is
  * checked first: "advance reversal" and "advance chargeback" take money back.
@@ -127,6 +147,8 @@ const SUGGESTIONS: Record<StatementField, RegExp[]> = {
   kind: [/^(transaction|trans|txn) ?(type|code)$/, /^(type|kind)$/, /(commission|comm) ?type/, /type|kind|category/, /description|memo/],
   lineDate: [/^(paid|payment|transaction|txn|posted|process(ed)?) ?date$/, /^date$/, /statement date/, /date/],
   insuredName: [/^insured( name)?$/, /insured/, /^(client|customer|owner)( name)?$/, /^name$/],
+  premium: [/^(annual |modal |target |base )?premium( amount| amt)?$/, /premium/],
+  rate: [/^(commission |comm )?(rate|pct|percent|%)$/, /(commission|comm).*(rate|pct|percent)/, /^rate$/],
 };
 
 /** A first guess at the mapping from header wording; each header is used at most once. */
@@ -178,7 +200,7 @@ export function parseStatementCsv(text: string, mapping: StatementMapping): Pars
   if (body.length > MAX_STATEMENT_LINES) throw new Error(`A statement can hold at most ${MAX_STATEMENT_LINES.toLocaleString("en-US")} lines; this file has ${body.length.toLocaleString("en-US")}.`);
 
   const column = (field: StatementField) => (mapping[field] ? headers.indexOf(mapping[field] as string) : -1);
-  const at = { policyNumber: column("policyNumber"), amount: column("amount"), kind: column("kind"), lineDate: column("lineDate"), insuredName: column("insuredName") };
+  const at = { policyNumber: column("policyNumber"), amount: column("amount"), kind: column("kind"), lineDate: column("lineDate"), insuredName: column("insuredName"), premium: column("premium"), rate: column("rate") };
 
   const lines = body.map((cells, index): ParsedStatementLine => {
     const raw: Record<string, string> = {};
@@ -213,8 +235,17 @@ export function parseStatementCsv(text: string, mapping: StatementMapping): Pars
     const lineDate = dateText ? parseStatementDate(dateText) : null;
     if (dateText && !lineDate) errors.push(`“${dateText}” is not a date.`);
 
+    const premiumText = cell(at.premium);
+    const premiumRead = premiumText ? parseAmountCents(premiumText) : null;
+    const premiumCents = premiumRead === null ? null : Math.abs(premiumRead);
+    if (premiumText && premiumRead === null) errors.push(`“${premiumText}” is not a premium.`);
+
+    const rateText = cell(at.rate);
+    const rateBp = rateText ? parseRateBp(rateText) : null;
+    if (rateText && rateBp === null) errors.push(`“${rateText}” is not a commission rate.`);
+
     const error = errors.length ? errors.join(" ") : null;
-    return { lineNumber: index + 1, raw, policyNumber, insuredName, amountCents, kind, kindFrom, lineDate, error };
+    return { lineNumber: index + 1, raw, policyNumber, insuredName, amountCents, kind, kindFrom, lineDate, premiumCents, rateBp, error };
   });
 
   return { headers, lines };

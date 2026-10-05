@@ -440,7 +440,7 @@ export function PartnerLeadForm({
             }),
           },
         );
-        const saved = (await response.json().catch(() => null)) as { id?: string; error?: string } | null;
+        const saved = (await response.json().catch(() => null)) as { id?: string; error?: string; code?: string } | null;
         if (response.ok) {
           dirtyRef.current = false;
           if (saved?.id && saved.id !== draftIdRef.current) draftIdRef.current = saved.id;
@@ -452,9 +452,12 @@ export function PartnerLeadForm({
           draftIdRef.current = null;
           onDraftChange?.(null);
           if (visibleStatus) setStatus(saved?.error ?? "Draft could not be saved");
-        } else if (visibleStatus) {
-          setStatus("Draft could not be saved");
-          notify.fail("Draft could not be saved");
+        } else {
+          // Say why (e.g. "You have 25 drafts open. Submit or discard one…"), not just that it failed.
+          // A draft limit is shown even on a background autosave, since only the partner can clear it.
+          const message = saved?.error ?? "Draft could not be saved";
+          if (visibleStatus || saved?.code === "form_draft_limit_reached") setStatus(message);
+          if (visibleStatus) notify.fail(message);
         }
       } catch {
         if (visibleStatus) {
@@ -1769,12 +1772,8 @@ function LegacyPartnerPortalWorkspace({
       )}
       {section === "submit" && (
         <section id="submit" className="portal-partner-submit-shell scroll-mt-6">
+          {/* A paused or draft partner is told once, by the portal layout's banner. */}
           <PageHeader title="Submit a lead" />
-          {partnerStatus !== "active" && (
-            <p role="status" className="rounded-md border border-[var(--warning)] bg-[var(--warning-surface)] px-4 py-2.5 text-sm text-[var(--warning-ink)]">
-              New submissions are disabled while this partner account is {partnerStatus}.
-            </p>
-          )}
           {!productsLoaded ? (
             <div className="overflow-hidden rounded-lg border border-border bg-card">
               <SectionLoading rows={3} columns={3} label="Loading approved products" />

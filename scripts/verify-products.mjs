@@ -1,3 +1,4 @@
+import "./lib/refuseProduction.mjs";
 // SA-4.5 live verification. Run with: npm run verify:products
 // Exercises the product API and the archive/picker contract against the configured Supabase app.
 import { SignJWT } from "jose";

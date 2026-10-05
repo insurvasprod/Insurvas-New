@@ -18,6 +18,7 @@ import type { TemplateField, TemplateRow } from "@/lib/templates/constants";
 import type { PipelineStage } from "@/lib/pipelines/types";
 import { pruneHiddenTemplateValues, templateFormFieldVisible } from "@/lib/templates/visibility";
 import { cn } from "@/lib/utils";
+import { LeadStageHint } from "@/components/app/applications/lead-stage-hint";
 import { DispositionPicker, ListView, StagesView, TableView, dispositionGroups, durationLabel, inStageMs, isOverdue, type ViewContext } from "@/components/app/pipeline-views";
 
 type Lead = { id: string; pipeline_id: string; stage_id: string; values: Record<string, unknown>; screening_outcome?: string | null; screening_warning?: string | null; created_at: string; updated_at: string; submitter_name?: string | null; owner_user_id?: string | null; owner_name?: string | null; disposition?: string | null; disposition_at?: string | null; stage_entered_at?: string | null; monthly_premium_cents?: number | null };
@@ -167,7 +168,7 @@ function PipelineBoard({ stages, leads, selectedId, readOnly, now, money, contex
   );
 }
 
-function LeadPreviewPanel({ lead, stages, readOnly, onMove, onClose }: { lead: Lead; stages: PipelineStage[]; readOnly: boolean; onMove: () => void; onClose: () => void }) {
+function LeadPreviewPanel({ lead, stages, readOnly, onMove, onClose, onReconciled }: { lead: Lead; stages: PipelineStage[]; readOnly: boolean; onMove: () => void; onClose: () => void; onReconciled?: () => void }) {
   const [tab, setTab] = useState<"submission" | "timeline">("submission"); const [data, setData] = useState<LeadDetail | null>(null); const [error, setError] = useState("");
   // The selected lead changes the external request and resets the preview while it loads.
   // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -178,6 +179,8 @@ function LeadPreviewPanel({ lead, stages, readOnly, onMove, onClose }: { lead: L
     {/* Moving a lead from the keyboard: the board's cards are drag-only, so the move lives here too —
         as a disposition, the same as a drop. */}
     <div className="flex items-center gap-2 border-b border-border px-4 py-2.5"><span className="text-xs text-muted-foreground">Stage</span><span className="flex-1 truncate text-sm font-semibold">{liveStages.find((item) => item.id === lead.stage_id)?.name ?? "Unmapped"}</span><Button type="button" variant="outline" size="sm" aria-label={`Move ${leadName(lead)} to stage`} disabled={readOnly} onClick={onMove}>Move</Button></div>
+      {/* LA-3.23 · when the application has moved on but the card was held back by hand. */}
+      <LeadStageHint leadId={lead.id} boardStageId={lead.stage_id} readOnly={readOnly} onReconciled={onReconciled} />
     <div className="lead-preview-tabs"><button type="button" className={tab === "submission" ? "is-active" : ""} onClick={() => setTab("submission")}>Submission</button><button type="button" className={tab === "timeline" ? "is-active" : ""} onClick={() => setTab("timeline")}>Timeline</button></div>{error ? <div className="lead-preview-state text-destructive">{error}</div> : !data ? <div className="flex-1"><SectionLoading rows={6} columns={2} label="Loading lead" /></div> : tab === "submission" ? <div className="lead-preview-scroll"><div className="lead-preview-banner"><span className={`lead-stage-pill ${stageTone(data.stage ?? undefined)}`}>{data.stage?.name ?? "Open"}</span><span>{data.screening.outcome ?? "Screening pending"}</span></div><div className="lead-preview-section"><div className="lead-section-heading"><h3>Form as submitted</h3><span>Version {data.lead.definition_version}</span></div><div className="lead-form-snapshot">{fieldEntries.map(([key, value]) => <div key={key} className="lead-snapshot-row"><span>{data.template.fields.find((field) => field.field_key === key)?.label ?? key}</span><strong>{display(value)}</strong></div>)}</div></div><div className="lead-preview-section"><div className="lead-section-heading"><h3>Submission details</h3></div><dl className="lead-detail-list"><div><dt>Submitted</dt><dd>{when(data.lead.created_at)}</dd></div><div><dt>Submitted by</dt><dd>{data.submitter?.name ?? lead.submitter_name ?? "Workspace"}</dd></div><div><dt>Owner</dt><dd>{data.owner?.name ?? "Unclaimed"}</dd></div><div><dt>Queue status</dt><dd>{data.queue?.status ?? "Not queued"}</dd></div></dl></div></div> : <div className="lead-preview-scroll"><div className="lead-preview-section"><div className="lead-section-heading"><h3>Submission timeline</h3></div><div className="lead-timeline">{data.timeline.length ? data.timeline.map((event) => <div key={event.id} className="lead-timeline-item"><span className="lead-timeline-dot" /><div><strong>{event.label}</strong><p>{event.detail ?? event.actor}</p><time>{when(event.at)}</time></div></div>) : <p className="text-sm text-muted-foreground">No timeline events yet.</p>}</div></div></div>}<div className="lead-preview-footer"><Link href={`/app/leads/${lead.id}`} className="lead-full-link">Open full lead workspace <ExternalLink className="size-4" /></Link></div></aside>;
 }
 
@@ -397,7 +400,7 @@ export function LeadWorkspace() {
             ) : null}
           </div>
         </TableCard>
-        {selected && (view === "board" || view === "table") && <LeadPreviewPanel lead={selected} stages={selectedStages} readOnly={data.readOnly} onMove={() => setPicker({ leads: [selected], stageId: null, source: "board" })} onClose={() => setSelected(null)} />}
+        {selected && (view === "board" || view === "table") && <LeadPreviewPanel lead={selected} stages={selectedStages} readOnly={data.readOnly} onMove={() => setPicker({ leads: [selected], stageId: null, source: "board" })} onClose={() => setSelected(null)} onReconciled={() => void refresh()} />}
       </div>
 
       {picker && (() => {

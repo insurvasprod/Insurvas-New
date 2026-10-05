@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ArrowDown, ArrowUp, Check, Loader2, Plus } from "lucide-react";
 import { notify } from "@/lib/notify";
 
@@ -144,6 +144,8 @@ function StageEditor({ pipelineId, stage, ordered, leadCount, entries, context, 
   }
 
   async function archive() {
+    // No un-archive in the product, so ask first (Settings did before the stage manager moved there).
+    if (!window.confirm(`Archive ${stage.name}? It leaves the board and cannot be brought back from here.`)) return;
     setSaving(true);
     const result = await request(`/api/app/pipelines/${pipelineId}/stages/${stage.id}`, "PATCH", { is_archived: true });
     setSaving(false);
@@ -635,6 +637,7 @@ export function DispositionLibrary({ open, onOpenChange, pipelines, context, onC
   context: PipelineViewContext | null;
   onChanged: () => void;
 }) {
+  const router = useRouter();
   const [rows, setRows] = useState<LibraryRow[] | null>(null);
   const [error, setError] = useState("");
   const [filter, setFilter] = useState<LibraryFilter>("all");
@@ -725,7 +728,14 @@ export function DispositionLibrary({ open, onOpenChange, pipelines, context, onC
             toolbar={
               <DataToolbar
                 actions={<>
-                  <Button asChild variant="outline"><Link href="/app/settings#dispositions">New disposition</Link></Button>
+                  <Button type="button" variant="outline" onClick={() => {
+                    // Opened from Settings itself now, so a link would only push the hash, which Next
+                    // does without a hashchange event — the Dispositions tab never opened. Close the
+                    // library and set the hash (which does fire it), or go there from anywhere else.
+                    onOpenChange(false);
+                    if (window.location.pathname === "/app/settings") window.location.hash = "dispositions";
+                    else router.push("/app/settings#dispositions");
+                  }}>New disposition</Button>
                   <RefreshButton onClick={() => void refresh()} refreshing={refreshing} />
                 </>}
               >

@@ -2,7 +2,7 @@ import "server-only";
 
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isSchemaGap } from "@/lib/appointments/schemaGap";
-import { DEFAULT_CADENCE, PREFERRED_TIMES, isDayPart, parseInterval, type CadenceRow, type PreferredTime } from "./engine";
+import { DEFAULT_CADENCE, DEFAULT_CEILING, PREFERRED_TIMES, isDayPart, parseInterval, type CadenceRow, type PreferredTime } from "./engine";
 
 /**
  * LA-2.7 · reading and writing the cadence rows that decide when a lead is dialled again.
@@ -158,7 +158,73 @@ export type CadenceView = {
   fallbackRows: StoredCadenceRow[];
   /** 20260924230300 applied: day-part preferences, seven dials, no merging, atomic saves. */
   schemaReady: boolean;
+  /** Max attempts for this scope (20260929201100). See `MaxAttemptsView`. */
+  maxAttempts: MaxAttemptsView;
 };
+
+/**
+ * LA-2.7-8 · max attempts, per tenant with a per-campaign override. `own` is this scope's stored
+ * value (null = inherits), `inherited` what it falls back to, `effective` what the scheduler uses
+ * for a lead with no recycle ceiling of its own. `ready` is false until 20260929201100 is applied,
+ * when the scheduler still stops at the built-in seven and nothing can be saved.
+ */
+export type MaxAttemptsView = { own: number | null; inherited: number; effective: number; ready: boolean };
+
+/** A save that needs a database update that has not been applied. Routes answer 503. */
+export class CadenceLimitsPendingError extends Error {
+  constructor() {
+    super("This setting needs a database update that has not been applied yet.");
+    this.name = "CadenceLimitsPendingError";
+  }
+}
+
+type LimitRow = { campaign_id: string | null; max_attempts: number };
+
+export async function getMaxAttempts(tenantId: string, campaignId: string | null): Promise<MaxAttemptsView> {
+  const result = (await db()
+    .from("tenant_cadence_limits")
+    .select("campaign_id, max_attempts")
+    .eq("tenant_id", tenantId)) as unknown as Result<LimitRow[]>;
+  if (result.error) {
+    if (isSchemaGap(result.error)) return { own: null, inherited: DEFAULT_CEILING, effective: DEFAULT_CEILING, ready: false };
+    throw new Error(`Could not load max attempts: ${result.error.message}`);
+  }
+  const rows = result.data ?? [];
+  const tenant = rows.find((row) => row.campaign_id === null)?.max_attempts ?? null;
+  const campaign = campaignId ? rows.find((row) => row.campaign_id === campaignId)?.max_attempts ?? null : null;
+  const own = campaignId ? campaign : tenant;
+  const inherited = campaignId ? tenant ?? DEFAULT_CEILING : DEFAULT_CEILING;
+  return { own, inherited, effective: own ?? inherited, ready: true };
+}
+
+/**
+ * The ceiling the scheduler applies to a lead in this campaign before its own recycle ceiling:
+ * cadence_max_attempts (20260929201100) — the campaign's, else the tenant's, else seven. Before that
+ * migration the function is missing (42883 / PGRST202) and the scheduler's seven stands.
+ */
+export async function cadenceMaxAttempts(tenantId: string, campaignId: string | null): Promise<number> {
+  const result = await db().rpc("cadence_max_attempts", { p_tenant_id: tenantId, p_campaign_id: campaignId });
+  if (result.error || result.data == null) return DEFAULT_CEILING;
+  const value = Number(result.data as unknown);
+  return Number.isInteger(value) && value > 0 ? value : DEFAULT_CEILING;
+}
+
+/** Set (or, with null, clear) max attempts for one scope. Returns what the scope now runs. */
+export async function saveMaxAttempts(input: { tenantId: string; campaignId: string | null; maxAttempts: number | null; userId: string }): Promise<number> {
+  const result = await db().rpc("set_cadence_max_attempts", {
+    p_tenant_id: input.tenantId,
+    p_campaign_id: input.campaignId,
+    p_max: input.maxAttempts,
+    p_user_id: input.userId,
+  });
+  if (result.error) {
+    if (isSchemaGap(result.error) || /could not find the function|PGRST202/i.test(`${result.error.code ?? ""} ${result.error.message}`))
+      throw new CadenceLimitsPendingError();
+    if (/CADENCE_CAMPAIGN_NOT_FOUND/.test(result.error.message)) throw new CadenceCampaignError();
+    throw new Error(`Could not save max attempts: ${result.error.message}`);
+  }
+  return Number((result.data as unknown) ?? DEFAULT_CEILING);
+}
 
 export async function getCadence(tenantId: string, scope: CadenceScope): Promise<CadenceView> {
   let query = db()
@@ -167,7 +233,7 @@ export async function getCadence(tenantId: string, scope: CadenceScope): Promise
     .eq("tenant_id", tenantId);
   query = scope.campaignId ? query.eq("campaign_id", scope.campaignId) : query.is("campaign_id", null);
 
-  const [rules, campaigns, fallback, schemaReady] = await Promise.all([
+  const [rules, campaigns, fallback, schemaReady, maxAttempts] = await Promise.all([
     query.order("attempt_number", { ascending: true }),
     db().from("tenant_campaigns").select("id, name").eq("tenant_id", tenantId).order("name", { ascending: true }),
     scope.campaignId
@@ -179,6 +245,7 @@ export async function getCadence(tenantId: string, scope: CadenceScope): Promise
           .order("attempt_number", { ascending: true })
       : Promise.resolve({ data: [], error: null } as Result<Row[]>),
     cadenceSchemaReady().catch(() => false),
+    getMaxAttempts(tenantId, scope.campaignId),
   ]);
 
   if (rules.error) throw new Error(`Could not load the cadence: ${rules.error.message}`);
@@ -193,6 +260,7 @@ export async function getCadence(tenantId: string, scope: CadenceScope): Promise
     campaigns: (campaigns.data ?? []) as unknown as { id: string; name: string }[],
     fallbackRows: (fallback.data ?? []).map(toRow),
     schemaReady,
+    maxAttempts,
   };
 }
 

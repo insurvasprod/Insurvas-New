@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { notify } from "@/lib/notify";
 
-import { Badge } from "@/components/ui/badge";
+import { StatusChip } from "@/components/ui/status-chip";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 
@@ -37,16 +37,9 @@ export function BillingModePanel({ tenantId, mode }: { tenantId: string; mode: "
       <CardContent className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-lg font-semibold leading-[1.28] tracking-[-0.015em]">Billing mode</h2>
-          <Badge
-            variant="outline"
-            className={
-              mode === "manual"
-                ? "border-transparent bg-[var(--color-warning)]/10 text-[var(--color-warning)]"
-                : "border-transparent bg-[var(--color-success)]/10 text-[var(--color-success)]"
-            }
-          >
+          <StatusChip tone={mode === "manual" ? "warning" : "good"}>
             {mode === "manual" ? "Manual" : "Automatic"}
-          </Badge>
+          </StatusChip>
         </div>
 
         <p className="text-sm text-muted-foreground">

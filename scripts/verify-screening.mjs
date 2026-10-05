@@ -1,3 +1,4 @@
+import "./lib/refuseProduction.mjs";
 // LA-1.5 live verification. Uses an in-process HTTP vendor simulator and disposable fixtures.
 // The simulator is HTTP only because it is never exposed outside this process; the admin registry
 // still rejects non-HTTPS endpoints for real configuration.

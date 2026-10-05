@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { US_STATES } from "@/lib/signup/constants";
 import { normalizeZip, stateForZip } from "@/lib/geo/zipState";
+import { InsurvasLogo } from "@/components/shared/insurvas-logo";
 
 type Product = { code: string; name: string; category: string };
 type LinkData = { slug: string; campaign: string | null; partner_name: string };
@@ -75,7 +76,7 @@ export function AffiliateIntakeForm({ slug }: { slug: string }) {
   const shell = (children: ReactNode) => (
     <div className="m-stagger flex min-h-screen flex-col bg-[var(--canvas)]">
       <div className="flex items-center justify-between border-b border-border bg-card px-4 py-4 sm:px-6 lg:px-16">
-        <span className="text-lg font-semibold leading-[1.28] tracking-[-0.015em] text-foreground">Insurvas</span>
+        <InsurvasLogo size="public" />
         {link?.partner_name && (
           <span className="text-xs leading-normal tracking-[-0.01em] text-muted-foreground">
             Referred by <strong className="font-semibold text-foreground">{link.partner_name}</strong>

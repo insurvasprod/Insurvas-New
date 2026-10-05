@@ -1,33 +1,40 @@
 "use client";
 
 import {
-  Fragment,
   useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
+  type FormEvent,
 } from "react";
 import {
   ArrowLeft,
-  ChevronRight,
-  Search,
   Settings2,
   ShieldCheck,
-  UserRound,
-  Users,
+  UserPlus,
   X,
 } from "lucide-react";
 import { notify } from "@/lib/notify";
 
 import { PartnerFormStudio } from "@/components/app/partner-form-studio";
+import { PartnerInviteResultPanel, type PartnerInviteResult } from "@/components/app/partner-invite-result";
 import { PartnerMarketAccessPanel } from "@/components/app/partner-market-access-panel";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { EmptyState, ErrorState, NoMatches, SectionLoading } from "@/components/ui/page-states";
+import { Pager, paginate } from "@/components/ui/pager";
+import { StatusChip } from "@/components/ui/status-chip";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { TableCard } from "@/components/ui/table-card";
 import type { PartnerRole } from "@/lib/partnerAuth/roles";
-import { SectionLoading } from "@/components/ui/page-states";
+import { capacityLabel } from "@/lib/partners/limits";
+import { cn } from "@/lib/utils";
+
+const PAGE_SIZE = 25;
+const TIMEOUT_MS = 10000;
 
 type Member = {
   id: string;
@@ -37,12 +44,14 @@ type Member = {
   role: PartnerRole;
   status: "active" | "revoked";
   accepted_at: string | null;
+  invite_expires_at?: string | null;
   partner_admin_user_id: string | null;
 };
 
 type Selected = Member & { parentName: string | null };
-type TeamScope = "admins" | "users" | "unassigned";
+type TeamScope = "all" | "admins" | "users" | "unassigned";
 type ConfigTab = "overview" | "lead" | "markets";
+type FieldError = { field: "name" | "email"; message: string } | null;
 
 function roleLabel(role: PartnerRole) {
   return role === "partner_admin" ? "Partner admin" : "Partner user";
@@ -65,251 +74,88 @@ function MemberAvatar({ member }: { member: Member }) {
   );
 }
 
+/** Invited and not yet accepted, and not withdrawn: the only state a link can be resent for. */
+function isPendingInvite(member: Member) {
+  return member.status === "active" && !member.accepted_at;
+}
+
 function statusLabel(member: Member) {
-  if (!member.accepted_at) return "Invitation pending";
-  return member.status === "active" ? "Active" : "Deactivated";
+  if (member.status !== "active") return "Deactivated";
+  return member.accepted_at ? "Active" : "Invitation pending";
 }
 
-function MemberTable({
-  members,
-  selectedUserId,
-  readOnly,
-  offboarded,
-  admins,
-  busy,
-  parentName,
-  onConfigure,
-  onAssign,
-  onViewUsers,
-  userCountForAdmin,
-  childUsers,
-  expandedAdminId,
-}: {
-  members: Member[];
-  selectedUserId: string | null;
-  readOnly: boolean;
-  offboarded: boolean;
-  admins: Member[];
-  busy: string | null;
-  parentName: (member: Member) => string | null;
-  onConfigure: (member: Member) => void;
-  onAssign: (member: Member, adminId: string) => void;
-  onViewUsers?: (admin: Member) => void;
-  userCountForAdmin: (admin: Member) => number;
-  childUsers: Member[];
-  expandedAdminId: string | null;
-}) {
-  if (!members.length)
-    return (
-      <div className="portal-team-empty" role="status">
-        <Users aria-hidden="true" />
-        <p>No team members match this view.</p>
-        <span>Try another role filter or search term.</span>
-      </div>
-    );
-
-  return (
-    <div className="portal-team-table-wrap">
-      <table className="portal-team-table">
-        <thead>
-          <tr>
-            <th scope="col">Name</th>
-            <th scope="col">Email</th>
-            <th scope="col">Role</th>
-            <th scope="col">Status</th>
-            <th scope="col">Reports to</th>
-            <th scope="col" className="portal-team-table-action-heading">
-              Actions
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {members.map((member) => {
-            const parent = parentName(member);
-            const selected = member.user_id === selectedUserId;
-            const isUnassigned = member.role === "partner_user" && !parent;
-            const isExpanded =
-              member.role === "partner_admin" &&
-              expandedAdminId === member.user_id;
-            const usersForAdmin = isExpanded
-              ? childUsers.filter(
-                  (child) => child.partner_admin_user_id === member.user_id,
-                )
-              : [];
-            return (
-              <Fragment key={member.id}>
-                <tr className={selected ? "is-selected" : undefined}>
-                  <td>
-                    <div className="portal-team-member-name">
-                      <MemberAvatar member={member} />
-                      <span>
-                        <strong>{member.name}</strong>
-                        <small>{parent ?? "Publisher workspace"}</small>
-                      </span>
-                    </div>
-                  </td>
-                  <td className="portal-team-email">{member.email}</td>
-                  <td>
-                    <span className="portal-team-role">
-                      {member.role === "partner_admin" ? (
-                        <ShieldCheck aria-hidden="true" />
-                      ) : (
-                        <UserRound aria-hidden="true" />
-                      )}
-                      {roleLabel(member.role)}
-                    </span>
-                  </td>
-                  <td>
-                    <Badge
-                      variant={member.status === "active" ? "secondary" : "outline"}
-                      className={member.status === "active" ? "portal-team-status-active" : undefined}
-                    >
-                      {statusLabel(member)}
-                    </Badge>
-                  </td>
-                  <td className="portal-team-parent">{parent ?? "Unassigned"}</td>
-                  <td className="portal-team-row-actions">
-                    {member.role === "partner_admin" && onViewUsers ? (
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        className="portal-team-view-users"
-                        aria-expanded={isExpanded}
-                        onClick={() => onViewUsers(member)}
-                      >
-                        {isExpanded ? "Hide users" : `View users (${userCountForAdmin(member)})`}
-                        <ChevronRight data-icon="inline-end" aria-hidden="true" />
-                      </Button>
-                    ) : null}
-                    {isUnassigned ? (
-                      <select
-                        aria-label={`Assign ${member.name}`}
-                        className="portal-team-assign"
-                        defaultValue=""
-                        disabled={readOnly || offboarded || busy === member.user_id}
-                        onChange={(event) => {
-                          if (event.target.value) onAssign(member, event.target.value);
-                        }}
-                      >
-                        <option value="" disabled>
-                          Assign…
-                        </option>
-                        {admins.map((admin) => (
-                          <option key={admin.user_id} value={admin.user_id}>
-                            {admin.name}
-                          </option>
-                        ))}
-                      </select>
-                    ) : null}
-                    {member.role === "partner_admin" ? (
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant={selected ? "default" : "outline"}
-                        className="portal-team-configure-button"
-                        onClick={() => onConfigure(member)}
-                      >
-                        <Settings2 data-icon="inline-start" aria-hidden="true" />
-                        Configure admin
-                      </Button>
-                    ) : (
-                      <Badge variant="outline" className="portal-team-inherited-badge">
-                        Inherited from {parent ?? "partner admin"}
-                      </Badge>
-                    )}
-                  </td>
-                </tr>
-                {isExpanded ? (
-                  <tr className="portal-team-expanded-row">
-                    <td colSpan={6}>
-                      <div className="portal-team-expanded-users">
-                        <div className="portal-team-expanded-users-heading">
-                          <div>
-                            <strong>Users reporting to {member.name}</strong>
-                            <span>
-                              {usersForAdmin.length} {usersForAdmin.length === 1 ? "partner user" : "partner users"}
-                            </span>
-                          </div>
-                          <span className="portal-team-inherited-hint">Inherits this admin&apos;s defaults</span>
-                        </div>
-                        {usersForAdmin.length ? (
-                          <div className="portal-team-expanded-users-list">
-                            {usersForAdmin.map((user) => (
-                              <div
-                                key={user.id}
-                                className={`portal-team-expanded-user ${user.user_id === selectedUserId ? "is-selected" : ""}`}
-                              >
-                                <div className="portal-team-member-name">
-                                  <MemberAvatar member={user} />
-                                  <span>
-                                    <strong>{user.name}</strong>
-                                    <small>{user.email}</small>
-                                  </span>
-                                </div>
-                                <Badge
-                                  variant={user.status === "active" ? "secondary" : "outline"}
-                                  className={user.status === "active" ? "portal-team-status-active" : undefined}
-                                >
-                                  {statusLabel(user)}
-                                </Badge>
-                                <Badge variant="outline" className="portal-team-inherited-badge">
-                                  Inherited from {member.name}
-                                </Badge>
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <p className="portal-team-expanded-users-empty">No users have been invited by this admin yet.</p>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ) : null}
-              </Fragment>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
+/**
+ * The agency's view of one partner's team (LA-1.2). The agency issues a partner's first partner
+ * admin from here — the partner portal's own Team page can only add partner users — and can resend,
+ * withdraw, deactivate and reactivate any member. Every refusal is the route's own `body.error`.
+ */
 export function PartnerUsersPanel({
   partnerId,
   readOnly,
   offboarded = false,
+  canAssignAdmin = false,
+  seatUsage,
+  seatLimit = null,
+  onSeatsChanged,
 }: {
   partnerId: string;
+  /** Billing read-only: the write routes refuse, so no write action is drawn. */
   readOnly: boolean;
   offboarded?: boolean;
+  /** Reporting-line assignment is owner-only (admin-assignment route); invite and status are owner or bookkeeper. */
+  canAssignAdmin?: boolean;
+  /** Account-wide partner-user seats in use and the plan's limit (null = unlimited). */
+  seatUsage?: number;
+  seatLimit?: number | null;
+  /** Called after a change that moves the seat count, so the page can re-read its capacity. */
+  onSeatsChanged?: () => void;
 }) {
   const [members, setMembers] = useState<Member[]>([]);
   const [query, setQuery] = useState("");
-  const [scope, setScope] = useState<TeamScope>("admins");
+  const [scope, setScope] = useState<TeamScope>("all");
   const [adminFilter, setAdminFilter] = useState<string>("");
-  const [expandedAdminId, setExpandedAdminId] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<Selected | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  // The first read draws the skeleton; a reload after an action keeps the rows on screen.
+  const [loaded, setLoaded] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [invite, setInvite] = useState<PartnerInviteResult | null>(null);
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [role, setRole] = useState<PartnerRole>("partner_admin");
+  const [reportsTo, setReportsTo] = useState("");
+  const [fieldError, setFieldError] = useState<FieldError>(null);
+  const [inviteError, setInviteError] = useState<string | null>(null);
+  const [confirmFor, setConfirmFor] = useState<Member | null>(null);
   const workspaceRef = useRef<HTMLElement | null>(null);
+
+  const canWrite = !readOnly && !offboarded;
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const response = await fetch(`/api/app/partners/${partnerId}/users`, {
         cache: "no-store",
+        signal: AbortSignal.timeout(TIMEOUT_MS),
       });
       const body = await response.json().catch(() => null);
       if (!response.ok) {
+        setLoadError(body?.error ?? "Could not load the team");
         notify.block(body?.error ?? "Could not load the team");
         return;
       }
       setMembers(body.users ?? []);
+      setLoadError(null);
     } catch (reason) {
-      notify.fail(reason instanceof Error ? reason.message : "Could not load the team");
+      const message = reason instanceof Error ? reason.message : "Could not load the team";
+      setLoadError(message);
+      notify.fail(message);
     } finally {
       setLoading(false);
+      setLoaded(true);
     }
   }, [partnerId]);
 
@@ -321,6 +167,10 @@ export function PartnerUsersPanel({
   const admins = useMemo(
     () => members.filter((member) => member.role === "partner_admin"),
     [members],
+  );
+  const activeAdmins = useMemo(
+    () => admins.filter((admin) => admin.status === "active"),
+    [admins],
   );
   const users = useMemo(
     () => members.filter((member) => member.role === "partner_user"),
@@ -334,29 +184,19 @@ export function PartnerUsersPanel({
     () => new Map(admins.map((admin) => [admin.user_id, admin.name])),
     [admins],
   );
-  const counts = useMemo(
-    () => ({
-      admins: admins.length,
-      users: users.length,
-      active: members.filter((member) => member.status === "active").length,
-      pending: members.filter((member) => !member.accepted_at).length,
-      unassigned: unassigned.length,
-    }),
-    [admins.length, members, unassigned.length, users.length],
-  );
   const filtered = useMemo(() => {
     const text = query.trim().toLowerCase();
-    const source = scope === "admins" ? admins : scope === "unassigned" ? unassigned : users;
+    const source =
+      scope === "admins" ? admins : scope === "users" ? users : scope === "unassigned" ? unassigned : members;
     return source.filter((member) => {
       const matchesQuery =
         !text || `${member.name} ${member.email}`.toLowerCase().includes(text);
       const matchesAdmin =
-        scope !== "users" ||
-        !adminFilter ||
-        member.partner_admin_user_id === adminFilter;
+        scope !== "users" || !adminFilter || member.partner_admin_user_id === adminFilter;
       return matchesQuery && matchesAdmin;
     });
-  }, [adminFilter, admins, query, scope, unassigned, users]);
+  }, [adminFilter, admins, members, query, scope, unassigned, users]);
+  const visible = paginate(filtered, page, PAGE_SIZE);
 
   useEffect(() => {
     if (!selected) return;
@@ -367,6 +207,29 @@ export function PartnerUsersPanel({
     return () => window.cancelAnimationFrame(frame);
   }, [selected]);
 
+  function changeScope(value: TeamScope) {
+    setScope(value);
+    setPage(1);
+    if (value !== "users") setAdminFilter("");
+  }
+
+  function viewUsersOf(admin: Member) {
+    setScope("users");
+    setAdminFilter(admin.user_id);
+    setPage(1);
+  }
+
+  function openInvite() {
+    setName("");
+    setEmail("");
+    // A partner with no admin yet needs one first: that is who runs the partner portal's own team page.
+    setRole(admins.length ? "partner_user" : "partner_admin");
+    setReportsTo("");
+    setFieldError(null);
+    setInviteError(null);
+    setInviteOpen(true);
+  }
+
   async function assign(member: Member, adminId: string) {
     setBusy(member.user_id);
     try {
@@ -375,6 +238,7 @@ export function PartnerUsersPanel({
         {
           method: "PUT",
           headers: { "content-type": "application/json" },
+          signal: AbortSignal.timeout(TIMEOUT_MS),
           body: JSON.stringify({ partner_admin_user_id: adminId }),
         },
       );
@@ -392,6 +256,133 @@ export function PartnerUsersPanel({
     }
   }
 
+  async function submitInvite(event: FormEvent) {
+    event.preventDefault();
+    setFieldError(null);
+    setInviteError(null);
+    const trimmedName = name.trim();
+    const trimmedEmail = email.trim();
+    if (!trimmedName) {
+      setFieldError({ field: "name", message: "Enter the user's name" });
+      return;
+    }
+    if (!/^\S+@\S+\.\S+$/.test(trimmedEmail)) {
+      setFieldError({ field: "email", message: "Enter a valid email address" });
+      return;
+    }
+
+    setBusy("invite");
+    try {
+      const response = await fetch(`/api/app/partners/${partnerId}/users`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        signal: AbortSignal.timeout(TIMEOUT_MS),
+        body: JSON.stringify({ name: trimmedName, email: trimmedEmail, role }),
+      });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) {
+        // Seat limit (the plan-limit sentence), an agency account's email, a duplicate email, a
+        // partner that is gone: the route words each one, and the form stays filled to fix it.
+        setInviteError(body?.error ?? "Could not send invitation");
+        return;
+      }
+      setInvite({
+        url: body.invite.url,
+        expiresAt: body.invite.expiresAt,
+        delivered: Boolean(body.invite.delivered),
+        recipient: body.user.email,
+        mode: body.invite.mode,
+      });
+      setInviteOpen(false);
+      notify.done(body.invite.delivered ? "Invitation sent" : "Invitation created; copy the secure link");
+
+      // The invite route takes no reporting line, so a chosen admin is set by the assignment route.
+      if (role === "partner_user" && reportsTo && canAssignAdmin && body.user?.id) {
+        const assigned = await fetch(
+          `/api/app/partners/${partnerId}/users/${body.user.id}/admin-assignment`,
+          {
+            method: "PUT",
+            headers: { "content-type": "application/json" },
+            signal: AbortSignal.timeout(TIMEOUT_MS),
+            body: JSON.stringify({ partner_admin_user_id: reportsTo }),
+          },
+        );
+        const assignedBody = await assigned.json().catch(() => null);
+        if (!assigned.ok) {
+          notify.block(assignedBody?.error ?? "Could not assign the partner admin", {
+            detail: "The invitation was created. Assign a partner admin from the Unassigned users view.",
+          });
+        }
+      }
+      await load();
+      onSeatsChanged?.();
+    } catch {
+      setInviteError("Could not send invitation. Check your connection and try again.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function resend(member: Member) {
+    setBusy(member.user_id);
+    try {
+      const response = await fetch(
+        `/api/app/partners/${partnerId}/users/${member.user_id}/resend-invite`,
+        { method: "POST", signal: AbortSignal.timeout(TIMEOUT_MS) },
+      );
+      const body = await response.json().catch(() => null);
+      if (!response.ok) {
+        notify.block(body?.error ?? "Could not resend invitation");
+        return;
+      }
+      setInvite({
+        url: body.invite.url,
+        expiresAt: body.invite.expiresAt,
+        delivered: Boolean(body.invite.delivered),
+        recipient: member.email,
+        mode: body.invite.mode,
+      });
+      notify.done(body.invite.delivered ? "Invitation resent" : "Invitation reissued; copy the secure link");
+      await load();
+    } catch {
+      notify.fail("Could not resend invitation. Try again in a moment.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function changeStatus(member: Member) {
+    const action = member.status === "active" ? "deactivate" : "reactivate";
+    setBusy(member.user_id);
+    try {
+      const response = await fetch(`/api/app/partners/${partnerId}/users/${member.user_id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        signal: AbortSignal.timeout(TIMEOUT_MS),
+        body: JSON.stringify({ action }),
+      });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) {
+        // A reactivation over the plan's seats returns the plan-limit sentence here.
+        notify.block(body?.error ?? "Could not change user status");
+        return;
+      }
+      setConfirmFor(null);
+      notify.done(
+        action === "deactivate"
+          ? member.accepted_at ? `${member.name} deactivated` : "Invitation withdrawn"
+          : `${member.name} reactivated`,
+      );
+      await load();
+      onSeatsChanged?.();
+    } catch {
+      notify.fail("Could not change user status. Try again in a moment.");
+    } finally {
+      setBusy(null);
+      setConfirmFor(null);
+    }
+  }
+
   function configure(member: Member) {
     setSelected({
       ...member,
@@ -401,154 +392,203 @@ export function PartnerUsersPanel({
     });
   }
 
+  const seats = seatUsage == null ? undefined : capacityLabel(seatUsage, seatLimit, "partner-user seats used across your account");
+  const labelText = "text-sm font-semibold text-[var(--body)]";
+  const hasFilters = Boolean(query.trim()) || scope !== "all" || Boolean(adminFilter);
+  const confirmPending = confirmFor ? !confirmFor.accepted_at : false;
+
   return (
-    <div className="portal-partner-team">
-      <Card className="portal-team-overview-card">
-        <CardContent className="p-0">
-          <div className="portal-team-heading">
-            <div>
-              <h3>
-                <Users aria-hidden="true" />
-                Team
-              </h3>
-              <p>Manage publisher admins, users, and inherited access in one clear view.</p>
-            </div>
-            <Badge variant="outline">{members.length} people</Badge>
-          </div>
+    <div className="portal-partner-team space-y-4">
+      {offboarded ? (
+        <p role="status" className="rounded-md border border-border bg-[var(--surface-alt)] px-4 py-2 text-sm text-[var(--body)]">
+          This partner is offboarded. Its team stays as history and cannot be changed.
+        </p>
+      ) : null}
 
-          {offboarded ? (
-            <div className="portal-team-history-note" role="status">
-              Offboarded team members remain visible as history. Changes are disabled.
-            </div>
-          ) : null}
+      {invite ? <PartnerInviteResultPanel result={invite} /> : null}
 
-          <div className="portal-team-metrics" aria-label="Team summary">
-            <div><span>Admins</span><strong>{counts.admins}</strong></div>
-            <div><span>Users</span><strong>{counts.users}</strong></div>
-            <div><span>Active</span><strong>{counts.active}</strong></div>
-            <div><span>Pending</span><strong>{counts.pending}</strong></div>
-          </div>
-
-          <div className="portal-team-controls">
-            <div className="portal-team-scope-switcher" role="tablist" aria-label="Team member view">
-              {(
-                [
-                  ["admins", `Admins · ${counts.admins}`],
-                  ["users", `Users · ${counts.users}`],
-                  ["unassigned", `Unassigned · ${counts.unassigned}`],
-                ] as const
-              ).map(([value, label]) => (
-                <button
-                  key={value}
-                  type="button"
-                  role="tab"
-                  aria-selected={scope === value}
-                  onClick={() => {
-                    setScope(value);
-                    if (value !== "admins") setExpandedAdminId(null);
-                    if (value !== "users") setAdminFilter("");
-                  }}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-            <div className="portal-team-search-wrap">
-              <Search aria-hidden="true" />
-              <Input
-                aria-label="Search team members"
-                placeholder="Search team members"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-              />
-            </div>
-          </div>
-
-          {scope === "users" ? (
-            <div className="portal-team-filter-row">
-              <label htmlFor={`team-admin-filter-${partnerId}`}>Reporting line</label>
+      <TableCard
+        toolbar={
+          <DataToolbar
+            actions={
+              <>
+                {canWrite ? (
+                  <Button type="button" onClick={openInvite}>
+                    <UserPlus aria-hidden="true" />
+                    Invite user
+                  </Button>
+                ) : null}
+                <RefreshButton onClick={() => void load()} refreshing={loaded && loading} />
+              </>
+            }
+          >
+            <ToolbarSearch
+              value={query}
+              onChange={(value) => { setQuery(value); setPage(1); }}
+              placeholder="Search team members"
+              label="Search team members by name or email"
+            />
+            <select
+              aria-label="Filter by role"
+              className={toolbarControl}
+              value={scope}
+              onChange={(event) => changeScope(event.target.value as TeamScope)}
+            >
+              <option value="all">All members · {members.length}</option>
+              <option value="admins">Partner admins · {admins.length}</option>
+              <option value="users">Partner users · {users.length}</option>
+              <option value="unassigned">Unassigned users · {unassigned.length}</option>
+            </select>
+            {scope === "users" ? (
               <select
-                id={`team-admin-filter-${partnerId}`}
+                aria-label="Filter by reporting line"
+                className={toolbarControl}
                 value={adminFilter}
-                onChange={(event) => setAdminFilter(event.target.value)}
+                onChange={(event) => { setAdminFilter(event.target.value); setPage(1); }}
               >
                 <option value="">All partner admins</option>
                 {admins.map((admin) => (
                   <option key={admin.user_id} value={admin.user_id}>
-                    {admin.name}
+                    Reports to {admin.name}
                   </option>
                 ))}
               </select>
-              {adminFilter ? (
-                <button type="button" onClick={() => setAdminFilter("")}>
-                  Clear filter
-                </button>
-              ) : null}
-            </div>
-          ) : null}
-
-          <div className="portal-team-table-heading">
-            <div>
-              <strong>{scope === "admins" ? "Partner admins" : scope === "users" ? "Partner users" : "Unassigned users"}</strong>
-              <span>
-                {scope === "admins"
-                  ? "Configure an admin once, then let users inherit their defaults."
-                  : scope === "users"
-                    ? "Each user can inherit an admin or receive a direct override."
-                    : "Assign a reporting line before relying on inherited defaults."}
-              </span>
-            </div>
-            {scope === "admins" && admins.length ? (
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                onClick={() => {
-                  setScope("users");
-                  setAdminFilter("");
-                  setExpandedAdminId(null);
-                }}
-              >
-                View all users <ChevronRight data-icon="inline-end" aria-hidden="true" />
-              </Button>
             ) : null}
-          </div>
-
-          {loading ? (
-            <SectionLoading rows={5} columns={4} label="Loading team" />
-          ) : (
-            <MemberTable
-              members={filtered}
-              selectedUserId={selected?.user_id ?? null}
-              readOnly={readOnly}
-              offboarded={offboarded}
-              admins={admins}
-              busy={busy}
-              parentName={(member) =>
-                member.partner_admin_user_id
+          </DataToolbar>
+        }
+        footer={
+          loaded && members.length ? (
+            <Pager page={visible.current} total={filtered.length} noun="members" pageSize={PAGE_SIZE} onPage={setPage} suffix={seats} />
+          ) : seats ? (
+            <span>{seats[0].toUpperCase() + seats.slice(1)}</span>
+          ) : undefined
+        }
+      >
+        {!loaded ? (
+          <SectionLoading rows={5} columns={5} label="Loading team" />
+        ) : loadError && !members.length ? (
+          <ErrorState detail={loadError} action={<Button type="button" variant="outline" onClick={() => void load()}>Try again</Button>} />
+        ) : members.length === 0 ? (
+          <EmptyState
+            title="No team members yet"
+            hint={canWrite ? "Invite this partner's first partner admin. They can then add their own partner users from the partner portal." : "Nobody has been invited to this partner's portal."}
+            action={canWrite ? <Button type="button" variant="outline" onClick={openInvite}>Invite user</Button> : undefined}
+          />
+        ) : filtered.length === 0 ? (
+          <NoMatches
+            noun="team members"
+            onClear={hasFilters ? () => { setQuery(""); changeScope("all"); } : undefined}
+          />
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Member</TableHead>
+                <TableHead>Role</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Reporting line</TableHead>
+                <TableHead className="text-right"><span className="sr-only">Actions</span></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {visible.rows.map((member) => {
+                const pending = isPendingInvite(member);
+                const parent = member.partner_admin_user_id
                   ? parentByUserId.get(member.partner_admin_user_id) ?? null
-                  : null
-              }
-              onConfigure={configure}
-              onAssign={(member, adminId) => void assign(member, adminId)}
-              onViewUsers={
-                scope === "admins"
-                  ? (admin) => {
-                      setExpandedAdminId((current) =>
-                        current === admin.user_id ? null : admin.user_id,
-                      );
-                    }
-                  : undefined
-              }
-              userCountForAdmin={(admin) =>
-                users.filter((member) => member.partner_admin_user_id === admin.user_id).length
-              }
-              childUsers={users}
-              expandedAdminId={scope === "admins" ? expandedAdminId : null}
-            />
-          )}
-        </CardContent>
-      </Card>
+                  : null;
+                const userCount = users.filter((user) => user.partner_admin_user_id === member.user_id).length;
+                const rowBusy = busy === member.user_id;
+                return (
+                  <TableRow key={member.id} className={member.user_id === selected?.user_id ? "bg-[var(--surface-alt)]" : undefined}>
+                    <TableCell className="max-w-[320px]">
+                      <strong className="block truncate font-semibold text-foreground">{member.name}</strong>
+                      <span className="block truncate text-xs text-muted-foreground" title={member.email}>{member.email}</span>
+                    </TableCell>
+                    <TableCell>
+                      <StatusChip tone={member.role === "partner_admin" ? "action" : "neutral"}>{roleLabel(member.role)}</StatusChip>
+                    </TableCell>
+                    <TableCell>
+                      <StatusChip
+                        tone={member.status !== "active" ? "danger" : pending ? "warning" : "good"}
+                        title={pending && member.invite_expires_at ? `Link expires ${new Date(member.invite_expires_at).toLocaleString()}` : undefined}
+                      >
+                        {member.status !== "active" ? "Deactivated" : pending ? "Invited" : "Active"}
+                      </StatusChip>
+                    </TableCell>
+                    <TableCell>
+                      {member.role === "partner_admin" ? (
+                        userCount ? (
+                          <Button type="button" size="sm" variant="ghost" className="-ml-2" onClick={() => viewUsersOf(member)}>
+                            View users ({userCount})
+                          </Button>
+                        ) : (
+                          <span className="text-sm text-muted-foreground">No users yet</span>
+                        )
+                      ) : parent ? (
+                        <span className="text-sm">Reports to {parent}</span>
+                      ) : canWrite && canAssignAdmin && activeAdmins.length ? (
+                        <select
+                          aria-label={`Assign ${member.name} to a partner admin`}
+                          className={cn(toolbarControl, "h-8")}
+                          value=""
+                          disabled={busy !== null}
+                          onChange={(event) => {
+                            if (event.target.value) void assign(member, event.target.value);
+                          }}
+                        >
+                          <option value="" disabled>
+                            Assign…
+                          </option>
+                          {activeAdmins.map((admin) => (
+                            <option key={admin.user_id} value={admin.user_id}>
+                              {admin.name}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <StatusChip tone="warning">Unassigned</StatusChip>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <span className="inline-flex justify-end gap-2">
+                        {member.role === "partner_admin" ? (
+                          <Button type="button" size="sm" variant="outline" onClick={() => configure(member)}>
+                            <Settings2 aria-hidden="true" />
+                            Configure
+                          </Button>
+                        ) : null}
+                        {canWrite && pending ? (
+                          <Button type="button" size="sm" variant="outline" disabled={busy !== null} onClick={() => void resend(member)}>
+                            {rowBusy ? "Sending…" : "Resend invite"}
+                          </Button>
+                        ) : null}
+                        {canWrite ? (
+                          member.status === "active" ? (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              disabled={busy !== null}
+                              aria-label={pending ? `Withdraw the invitation for ${member.name}` : `Deactivate ${member.name}`}
+                              onClick={() => setConfirmFor(member)}
+                            >
+                              {pending ? "Withdraw" : "Deactivate"}
+                            </Button>
+                          ) : (
+                            <Button type="button" size="sm" variant="outline" disabled={busy !== null} onClick={() => void changeStatus(member)}>
+                              {rowBusy ? "Reactivating…" : "Reactivate"}
+                            </Button>
+                          )
+                        ) : null}
+                      </span>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        )}
+      </TableCard>
 
       {selected ? (
         <section
@@ -564,6 +604,111 @@ export function PartnerUsersPanel({
           />
         </section>
       ) : null}
+
+      <Dialog open={inviteOpen} onOpenChange={(open) => { if (busy !== "invite") setInviteOpen(open); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Invite user</DialogTitle>
+            <DialogDescription>They get a secure link to set a password and sign in to the partner portal.</DialogDescription>
+          </DialogHeader>
+          <form className="space-y-4" onSubmit={(event) => void submitInvite(event)} noValidate>
+            {inviteError ? (
+              <p role="alert" className="rounded-md border border-[var(--error)] bg-[var(--error-surface)] px-3 py-2 text-sm text-[var(--error-ink)]">
+                {inviteError}
+              </p>
+            ) : null}
+            <label className="block">
+              <span className={labelText}>Full name</span>
+              <Input
+                className="mt-1.5"
+                autoComplete="name"
+                maxLength={120}
+                value={name}
+                aria-invalid={fieldError?.field === "name"}
+                onChange={(event) => { setName(event.target.value); if (fieldError?.field === "name") setFieldError(null); }}
+              />
+              {fieldError?.field === "name" && <small className="mt-1.5 block text-xs text-[var(--error-ink)]" role="alert">{fieldError.message}</small>}
+            </label>
+            <label className="block">
+              <span className={labelText}>Work email</span>
+              <Input
+                className="mt-1.5"
+                type="email"
+                autoComplete="email"
+                maxLength={254}
+                value={email}
+                aria-invalid={fieldError?.field === "email"}
+                onChange={(event) => { setEmail(event.target.value); if (fieldError?.field === "email") setFieldError(null); }}
+              />
+              {fieldError?.field === "email" && <small className="mt-1.5 block text-xs text-[var(--error-ink)]" role="alert">{fieldError.message}</small>}
+            </label>
+            <label className="block">
+              <span className={labelText}>Role</span>
+              <select
+                value={role}
+                onChange={(event) => { setRole(event.target.value as PartnerRole); setReportsTo(""); }}
+                className={cn(toolbarControl, "mt-1.5 w-full")}
+              >
+                <option value="partner_admin">Partner admin</option>
+                <option value="partner_user">Partner user</option>
+              </select>
+              <small className="mt-1.5 block text-xs text-muted-foreground">
+                {role === "partner_admin"
+                  ? "Partner admins manage their organization's team, submit leads, and message the agent."
+                  : "Partner users can submit leads, track their organization's pipeline, and message the agent."}
+              </small>
+            </label>
+            {role === "partner_user" && canAssignAdmin && activeAdmins.length ? (
+              <label className="block">
+                <span className={labelText}>Reports to</span>
+                <select
+                  value={reportsTo}
+                  onChange={(event) => setReportsTo(event.target.value)}
+                  className={cn(toolbarControl, "mt-1.5 w-full")}
+                >
+                  <option value="">Assign later</option>
+                  {activeAdmins.map((admin) => (
+                    <option key={admin.user_id} value={admin.user_id}>
+                      {admin.name}
+                    </option>
+                  ))}
+                </select>
+                <small className="mt-1.5 block text-xs text-muted-foreground">They inherit this partner admin&apos;s lead form and market defaults.</small>
+              </label>
+            ) : null}
+            <DialogFooter>
+              <Button type="button" variant="outline" disabled={busy === "invite"} onClick={() => setInviteOpen(false)}>Cancel</Button>
+              <Button type="submit" disabled={busy !== null}>{busy === "invite" ? "Sending…" : "Send invitation"}</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={confirmFor !== null} onOpenChange={(open) => { if (!open && busy === null) setConfirmFor(null); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {confirmFor ? (confirmPending ? `Withdraw the invitation for ${confirmFor.name}?` : `Deactivate ${confirmFor.name}?`) : ""}
+            </DialogTitle>
+            <DialogDescription>
+              {confirmPending
+                ? "Their invitation link stops working. You can reactivate them later."
+                : "They can no longer sign in to the partner portal. Their history stays, and you can reactivate them later."}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" variant="outline" disabled={busy !== null} onClick={() => setConfirmFor(null)}>Cancel</Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={busy !== null}
+              onClick={() => { if (confirmFor) void changeStatus(confirmFor); }}
+            >
+              {busy !== null ? "Saving…" : confirmPending ? "Withdraw invitation" : "Deactivate"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

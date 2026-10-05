@@ -1,3 +1,4 @@
+import "./lib/refuseProduction.mjs";
 // LA-1.18 live acceptance and failure-path checks. Creates only disposable tenants and removes them.
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
@@ -114,10 +115,16 @@ async function main() {
     // a cost report showing zero spend unless it tells the reader otherwise. The disclosure is a
     // static, unconditional element of the workspace, so guard it at the source; it renders whenever
     // the report renders, and this fails the day someone deletes it.
+    // Since the 2026-09-28 UI consistency pass (no explainer cards), both rules are tooltips: the
+    // cost rule on the Conversion column header, the calendar on the period inputs. Guard both at
+    // the source, wired where they render, plus the calendar constant the figures use.
     const workspace = await readFile("components/app/partner-quality-workspace.tsx", "utf8");
-    const disclosure = /Cost data is not included yet/.test(workspace) && /accounting/i.test(workspace);
-    check("the page states plainly that cost is not included", disclosure, disclosure ? "" : "the cost disclosure is no longer in the workspace");
-    check("the page states the fixed EST reporting calendar", /fixed EST \(UTC−5\)/.test(workspace) && /Etc\/GMT\+5/.test(workspace), "the fixed EST label or calendar constant is missing");
+    const parts = await readFile("components/app/partner-quality-parts.tsx", "utf8");
+    const metrics = await readFile("lib/partnerQuality/metrics.ts", "utf8");
+    const disclosure = /NO_COST_HINT = "[^"]*Cost data is not included yet[^"]*accounting[^"]*"/.test(parts) && /th\("conversion_rate", "Conversion", "[^"]*", NO_COST_HINT\)/.test(workspace);
+    check("the page states plainly that cost is not included (Conversion column tooltip)", disclosure, disclosure ? "" : "the no-cost tooltip is missing or no longer on the Conversion header");
+    const calendar = /REPORTING_CALENDAR_HINT = "[^"]*fixed EST \(UTC−5\)[^"]*"/.test(parts) && /title=\{REPORTING_CALENDAR_HINT\}/.test(parts) && /PARTNER_QUALITY_TIME_ZONE = "Etc\/GMT\+5"/.test(metrics);
+    check("the page states the fixed EST reporting calendar (period inputs tooltip)", calendar, "the fixed EST tooltip or the calendar constant is missing");
     check("wrong role is rejected", (await api(`/api/app/partner-quality?from=${today}&to=${today}`, assistantCookie)).status === 403);
     const crossTenantResponse = await api(`/api/app/partner-quality?from=${today}&to=${today}`, otherCookie);
     const crossTenantBody = await crossTenantResponse.json().catch(() => ({}));

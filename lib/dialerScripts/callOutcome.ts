@@ -11,6 +11,7 @@ import { DispositionError, getDispositionWizard, listDispositionConfig } from "@
 import type { DispositionWizard } from "@/lib/dispositions/types";
 import { DialerWorkflowError } from "./service";
 import type { DialOutcomeRow } from "./dialOutcomeKey";
+import { FALLBACK_DIALER_OUTCOMES, INBOUND_RETURN_CALL } from "./outcomes";
 
 /**
  * The "Record call outcome" dialog in CALL mode: the disposition walk linked to one dial attempt.
@@ -29,8 +30,12 @@ type Result<T> = { data: T; error: { message: string; code?: string } | null };
 type Query = PromiseLike<Result<unknown>> & { select(columns: string): Query; eq(column: string, value: unknown): Query; maybeSingle<T = unknown>(): Promise<Result<T | null>> };
 const loose = () => getSupabaseServiceClient() as unknown as { from(table: string): Query };
 
-/** The dialer's attempt-only outcomes. Not tenant dispositions, so they have no row to read. */
-const ATTEMPT_OUTCOMES: Array<[string, string]> = [["no_answer", "No answer"], ["voicemail", "Voicemail"], ["busy", "Busy"], ["wrong_number", "Wrong number"], ["disconnected", "Disconnected"]];
+/**
+ * The dialer's outcomes a tenant has no row for yet — only before 20260929200000 seeds them into the
+ * one vocabulary (lib/dialerScripts/outcomes.ts). After it, every one is a tenant row and this adds
+ * nothing.
+ */
+const ATTEMPT_OUTCOMES: Array<[string, string]> = FALLBACK_DIALER_OUTCOMES.map((row) => [row.key, row.label]);
 
 export type CallOutcomeOption = {
   disposition_key: string;
@@ -81,7 +86,8 @@ async function defaultEndsCall(keys: string[]): Promise<Map<string, boolean>> {
  */
 async function callOutcomeOptions(tenantId: string, verification: { complete: boolean } | null): Promise<CallOutcomeOption[]> {
   const config = await listDispositionConfig(tenantId);
-  const active = config.dispositions.filter((row) => row.is_active);
+  // The inbound return call is the customer's call, offered only on the search path, never here.
+  const active = config.dispositions.filter((row) => row.is_active && row.disposition_key !== INBOUND_RETURN_CALL);
   const known = new Set(config.dispositions.map((row) => row.disposition_key));
   const attemptOnly = ATTEMPT_OUTCOMES.filter(([key]) => !known.has(key));
   const needDefault = [...active.filter((row) => row.ends_call === null || row.ends_call === undefined).map((row) => row.disposition_key), ...attemptOnly.map(([key]) => key)];

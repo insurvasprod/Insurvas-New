@@ -1,0 +1,276 @@
+<div> {flex-direction:column;padding:24px 32px 32px}
+  <div .m-stagger> {flex-direction:column;gap:24px}
+    <div> {justify-content:space-between;gap:24px}
+        <div> {fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+          "Sell"
+        <h1> {fsize:32px;fweight:600;color:#15191e}
+          "Applications"
+        <p> {fsize:16px;fweight:400;color:#60646c}
+          "Every application in flight, and the one thing each is waiting for."
+      <div> {gap:12px}
+        <button type="button"> {justify-content:center;gap:8px;height:44px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+          "Export"
+        <button type="button"> {justify-content:center;gap:8px;height:44px;padding:0 16px;bd-radius:8px;bg:#ff5900;color:#15191e;bd:1px solid transparent;fsize:14px;fweight:600}
+          "New application"
+    <div> {grid-template-columns:repeat(5,minmax(0,1fr));gap:16px}
+      <div> {bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff;padding:16px 18px}
+        <div> {fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+          "Draft"
+        <div> {fsize:32px;fweight:600;color:#15191e}
+          "9"
+        <div> {fsize:12px;fweight:400;color:#60646c}
+          "not yet checked"
+      <div> {bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff;padding:16px 18px}
+        <div> {fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+          "Ready to submit"
+        <div> {fsize:32px;fweight:600;color:#15191e}
+          "3"
+        <div> {fsize:12px;fweight:400;color:#60646c}
+          "QA passed today"
+      <div> {bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff;padding:16px 18px}
+        <div> {fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+          "Submitted"
+        <div> {fsize:32px;fweight:600;color:#15191e}
+          "14"
+        <div> {fsize:12px;fweight:400;color:#60646c}
+          "sent this week"
+      <div> {bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff;padding:16px 18px}
+        <div> {fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+          "Pending carrier"
+        <div> {fsize:32px;fweight:600;color:#9a4f00}
+          "21"
+        <div> {fsize:12px;fweight:400;color:#60646c}
+          "waiting on a decision"
+      <div> {bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff;padding:16px 18px}
+        <div> {fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+          "Awaiting policy number"
+        <div> {fsize:32px;fweight:600;color:#b02020}
+          "6"
+        <div> {fsize:12px;fweight:400;color:#60646c}
+          "issued, number not back"
+    <div> {gap:12px;padding:12px;bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff}
+      <button type="button"> {gap:8px;height:40px;padding:0 14px;bd:1px solid #7a828e;bd-radius:8px;bg:#ffffff;color:#15191e;fsize:14px;fweight:600}
+        "All carriers"
+        <svg/>
+      <span> {gap:8px;height:40px;width:248px;padding:0 12px;bd:1px solid #7a828e;bd-radius:8px;bg:#ffffff;color:#60646c}
+        <svg/>
+        <input type="search" aria-label="Search a client, a reference or a policy number" placeholder="Search a client, a reference or a policy number"> {bd:0;bg:transparent;fsize:14px;fweight:400;color:#15191e}
+      <button type="button"> {gap:8px;height:40px;padding:0 14px;bd:1px solid #7a828e;bd-radius:8px;bg:#ffffff;color:#15191e;fsize:14px;fweight:600}
+        <svg/>
+        "Filters"
+        <span> {height:20px;justify-content:center;padding:0 6px;bd-radius:9999px;bg:#e4e8ee;color:#15191e;fsize:12px;fweight:400;fweight:600}
+          "2"
+    <div> {gap:8px}
+      <span> {gap:8px;padding:4px 8px 4px 12px;bd:1px solid #d5dbe3;bd-radius:9999px;bg:#ffffff;fsize:12px;fweight:400;fweight:600;color:#33383f}
+        "Status: pending carrier"
+        <button type="button" aria-label="Remove Status: pending carrier"> {width:16px;height:16px;justify-content:center;bd:0;bd-radius:9999px;bg:#e4e8ee;color:#33383f;fsize:11px}
+          "x"
+      <span> {gap:8px;padding:4px 8px 4px 12px;bd:1px solid #d5dbe3;bd-radius:9999px;bg:#ffffff;fsize:12px;fweight:400;fweight:600;color:#33383f}
+        "Carrier: Gerber Life"
+        <button type="button" aria-label="Remove Carrier: Gerber Life"> {width:16px;height:16px;justify-content:center;bd:0;bd-radius:9999px;bg:#e4e8ee;color:#33383f;fsize:11px}
+          "x"
+      <button type="button"> {bd:0;bg:transparent;padding:4px;color:#15191e;fsize:12px;fweight:400;fweight:600}
+        "Clear all"
+      <span> {fsize:12px;fweight:400;color:#60646c}
+        "47 of 53"
+    <div> {flex-direction:column;bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff}
+      <table> {width:100%}
+        <thead>
+          <tr> {bg:#e4e8ee}
+            <th> {width:150px;padding:8px 12px;fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+              "Client"
+            <th> {width:146px;padding:8px 12px;fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+              "Carrier"
+            <th> {width:118px;padding:8px 12px;fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+              "Product"
+            <th> {width:80px;padding:8px 12px;fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+              "Attempt"
+            <th> {width:140px;padding:8px 12px;fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+              "Status"
+            <th> {width:96px;padding:8px 12px;fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+              "Premium"
+            <th> {width:124px;padding:8px 12px;fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+              "QA"
+            <th> {width:136px;padding:8px 12px;fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+              "Policy #"
+            <th> {width:124px;padding:8px 12px;fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+              "Updated"
+        <tbody .m-seq>
+          <tr .m-row> {bg:#fff3ec}
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "Grace Oyelaran"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "Gerber Life"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "Final Expense"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "2nd"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#fcefdf;color:#9a4f00;fsize:12px;fweight:400;fweight:600}
+                <span> {width:6px;height:6px;bd-radius:9999px;bg:#b35c00}
+                "Counteroffer"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "$71.20"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e0f3e7;color:#0d7038;fsize:12px;fweight:400;fweight:600}
+                <span> {width:6px;height:6px;bd-radius:9999px;bg:#138a43}
+                "Pass"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "—"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "28 Sep 2:41pm"
+          <tr .m-row>
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "Alonzo Pike"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "Mutual of Omaha"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "Final Expense"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "1st"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e0f2f6;color:#005e75;fsize:12px;fweight:400;fweight:600}
+                <span> {width:6px;height:6px;bd-radius:9999px;bg:#00708a}
+                "Submitted"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "$38.90"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e0f3e7;color:#0d7038;fsize:12px;fweight:400;fweight:600}
+                <span> {width:6px;height:6px;bd-radius:9999px;bg:#138a43}
+                "Pass"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "—"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "28 Sep 1:06pm"
+          <tr .m-row>
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "Tomas Herrera"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "Americo"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "Final Expense"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "1st"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#fcefdf;color:#9a4f00;fsize:12px;fweight:400;fweight:600}
+                <span> {width:6px;height:6px;bd-radius:9999px;bg:#b35c00}
+                "Pending carrier"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "$41.80"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#fcefdf;color:#9a4f00;fsize:12px;fweight:400;fweight:600}
+                <span> {width:6px;height:6px;bd-radius:9999px;bg:#b35c00}
+                "2 warnings"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "—"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "27 Sep 4:52pm"
+          <tr .m-row>
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "Mary E Morgan"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "Foresters"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "Final Expense"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "1st"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e0f3e7;color:#0d7038;fsize:12px;fweight:400;fweight:600}
+                <span> {width:6px;height:6px;bd-radius:9999px;bg:#138a43}
+                "Issued"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "$82.30"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e0f3e7;color:#0d7038;fsize:12px;fweight:400;fweight:600}
+                <span> {width:6px;height:6px;bd-radius:9999px;bg:#138a43}
+                "Pass"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              <code>
+                "FOR-2280451"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "26 Sep 11:20am"
+          <tr .m-row>
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "Delores Whitley"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "Gerber Life"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "Final Expense"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "1st"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#fdeaea;color:#b02020;fsize:12px;fweight:400;fweight:600}
+                <span> {width:6px;height:6px;bd-radius:9999px;bg:#c92a2a}
+                "Awaiting policy #"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "$54.05"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e0f3e7;color:#0d7038;fsize:12px;fweight:400;fweight:600}
+                <span> {width:6px;height:6px;bd-radius:9999px;bg:#138a43}
+                "Pass"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "—"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "26 Sep 9:38am"
+          <tr .m-row>
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "Curtis Bramlett"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "Mutual of Omaha"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "Final Expense"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "2nd"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e4e8ee;color:#33383f;fsize:12px;fweight:400;fweight:600}
+                <span> {width:6px;height:6px;bd-radius:9999px;bg:#60646c}
+                "Draft"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "$61.75"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#fdeaea;color:#b02020;fsize:12px;fweight:400;fweight:600}
+                <span> {width:6px;height:6px;bd-radius:9999px;bg:#c92a2a}
+                "2 to fix"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "—"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "28 Sep 9:14am"
+          <tr .m-row>
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "Ella Rosario"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "Americo"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "Final Expense"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "1st"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#fff3ec;color:#a63800;fsize:12px;fweight:400;fweight:600}
+                <span> {width:6px;height:6px;bd-radius:9999px;bg:#ff5900}
+                "Ready to submit"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "$39.60"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e0f3e7;color:#0d7038;fsize:12px;fweight:400;fweight:600}
+                <span> {width:6px;height:6px;bd-radius:9999px;bg:#138a43}
+                "Pass"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "—"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "28 Sep 8:02am"
+      <div> {justify-content:space-between;gap:16px;padding:12px 16px;bd-top:1px solid #d5dbe3;bg:#f1f3f7}
+        <span> {fsize:12px;fweight:400;color:#60646c}
+          "Showing 1–7 of 53 applications · most recently touched first"
+        <span> {gap:8px}
+          <button type="button"> {justify-content:center;gap:8px;height:32px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+            "Previous"
+          <button type="button"> {justify-content:center;gap:8px;height:32px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+            "Next"
+    <div> {padding:14px 16px;bd:1px solid #d5dbe3;bd-left:3px solid #00708a;bd-radius:12px;bg:#e0f2f6}
+      <div> {fsize:14px;fweight:400;fweight:600;color:#005e75}
+        "An application with no carrier reference never leaves the Missing reference list"
+      <p> {fsize:14px;fweight:400;color:#33383f}
+        "Submitting writes the attempt, but the carrier’s own reference is typed in by hand from their portal or their email. Until someone types it, the case stays on"
+        <strong>
+          "Pending · Missing carrier reference"
+        "and no webhook can match a decision to it."

@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { LinkArrow } from "@/components/ui/link-arrow";
 import { PortalAuthSplitShell, type PortalAuthMode } from "@/components/portal/portal-auth-split-shell";
+import { InsurvasLogo } from "@/components/shared/insurvas-logo";
 import type { PublicPlanOption } from "@/lib/plans/public";
 import type { MaintenanceStatus } from "@/lib/system/constants";
 
@@ -227,10 +228,7 @@ export function TenantAuthWorkspace({
 
   const brand = (
     <Link href="/app/login" className="mb-10 flex items-center gap-2.5 no-underline" aria-label="Insurvas licensed agent portal">
-      <span className="inline-flex size-[30px] items-center justify-center rounded-lg bg-[var(--primary)] text-sm font-semibold text-[var(--on-primary)]">
-        I
-      </span>
-      <span className="text-lg font-semibold leading-[1.28] tracking-[-0.015em] text-foreground">Insurvas</span>
+      <InsurvasLogo size="auth" />
     </Link>
   );
 

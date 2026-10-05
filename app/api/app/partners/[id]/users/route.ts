@@ -60,6 +60,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (message.includes("partner_not_found")) return NextResponse.json({ error: "Partner not found" }, { status: 404 });
     const limit = message.match(/max_partner_users:(\d+):(\d+)/);
     if (limit) return NextResponse.json(partnerLimitBody("max_partner_users", Number(limit[1]), Number(limit[2]), "invite"), { status: 403 });
+    // The caller gets a generic message; the server log keeps the real cause (an Auth or RPC error).
+    console.error("[partners/users] invite failed:", message);
     return NextResponse.json({ error: "Could not invite partner user" }, { status: 500 });
   }
 }

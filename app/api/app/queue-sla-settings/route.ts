@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import { getQueueSlaSettings, updateQueueSlaSettings } from "@/lib/queueSla/service";
 import { getOldestWaitingSeconds, getSlaLastSevenDays, nurtureOnExpiryReady } from "@/lib/queueSla/stats";
+import { getSlaJobStatus } from "@/lib/queueSla/digest";
 
 /** The database refuses anything past seven days (update_tenant_queue_sla_settings), so the route does too. */
 const MAX_SECONDS = 604_800;
@@ -27,13 +28,16 @@ export async function GET() {
   // The seven-day figures, the live ladder position and the schema check are read beside the
   // settings, and a failure in any of them must not take the settings down with it: the thresholds
   // stay editable and the card says it could not count.
-  const [lastSevenDays, oldestWaitingSeconds, nurtureReady] = await Promise.all([
+  const [lastSevenDays, oldestWaitingSeconds, nurtureReady, job] = await Promise.all([
     getSlaLastSevenDays(auth.context.tenantId, settings.warn_after_seconds).catch((error) => { console.error("Queue SLA seven-day figures failed", error); return null; }),
     getOldestWaitingSeconds(auth.context.tenantId).catch(() => null),
     nurtureOnExpiryReady().catch(() => false),
+    // Whether the rungs' side effects are being delivered (20260925709910). Only the state and the
+    // time of the last run: the screen says one line when they are not.
+    getSlaJobStatus(auth.context.tenantId).then((status) => ({ state: status.state, lastRunAt: status.lastRunAt })).catch((error) => { console.error("Queue SLA job status failed", error); return null; }),
   ]);
   return NextResponse.json(
-    { settings, lastSevenDays, oldestWaitingSeconds, schema: { nurtureOnExpiry: nurtureReady } },
+    { settings, lastSevenDays, oldestWaitingSeconds, job, schema: { nurtureOnExpiry: nurtureReady } },
     { headers: { "Cache-Control": "no-store" } },
   );
 }

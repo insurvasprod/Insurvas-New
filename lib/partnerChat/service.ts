@@ -5,6 +5,7 @@ import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { parsePartnerMessage, type PartnerCardType, type PartnerMessage, type PartnerMessageAttachment } from "./cards";
 import { notifyTenantAgents } from "@/lib/agentAlerts/service";
 import { notifyPartnerUsers } from "@/lib/partnerAlerts/service";
+import { productLineLabel } from "@/lib/format/productLine";
 
 export const PARTNER_CHAT_BUCKET = "partner-chat-attachments";
 export const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
@@ -120,8 +121,15 @@ async function resolvedCard(supabase: ReturnType<typeof getSupabaseServiceClient
     const { data: user } = await supabase.from("users").select("name").eq("id", input.userId).maybeSingle();
     agent = user?.name ?? agent;
   }
+  // D19(b): the card names the product as the catalog calls it ("Term Life"), never the raw code
+  // (term_life) or the placeholder "lead". A code the catalog does not know is spelled out.
+  const productCode = product;
+  if (product !== "lead") {
+    const { data: catalog } = await supabase.from("products").select("name").eq("code", product).maybeSingle<{ name: string | null }>();
+    product = catalog?.name?.trim() || productLineLabel(product);
+  }
   const text = input.message ?? ({
-    new_lead: `${name} is available for ${product}`,
+    new_lead: product === "lead" ? `${name} is available for a new lead` : `${name} is available for ${product}`,
     connected: `${agent} is connected to ${name}`,
     transferred: `${agent} accepted the transfer for ${name}`,
     call_dropped: `The call with ${name} was dropped`,
@@ -129,7 +137,7 @@ async function resolvedCard(supabase: ReturnType<typeof getSupabaseServiceClient
     call_outcome: `${name}: ${disposition}`,
     nobody_claimed: `${name} was not claimed before the threshold`,
   } satisfies Record<PartnerCardType, string>)[input.cardType];
-  return { text: text.slice(0, 2000), payload: { customer: name, agent, product, disposition, ...(state ? { state } : {}) } };
+  return { text: text.slice(0, 2000), payload: { customer: name, agent, product, ...(productCode !== "lead" ? { product_code: productCode } : {}), disposition, ...(state ? { state } : {}) } };
 }
 
 /**

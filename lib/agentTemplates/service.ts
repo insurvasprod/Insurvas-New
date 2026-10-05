@@ -5,6 +5,8 @@ import type { Json } from "@/lib/supabase/database.types";
 import { getEntitlement } from "@/lib/entitlements/get";
 import {
   isKnownScreeningVersion,
+  linkScreeningAuditToLead,
+  linkScreeningAuditsToLeads,
   screenPartnerPhone,
   type ScreeningDecision,
 } from "@/lib/compliance/screening";
@@ -34,6 +36,7 @@ import {
 } from "@/lib/pipelines/service";
 import { isRequiredLeadImportField, parseLeadCsv, sanitizeImportMapping, US_STATE_CODES, type ImportDateOrder, type LeadImportRow } from "./csv";
 import { commitLeadImport, ImportCommitRefusal, projectedUsableCostCents } from "./importCommit";
+import { trustedFormCertificateId } from "@/lib/consent/capture";
 
 const PRODUCT_CODE = "term_life";
 // Each screening is ~10 sequential round trips; this bounds how many a CSV import runs at once.
@@ -1642,6 +1645,10 @@ export async function importAgentLeads(
       );
     return { rowNumber: ref.rowNumber, lead, created: ref.created };
   });
+  // LA-2.3-9: each row's screening check is linked to the lead it became or was attached to. Best
+  // effort: never throws, so the import that just committed is never reported as failed over it.
+  const rowIndex = new Map(rows.map((row, index) => [row.rowNumber, index]));
+  await linkScreeningAuditsToLeads(tenantId, imported.map((item) => ({ auditId: screenings[rowIndex.get(item.rowNumber) ?? -1]?.auditId, leadId: item.lead.id })));
   // `scrubMarked` travels with the result so a screen can distinguish "imported and dialable" from
   // "imported, but nothing will be served yet". Those look identical from a row count alone, and
   // the second one is the state that used to be permanent.
@@ -2360,7 +2367,7 @@ export async function createPartnerLead(
   screening: Pick<
     ScreeningDecision,
     "resultId" | "version" | "outcome" | "warning" | "checkedAt"
-  >,
+  > & { auditId?: string | null },
   options: {
     screeningWarningAcknowledged?: boolean;
     /** LA-1.5-4: a new lead over an internal DQ needs a 10–1000 character reason. */
@@ -2511,11 +2518,17 @@ export async function createPartnerLead(
       );
     return updated.data;
   };
-  if (existing.data)
+  // LA-2.3-9: the check ran before the lead existed, so its audit row is linked now. Best effort:
+  // linkScreeningAuditToLead logs a failure and never throws, so the submit cannot fail on it.
+  const linkAudit = (leadId: unknown) =>
+    linkScreeningAuditToLead({ tenantId, auditId: screening.auditId, leadId: typeof leadId === "string" ? leadId : null });
+  if (existing.data) {
+    await linkAudit(existing.data.id);
     return {
       lead: await updateExisting(existing.data.id),
       replayed: true as const,
     };
+  }
   const insertValues = {
     tenant_id: tenantId,
     tenant_template_id: template.tenant_template_id,
@@ -2585,7 +2598,10 @@ export async function createPartnerLead(
       .select(selected)
       .single());
   }
-  if (!error && data) return { lead: data, replayed: false };
+  if (!error && data) {
+    await linkAudit((data as { id?: unknown }).id);
+    return { lead: data, replayed: false };
+  }
   if (error?.code === "23505") {
     const existing = await supabase
       .from("agent_leads")
@@ -2598,6 +2614,7 @@ export async function createPartnerLead(
       throw new Error(
         existing.error?.message ?? "Could not resolve duplicate submission",
       );
+    await linkAudit(existing.data.id);
     return { lead: await updateExisting(existing.data.id), replayed: true };
   }
   throw new Error(error?.message ?? "Could not submit lead");
@@ -2652,7 +2669,8 @@ export async function consentForLeads(
   const keep = (rows: Array<LeadConsentExport & { lead_id: string }> | null, wanted: Set<string> | null) => {
     for (const row of rows ?? []) {
       // Ordered newest first, so the first row seen for a lead is the one to keep.
-      if ((!wanted || wanted.has(row.lead_id)) && !byLead.has(row.lead_id)) byLead.set(row.lead_id, row);
+      // A posted TrustedForm certificate filed before its id was taken from the URL still exports one.
+      if ((!wanted || wanted.has(row.lead_id)) && !byLead.has(row.lead_id)) byLead.set(row.lead_id, { ...row, certificate_id: row.certificate_id ?? trustedFormCertificateId(row.certificate_url) });
     }
   };
   // One retry for a dropped connection: a full export makes many reads, and one "fetch failed"

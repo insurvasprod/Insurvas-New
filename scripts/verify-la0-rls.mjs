@@ -1,3 +1,4 @@
+import "./lib/refuseProduction.mjs";
 // LA-0 database defense-in-depth check. The tenant connection is deliberately used here rather
 // than the service client: service_role bypasses RLS and would make this test meaningless.
 import pg from "pg";

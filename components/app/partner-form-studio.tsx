@@ -11,7 +11,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { notify } from "@/lib/notify";
-import { Badge } from "@/components/ui/badge";
+import { StatusChip } from "@/components/ui/status-chip";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -549,11 +549,11 @@ export function PartnerFormStudio({
                   : "These defaults apply unless an admin or user has a direct override."}
               </p>
             </div>
-            <Badge variant={profile?.profile ? "default" : "secondary"}>
+            <StatusChip tone={profile?.profile ? "info" : "neutral"}>
               {profile?.profile
                 ? "Custom configuration"
                 : "Using tenant defaults"}
-            </Badge>
+            </StatusChip>
           </div>
           <div className="flex flex-wrap gap-2">
             <select

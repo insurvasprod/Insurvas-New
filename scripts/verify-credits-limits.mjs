@@ -1,3 +1,4 @@
+import "./lib/refuseProduction.mjs";
 // SA-4.9 · authenticated route, metering, invoice, performance and audit verification.
 // Disposable rows are removed in finally. Audit rows remain because the audit log is append-only.
 import { SignJWT } from "jose";

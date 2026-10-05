@@ -74,11 +74,12 @@ export function UserDetailTabCard({
 export async function UserLoginTab({ userId, email }: { userId: string; email: string | null }) {
   const events = await fetchUserLoginEvents(userId, email);
   return (
-    // The shared table draws its own bordered shell; inside this card the card is the shell.
-    <div className="[&>div]:rounded-none [&>div]:border-0">
+    // Inside this card the card is the shell, so the table draws none of its own.
+    <>
       <LoginActivityTable
         events={events}
         layout="board"
+        framed={false}
         // One user's page: every row's actor is the same email, and the column is ~713px wide.
         hideActor
         minWidth={600}
@@ -101,7 +102,7 @@ export async function UserLoginTab({ userId, email }: { userId: string; email: s
           ) : undefined
         }
       />
-    </div>
+    </>
   );
 }
 

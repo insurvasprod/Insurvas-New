@@ -1,3 +1,4 @@
+import "./lib/refuseProduction.mjs";
 // SA-6.2 endpoint-level verifier. Uses a nonexistent email and a reserved documentation IP;
 // it never authenticates, sends mail, creates a tenant, or changes a real account.
 import { createClient } from "@supabase/supabase-js";

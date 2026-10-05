@@ -1,39 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { AgentSettingsOverview } from "@/components/app/agent-settings-overview";
-import { AppointmentVaultSettings } from "@/components/app/appointment-vault-settings";
-import { CarrierLibrarySettings } from "@/components/app/carrier-library-settings";
-import { DispositionSettings } from "@/components/app/disposition-settings";
-import { PipelineSettings } from "@/components/app/pipeline-settings";
-import { QueueSlaSettings } from "@/components/app/queue-sla-settings";
-import { CalendarAvailabilitySettings } from "@/components/app/calendar-availability-settings";
-import { CadenceSettings } from "@/components/app/cadence-settings";
-import { CallingWindowSettingsPanel } from "@/components/app/calling-window-settings";
-import { LeadPostKeysSettings } from "@/components/app/lead-post-keys-settings";
-import { TeamSettings } from "@/components/app/team-settings";
-import { TemplateSettings } from "@/components/app/template-settings";
-import { ManagedElsewhereSettings } from "@/components/app/settings/managed-settings";
+import { SETTINGS_PANELS } from "@/components/app/settings/panels";
 import { LockIcon, SettingsSectionProvider } from "@/components/app/settings/primitives";
 import type { TeamSnapshot } from "@/lib/tenantTeam/service";
 import type { WorkspaceSnapshot } from "@/lib/settings/workspaceSnapshot";
 import { cn } from "@/lib/utils";
-
-/**
- * One short line under each tab's title (2026-09-28 review: no explanatory copy). Where the shared
- * section list's description reads as an essay, the tab shows this instead; search keeps the long one.
- */
-const SHORT_DESCRIPTIONS: Record<string, string> = {
-  "agency-profile": "The agency's legal identity and what it is contracted to sell.",
-  "carrier-library": "Carriers, contract levels, commission schedules and advance rules.",
-  "states-licences": "Licences, carrier appointments, E&O cover and continuing education.",
-  "team-access": "Who is on the workspace, their role and where they are licensed.",
-  "queue-sla": "How long a claimable lead may wait before each step of the response ladder.",
-  "lead-posting": "Vendor posting keys, the URL they post to and their field maps.",
-  pipelines: "Pipelines, their stages, and the stage each disposition moves a lead to.",
-  alerts: "Alert preferences are personal — open them from the bell in the top bar.",
-  billing: "Billing is handled by Insurvas — contact support to change your plan.",
-};
 
 export type AgentSettingsTab = {
   id: string;
@@ -44,6 +16,8 @@ export type AgentSettingsTab = {
   managed?: string;
   /** The rail heading this section sits under. Sections with no group are listed first, ungrouped. */
   group?: string;
+  /** One short line under the tab's title, when the description (kept for search) is long. */
+  short?: string;
 };
 
 export function AgentSettingsTabs({
@@ -111,25 +85,11 @@ export function AgentSettingsTabs({
     return null;
   }
 
+  // UX-4: the component for each section comes from the registry, keyed by the section's id.
   function renderActiveContent(): ReactNode {
     if (!active) return null;
-    switch (active.id) {
-      case "agency-profile": return <AgentSettingsOverview team={team} workspace={workspace} />;
-      case "carrier-library": return <CarrierLibrarySettings />;
-      case "states-licences": return <AppointmentVaultSettings inSettings />;
-      case "team-access": return <TeamSettings initial={team} workspace={workspace} />;
-      case "calendar": return <CalendarAvailabilitySettings />;
-      case "cadence": return <CadenceSettings />;
-      case "calling-windows": return <CallingWindowSettingsPanel />;
-      case "lead-posting": return <LeadPostKeysSettings />;
-      case "queue-sla": return <QueueSlaSettings />;
-      case "pipelines": return <PipelineSettings />;
-      case "dispositions": return <DispositionSettings />;
-      case "form-templates": return <TemplateSettings />;
-      case "alerts":
-      case "billing": return <ManagedElsewhereSettings which={active.id} />;
-      default: return <p className="portal-settings-empty">This settings area is not available for the current account.</p>;
-    }
+    const panel = SETTINGS_PANELS[active.id];
+    return panel ? panel({ team, workspace }) : <p className="portal-settings-empty">This settings area is not available for the current account.</p>;
   }
 
   return (
@@ -207,7 +167,7 @@ export function AgentSettingsTabs({
             tabIndex={-1}
             key={active.id}
           >
-            <SettingsSectionProvider value={{ title: active.label, description: SHORT_DESCRIPTIONS[active.id] ?? active.description }}>
+            <SettingsSectionProvider value={{ title: active.label, description: active.short ?? active.description }}>
               {renderActiveContent()}
             </SettingsSectionProvider>
           </section>

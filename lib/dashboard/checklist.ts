@@ -23,7 +23,8 @@ export type SetupChecklist = {
  */
 const SETUP_STEPS = [
   { key: "carriers", label: "Add your carriers", path: "/app/settings#carrier-library" },
-  { key: "statement", label: "Upload a carrier statement", path: "/app/ledger" },
+  // LA-4.6: straight to the import, which is the activation step ("You appear to be owed $X").
+  { key: "statement", label: "Upload a carrier statement", path: "/app/statements?import=1" },
   { key: "appointments", label: "Confirm your appointments", path: "/app/settings#states-licences" },
   { key: "lead-sources", label: "Add your lead sources", path: "/app/publishers" },
   { key: "phone", label: "Connect your phone number", path: "/app/settings#agency-profile" },
@@ -39,14 +40,13 @@ const SETUP_STEPS = [
  * and missed the 383 stored as `"complete"` — so two thirds of the platform saw a permanent
  * "0 of 5" checklist telling them to redo setup they had already finished.
  */
-export function setupChecklistForState(onboardingState: string): SetupChecklist {
+export function setupChecklistForState(onboardingState: string, progress: { statementImported?: boolean } = {}): SetupChecklist {
   const complete = isOnboardingComplete(onboardingState);
-  return {
-    complete,
-    completed: complete ? SETUP_STEPS.length : 0,
-    total: SETUP_STEPS.length,
-    steps: SETUP_STEPS.map((step) => ({ ...step, complete })),
-  };
+  // LA-4.6: the one step with its own durable signal. A statement that stands (not voided) means the
+  // step is done, whatever the onboarding state says.
+  const steps = SETUP_STEPS.map((step) => ({ ...step, complete: complete || (step.key === "statement" && Boolean(progress.statementImported)) }));
+  const completed = steps.filter((step) => step.complete).length;
+  return { complete: completed === steps.length, completed, total: steps.length, steps };
 }
 
 export function setupStepDefinitions(): readonly Omit<SetupChecklistStep, "complete">[] {

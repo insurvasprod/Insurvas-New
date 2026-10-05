@@ -83,6 +83,7 @@ export function FeatureGateNotice({
       featureKey={guard.feature}
       grantedFeatures={guard.entitlement.features}
       planCode={guard.entitlement.plan_code}
+      planName={guard.entitlement.plan_name}
       seats={guard.entitlement.limits.max_seats}
     />
   );

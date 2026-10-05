@@ -1,3 +1,4 @@
+import "./lib/refuseProduction.mjs";
 // LA-1.3 live contract checks. Run with: npm run verify:partner-products
 // The fixture proves tenant product selection, per-partner approval, server-side filtering and
 // the no-deploy product catalog contract. It is disposable and is removed in finally.

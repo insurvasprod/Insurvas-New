@@ -1,3 +1,4 @@
+import "./lib/refuseProduction.mjs";
 // SA-4.8 live verification. Run with: npm run verify:compliance
 // Temporary vendor/admin fixtures are removed in finally. Audit rows are append-only by design.
 import { SignJWT } from "jose";

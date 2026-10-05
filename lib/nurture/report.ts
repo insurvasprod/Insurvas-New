@@ -1,7 +1,7 @@
 import "server-only";
 
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
-import { getCadence, humanInterval } from "@/lib/cadence/service";
+import { cadenceMaxAttempts, getCadence, humanInterval } from "@/lib/cadence/service";
 import { effectiveLadder, ladderSummary } from "@/lib/cadence/ladder";
 import { DEFAULT_CEILING, SLOTS, type Slot } from "@/lib/cadence/engine";
 import { isMissingSchema, listNurtureCampaigns, type NurtureCampaign } from "./service";
@@ -147,6 +147,8 @@ export async function nurtureReport(tenantId: string, actor: { userId: string; r
   const thisMonth = monthStart(0);
   const lastMonth = monthStart(-1);
 
+  // Max attempts for the tenant default (20260929201100). Seven before it is applied.
+  const tenantCeiling = await cadenceMaxAttempts(tenantId, null).catch(() => DEFAULT_CEILING);
   const [campaigns, nurtureLeads, reactivations, performance, cadence, rotationLead, poolResult, batchResult, conversionView] = await Promise.all([
     listNurtureCampaigns(tenantId),
     allRows(
@@ -160,7 +162,7 @@ export async function nurtureReport(tenantId: string, actor: { userId: string; r
     db.rpc("tenant_recycle_performance", { p_tenant_id: tenantId, p_actor_user_id: actor.userId, p_actor_role: actor.role, p_agent_user_id: null, p_campaign_id: null, p_disposition: null, p_from_at: thisMonth, p_to_at: null }).then((result) => (result.error ? null : result.data), () => null),
     getCadence(tenantId, { campaignId: null }).catch(() => null),
     // The most recently touched lead still mid-cadence: the example the rotation card explains.
-    db.from("agent_leads").select("id, values, attempts_made, next_preferred_slot").eq("tenant_id", tenantId).in("lead_state", ["working", "retry", "nurture"]).gt("attempts_made", 0).lt("attempts_made", DEFAULT_CEILING).order("updated_at", { ascending: false }).limit(1),
+    db.from("agent_leads").select("id, values, attempts_made, next_preferred_slot, campaign_id, attempt_ceiling").eq("tenant_id", tenantId).in("lead_state", ["working", "retry", "nurture"]).gt("attempts_made", 0).lt("attempts_made", tenantCeiling).order("updated_at", { ascending: false }).limit(1),
     rpcSafe(db, "tenant_recycle_pool", { p_tenant_id: tenantId, p_actor: actor.userId }),
     rpcSafe(db, "tenant_recycle_batch_report", { p_tenant_id: tenantId, p_campaign_id: null, p_limit: 12 }),
     conversion(db, tenantId),
@@ -243,7 +245,7 @@ export async function nurtureReport(tenantId: string, actor: { userId: string; r
 
   let cadenceView: NurtureReport["cadence"] = null;
   if (cadence) {
-    const steps = effectiveLadder(cadence.rows, [], { lastAttempt: cadence.schemaReady ? DEFAULT_CEILING : 6 });
+    const steps = effectiveLadder(cadence.rows, [], { lastAttempt: cadence.schemaReady ? tenantCeiling : 6 });
     const summary = ladderSummary(steps);
     cadenceView = {
       steps: steps.map((step) => ({ attempt: step.attempt, interval: step.delayInterval ? humanInterval(step.delayInterval) : null, slot: step.preferredSlot, offsetMs: step.offsetMs, source: step.source })),
@@ -266,7 +268,8 @@ export async function nurtureReport(tenantId: string, actor: { userId: string; r
       leadId: text(lead.id),
       leadName: name,
       attempt: Number(lead.attempts_made ?? 0) + 1,
-      ceiling: DEFAULT_CEILING,
+      // The lead's own recycle ceiling wins, then its campaign's max attempts.
+      ceiling: lead.attempt_ceiling != null ? Number(lead.attempt_ceiling) : await cadenceMaxAttempts(tenantId, text(lead.campaign_id) || null).catch(() => tenantCeiling),
       slots: SLOTS.map((slot) => {
         if (tried.has(slot)) {
           const outcome = tried.get(slot) ?? "";

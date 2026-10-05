@@ -16,7 +16,7 @@ type CampaignSpeed = {
   campaignId: string; campaignName: string; vendorId: string; postedLeads: number; dialledLeads: number;
   medianSeconds: number | null; dialledWithin60s: number; dialledWithin60sPct: number | null;
 };
-type Loaded = { campaigns: CampaignSpeed[]; pending: boolean };
+type Loaded = { campaigns: CampaignSpeed[]; source: "view" | "computed" };
 
 // One read per page view: every vendor row that opens shares it.
 let shared: Promise<Loaded> | null = null;
@@ -53,7 +53,6 @@ export function CampaignSpeedToLead({ vendorId }: { vendorId: string }) {
       <p className="m-0 text-xs font-semibold uppercase tracking-[0.02em] text-muted-foreground">Speed to lead by campaign · arrival to first dial</p>
       {state.error ? <p className="m-0 mt-1 text-xs text-[var(--error-ink)]" role="alert">{state.error}</p>
         : !state.loaded ? <SectionLoading rows={2} columns={4} label="Loading speed to lead" />
-        : state.loaded.pending ? <p className="m-0 mt-1 text-xs text-muted-foreground">Per-campaign speed to lead needs a database update that has not been applied yet.</p>
         : rows.length === 0 ? <p className="m-0 mt-1 text-xs text-muted-foreground">None of this vendor&rsquo;s campaigns has a real-time posted lead yet.</p>
         : <table className="mt-1 w-full border-collapse text-left">
           <thead><tr>

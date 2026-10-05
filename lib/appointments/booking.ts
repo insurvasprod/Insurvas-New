@@ -65,6 +65,11 @@ export const BOOKING_REFUSALS: Record<string, readonly [number, string]> = {
     "That appointment has already been closed out, cancelled or moved, so it cannot be rescheduled.",
   ],
   APPOINTMENT_NOT_A_NO_SHOW: [409, "Only a no-show can be rebooked. Reschedule an appointment that is still booked."],
+  // 20260929202000 · a setter moves, rebooks or confirms only the appointments they booked.
+  APPOINTMENT_NOT_YOURS: [403, "Another setter booked this appointment, so only they or the agent can change it."],
+  // 20260929202000 · the confirmed step of the walk.
+  APPOINTMENT_ALREADY_STARTED: [409, "This appointment has already started, so it can no longer be confirmed. Close it out instead."],
+  SETTER_MAY_NOT_RECORD_OUTCOMES: [403, "Only the agent records whether somebody showed. You can confirm the appointments you booked."],
   APPOINTMENT_ALREADY_REBOOKED: [409, "This no-show has already been rebooked. Move that appointment instead."],
   APPOINTMENT_BLOCKED_TIME: [409, "The agent has blocked that time."],
   // 20260924120000 · the agent turned off same-day booking in Calendar & availability.
@@ -187,8 +192,52 @@ export async function rebookAppointment(input: {
 /** A setter books into a calendar but is not told why its owner is away (decided 2026-09-25). */
 export const HIDDEN_BLOCK_REASON = "Unavailable";
 
-export function redactBlocksForSetter(context: BookableContext): BookableContext {
-  return { ...context, blocks: context.blocks.map((block) => ({ ...block, reason: HIDDEN_BLOCK_REASON })) };
+/**
+ * What a setter may see of the diary they book into (LA-2.12-2): every slot that is taken stays
+ * in the payload, because the picker has to know it is not free, but another setter's booking
+ * loses the lead and the notes. "Cannot see other setters' leads" — a slot is not a lead.
+ */
+export function redactBlocksForSetter(context: BookableContext, viewerId: string): BookableContext {
+  return {
+    ...context,
+    blocks: context.blocks.map((block) => ({ ...block, reason: HIDDEN_BLOCK_REASON })),
+    upcoming: context.upcoming.map((row) =>
+      row.bookedBy === viewerId ? row : { ...row, leadId: "", notes: null, bookedBy: null },
+    ),
+  };
+}
+
+/**
+ * The few facts a route needs to refuse an action before the database does (a setter moving a
+ * colleague's booking, an outcome recorded before the call happened). The database still refuses
+ * both — this is what answers correctly before 20260929202000 is applied.
+ */
+export async function appointmentFacts(tenantId: string, appointmentId: string): Promise<{ bookedBy: string | null; startsAtUtc: string; status: string } | null> {
+  const db = getSupabaseServiceClient() as unknown as Db;
+  const result = await db.from("tenant_appointments").select("booked_by, starts_at_utc, status").eq("tenant_id", tenantId).eq("id", appointmentId);
+  if (result.error) throw new Error(`Could not load the appointment: ${result.error.message}`);
+  const row = (result.data ?? [])[0];
+  if (!row) return null;
+  return { bookedBy: text(row.booked_by) || null, startsAtUtc: text(row.starts_at_utc), status: text(row.status) };
+}
+
+/**
+ * booked -> confirmed (LA-2.11-5), through mark_appointment_outcome like every other step. Before
+ * 20260929202000 the function does not know the step and answers APPOINTMENT_OUTCOME_UNKNOWN,
+ * which is a SchemaGapError here, never the caller's fault.
+ */
+export async function confirmAppointment(input: { tenantId: string; appointmentId: string; actorId: string }): Promise<void> {
+  const db = getSupabaseServiceClient() as unknown as Db;
+  const result = await db.rpc("mark_appointment_outcome", {
+    p_tenant_id: input.tenantId,
+    p_appointment_id: input.appointmentId,
+    p_actor: input.actorId,
+    p_outcome: "confirmed",
+  });
+  if (result.error) {
+    if (/^APPOINTMENT_OUTCOME_UNKNOWN/.test(result.error.message)) throw new SchemaGapError();
+    throw new Error(result.error.message);
+  }
 }
 
 export type BookableContext = {
@@ -204,7 +253,7 @@ export type BookableContext = {
     allowSameDay: boolean;
     allowDoubleBooking: boolean;
   }>;
-  upcoming: Array<{ appointmentId: string; agentUserId: string; leadId: string; startsAtUtc: string; durationMinutes: number; status: string; notes: string | null }>;
+  upcoming: Array<{ appointmentId: string; agentUserId: string; leadId: string; startsAtUtc: string; durationMinutes: number; status: string; notes: string | null; bookedBy: string | null }>;
   /** Busy time from connected Google / Outlook calendars, for agents who honour it (20260924230200). */
   busy: Array<{ userId: string; startsAt: string; endsAt: string }>;
 };
@@ -231,13 +280,19 @@ export async function bookableContext(tenantId: string): Promise<BookableContext
   const readPolicy = (columns: string) =>
     db.from("tenant_agent_booking_policy").select(columns).eq("tenant_id", tenantId);
 
-  const [availability, firstBlocks, firstPolicy, upcoming, busyRows] = await Promise.all([
+  const [allAvailability, firstBlocks, firstPolicy, upcoming, busyRows, holders] = await Promise.all([
     db.from("tenant_agent_availability").select("user_id, weekday, start_time, end_time, timezone").eq("tenant_id", tenantId),
     readBlocks(),
     readPolicy("user_id, appointment_minutes, buffer_minutes, max_per_day, allow_same_day, honour_linked_calendars, allow_double_booking"),
-    db.from("tenant_appointments").select("id, agent_user_id, lead_id, starts_at_utc, duration_minutes, status, notes").eq("tenant_id", tenantId).gte("starts_at_utc", nowIso).order("starts_at_utc", { ascending: true }),
+    db.from("tenant_appointments").select("id, agent_user_id, lead_id, booked_by, starts_at_utc, duration_minutes, status, notes").eq("tenant_id", tenantId).gte("starts_at_utc", nowIso).order("starts_at_utc", { ascending: true }),
     db.from("tenant_calendar_busy").select("user_id, starts_at, ends_at, tenant_connected_calendars!inner(status)").eq("tenant_id", tenantId).eq("tenant_connected_calendars.status", "connected").gte("ends_at", nowIso),
+    // Who holds a calendar: the licensed roles (Settings › Calendar lists only them as bookable). A
+    // setter's own working hours put them on the roster, never in the list of people to book with.
+    db.from("tenant_users").select("user_id, role, accepted_at").eq("tenant_id", tenantId).in("role", ["owner", "producer"]),
   ]);
+  if (holders.error) throw new Error(`Could not load who can be booked: ${holders.error.message}`);
+  const bookable = new Set((holders.data ?? []).filter((row) => row.accepted_at).map((row) => text(row.user_id)));
+  const availability = { ...allAvailability, data: (allAvailability.data ?? []).filter((row) => bookable.has(text(row.user_id))) };
 
   const blocks = isSchemaGap(firstBlocks.error)
     ? await db.from("tenant_agent_blocks").select("user_id, starts_at, ends_at, reason").eq("tenant_id", tenantId).gte("ends_at", nowIso)
@@ -319,6 +374,7 @@ export async function bookableContext(tenantId: string): Promise<BookableContext
       durationMinutes: Number(row.duration_minutes ?? 0),
       status: text(row.status),
       notes: text(row.notes) || null,
+      bookedBy: text(row.booked_by) || null,
     })),
     // An agent with no policy row runs the column default, which honours linked calendars.
     busy: (busyRows.error ? [] : busyRows.data ?? [])

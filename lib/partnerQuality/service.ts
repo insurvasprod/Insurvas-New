@@ -1,8 +1,10 @@
 import "server-only";
 
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
+import { partnerQualityEvidence } from "./evidence";
 import type { PartnerQualityLeadResult, PartnerQualityMetric, PartnerQualityPeriod, PartnerQualityReport, PartnerQualityTeamGroup } from "./types";
 import { PARTNER_QUALITY_METRICS } from "./types";
+import { buildPartnerQualityReport, partnerQualityMonthStart, partnerQualityToday, previousPartnerQualityPeriod } from "./metrics";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -86,24 +88,17 @@ function periodFor(evidence: QualityEvidence[]): PartnerQualityPeriod {
   };
 }
 
-async function loadTeamMetrics(tenantId: string, report: PartnerQualityReport): Promise<PartnerQualityTeamGroup[]> {
+async function loadTeamMetrics(tenantId: string, report: Pick<PartnerQualityReport, "rows">, current: QualityEvidence[], previous: QualityEvidence[]): Promise<PartnerQualityTeamGroup[]> {
   const partnerIds = report.rows.map((row) => row.partner_id);
   if (!partnerIds.length) return [];
   const db = getSupabaseServiceClient();
-  const [memberships, currentEvidence, previousEvidence] = await Promise.all([
-    db.from("partner_users").select("id, user_id, partner_id, role, status, invited_at, accepted_at, deactivated_at, partner_admin_user_id").eq("tenant_id", tenantId).in("partner_id", partnerIds).order("invited_at", { ascending: true }),
-    db.rpc("partner_quality_evidence", { p_tenant_id: tenantId, p_from_date: report.from, p_to_date: report.to }),
-    db.rpc("partner_quality_evidence", { p_tenant_id: tenantId, p_from_date: report.previous_from, p_to_date: report.previous_to }),
-  ]);
+  const memberships = await db.from("partner_users").select("id, user_id, partner_id, role, status, invited_at, accepted_at, deactivated_at, partner_admin_user_id").eq("tenant_id", tenantId).in("partner_id", partnerIds).order("invited_at", { ascending: true });
   if (memberships.error) throw new Error(`Could not load partner hierarchy: ${memberships.error.message}`);
-  if (currentEvidence.error || previousEvidence.error) throw new Error(`Could not load partner hierarchy metrics: ${currentEvidence.error?.message ?? previousEvidence.error?.message}`);
   const memberRows = (memberships.data ?? []) as TeamMembership[];
   const userIds = [...new Set(memberRows.map((member) => member.user_id))];
   const users = userIds.length ? await db.from("users").select("id, name, email").in("id", userIds) : { data: [], error: null };
   if (users.error) throw new Error(`Could not load partner hierarchy users: ${users.error.message}`);
   const userById = new Map((users.data ?? []).map((user) => [user.id, user]));
-  const current = (currentEvidence.data ?? []) as QualityEvidence[];
-  const previous = (previousEvidence.data ?? []) as QualityEvidence[];
   const allLeadIds = [...new Set([...current, ...previous].map((row) => row.lead_id))];
   const owners = allLeadIds.length ? await db.from("agent_leads").select("id, created_by").eq("tenant_id", tenantId).in("id", allLeadIds) : { data: [], error: null };
   if (owners.error) throw new Error(`Could not load partner hierarchy lead ownership: ${owners.error.message}`);
@@ -133,17 +128,23 @@ async function loadTeamMetrics(tenantId: string, report: PartnerQualityReport): 
 export async function listPartnerQuality(tenantId: string, filters: { from?: unknown; to?: unknown }, readOnly: boolean) {
   const from = filters.from == null || filters.from === "" ? null : assertPartnerQualityDate(filters.from, "From date");
   const to = filters.to == null || filters.to === "" ? null : assertPartnerQualityDate(filters.to, "To date");
-  if (from && to && from > to) throw new Error("From date must be on or before To date");
-  const { data, error } = await getSupabaseServiceClient().rpc("partner_quality_report", { p_tenant_id: tenantId, p_from_date: from, p_to_date: to });
-  if (error) throw new Error(`Could not load partner quality: ${error.message}`);
-  const report = normalizeReport(data, readOnly);
-  const [team, types] = await Promise.all([
-    loadTeamMetrics(tenantId, report),
-    report.rows.length ? getSupabaseServiceClient().from("partners").select("id, partner_type").eq("tenant_id", tenantId) : Promise.resolve({ data: [], error: null }),
+  // partner_quality_report's defaults: the reporting month so far.
+  const period = { from: from ?? partnerQualityMonthStart(), to: to ?? partnerQualityToday() };
+  if (period.from > period.to) throw new Error("From date must be on or before To date");
+  const previous = previousPartnerQualityPeriod(period.from, period.to);
+  // Two evidence reads (this period, the one before) feed every figure on the page: the partner
+  // rows, the summaries and the team table. The SQL report read the evidence five times in one
+  // statement and timed out on a busy month (LA-1.18).
+  const [partners, currentEvidence, previousEvidence] = await Promise.all([
+    getSupabaseServiceClient().from("partners").select("id, name, partner_type").eq("tenant_id", tenantId),
+    partnerQualityEvidence(tenantId, period.from, period.to),
+    partnerQualityEvidence(tenantId, previous.from, previous.to),
   ]);
-  if (types.error) throw new Error(`Could not load partner types: ${types.error.message}`);
-  const typeById = new Map(((types.data ?? []) as { id: string; partner_type: string | null }[]).map((partner) => [partner.id, partner.partner_type]));
-  return { ...report, rows: report.rows.map((row) => ({ ...row, partner_type: typeById.get(row.partner_id) ?? null })), team };
+  if (partners.error) throw new Error(`Could not load partners: ${partners.error.message}`);
+  const built = buildPartnerQualityReport((partners.data ?? []) as { id: string; name: string; partner_type: string | null }[], currentEvidence, previousEvidence, { ...period, previous_from: previous.from, previous_to: previous.to });
+  const report = normalizeReport(built, readOnly);
+  const team = await loadTeamMetrics(tenantId, report, currentEvidence, previousEvidence);
+  return { ...report, team };
 }
 
 export async function listPartnerQualityLeads(tenantId: string, filters: { from: unknown; to: unknown; partnerId: unknown; partnerUserId?: unknown; metric: unknown; disposition?: unknown; page?: unknown; pageSize?: unknown }) {

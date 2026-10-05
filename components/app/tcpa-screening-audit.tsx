@@ -5,6 +5,7 @@ import { Fragment, useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { EmptyState, ErrorState, NoMatches, SectionLoading } from "@/components/ui/page-states";
+import { Pager } from "@/components/ui/pager";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 import { formatPhone, normalizeDigits } from "@/lib/suppression/constants";
@@ -32,30 +33,30 @@ const vendorLabel = (vendor: string | null) => {
   return vendor.split(",").map((part) => part.replace(/^(litigator|dnc):/, "").replace(/^demo:(litigator|dnc)_scrub$/, "Demo $1 feed")).join(" · ");
 };
 
+const PAGE_SIZE = 25;
 const th = "bg-[var(--surface-alt)] px-3 py-2 text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] text-muted-foreground";
 const td = "border-t border-border px-3 py-2 text-sm leading-normal tracking-[-0.02em] text-[var(--body)] align-top";
 
 export function TcpaScreeningAudit() {
   const [rows, setRows] = useState<ScreeningAuditRow[] | null>(null);
-  const [nextBefore, setNextBefore] = useState<string | null>(null);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
   const [error, setError] = useState<string | null>(null);
   const [phone, setPhone] = useState("");
   const [outcome, setOutcome] = useState("");
   const [open, setOpen] = useState<string | null>(null);
-  const [loadingMore, setLoadingMore] = useState(false);
   const [reload, setReload] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
 
-  const fetchPage = useCallback(async (before: string | null) => {
-    const params = new URLSearchParams({ audit: "1", limit: "25" });
+  const fetchPage = useCallback(async (pageNumber: number) => {
+    const params = new URLSearchParams({ audit: "1", limit: String(PAGE_SIZE), page: String(pageNumber) });
     const digits = normalizeDigits(phone);
     if (digits) params.set("phone", digits);
     if (outcome) params.set("outcome", outcome);
-    if (before) params.set("before", before);
     const response = await fetch(`/api/app/suppression?${params}`, { cache: "no-store" });
     const body = await response.json().catch(() => null);
     if (!response.ok) throw new Error(body?.error ?? "Could not load the screening audit");
-    return body as { rows: ScreeningAuditRow[]; nextBefore: string | null };
+    return body as { rows: ScreeningAuditRow[]; total: number };
   }, [phone, outcome]);
 
   useEffect(() => {
@@ -63,51 +64,34 @@ export function TcpaScreeningAudit() {
     if (phone.trim() && !normalizeDigits(phone)) return;
     let live = true;
     const timer = setTimeout(() => {
-      fetchPage(null).then(
-        (page) => { if (live) { setRows(page.rows); setNextBefore(page.nextBefore); setError(null); setRefreshing(false); } },
+      fetchPage(page).then(
+        (loaded) => { if (live) { setRows(loaded.rows); setTotal(loaded.total); setError(null); setRefreshing(false); } },
         (failure: unknown) => { if (live) { setError(failure instanceof Error ? failure.message : "Could not load the screening audit"); setRows(null); setRefreshing(false); } },
       );
     }, 250);
     return () => { live = false; clearTimeout(timer); };
-  }, [fetchPage, phone, reload]);
-
-  async function more() {
-    if (!nextBefore) return;
-    setLoadingMore(true);
-    try {
-      const page = await fetchPage(nextBefore);
-      setRows((current) => [...(current ?? []), ...page.rows]);
-      setNextBefore(page.nextBefore);
-    } catch (failure) {
-      setError(failure instanceof Error ? failure.message : "Could not load more checks");
-    } finally {
-      setLoadingMore(false);
-    }
-  }
+  }, [fetchPage, phone, page, reload]);
 
   return (
     <TableCard
       title="Screening audit"
       toolbar={
         <DataToolbar actions={<RefreshButton onClick={() => { if (phone.trim() && !normalizeDigits(phone)) return; setError(null); setRefreshing(true); setReload((value) => value + 1); }} refreshing={refreshing} />}>
-          <ToolbarSearch value={phone} onChange={setPhone} placeholder="Search a number" label="Filter checks by number" />
-          <select aria-label="Filter checks by outcome" value={outcome} onChange={(event) => setOutcome(event.target.value)} className={toolbarControl}>
+          <ToolbarSearch value={phone} onChange={(value) => { setPhone(value); setPage(1); }} placeholder="Search a number" label="Filter checks by number" />
+          <select aria-label="Filter checks by outcome" value={outcome} onChange={(event) => { setOutcome(event.target.value); setPage(1); }} className={toolbarControl}>
             <option value="">Every outcome</option>
             {Object.entries(SCREENING_OUTCOME_LABELS).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
           </select>
         </DataToolbar>
       }
-      footer={!error && rows && rows.length > 0 ? <>
-        <span>{rows.length.toLocaleString()} check{rows.length === 1 ? "" : "s"} shown, newest first</span>
-        {nextBefore ? <Button type="button" variant="outline" size="sm" disabled={loadingMore} aria-busy={loadingMore} onClick={() => void more()}>Older checks</Button> : <span>That is every check</span>}
-      </> : undefined}
+      footer={!error && rows && rows.length > 0 ? <Pager page={page} total={total} noun={total === 1 ? "check" : "checks"} onPage={setPage} pageSize={PAGE_SIZE} suffix="newest first" /> : undefined}
     >
       {error ? <ErrorState title="The screening audit did not load" detail={error} action={<Button variant="outline" onClick={() => { setError(null); setReload((value) => value + 1); }}>Try again</Button>} />
         : !rows ? <SectionLoading rows={4} columns={6} label="Loading the screening audit" />
         : rows.length === 0 ? (phone || outcome
-          ? <NoMatches noun="checks" onClear={() => { setPhone(""); setOutcome(""); }} />
+          ? <NoMatches noun="checks" onClear={() => { setPhone(""); setOutcome(""); setPage(1); }} />
           : <EmptyState title="No number has been screened yet" hint="Each DNC and litigator check is listed here once it runs." />)
-        : <table className="w-full min-w-[920px] table-fixed border-collapse text-left">
+        : <table className="w-full min-w-[1030px] table-fixed border-collapse text-left">
           <thead><tr>
             <th className={`${th} w-[140px]`}>When</th>
             <th className={`${th} w-[150px]`}>Number</th>

@@ -435,18 +435,103 @@ export async function createManualDeal(tenantId: string, userId: string, input: 
   return deal.data;
 }
 
-export function csvForDealFlow(rows: DealFlowRow[]) {
-  const cell = (value: unknown) => { const raw = String(value ?? ""); const safe = /^[=+\-@]/.test(raw) ? `'${raw}` : raw; return `"${safe.replaceAll('"', '""')}"`; };
-  // The first sixteen columns are the export's original shape and stay in place for the
-  // spreadsheets already reading it; everything the board added is appended after them.
-  const headers = [
-    "date", "partner", "agent", "insured_name", "phone", "product_line", "carrier", "product_type", "monthly_premium_cents", "face_amount_cents", "draft_date", "status", "call_result", "notes", "initial_quote", "manual_entry",
-    "lead_id", "short_id", "campaign", "vendor", "state", "stage", "stage_type", "source", "disposition", "disposition_at", "disposition_by", "annualised_premium_cents", "issued_at",
-    "buffer_agent", "tracking_id",
-  ];
-  return [headers, ...rows.map((row) => [
+const csvCell = (value: unknown) => { const raw = String(value ?? ""); const safe = /^[=+\-@]/.test(raw) ? `'${raw}` : raw; return `"${safe.replaceAll('"', '""')}"`; };
+// The first sixteen columns are the export's original shape and stay in place for the
+// spreadsheets already reading it; everything the board added is appended after them.
+const CSV_HEADERS = [
+  "date", "partner", "agent", "insured_name", "phone", "product_line", "carrier", "product_type", "monthly_premium_cents", "face_amount_cents", "draft_date", "status", "call_result", "notes", "initial_quote", "manual_entry",
+  "lead_id", "short_id", "campaign", "vendor", "state", "stage", "stage_type", "source", "disposition", "disposition_at", "disposition_by", "annualised_premium_cents", "issued_at",
+  "buffer_agent", "tracking_id",
+];
+
+/** The CSV's header line, CRLF-terminated. */
+export function dealFlowCsvHeader() {
+  return CSV_HEADERS.map(csvCell).join(",") + "\r\n";
+}
+
+/** One CRLF-terminated CSV line per row, in the header's column order. Empty for no rows. */
+export function dealFlowCsvLines(rows: DealFlowRow[]) {
+  return rows.map((row) => [
     row.local_date, row.partner_name, row.agent_name, row.insured_name, row.phone, row.product_line, row.carrier, row.product_type, row.monthly_premium_cents, row.face_amount_cents, row.draft_date, row.status, row.call_result, row.notes, row.initial_quote, row.manual_entry,
     row.lead_id, shortLeadId(row.lead_id), row.campaign_name, row.vendor_name, row.customer_state, row.stage_name, row.stage_type, row.source, row.call_result_label ?? row.call_result, row.disposition_at, row.disposition_by_name, row.monthly_premium_cents == null ? null : row.monthly_premium_cents * 12, row.issued_at,
     row.buffer_agent_name, row.tracking_id,
-  ])].map((line) => line.map(cell).join(",")).join("\r\n") + "\r\n";
+  ].map(csvCell).join(",") + "\r\n").join("");
+}
+
+export function csvForDealFlow(rows: DealFlowRow[]) {
+  return dealFlowCsvHeader() + dealFlowCsvLines(rows);
+}
+
+/**
+ * Deals per export read. The CSV used to be one 10,000-row list_deal_flow_report page, which hit the
+ * statement timeout at 10,000 deals (LA-1.13-10, 2026-09-30). Each read now handles at most this many.
+ */
+export const DEAL_FLOW_EXPORT_PAGE_SIZE = 1000;
+/** A runaway guard: 100 reads of 1,000 is ten times the report's supported size. */
+const DEAL_FLOW_EXPORT_MAX_PAGES = 100;
+
+type ExportCursor = { local_date: string; created_at: string; id: string };
+
+function exportCursor(raw: unknown): ExportCursor | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const value = raw as RawRow;
+  const localDate = str(value.local_date);
+  const createdAt = str(value.created_at);
+  const id = str(value.id);
+  return localDate && createdAt && id ? { local_date: localDate, created_at: createdAt, id } : null;
+}
+
+/**
+ * The deal flow report's rows for the CSV, one bounded page at a time, in the grid's order and under
+ * the grid's filters. Migration 20260929140200's list_deal_flow_export walks the report with a
+ * keyset cursor. Before it is applied, the report itself is paged (page_size 1,000), which is slower
+ * but no single read grows with the export.
+ */
+export async function* dealFlowExportPages(tenantId: string, filters: DealFlowListFilters): AsyncGenerator<DealFlowRow[]> {
+  const db = getSupabaseServiceClient() as unknown as UntypedDb;
+  const args = {
+    p_tenant_id: tenantId,
+    p_from_date: filters.fromDate ? date(filters.fromDate, "From date") : null,
+    p_to_date: filters.toDate ? date(filters.toDate, "To date") : null,
+    p_partner_id: filters.partnerId ? assertUuid(filters.partnerId, "partner") : null,
+    p_product_line: filters.productLine ? text(filters.productLine, "Product", 120) : null,
+    p_agent_id: filters.agentId ? assertUuid(filters.agentId, "agent") : null,
+    p_status: filters.status ? status(filters.status) : null,
+    p_search: cleanSearch(filters.search),
+    p_stage_type: filters.stageType ?? null,
+    p_limit: DEAL_FLOW_EXPORT_PAGE_SIZE,
+  };
+  if (filters.stageType && !isStageType(filters.stageType)) throw new Error("Choose a valid status");
+
+  let cursor: ExportCursor | null = null;
+  let maps: { partners: Map<string, string>; agents: Map<string, string> } | null = null;
+  for (let read = 0; read < DEAL_FLOW_EXPORT_MAX_PAGES; read += 1) {
+    const result = await db.rpc("list_deal_flow_export", { ...args, p_after_local_date: cursor?.local_date ?? null, p_after_created_at: cursor?.created_at ?? null, p_after_id: cursor?.id ?? null });
+    if (result.error && read === 0 && schemaMissing(result.error)) {
+      yield* reportPages(tenantId, filters);
+      return;
+    }
+    if (result.error) throw new Error(`Could not export daily deal flow: ${result.error.message}`);
+    const payload = (result.data && typeof result.data === "object" && !Array.isArray(result.data) ? result.data : {}) as RawRow;
+    if (!maps) {
+      const options = await lookups(tenantId);
+      maps = { partners: new Map(options.partners.map((partner) => [partner.id, partner.name])), agents: new Map(options.agents.map((agent) => [agent.id, agent.name])) };
+    }
+    const { partners, agents } = maps;
+    const rows = (Array.isArray(payload.rows) ? (payload.rows as RawRow[]) : []).map((row) => normaliseRow(row, partners, agents));
+    if (rows.length) yield rows;
+    cursor = payload.more === true ? exportCursor(payload.next) : null;
+    if (!cursor) return;
+  }
+  throw new Error("Could not export daily deal flow: the export is larger than the report supports");
+}
+
+/** Before 20260929140200: the report's own pages, DEAL_FLOW_EXPORT_PAGE_SIZE rows each. */
+async function* reportPages(tenantId: string, filters: DealFlowListFilters): AsyncGenerator<DealFlowRow[]> {
+  for (let page = 1; page <= DEAL_FLOW_EXPORT_MAX_PAGES; page += 1) {
+    const report = await listDealFlow(tenantId, { ...filters, focusLeadId: undefined, page, pageSize: DEAL_FLOW_EXPORT_PAGE_SIZE });
+    if (report.rows.length) yield report.rows;
+    if (report.rows.length < DEAL_FLOW_EXPORT_PAGE_SIZE || page * DEAL_FLOW_EXPORT_PAGE_SIZE >= report.total) return;
+  }
+  throw new Error("Could not export daily deal flow: the export is larger than the report supports");
 }

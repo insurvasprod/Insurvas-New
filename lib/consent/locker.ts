@@ -2,6 +2,7 @@ import "server-only";
 
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import type { ConsentArtefact, ConsentCoverage, ConsentStatus } from "./constants";
+import { trustedFormCertificateId } from "./capture";
 
 /**
  * LA-2.6 · the consent locker.
@@ -139,7 +140,7 @@ export async function getConsentLocker(input: {
       leadName: lead ? leadName(lead.values) : "Lead no longer in your book",
       leadPhone: lead ? leadPhone(lead.values) : null,
       provider: text(row.provider),
-      certificateId: text(row.certificate_id) || null,
+      certificateId: text(row.certificate_id) || trustedFormCertificateId(text(row.certificate_url)),
       certificateUrl: text(row.certificate_url) || null,
       status: (text(row.capture_status) || "pending") as ConsentStatus,
       captureError: text(row.capture_error) || null,
@@ -236,7 +237,7 @@ export async function getConsentRecord(tenantId: string, id: string): Promise<Co
     leadName: lead.data ? leadName(lead.data.values) : "Lead no longer in your book",
     leadPhone: lead.data ? leadPhone(lead.data.values) : null,
     provider: text(row.provider),
-    certificateId: text(row.certificate_id) || null,
+    certificateId: text(row.certificate_id) || trustedFormCertificateId(text(row.certificate_url)),
     certificateUrl: text(row.certificate_url) || null,
     status: (text(row.capture_status) || "pending") as ConsentStatus,
     captureError: text(row.capture_error) || null,

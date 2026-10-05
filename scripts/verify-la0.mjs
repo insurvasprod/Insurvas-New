@@ -1,3 +1,4 @@
+import "./lib/refuseProduction.mjs";
 /**
  * The whole LA-0 acceptance matrix in one command: `npm run verify:la0`.
  *

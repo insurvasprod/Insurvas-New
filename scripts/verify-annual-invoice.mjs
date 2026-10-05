@@ -1,3 +1,4 @@
+import "./lib/refuseProduction.mjs";
 // SA-3.2 acceptance: an annual provider payment is reconciled through the live webhook path.
 // This creates only a namespaced tenant and retains the resulting immutable invoice as QA history.
 import { createHmac } from "node:crypto";

@@ -7,7 +7,6 @@ import { notify } from "@/lib/notify";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatTile } from "@/components/ui/stat";
-import { sectionForPath } from "@/lib/menu/definition";
 import { insideWindow, hourLabel, STATE_NAMES, windowSummary, type CallbackWindowFacts } from "@/lib/callbacks/windowFacts";
 import type { CallbackView } from "@/lib/callbacks/service";
 import type { CallbackRefusalNotice } from "@/lib/callbacks/refusals";
@@ -368,7 +367,6 @@ export function CallbackCalendar({ readOnly }: { readOnly: boolean }) {
   return (
     <main className="m-stagger portal-callbacks-page">
       <PageHeader
-        eyebrow={sectionForPath("/app/callbacks") ?? undefined}
         title="Callbacks"
         description={"“Call me Thursday after 2” is the most common productive outcome. It is booked in her time, not yours — and it counts when the call comes back."}
         actions={<div className="flex flex-wrap items-center gap-2">{scopeToggle}<Button variant="outline" asChild><Link href="/app/dialer">Open the queue</Link></Button></div>}

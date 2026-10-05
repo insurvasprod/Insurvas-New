@@ -1,3 +1,4 @@
+import "./lib/refuseProduction.mjs";
 // SA-2.7: verifies completed subscription mutation responses are replayed without a second write.
 import { randomUUID } from "node:crypto";
 import { SignJWT } from "jose";

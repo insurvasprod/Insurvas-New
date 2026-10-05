@@ -62,7 +62,75 @@ export function proposeExactMatches(lines: MatchableLine[], policies: MatchableP
   return proposals;
 }
 
-export type StatementTotals = { entries: number; grossCents: number; advancesCents: number; chargebacksCents: number; adjustmentsCents: number };
+/**
+ * An insured's name as matching compares it: lower case, letters and digits only, words in order,
+ * and "LAST, FIRST" turned round to "first last". Middle initials are dropped, because carriers
+ * print them and agents do not type them.
+ */
+export function normaliseInsuredName(value: string): string {
+  let text = value.trim().toLowerCase();
+  const comma = /^([^,]+),\s*(.+)$/.exec(text);
+  if (comma) text = `${comma[2]} ${comma[1]}`;
+  const words = text.replace(/[^a-z0-9\s]+/g, " ").split(/\s+/).filter(Boolean);
+  return words.filter((word, index) => !(word.length === 1 && index > 0 && index < words.length - 1)).join(" ");
+}
+
+export type NamedLine = MatchableLine & { insuredName: string | null; amountCents: number | null };
+export type FallbackProposal = MatchProposal & { method: "name" | null };
+
+/**
+ * LA-4.3 · for each line the exact match could not place, a proposal by the insured's name and the
+ * statement's carrier. Still only a PROPOSAL: a person accepts it, and its reason says it was made
+ * by name so it is read with care.
+ *
+ *   · exactly one policy with this carrier and this name → proposed;
+ *   · more than one → the amount breaks the tie, when the caller passes what the ledger expected
+ *     for each policy in the statement's period: the one policy with an expected entry within
+ *     `toleranceCents` of the line's amount is proposed;
+ *   · otherwise no proposal, with the reason.
+ *
+ * Lines that already have an exact proposal, have no name, or could not be read are not returned.
+ */
+export function proposeFallbackMatches(
+  lines: NamedLine[],
+  policies: MatchablePolicy[],
+  carrier: MatchCarrier,
+  exact: Map<number, MatchProposal>,
+  expected?: ReadonlyMap<string, number[]>,
+  toleranceCents = RECONCILE_TOLERANCE_CENTS,
+): Map<number, FallbackProposal> {
+  const byName = new Map<string, MatchablePolicy[]>();
+  for (const policy of policies) {
+    if (!policyIsWithCarrier(policy.carrier, carrier)) continue;
+    const key = normaliseInsuredName(policy.insuredName);
+    if (!key) continue;
+    byName.set(key, [...(byName.get(key) ?? []), policy]);
+  }
+
+  const out = new Map<number, FallbackProposal>();
+  for (const line of lines) {
+    if (line.error || exact.get(line.lineNumber)?.policyId) continue;
+    const key = line.insuredName ? normaliseInsuredName(line.insuredName) : "";
+    if (!key) continue;
+    const named = byName.get(key) ?? [];
+    if (named.length === 1) {
+      out.set(line.lineNumber, { policyId: named[0].id, method: "name", reason: `Insured name and carrier match (${named[0].policyNumber}); the policy number did not. Check before accepting.` });
+      continue;
+    }
+    if (named.length > 1 && expected && line.amountCents !== null) {
+      const amount = line.amountCents;
+      const fits = named.filter((policy) => (expected.get(policy.id) ?? []).some((cents) => Math.abs(cents - amount) < toleranceCents));
+      if (fits.length === 1) {
+        out.set(line.lineNumber, { policyId: fits[0].id, method: "name", reason: `Insured name, carrier and amount match (${fits[0].policyNumber}); the policy number did not. Check before accepting.` });
+        continue;
+      }
+    }
+    if (named.length > 1) out.set(line.lineNumber, { policyId: null, method: null, reason: `${named.length} ${carrier.name} policies are for ${line.insuredName}; choose one by hand.` });
+  }
+  return out;
+}
+
+export type StatementTotals ={ entries: number; grossCents: number; advancesCents: number; chargebacksCents: number; adjustmentsCents: number };
 
 /**
  * The four figures the ledger's tiles carry, over statement entries. Gross is everything received

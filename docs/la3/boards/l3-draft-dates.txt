@@ -1,0 +1,209 @@
+<div> {flex-direction:column;padding:24px 32px 32px}
+  <div .m-stagger> {flex-direction:column;gap:24px}
+    <div> {justify-content:space-between;gap:24px}
+        <div> {fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+          "Sell"
+        <h1> {fsize:32px;fweight:600;color:#15191e}
+          "Draft-date calculator"
+        <p> {fsize:16px;fweight:400;color:#60646c}
+          "When their money arrives, and the safest day to take the premium."
+      <div> {gap:12px}
+        <button type="button"> {justify-content:center;gap:8px;height:44px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+          "Open the case"
+        <button type="button"> {justify-content:center;gap:8px;height:44px;padding:0 16px;bd-radius:8px;bg:#ff5900;color:#15191e;bd:1px solid transparent;fsize:14px;fweight:600}
+          "Set the draft day"
+    <div> {gap:24px}
+      <div> {flex-direction:column;gap:24px}
+        <div> {flex-direction:column;bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff}
+          <div> {justify-content:space-between;gap:16px;padding:12px 16px;bg:#e4e8ee;bd-bottom:1px solid #d5dbe3}
+            <span> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+              "Draft-date calculator"
+            <span> {gap:10px}
+              <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e4e8ee;color:#33383f;fsize:12px;fweight:400;fweight:600}
+                "Grace Oyelaran · Attempt 2"
+          <div> {padding:18px 20px;grid-template-columns:minmax(0,1fr) minmax(0,1.9fr) minmax(0,1.05fr);gap:16px}
+            <label>
+              <span> {fsize:14px;fweight:400;fweight:600;color:#33383f}
+                "Date of birth"
+              <input type="text" value="14 Mar 1959"> {width:100%;height:44px;padding:0 12px;bd:1px solid #7a828e;bd-radius:8px;bg:#ffffff;fsize:16px;fweight:400;color:#15191e}
+              <span> {fsize:12px;fweight:400;color:#60646c}
+                "The day of the month is what sets the cycle"
+            <label>
+              <span> {fsize:14px;fweight:400;fweight:600;color:#33383f}
+                "Income type"
+              <select> {width:100%;height:44px;padding:0 12px;bd:1px solid #7a828e;bd-radius:8px;bg:#ffffff;fsize:16px;fweight:400;color:#15191e}
+                <option>
+                  "Social Security retirement"
+                <option>
+                  "SSI"
+                <option>
+                  "SSI concurrent"
+                <option>
+                  "Pre-May-1997 claim"
+                <option>
+                  "Private pension"
+                <option>
+                  "Payroll"
+            <label>
+              <span> {fsize:14px;fweight:400;fweight:600;color:#33383f}
+                "Anchor date"
+              <input type="text" value="01 Oct 2026"> {width:100%;height:44px;padding:0 12px;bd:1px solid #7a828e;bd-radius:8px;bg:#ffffff;fsize:16px;fweight:400;color:#15191e}
+              <span> {fsize:12px;fweight:400;color:#60646c}
+                "First month the policy can draft"
+          <div> {padding:0 20px 20px}
+            <div> {bd:1px solid #d5dbe3;bd-radius:12px;bg:#fff3ec;padding:20px}
+              <div> {fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+                "Recommended draft day"
+              <div> {fsize:56px;fweight:600;color:#15191e}
+                "23rd"
+                <div> {padding:14px 16px;bd:1px solid #d5dbe3;bd-left:3px solid #00708a;bd-radius:12px;bg:#e0f2f6}
+                  <div> {fsize:14px;fweight:400;fweight:600;color:#005e75}
+                    "Read this back to her, word for word"
+                  <p> {fsize:14px;fweight:400;color:#33383f}
+                    "“Your deposit lands on the third Wednesday, which is the 21st of October. We will take the premium on the 23rd, two days later, and on the 23rd every month after that.”"
+              <div> {gap:12px}
+                <span> {fsize:12px;fweight:400;color:#60646c}
+                  "If she would rather have it later"
+                <button type="button"> {justify-content:center;gap:8px;height:36px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+                  "Use the 25th"
+                <button type="button"> {justify-content:center;gap:8px;height:36px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+                  "Use the 28th"
+              <p> {fsize:12px;fweight:400;color:#60646c}
+                "Why the 23rd: a third Wednesday can fall anywhere from the 15th to the 21st. The 23rd is the earliest day that sits after the latest possible arrival in all twelve months, so the same day works every month and she only has to remember one."
+          <div> {padding:18px 20px;bd-top:1px solid #d5dbe3}
+              <h2> {fsize:18px;fweight:600;color:#15191e}
+                "How each income type pays"
+              <p> {fsize:14px;fweight:400;color:#60646c}
+                "The cycle is a property of the benefit, not of the client."
+              <div> {grid-template-columns:repeat(2,minmax(0,1fr));gap:16px 24px}
+                  <div> {fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+                    "Social Security retirement"
+                  <div> {fsize:14px;fweight:400;color:#15191e;fweight:600}
+                    "2nd, 3rd or 4th Wednesday"
+                  <div> {fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+                    "SSI"
+                  <div> {fsize:14px;fweight:400;color:#15191e;fweight:600}
+                    "1st of the month"
+                  <div> {fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+                    "SSI concurrent"
+                  <div> {fsize:14px;fweight:400;color:#15191e;fweight:600}
+                    "1st and 3rd of the month"
+                  <div> {fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+                    "Pre-May-1997 claim"
+                  <div> {fsize:14px;fweight:400;color:#15191e;fweight:600}
+                    "3rd of the month"
+                  <div> {fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+                    "Private pension"
+                  <div> {fsize:14px;fweight:400;color:#15191e;fweight:600}
+                    "Set by the plan"
+                  <div> {fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+                    "Payroll"
+                  <div> {fsize:14px;fweight:400;color:#15191e;fweight:600}
+                    "Whatever the employer runs"
+      <div> {flex-direction:column;gap:24px;width:462px}
+        <div> {flex-direction:column;bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff}
+          <div> {justify-content:space-between;gap:16px;padding:12px 16px;bg:#e4e8ee;bd-bottom:1px solid #d5dbe3}
+            <span> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+              "Twelve months ahead"
+            <span> {gap:10px}
+              <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e0f2f6;color:#005e75;fsize:12px;fweight:400;fweight:600}
+                "Third Wednesday"
+          <table> {width:100%}
+            <thead>
+              <tr> {bg:#e4e8ee}
+                <th> {width:132px;padding:8px 12px;fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+                  "Month"
+                <th> {padding:8px 12px;fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+                  "Arrives"
+                <th> {width:168px;padding:8px 12px;fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+                  "Recommended draft"
+            <tbody .m-seq>
+              <tr .m-row>
+                <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                    "October 2026"
+                <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                    "Wed 21 Oct"
+                <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                  "23rd"
+              <tr .m-row>
+                <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                    "November 2026"
+                <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                    "Wed 18 Nov"
+                <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                  "20th"
+              <tr .m-row>
+                <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                    "December 2026"
+                <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                    "Wed 16 Dec"
+                <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                  "18th"
+              <tr .m-row>
+                <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                    "January 2027"
+                <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                    "Wed 20 Jan"
+                <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                  "22nd"
+              <tr .m-row>
+                <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                    "February 2027"
+                <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                    "Wed 17 Feb"
+                <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                  "19th"
+              <tr .m-row>
+                <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                    "March 2027"
+                <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                    "Wed 17 Mar"
+                <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                  "19th"
+              <tr .m-row>
+                <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                    "April 2027"
+                <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                    "Wed 21 Apr"
+                <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                  "23rd"
+              <tr .m-row>
+                <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                    "May 2027"
+                <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                    "Wed 19 May"
+                <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                  "21st"
+              <tr .m-row>
+                <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                    "June 2027"
+                <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                    "Wed 16 Jun"
+                <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                  "18th"
+              <tr .m-row>
+                <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                    "July 2027"
+                <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                    "Wed 21 Jul"
+                <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                  "23rd"
+              <tr .m-row>
+                <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                    "August 2027"
+                <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                    "Wed 18 Aug"
+                <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                  "20th"
+              <tr .m-row>
+                <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                    "September 2027"
+                <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                    "Wed 15 Sep"
+                <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                  "17th"
+    <div> {padding:14px 16px;bd:1px solid #d5dbe3;bd-left:3px solid #b35c00;bd-radius:12px;bg:#fcefdf}
+      <div> {fsize:14px;fweight:400;fweight:600;color:#9a4f00}
+        "You can override the day, and the override is kept"
+      <p> {fsize:14px;fweight:400;color:#33383f}
+        "Typing a different day is allowed — the client knows her own bank better than a rule does. The override is written to the case with who set it and why, next to the day the calculator gave. The recommendation itself never goes past the 28th, because February has no 30th and a draft that cannot happen is a lapse waiting to be filed."

@@ -21,7 +21,7 @@ import {
   control,
   st,
 } from "@/components/app/settings/primitives";
-import { DAY_PARTS, SLOTS, parseInterval, type CadenceRow } from "@/lib/cadence/engine";
+import { DAY_PARTS, MAX_ATTEMPTS_RANGE, SLOTS, parseInterval, type CadenceRow } from "@/lib/cadence/engine";
 import { LAST_DIALLED_ATTEMPT, builtInRule, effectiveLadder, ladderSummary } from "@/lib/cadence/ladder";
 import { cn } from "@/lib/utils";
 
@@ -33,8 +33,8 @@ import { cn } from "@/lib/utils";
  * that is the fact an owner is missing, more than the row editor itself.
  *
  * Numbering follows the SQL, not the task page: the rule stored as attempt N is the wait before
- * the Nth dial. Attempt 1 is the first dial and has no rule; the seventh dial is the last
- * (20260924230300 — the sixth until it is applied). See lib/cadence/ladder.ts.
+ * the Nth dial. Attempt 1 is the first dial and has no rule. The last dial is max attempts — seven
+ * unless this scope sets its own (20260929201100). See lib/cadence/ladder.ts.
  */
 
 /** The dialer before 20260924230300: it stopped after the sixth dial. */
@@ -80,6 +80,8 @@ type Loaded = {
   fallbackRows?: CadenceRow[];
   /** 20260924230300 applied: day parts, seven dials, a campaign cadence never merged, atomic saves. */
   schemaReady?: boolean;
+  /** LA-2.7-8 · this scope's max attempts (20260929201100). Absent from an older server. */
+  maxAttempts?: { own: number | null; inherited: number; effective: number; ready: boolean };
   canEdit: boolean;
 };
 
@@ -101,6 +103,8 @@ export function CadenceSettings() {
   const [saveError, setSaveError] = useState("");
   const [busy, setBusy] = useState(false);
   const [openKey, setOpenKey] = useState<string | null>(null);
+  // Max attempts as typed: "" means this scope inherits (the tenant default, else seven).
+  const [maxDraft, setMaxDraft] = useState("");
 
   // A promise chain rather than async/await, for the same reason as the calendar panel: the effect
   // below calls this on mount, and the linter can reach a setState synchronously through an async
@@ -117,6 +121,7 @@ export function CadenceSettings() {
           setError(null);
           setLoaded(body);
           setDraft(withKeys(body.rows));
+          setMaxDraft(body.maxAttempts?.own == null ? "" : String(body.maxAttempts.own));
           setOpenKey(null);
         })
         .catch((cause: unknown) => {
@@ -152,8 +157,13 @@ export function CadenceSettings() {
     return { byRow, gap: gap === -1 ? null : gap + base };
   }, [draft]);
 
-  const dirty = Boolean(loaded) && JSON.stringify(draft.map(withoutKey)) !== JSON.stringify(loaded?.rows ?? []);
-  const invalid = problems.byRow.size > 0 || problems.gap !== null;
+  const savedMax = loaded?.maxAttempts?.own == null ? "" : String(loaded.maxAttempts.own);
+  const maxDirty = Boolean(loaded) && maxDraft.trim() !== savedMax;
+  const maxValue = maxDraft.trim() === "" ? null : Number(maxDraft);
+  const maxInvalid =
+    maxValue !== null && (!Number.isInteger(maxValue) || maxValue < MAX_ATTEMPTS_RANGE.min || maxValue > MAX_ATTEMPTS_RANGE.max);
+  const dirty = (Boolean(loaded) && JSON.stringify(draft.map(withoutKey)) !== JSON.stringify(loaded?.rows ?? [])) || maxDirty;
+  const invalid = problems.byRow.size > 0 || problems.gap !== null || maxInvalid;
 
   function update(key: string, patch: Partial<CadenceRow>) {
     setDraft((rows) => rows.map((row) => (row.key === key ? { ...row, ...patch } : row)));
@@ -186,6 +196,8 @@ export function CadenceSettings() {
         body: JSON.stringify({
           campaignId: campaignId || null,
           rows: draft.map(withoutKey),
+          // Sent only when changed, so a cadence still saves before 20260929201100 is applied.
+          ...(maxDirty ? { maxAttempts: maxValue } : {}),
         }),
       });
       const body = await response.json().catch(() => null);
@@ -227,11 +239,15 @@ export function CadenceSettings() {
 
   const fallback = loaded.fallbackRows ?? [];
   const ready = loaded.schemaReady !== false;
+  const limits = loaded.maxAttempts;
+  const limitsReady = limits?.ready === true;
   // The dialer as deployed: before 20260924230300 it stops at the sixth dial and merges a
-  // campaign's rules with the tenant default attempt by attempt.
-  const lastAttempt = ready ? LAST_DIALLED_ATTEMPT : LEGACY_LAST_ATTEMPT;
+  // campaign's rules with the tenant default attempt by attempt. After it, the last dial is this
+  // scope's max attempts (the draft's, for the plan) — seven until one is set.
+  const runningLast = ready ? limits?.effective ?? LAST_DIALLED_ATTEMPT : LEGACY_LAST_ATTEMPT;
+  const lastAttempt = ready ? (maxInvalid ? runningLast : maxValue ?? limits?.inherited ?? LAST_DIALLED_ATTEMPT) : LEGACY_LAST_ATTEMPT;
   const ladderOptions = { lastAttempt, merge: !ready };
-  const running = effectiveLadder(loaded.rows, fallback, ladderOptions);
+  const running = effectiveLadder(loaded.rows, fallback, { lastAttempt: runningLast, merge: !ready });
   const runningSummary = ladderSummary(running);
   const planned = effectiveLadder(draft, fallback, ladderOptions);
   const plannedSummary = ladderSummary(planned);
@@ -259,8 +275,12 @@ export function CadenceSettings() {
       </StatStrip>
 
       {saveError && <Callout tone="error" title={saveError} />}
+      {maxInvalid && <Callout tone="error" title={`Max attempts is a whole number from ${MAX_ATTEMPTS_RANGE.min} to ${MAX_ATTEMPTS_RANGE.max}, or blank to inherit.`} />}
       {readOnly && <Callout tone="info" title="Only an owner can change the cadence. You are seeing what is in force." />}
       {!ready && <Callout tone="warning" title={`Until a pending database update is applied, the dialer stops after the ${ordinal(lastAttempt)} dial.`} />}
+      {ready && limits && !limitsReady && loaded.usingDefaults && (
+        <Callout tone="warning" title="Until a pending database update is applied, the built-in cadence waits 1 day after the first dial, not 2 hours." />
+      )}
 
       <TableCard
         title="Attempt ladder"
@@ -299,6 +319,27 @@ export function CadenceSettings() {
                 <option key={campaign.id} value={campaign.id}>{campaign.name}</option>
               ))}
             </select>
+            <label htmlFor="cadence-max-attempts" className="text-[13px] text-[var(--muted)]">Max attempts</label>
+            <input
+              id="cadence-max-attempts"
+              type="number"
+              inputMode="numeric"
+              min={MAX_ATTEMPTS_RANGE.min}
+              max={MAX_ATTEMPTS_RANGE.max}
+              className={cn(toolbarControl, "w-[84px]", maxInvalid && "border-[var(--error-ink)]")}
+              value={maxDraft}
+              placeholder={String(limits?.inherited ?? LAST_DIALLED_ATTEMPT)}
+              disabled={busy || readOnly || !limitsReady}
+              aria-invalid={maxInvalid || undefined}
+              title={
+                !limitsReady
+                  ? "Max attempts needs a database update that has not been applied yet. The dialer stops at seven."
+                  : campaignId
+                    ? `Blank uses the tenant default (${limits?.inherited ?? LAST_DIALLED_ATTEMPT}). A recycled lead keeps its own ceiling.`
+                    : `Blank uses ${LAST_DIALLED_ATTEMPT}. A campaign may set its own. A recycled lead keeps its own ceiling.`
+              }
+              onChange={(event) => setMaxDraft(event.target.value)}
+            />
             {dirty && <Pill tone="warning">Unsaved changes</Pill>}
           </DataToolbar>
         }
@@ -395,7 +436,7 @@ export function CadenceSettings() {
 
       {!readOnly && (
         <SettingsSaveBar visible={dirty} note={campaignName ? `Unsaved changes to ${campaignName}'s cadence` : "Unsaved changes to the cadence"}>
-          <Button type="button" variant="outline" onClick={() => { setDraft(withKeys(loaded.rows)); setSaveError(""); setOpenKey(null); }} disabled={busy}>Discard</Button>
+          <Button type="button" variant="outline" onClick={() => { setDraft(withKeys(loaded.rows)); setMaxDraft(savedMax); setSaveError(""); setOpenKey(null); }} disabled={busy}>Discard</Button>
           <Button type="button" onClick={() => void save()} disabled={busy || invalid}>{busy ? "Saving…" : "Save changes"}</Button>
         </SettingsSaveBar>
       )}

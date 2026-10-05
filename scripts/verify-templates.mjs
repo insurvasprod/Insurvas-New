@@ -1,3 +1,4 @@
+import "./lib/refuseProduction.mjs";
 // SA-4.6 live verification. Run with: npm run verify:templates
 import { SignJWT } from "jose";
 import { createClient } from "@supabase/supabase-js";

@@ -115,11 +115,15 @@ async function writeAudit(params: {
   rawResponse: JsonObject;
   resultId: string | null;
   cached: boolean;
-}) {
-  const { error } = await getSupabaseServiceClient().from("screening_audit").insert({
+  /** LA-2.3-9: the lead the check was for, when it is already known (a re-scrub, the dial preflight). */
+  leadId?: string | null;
+}): Promise<string | null> {
+  const row = {
     tenant_id: params.tenantId,
     partner_id: params.partnerId,
     user_id: params.userId,
+    // Typed `never` in the generated types (the column predates the tenant plane); it exists live.
+    lead_id: (params.leadId ?? null) as never,
     phone_digits: params.phoneDigits,
     outcome: params.outcome,
     vendor: params.vendor,
@@ -127,9 +131,70 @@ async function writeAudit(params: {
     result_id: params.resultId,
     cached: params.cached,
     version: SCREENING_RESULT_VERSION,
-  });
+  };
+  const insert = (values: typeof row) => getSupabaseServiceClient().from("screening_audit").insert(values).select("id").single<{ id: string }>();
+  let { data, error } = await insert(row);
+  // Until 20260925709750 repoints screening_audit.lead_id at agent_leads, the live FK still names
+  // the legacy `leads` table, so an agent lead id is refused (23503). The check is still audited,
+  // without the link: an unaudited check would fail the screening closed.
+  if (error?.code === "23503" && params.leadId) ({ data, error } = await insert({ ...row, lead_id: null as never }));
   if (error) throw new Error(`Could not write screening audit: ${error.message}`);
+  return data?.id ?? null;
 }
+
+/**
+ * LA-2.3-9: a check made before its lead existed (partner submit, import, real-time post) is
+ * linked to the lead once it is inserted, through the audit row's id (ScreenedDecision.auditId).
+ * Best effort by design: the lead is already saved, so a failed link is logged, never thrown.
+ */
+export async function linkScreeningAuditToLead(input: { tenantId: string; auditId: string | null | undefined; leadId: string | null | undefined }): Promise<void> {
+  if (!input.auditId || !input.leadId) return;
+  try {
+    const { error } = await getSupabaseServiceClient().from("screening_audit")
+      .update({ lead_id: input.leadId } as never)
+      .eq("tenant_id", input.tenantId).eq("id", input.auditId).is("lead_id", null);
+    if (error) console.error(`[screening-audit] could not link check ${input.auditId} to lead ${input.leadId}: ${error.message}`);
+  } catch (error) {
+    console.error(`[screening-audit] could not link check ${input.auditId} to lead ${input.leadId}: ${error instanceof Error ? error.message : "unknown"}`);
+  }
+}
+
+/** Links per update when link_screening_audit_leads (20260925709740) is not applied yet. */
+const LINK_FALLBACK_CAP = 1000;
+
+/**
+ * The bulk form, for an import: one call for every committed lead. Best effort, like the single
+ * link: a failure is logged and the import it follows stands.
+ */
+export async function linkScreeningAuditsToLeads(tenantId: string, links: Array<{ auditId: string | null | undefined; leadId: string | null | undefined }>): Promise<void> {
+  const seen = new Set<string>();
+  const pairs = links.flatMap((link) => {
+    if (!link.auditId || !link.leadId || seen.has(link.auditId)) return [];
+    seen.add(link.auditId);
+    return [{ audit_id: link.auditId, lead_id: link.leadId }];
+  });
+  if (!pairs.length) return;
+  try {
+    const { error } = await getSupabaseServiceClient().rpc("link_screening_audit_leads" as never, { p_tenant_id: tenantId, p_links: pairs } as never) as unknown as { error: { message: string; code?: string } | null };
+    if (!error) return;
+    if (error.code !== "42883" && error.code !== "PGRST202" && !/could not find the function/i.test(error.message)) {
+      console.error(`[screening-audit] could not link ${pairs.length} check(s) to their leads: ${error.message}`);
+      return;
+    }
+  } catch (error) {
+    console.error(`[screening-audit] could not link ${pairs.length} check(s) to their leads: ${error instanceof Error ? error.message : "unknown"}`);
+    return;
+  }
+  // Before the bulk function: one update per link, ten at a time, capped so an import is not held.
+  const capped = pairs.slice(0, LINK_FALLBACK_CAP);
+  if (pairs.length > capped.length) console.error(`[screening-audit] ${pairs.length - capped.length} check(s) left unlinked until 20260925709740 is applied`);
+  for (let start = 0; start < capped.length; start += 10) {
+    await Promise.all(capped.slice(start, start + 10).map((pair) => linkScreeningAuditToLead({ tenantId, auditId: pair.audit_id, leadId: pair.lead_id })));
+  }
+}
+
+/** A screening decision plus the audit row it wrote (null only if the check wrote none). */
+export type ScreenedDecision = ScreeningDecision & { auditId: string | null };
 
 async function waitForClaim(tenantId: string, phoneDigits: string): Promise<ScreeningClaim | null> {
   const startedAt = Date.now();
@@ -144,7 +209,7 @@ async function waitForClaim(tenantId: string, phoneDigits: string): Promise<Scre
 }
 
 /** The production bindings for lib/compliance/screeningCore.ts. */
-function screeningDeps(input: { tenantId: string; partnerId: string | null; userId: string | null; fetcher: typeof fetch }): ScreeningDeps {
+function screeningDeps(input: { tenantId: string; partnerId: string | null; userId: string | null; leadId: string | null; fetcher: typeof fetch; onAudit?: (auditId: string | null) => void }): ScreeningDeps {
   const db = getSupabaseServiceClient();
   const { tenantId } = input;
   return {
@@ -188,7 +253,9 @@ function screeningDeps(input: { tenantId: string; partnerId: string | null; user
       if (error || !data) throw new Error(error?.message ?? "Could not persist screening result");
       return data as string;
     },
-    audit: (entry: ScreeningAuditEntry) => writeAudit({ tenantId, partnerId: input.partnerId, userId: input.userId, ...entry }),
+    async audit(entry: ScreeningAuditEntry) {
+      input.onAudit?.(await writeAudit({ tenantId, partnerId: input.partnerId, userId: input.userId, leadId: input.leadId, ...entry }));
+    },
   };
 }
 
@@ -197,19 +264,24 @@ export async function screenPartnerPhone(input: {
   partnerId: string | null;
   userId: string | null;
   phone: unknown;
+  /** LA-2.3-9: set when the check is for a lead that already exists (a campaign re-scrub). */
+  leadId?: string | null;
   fetcher?: typeof fetch;
-}): Promise<ScreeningDecision> {
+}): Promise<ScreenedDecision> {
+  const leadId = input.leadId ?? null;
   let phoneDigits: string;
   try {
     phoneDigits = getUsPhone10Digits(input.phone);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Enter a valid US phone number";
-    await writeAudit({ tenantId: input.tenantId, partnerId: input.partnerId, userId: input.userId, phoneDigits: null, outcome: "invalid_phone", vendor: null, rawResponse: { error: "invalid_phone" }, resultId: null, cached: false });
-    return { allowed: false, phoneDigits: null, outcome: "invalid_phone", warning: null, resultId: null, version: SCREENING_RESULT_VERSION, checkedAt: null, cached: false, message };
+    const auditId = await writeAudit({ tenantId: input.tenantId, partnerId: input.partnerId, userId: input.userId, leadId, phoneDigits: null, outcome: "invalid_phone", vendor: null, rawResponse: { error: "invalid_phone" }, resultId: null, cached: false });
+    return { allowed: false, phoneDigits: null, outcome: "invalid_phone", warning: null, resultId: null, version: SCREENING_RESULT_VERSION, checkedAt: null, cached: false, message, auditId };
   }
   // Tenant do-not-call list, the 24-hour vendor cache, metering, vendor fallback, internal DQ and
   // the precedence between them: lib/compliance/screeningCore.ts (tested with injected vendors).
-  return runScreening(screeningDeps({ tenantId: input.tenantId, partnerId: input.partnerId, userId: input.userId, fetcher: input.fetcher ?? fetch }), phoneDigits);
+  let auditId: string | null = null;
+  const decision = await runScreening(screeningDeps({ tenantId: input.tenantId, partnerId: input.partnerId, userId: input.userId, leadId, fetcher: input.fetcher ?? fetch, onAudit: (id) => { auditId = id; } }), phoneDigits);
+  return { ...decision, auditId };
 }
 
 /* ── the dial preflight dialog's litigator row ─────────────────────────────────────────────────── */
@@ -259,10 +331,12 @@ export async function checkLitigatorForDialPreflight(input: {
   tenantId: string;
   userId: string | null;
   phoneDigits: string;
+  /** LA-2.3-9: the lead this number belongs to, when the dialog found one. */
+  leadId?: string | null;
   fetcher?: typeof fetch;
 }): Promise<DialPreflightLitigator> {
   const db = getSupabaseServiceClient();
-  const audit = { tenantId: input.tenantId, partnerId: null, userId: input.userId, phoneDigits: input.phoneDigits };
+  const audit = { tenantId: input.tenantId, partnerId: null, userId: input.userId, phoneDigits: input.phoneDigits, leadId: input.leadId ?? null };
   const now = new Date();
 
   const claim = await db.rpc("claim_screening_cache", { p_tenant_id: input.tenantId, p_phone_digits: input.phoneDigits, p_version: SCREENING_RESULT_VERSION, p_claim_seconds: 30 });

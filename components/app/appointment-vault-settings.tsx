@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { notify } from "@/lib/notify";
 import { Plus } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { StatusChip } from "@/components/ui/status-chip";
 import { Button } from "@/components/ui/button";
 import { DataToolbar, RefreshButton, ToolbarSearch } from "@/components/ui/data-toolbar";
 import { PageHeader } from "@/components/ui/page-header";
@@ -206,7 +206,7 @@ export function AppointmentVaultSettings({
       className="portal-appointments-header"
       title="Appointments & licences"
       description="Whether you may legally write this product in this state today."
-      actions={!canEdit ? <Badge variant="outline" className="portal-appointments-view-only">View only</Badge> : undefined}
+      actions={!canEdit ? <StatusChip>View only</StatusChip> : undefined}
     />
   );
   const saveBar = canEdit ? (

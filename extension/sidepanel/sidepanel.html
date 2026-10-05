@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Insurvas</title>
+    <link rel="stylesheet" href="sidepanel.css" />
+  </head>
+  <body>
+    <header class="top">
+      <h1>Insurvas</h1>
+      <p id="grant-line" class="muted" aria-live="polite">No application open.</p>
+    </header>
+
+    <section id="state" class="state" role="status"></section>
+
+    <section id="actions" class="actions" hidden>
+      <button type="button" id="fill" class="primary">Fill this page</button>
+      <button type="button" id="highlight" aria-pressed="false">Highlight</button>
+      <button type="button" id="reload">Reload values</button>
+    </section>
+    <p id="result" class="result" aria-live="polite" hidden></p>
+    <p class="muted small">Insurvas fills fields. It never submits — check each page, then press the carrier's own button.</p>
+
+    <section id="copy" class="copy" hidden>
+      <div class="copy-head">
+        <h2>Copy-assist</h2>
+        <span id="progress" class="muted small"></span>
+      </div>
+      <div id="groups"></div>
+    </section>
+
+    <footer class="foot">
+      <button type="button" id="forget" class="link">Forget this grant</button>
+    </footer>
+
+    <script src="sidepanel.js" type="module"></script>
+  </body>
+</html>

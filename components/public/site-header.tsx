@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Menu } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { InsurvasLogo } from "@/components/shared/insurvas-logo";
 
 /**
  * The marketing rail.
@@ -26,10 +27,7 @@ export function SiteHeader({ current }: { current?: "home" | "pricing" }) {
     <header className="sticky top-0 z-50 border-b border-border bg-[color-mix(in_srgb,var(--card)_82%,transparent)] backdrop-blur-xl supports-[backdrop-filter]:bg-[color-mix(in_srgb,var(--card)_72%,transparent)]">
       <div className="mx-auto flex max-w-7xl items-center gap-3 px-4 py-[14px] sm:px-6 md:gap-10 lg:px-16">
         <Link href="/" aria-current={current === "home" ? "page" : undefined} className="group flex items-center gap-2.5 no-underline">
-          <span className="inline-flex size-7 items-center justify-center rounded-lg bg-[var(--primary)] text-sm font-semibold text-[var(--on-primary)] transition-transform duration-300 group-hover:rotate-[-8deg] group-hover:scale-105">
-            I
-          </span>
-          <span className="text-lg font-semibold leading-[1.28] tracking-[-0.015em] text-foreground">Insurvas</span>
+          <InsurvasLogo size="public" />
         </Link>
 
         <nav aria-label="Primary" className="hidden items-center gap-7 md:flex">

@@ -88,11 +88,11 @@ function uniqueKey(base: string, used: Set<string>) {
 
 const PREVIEW_MARKET = { carrier_id: "", carrier_name: "", state: "" };
 
-function PartnerViewPreview({ source, productCode, productName }: { source: PartnerFormPreviewSource; productCode: string; productName: string }) {
+function PartnerViewPreview({ source, productCode, productName, agencyName }: { source: PartnerFormPreviewSource; productCode: string; productName: string; agencyName: string | null }) {
   return (
     <SettingsCard title="Partner view preview" sub="Drawn from this draft. Nothing is saved or submitted.">
       <div className="portal-partner-submit-page">
-        <PartnerLeadForm productCode={productCode} productName={productName} partnerStatus="active" market={PREVIEW_MARKET} preview={source} />
+        <PartnerLeadForm productCode={productCode} productName={productName} partnerStatus="active" market={PREVIEW_MARKET} preview={source} agencyName={agencyName} />
       </div>
     </SettingsCard>
   );
@@ -146,6 +146,8 @@ export function TemplateSettings() {
   const [current, setCurrent] = useState<Current | null>(null);
   const [available, setAvailable] = useState<Available[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  // The partner form shows the agency by name; the preview shows the same name (LA-1.4-5).
+  const [agencyName, setAgencyName] = useState<string | null>(null);
   const [state, setState] = useState<DraftState | null>(null);
   const [selected, setSelected] = useState("");
   const [preview, setPreview] = useState<Preview | null>(null);
@@ -167,6 +169,7 @@ export function TemplateSettings() {
     setCurrent(body.current);
     setAvailable(body.templates ?? []);
     setProducts(body.products ?? []);
+    setAgencyName(typeof body.agencyName === "string" ? body.agencyName : null);
     setState({ draft: draftFrom(body.current), seen: {} });
     setSaveError("");
     setSelected("");
@@ -543,7 +546,7 @@ export function TemplateSettings() {
       />
       </SettingsGrid>
 
-      {previewSource && <PartnerViewPreview source={previewSource} productCode={current.assignment.product_code} productName={current.template.product_name} />}
+      {previewSource && <PartnerViewPreview source={previewSource} productCode={current.assignment.product_code} productName={current.template.product_name} agencyName={agencyName} />}
 
       <SettingsSaveBar visible={dirty} note="Commits a new form version; forms already in progress keep theirs">
         <Button type="button" variant="outline" onClick={discard} disabled={saving}>Discard</Button>

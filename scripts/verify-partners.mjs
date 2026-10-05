@@ -1,3 +1,4 @@
+import "./lib/refuseProduction.mjs";
 // LA-1.1 live contract checks. Run with: npm run verify:partners
 import { randomUUID } from "node:crypto";
 import { SignJWT } from "jose";
@@ -125,15 +126,23 @@ async function main() {
     const capacityActivated = await api(`/api/app/partners/${capacityId}`, owner, { method: "PATCH", ...json({ action: "transition", next_status: "active", reason: "Capacity verification" }) });
     check("capacity holder can be activated", capacityActivated.status === 200);
 
+    // LA-1.19 (user decision, 2026-09-25): only an ACTIVE partner holds a slot. With one of two
+    // publisher slots held, two drafts are both created (a draft holds none), and the cap is
+    // enforced where a slot is taken: activating them together lets exactly one through.
     const concurrent = await Promise.all([
       api("/api/app/partners", owner, { method: "POST", ...json(partner("Concurrent A")) }),
       api("/api/app/partners", owner, { method: "POST", ...json(partner("Concurrent B")) }),
     ]);
     const concurrentBodies = await Promise.all(concurrent.map((response) => response.json()));
-    const successful = concurrentBodies.map((body) => body.partner?.id).filter(Boolean); otherPartnerId = successful[0] ?? null;
-    check("concurrent creates respect the cached partner limit atomically", concurrent.filter((response) => response.status === 201).length === 1 && concurrent.some((response) => response.status === 403), `${JSON.stringify(concurrent.map((response) => response.status))} ${JSON.stringify(concurrentBodies)}`);
+    const drafts = concurrentBodies.map((body) => body.partner?.id).filter(Boolean); otherPartnerId = drafts[0] ?? null;
+    check("drafts hold no slot: both concurrent creates succeed below the active cap", concurrent.every((response) => response.status === 201) && concurrentBodies.every((body) => body.partner?.status === "draft"), `${JSON.stringify(concurrent.map((response) => response.status))} ${JSON.stringify(concurrentBodies)}`);
+    const activations = await Promise.all(drafts.map((id) => api(`/api/app/partners/${id}`, owner, { method: "PATCH", ...json({ action: "transition", next_status: "active", reason: "Concurrent activation at the cap" }) })));
+    const activationBodies = await Promise.all(activations.map((response) => response.json()));
+    check("concurrent activations respect the partner limit atomically", drafts.length === 2 && activations.filter((response) => response.status === 200).length === 1 && activations.some((response) => response.status === 403), `${JSON.stringify(activations.map((response) => response.status))} ${JSON.stringify(activationBodies)}`);
+    const refusal = activationBodies.find((body) => body.code === "limit_reached");
+    check("the refused activation names the limit in words", refusal?.limitKey === "max_publishers" && /active publishers/.test(refusal?.error ?? "") && !/max_publishers/.test(refusal?.error ?? ""), JSON.stringify(refusal));
     const limit = await api("/api/app/partners", owner, { method: "POST", ...json(partner("Over limit")) });
-    check("plan partner limit rejects another create", limit.status === 403);
+    check("plan partner limit rejects another create once the active slots are full", limit.status === 403);
 
     const ownList = await api("/api/app/partners", owner); const ownBody = await ownList.json();
     const otherList = await api("/api/app/partners", otherOwner); const otherBody = await otherList.json();

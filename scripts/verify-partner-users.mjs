@@ -1,3 +1,4 @@
+import "./lib/refuseProduction.mjs";
 // LA-1.2 live contract checks. Run with: npm run verify:partner-users
 import { randomUUID } from "node:crypto";
 import bcrypt from "bcryptjs";
@@ -141,7 +142,10 @@ async function main() {
   check("partner user login succeeds", userLogin.status === 200 && userCookie.startsWith("insurvas_partner_session="));
   const partnerCredentialOnAgentLogin = await fetch(`${BASE}/api/app/auth/login`, { method: "POST", ...json({ email: adminEmail, password: "Partner QA password 123!" }), headers: { "content-type": "application/json", "x-forwarded-for": normalLoginIp } });
   const agentCredentialOnPartnerLogin = await fetch(`${BASE}/api/partner/auth/login`, { method: "POST", ...json({ email: ownerEmail, password: "Partner QA password 123!" }), headers: { "content-type": "application/json", "x-forwarded-for": normalLoginIp } });
-  check("partner credentials are rejected by the agent login", partnerCredentialOnAgentLogin.status === 401);
+  // One account, one portal (lib/auth/planeSeparation.ts): past the password the agent login names
+  // the right door with 403 wrong_portal, and still issues no agent session.
+  const partnerOnAgentBody = await partnerCredentialOnAgentLogin.clone().json().catch(() => ({}));
+  check("partner credentials are rejected by the agent login", partnerCredentialOnAgentLogin.status === 403 && partnerOnAgentBody.code === "wrong_portal" && tenantSessionCookie(partnerCredentialOnAgentLogin).length <= "insurvas_tenant_session=".length,JSON.stringify({ status: partnerCredentialOnAgentLogin.status, body: partnerOnAgentBody }));
   check("agent credentials are rejected by the partner login", agentCredentialOnPartnerLogin.status === 401);
   const agentLogin = await fetch(`${BASE}/api/app/auth/login`, { method: "POST", ...json({ email: ownerEmail, password: "Partner QA password 123!" }), headers: { "content-type": "application/json", "x-forwarded-for": normalLoginIp } });
   check("agent login issues the agent session and clears the partner session", agentLogin.status === 200 && tenantSessionCookie(agentLogin).startsWith("insurvas_tenant_session=") && hasClearedCookie(agentLogin, "insurvas_partner_session"));

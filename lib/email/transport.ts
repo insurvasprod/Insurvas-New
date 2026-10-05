@@ -39,6 +39,8 @@ export type SendEmailInput = {
    */
   dedupeKey?: string | null;
   replyTo?: string;
+  /** Files sent with the email (a welcome-pack PDF, say). Kept small: SMTP providers cap messages at ~25 MB. */
+  attachments?: { filename: string; content: Buffer | Uint8Array; contentType: string }[];
 };
 
 type SmtpConfig = {
@@ -190,7 +192,8 @@ async function record(input: SendEmailInput, row: {
 export async function sendEmail(input: SendEmailInput): Promise<EmailDelivery> {
   if (emailDeliveryMode() !== "smtp") {
     const reason = "email_delivery_disabled";
-    console.info(`[email] ${input.templateKey} recorded but not sent — ${reason}`);
+    const files = input.attachments?.length ? ` (${input.attachments.length} attachment${input.attachments.length === 1 ? "" : "s"}, ${input.attachments.reduce((n, a) => n + a.content.byteLength, 0)} bytes)` : "";
+    console.info(`[email] ${input.templateKey} recorded but not sent — ${reason}${files}`);
     await record(input, { status: "skipped", failureReason: reason });
     return { delivered: false, reason };
   }
@@ -223,6 +226,7 @@ export async function sendEmail(input: SendEmailInput): Promise<EmailDelivery> {
       text: input.text,
       html: input.html,
       replyTo: input.replyTo,
+      ...(input.attachments?.length ? { attachments: input.attachments.map((a) => ({ filename: a.filename, content: Buffer.from(a.content), contentType: a.contentType })) } : {}),
     });
 
     await record(input, { status: "sent", providerMessageId: info.messageId });

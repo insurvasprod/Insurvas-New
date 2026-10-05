@@ -19,6 +19,7 @@ import {
 
 import type { PartnerRole } from "@/lib/partnerAuth/roles";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { InsurvasLogo } from "@/components/shared/insurvas-logo";
 
 type PartnerStatus = "draft" | "active" | "paused" | "offboarded";
 type PartnerNavItem = { label: string; path: string; icon: typeof Home };
@@ -120,7 +121,7 @@ export function PartnerSidebar({ role, partnerStatus, partnerName, footer }: { r
         <button type="button" onClick={() => setOpen(true)} aria-label="Open menu" aria-expanded={open} className="-ml-1 rounded-md p-1.5 transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]">
           <Menu className="size-5" aria-hidden="true" />
         </button>
-        <div className="flex items-center gap-2.5"><span aria-hidden="true" className="inline-flex size-[26px] shrink-0 items-center justify-center rounded-lg bg-[var(--primary)] text-xs font-semibold text-[var(--on-primary)]">I</span><span className="text-sm font-semibold tracking-[-0.01em]">Insurvas partners</span></div>
+        <InsurvasLogo size="sidebar" />
       </header>
 
       {open && (
@@ -128,7 +129,7 @@ export function PartnerSidebar({ role, partnerStatus, partnerName, footer }: { r
           <button type="button" aria-label="Close menu" onClick={() => setOpen(false)} className="absolute inset-0 bg-black/50" />
           <div className="portal-agent-sidebar-mobile-drawer absolute inset-y-0 left-0 flex w-80 max-w-[88vw] flex-col overflow-y-auto p-4 text-foreground">
             <div className="min-h-0 flex-1">
-              <div className="portal-agent-sidebar-brand"><div className="flex items-center gap-2.5"><span aria-hidden="true" className="inline-flex size-[26px] shrink-0 items-center justify-center rounded-lg bg-[var(--primary)] text-xs font-semibold text-[var(--on-primary)]">I</span><span className="text-sm font-semibold tracking-[-0.01em]">Insurvas partners</span></div><button type="button" onClick={() => setOpen(false)} aria-label="Close menu" className="portal-agent-sidebar-collapse rounded-md p-1.5 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"><X className="size-5" aria-hidden="true" /></button></div>
+              <div className="portal-agent-sidebar-brand"><InsurvasLogo size="sidebar" /><button type="button" onClick={() => setOpen(false)} aria-label="Close menu" className="portal-agent-sidebar-collapse rounded-md p-1.5 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"><X className="size-5" aria-hidden="true" /></button></div>
               {navigation}
               <PartnerCard role={role} partnerStatus={partnerStatus} partnerName={partnerName} />
             </div>
@@ -138,7 +139,7 @@ export function PartnerSidebar({ role, partnerStatus, partnerName, footer }: { r
       )}
 
       <aside data-print-hide className={`portal-agent-sidebar-desktop hidden shrink-0 flex-col md:flex ${collapsed ? "is-collapsed" : ""}`} data-collapsed={collapsed}>
-        <div className="portal-agent-sidebar-brand"><div className="flex items-center gap-2.5"><span aria-hidden="true" className="inline-flex size-[26px] shrink-0 items-center justify-center rounded-lg bg-[var(--primary)] text-xs font-semibold text-[var(--on-primary)]">I</span><span className="text-sm font-semibold tracking-[-0.01em]">Insurvas partners</span></div><button type="button" className="portal-agent-sidebar-collapse rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]" onClick={() => setCollapsed((value) => !value)} aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"} aria-pressed={collapsed} title={collapsed ? "Expand sidebar" : "Collapse sidebar"}>{collapsed ? <PanelLeftOpen className="size-4" aria-hidden="true" /> : <PanelLeftClose className="size-4" aria-hidden="true" />}</button></div>
+        <div className="portal-agent-sidebar-brand"><div className="insurvas-partner-brand-full"><InsurvasLogo size="sidebar" /></div><InsurvasLogo size="compact" variant="symbol" className="insurvas-partner-brand-compact" /><button type="button" className="portal-agent-sidebar-collapse rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]" onClick={() => setCollapsed((value) => !value)} aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"} aria-pressed={collapsed} title={collapsed ? "Expand sidebar" : "Collapse sidebar"}>{collapsed ? <PanelLeftOpen className="size-4" aria-hidden="true" /> : <PanelLeftClose className="size-4" aria-hidden="true" />}</button></div>
         <div className="portal-agent-sidebar-scroll min-h-0 flex-1">
           {navigation}
         </div>
