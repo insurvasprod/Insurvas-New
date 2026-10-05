@@ -5,6 +5,7 @@ import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { StatementImportButton } from "@/components/app/statement-import";
 import { StatementsTable } from "@/components/app/statements-table";
+import { UnmatchedLinesTable } from "@/components/app/unmatched-lines-table";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatStrip, StatTile } from "@/components/ui/stat";
@@ -14,7 +15,7 @@ import {
   type StatementCarrierOption,
   type StatementMapping,
 } from "@/lib/ledger/statementConstants";
-import { getSavedStatementMappings, listStatementCarriers, listStatements } from "@/lib/ledger/statementService";
+import { getSavedStatementMappings, listStatementCarriers, listStatements, listUnmatchedLines } from "@/lib/ledger/statementService";
 import { hasTenantPermission } from "@/lib/tenantAuth/permissions";
 
 /**
@@ -23,9 +24,14 @@ import { hasTenantPermission } from "@/lib/tenantAuth/permissions";
  * A statement is a record, not a draft: it is never deleted, only voided with a reason, and each
  * row links to the review screen where its lines are accepted, matched by hand or left unmatched.
  * Owner and bookkeeper only (`statements.view`), the same two roles the API admits.
+ *
+ * LA-4.3: a second tab, "Unmatched lines", is the queue across every statement — the lines still
+ * without a match, which can be re-matched against the book as it is now.
  */
 
-export default async function StatementsPage({ searchParams }: { searchParams: Promise<{ import?: string }> }) {
+const tabClass = (active: boolean) => `-mb-px inline-flex h-10 items-center gap-1.5 border-b-2 px-1 text-sm font-semibold leading-[1.43] tracking-[-0.01em] outline-none focus-visible:ring-2 focus-visible:ring-ring ${active ? "border-[var(--primary)] text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`;
+
+export default async function StatementsPage({ searchParams }: { searchParams: Promise<{ import?: string; view?: string }> }) {
   const guard = await guardPage("statement_ingestion");
   if (!guard.entitled) {
     return (
@@ -41,7 +47,9 @@ export default async function StatementsPage({ searchParams }: { searchParams: P
   }
 
   const readOnly = guard.entitlement.access === "read_only";
-  const [{ available, statements }, { import: importParam }] = await Promise.all([listStatements(guard.context.tenantId), searchParams]);
+  const [{ available, statements }, { import: importParam, view }] = await Promise.all([listStatements(guard.context.tenantId), searchParams]);
+  const showUnmatched = view === "unmatched";
+  const unmatched = showUnmatched && available ? await listUnmatchedLines(guard.context.tenantId) : null;
   const blocked = !available ? STATEMENT_SCHEMA_PENDING_MESSAGE : readOnly ? "Importing is paused while the account is read-only." : null;
   const [carriers, savedMappings]: [StatementCarrierOption[], Record<string, StatementMapping>] = blocked
     ? [[], {}]
@@ -56,6 +64,7 @@ export default async function StatementsPage({ searchParams }: { searchParams: P
   const waiting = standing.reduce((total, statement) => total + statement.counts.proposed + statement.counts.unmatched, 0);
   const acceptedCents = standing.reduce((total, statement) => total + statement.acceptedCents, 0);
   const toReview = standing.filter((statement) => statement.status === "review").length;
+  const unmatchedCount = standing.reduce((total, statement) => total + statement.counts.unmatched, 0);
 
   return (
     <div className="m-stagger flex flex-col gap-6">
@@ -83,11 +92,26 @@ export default async function StatementsPage({ searchParams }: { searchParams: P
         </StatStrip>
       )}
 
-      <StatementsTable
-        statements={statements}
-        emptyTitle={available ? "No statement imported yet" : "Statements are not available yet"}
-        emptyHint={available ? "Import a carrier's commission statement as CSV to review its lines." : STATEMENT_SCHEMA_PENDING_MESSAGE}
-      />
+      {statements.length > 0 && (
+        <div role="tablist" aria-label="Statement lists" className="flex flex-wrap gap-6 border-b border-border">
+          <Link role="tab" aria-selected={!showUnmatched} href="/app/statements" className={tabClass(!showUnmatched)}>
+            Statements <span className="text-xs font-semibold tabular-nums text-muted-foreground">{statements.length.toLocaleString("en-US")}</span>
+          </Link>
+          <Link role="tab" aria-selected={showUnmatched} href="/app/statements?view=unmatched" className={tabClass(showUnmatched)}>
+            Unmatched lines <span className="text-xs font-semibold tabular-nums text-muted-foreground">{unmatchedCount.toLocaleString("en-US")}</span>
+          </Link>
+        </div>
+      )}
+
+      {showUnmatched && unmatched ? (
+        <UnmatchedLinesTable lines={unmatched.lines} canWrite={!readOnly} writeBlockedReason={readOnly ? "Re-matching is paused while the account is read-only." : null} />
+      ) : (
+        <StatementsTable
+          statements={statements}
+          emptyTitle={available ? "No statement imported yet" : "Statements are not available yet"}
+          emptyHint={available ? "Import a carrier's commission statement as CSV, Excel or PDF to review its lines." : STATEMENT_SCHEMA_PENDING_MESSAGE}
+        />
+      )}
     </div>
   );
 }

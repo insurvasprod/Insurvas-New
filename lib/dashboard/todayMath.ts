@@ -39,6 +39,17 @@ export function lastDays(nowMs: number, zone: string, count = 14): DayWindow[] {
   return days;
 }
 
+/**
+ * The agency's next midnight, as a UTC instant. `lastDays` ends today at "now" (a count over it is
+ * "so far today"); a diary of today's appointments needs the whole day, the ones still to come too.
+ */
+export function endOfToday(nowMs: number, zone: string): string {
+  const today = wallClock(new Date(nowMs).toISOString(), zone);
+  // Noon today plus a day, read in the zone: tomorrow's date whatever DST does overnight.
+  const tomorrow = wallClock(new Date(zonedInstant(today.year, today.month, today.day, 720, zone) + 86_400_000).toISOString(), zone);
+  return new Date(zonedInstant(tomorrow.year, tomorrow.month, tomorrow.day, 0, zone)).toISOString();
+}
+
 /** "Good morning" until noon, "Good afternoon" until six, "Good evening" after — agency time. */
 export function greeting(nowMs: number, zone: string) {
   const hour = Math.floor(wallClock(new Date(nowMs).toISOString(), zone).minutes / 60);

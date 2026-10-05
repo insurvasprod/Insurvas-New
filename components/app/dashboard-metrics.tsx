@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Suspense } from "react";
 import {
-  BookOpen, BriefcaseBusiness, CalendarCheck, ContactRound, ListChecks, PhoneIncoming, PhoneOutgoing, RadioTower, Receipt, Route, SquareStack,
+  BookOpen, BriefcaseBusiness, CalendarCheck, ContactRound, ListChecks, PhoneIncoming, PhoneOutgoing, RadioTower, Receipt, Route, SquareStack, TriangleAlert,
   type LucideIcon,
 } from "lucide-react";
 
@@ -27,6 +27,7 @@ const ICONS: Record<string, LucideIcon> = {
   "contact-round": ContactRound,
   "book-open": BookOpen,
   receipt: Receipt,
+  "triangle-alert": TriangleAlert,
 };
 
 const TONE = { danger: "text-[var(--error-ink)]", warning: "text-[var(--warning-ink)]", good: "text-[var(--success-ink)]" } as const;
@@ -36,7 +37,7 @@ async function MetricFigure({ tile, tenantId }: { tile: DashboardTile; tenantId:
   return (
     <>
       <span className="mt-2 block text-2xl font-semibold leading-[1.2] tracking-[-0.025em] tabular-nums text-foreground" title={metric?.detail}>
-        {metric ? metric.value.toLocaleString("en-US") : "—"}
+        {metric ? metric.display ?? metric.value.toLocaleString("en-US") : "—"}
       </span>
       <span className={`mt-0.5 block truncate text-xs leading-normal ${metric?.tone ? TONE[metric.tone] : "text-muted-foreground"}`} title={metric?.detail ?? tile.description}>
         {metric ? metric.caption : tile.action_label}

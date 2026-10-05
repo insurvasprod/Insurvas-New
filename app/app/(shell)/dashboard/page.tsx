@@ -6,11 +6,13 @@ import { loadFeatureSwitches } from "@/lib/features/killSwitch";
 import { applyKillSwitches } from "@/lib/features/killSwitchRules";
 import { visibleDashboardTiles } from "@/lib/dashboard/tiles";
 import { setupChecklistForState } from "@/lib/dashboard/checklist";
+import { hasImportedStatement } from "@/lib/dashboard/summaries";
 import { getDashboardOnboardingState } from "@/lib/dashboard/service";
 import { SetupChecklist } from "@/components/app/setup-checklist";
 import { Card, CardContent } from "@/components/ui/card";
 import { listDueCallbacks } from "@/lib/callbacks/service";
 import { AppointmentCloseOutStrip } from "@/components/app/appointment-close-out-strip";
+import { PendingSummaryCard } from "@/components/app/applications/pending-summary-card";
 import Link from "next/link";
 import { Suspense } from "react";
 import { getWorkspaceTimezone } from "@/lib/agencyProfile/timezone";
@@ -128,14 +130,15 @@ export default async function AgentDashboardPage() {
   // depends on neither the entitlement nor the tenant — only applying the switches does. Awaiting
   // it afterwards cost a second serial round trip, ~170ms of ~340ms of data time on this page,
   // for a criterion ("loads in under 1 second") with no room to spare.
-  const [entitlement, onboardingState, switches] = await Promise.all([
+  const [entitlement, onboardingState, switches, statementImported] = await Promise.all([
     getEntitlement(context.tenantId),
     getDashboardOnboardingState(context.tenantId),
     loadFeatureSwitches(),
+    hasImportedStatement(context.tenantId),
   ]);
   const available = applyKillSwitches(entitlement.features, switches, context.tenantId);
   const tiles = visibleDashboardTiles(available, context.role);
-  const checklist = setupChecklistForState(onboardingState);
+  const checklist = setupChecklistForState(onboardingState, { statementImported });
   // `available`, not `entitlement.features`. Kill switches are consulted BEFORE the entitlement at
   // every enforcement point (SA-4.10), and `applyKillSwitches` on the line above is what applies
   // them. This read used `hasFeature(entitlement, …)`, which is the raw plan — so switching
@@ -150,6 +153,7 @@ export default async function AgentDashboardPage() {
   // by it.
   const closeOutAvailable =
     available.includes("outbound_dialing") && ["owner", "producer"].includes(context.role);
+  const applicationsAvailable = available.includes("applications") && ["owner", "producer"].includes(context.role);
 
   // A producer has no team to rank, so the callbacks card sits beside the heatmap instead of the
   // standings; an owner gets it in the bottom row with the setup checklist. Streamed: the page shell
@@ -175,6 +179,10 @@ export default async function AgentDashboardPage() {
           is one people stop reading. It stays on Activity as well, where the empty state is a fact
           worth stating. */}
       {closeOutAvailable && <AppointmentCloseOutStrip hideWhenEmpty />}
+
+      {/* LA-3.15 / 3.18 / 3.26 · awaiting a policy number, waiting on the client, counteroffers about
+          to expire. It fetches its own counts and hides itself when there is nothing, or no access. */}
+      {applicationsAvailable && <PendingSummaryCard />}
 
       {/* The lead: the band, the KPI strip, what needs you, then the analysis panels. The owner asked
           for a metrics dashboard — more numbers, compact, something worth watching — over the

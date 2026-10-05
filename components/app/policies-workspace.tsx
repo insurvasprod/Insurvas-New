@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Check, Download, Plus, Upload } from "lucide-react";
 import { notify } from "@/lib/notify";
@@ -15,6 +16,7 @@ import { TableCard } from "@/components/ui/table-card";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { RecordLapseSignal } from "@/components/app/record-lapse-signal";
 import { parsePolicyCsv, policyCsvTemplate, type PolicyImportRow } from "@/lib/policies/csv";
+import { Pager } from "@/components/ui/pager";
 
 type Policy = PolicyImportRow & { id: string; source: "manual" | "csv"; created_at: string; updated_at: string };
 type Metrics = { active: number; annualPremiumCents: number; carriers: number; renewalsDue: number };
@@ -161,11 +163,7 @@ export function PoliciesWorkspace({ readOnly }: { readOnly: boolean }) {
         </DataToolbar>
       }
       footer={policies.length > 0 && !error ? <>
-        <span>{filtered.length ? `Showing ${currentPage * PAGE_SIZE + 1}–${currentPage * PAGE_SIZE + shown.length} of ${filtered.length.toLocaleString()} ${filtered.length === 1 ? "policy" : "policies"} · newest first` : "Nothing to show"}</span>
-        <span className="flex gap-2">
-          <Button type="button" variant="outline" size="sm" disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}>Previous</Button>
-          <Button type="button" variant="outline" size="sm" disabled={currentPage >= pageCount - 1} onClick={() => setPage(currentPage + 1)}>Next</Button>
-        </span>
+        <Pager page={currentPage + 1} total={filtered.length} pageSize={PAGE_SIZE} noun={filtered.length === 1 ? "policy" : "policies"} suffix="newest first" onPage={(next) => setPage(next - 1)} />
       </> : undefined}
     >
       {loading && policies.length === 0 ? <SectionLoading rows={4} columns={6} label="Loading policies" />
@@ -173,7 +171,9 @@ export function PoliciesWorkspace({ readOnly }: { readOnly: boolean }) {
         : policies.length === 0 ? <EmptyState title="No policies yet" hint="Import a carrier file or add a policy by hand." />
         : filtered.length === 0 ? <NoMatches noun="policies" onClear={clearFilters} />
         : (
-          <table className="w-full min-w-[980px] table-fixed border-collapse text-left">
+          <table className="w-full min-w-[1190px] table-fixed border-collapse text-left">
+            {/* The fixed columns add up to 990px; the minimum leaves Customer 200px of its own. At 980 it
+                was squeezed to zero on any screen narrower than the table, and names ran into Carrier. */}
             <thead><tr>
               <th className={th}>Customer</th>
               <th className={`${th} w-[160px]`}>Carrier</th>
@@ -186,7 +186,7 @@ export function PoliciesWorkspace({ readOnly }: { readOnly: boolean }) {
             </tr></thead>
             <tbody>
               {shown.map((policy) => <tr key={policy.id} className="m-row">
-                <td className={`${td} font-semibold text-foreground`}>{policy.insured_name}</td>
+                <td className={`${td} font-semibold text-foreground`}><Link href={`/app/policies/${policy.id}`} className="underline-offset-2 hover:underline">{policy.insured_name}</Link></td>
                 <td className={td}>{policy.carrier}</td>
                 <td className={td}>{policy.product}</td>
                 <td className={td}><span className="block tabular-nums">{policy.policy_number}</span><span className="block text-xs text-muted-foreground">{policy.source === "csv" ? "Imported" : "Manual entry"}</span></td>

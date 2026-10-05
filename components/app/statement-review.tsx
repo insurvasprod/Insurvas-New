@@ -15,6 +15,11 @@
  *
  * Every row keeps the carrier's cells verbatim, one click away. Voiding takes a reason and removes
  * the statement's lines from the ledger without deleting anything.
+ *
+ * LA-4.3: a proposal made by insured name (no policy number matched) says so, so it is read with
+ * care. "Re-match" proposes again for the unmatched lines against the book as it is now. "Re-process"
+ * re-reads the stored original with new column choices: a new statement replaces this one, and this
+ * one is voided and kept.
  */
 
 import { useMemo, useState, useTransition } from "react";
@@ -27,6 +32,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NoMatches } from "@/components/ui/page-states";
 import { TableCard } from "@/components/ui/table-card";
+import { StatementMappingFields } from "@/components/app/statement-import";
 import {
   STATEMENT_KIND_LABELS,
   statementDay,
@@ -35,8 +41,10 @@ import {
   type StatementLineDecision,
   type StatementLineReview,
   type StatementLineView,
+  type StatementMapping,
   type StatementPolicyRef,
 } from "@/lib/ledger/statementConstants";
+import { statementMappingProblem } from "@/lib/ledger/statementParse";
 import { normalisePolicyNumber, policyIsWithCarrier } from "@/lib/ledger/statementMatch";
 
 type Filter = "waiting" | "accepted" | "left_unmatched" | "error" | "all";
@@ -71,6 +79,7 @@ export function StatementReview({
   canWrite,
   writeBlockedReason,
   voided,
+  reprocess,
 }: {
   statementId: string;
   lines: StatementLineView[];
@@ -79,6 +88,8 @@ export function StatementReview({
   canWrite: boolean;
   writeBlockedReason: string | null;
   voided: boolean;
+  /** LA-4.3: present when the statement can be re-read from its stored original. */
+  reprocess?: { headers: string[]; mapping: StatementMapping } | null;
 }) {
   const router = useRouter();
   const waitingCount = lines.filter((line) => line.review === "proposed" || line.review === "unmatched").length;
@@ -94,6 +105,10 @@ export function StatementReview({
   const [voidReason, setVoidReason] = useState("");
   const [search, setSearch] = useState("");
   const [refreshing, startRefresh] = useTransition();
+  const [reprocessOpen, setReprocessOpen] = useState(false);
+  const [reprocessMapping, setReprocessMapping] = useState<StatementMapping>(reprocess?.mapping ?? {});
+  const unmatchedCount = lines.filter((line) => line.review === "unmatched").length;
+  const reprocessProblem = reprocess ? statementMappingProblem(reprocessMapping, reprocess.headers) : null;
 
   const active = FILTERS.find((item) => item.key === filter) ?? FILTERS[0];
   const needle = search.trim().toLowerCase();
@@ -138,6 +153,32 @@ export function StatementReview({
     }
   }
 
+  async function rematch() {
+    setBusy(true); setError(null); setNotice(null);
+    try {
+      const data = (await send(`/api/app/statements/${statementId}/lines`, "POST", { action: "rematch" })) as { proposed?: number };
+      const proposed = data.proposed ?? 0;
+      setNotice(proposed ? `${proposed.toLocaleString("en-US")} unmatched ${proposed === 1 ? "line has" : "lines have"} a proposed match now. Check and accept ${proposed === 1 ? "it" : "them"}.` : "Still no policy in your book matches the unmatched lines.");
+      router.refresh();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "The lines were not re-matched.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function reprocessIt() {
+    setBusy(true); setError(null);
+    try {
+      const data = (await send(`/api/app/statements/${statementId}`, "PATCH", { action: "reprocess", mapping: reprocessMapping })) as { id?: string };
+      setReprocessOpen(false);
+      if (data.id) router.push(`/app/statements/${data.id}`);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "The statement was not re-processed.");
+      setBusy(false);
+    }
+  }
+
   function openPicker(line: StatementLineView) {
     setPicking(picking === line.id ? null : line.id);
     setQuery(line.policyNumber ?? "");
@@ -149,6 +190,16 @@ export function StatementReview({
         {canWrite && (
           <Button type="button" variant="outline" disabled={busy} onClick={() => setVoidOpen(true)}>
             Void statement
+          </Button>
+        )}
+        {canWrite && reprocess && (
+          <Button type="button" variant="outline" disabled={busy} onClick={() => { setReprocessMapping(reprocess.mapping); setReprocessOpen(true); }}>
+            Re-process
+          </Button>
+        )}
+        {canWrite && unmatchedCount > 0 && (
+          <Button type="button" variant="outline" disabled={busy} title="Propose matches again against your book as it is now" onClick={() => void rematch()}>
+            Re-match {unmatchedCount.toLocaleString("en-US")}
           </Button>
         )}
         {canWrite && proposed.length > 0 && (
@@ -230,14 +281,14 @@ export function StatementReview({
                       {line.review === "proposed" && policy && (
                         <>
                           <span className="block font-semibold text-foreground">{policy.policyNumber}</span>
-                          <span className="block text-xs text-muted-foreground">{policy.insuredName} · proposed: number and carrier match</span>
+                          <span className={`block text-xs ${line.match?.method === "name" ? "font-medium text-[var(--warning-ink)]" : "text-muted-foreground"}`}>{policy.insuredName} · {line.match?.method === "name" ? "proposed by insured name; the policy number did not match, so check it" : "proposed: number and carrier match"}</span>
                         </>
                       )}
                       {line.review === "accepted" && (
                         <>
                           <span className="block font-semibold text-foreground">{policy ? `${policy.policyNumber} · ${policy.insuredName}` : "Matched policy"}</span>
                           <span className="block text-xs text-muted-foreground">
-                            Accepted{line.match?.acceptedByName ? ` by ${line.match.acceptedByName}` : ""}{line.match?.acceptedAt ? ` · ${statementDay(line.match.acceptedAt)}` : ""} · {line.match?.method === "manual" ? "matched by hand" : "exact match"}
+                            Accepted{line.match?.acceptedByName ? ` by ${line.match.acceptedByName}` : ""}{line.match?.acceptedAt ? ` · ${statementDay(line.match.acceptedAt)}` : ""} · {line.match?.method === "manual" ? "matched by hand" : line.match?.method === "name" ? "matched by insured name" : "exact match"}{line.entrySource === "manual" ? " · typed from the PDF" : ""}
                           </span>
                         </>
                       )}
@@ -310,6 +361,29 @@ export function StatementReview({
           </table>
         )}
       </TableCard>
+
+      {reprocess && (
+        <Dialog open={reprocessOpen} onOpenChange={(next) => { if (!busy) setReprocessOpen(next); }}>
+          <DialogContent className="max-h-[calc(100vh-4rem)] overflow-y-auto sm:max-w-2xl">
+            <DialogHeader>
+              <DialogTitle className="text-base">Re-process this statement</DialogTitle>
+              <DialogDescription>
+                The stored original is read again with these columns, and its lines are matched against your book as it is now. A new statement replaces this one; this one is voided and kept, with its decisions. Accepted lines on the new statement need accepting again.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-3 text-sm">
+              <StatementMappingFields idPrefix="reprocess-map" headers={reprocess.headers} mapping={reprocessMapping} onChange={setReprocessMapping} />
+              {reprocessProblem && <p className="text-xs font-medium text-[var(--warning-ink)]">{reprocessProblem}</p>}
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" disabled={busy} onClick={() => setReprocessOpen(false)}>Keep it</Button>
+              <Button type="button" disabled={busy || Boolean(reprocessProblem)} title={reprocessProblem ?? undefined} onClick={() => void reprocessIt()}>
+                {busy ? "Re-reading…" : "Re-process statement"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
 
       <Dialog open={voidOpen} onOpenChange={(next) => { if (!busy) setVoidOpen(next); }}>
         <DialogContent>

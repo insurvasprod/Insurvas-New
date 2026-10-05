@@ -57,15 +57,8 @@ export function needsPaymentBanner(status: SubscriptionStatus): boolean {
   return status === "past_due" || status === "suspended";
 }
 
-export const SUBSCRIPTION_STATUS_BADGE_CLASS: Record<SubscriptionStatus, string> = {
-  trialing: "border-transparent bg-[var(--color-blue)]/10 text-[var(--color-blue)]",
-  active: "border-transparent bg-[var(--color-success)]/10 text-[var(--color-success)]",
-  past_due: "border-transparent bg-[var(--color-warning)]/10 text-[var(--color-warning)]",
-  suspended: "border-transparent bg-[var(--color-danger)]/10 text-[var(--color-danger)]",
-  paused: "border-transparent bg-muted text-muted-foreground",
-  cancelling: "border-transparent bg-[var(--color-warning)]/10 text-[var(--color-warning)]",
-  cancelled: "border-transparent bg-muted text-muted-foreground",
-};
+// The status chip's colour comes from `subscriptionTone()` in components/admin/status-chip.tsx
+// (UX-5, 2026-10-03); the hand-mixed class map that used to live here was the third chip system.
 
 /** Which admin actions make sense from a given state — keeps the UI from offering no-ops. */
 export function availableActions(status: SubscriptionStatus): {

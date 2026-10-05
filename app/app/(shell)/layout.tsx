@@ -85,7 +85,7 @@ export default async function AgentShellLayout({ children }: { children: React.R
   // rather than the current outage state.
   const available = applyKillSwitches(entitlement.features, unwrap(switchesSettled), context.tenantId);
   const menu = buildAgentMenu(available, context.role);
-  const planName = entitlement.plan_code ? planDisplayName(entitlement.plan_code) : null;
+  const planName = entitlement.plan_code ? planDisplayName(entitlement.plan_code, entitlement.plan_name) : null;
   const identity = await readTopBarIdentity(context);
   const moduleAccess = {
     inbound: available.includes("inbound_transfers"),

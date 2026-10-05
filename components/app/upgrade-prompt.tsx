@@ -22,6 +22,7 @@ export async function UpgradePrompt({
   featureKey,
   description,
   planCode,
+  planName,
   limitKey,
   usage,
   limit,
@@ -33,6 +34,8 @@ export async function UpgradePrompt({
   featureKey?: string;
   description?: string;
   planCode: string | null;
+  /** The plan's display name from the entitlement, when it carries one. */
+  planName?: string | null;
   limitKey?: string;
   usage?: number;
   limit?: number;
@@ -41,7 +44,7 @@ export async function UpgradePrompt({
   grantedFeatures?: readonly string[];
 }) {
   const offer = featureKey && !limitKey ? await featureUpgradeOffer(featureKey, planCode) : null;
-  const currentPlan = planDisplayName(planCode);
+  const currentPlan = planDisplayName(planCode, planName);
   // The page's neighbours in its own menu section, so "what you have" is about this corner of the
   // product rather than the whole plan: "Ledger — Included" beside "Statements — Not included".
   const items = featureKey && grantedFeatures ? allMenuItems() : [];

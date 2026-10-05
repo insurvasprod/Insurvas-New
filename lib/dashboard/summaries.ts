@@ -3,6 +3,7 @@ import "server-only";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { getQueueSlaSettings } from "@/lib/queueSla/service";
 import { listDueCallbacks } from "@/lib/callbacks/service";
+import { owedToYou } from "@/lib/discrepancies/service";
 
 import { activitySentence, appointmentsSentence, callbacksSentence, carriersSentence, dialerSentence, inboundSentence, leadsSentence, policiesSentence, poolSentence, waitLabel } from "./summaryText";
 import { NOT_A_CONTACT } from "./todayMath";
@@ -17,7 +18,14 @@ import { NOT_A_CONTACT } from "./todayMath";
  * (summaryText) as the cell's hover text. Null for a tile with no figure, or when the read fails:
  * the cell then says "—" rather than showing a number it could not get.
  */
-export type TileMetric = { value: number; caption: string; detail: string; tone?: "danger" | "warning" | "good" };
+export type TileMetric = {
+  value: number;
+  caption: string;
+  detail: string;
+  tone?: "danger" | "warning" | "good";
+  /** The figure as shown, when it is not a plain count — money, say ("$3,412"). */
+  display?: string;
+};
 
 type Head = PromiseLike<{ count: number | null; error: { message: string } | null }>;
 type Loose = {
@@ -119,6 +127,35 @@ async function ledger(tenantId: string): Promise<TileMetric> {
   };
 }
 
+/**
+ * LA-4.6 · "Owed to you": the open and disputed discrepancies, summed from their stored rows — one
+ * read, no ledger recompute. Before any statement is imported there is nothing to compare, so the
+ * cell says what to do next rather than claiming $0.
+ */
+async function owed(tenantId: string): Promise<TileMetric> {
+  const [statements, totals] = await Promise.all([
+    db().from("tenant_commission_statements").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId).not("status", "eq", "voided"),
+    owedToYou(tenantId),
+  ]);
+  if (statements.error) throw new Error("owed summary unavailable");
+  if (!totals.available || (statements.count ?? 0) === 0) {
+    return { value: 0, display: "—", caption: "import a statement", detail: "Import a carrier statement to see what the carrier paid against what your contract says it owes." };
+  }
+  const dollars = `$${Math.round(totals.totalCents / 100).toLocaleString("en-US")}`;
+  const parts = [
+    totals.byKind.never_paid.count ? `${n(totals.byKind.never_paid.count)} never paid` : null,
+    totals.byKind.short_paid.count + totals.byKind.mis_rated.count ? `${n(totals.byKind.short_paid.count + totals.byKind.mis_rated.count)} paid short` : null,
+    totals.byKind.duplicate_chargeback.count + totals.byKind.unexpected_chargeback.count ? `${n(totals.byKind.duplicate_chargeback.count + totals.byKind.unexpected_chargeback.count)} chargebacks to dispute` : null,
+  ].filter(Boolean);
+  return {
+    value: totals.totalCents,
+    display: dollars,
+    caption: totals.count ? plural(totals.count, "item") : "nothing found",
+    detail: totals.count ? `You appear to be owed ${dollars}: ${parts.join(", ")}.` : "Every accepted statement line agrees with your contract.",
+    tone: totals.count ? "warning" : "good",
+  };
+}
+
 async function callbacks(tenantId: string): Promise<TileMetric> {
   const due = await listDueCallbacks(tenantId);
   const overdue = due.filter((item) => item.isOverdue).length;
@@ -172,7 +209,18 @@ const READERS: Record<string, (tenantId: string) => Promise<TileMetric>> = {
   "work.leads": leads,
   "book.policies": policies,
   "book.ledger": ledger,
+  "book.owed": owed,
 };
+
+/** LA-4.6 · whether any carrier statement stands (not voided): the setup checklist's statement step. One head count. */
+export async function hasImportedStatement(tenantId: string): Promise<boolean> {
+  try {
+    const { count, error } = await db().from("tenant_commission_statements").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId).not("status", "eq", "voided");
+    return !error && (count ?? 0) > 0;
+  } catch {
+    return false;
+  }
+}
 
 export async function tileMetric(key: string, tenantId: string): Promise<TileMetric | null> {
   const read = READERS[key];

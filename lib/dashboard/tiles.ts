@@ -171,6 +171,18 @@ export const DASHBOARD_TILES: readonly DashboardTile[] = [
     required_roles: ["owner", "producer", "bookkeeper"],
   },
   {
+    // LA-4.6 · the activation figure: what the carriers appear to owe (open and disputed findings).
+    key: "book.owed",
+    label: "Owed to you",
+    description: "What carriers paid against what your contract says they owe.",
+    hint: "Found by comparing your accepted carrier statements with your contract levels.",
+    action_label: "Open discrepancies",
+    path: "/app/discrepancies",
+    icon: "triangle-alert",
+    required_feature: "discrepancy_report",
+    required_roles: ["owner", "bookkeeper"],
+  },
+  {
     key: "book.ledger",
     label: "Commission ledger",
     description: "Every commission traced back to the policy or statement behind it.",

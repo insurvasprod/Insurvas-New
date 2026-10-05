@@ -18,7 +18,11 @@ export const STATEMENT_KIND_LABELS: Record<StatementLineKind, string> = {
 };
 
 /** The columns a statement is read by. Policy number and amount are required; the rest help. */
-export const STATEMENT_FIELDS = ["policyNumber", "amount", "kind", "lineDate", "insuredName"] as const;
+/**
+ * The columns a statement is read by. Policy number and amount are required; the rest help. Premium
+ * and rate (LA-4.3) are what "paid at the wrong rate" is judged on when a carrier sends them.
+ */
+export const STATEMENT_FIELDS = ["policyNumber", "amount", "kind", "lineDate", "insuredName", "premium", "rate"] as const;
 export type StatementField = (typeof STATEMENT_FIELDS)[number];
 export const REQUIRED_STATEMENT_FIELDS: readonly StatementField[] = ["policyNumber", "amount"];
 
@@ -27,7 +31,9 @@ export const STATEMENT_FIELD_LABELS: Record<StatementField, { label: string; hin
   amount: { label: "Amount", hint: "Paid, advanced or charged back on this line" },
   kind: { label: "Kind", hint: "Advance, commission, chargeback or adjustment. Without it, a negative amount is a chargeback and a positive one commission" },
   lineDate: { label: "Date", hint: "When the carrier paid or charged it. Without it, the line posts on the last day of the period" },
-  insuredName: { label: "Insured", hint: "Shown beside the line; never used to match" },
+  insuredName: { label: "Insured", hint: "Shown beside the line, and used to propose a match when no policy number matches" },
+  premium: { label: "Premium", hint: "The premium the commission was paid on, when the carrier shows it" },
+  rate: { label: "Rate", hint: "The commission rate paid, like 110% or 1.10, when the carrier shows it" },
 };
 
 /** Field → the file's column header. */
@@ -37,6 +43,18 @@ export type StatementMapping = Partial<Record<StatementField, string>>;
 export const MAX_STATEMENT_LINES = 10_000;
 /** The CSV parser's own ceiling (lib/contacts/csv.ts). */
 export const MAX_STATEMENT_BYTES = 5_000_000;
+/**
+ * The largest statement FILE accepted (LA-4.1), CSV, Excel or PDF. It travels in one request body,
+ * so it stays under a serverless host's ~4.5 MB request limit with room for the form fields.
+ */
+export const MAX_STATEMENT_FILE_BYTES = 4_000_000;
+
+export const STATEMENT_FILE_KINDS = ["csv", "xlsx", "pdf"] as const;
+export type StatementFileKind = (typeof STATEMENT_FILE_KINDS)[number];
+
+/** Before migration 20261002100000 (LA-4.1–4.3): CSV still imports, the rest waits. */
+export const STATEMENT_FILES_PENDING_MESSAGE =
+  "Keeping statement files, PDF statements, name matching and re-processing need a database update. Until it is applied, CSV statements import as before.";
 
 /**
  * A reported total within this many cents of the expected one reads as agreeing. Carriers round
@@ -49,7 +67,7 @@ export const RECONCILE_TOLERANCE_CENTS = 100;
 export const STATEMENT_SCHEMA_PENDING_MESSAGE =
   "Carrier statement import needs a database update. Until it is applied, statements cannot be imported and the ledger shows expected commission only.";
 
-export type StatementStatus = "review" | "reviewed" | "voided";
+export type StatementStatus = "awaiting_entry" | "review" | "reviewed" | "voided";
 export type StatementLineReview = "proposed" | "accepted" | "unmatched" | "left_unmatched" | "error";
 
 export type StatementCarrierOption = { id: string; code: string; name: string };
@@ -72,6 +90,14 @@ export type StatementSummary = {
   counts: { lines: number; accepted: number; proposed: number; unmatched: number; leftUnmatched: number; errors: number };
   acceptedCents: number;
   statementCents: number;
+  /** LA-4.1: what the original was, and whether it is stored. "csv" with no file before the migration. */
+  fileKind: StatementFileKind;
+  hasFile: boolean;
+  sheetName: string | null;
+  /** The statement this one re-read, and the one that re-read it (LA-4.3). */
+  reprocessedFrom: string | null;
+  headers: string[];
+  mapping: StatementMapping;
 };
 
 export type StatementPolicyRef = { id: string; policyNumber: string; insuredName: string; carrier: string };
@@ -91,8 +117,15 @@ export type StatementLineView = {
   reviewedByName: string | null;
   reviewedAt: string | null;
   /** The live match: proposed or accepted. Null when unmatched. */
-  match: { id: string; method: "exact" | "manual"; status: "proposed" | "accepted"; policy: StatementPolicyRef | null; acceptedByName: string | null; acceptedAt: string | null } | null;
+  match: { id: string; method: MatchMethod; status: "proposed" | "accepted"; policy: StatementPolicyRef | null; acceptedByName: string | null; acceptedAt: string | null } | null;
+  /** Read from the file, or typed in from a PDF (LA-4.2). */
+  entrySource: "file" | "manual";
+  premiumCents: number | null;
+  rateBp: number | null;
 };
+
+/** How a match was made: the policy number, the insured name (LA-4.3), or by hand. */
+export type MatchMethod = "exact" | "name" | "manual";
 
 /** What the preview step shows before anything is written. */
 export type StatementPreview = {
@@ -112,6 +145,7 @@ export type StatementPreview = {
     lineDate: string | null;
     error: string | null;
     proposal: StatementPolicyRef | null;
+    proposalMethod: "exact" | "name" | null;
     reason: string;
   }>;
   duplicate: { statementId: string; uploadedAt: string; uploadedByName: string | null } | null;
@@ -133,7 +167,7 @@ export type StatementLedgerEntry = {
   policyNumber: string;
   insuredName: string;
   producerUserId: string | null;
-  method: "exact" | "manual";
+  method: MatchMethod;
   acceptedByName: string | null;
   acceptedAt: string;
 };
@@ -164,6 +198,29 @@ export function statementPeriod(start: string, end: string): string {
 export function statementMoney(cents: number): string {
   return `${cents < 0 ? "−" : ""}$${(Math.abs(cents) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
+
+/** A line typed in from a PDF statement (LA-4.2), as the entry grid sends it. */
+export type ManualStatementLine = {
+  policyNumber: string;
+  insuredName?: string;
+  amount: string;
+  kind?: StatementLineKind | "";
+  lineDate?: string;
+};
+
+/** One line in the cross-statement unmatched queue (LA-4.3). */
+export type UnmatchedStatementLine = {
+  id: string;
+  statementId: string;
+  carrierName: string;
+  periodStart: string;
+  periodEnd: string;
+  lineNumber: number;
+  policyNumber: string | null;
+  insuredName: string | null;
+  amountCents: number | null;
+  kind: StatementLineKind | null;
+};
 
 export type StatementLineDecision =
   | { line_id: string; action: "accept" | "reject" | "leave_unmatched" }

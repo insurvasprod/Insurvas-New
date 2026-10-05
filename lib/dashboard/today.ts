@@ -7,7 +7,7 @@ import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import type { TenantRole } from "@/lib/tenantAuth/roles";
 
 import { hourHeatmap, leaderboard, outcomeMix, type AttemptRow, type Heatmap, type Leader, type Outcome } from "./insights";
-import { contactRate, greeting, lastDays, longDate, NOT_A_CONTACT } from "./todayMath";
+import { contactRate, endOfToday, greeting, lastDays, longDate, NOT_A_CONTACT } from "./todayMath";
 
 /**
  * The dashboard's "Today" hero and "Needs you today" strip: what happened today, the last fourteen
@@ -31,7 +31,10 @@ export type DashboardToday = {
   dialsYesterday: number | null;
   contactsToday: number | null;
   contactRatePct: number | null;
+  /** Appointments that START today (agency day), not rows created today (LA-2.11-8). */
   appointmentsToday: number | null;
+  /** Today's appointments themselves, earliest first (at most TODAY_LIST_LIMIT). */
+  appointmentsTodayList: TodayAppointment[] | null;
   queueReady: number | null;
   series: Array<{ key: string; label: string; weekday: string; dials: number | null; contacts: number | null; isToday: boolean }>;
   nextCallback: { name: string; atUtc: string; customerTimezone: string } | null;
@@ -58,6 +61,20 @@ export type DashboardToday = {
 };
 
 const SAMPLE_LIMIT = 5000;
+
+export type TodayAppointment = {
+  id: string;
+  customerName: string;
+  startsAtUtc: string;
+  customerTimezone: string;
+  agentName: string;
+  status: string;
+};
+
+/** The dashboard's list is the nudge; the calendar is the list. */
+const TODAY_LIST_LIMIT = 6;
+/** Every appointment that is on today's diary: not cancelled, not moved to another slot. */
+const ON_THE_DIARY = ["booked", "confirmed", "pending", "showed", "no_show"];
 
 type Result = PromiseLike<{ data: unknown; error: { message: string } | null; count?: number | null }>;
 type Chain = Result & {
@@ -137,6 +154,39 @@ export async function getDashboardToday(input: { tenantId: string; userId: strin
     return count(scope === "you" ? query.eq("booked_by", input.userId) : query);
   })() : Promise.resolve(null);
 
+  // LA-2.11-8 · today's appointments: the ones on today's diary (starting between the agency's
+  // midnight and the next), not the ones somebody booked today for next week. Scope as everywhere
+  // on this screen: the owner sees the agency, a producer their own diary, a setter what they booked.
+  const todayEnd = endOfToday(now, zone);
+  const appointmentsTodayRead = dialing ? (async () => {
+    let query = db().from("tenant_appointments").select("id, lead_id, agent_user_id, starts_at_utc, customer_timezone, status")
+      .eq("tenant_id", input.tenantId).in("status", ON_THE_DIARY).gte("starts_at_utc", today.start).lt("starts_at_utc", todayEnd);
+    if (scope === "you") query = input.role === "setter" ? query.eq("booked_by", input.userId) : query.eq("agent_user_id", input.userId);
+    const result = await query.order("starts_at_utc", { ascending: true }).limit(200);
+    if (result.error) return null;
+    const rows = (result.data ?? []) as Array<{ id: string; lead_id: string; agent_user_id: string; starts_at_utc: string; customer_timezone: string; status: string }>;
+    const shown = rows.slice(0, TODAY_LIST_LIMIT);
+    const leadIds = [...new Set(shown.map((row) => row.lead_id))];
+    const agentIds = [...new Set(shown.map((row) => row.agent_user_id))];
+    const [leads, agents] = await Promise.all([
+      leadIds.length ? db().from("agent_leads").select("id, values").eq("tenant_id", input.tenantId).in("id", leadIds) : Promise.resolve({ data: [], error: null }),
+      agentIds.length ? db().from("users").select("id, name").in("id", agentIds) : Promise.resolve({ data: [], error: null }),
+    ]);
+    const leadValues = new Map(((leads.error ? [] : leads.data ?? []) as Array<{ id: string; values: Record<string, unknown> | null }>).map((row) => [row.id, row.values]));
+    const agentName = new Map(((agents.error ? [] : agents.data ?? []) as Array<{ id: string; name: string | null }>).map((row) => [row.id, row.name?.trim() || "Agent"]));
+    return {
+      count: rows.length,
+      list: shown.map((row): TodayAppointment => ({
+        id: row.id,
+        customerName: leadName(leadValues.get(row.lead_id)),
+        startsAtUtc: row.starts_at_utc,
+        customerTimezone: row.customer_timezone,
+        agentName: agentName.get(row.agent_user_id) ?? "Agent",
+        status: row.status,
+      })),
+    };
+  })().catch(() => null) : Promise.resolve(null);
+
   const policiesRead = has("book_of_business") ? (async () => {
     let query = db().from("tenant_policies").select("annual_premium_cents").eq("tenant_id", input.tenantId).gte("created_at", new Date(now - 30 * 86_400_000).toISOString());
     if (scope === "you") query = query.eq("created_by", input.userId);
@@ -150,10 +200,7 @@ export async function getDashboardToday(input: { tenantId: string; userId: strin
     db().from("users").select("name").eq("id", input.userId).limit(1),
     Promise.all(seriesReads),
     dialing ? count(attempts().gte("attempted_at", yesterdayStart).lt("attempted_at", sameTimeYesterday)) : Promise.resolve(null),
-    dialing ? (() => {
-      const query = db().from("tenant_appointments").select("id", { count: "exact", head: true }).eq("tenant_id", input.tenantId).gte("created_at", today.start).not("status", "in", "(cancelled)");
-      return count(scope === "you" ? query.eq("booked_by", input.userId) : query);
-    })() : Promise.resolve(null),
+    appointmentsTodayRead,
     dialing ? count(db().from("lead_queue").select("id", { count: "exact", head: true }).eq("tenant_id", input.tenantId).eq("status", "unclaimed").is("partner_id", null)) : Promise.resolve(null),
     has("callback_calendar") ? (async () => {
       const result = await db().from("tenant_callbacks").select("scheduled_at_utc, customer_timezone, lead:agent_leads!tenant_callbacks_lead_id_fkey(values)").eq("tenant_id", input.tenantId).in("status", ["scheduled", "due"]).gte("scheduled_at_utc", new Date(now).toISOString()).order("scheduled_at_utc", { ascending: true }).limit(1);
@@ -199,7 +246,8 @@ export async function getDashboardToday(input: { tenantId: string; userId: strin
     dialsYesterday,
     contactsToday,
     contactRatePct: dialsToday === null || contactsToday === null ? null : contactRate(dialsToday, contactsToday),
-    appointmentsToday,
+    appointmentsToday: appointmentsToday ? appointmentsToday.count : null,
+    appointmentsTodayList: appointmentsToday ? appointmentsToday.list : null,
     queueReady,
     series: days.map((day, index) => ({ key: day.key, label: day.label, weekday: day.weekday, dials: series[index]?.[0] ?? null, contacts: series[index]?.[1] ?? null, isToday: day.isToday })),
     nextCallback,
