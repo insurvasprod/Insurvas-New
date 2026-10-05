@@ -45,7 +45,9 @@ export function PageHeader({
           </p>
         )}
       </div>
-      {actions && <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>}
+      {/* max-w-full, not shrink-0: a fixed-width row never wraps, so on a phone the last action ran
+          off the screen and was clipped (Policies' Import, 2026-10-03). Now the row wraps instead. */}
+      {actions && <div className="flex max-w-full flex-wrap items-center gap-2">{actions}</div>}
     </div>
   );
 }

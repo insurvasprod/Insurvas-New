@@ -17,6 +17,10 @@ import type { ReactNode } from "react";
  * grounds are fixed values, and their inks clear 4.5:1 on them (6.1–6.4:1) in both themes.
  *
  * `action` is the one tone allowed to be orange, for a row the reader must do something about.
+ *
+ * UX-5 (2026-10-03): the one chip. The settings `Pill` is a thin alias over this, and `Badge` is
+ * being retired call site by call site (lib/design/uiConsistency.test.mjs counts both down). Text is
+ * 12px, the smallest size the type scale allows; it was 11px.
  */
 export type StatusTone = "neutral" | "good" | "info" | "warning" | "danger" | "action";
 
@@ -38,17 +42,20 @@ export function StatusChip({
    * tone that means something: colour alone is not an encoding, and a queue is scanned, not read.
    */
   dot,
+  className,
 }: {
   tone?: StatusTone;
   children: ReactNode;
   title?: string;
   dot?: boolean;
+  /** Layout only (margins, alignment). Never a colour: the tone owns that. */
+  className?: string;
 }) {
   const showDot = dot ?? tone !== "neutral";
   return (
     <span
       title={title}
-      className={`inline-flex w-fit items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${TONE[tone].chip}`}
+      className={`inline-flex w-fit items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs leading-[1.5] font-semibold tracking-[-0.01em] ${TONE[tone].chip}${className ? ` ${className}` : ""}`}
     >
       {showDot && (
         <span className={`size-1.5 shrink-0 rounded-full ${TONE[tone].dot}`} aria-hidden="true" />

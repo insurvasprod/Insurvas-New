@@ -10,8 +10,13 @@ Written 2026-09-18 against branch `codex/la1-end-to-end` by reading every `page.
 
 ## Read these in order
 
+**Precedence (UX-1, 2026-10-03):** [`UI-CONSISTENCY.md`](UI-CONSISTENCY.md) is the single design
+authority. Where any file below or any mockup disagrees with it, it wins. Its rules are enforced by
+`lib/design/uiConsistency.test.mjs`, a ratchet whose offender counts only go down.
+
 | File | What it is |
 |---|---|
+| [`UI-CONSISTENCY.md`](UI-CONSISTENCY.md) | **Read first.** How every page is built: one header, `StatStrip`, `TableCard` + `DataToolbar`, 36px controls, skeleton loading, no eyebrow, orange apps and a blue admin console. |
 | [`00-FOUNDATION.md`](00-FOUNDATION.md) | The contract every page inherits. Tokens, type scale, the page skeleton, the six required states, the shell, accessibility floor, responsive rules. **Every page prompt assumes you have read this.** |
 | [`01-PUBLIC-AND-AUTH.md`](01-PUBLIC-AND-AUTH.md) | 17 pages. Marketing, signup, login, onboarding, checkout, legal. |
 | [`02-AGENT-APP.md`](02-AGENT-APP.md) | 32 pages. The licensed-agent workspace — LA-1 inbound, LA-2 outbound, book of business, settings. |

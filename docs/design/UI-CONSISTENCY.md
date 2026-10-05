@@ -6,6 +6,22 @@ cards everywhere, buttons of different heights. This is the one way a page is bu
 Every rule points at a shared component; if a page needs something the components cannot do, extend
 the component, do not hand-roll a local copy.
 
+**This file is the single authority (UX-1, 2026-10-03).** Where `00-FOUNDATION.md`, a page prompt in
+`01`–`04`, a mockup or `06-MOCKUP-INDEX.md` says otherwise, this file wins; those files carry a note
+pointing here. Three questions they used to answer differently are settled:
+
+| Question | Decision | What it replaces |
+|---|---|---|
+| Eyebrow above the title | **None.** `PageHeader` ignores the prop. Auth and onboarding cards (`AuthCard`) may show a step label ("Step 1 of 3"). | FOUNDATION's "eyebrow is the menu section" rule |
+| Figures | **`StatStrip` + `StatTile` only**, at most one strip, under the header (§4) | the 3–5 metric-card grid in FOUNDATION and the page prompts |
+| Colour identity | **Two, by plane.** Orange (`app/globals.css`) for the agent and partner apps and the public site. Blue for the admin console only (user decision 1), applied as token overrides in `app/admin/admin-plane.css`, so components never name a colour. | FOUNDATION §1's split, whose blue marketing/legal pages and old hex values are out of date |
+
+**The rules are enforced.** `lib/design/uiConsistency.test.mjs` counts each mechanically checkable
+rule per file (raw tables, extra headers, tall controls, hex colours, `text-[Npx]`, eyebrows,
+"Loading…" text, hand-rolled pagers, `btn()`), against today's counts in
+`lib/design/uiOffenders.json`. A new offender fails the build; a fix must lower the baseline (see the
+top of the test). The numbers only go down.
+
 ## 1. Chrome (done centrally — do not re-add)
 - No workspace/context strip under the top bar. The top bar and the sidebar brand block are one band
   (same 56px height, same `--nav-*` colours).

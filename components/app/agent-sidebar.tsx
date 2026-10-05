@@ -51,64 +51,11 @@ import {
 } from "lucide-react";
 
 import type { MenuItem, MenuSection } from "@/lib/menu/definition";
+import { InsurvasLogo } from "@/components/shared/insurvas-logo";
+import { buildSidebarTree, initialOpenModule, NAV_BUSINESS_ICON, NAV_PARTNERS_ICON, type ModuleAccess, type SidebarModule, type SidebarTree } from "@/lib/menu/sidebar";
 
-type ModuleId = "la1" | "la2";
-
-export type AgentModuleAccess = {
-  /** True when the effective tenant entitlement includes the inbound module. */
-  inbound: boolean;
-  /** True when the effective tenant entitlement includes the outbound module. */
-  outbound: boolean;
-};
-
-const MODULE_FEATURES: Record<ModuleId, ReadonlySet<string>> = {
-  la1: new Set(["inbound_transfers"]),
-  la2: new Set(["outbound_dialing", "lead_import", "true_cpa"]),
-};
-
-const MODULE_COPY: Record<ModuleId, { label: string }> = {
-  la1: { label: "LA-1 Inbound operations" },
-  la2: { label: "LA-2 Outbound acquisition" },
-};
-
-// These destinations are shared by more than one insurance workflow. When the matching module
-// is purchased, keep the high-frequency hand-off tools close to that module; when it is not,
-// leave them in Business so a Book-of-Business-only tenant does not lose an existing route.
-const LA1_SHARED_KEYS = new Set(["leads.workspace", "sell.callbacks"]);
-const LA2_SHARED_KEYS = new Set(["sell.deal-flow"]);
-
-const MODULE_ITEM_ORDER: Record<ModuleId, string[]> = {
-  la1: ["leads.floor", "leads.inbound", "leads.workspace", "sell.callbacks", "leads.partner-chat"],
-  la2: ["leads.dialer", "leads.import", "leads.lists", "leads.nurture", "leads.assignments", "sell.calendar", "sell.deal-flow", "insight.true-cpa", "insight.vendor-returns", "insight.activity"],
-};
-
-const NAV_LABELS: Record<string, string> = {
-  "home.dashboard": "Home",
-  "leads.inbound": "Inbound inbox",
-  "partners.publishers": "Publishers",
-};
-
-const BUSINESS_SECTION_ORDER = [
-  "Book of Business",
-  "Leads",
-  "Sell",
-  "Retention",
-  "Insight",
-  "Partners",
-  "Accounting",
-  "Compliance",
-] as const;
-
-const BUSINESS_SECTION_ICONS: Record<(typeof BUSINESS_SECTION_ORDER)[number], typeof BriefcaseBusiness> = {
-  "Book of Business": BookOpen,
-  Leads: ContactRound,
-  Sell: Calculator,
-  Retention: RotateCcw,
-  Insight: ChartNoAxesCombined,
-  Partners: Users,
-  Accounting: Landmark,
-  Compliance: ShieldCheck,
-};
+/** Which acquisition modules the effective tenant entitlement includes (inbound, outbound). */
+export type AgentModuleAccess = ModuleAccess;
 
 function iconFor(name: string) {
   return ICONS[name as keyof typeof ICONS] ?? Circle;
@@ -116,15 +63,6 @@ function iconFor(name: string) {
 
 function isActivePath(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
-}
-
-function orderModuleItems(items: MenuItem[], id: ModuleId) {
-  const order = MODULE_ITEM_ORDER[id];
-  return [...items].sort((a, b) => {
-    const aIndex = order.indexOf(a.key);
-    const bIndex = order.indexOf(b.key);
-    return (aIndex === -1 ? order.length : aIndex) - (bIndex === -1 ? order.length : bIndex);
-  });
 }
 
 function NavItemLink({
@@ -139,7 +77,7 @@ function NavItemLink({
   const pathname = usePathname();
   const active = isActivePath(pathname, item.path);
   const Icon = iconFor(item.icon);
-  const label = NAV_LABELS[item.key] ?? item.label;
+  const label = item.navLabel ?? item.label;
 
   return (
     <li>
@@ -234,17 +172,13 @@ function DisclosureSection({
 }
 
 function BusinessGroups({
-  items,
+  groups,
   onNavigate,
 }: {
-  items: MenuItem[];
+  groups: SidebarTree["business"];
   onNavigate?: () => void;
 }) {
   const pathname = usePathname();
-  const groups = BUSINESS_SECTION_ORDER.map((label) => ({
-    label,
-    items: items.filter((item) => item.section === label),
-  })).filter((group) => group.items.length > 0);
   const activeGroups = groups.filter((group) =>
     group.items.some((item) => isActivePath(pathname, item.path)),
   );
@@ -260,7 +194,7 @@ function BusinessGroups({
         <DisclosureSection
           key={group.label}
           label={group.label}
-          icon={BUSINESS_SECTION_ICONS[group.label]}
+          icon={iconFor(group.icon)}
           items={group.items}
           open={openGroups.includes(group.label)}
           active={activeGroups.some((activeGroup) => activeGroup.label === group.label)}
@@ -280,28 +214,18 @@ function BusinessGroups({
 }
 
 function ModuleSection({
-  id,
-  items,
-  entitled,
+  module,
   open,
   onToggle,
   onNavigate,
 }: {
-  id: ModuleId;
-  items: MenuItem[];
-  entitled: boolean;
+  module: SidebarModule;
   open: boolean;
   onToggle: () => void;
   onNavigate?: () => void;
 }) {
-  const copy = MODULE_COPY[id];
-  const visible = items.length > 0;
-  const status = !entitled
-    ? "Not included"
-    : visible
-      ? "Enabled"
-      : "Role restricted";
-  const disabled = !entitled || !visible;
+  const { id, items, status, disabled } = module;
+  const Icon = iconFor(module.icon);
 
   return (
     <section className={`portal-agent-module portal-agent-module-${id}`}>
@@ -310,7 +234,8 @@ function ModuleSection({
         className="portal-agent-module-button"
         aria-expanded={open}
         aria-controls={`agent-module-${id}`}
-        aria-label={`${copy.label}, ${status}`}
+        aria-label={`${module.fullName}, ${status}`}
+        title={module.fullName}
         aria-disabled={disabled}
         disabled={disabled}
         data-available={!disabled}
@@ -318,14 +243,10 @@ function ModuleSection({
         onClick={onToggle}
       >
         <span className="portal-agent-module-icon" aria-hidden="true">
-          {id === "la1" ? (
-            <PhoneIncoming className="size-4" />
-          ) : (
-            <PhoneOutgoing className="size-4" />
-          )}
+          {createElement(Icon, { className: "size-4" })}
         </span>
         <span className="portal-agent-module-copy">
-          <span className="portal-agent-module-label" title={copy.label}>{copy.label}</span>
+          <span className="portal-agent-module-label">{module.label}</span>
           <span className="portal-agent-module-status">{status}</span>
         </span>
         {disabled ? (
@@ -337,7 +258,7 @@ function ModuleSection({
           />
         )}
       </button>
-      {open && visible && (
+      {open && items.length > 0 && (
         <ul id={`agent-module-${id}`} className="portal-agent-module-items">
           {items.map((item) => (
             <NavItemLink
@@ -385,9 +306,9 @@ function PlanCard({ plan }: { plan: AgentPlanSummary }) {
 /**
  * Entitlement-aware navigation for the licensed-agent shell.
  *
- * The server still supplies the filtered menu and every route keeps its own guard. This component
- * only changes how those already-authorized destinations are grouped and reached: LA-1 and LA-2
- * are module disclosures, while the less frequent sections stay behind Business and Partners.
+ * The server still supplies the filtered menu and every route keeps its own guard. The arrangement
+ * — module headings, their order, Business groups, Partners — is data in `lib/menu/sidebar.ts`
+ * (UX-3); this component renders `buildSidebarTree()` and only owns what is open.
  */
 function NavList({
   menu,
@@ -399,105 +320,58 @@ function NavList({
   onNavigate?: () => void;
 }) {
   const pathname = usePathname();
-  const allItems = menu.flatMap((section) => section.items);
-  const homeItems = allItems.filter((item) => item.section === "Home");
-  const inboundEntitled = moduleAccess?.inbound ?? allItems.some(
-    (item) => item.required_feature && MODULE_FEATURES.la1.has(item.required_feature),
-  );
-  const outboundEntitled = moduleAccess?.outbound ?? allItems.some(
-    (item) => item.required_feature && MODULE_FEATURES.la2.has(item.required_feature),
-  );
-  const la1Items = orderModuleItems(allItems.filter(
-    (item) =>
-      (item.required_feature && MODULE_FEATURES.la1.has(item.required_feature)) ||
-      (inboundEntitled && LA1_SHARED_KEYS.has(item.key)),
-  ), "la1");
-  const la2Items = orderModuleItems(allItems.filter(
-    (item) =>
-      (item.required_feature && MODULE_FEATURES.la2.has(item.required_feature)) ||
-      (outboundEntitled && LA2_SHARED_KEYS.has(item.key)),
-  ), "la2");
-  const moduleKeys = new Set([...la1Items, ...la2Items].map((item) => item.key));
-  const partnerItems = allItems.filter(
-    (item) => item.section === "Partners" || item.key === "insight.partner-quality",
-  );
-  const partnerKeys = new Set(partnerItems.map((item) => item.key));
-  const settingsItems = allItems.filter((item) => item.section === "Settings");
-  const businessItems = allItems.filter(
-    (item) =>
-      item.section !== "Home" &&
-      item.section !== "Settings" &&
-      !moduleKeys.has(item.key) &&
-      !partnerKeys.has(item.key),
-  );
+  const tree = buildSidebarTree(menu, moduleAccess);
+  const isActive = (item: MenuItem) => isActivePath(pathname, item.path);
+  const activeBusiness = tree.business.some((group) => group.items.some(isActive));
+  const activePartners = tree.partners.some(isActive);
 
-  const activeLa1 = la1Items.some((item) => isActivePath(pathname, item.path));
-  const activeLa2 = la2Items.some((item) => isActivePath(pathname, item.path));
-  const activeBusiness = businessItems.some((item) => isActivePath(pathname, item.path));
-  const activePartners = partnerItems.some((item) => isActivePath(pathname, item.path));
-  const activeModule: ModuleId | null = activeLa1 ? "la1" : activeLa2 ? "la2" : null;
-
-  const [openModule, setOpenModule] = useState<ModuleId | null>(
-    activeModule ?? (la1Items.length > 0 ? "la1" : la2Items.length > 0 ? "la2" : null),
-  );
+  const [openModule, setOpenModule] = useState<string | null>(() => initialOpenModule(tree, isActive));
   const [businessOpen, setBusinessOpen] = useState(activeBusiness);
   const [partnersOpen, setPartnersOpen] = useState(activePartners);
-
-  const entitlement = moduleAccess ?? {
-    inbound: inboundEntitled,
-    outbound: outboundEntitled,
-  };
 
   return (
     <nav className="portal-agent-nav" aria-label="Agent workspace navigation">
       <ul className="portal-agent-nav-home">
-        {homeItems.map((item) => (
+        {tree.home.map((item) => (
           <NavItemLink key={item.key} item={item} onNavigate={onNavigate} />
         ))}
       </ul>
 
       <div className="portal-agent-module-stack" aria-label="Licensed agent modules">
-        <ModuleSection
-          id="la1"
-          items={la1Items}
-          entitled={entitlement.inbound}
-          open={openModule === "la1"}
-          onToggle={() => setOpenModule(openModule === "la1" ? null : "la1")}
-          onNavigate={onNavigate}
-        />
-        <ModuleSection
-          id="la2"
-          items={la2Items}
-          entitled={entitlement.outbound}
-          open={openModule === "la2"}
-          onToggle={() => setOpenModule(openModule === "la2" ? null : "la2")}
-          onNavigate={onNavigate}
-        />
+        {tree.modules.map((module) => (
+          <ModuleSection
+            key={module.id}
+            module={module}
+            open={openModule === module.id}
+            onToggle={() => setOpenModule(openModule === module.id ? null : module.id)}
+            onNavigate={onNavigate}
+          />
+        ))}
       </div>
 
       {/* No rule between the modules and Business: the board runs the headings on at an even 8px. */}
       <DisclosureSection
         label="Business"
-        icon={BriefcaseBusiness}
+        icon={iconFor(NAV_BUSINESS_ICON)}
         items={[]}
         open={businessOpen}
         active={activeBusiness}
         onToggle={() => setBusinessOpen((value) => !value)}
         onNavigate={onNavigate}
       >
-        <BusinessGroups items={businessItems} onNavigate={onNavigate} />
+        <BusinessGroups groups={tree.business} onNavigate={onNavigate} />
       </DisclosureSection>
       <DisclosureSection
         label="Partners"
-        icon={Users}
-        items={partnerItems}
+        icon={iconFor(NAV_PARTNERS_ICON)}
+        items={tree.partners}
         open={partnersOpen}
         active={activePartners}
         onToggle={() => setPartnersOpen((value) => !value)}
         onNavigate={onNavigate}
       />
 
-      {settingsItems.map((item) => (
+      {tree.settings.map((item) => (
         <ul key={item.key} className="portal-agent-nav-settings">
           <NavItemLink item={item} onNavigate={onNavigate} />
         </ul>
@@ -568,13 +442,7 @@ export function AgentSidebar({
   // One mark everywhere the product names itself — the phone bar and drawer used a building icon.
   const brandMark = (
     <div className="flex items-center gap-2.5">
-      <span
-        aria-hidden="true"
-        className="inline-flex size-[26px] shrink-0 items-center justify-center rounded-lg bg-[var(--primary)] text-xs font-semibold text-[var(--on-primary)]"
-      >
-        I
-      </span>
-      <span className="text-sm font-semibold tracking-[-0.01em]">Insurvas</span>
+      <InsurvasLogo size="sidebar" />
     </div>
   );
 
@@ -637,7 +505,8 @@ export function AgentSidebar({
         {/* The brand block sits OUTSIDE the scroll container: its hairline is the top edge of the
             rail, and an edge that scrolls away is not an edge. */}
         <div className="portal-agent-sidebar-brand">
-            {brandMark}
+            <div className="insurvas-agent-brand-full">{brandMark}</div>
+            <InsurvasLogo size="compact" variant="symbol" className="insurvas-agent-brand-compact" />
             <button
               type="button"
               className="portal-agent-sidebar-collapse rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"

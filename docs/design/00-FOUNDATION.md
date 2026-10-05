@@ -2,9 +2,21 @@
 
 The contract every page inherits. Read this once; every page prompt assumes it.
 
+> **Superseded in part (UX-1, 2026-10-03).** [`UI-CONSISTENCY.md`](UI-CONSISTENCY.md) is the single
+> authority and wins wherever this file disagrees. In particular: **§1's two identities** are now
+> orange for the agent and partner apps and the public site, and blue for the admin console only
+> (`app/admin/admin-plane.css`); **the eyebrow rule** is now "no eyebrow"; and **the metric-card summary
+> strip** in the page skeleton is now `StatStrip`. Those passages are kept below for history and
+> marked. Everything else here (tokens, states, accessibility, responsive rules) still applies.
+
 ---
 
 ## 1. There are two visual identities, and that is deliberate
+
+> **Updated (2026-10-03):** still two identities, but drawn differently than the table below says.
+> Orange (`app/globals.css` `:root`) covers the agent and partner apps and the public site. Blue
+> covers the admin console only, as token overrides in `app/admin/admin-plane.css` (user
+> decision 1). The hex values and the "marketing and legal are blue" row below are out of date.
 
 This is the single most important fact about the design system, and the thing most likely to be
 broken by someone redesigning "consistently".
@@ -151,6 +163,10 @@ variants that exist today are the reason the product feels inconsistent.
 ```
 
 ### The eyebrow rule
+
+> **Superseded:** no eyebrow (UI-CONSISTENCY.md, enforced by `lib/design/uiConsistency.test.mjs`).
+> The summary strip above is `StatStrip`, not a metric-card grid. D-01 stays fixed because there is
+> no eyebrow left to leak a mockup number into.
 
 The eyebrow is currently **38 distinct hand-typed strings**, six of which are mockup file numbers
 (`10 / OPERATIONS`, `19 / Licensed agent`, `22 / Licensed agent`, `24 / Licensed agent`,
