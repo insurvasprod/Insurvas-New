@@ -1,6 +1,6 @@
 // Pure partner-quality arithmetic, shared by the service (server) and the workspaces (client).
 // No imports that pull in server code: the list and detail pages are client components.
-import type { PartnerQualityDailyRow, PartnerQualityDisposition, PartnerQualityEvidence, PartnerQualityPeriodMetrics, PartnerQualityScreening } from "./types";
+import type { PartnerQualityDailyRow, PartnerQualityDisposition, PartnerQualityDispositionBreakdown, PartnerQualityEvidence, PartnerQualityPeriod, PartnerQualityPeriodMetrics, PartnerQualityReport, PartnerQualityRow, PartnerQualityScreening, PartnerQualitySummary } from "./types";
 
 // Product decision: reporting is fixed EST (UTC-5), not the reader's timezone and not a
 // daylight-saving-aware New York clock. Keep this value aligned with the database functions.
@@ -104,6 +104,53 @@ export function dailyVolume(evidence: PartnerQualityEvidence[], from: string, to
     const metrics = periodMetrics(rows);
     return { date, sent: metrics.sent, claimed: metrics.claimed, worked: metrics.worked, submitted: metrics.submitted, flagged: screeningFlags(metrics.screening), duplicates: metrics.duplicates };
   });
+}
+
+/** The first day of the current reporting month (partner_quality_report's default "from"). */
+export function partnerQualityMonthStart(now = new Date()): string {
+  return `${partnerQualityToday(now).slice(0, 8)}01`;
+}
+
+function periodOf(metrics: PartnerQualityPeriodMetrics): PartnerQualityPeriod {
+  return { sent: metrics.sent, claimed: metrics.claimed, worked: metrics.worked, submitted: metrics.submitted, conversion_rate: metrics.conversion_rate, disqualification_rate: metrics.disqualification_rate, duplicate_rate: metrics.duplicate_rate, screening: metrics.screening };
+}
+
+function summaryOf(metrics: PartnerQualityPeriodMetrics): PartnerQualitySummary {
+  return { sent: metrics.sent, claimed: metrics.claimed, worked: metrics.worked, submitted: metrics.submitted, disqualified: metrics.disqualified, duplicates: metrics.duplicates, screening: metrics.screening };
+}
+
+/**
+ * The list page's report, counted from partner_quality_evidence exactly as partner_quality_report
+ * counts it in SQL: one row per partner of the tenant (a partner with no leads is a zero row), its
+ * previous-period figures, the disposition breakdown and both summaries. Counting here from two
+ * evidence reads replaces the SQL report, which evaluated the evidence five times in one statement
+ * and ran past the statement timeout on a busy month.
+ */
+export function buildPartnerQualityReport(
+  partners: ReadonlyArray<{ id: string; name: string; partner_type: string | null }>,
+  current: PartnerQualityEvidence[],
+  previous: PartnerQualityEvidence[],
+  period: { from: string; to: string; previous_from: string; previous_to: string },
+): Omit<PartnerQualityReport, "team" | "readOnly"> {
+  const group = (evidence: PartnerQualityEvidence[]) => {
+    const byPartner = new Map<string, PartnerQualityEvidence[]>();
+    for (const row of evidence) byPartner.set(row.partner_id, [...(byPartner.get(row.partner_id) ?? []), row]);
+    return byPartner;
+  };
+  const currentByPartner = group(current);
+  const previousByPartner = group(previous);
+  const rows: PartnerQualityRow[] = partners
+    .map((partner) => {
+      const now = periodMetrics(currentByPartner.get(partner.id) ?? []);
+      const before = periodMetrics(previousByPartner.get(partner.id) ?? []);
+      return { partner_id: partner.id, partner_name: partner.name, partner_type: partner.partner_type, ...periodOf(now), disqualified: now.disqualified, duplicates: now.duplicates, previous: periodOf(before) };
+    })
+    .sort((a, b) => a.partner_name.localeCompare(b.partner_name) || a.partner_id.localeCompare(b.partner_id));
+  const dispositions: PartnerQualityDispositionBreakdown[] = [...currentByPartner.entries()]
+    .map(([partner_id, evidence]) => ({ partner_id, dispositions: dispositionBreakdown(evidence).sort((a, b) => a.key.localeCompare(b.key)) }))
+    .filter((entry) => entry.dispositions.length > 0)
+    .sort((a, b) => a.partner_id.localeCompare(b.partner_id));
+  return { ...period, rows, dispositions, summary: summaryOf(periodMetrics(current)), previous_summary: summaryOf(periodMetrics(previous)) };
 }
 
 /** Percent change from `previous` to `current`, rounded; null when there is no base to compare with. */

@@ -1,8 +1,9 @@
 // The attempt ladder as the dialer actually walks it — read from the SQL, not from the task page.
 //
-// `schedule_next_attempt` (20260924230300) runs after a dial is dispositioned, with
+// `schedule_next_attempt` (20260929201100) runs after a dial is dispositioned, with
 // `attempts_made` ALREADY incremented, and looks up the rule for `attempt_number = attempts_made + 1`.
-// So the rule stored as attempt N is the wait before the Nth dial, counted from dial N-1:
+// So the rule stored as attempt N is the wait before the Nth dial, counted from dial N-1. That is
+// the ONE meaning of "rule N" everywhere: here, the scheduler, `DEFAULT_CADENCE` and the lead record.
 //
 //   attempt 1   the first dial. No rule is ever read for it — a fresh lead is served at once.
 //   attempt N   waits the attempt-N rule after attempt N-1; with no rule for N, the built-in delay.
@@ -11,20 +12,29 @@
 // cadence replaces this one entirely; the two are never merged". A campaign with no rules runs
 // the tenant default.
 //
-// And the ceiling: it refuses to schedule once `attempts_made >= 7`, so the seventh dial is the
-// last. A rule for attempt 8 or later is stored and never read.
+// And the ceiling: it refuses to schedule once `attempts_made >= max attempts` — seven unless the
+// tenant or campaign sets its own (tenant_cadence_limits) — so that dial is the last. A rule past
+// it is stored and never read.
 //
 // Pure and dependency-free so the client can import it (no `server-only`).
 
-import { DEFAULT_CEILING, parseInterval, type CadenceRow, type PreferredTime, type Slot } from "./engine";
+import { DEFAULT_CADENCE, DEFAULT_CEILING, parseInterval, type CadenceRow, type PreferredTime, type Slot } from "./engine";
 
-/** The last attempt the dialer will make: the scheduler exhausts the lead after this dial. */
+/** The last attempt by default (no max attempts set): the scheduler exhausts the lead after this dial. */
 export const LAST_DIALLED_ATTEMPT = DEFAULT_CEILING;
 
-/** `schedule_next_attempt`'s own fallback, by attempt number. Attempt 1 has none: it is t=0. */
+/**
+ * `schedule_next_attempt`'s own fallback, by attempt number — the spec's +2h, +1d, +1d, +2d
+ * (weekend), +3d, +5d, then five days for any attempt past the table. Attempt 1 has none: it is t=0.
+ * Read from `DEFAULT_CADENCE`, so the two cannot disagree.
+ */
 export function builtInRule(attempt: number): { delayInterval: string; preferredSlot: Slot | null } {
-  const delay = ({ 2: "1 day", 3: "1 day", 4: "2 days", 5: "3 days" } as Record<number, string>)[attempt] ?? "5 days";
-  return { delayInterval: delay, preferredSlot: attempt === 4 ? "weekend" : null };
+  const row = DEFAULT_CADENCE.find((entry) => entry.attemptNumber === attempt);
+  const preferred = row?.preferredSlot;
+  return {
+    delayInterval: row?.delayInterval ?? "5 days",
+    preferredSlot: preferred && preferred !== "morning" && preferred !== "evening" && preferred !== "opposite_half" ? preferred : null,
+  };
 }
 
 export type LadderStep = {

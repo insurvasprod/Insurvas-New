@@ -4,7 +4,7 @@ import { Fragment, useState } from "react";
 import { MoreHorizontal } from "lucide-react";
 import { notify } from "@/lib/notify";
 
-import { Badge } from "@/components/ui/badge";
+import { StatusChip } from "@/components/ui/status-chip";
 import { Button } from "@/components/ui/button";
 import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { NoMatches } from "@/components/ui/page-states";
@@ -166,9 +166,7 @@ export function FeatureCatalog({
                           <span className="flex items-center gap-2">
                             {feature.label}
                             {feature.is_archived && (
-                              <Badge variant="outline" className="border-transparent bg-muted text-muted-foreground">
-                                Archived
-                              </Badge>
+                              <StatusChip>Archived</StatusChip>
                             )}
                           </span>
                         </TableCell>

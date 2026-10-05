@@ -1,3 +1,4 @@
+import "./lib/refuseProduction.mjs";
 // SA-2.8 tenant boundary check.
 // The SA-2 control-plane tables are deliberately service-role-only. Tenant users consume their
 // own entitlement through server adapters, never by directly querying subscriptions or billing

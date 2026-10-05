@@ -1,3 +1,4 @@
+import "./lib/refuseProduction.mjs";
 // SA-3.6 acceptance, against the real database.
 //
 // The redemption cap and the "three invoices then it stops" behaviour are enforced in SQL, so they

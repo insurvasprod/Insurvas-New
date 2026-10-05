@@ -1,3 +1,4 @@
+import "./lib/refuseProduction.mjs";
 // SA-2.8 acceptance: for each seeded plan, assert the EXACT feature list an agent on it gets,
 // and that a suspended subscription yields a read-only entitlement rather than an empty one.
 //

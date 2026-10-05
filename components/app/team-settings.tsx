@@ -251,8 +251,8 @@ export function TeamSettings({ initial, workspace }: { initial: TeamSnapshot; wo
         <Callout
           tone="warning"
           title={setterAtLimit
-            ? `All ${setterSeats.limit ?? 0} setter seats are in use — another setter invite will be refused until one is freed or the plan is upgraded.`
-            : `Setter seats are nearly full: ${setterSeats.usage} of ${setterSeats.limit ?? 0} in use.`}
+            ? `Your plan's setter-seat limit is reached: ${setterSeats.usage} of ${setterSeats.limit ?? 0} setter seats in use. Upgrade the plan, or deactivate a setter, to invite another.`
+            : `Setter seats are nearly full: ${setterSeats.usage} of ${setterSeats.limit ?? 0} in use. Upgrade the plan before the next setter invite.`}
         />
       )}
       {error && <Callout tone="error" title={error} />}

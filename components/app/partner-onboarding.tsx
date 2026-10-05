@@ -76,8 +76,8 @@ export function PartnerOnboarding({ partnerId, termText, hasTerm, approved, last
         </div>
         <StatusChip tone={done === steps.length ? "good" : "neutral"}>{done} of {steps.length} done</StatusChip>
       </div>
-      <div className="mt-3.5 overflow-hidden rounded-lg border border-border">
-        <table className="w-full table-fixed border-collapse text-left">
+      <div className="mt-3.5 overflow-x-auto rounded-lg border border-border">
+        <table className="w-full min-w-[520px] table-fixed border-collapse text-left">
           <thead><tr><th className={th}>Step</th><th className={`${th} w-[190px]`}>State</th><th className={th}>Detail</th></tr></thead>
           <tbody>{steps.map((step) => <tr key={step.step} className="m-row">
             <td className={`${td} font-semibold text-foreground`}>{step.step}</td>

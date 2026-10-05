@@ -5,7 +5,7 @@ import type { PartnerLeadDetail, PartnerLeadFacets, PartnerLeadFilters, PartnerL
 import type { PartnerRole } from "@/lib/partnerAuth/roles";
 import { maskSensitiveValues } from "@/lib/partnerLeads/mask";
 import { CONVERTED_WINDOW_MS, HELD_STATUSES, NOBODY_CLAIMED_LABEL, SALE_DISPOSITIONS, nobodyClaimed, partnerLane, type PartnerLaneCounts } from "./lanes";
-import { countersFromLanes, startOfTodayIn } from "./counters";
+import { countersFromLanes, startOfTodayIn, submittedSinceFromBuckets } from "./counters";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -228,8 +228,11 @@ async function partnerLaneFigures(
   const liveRows = (live.data ?? []) as unknown as Array<{ id: string; status: string }>;
   const held = liveRows.filter((row) => row.status !== "unclaimed").map((row) => row.id);
   const onCall = new Set<string>();
-  for (let index = 0; index < held.length; index += 200) {
-    const { data, error } = await db.from("tenant_verification_sessions").select("work_item_id").eq("tenant_id", tenantId).is("ended_at", null).in("work_item_id", held.slice(index, index + 200));
+  // The chunks are independent reads: run them together rather than one round trip after another.
+  const chunks: string[][] = [];
+  for (let index = 0; index < held.length; index += 200) chunks.push(held.slice(index, index + 200));
+  const sessions = await Promise.all(chunks.map((chunk) => db.from("tenant_verification_sessions").select("work_item_id").eq("tenant_id", tenantId).is("ended_at", null).in("work_item_id", chunk)));
+  for (const { data, error } of sessions) {
     if (error) { console.error(`[partner-pipeline] verification lookup failed: ${error.message}`); return { counts: null, onCall: new Set() }; }
     for (const row of (data ?? []) as Array<{ work_item_id: string }>) onCall.add(row.work_item_id);
   }
@@ -325,6 +328,10 @@ export async function listPartnerLeads(tenantId: string, partnerId: string, filt
 
   const payload = data as Record<string, unknown>;
   const rowValues = Array.isArray(payload.rows) ? payload.rows : [];
+  // 20260929140000 adds position 15, "the SLA ladder has told the partner", so the page needs no
+  // second read for it. Null means an older read model: partnerToldIds below answers instead.
+  const flagged = rowValues.filter((value): value is unknown[] => Array.isArray(value) && value.length >= 16 && typeof value[15] === "boolean");
+  const toldByModel = flagged.length > 0 ? new Set(flagged.filter((value) => value[15] === true && typeof value[1] === "string").map((value) => value[1] as string)) : null;
   const rows: PartnerLeadRow[] = rowValues.flatMap((value): PartnerLeadRow[] => {
     if (!Array.isArray(value) || value.length < 13) return [];
     // The stage-aware read model returns stage_name and stage_type in positions
@@ -381,10 +388,19 @@ export async function listPartnerLeads(tenantId: string, partnerId: string, filt
   // stage filter narrows the still-open count, and an "oldest" from outside that filter would sit
   // under a number it does not describe.
   const unfiltered = !filters.dateFrom && !filters.dateTo && !filters.product && !filters.stageId && !filters.outcome;
-  const [oldestOpenAt, lanes, submittedToday] = await Promise.all([
-    unfiltered ? oldestOpenQueuedAt(db, tenantId, partnerId, effectiveCloserId) : Promise.resolve(null),
+  // 20260929140000's read model answers "oldest open" and "submitted since midnight" from the rows
+  // it already read, under the same scope and filters. Without it (an older read model) the two
+  // separate reads below run as before. The midnight count by lead creation was the slow one: it
+  // walked every queue item the partner ever had (4-9 s at 5,000 leads on 2026-09-30).
+  const since = startOfTodayIn(timezone);
+  const modelOldest = Object.prototype.hasOwnProperty.call(payload, "oldest_open_at") ? (typeof payload.oldest_open_at === "string" ? payload.oldest_open_at : null) : undefined;
+  const modelSubmitted = submittedSinceFromBuckets(payload.submitted_recent, since);
+  const pageWorkItemIds = rows.map((row) => row.workItemId);
+  const [oldestOpenAt, lanes, submittedToday, told] = await Promise.all([
+    !unfiltered ? Promise.resolve(null) : modelOldest !== undefined ? Promise.resolve(modelOldest) : oldestOpenQueuedAt(db, tenantId, partnerId, effectiveCloserId),
     partnerLaneFigures(db, tenantId, partnerId, effectiveCloserId, filters),
-    submittedSince(db, tenantId, partnerId, effectiveCloserId, filters, startOfTodayIn(timezone)),
+    modelSubmitted !== null ? Promise.resolve(modelSubmitted) : submittedSince(db, tenantId, partnerId, effectiveCloserId, filters, since),
+    toldByModel ? Promise.resolve(toldByModel) : partnerToldIds(db, tenantId, partnerId, pageWorkItemIds),
   ]);
   // LA-1.17-4: the four counters in the board's lanes (counters.ts). With a stage or outcome filter
   // the lanes are withheld, and the read model's own counters, which honour those filters, stand.
@@ -392,7 +408,6 @@ export async function listPartnerLeads(tenantId: string, partnerId: string, filt
     ? countersFromLanes(lanes.counts, submittedToday ?? counter("submittedToday"))
     : { submittedToday: submittedToday ?? counter("submittedToday"), claimed: counter("claimed"), converted: counter("converted"), stillOpen: counter("stillOpen") };
   const now = Date.now();
-  const told = await partnerToldIds(db, tenantId, partnerId, hydratedRows.map((row) => row.workItemId));
   const lanedRows = hydratedRows.map((row) => ({
     ...row,
     ...(told.has(row.workItemId) && nobodyClaimed({ status: row.status, slaPartnerNotifiedAt: "told" }) ? { stageName: NOBODY_CLAIMED_LABEL } : {}),

@@ -22,7 +22,35 @@ export type PreviewRow = {
   /** score_lead's raw score, in weight units (0–100 at the default weights). */
   score: number | null;
   reasons: string[];
+  /** LA-2.13-2 · each signal's share of the score (score_lead's own factors). Null when not read. */
+  breakdown?: SignalBreakdown[] | null;
 };
+
+/** One signal's part of a lead's score: its 0–1 factor, its weight and the points they make. */
+export type SignalBreakdown = { signal: string; label: string; factor: number; weight: number; points: number };
+
+/**
+ * score_lead's `signals` (factor per signal, plus the weights it used) as rows, in the order of
+ * `labels`: points = weight × factor, and the points add up to the score (score_lead rounds the sum
+ * to three places). Anything malformed is left out rather than guessed.
+ */
+export function signalBreakdown(signals: unknown, labels: ReadonlyArray<{ signal: string; label: string }>): SignalBreakdown[] {
+  const raw = record(signals);
+  const weights = record(raw.weights);
+  const out: SignalBreakdown[] = [];
+  for (const { signal, label } of labels) {
+    const factor = numOrNull(raw[signal]);
+    const weight = numOrNull(weights[signal]);
+    if (factor === null || weight === null) continue;
+    out.push({ signal, label, factor, weight, points: Math.round(weight * factor * 1000) / 1000 });
+  }
+  return out;
+}
+
+/** "8.0 of 20 pts" — how a signal filled its weight. */
+export function breakdownLine(row: SignalBreakdown): string {
+  return `${row.points.toFixed(1)} of ${row.weight.toFixed(row.weight % 1 === 0 ? 0 : 1)} pts`;
+}
 
 export type HeldBackRow = {
   workItemId: string;

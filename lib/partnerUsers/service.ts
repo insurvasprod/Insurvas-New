@@ -1,6 +1,7 @@
 import "server-only";
 
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
+import { holdsAgencyMembership } from "@/lib/auth/planeSeparation";
 import type { PartnerRole } from "@/lib/partnerAuth/roles";
 import type { Entitlement } from "@/lib/entitlements/types";
 
@@ -118,6 +119,10 @@ export async function invitePartnerUser(params: {
     .eq("email", email)
     .maybeSingle<{ id: string }>();
   if (lookupError) throw new Error(`Could not check for an existing account: ${lookupError.message}`);
+
+  // One account, one portal: an agency's own staff account is never attached to a partner
+  // organisation (lib/auth/planeSeparation.ts). The routes map this to a 409.
+  if (existing && await holdsAgencyMembership(existing.id)) throw new Error("agency_account: this email belongs to an agency account");
 
   let authUserId = existing?.id ?? null;
   if (!authUserId) {

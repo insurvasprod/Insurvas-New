@@ -1,3 +1,4 @@
+import "./lib/refuseProduction.mjs";
 // SA-4.4 live verification. Run with: npm run verify:offers
 //
 // Uses local coupon rows rather than creating provider promo codes. The script verifies the

@@ -1,3 +1,4 @@
+import "./lib/refuseProduction.mjs";
 // LA-0.1 acceptance verification. Uses one signed tenant session through a plan change so the
 // test proves the next request reads the cached entitlement, not a role or plan claim in the cookie.
 // Everything is created under a throwaway tenant and removed in finally.

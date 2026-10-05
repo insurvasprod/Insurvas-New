@@ -1,3 +1,4 @@
+import "./lib/refuseProduction.mjs";
 // SA-4.10 · Proves the kill-switch TTL across two independent Node processes.
 //
 // Run with two production servers already running:

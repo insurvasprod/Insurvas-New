@@ -4,8 +4,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { CheckCircle2, ChevronDown, ChevronLeft, Hand, Loader2 } from "lucide-react";
 import { notify } from "@/lib/notify";
+import { claimedMessage, releaseConfirmation } from "@/lib/transferInbox/constants";
 
-import { Badge } from "@/components/ui/badge";
+import { StatusChip } from "@/components/ui/status-chip";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -18,6 +19,7 @@ import type { LeadLineage, LeadNextAction } from "@/lib/leadWorkspace/lineage";
 import { LeadAttemptsTab, LeadCallbacksTab, LeadNurtureTab } from "@/components/app/lead-record-tabs";
 import { DispositionWizardDialog } from "@/components/app/disposition-wizard-dialog";
 import { LeadSignatureReadiness } from "@/components/app/lead-signature-readiness";
+import { LeadApplicationEntry } from "@/components/app/applications/lead-application-entry";
 
 type Template = { product_name: string; definition_version?: number; fields: Array<{ field_key: string; label: string; type: string; is_required: boolean; options: string[]; help_text?: string | null }>; form_definition: { sections: Array<{ section_key: string; label: string; fields: Array<{ field_key: string; is_required: boolean; show_when: { field_key: string; equals: string } | null; conditional_on?: { field_key: string; equals: string } | null }> }> } };
 type Event = { id: string; label: string; at: string; actor: string; detail: string | null; immutable: boolean };
@@ -27,17 +29,17 @@ type Workspace = { lead: { id: string; values: Record<string, unknown>; product_
 function ExistingCustomerPreflight({ data, onRecheck, busy }: { data: Workspace; onRecheck: () => void; busy: boolean }) {
   const matches = data.preflight.matches ?? [];
   const label = data.preflight.status === "already_customer" ? "Already a customer" : data.preflight.status === "spoken_before" ? "Spoken before" : data.preflight.status === "not_checked" ? "Pre-flight unavailable" : "New household";
-  return <Card className={data.preflight.status === "already_customer" ? "border-[var(--error)]/50 bg-[var(--error)]/5" : data.preflight.status === "spoken_before" ? "border-[var(--warning)]/50 bg-[var(--warning)]/5" : ""}><CardContent className="space-y-3 p-4"><div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Existing-customer pre-flight</p><p className="mt-1 font-semibold">{label}</p>{data.preflight.soldByMultiplePartners && <p className="mt-1 text-sm font-semibold text-[var(--error-ink)]">Sold by {data.preflight.soldByPartners?.length ?? 2} partners: {(data.preflight.soldByPartners ?? []).map((partner) => partner.partnerName).join(", ")}</p>}</div><div className="flex items-center gap-2">{data.preflight.soldByMultiplePartners && <Badge variant="destructive">Sold by two partners</Badge>}<Badge variant={data.preflight.status === "already_customer" ? "destructive" : data.preflight.status === "spoken_before" ? "outline" : "secondary"}>{matches.length} prior match{matches.length === 1 ? "" : "es"}</Badge><Button type="button" variant="outline" disabled={busy} onClick={onRecheck}>{busy ? "Checking…" : "Re-check"}</Button></div></div>{matches.length > 0 && <div className="space-y-2">{matches.slice(0, 5).map((match, index) => <div key={`${match.leadId ?? match.contactId ?? "match"}-${index}`} className="rounded-md border bg-background/60 p-3 text-sm"><p className="font-medium">{match.sourceType === "contact" ? "Contact on file" : `Prior lead${match.partnerName ? ` from ${match.partnerName}` : ""}`}</p><p className="mt-1 text-xs text-muted-foreground">{match.productLine ? `${match.productLine} · ` : ""}{match.outcome ?? "No outcome recorded"} · {when(match.submittedAt)}</p><p className="mt-1 text-xs text-muted-foreground">Matched on {match.matchedOn.join(", ") || "household details"}.</p></div>)}</div>}{data.preflight.policyMatchingNote && <p className="text-xs text-muted-foreground">{data.preflight.policyMatchingNote}</p>}</CardContent></Card>;
+  return <Card className={data.preflight.status === "already_customer" ? "border-[var(--error)]/50 bg-[var(--error)]/5" : data.preflight.status === "spoken_before" ? "border-[var(--warning)]/50 bg-[var(--warning)]/5" : ""}><CardContent className="space-y-3 p-4"><div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Existing-customer pre-flight</p><p className="mt-1 font-semibold">{label}</p>{data.preflight.soldByMultiplePartners && <p className="mt-1 text-sm font-semibold text-[var(--error-ink)]">Sold by {data.preflight.soldByPartners?.length ?? 2} partners: {(data.preflight.soldByPartners ?? []).map((partner) => partner.partnerName).join(", ")}</p>}</div><div className="flex items-center gap-2">{data.preflight.soldByMultiplePartners && <StatusChip tone="danger">Sold by two partners</StatusChip>}<StatusChip tone={data.preflight.status === "already_customer" ? "danger" : data.preflight.status === "spoken_before" ? "warning" : "neutral"}>{matches.length} prior match{matches.length === 1 ? "" : "es"}</StatusChip><Button type="button" variant="outline" disabled={busy} onClick={onRecheck}>{busy ? "Checking…" : "Re-check"}</Button></div></div>{matches.length > 0 && <div className="space-y-2">{matches.slice(0, 5).map((match, index) => <div key={`${match.leadId ?? match.contactId ?? "match"}-${index}`} className="rounded-md border bg-background/60 p-3 text-sm"><p className="font-medium">{match.sourceType === "contact" ? "Contact on file" : `Prior lead${match.partnerName ? ` from ${match.partnerName}` : ""}`}</p><p className="mt-1 text-xs text-muted-foreground">{match.productLine ? `${match.productLine} · ` : ""}{match.outcome ?? "No outcome recorded"} · {when(match.submittedAt)}</p><p className="mt-1 text-xs text-muted-foreground">Matched on {match.matchedOn.join(", ") || "household details"}.</p></div>)}</div>}{data.preflight.policyMatchingNote && <p className="text-xs text-muted-foreground">{data.preflight.policyMatchingNote}</p>}</CardContent></Card>;
 }
 
 function display(value: unknown) { return Array.isArray(value) ? value.join(", ") : value === null || value === undefined || value === "" ? "Not provided" : String(value); }
 function when(value: string) { return new Date(value).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }); }
 function visible(field: { show_when: { field_key: string; equals: string } | null; conditional_on?: { field_key: string; equals: string } | null }, values: Record<string, unknown>) { const condition = field.show_when ?? field.conditional_on; if (!condition) return true; const current = values[condition.field_key]; return Array.isArray(current) ? current.includes(condition.equals) : String(current ?? "") === condition.equals; }
-function stateVariant(state: string) { return state === "outstanding" ? "destructive" : state === "corrected" ? "outline" : "secondary"; }
+function stateTone(state: string) { return state === "outstanding" ? "danger" : state === "corrected" ? "warning" : "good"; }
 
 function VerificationTab({ data }: { data: Workspace }) {
   if (!data.verification) return <p className="text-sm text-muted-foreground">Verification has not started for this lead.</p>;
-  return <div className="space-y-5"><div className="space-y-3"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Verification progress</p><p className="mt-1 text-2xl font-semibold">{data.verification.session.progress_percentage}%</p></div><div className="flex items-center gap-2"><Badge variant={data.verification.session.progress_percentage === 100 ? "secondary" : "outline"}>{data.verification.session.status}</Badge>{data.queue && data.queue.owner_user_id === data.currentUserId && <Button asChild><Link href={`/app/inbound/${data.queue.id}/verification`}>Open live verification</Link></Button>}</div></div><div className="h-3 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${data.verification.session.progress_percentage}%` }} /></div><p className="text-xs text-muted-foreground">Started {when(data.verification.session.started_at)}{data.verification.session.completed_at ? ` · completed ${when(data.verification.session.completed_at)}` : ""}</p></div><div><h3 className="text-sm font-semibold">Field confirmation</h3><div className="mt-2 divide-y rounded-md border">{data.verification.fields.map((field) => <div key={field.field_key} className="flex flex-wrap items-center justify-between gap-3 px-3 py-2.5 text-sm"><span>{field.field_key}</span><div className="flex items-center gap-2"><Badge variant={stateVariant(field.state)}>{field.state}</Badge>{field.state === "corrected" && <span className="text-xs text-muted-foreground">{display(field.old_value)} → {display(field.new_value)}</span>}</div></div>)}</div></div></div>;
+  return <div className="space-y-5"><div className="space-y-3"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Verification progress</p><p className="mt-1 text-2xl font-semibold">{data.verification.session.progress_percentage}%</p></div><div className="flex items-center gap-2"><StatusChip tone={data.verification.session.progress_percentage === 100 ? "good" : "info"}>{data.verification.session.status}</StatusChip>{data.queue && data.queue.owner_user_id === data.currentUserId && <Button asChild><Link href={`/app/inbound/${data.queue.id}/verification`}>Open live verification</Link></Button>}</div></div><div className="h-3 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${data.verification.session.progress_percentage}%` }} /></div><p className="text-xs text-muted-foreground">Started {when(data.verification.session.started_at)}{data.verification.session.completed_at ? ` · completed ${when(data.verification.session.completed_at)}` : ""}</p></div><div><h3 className="text-sm font-semibold">Field confirmation</h3><div className="mt-2 divide-y rounded-md border">{data.verification.fields.map((field) => <div key={field.field_key} className="flex flex-wrap items-center justify-between gap-3 px-3 py-2.5 text-sm"><span>{field.field_key}</span><div className="flex items-center gap-2"><StatusChip tone={stateTone(field.state)}>{field.state}</StatusChip>{field.state === "corrected" && <span className="text-xs text-muted-foreground">{display(field.old_value)} → {display(field.new_value)}</span>}</div></div>)}</div></div></div>;
 }
 
 // "18 Sep 4:19 pm", as the board stamps a note.
@@ -277,7 +279,17 @@ export function LeadDetailWorkspace({ leadId }: { leadId: string }) {
   useEffect(() => { void load(); }, [load]);
 
   async function action(name: string, path: string, init: RequestInit, success: string) { setSaving(name); const response = await fetch(path, init); const body = await response.json().catch(() => null); setSaving(null); if (!response.ok) { notify.block(body?.error ?? "The action could not be completed"); return; } notify.done(success); await load(); }
-  function claim() { if (!data?.queue) return; void action("claim", "/api/app/inbound/claim", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ work_item_id: data.queue.id }) }, "Transfer claimed"); }
+  // The claim says whether it resumed the verification the transfer had when it was given back (LA-1.11-6).
+  async function claim() {
+    if (!data?.queue) return;
+    setSaving("claim");
+    const response = await fetch("/api/app/inbound/claim", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ work_item_id: data.queue.id }) });
+    const body = await response.json().catch(() => null);
+    setSaving(null);
+    if (!response.ok) { notify.block(body?.error ?? "The action could not be completed"); return; }
+    notify.done(claimedMessage(body));
+    await load();
+  }
   function moveStage(event: React.ChangeEvent<HTMLSelectElement>) { if (!data) return; void action("stage", `/api/app/leads/${data.lead.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ values: data.lead.values, stage_id: event.target.value }) }, "Stage changed"); }
   function handoff() { if (!data?.queue) return; const target = handoffTarget || data.licensedAgents[0]?.id || ""; if (!target) { notify.block("Choose a licensed agent before offering the handoff"); return; } void action("handoff", "/api/app/inbound/handoff", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "offer", work_item_id: data.queue.id, target_user_id: target }) }, "Handoff offered"); }
   function acceptHandoff() { if (!data?.pendingHandoff) return; void action("accept", "/api/app/inbound/handoff", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "accept", handoff_id: data.pendingHandoff.id }) }, "Handoff accepted"); }
@@ -286,7 +298,10 @@ export function LeadDetailWorkspace({ leadId }: { leadId: string }) {
   // LA-1.14-9 / LA-1.10-8: give the transfer back, put a dropped call back, or end buffer involvement.
   async function release(kind: "unassign" | "requeue" | "end_buffer", acknowledgeLanguage = false) {
     if (!data?.queue) return;
-    if (kind === "unassign" && !window.confirm("Give this transfer back to the queue? Nobody will own it until someone claims it. The verification so far is kept for them.")) return;
+    // Every one of the three asks first; the language cover prompt below is a second, separate question.
+    const values = data.lead.values;
+    const customer = [values.full_name, values.name, [values.first_name, values.last_name].filter(Boolean).join(" ")].find((part): part is string => typeof part === "string" && part.trim() !== "");
+    if (!acknowledgeLanguage && !window.confirm(releaseConfirmation(kind, { customer, bufferName: data.transfer?.buffer?.name, agentName: data.owner?.name }))) return;
     setSaving(kind);
     const response = await fetch("/api/app/inbound/release", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: kind, work_item_id: data.queue.id, ...(acknowledgeLanguage ? { acknowledge_language: true } : {}) }) });
     const body = await response.json().catch(() => null);
@@ -429,7 +444,7 @@ export function LeadDetailWorkspace({ leadId }: { leadId: string }) {
             <h2 className="text-lg font-semibold leading-[1.28] tracking-[-0.015em]">Actions</h2>
             <div className="mt-3.5 flex flex-col gap-2">
               {data.actions.canClaim && (
-                <Button type="button" className="w-full" disabled={readOnly || saving === "claim"} onClick={claim}>
+                <Button type="button" className="w-full" disabled={readOnly || saving === "claim"} onClick={() => void claim()}>
                   {saving === "claim" ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}{readOnly ? "Read-only" : "Claim"}
                 </Button>
               )}
@@ -452,6 +467,7 @@ export function LeadDetailWorkspace({ leadId }: { leadId: string }) {
               {canDisposition && data.queue && <Button variant="outline" className={outline} onClick={() => setOutcomeOpen(true)}>Disposition</Button>}
               {canDisposition && data.queue && <DispositionWizardDialog workItemId={data.queue.id} open={outcomeOpen} onOpenChange={setOutcomeOpen} readOnly={readOnly} />}
               {canVerify && data.queue && <Button asChild variant="outline" className={outline}><Link href={`/app/inbound/${data.queue.id}/verification`}>Verification</Link></Button>}
+              <LeadApplicationEntry leadId={data.lead.id} workItemId={data.queue?.id ?? null} canStart={!readOnly && (data.role === "owner" || data.role === "producer")} className={outline} />
               {data.stage && data.actions.canChangeStage && (
                 <div className="mt-1">
                   <Label htmlFor="lead-stage" className="text-xs font-semibold uppercase tracking-[0.02em] text-muted-foreground">Stage</Label>
@@ -463,7 +479,7 @@ export function LeadDetailWorkspace({ leadId }: { leadId: string }) {
               {!anyAction && <p className="text-sm text-muted-foreground">Nothing can be done on this lead from here right now.</p>}
             </div>
             {expired && <p className="mt-3 text-xs text-muted-foreground">Expired unclaimed.</p>}
-            {data.queue && <p className="mt-3 text-xs text-muted-foreground">Work item: {data.transfer?.phaseLabel ?? data.queue.status.replace(/_/g, " ")}{data.disposition ? ` · ${data.disposition.label}` : ""}</p>}
+            {data.queue && <p className="mt-3 text-xs text-muted-foreground">Work item: {data.transfer?.phaseLabel ?? data.queue.status.replace(/_/g, " ")}{data.disposition ? ` · ${data.disposition.label}` : ""}{data.transfer?.requeueCount ? ` · back in the queue ${data.transfer.requeueCount === 1 ? "once" : `${data.transfer.requeueCount} times`}` : ""}</p>}
             {data.transfer?.buffer?.onCall && <p className="mt-1 text-xs text-muted-foreground">Buffer {data.transfer.buffer.name} is still on the call.</p>}
           </section>
 

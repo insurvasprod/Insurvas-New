@@ -28,7 +28,8 @@ import { resolveUnpartneredEntry } from "@/lib/pipelines/service";
 import { claim, retryAfterSeconds, LEAD_POST_PER_KEY } from "@/lib/rateLimit";
 import { notifyTenantAgents } from "@/lib/agentAlerts/service";
 import { autoRoutePostedLead } from "@/lib/assignment/autoRoute";
-import { screenPartnerPhone } from "@/lib/compliance/screening";
+import { linkScreeningAuditToLead, screenPartnerPhone } from "@/lib/compliance/screening";
+import { captureConsentFromValues } from "@/lib/consent/capture";
 import { applyFieldMap } from "./fieldMap";
 import { isMissingSchema } from "./schemaGap";
 import { consentIpOf, consentTextOf, LEGACY_LOG_CODE, parseUsDateOfBirth, type ValidationReasonCode } from "./validation";
@@ -135,7 +136,10 @@ export async function acceptPostedLead(input: {
       raw_payload: input.payload as never,
       processing_ms: Date.now() - startedAt,
       http_status: outcome.status,
-      idempotency_key: input.idempotencyKey,
+      // LA-2.5-2 "without dropping legitimate posts": a 429 or a 5xx is "retry", not an answer. Were
+      // its row to keep the vendor's Idempotency-Key, the retry would replay the 429 (or the outage)
+      // forever and the lead would never land. Only a final answer claims the key.
+      idempotency_key: outcome.status === 429 || outcome.status >= 500 ? null : input.idempotencyKey,
     };
     // Which key the post arrived on, so the settings screen can count posts per key. Retried
     // without it until the column exists: losing the key id is fine, losing the log row is not —
@@ -358,6 +362,8 @@ export async function acceptPostedLead(input: {
     .maybeSingle<{ id: string }>();
 
   if (existing) {
+    // LA-2.3-9: the check was for this known lead. Best effort, never fails the answer.
+    await linkScreeningAuditToLead({ tenantId: keyRow.tenant_id, auditId: screening.auditId, leadId: existing.id });
     return log({ status: 409, outcome: "rejected", reasonCode: "duplicate", leadId: existing.id, message: "This person is already in the system." }, { campaignId: campaign.id });
   }
 
@@ -454,6 +460,8 @@ export async function acceptPostedLead(input: {
   if (createError || !created) {
     return log({ status: 500, outcome: "error", reasonCode: "missing_required_field", leadId: null, message: `The lead could not be created: ${createError?.message ?? "unknown"}` }, { campaignId: campaign.id });
   }
+  // LA-2.3-9: the scrub ran before the lead existed; its audit row is linked now (best effort).
+  await linkScreeningAuditToLead({ tenantId: keyRow.tenant_id, auditId: screening.auditId, leadId: created.id });
 
   const { error: queueError } = await supabase.from("lead_queue").insert({
     tenant_id: keyRow.tenant_id,
@@ -543,7 +551,8 @@ export async function captureConsentArtefact(
     lead_id: leadId,
     provider,
     certificate_url: certificateUrl,
-    certificate_id: typeof values.jornaya_leadid === "string" ? values.jornaya_leadid : null,
+    certificate_id: captureConsentFromValues(values)?.certificate_id
+      ?? (typeof values.jornaya_leadid === "string" ? values.jornaya_leadid : null),
     consent_timestamp: typeof values.consent_timestamp === "string" ? values.consent_timestamp : null,
     ip: typeof values.consent_ip === "string" ? values.consent_ip : typeof values.ip === "string" ? values.ip : null,
     source_url: typeof values.source_url === "string" ? values.source_url : null,

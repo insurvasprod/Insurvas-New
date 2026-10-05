@@ -1,3 +1,4 @@
+import "./lib/refuseProduction.mjs";
 // LA-1.9 live acceptance check. Uses disposable tenants and the real app routes.
 import { randomUUID } from "node:crypto";
 import { SignJWT } from "jose";

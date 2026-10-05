@@ -17,13 +17,12 @@ import type { ScreeningAuditRow } from "./exemptionConstants";
 
 type Result<T> = { data: T | null; error: { message: string; code?: string } | null };
 type Row = Record<string, unknown>;
-type Query = PromiseLike<Result<Row[]>> & {
-  select(columns: string): Query;
+type Query = PromiseLike<Result<Row[]> & { count?: number | null }> & {
+  select(columns: string, options?: { count?: "exact" }): Query;
   eq(column: string, value: unknown): Query;
   in(column: string, values: unknown[]): Query;
-  lt(column: string, value: unknown): Query;
   order(column: string, options?: { ascending?: boolean }): Query;
-  limit(count: number): Query;
+  range(from: number, to: number): Query;
 };
 type Db = { from(table: string): Query };
 
@@ -54,37 +53,38 @@ function origin(row: Row): string {
   return "Real-time post";
 }
 
-export type ScreeningAuditPage = { rows: ScreeningAuditRow[]; nextBefore: string | null };
+export type ScreeningAuditPage = { rows: ScreeningAuditRow[]; total: number; page: number; pageSize: number };
 
 export async function listScreeningAudit(input: {
   tenantId: string;
   phone?: string | null;
   outcome?: string | null;
-  before?: string | null;
-  limit?: number;
+  /** 1-based, for the shared Pager. */
+  page?: number;
+  pageSize?: number;
 }): Promise<ScreeningAuditPage> {
-  const limit = Math.max(1, Math.min(input.limit ?? 25, 100));
-  let query = db().from("screening_audit")
-    .select("id, ts, phone_digits, outcome, vendor, cached, user_id, partner_id, lead_id, raw_response")
-    .eq("tenant_id", input.tenantId);
-  if (input.phone) {
-    const digits = normalizeDigits(input.phone);
-    if (!digits) throw new Error("That is not a ten-digit US phone number.");
-    query = query.eq("phone_digits", digits);
-  }
-  if (input.outcome) {
-    if (!(SCREENING_OUTCOMES as readonly string[]).includes(input.outcome)) throw new Error("That is not a screening outcome.");
-    query = query.eq("outcome", input.outcome);
-  }
-  if (input.before) {
-    if (Number.isNaN(Date.parse(input.before))) throw new Error("That is not a time to page from.");
-    query = query.lt("ts", input.before);
-  }
-  // One extra row says whether there is another page, without a count over twenty thousand rows.
-  const result = await query.order("ts", { ascending: false }).limit(limit + 1);
+  const pageSize = Math.max(1, Math.min(input.pageSize ?? 25, 100));
+  const page = Math.max(1, Math.floor(input.page ?? 1));
+  const digits = input.phone ? normalizeDigits(input.phone) : null;
+  if (input.phone && !digits) throw new Error("That is not a ten-digit US phone number.");
+  if (input.outcome && !(SCREENING_OUTCOMES as readonly string[]).includes(input.outcome)) throw new Error("That is not a screening outcome.");
+  const scoped = (columns: string, options?: { count?: "exact" }) => {
+    let query = db().from("screening_audit").select(columns, options).eq("tenant_id", input.tenantId);
+    if (digits) query = query.eq("phone_digits", digits);
+    if (input.outcome) query = query.eq("outcome", input.outcome);
+    return query;
+  };
+  // Newest first, id as the tie-break so a page boundary never repeats or skips a row. The count is
+  // its own read (20260925709730 indexes both): if it cannot be answered, the page still shows.
+  const [result, counted] = await Promise.all([
+    scoped("id, ts, phone_digits, outcome, vendor, cached, user_id, partner_id, lead_id, raw_response")
+      .order("ts", { ascending: false }).order("id", { ascending: false }).range((page - 1) * pageSize, page * pageSize - 1),
+    scoped("id", { count: "exact" }).range(0, 0),
+  ]);
   if (result.error) throw new Error(`Could not load the screening audit: ${result.error.message}`);
-  const rows = (result.data ?? []).slice(0, limit);
-  const more = (result.data ?? []).length > limit;
+  const rows = result.data ?? [];
+  const seen = (page - 1) * pageSize + rows.length;
+  const total = !counted.error && typeof counted.count === "number" ? counted.count : rows.length === pageSize ? seen + 1 : seen;
 
   const [users, partners, leads] = await Promise.all([
     nameMap("users", rows.map((row) => text(row.user_id)), "id, full_name, email", (row) => text(row.full_name) || text(row.email) || "Someone on your team"),
@@ -115,6 +115,8 @@ export async function listScreeningAudit(input: {
         rawResponse: row.raw_response ?? null,
       };
     }),
-    nextBefore: more && rows.length ? text(rows[rows.length - 1].ts) : null,
+    total,
+    page,
+    pageSize,
   };
 }

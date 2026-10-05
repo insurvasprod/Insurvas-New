@@ -4,7 +4,7 @@ import { appointmentReminderEmail } from "@/lib/email/templates";
 import { sendEmail } from "@/lib/email/transport";
 import { customerName } from "@/lib/callbacks/timezone";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
-import { appointmentReminderEventKey, appointmentReminderTimes } from "./reminderContract";
+import { appointmentReminderEventKey, appointmentReminderTimes, customerReminderAllowed } from "./reminderContract";
 
 const DEFAULT_LEAD_MINUTES = 24 * 60;
 
@@ -46,12 +46,19 @@ export async function processAppointmentReminders(input: { now?: Date; leadMinut
 
   const leadIds = [...new Set(rows.map((row) => row.lead_id))];
   const userIds = [...new Set(rows.map((row) => row.agent_user_id))];
-  const [leads, users, availability] = await Promise.all([
+  const tenantIds = [...new Set(rows.map((row) => row.tenant_id))];
+  const [leads, users, availability, certificates] = await Promise.all([
     db.from("agent_leads").select("id, values").in("id", leadIds),
     db.from("users").select("id, name, email, status").in("id", userIds),
     db.from("tenant_agent_availability").select("tenant_id, user_id, timezone").in("user_id", userIds),
+    // The customer's consent (LA-2.11): their lead's certificates, tenant-scoped like every read here.
+    db.from("tenant_consent_artefacts").select("tenant_id, lead_id, capture_status").in("tenant_id", tenantIds).in("lead_id", leadIds),
   ]);
-  if (leads.error || users.error || availability.error) throw new Error("Could not load appointment reminder recipients.");
+  if (leads.error || users.error || availability.error || certificates.error) throw new Error("Could not load appointment reminder recipients.");
+  const consentByLead = new Map<string, string[]>();
+  for (const row of (certificates.data ?? []) as Array<{ lead_id: string; capture_status: string }>) {
+    consentByLead.set(row.lead_id, [...(consentByLead.get(row.lead_id) ?? []), row.capture_status]);
+  }
   const leadMap = new Map<string, Record<string, unknown>>((leads.data ?? []).map((lead: { id: string; values: unknown }): [string, Record<string, unknown>] => [lead.id, (lead.values ?? {}) as Record<string, unknown>]));
   const userMap = new Map<string, UserRow>((users.data ?? []).map((user: UserRow): [string, UserRow] => [user.id, user]));
   const zoneMap = new Map<string, string>((availability.data ?? []).map((row: { user_id: string; timezone: string }): [string, string] => [row.user_id, row.timezone]));
@@ -65,7 +72,9 @@ export async function processAppointmentReminders(input: { now?: Date; leadMinut
     const agentTimezone = zoneMap.get(row.agent_user_id) ?? "UTC";
     const times = appointmentReminderTimes({ startsAtUtc: row.starts_at_utc, customerTimezone: row.customer_timezone, agentTimezone });
     const name = customerName(values);
-    const customerEmail = address(values.email ?? values.email_address);
+    // A channel is not consent: the customer is reminded only when both are there.
+    const channel = address(values.email ?? values.email_address);
+    const customerEmail = customerReminderAllowed({ email: channel, certificateStatuses: consentByLead.get(row.lead_id) ?? [] }) ? channel : null;
     const recipients = [
       { type: "agent" as const, key: row.agent_user_id, name: user?.name ?? "Agent", email: address(user?.email), notify: true },
       ...(customerEmail ? [{ type: "customer" as const, key: customerEmail, name, email: customerEmail, notify: false }] : []),

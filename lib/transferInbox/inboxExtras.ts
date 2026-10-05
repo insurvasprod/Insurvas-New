@@ -127,11 +127,14 @@ export async function inboxRowFacts(tenantId: string): Promise<Record<string, Ro
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
   const [calls, outcomes, escalated, labels] = await Promise.all([
     db.from("active_calls").select("work_item_id, started_at").eq("tenant_id", tenantId).is("ended_at", null).limit(2000),
-    db.from("lead_queue").select("id, disposition").eq("tenant_id", tenantId).not("disposition", "is", null).gte("disposition_at", since).limit(2000),
+    // Both lead_queue reads are partner transfers only (partner_id set): the inbox never shows the
+    // dialer's work items, and without the filter these scanned every unclaimed outbound row
+    // (~100k in a large agency; 19 s under load, measured 2026-09-30).
+    db.from("lead_queue").select("id, disposition").eq("tenant_id", tenantId).not("partner_id", "is", null).not("disposition", "is", null).gte("disposition_at", since).limit(2000),
     // sla_escalated_at is written by run_unclaimed_sla (20260924250100) but is not in the generated
     // types yet, so this one read goes through an untyped client.
-    (db as unknown as { from: (table: string) => { select: (columns: string) => { eq: (c: string, v: string) => { eq: (c: string, v: string) => { not: (c: string, op: string, v: null) => { limit: (n: number) => PromiseLike<{ data: Array<{ id: string; sla_escalated_at: string | null }> | null; error: { message: string } | null }> } } } } } })
-      .from("lead_queue").select("id, sla_escalated_at").eq("tenant_id", tenantId).eq("status", "unclaimed").not("sla_escalated_at", "is", null).limit(2000),
+    (db as unknown as { from: (table: string) => { select: (columns: string) => { eq: (c: string, v: string) => { eq: (c: string, v: string) => { not: (c: string, op: string, v: null) => { not: (c: string, op: string, v: null) => { limit: (n: number) => PromiseLike<{ data: Array<{ id: string; sla_escalated_at: string | null }> | null; error: { message: string } | null }> } } } } } } })
+      .from("lead_queue").select("id, sla_escalated_at").eq("tenant_id", tenantId).eq("status", "unclaimed").not("partner_id", "is", null).not("sla_escalated_at", "is", null).limit(2000),
     db.from("dispositions").select("disposition_key, label").eq("tenant_id", tenantId),
   ]);
   const facts: Record<string, RowFact> = {};

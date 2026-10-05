@@ -1,3 +1,4 @@
+import "./lib/refuseProduction.mjs";
 /**
  * Which migrations since a given version are live in the database (default 20260923).
  *

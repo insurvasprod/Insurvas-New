@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Badge } from "@/components/ui/badge";
+import { StatusChip } from "@/components/ui/status-chip";
 import { Button } from "@/components/ui/button";
 import { DataToolbar, toolbarControl } from "@/components/ui/data-toolbar";
 import { TableCard } from "@/components/ui/table-card";
@@ -112,7 +112,7 @@ export function CampaignComparisonWorkspace({ rows, defaultFrom, defaultTo }: { 
           <p className="mt-0.5 text-xs text-muted-foreground">{result.matched_periods.days} matched days · {result.confidence.sample_a} observations in A · {result.confidence.sample_b} in B</p>
           {result.cadence && <p className={`mt-0.5 text-xs ${TONE_TEXT[CADENCE_TONE[result.cadence.status]]}`}><strong className="font-semibold">{CADENCE_TITLE[result.cadence.status]}.</strong> {result.cadence.message}</p>}
         </div>
-        <Badge variant={result.confidence.level === "strong" ? "secondary" : result.confidence.level === "insufficient" ? "destructive" : "outline"}>{result.confidence.level.replaceAll("_", " ")}</Badge>
+        <StatusChip tone={result.confidence.level === "strong" ? "good" : result.confidence.level === "insufficient" ? "danger" : "neutral"}>{result.confidence.level.replaceAll("_", " ")}</StatusChip>
       </div>
       <dl className="grid gap-x-6 gap-y-3 border-t border-border px-4 py-3 sm:grid-cols-3">
         <div><dt className={fact}>{label[result.metric.key]}</dt><dd className="mt-1 text-sm font-semibold tabular-nums">A {metricValue(result.metric.a_value, result.metric.unit)} · B {metricValue(result.metric.b_value, result.metric.unit)}</dd></div>

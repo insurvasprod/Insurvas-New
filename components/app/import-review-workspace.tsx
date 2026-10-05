@@ -11,7 +11,7 @@ import { StatStrip, StatTile } from "@/components/ui/stat";
 import { TableCard } from "@/components/ui/table-card";
 import { KeyValues, Pill, st } from "@/components/app/settings/primitives";
 import { ImportStepper } from "@/components/app/import-stepper";
-import { parseCsv } from "@/lib/agentTemplates/csv";
+import { normalizeImportState, parseCsv } from "@/lib/agentTemplates/csv";
 import {
   formatCents,
   IMPORT_CSV_KEY,
@@ -173,7 +173,8 @@ export function ImportReviewWorkspace({ plan, csv }: { plan: ReviewPlan; csv: st
     const licensed = new Set(territory);
     const byState = new Map<string, number>();
     for (const rowNumber of plan.rows.ready) {
-      const state = (parsed[rowNumber - 1]?.[column] ?? "").trim().toUpperCase();
+      // Read as the importer stores it: "Tennessee" is TN.
+      const state = normalizeImportState(parsed[rowNumber - 1]?.[column] ?? "");
       if (state && !licensed.has(state)) byState.set(state, (byState.get(state) ?? 0) + 1);
     }
     const rows = [...byState.values()].reduce((sum, n) => sum + n, 0);

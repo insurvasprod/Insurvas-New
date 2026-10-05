@@ -63,14 +63,14 @@ function countSeats(tenantId: string): Promise<Counted> {
   return fetchTenantSeatCounts(tenantId).then((counts) => ({ value: counts.held, error: null }), failure);
 }
 
-/** Publishers that hold a slot against max_publishers: the create path's own count (draft + active). */
+/** Publishers that hold a slot against max_publishers: active only, as the limit trigger counts them (709950). */
 async function countPublishers(tenantId: string): Promise<Counted> {
   const { count, error } = await getSupabaseServiceClient()
     .from("partners")
     .select("id", { count: "exact", head: true })
     .eq("tenant_id", tenantId)
     .eq("partner_type", "publisher")
-    .in("status", ["draft", "active"]);
+    .eq("status", "active");
   if (error) return { value: null, error: `Could not count publishers: ${error.message}` };
   return { value: count ?? 0, error: null };
 }

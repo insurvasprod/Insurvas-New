@@ -3,7 +3,7 @@ import "server-only";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { customerName, formatInTimezone, stateFromLeadValues, STATE_TIMEZONES } from "@/lib/callbacks/timezone";
 import { productLineLabel } from "@/lib/format/productLine";
-import { describeEmptyQueue, EMPTY_QUEUE_NORMAL, pickRefusalMessage, returnWindowLine, suppressionRefusal, type ReturnWindow } from "./display";
+import { describeEmptyQueue, EMPTY_QUEUE_NORMAL, explainEmptyQueue, pickRefusalMessage, returnWindowLine, suppressionRefusal, windowOpeningCandidates, type EmptyQueueFacts, type ReturnWindow, type StateWindowRow } from "./display";
 import { getDncDialingStatus, performDncDialPreflight } from "@/lib/compliance/service";
 import { normalizeDialPhone } from "@/lib/compliance/scrub";
 import { getCallingWindows, staleRulesReason } from "@/lib/callingWindow/service";
@@ -14,6 +14,8 @@ import { recordDialRefused } from "@/lib/leadWorkspace/refusals";
 import { isPendingSchema, SchemaPendingError } from "@/lib/appointments/pendingSchema";
 import { decideDialLicence, leadStateBeforeServe, type LicenceDecision } from "./licence";
 import { checkCallbackInCallingWindow } from "@/lib/dispositions/callbackWindow";
+import { dialerVocabulary, type DialerVocabulary, type DispositionVocabularyRow } from "./outcomes";
+import { isPlaceholderDisclosure } from "./disclosureStatus";
 
 type Row = Record<string, unknown>;
 type Result<T> = { data: T; error: { message: string; code?: string } | null };
@@ -22,6 +24,8 @@ type Query = PromiseLike<Result<unknown>> & {
   eq(column: string, value: unknown): Query;
   lte(column: string, value: unknown): Query;
   gte(column: string, value: unknown): Query;
+  gt(column: string, value: unknown): Query;
+  in(column: string, values: readonly unknown[]): Query;
   not(column: string, operator: string, value: unknown): Query;
   is(column: string, value: null): Query;
   order(column: string, options?: { ascending?: boolean }): Query;
@@ -59,6 +63,12 @@ export type DialerEligibility = {
   suppressionHits?: Array<{ listType: string; reason: string; addedAt: string | null }> | null;
   /** The licence the dial is judged on, for the card's Licence row. Null when it was never reached. */
   licence?: { status: "live" | "refused" | "unavailable"; state: string; expiresAt: string | null; message: string | null } | null;
+  /**
+   * LA-2.3-3: an owner-recorded DNC exemption for this number (active_dnc_exemption, 20260925709700).
+   * It clears federal/state DNC only — never the agency's own list or a litigator. Null when there is
+   * none, or before that migration.
+   */
+  dncExemption?: { basis: string; expiresAt: string | null; certificateUrl: string | null } | null;
 };
 
 export class DialGateError extends Error {
@@ -89,6 +99,8 @@ const DEFAULT_REBUTTALS = [
   ["not_interested", "Not interested", "Understood. Is that because the timing is not right, or because you already have the protection you want?"],
   ["call_me_later", "Call me later", "Of course. What day and time works best in your local time? I will record that callback request."],
   ["how_did_you_get_my_number", "How did you get my number", "Your contact information came with the lead submission for this insurance inquiry. I can also stop the call if you would prefer not to be contacted."],
+  ["need_to_think", "I need to think about it", "Of course. So I can help you think it through, what part would you like to be surer of: the amount, the monthly cost, or the company?"],
+  ["talk_to_spouse", "I need to talk to my spouse", "That makes sense. Would it help to set a time when you can both be on the call, so I can answer their questions directly?"],
 ] as const;
 
 function text(value: unknown) { return typeof value === "string" ? value : ""; }
@@ -122,6 +134,13 @@ function resolve(value: unknown, variables: Record<string, string>): unknown {
 function selectionReason(result: { data?: Row | null; error: { code?: string; message: string } | null }) {
   if (result.error) {
     const missingRelation = result.error.code === "PGRST205" || /Could not find the table/i.test(result.error.message);
+    // A statement timeout (57014) is a slow database, not a wrong query: the panel is the call's
+    // compliance screen and must still open, so the reason is left out and the timeout logged.
+    // (20260929200300 indexes this read by lead.)
+    if (result.error.code === "57014") {
+      console.error(`[dialer] the selection reason read timed out: ${result.error.message}`);
+      return null;
+    }
     if (!missingRelation) throw new Error(`Could not load the selection reason: ${result.error.message}`);
     return null;
   }
@@ -141,6 +160,11 @@ function mapRebuttals(rows: Row[]) {
 
 function leadPhone(values: Row) {
   return text(values.phone ?? values.phone_number);
+}
+
+function leadCity(values: Row) {
+  const raw = text(values.city ?? values.address_city ?? values.City).trim();
+  return raw ? raw.replace(/\s+/g, " ") : "";
 }
 
 function localTime(now: string, values: Row) {
@@ -217,8 +241,10 @@ async function getDialerEligibility(db: Db, tenantId: string, values: Row, campa
   let suppression: DialerEligibility["suppression"] = "not_checked";
   let suppressionHits: DialerEligibility["suppressionHits"] = null;
   let licenceView: DialerEligibility["licence"] = null;
+  const exemptionRead = normalizedPhone ? readDncExemption(db, tenantId, normalizedPhone) : Promise.resolve(null);
+  let dncExemption: DialerEligibility["dncExemption"] = null;
   const blocked = (reason: DialerEligibility["reason"], message: string, dncCheck: DialerEligibility["dncCheck"] = "pending"): DialerEligibility => ({
-    allowed: false, reason, message, checkedAt, timezone, customerLocalTime, dncCheck, suppression, suppressionHits, licence: licenceView,
+    allowed: false, reason, message, checkedAt, timezone, customerLocalTime, dncCheck, suppression, suppressionHits, licence: licenceView, dncExemption,
   });
 
   if (!state) {
@@ -227,6 +253,7 @@ async function getDialerEligibility(db: Db, tenantId: string, values: Row, campa
       suppression = own.internal;
       suppressionHits = own.hits;
     }
+    dncExemption = await exemptionRead;
     return blocked("no_state", "Dialing is blocked because this lead has no state and its local calling time cannot be determined.");
   }
   if (!normalizedPhone || !suppressedRead) {
@@ -235,7 +262,7 @@ async function getDialerEligibility(db: Db, tenantId: string, values: Row, campa
 
   // The three reads are independent and side-effect free, so they are fetched together; the
   // decisions below still run in the original order, so the first blocking reason is unchanged.
-  const [licence, window, suppressed, dncResult] = await Promise.all([
+  const [licence, window, suppressed, dncResult, exemption] = await Promise.all([
     // "Refused by the dialer": the agent must be licensed in the lead's state (Settings › States &
     // licences, and their own states on Team & access). Only known for a named agent.
     agentId
@@ -253,7 +280,9 @@ async function getDialerEligibility(db: Db, tenantId: string, values: Row, campa
     suppressedRead,
     // Settled here so a DNC failure is evaluated in its own turn below, never short-circuiting the earlier checks.
     getDncDialingStatus().then((status) => ({ ok: true as const, status }), () => ({ ok: false as const })),
+    exemptionRead,
   ]);
+  dncExemption = exemption;
   suppression = suppressed.internal;
   suppressionHits = suppressed.hits;
   if (licence) {
@@ -291,7 +320,20 @@ async function getDialerEligibility(db: Db, tenantId: string, values: Row, campa
     suppression,
     suppressionHits,
     licence: licenceView,
+    dncExemption,
   };
+}
+
+/** active_dnc_exemption (20260925709700), or null — none, or the function not there yet (42883 / PGRST202). */
+async function readDncExemption(db: Db, tenantId: string, normalizedPhone: string): Promise<DialerEligibility["dncExemption"]> {
+  const result = await db.rpc("active_dnc_exemption", { p_tenant_id: tenantId, p_phone: normalizedPhone });
+  if (result.error) {
+    if (!isPendingSchema(result.error)) console.error(`[dialer] active_dnc_exemption failed: ${result.error.message}`);
+    return null;
+  }
+  const row = ((Array.isArray(result.data) ? result.data[0] : result.data) ?? null) as Row | null;
+  if (!row || !text(row.basis)) return null;
+  return { basis: text(row.basis), expiresAt: text(row.expires_at) || null, certificateUrl: text(row.certificate_url) || null };
 }
 
 type SuppressionRead = { internal: "clear" | "suppressed" | "unavailable"; hits: DialerEligibility["suppressionHits"] };
@@ -373,6 +415,17 @@ async function readRecycleContext(db: Db, tenantId: string, leadId: string): Pro
   return { angle: text(row.angle), script: text(row.script) || null, attemptCeiling: numberOrNull(row.attempt_ceiling), recycledAt: text(row.recycled_at) || null };
 }
 
+/** cadence_max_attempts (20260929201100), or null — before that migration (42883 / PGRST202) the default seven applies. */
+async function readCadenceCeiling(db: Db, tenantId: string, campaignId: string | null): Promise<number | null> {
+  const result = await db.rpc("cadence_max_attempts", { p_tenant_id: tenantId, p_campaign_id: campaignId });
+  if (result.error) {
+    if (!isPendingSchema(result.error)) console.error(`[dialer] cadence_max_attempts failed: ${result.error.message}`);
+    return null;
+  }
+  const n = numberOrNull(Array.isArray(result.data) ? result.data[0] : result.data);
+  return n !== null && Number.isInteger(n) && n >= 1 ? n : null;
+}
+
 /** lead_return_window (20260925700100), or null before it exists or when the read fails. */
 async function readReturnWindow(db: Db, tenantId: string, leadId: string): Promise<ReturnWindow | null> {
   const result = await db.rpc("lead_return_window", { p_tenant_id: tenantId, p_lead_id: leadId });
@@ -384,6 +437,40 @@ async function readReturnWindow(db: Db, tenantId: string, leadId: string): Promi
   if (!row) return null;
   const days = row.days_remaining === null || row.days_remaining === undefined ? null : Number(row.days_remaining);
   return { vendorName: text(row.vendor_name) || null, campaignName: text(row.campaign_name) || null, daysRemaining: days, claimableUntil: text(row.claimable_until) || null, claimable: row.claimable === true, reason: text(row.reason) || null };
+}
+
+/**
+ * The dialer's outcome buttons from the tenant's dispositions (20260929200000), or the pre-migration
+ * list while no row carries a dialer position. Before that migration the column is missing (42703):
+ * the rows are read without it, so the call history still shows the tenant's own labels.
+ */
+export async function loadDialerVocabulary(tenantId: string): Promise<DialerVocabulary> {
+  const db = getSupabaseServiceClient() as unknown as Db;
+  const full = await db.from("dispositions").select("disposition_key, label, is_active, dialer_position").eq("tenant_id", tenantId);
+  if (!full.error) return dialerVocabulary(((full.data as Row[] | null) ?? []).map(vocabularyRow));
+  if (!isPendingSchema(full.error)) {
+    console.error(`[dialer] could not read the disposition vocabulary: ${full.error.message}`);
+    return dialerVocabulary(null);
+  }
+  const plain = await db.from("dispositions").select("disposition_key, label, is_active").eq("tenant_id", tenantId);
+  return dialerVocabulary(plain.error ? null : ((plain.data as Row[] | null) ?? []).map(vocabularyRow));
+}
+
+function vocabularyRow(row: Row): DispositionVocabularyRow {
+  return { disposition_key: text(row.disposition_key), label: text(row.label) || text(row.disposition_key), is_active: row.is_active === true, dialer_position: numberOrNull(row.dialer_position) };
+}
+
+/**
+ * The agent's own timezone (LA-2.10): the zone their working hours are kept in
+ * (tenant_agent_availability). Null when they have none; the screen then uses the browser's.
+ */
+async function readAgentTimezone(db: Db, tenantId: string, agentId: string | undefined): Promise<string | null> {
+  if (!agentId) return null;
+  const result = await db.from("tenant_agent_availability").select("timezone").eq("tenant_id", tenantId).eq("user_id", agentId).limit(1).maybeSingle<Row>();
+  if (result.error) return null;
+  const zone = text(result.data?.timezone);
+  if (!zone) return null;
+  try { new Intl.DateTimeFormat("en-US", { timeZone: zone }); return zone; } catch { return null; }
 }
 
 /** The published calling-window layers for the lead's state (the Callbacks page's facts). Advisory. */
@@ -424,11 +511,15 @@ export async function getDialerPanel(input: { tenantId: string; agentId?: string
   // Round 1b: display context, every read tolerant — a missing name or log must not close the
   // compliance panel. The agent's and agency's names feed the script variables; the DNC log is the
   // last number lookup actually made for this lead (migration 20260924323200).
-  const [agentResult, tenantResult, agencyResult, dncLogResult] = await Promise.all([
+  // The outcome buttons (the one vocabulary, 20260929200000) and the agent's own clock (LA-2.10)
+  // ride along; both fall back rather than fail.
+  const [agentResult, tenantResult, agencyResult, dncLogResult, vocabulary, agentTimezone] = await Promise.all([
     input.agentId ? db.from("users").select("name").eq("id", input.agentId).maybeSingle<Row>() : null,
     db.from("tenants").select("name").eq("id", input.tenantId).maybeSingle<Row>(),
     db.from("agency_profiles").select("legal_name, dba").eq("tenant_id", input.tenantId).maybeSingle<Row>(),
     db.from("tenant_dial_dnc_checks").select("result, checked_at").eq("tenant_id", input.tenantId).eq("lead_id", input.leadId).order("checked_at", { ascending: false }).limit(1).maybeSingle<Row>(),
+    loadDialerVocabulary(input.tenantId),
+    readAgentTimezone(db, input.tenantId, input.agentId),
   ]);
   if (leadResult.error) throw new Error(`Could not load lead: ${leadResult.error.message}`);
   if (!leadResult.data) throw new Error("Lead not found");
@@ -439,7 +530,7 @@ export async function getDialerPanel(input: { tenantId: string; agentId?: string
 
   // Round 2: everything that needs the lead. The default script is fetched alongside the campaign
   // one rather than after it; it is only used (and its error only raised) when the campaign has none.
-  const [campaignScript, defaultScript, disclosure, eligibility, campaign, windowResult, returnWindow, callbackWindow, recycle] = await Promise.all([
+  const [campaignScript, defaultScript, disclosure, eligibility, campaign, windowResult, returnWindow, callbackWindow, recycle, cadenceCeiling] = await Promise.all([
     campaignId
       ? db.from("tenant_scripts").select("id, campaign_id, product_code, version, sections").eq("tenant_id", input.tenantId).eq("campaign_id", campaignId).eq("product_code", productCode).eq("is_active", true).order("version", { ascending: false }).limit(1).maybeSingle<Row>()
       : null,
@@ -457,6 +548,8 @@ export async function getDialerPanel(input: { tenantId: string; agentId?: string
     readCallbackWindow(input.tenantId, state),
     // "Recycled · angle: …" on the card, while the lead is on a recycle pass.
     readRecycleContext(db, input.tenantId, input.leadId),
+    // "Attempt N of M": the cadence's own ceiling for this campaign (cadence_max_attempts, 20260929201100).
+    readCadenceCeiling(db, input.tenantId, campaignId),
   ]);
 
   let script: Row | null = null;
@@ -507,6 +600,9 @@ export async function getDialerPanel(input: { tenantId: string; agentId?: string
       firstName: variables.first_name,
       fullName: customerName(values),
       state,
+      // LA-2.9-1: the header's city/state. Imports map a City column to `city`; older rows may
+      // carry `address_city`. Empty when the list had none.
+      city: leadCity(values),
       age: variables.age,
       phone: leadPhone(values),
       campaignId,
@@ -519,11 +615,16 @@ export async function getDialerPanel(input: { tenantId: string; agentId?: string
       nextDialAfter: text(leadResult.data.next_dial_after) || null,
       nextSlot: text(leadResult.data.next_preferred_slot) || null,
       // The lead's own ceiling (a recycle pass), or null for the default seven.
-      attemptCeiling: numberOrNull(leadResult.data.attempt_ceiling),
+      // The lead's own ceiling (a recycle pass) wins, then the cadence's; null → the default seven.
+      attemptCeiling: numberOrNull(leadResult.data.attempt_ceiling) ?? cadenceCeiling,
     },
     recycle,
     // Who is looking: the booking and callback panels compare against this agent's own calendar.
     viewerUserId: input.agentId ?? null,
+    // The agent's own zone for "= your time" (LA-2.10-1); null → the browser's.
+    viewerTimezone: agentTimezone,
+    // The buttons and number keys, in order, and the labels for the history (M1 LA-1.12-4).
+    outcomes: vocabulary,
     // "—" on the board when absent, which is most leads today: nothing in the import path sets
     // campaign_id unless the list was attached to a campaign.
     campaign: campaign
@@ -547,7 +648,10 @@ export async function getDialerPanel(input: { tenantId: string; agentId?: string
     lastDncCheck: lastDnc ? { result: text(lastDnc.result), checkedAt: text(lastDnc.checked_at) } : null,
     script: { id: script ? text(script.id) : null, version: script ? Number(script.version) : 0, campaignId: script?.campaign_id ?? null, productCode, sections },
     rebuttals: mapRebuttals(Array.isArray(rebuttals.data) && rebuttals.data.length ? rebuttals.data as Row[] : defaultRows as unknown as Row[]),
-    disclosure: disclosure.data ? { id: text(disclosure.data.id), state, productCode, requiredText: text(disclosure.data.required_text), effectiveFrom: text(disclosure.data.effective_from), configured: true, blocking: false } : { id: null, state, productCode, requiredText: `No approved disclosure is configured for ${state || "this lead state"}. Dialing is blocked until Compliance publishes one.`, effectiveFrom: null, configured: false, blocking: true },
+    // D15: `approved` is false while the stored wording is the seeded placeholder (its first line
+    // says so). The dialer still dials on it — the user left the placeholder in place for their
+    // legal wording — but says plainly that it is not compliance-approved.
+    disclosure: disclosure.data ? { id: text(disclosure.data.id), state, productCode, requiredText: text(disclosure.data.required_text), effectiveFrom: text(disclosure.data.effective_from), configured: true, blocking: false, approved: !isPlaceholderDisclosure(text(disclosure.data.required_text)) } : { id: null, state, productCode, requiredText: `No approved disclosure is configured for ${state || "this lead state"}. Dialing is blocked until Compliance publishes one.`, effectiveFrom: null, configured: false, blocking: true, approved: false },
     eligibility,
     // Reported, not swallowed — with one deliberate exception. A lead that has never been served
     // has no decision row, and that is a real "no explanation yet"; a query that FAILED is not, and
@@ -658,7 +762,8 @@ export async function markDialClicked(input: { tenantId: string; agentId: string
   const phone = leadPhone(values);
   let dncResult: "clear" | "listed" | "unavailable";
   try {
-    const dnc = await performDncDialPreflight(phone, input.tenantId);
+    // The exemption's audited use (LA-2.3-3) names this dial: its lead, attempt and agent.
+    const dnc = await performDncDialPreflight(phone, input.tenantId, undefined, { leadId: text(lead.id), attemptId: input.attemptId, agentId: input.agentId });
     dncResult = dnc.allowed ? "clear" : "listed";
   } catch {
     dncResult = "unavailable";
@@ -840,16 +945,83 @@ export async function saveRebuttal(input: { tenantId: string; objectionKey: stri
  * Read only when Serve next found nothing, so a served press pays nothing for it. A failed read
  * falls back to the normal sentence rather than failing the press.
  */
-export async function emptyQueueReason(tenantId: string): Promise<string> {
+export async function emptyQueueReason(tenantId: string, agentId?: string): Promise<string> {
+  return (await diagnoseEmptyQueue(tenantId, agentId)).message;
+}
+
+/** Every state with a timezone: a setter may be served any of them (decideDialLicence). */
+const ALL_STATES = Object.keys(STATE_TIMEZONES).sort();
+
+/** The states this agent may be served now, or null for "every state" (a setter). */
+function workableStates(context: LicenceContext): string[] | null {
+  if (context.role === "setter") return null;
+  const today = new Date().toISOString().slice(0, 10);
+  const candidates = context.agentStates && context.agentStates.length ? context.agentStates : context.agencyLicences.map((row) => row.state);
+  return [...new Set(candidates.map((state) => state.trim().toUpperCase()).filter(Boolean))]
+    .filter((state) => decideDialLicence({ ...context, state, today }).allowed)
+    .sort();
+}
+
+/**
+ * LA-2.8-6 / LA-2.3-1 · works out WHICH reason leaves this agent's queue empty (explainEmptyQueue).
+ * Read only when nothing was served, or when the preview list is empty, so a served press pays
+ * nothing for it. Every read is bounded: one window check per workable state, a handful of
+ * confirmations of the next opening, and two index-backed reads of the retry timers. A read that
+ * fails leaves its fact out rather than failing the press.
+ */
+export async function diagnoseEmptyQueue(tenantId: string, agentId?: string): Promise<{ code: string; message: string }> {
   const db = getSupabaseServiceClient() as unknown as Db;
-  const [campaigns, waiting] = await Promise.all([
+  const now = Date.now();
+  const nowIso = new Date(now).toISOString();
+  const [campaigns, waiting, licence, agentZone] = await Promise.all([
     db.from("tenant_campaigns").select("name, status, scrub_status").eq("tenant_id", tenantId),
     db.from("lead_queue").select("id").eq("tenant_id", tenantId).eq("status", "unclaimed").limit(1),
+    agentId ? loadLicenceContext(db, tenantId, agentId).catch(() => null) : Promise.resolve(null),
+    readAgentTimezone(db, tenantId, agentId),
   ]);
-  if (campaigns.error) return EMPTY_QUEUE_NORMAL;
-  const rows = ((campaigns.data as Row[] | null) ?? []).map((row) => ({ name: text(row.name) || "Unnamed campaign", status: text(row.status), scrubStatus: text(row.scrub_status) }));
+  if (campaigns.error) return { code: "normal", message: EMPTY_QUEUE_NORMAL };
+  const campaignRows = ((campaigns.data as Row[] | null) ?? []).map((row) => ({ name: text(row.name) || "Unnamed campaign", status: text(row.status), scrubStatus: text(row.scrub_status) }));
   const anyUnclaimed = !waiting.error && ((waiting.data as Row[] | null) ?? []).length > 0;
-  return describeEmptyQueue({ campaigns: rows, anyUnclaimed });
+  const base: EmptyQueueFacts = { campaigns: campaignRows, anyUnclaimed, workableStates: null, windows: [], nextOpening: null, retryWaiting: null, slotWaiting: null, agentZone, now };
+  // No agent (or no licence answer): the campaign-level sentence, as before.
+  if (!licence) return { code: "campaigns", message: describeEmptyQueue({ campaigns: campaignRows, anyUnclaimed }) };
+
+  const states = workableStates(licence);
+  const facts: EmptyQueueFacts = { ...base, workableStates: states };
+  const early = explainEmptyQueue(facts);
+  if (early.code === "campaigns" || early.code === "nothing_waiting" || early.code === "no_licence") return early;
+
+  const checked = states ?? ALL_STATES;
+  const windowRows = await Promise.all(checked.map(async (state): Promise<StateWindowRow | null> => {
+    const result = await db.rpc("tenant_dial_window", { p_tenant_id: tenantId, p_state: state, p_campaign_id: null, p_at: nowIso });
+    if (result.error) return null;
+    const row = ((Array.isArray(result.data) ? result.data[0] : result.data) ?? null) as Row | null;
+    if (!row) return null;
+    return { state, allowed: row.allowed === true, startMinute: numberOrNull(row.start_minute), endMinute: numberOrNull(row.end_minute), localMinute: numberOrNull(row.local_minute), zone: text(row.zone) || STATE_TIMEZONES[state] || null, reason: text(row.reason) || (row.allowed === true ? "open" : "closed") };
+  }));
+  facts.windows = windowRows.filter((row): row is StateWindowRow => row !== null);
+
+  if (facts.windows.length && facts.windows.every((row) => !row.allowed)) {
+    // Confirm the soonest candidate openings (a Sunday or holiday rule can keep a day shut).
+    for (const candidate of windowOpeningCandidates(facts.windows, now).slice(0, 8)) {
+      const open = await db.rpc("tenant_can_dial_now", { p_tenant_id: tenantId, p_state: candidate.state, p_campaign_id: null, p_at: new Date(candidate.at + 60_000).toISOString() });
+      if (!open.error && open.data === true) { facts.nextOpening = candidate; break; }
+    }
+    return explainEmptyQueue(facts);
+  }
+
+  // Timers: retry / nurture leads whose next dial is still ahead (agent_leads_retry_due_idx), and
+  // retry leads that are due but wait for an untried slot. Scoped to the workable states.
+  const scoped = (query: Query) => (states ? query.in("values->>state", states) : query);
+  const [ahead, dueRetry] = await Promise.all([
+    scoped(db.from("agent_leads").select("next_dial_after", { count: "exact" }).eq("tenant_id", tenantId).in("lead_state", ["retry", "nurture"]).gt("next_dial_after", nowIso)).order("next_dial_after", { ascending: true }).limit(1),
+    scoped(db.from("agent_leads").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId).eq("lead_state", "retry").lte("next_dial_after", nowIso)),
+  ]);
+  const aheadRows = (ahead.data as Row[] | null) ?? [];
+  const aheadCount = (ahead as unknown as { count?: number | null }).count ?? aheadRows.length;
+  if (!ahead.error) facts.retryWaiting = { count: aheadCount, nextAt: text(aheadRows[0]?.next_dial_after) || null };
+  if (!dueRetry.error) facts.slotWaiting = (dueRetry as unknown as { count?: number | null }).count ?? null;
+  return explainEmptyQueue(facts);
 }
 
 /** At most this many leads are refused and handed back in one press of Next before it gives up. */

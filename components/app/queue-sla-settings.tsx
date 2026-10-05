@@ -10,6 +10,7 @@ import { StatStrip, StatTile } from "@/components/ui/stat";
 import { TableCard } from "@/components/ui/table-card";
 import { Callout, SettingsCard, SettingsSectionHeader, SettingsStack } from "@/components/app/settings/primitives";
 import { formatDuration, ladderStepStates, parseDuration, type LadderValues } from "@/lib/queueSla/ladder";
+import { slaJobNotice, type SlaJobState } from "@/lib/queueSla/digestView";
 import { cn } from "@/lib/utils";
 
 /**
@@ -83,6 +84,7 @@ export function QueueSlaSettings() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [oldestWaiting, setOldestWaiting] = useState<number | null>(null);
   const [nurtureReady, setNurtureReady] = useState(false);
+  const [jobState, setJobState] = useState<SlaJobState | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [loadError, setLoadError] = useState("");
@@ -105,6 +107,7 @@ export function QueueSlaSettings() {
           setStats(body.lastSevenDays ?? null);
           setOldestWaiting(typeof body.oldestWaitingSeconds === "number" ? body.oldestWaitingSeconds : null);
           setNurtureReady(body.schema?.nurtureOnExpiry === true);
+          setJobState(typeof body.job?.state === "string" ? (body.job.state as SlaJobState) : null);
           setLoadError("");
         })
         .catch((reason: unknown) => setLoadError(reason instanceof Error ? reason.message : "Could not load queue SLA settings"))
@@ -167,6 +170,8 @@ export function QueueSlaSettings() {
 
   // The stepper shows the ladder being edited, and where the longest-waiting transfer is on it.
   const shown = values ?? saved;
+  // One line when the rungs fire but what they cause is not being delivered (20260925709910).
+  const jobNotice = jobState ? slaJobNotice(jobState) : null;
   const states = ladderStepStates(shown, oldestWaiting);
   const steps = [
     { label: "Claimable" },
@@ -191,6 +196,7 @@ export function QueueSlaSettings() {
         </StatStrip>
       )}
 
+      {jobNotice && <Callout tone={jobNotice.tone} title={jobNotice.text} />}
       {error && <Callout tone="error" title={error} />}
 
       <SettingsCard title="The ladder" sub="Counted from the moment a lead becomes claimable. Each rung must be later than the one before.">
@@ -218,7 +224,7 @@ export function QueueSlaSettings() {
                     if (seconds) setTexts((current) => (current ? { ...current, [field.key]: formatDuration(seconds) } : current));
                   }}
                   className={cn(
-                    "mt-1.5 box-border h-11 w-full rounded-[8px] border bg-[var(--surface)] px-3 text-[16px] leading-[1.5] tracking-[-0.02em] text-[var(--ink)] outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)] disabled:cursor-not-allowed disabled:opacity-60",
+                    "mt-1.5 box-border h-9 w-full rounded-[8px] border bg-[var(--surface)] px-3 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--ink)] outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)] disabled:cursor-not-allowed disabled:opacity-60",
                     invalid ? "border-[var(--error)]" : "border-[var(--border-strong)]",
                   )}
                 />

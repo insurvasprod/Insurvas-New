@@ -1,3 +1,4 @@
+import "./lib/refuseProduction.mjs";
 // SA-3.4 acceptance: provider events driving subscription state, checked end to end through the
 // running app rather than by calling the handler directly.
 //

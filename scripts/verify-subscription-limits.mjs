@@ -1,3 +1,4 @@
+import "./lib/refuseProduction.mjs";
 // LA-1.19 live contract checks. Run with: npm run verify:subscription-limits
 import { randomUUID } from "node:crypto";
 import { SignJWT } from "jose";
@@ -19,7 +20,8 @@ async function cleanup() {
   await db.from("agent_leads").delete().in("tenant_id", [tenantId, otherTenantId]);
   await db.from("partner_users").delete().in("tenant_id", [tenantId, otherTenantId]);
   await db.from("partner_terms").delete().in("partner_id", [partnerId, secondPartnerId].filter(Boolean));
-  await db.from("partners").delete().in("id", [partnerId, secondPartnerId].filter(Boolean));
+  // Every partner the run made (drafts included), not only the two ids it kept.
+  await db.from("partners").delete().in("tenant_id", [tenantId, otherTenantId]);
   await db.from("tenant_entitlements").delete().in("tenant_id", [tenantId, otherTenantId]);
   await db.from("audit_log").delete().in("actor_id", [ownerId, producerId, otherOwnerId]);
   await db.from("tenant_users").delete().in("tenant_id", [tenantId, otherTenantId]);
@@ -47,12 +49,17 @@ async function main() {
     check("hostile input is rejected", (await api("/api/app/partners", owner, { method: "POST", ...json(partner("<script>alert(1)</script>")) })).status === 400);
     const created = await api("/api/app/partners", owner, { method: "POST", ...json(partner("Publisher one")) }); const createdBody = await created.json(); partnerId = createdBody.partner?.id;
     check("first publisher is created", created.status === 201 && Boolean(partnerId));
-    const repeated = await api("/api/app/partners", owner, { method: "POST", ...json(partner("Publisher one")) });
-    check("repeating the same create request cannot consume another capacity slot", repeated.status === 403);
+    // LA-1.19 (user decision, 2026-09-25): only an ACTIVE partner holds a slot. A repeated create
+    // makes a second draft, and neither draft takes a slot until it is activated.
+    const repeated = await api("/api/app/partners", owner, { method: "POST", ...json(partner("Publisher one")) }); const repeatedBody = await repeated.json(); secondPartnerId = repeatedBody.partner?.id ?? null;
+    const usageAfterDrafts = await (await api("/api/app/partners", owner)).json();
+    check("repeating the same create request cannot consume a capacity slot (drafts hold none)", repeated.status === 201 && repeatedBody.partner?.status === "draft" && usageAfterDrafts.usage?.publishers === 0, JSON.stringify({ status: repeated.status, usage: usageAfterDrafts.usage }));
     const activated = await api(`/api/app/partners/${partnerId}`, owner, { method: "PATCH", ...json({ action: "transition", next_status: "active", reason: "capacity test" }) });
     check("activating a partner consumes its type capacity", activated.status === 200);
     const over = await api("/api/app/partners", owner, { method: "POST", ...json(partner("Publisher two")) }); const overBody = await over.json();
     check("hand-crafted create over max_publishers is 403 and specific", over.status === 403 && overBody.code === "limit_reached" && overBody.limitKey === "max_publishers");
+    const secondActivation = await api(`/api/app/partners/${secondPartnerId}`, owner, { method: "PATCH", ...json({ action: "transition", next_status: "active", reason: "capacity test" }) }); const secondActivationBody = await secondActivation.json().catch(() => ({}));
+    check("activating a second draft at the cap is 403 and names the limit", secondActivation.status === 403 && secondActivationBody.limitKey === "max_publishers" && /active publisher/.test(secondActivationBody.error ?? ""), JSON.stringify({ status: secondActivation.status, body: secondActivationBody }));
     const concurrent = await Promise.all([api("/api/app/partners", owner, { method: "POST", ...json(partner("Concurrent one")) }), api("/api/app/partners", owner, { method: "POST", ...json(partner("Concurrent two")) })]);
     check("concurrent creates cannot overrun the cap", concurrent.filter((r) => r.status === 201).length === 0 && concurrent.every((r) => r.status === 403));
     const paused = await api(`/api/app/partners/${partnerId}`, owner, { method: "PATCH", ...json({ action: "transition", next_status: "active", reason: "already active" }) });
@@ -74,7 +81,7 @@ async function main() {
     // publisher on a plan that allows one. That must fail, and say which limit and by how much.
     const resumed = await api(`/api/app/partners/${partnerId}`, owner, { method: "PATCH", ...json({ action: "transition", next_status: "active", reason: "capacity test" }) });
     const resumedBody = await resumed.json().catch(() => ({}));
-    check("unpausing over the cap is blocked with a reason naming the limit", activatedReplacement.status === 200 && resumed.status === 403 && resumedBody.code === "limit_reached" && resumedBody.limitKey === "max_publishers" && resumedBody.limit === 1 && typeof resumedBody.error === "string" && /max_publishers/.test(resumedBody.error) && /upgrade/i.test(resumedBody.error), JSON.stringify({ activate: activatedReplacement.status, resume: resumed.status, body: resumedBody }));
+    check("unpausing over the cap is blocked with a reason naming the limit", activatedReplacement.status === 200 && resumed.status === 403 && resumedBody.code === "limit_reached" && resumedBody.limitKey === "max_publishers" && resumedBody.limit === 1 && typeof resumedBody.error === "string" && /active publisher/.test(resumedBody.error) && !/max_publishers/.test(resumedBody.error) && /upgrade/i.test(resumedBody.error), JSON.stringify({ activate: activatedReplacement.status, resume: resumed.status, body: resumedBody }));
     // Put the fixture back the way the checks below expect it: one active publisher, at the cap.
     await api(`/api/app/partners/${replacementId}`, owner, { method: "PATCH", ...json({ action: "transition", next_status: "paused", reason: "restore fixture" }) });
     await api(`/api/app/partners/${partnerId}`, owner, { method: "PATCH", ...json({ action: "transition", next_status: "active", reason: "restore fixture" }) });

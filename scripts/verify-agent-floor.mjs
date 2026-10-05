@@ -1,3 +1,4 @@
+import "./lib/refuseProduction.mjs";
 // LA-1.15 acceptance and failure-path verification. Uses disposable tenants and the real app API.
 import { randomUUID } from "node:crypto";
 import { SignJWT } from "jose";
@@ -22,8 +23,10 @@ async function cleanup() {
     await db.from("agent_floor_nudges").delete().eq("tenant_id", id);
     await db.from("agent_presence").delete().eq("tenant_id", id);
     await db.from("active_calls").delete().eq("tenant_id", id);
+    await db.from("tenant_verification_sessions").delete().eq("tenant_id", id);
     await db.from("lead_queue").delete().eq("tenant_id", id);
     await db.from("agent_leads").delete().eq("tenant_id", id);
+    await db.from("partners").delete().eq("tenant_id", id);
     await db.from("audit_log").delete().in("actor_id", [ownerId, assistantId, bookkeeperId, otherOwnerId]);
     await db.from("tenant_entitlements").delete().eq("tenant_id", id);
     await db.from("tenant_users").delete().eq("tenant_id", id);
@@ -56,7 +59,10 @@ async function main() {
   const template = await db.from("templates").select("id").eq("product_code", "term_life").eq("is_active", true).limit(1).single();
   if (pipeline.error || stage.error || template.error) throw new Error(pipeline.error?.message ?? stage.error?.message ?? template.error?.message ?? "Fixture dependency missing");
   const lead = await db.from("agent_leads").insert({ id: leadId, tenant_id: tenantId, template_id: template.data.id, template_version: 1, product_line: "term_life", pipeline_id: pipeline.data.id, stage_id: stage.data.id, values: { full_name: "Floor Prospect", age: 67, state: "AZ" }, created_by: ownerId, submission_id: randomUUID() }); if (lead.error) throw new Error(lead.error.message);
-  const queue = await db.from("lead_queue").insert({ id: queueId, tenant_id: tenantId, lead_id: leadId, product_line: "term_life", pipeline_id: pipeline.data.id, stage_id: stage.data.id, queued_at: new Date(Date.now() - 150_000).toISOString() }); if (queue.error) throw new Error(queue.error.message);
+  // The floor's waiting column is the inbound transfer inbox, which reads only rows with a partner
+  // (20260924160000) -- a partner-less row is a dialer lead and correctly never shows here.
+  const floorPartner = await db.from("partners").insert({ slug: `fx-${Math.random().toString(36).slice(2, 10)}`, tenant_id: tenantId, name: `LA-1.15 Floor Partner ${stamp}`, partner_type: "publisher", status: "active", timezone: "America/Phoenix" }).select("id").single(); if (floorPartner.error) throw new Error(floorPartner.error.message);
+  const queue = await db.from("lead_queue").insert({ id: queueId, tenant_id: tenantId, lead_id: leadId, partner_id: floorPartner.data.id, product_line: "term_life", pipeline_id: pipeline.data.id, stage_id: stage.data.id, queued_at: new Date(Date.now() - 150_000).toISOString() }); if (queue.error) throw new Error(queue.error.message);
   const owner = await cookie(ownerId); const bookkeeper = await cookie(bookkeeperId); const other = await cookie(otherOwnerId, otherTenantId); const expired = await cookie(ownerId, tenantId, true);
   try {
     const emptyTenantId = randomUUID(); let emptyUserId = null;
@@ -109,6 +115,26 @@ async function main() {
 
     const suspended = await db.from("tenant_entitlements").update({ entitlement: { ...grants.entitlement, status: "suspended", access: "read_only" } }).eq("tenant_id", tenantId); if (suspended.error) throw new Error(suspended.error.message);
     const readOnly = await api("/api/app/agent-floor", owner); const readOnlyBody = await readOnly.json(); const blockedWrite = await api("/api/app/agent-floor", owner, { method: "POST", ...json({ action: "presence", status: "ready" }) }); check("suspended tenant can read its floor but cannot write", readOnly.status === 200 && readOnlyBody.onCalls?.length === 1 && blockedWrite.status === 403, `GET ${readOnly.status} calls ${readOnlyBody.onCalls?.length} write ${blockedWrite.status}`);
+
+    // LA-1.14-9 (20260925709850): after a handoff the buffer who stays on the call shows on the
+    // licensed agent's call row and as supporting it, until their involvement ends. Read-only here
+    // (the tenant is suspended), so the state is set directly, the way accept_buffer_handoff and
+    // end_buffer_involvement leave it. The routes themselves are driven in verify-buffer-handoff.mjs.
+    const bufferColumns = await db.from("lead_queue").select("buffer_ended_at").limit(1);
+    if (bufferColumns.error) console.log(`  skip the buffer still on a handed-over call (LA-1.14-9) — schema pending: 20260925709850 is not applied (${bufferColumns.error.code})`);
+    else {
+      const partner = await db.from("partners").insert({ slug: `fx-${Math.random().toString(36).slice(2, 10)}`, tenant_id: tenantId, name: `LA-1.15 Partner ${stamp}`, partner_type: "publisher", status: "active", timezone: "America/Phoenix" }).select("id").single(); if (partner.error) throw new Error(partner.error.message);
+      const handedLeadId = randomUUID(); const handedItemId = randomUUID();
+      const handedLead = await db.from("agent_leads").insert({ id: handedLeadId, tenant_id: tenantId, template_id: template.data.id, template_version: 1, product_line: "term_life", pipeline_id: pipeline.data.id, stage_id: stage.data.id, values: { full_name: "Handed Prospect", age: 71, state: "AZ" }, created_by: ownerId, submission_id: randomUUID() }); if (handedLead.error) throw new Error(handedLead.error.message);
+      const handed = await db.from("lead_queue").insert({ id: handedItemId, tenant_id: tenantId, lead_id: handedLeadId, partner_id: partner.data.id, product_line: "term_life", pipeline_id: pipeline.data.id, stage_id: stage.data.id, status: "la_active", owner_user_id: ownerId, claimed_by: ownerId, owner_role: "owner", buffer_user_id: assistantId, claimed_at: new Date().toISOString() }); if (handed.error) throw new Error(handed.error.message);
+      const handedCall = await db.from("active_calls").insert({ tenant_id: tenantId, work_item_id: handedItemId, lead_id: handedLeadId, user_id: ownerId, agent_role: "owner" }); if (handedCall.error) throw new Error(handedCall.error.message);
+      const withBuffer = await (await api("/api/app/agent-floor", owner)).json();
+      const row = withBuffer.onCalls?.find((call) => call.id === handedItemId); const supporting = withBuffer.members?.find((member) => member.id === assistantId);
+      check("the licensed agent's call names the buffer still on it, and the buffer shows as supporting it", row?.buffer?.userId === assistantId && supporting?.supporting === true, JSON.stringify({ buffer: row?.buffer, supporting: supporting?.supporting }));
+      await db.from("lead_queue").update({ buffer_ended_at: new Date().toISOString() }).eq("id", handedItemId);
+      const afterEnd = await (await api("/api/app/agent-floor", owner)).json();
+      check("once buffer involvement ends the call stays the licensed agent's, with no buffer on it", afterEnd.onCalls?.find((call) => call.id === handedItemId)?.buffer === null && afterEnd.onCalls?.find((call) => call.id === handedItemId)?.agentId === ownerId, JSON.stringify(afterEnd.onCalls?.find((call) => call.id === handedItemId)));
+    }
   } finally { await cleanup(); if (realtime) { await realtime.removeAllChannels(); realtime.realtime.disconnect(); } }
   console.log(failures ? `\n${failures} check(s) FAILED.` : "\nAll LA-1.15 Agent Floor checks passed.");
   return failures ? 1 : 0;

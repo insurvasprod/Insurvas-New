@@ -1,3 +1,4 @@
+import "./lib/refuseProduction.mjs";
 // SA-0.2 acceptance check: provisions tenant A and B, then proves A's DB session can see none of
 // B's rows — at the Postgres RLS layer (tenant_app role), not just application-layer filtering.
 // Also exercises the real login -> session -> /api/app/me path if the dev server is reachable.

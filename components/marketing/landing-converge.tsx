@@ -3,6 +3,7 @@
 import { FileSpreadsheet, Mail, PhoneOutgoing, Users } from "lucide-react";
 
 import { usePrefersReducedMotion, useScrollProgress } from "@/components/marketing/motion";
+import { InsurvasLogo } from "@/components/shared/insurvas-logo";
 
 /**
  * The board's problem statement, drawn: four tools float apart in 3D, and as the section scrolls
@@ -44,12 +45,11 @@ export function LandingConverge() {
           );
         })}
         <div
-          className="absolute left-1/2 top-1/2 flex items-center gap-3 rounded-2xl bg-[var(--primary)] px-6 py-4 text-[var(--on-primary)] shadow-[0_24px_70px_-12px_var(--primary)]"
+          className="absolute left-1/2 top-1/2 flex items-center gap-3 rounded-2xl border border-[var(--nav-line)] bg-[var(--nav-bg)] px-6 py-4 text-[var(--nav-ink)] shadow-[0_24px_70px_-12px_var(--primary)]"
           style={{ transform: `translate(-50%, -50%) scale(${0.6 + ease * 0.4})`, opacity: 0.15 + ease * 0.85 }}
         >
-          <span className="inline-flex size-9 items-center justify-center rounded-lg bg-[color-mix(in_srgb,var(--on-primary)_16%,transparent)] text-base font-semibold">I</span>
+          <InsurvasLogo size="sidebar" />
           <span>
-            <span className="block text-lg font-semibold leading-tight">Insurvas</span>
             <span className="block text-xs opacity-80">one queue · one claim · one record</span>
           </span>
         </div>

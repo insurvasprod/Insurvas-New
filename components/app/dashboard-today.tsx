@@ -190,7 +190,7 @@ function KpiStrip({ data }: { data: DashboardToday }) {
         trend: data.contactRatePct === null || weekRate === null ? null : data.contactRatePct >= weekRate ? "up" : "down",
         spark: rates,
       },
-      { key: "appts", label: "Appointments", value: data.appointmentsToday, foot: data.appointmentsWeek === null ? "set today" : `${data.appointmentsWeek.toLocaleString()} this week` },
+      { key: "appts", label: "Appointments today", value: data.appointmentsToday, foot: data.appointmentsWeek === null ? "on today's diary" : `${data.appointmentsWeek.toLocaleString()} booked this week` },
       { key: "week", label: "Dials · 7 days", value: weekDials, foot: wow === null ? "no dials the week before" : `${wow >= 0 ? "+" : ""}${wow.toFixed(0)}% vs last week`, tone: wow === null ? "neutral" : wow >= 0 ? "good" : "warning", trend: wow === null ? null : wow >= 0 ? "up" : "down", spark: dials.slice(-7) },
     );
   }
@@ -207,6 +207,57 @@ function KpiStrip({ data }: { data: DashboardToday }) {
       <div className={`grid grid-cols-2 gap-px bg-border sm:grid-cols-3 ${cols}`}>
         {kpis.map((kpi, index) => <KpiCell key={kpi.key} kpi={kpi} index={index} />)}
       </div>
+    </section>
+  );
+}
+
+/* ── Today's appointments (LA-2.11-8) ────────────────────────────────────── */
+
+const APPOINTMENT_STATUS: Record<string, { label: string; tone: string }> = {
+  booked: { label: "Booked", tone: "bg-[var(--surface-alt)] text-foreground" },
+  confirmed: { label: "Confirmed", tone: "bg-[var(--success-surface)] text-[var(--success-ink)]" },
+  pending: { label: "Awaiting close-out", tone: "bg-[var(--warning-surface)] text-[var(--warning-ink)]" },
+  showed: { label: "Showed", tone: "bg-[var(--success-surface)] text-[var(--success-ink)]" },
+  no_show: { label: "No-show", tone: "bg-[var(--error-surface)] text-[var(--error-ink)]" },
+};
+
+function clockIn(iso: string, zone: string, withZone: boolean) {
+  try {
+    return new Intl.DateTimeFormat("en-US", { timeZone: zone, hour: "numeric", minute: "2-digit", ...(withZone ? { timeZoneName: "short" } : {}) }).format(new Date(iso));
+  } catch {
+    return "";
+  }
+}
+
+/** The diary for today, earliest first: the agency's clock, and the customer's when it differs. */
+function TodayAppointments({ data }: { data: DashboardToday }) {
+  const list = data.appointmentsTodayList;
+  if (!list || list.length === 0) return null;
+  const more = (data.appointmentsToday ?? list.length) - list.length;
+  return (
+    <section className={`${cardClass} overflow-hidden`} aria-labelledby="appointments-today-heading">
+      <div className="flex items-baseline justify-between gap-3 px-4 pb-2 pt-3">
+        <h2 id="appointments-today-heading" className="text-sm font-semibold leading-normal tracking-[-0.01em] text-foreground">Today&apos;s appointments</h2>
+        <Link href="/app/calendar" className="text-xs font-semibold text-muted-foreground no-underline hover:text-foreground">{more > 0 ? `${more} more · Calendar` : "Calendar"}</Link>
+      </div>
+      <ul className="m-0 list-none divide-y divide-border border-t border-border p-0">
+        {list.map((item) => {
+          const status = APPOINTMENT_STATUS[item.status] ?? APPOINTMENT_STATUS.booked;
+          const theirs = item.customerTimezone && item.customerTimezone !== data.zone ? clockIn(item.startsAtUtc, item.customerTimezone, true) : "";
+          return (
+            <li key={item.id}>
+              <Link href={`/app/calendar?appointment=${item.id}`} className="m-row flex items-center gap-3 px-4 py-2 text-inherit no-underline">
+                <span className="w-[72px] shrink-0 text-sm font-semibold tabular-nums text-foreground">{clockIn(item.startsAtUtc, data.zone, false)}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-semibold text-foreground">{item.customerName}</span>
+                  <span className="block truncate text-xs text-muted-foreground">with {item.agentName}{theirs ? ` · ${theirs} their time` : ""}</span>
+                </span>
+                <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${status.tone}`}>{status.label}</span>
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
     </section>
   );
 }
@@ -566,6 +617,7 @@ export function DashboardOverview({ data, serverNow, canDial, aside }: { data: D
       <TodayBand data={data} serverNow={serverNow} canDial={canDial} />
       <KpiStrip data={data} />
       <NeedsStrip needs={data.needs} />
+      <TodayAppointments data={data} />
       {hasDialing && (
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
           <ActivityPanel data={data} />

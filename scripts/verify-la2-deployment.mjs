@@ -1,3 +1,4 @@
+import "./lib/refuseProduction.mjs";
 /**
  * LA-2 deployment gate. Does the live database contain what the checked-out LA-2 migrations say it
  * should?

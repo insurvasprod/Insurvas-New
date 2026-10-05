@@ -1,3 +1,4 @@
+import "./lib/refuseProduction.mjs";
 // SA-5.3 acceptance: the trials screen's data, the three admin actions, and the reminder schedule.
 //
 // Drives the real HTTP route with a minted admin session against throwaway tenants, so the

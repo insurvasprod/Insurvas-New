@@ -16,6 +16,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { TableCard } from "@/components/ui/table-card";
 import { CONSENT_STATUS_HINTS, CONSENT_STATUS_LABELS, type ConsentArtefact } from "@/lib/consent/constants";
 import { EVIDENCE_FILTER_LABEL, EVIDENCE_LABEL, EVIDENCE_TONE, evidenceTime, keptFor, type EvidenceFilter, type EvidenceLevel } from "@/lib/consent/evidence";
+import { Pager } from "@/components/ui/pager";
 
 /**
  * The consent locker by lead (p-app-consent). Every lead, with the best evidence it has — the words,
@@ -69,7 +70,9 @@ export function ConsentLockerWorkspace() {
 
   const load = useCallback(async () => {
     setError(null);
-    const response = await fetch(`/api/app/consent?${query()}`, { cache: "no-store" });
+    // A network failure (a rejected fetch, not a 4xx/5xx) must still end the skeleton with an error.
+    const response = await fetch(`/api/app/consent?${query()}`, { cache: "no-store" }).catch(() => null);
+    if (!response) { setError("Could not reach the server. Check your connection and try again."); return; }
     const body = await response.json().catch(() => null);
     if (!response.ok) { setError(body?.error ?? "Could not load the consent locker"); return; }
     setLoaded(body as Loaded);
@@ -103,9 +106,6 @@ export function ConsentLockerWorkspace() {
   }
 
   const tiles = loaded?.tiles;
-  const first = loaded ? loaded.page * loaded.pageSize + 1 : 0;
-  const last = loaded ? loaded.page * loaded.pageSize + loaded.rows.length : 0;
-  const lastPage = loaded ? Math.max(0, Math.ceil(loaded.total / loaded.pageSize) - 1) : 0;
 
   // The first read only; a filter or page change keeps the page drawn and swaps the rows.
   if (!loaded && !error) return <PageLoading />;
@@ -140,11 +140,7 @@ export function ConsentLockerWorkspace() {
           </div>}
         </>}
         footer={loaded && loaded.rows.length > 0 ? <>
-          <span>Showing {first.toLocaleString()}&ndash;{last.toLocaleString()} of {loaded.total.toLocaleString()} lead{loaded.total === 1 ? "" : "s"}</span>
-          <span className="flex gap-2">
-            <Button type="button" variant="outline" size="sm" disabled={loaded.page === 0} onClick={() => setPage(loaded.page - 1)}>Previous</Button>
-            <Button type="button" variant="outline" size="sm" disabled={loaded.page >= lastPage} onClick={() => setPage(loaded.page + 1)}>Next</Button>
-          </span>
+          <Pager page={loaded.page + 1} total={loaded.total} pageSize={loaded.pageSize} noun={loaded.total === 1 ? "lead" : "leads"} onPage={(next) => setPage(next - 1)} />
         </> : undefined}
       >
         {error ? <ErrorState title="The consent locker did not load" detail={error} action={<Button variant="outline" onClick={() => void refresh()}>Try again</Button>} />

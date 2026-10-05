@@ -1,0 +1,239 @@
+<div> {justify-content:space-between;gap:16px;padding:10px 32px;bd-bottom:1px solid #d5dbe3;bg:#ffffff}
+  <span> {fsize:14px;fweight:400;color:#33383f}
+    "Northline Insurance · Growth plan · Owner"
+  <span> {gap:8px}
+    <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e4e8ee;color:#33383f;fsize:12px;fweight:400;fweight:600}
+      "Owner only"
+    <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e0f3e7;color:#0d7038;fsize:12px;fweight:400;fweight:600}
+      <span> {width:6px;height:6px;bd-radius:9999px;bg:#138a43}
+      "Effective-dated and audited"
+<div> {flex-direction:column;padding:24px 32px 32px}
+  <div .m-stagger> {flex-direction:column;gap:24px}
+    <div> {justify-content:space-between;gap:24px}
+        <div> {fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+          "Settings · Sales"
+        <h1> {fsize:32px;fweight:600;color:#15191e}
+          "Welcome pack"
+        <p> {fsize:16px;fweight:400;color:#60646c}
+          "The email that goes to a client once an attempt is captured, and the four things it always says."
+      <div> {gap:12px}
+        <button type="button"> {justify-content:center;gap:8px;height:44px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+          "Send myself a test"
+    <div> {gap:24px}
+      <div> {width:236px}
+        <div> {flex-direction:column;bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff}
+          <div> {padding:10px}
+            <a href="#"> {gap:8px;height:36px;padding:0 12px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              "Carriers and products"
+            <a href="#"> {gap:8px;height:36px;padding:0 12px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              "Appointments"
+            <a href="#"> {gap:8px;height:36px;padding:0 12px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              "Underwriting templates"
+            <a href="#"> {gap:8px;height:36px;padding:0 12px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              "Quotation templates"
+            <a href="#"> {gap:8px;height:36px;padding:0 12px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              "Application field sets"
+            <a href="#"> {gap:8px;height:36px;padding:0 12px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              "Carrier field maps"
+            <a href="#"> {gap:8px;height:36px;padding:0 12px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              "Disclosures"
+            <a href="#"> {gap:8px;height:36px;padding:0 12px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              "Quote and QA preferences"
+            <a href="#"> {gap:8px;height:36px;padding:0 12px;bd-radius:8px;bg:#fff3ec;color:#a63800;fweight:600;fsize:14px;fweight:400}
+              "Welcome pack"
+            <a href="#"> {gap:8px;height:36px;padding:0 12px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              "AI assistant"
+            <a href="#"> {gap:8px;height:36px;padding:0 12px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              "Extension"
+            <a href="#"> {gap:8px;height:36px;padding:0 12px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              "Pipeline sync"
+        <div> {flex-direction:column;bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff}
+          <div> {justify-content:space-between;gap:16px;padding:12px 16px;bg:#e4e8ee;bd-bottom:1px solid #d5dbe3}
+            <span> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+              "Welcome pack"
+            <span> {gap:10px}
+              <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e4e8ee;color:#33383f;fsize:12px;fweight:400;fweight:600}
+                "Owner only"
+          <div> {padding:20px 24px;bd-bottom:1px solid #d5dbe3}
+              <h2> {fsize:18px;fweight:600;color:#15191e}
+                "The four that always go"
+              <p> {fsize:14px;fweight:400;color:#60646c}
+                "Every one of these exists because leaving it out cost somebody a policy."
+              <div> {bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff}
+                <div> {justify-content:space-between;gap:16px;padding:12px 16px;bg:#e4e8ee;bd-bottom:1px solid #d5dbe3}
+                  <span> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+                    "Cannot be removed"
+                  <span> {gap:10px}
+                    <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e4e8ee;color:#33383f;fsize:12px;fweight:400;fweight:600}
+                      "4 blocks"
+                <div> {gap:12px;padding:12px 14px;bd-top:1px solid #d5dbe3}
+                  <span> {color:#60646c}
+                    <svg/>
+                    <span> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+                      "What will appear on the bank statement"
+                    <span> {fsize:12px;fweight:400;color:#15191e}
+                      "GERBER LIFE INS"
+                    <span> {fsize:12px;fweight:400;color:#60646c}
+                      "The single biggest cause of a first-month chargeback is a client who does not recognise the line and calls the bank instead of us."
+                <div> {gap:12px;padding:12px 14px;bd-top:1px solid #d5dbe3}
+                  <span> {color:#60646c}
+                    <svg/>
+                    <span> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+                      "The amount"
+                    <span> {fsize:12px;fweight:400;color:#15191e}
+                      "$71.20 a month"
+                    <span> {fsize:12px;fweight:400;color:#60646c}
+                      "In dollars, not “your premium”. She agreed to a number and the number has to be in writing."
+                <div> {gap:12px;padding:12px 14px;bd-top:1px solid #d5dbe3}
+                  <span> {color:#60646c}
+                    <svg/>
+                    <span> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+                      "The draft day"
+                    <span> {fsize:12px;fweight:400;color:#15191e}
+                      "The 23rd, every month"
+                    <span> {fsize:12px;fweight:400;color:#60646c}
+                      "Her deposit lands on the third Wednesday. The 23rd is the day the calculator gave and the day she agreed to."
+                <div> {gap:12px;padding:12px 14px;bd-top:1px solid #d5dbe3}
+                  <span> {color:#60646c}
+                    <svg/>
+                    <span> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+                      "The agent’s phone number"
+                    <span> {fsize:12px;fweight:400;color:#15191e}
+                      "Rinor G. · (602) 555–0148"
+                    <span> {fsize:12px;fweight:400;color:#60646c}
+                      "A client who can reach the agent does not cancel. This is a direct number, never a support queue."
+          <div> {padding:20px 24px;bd-bottom:1px solid #d5dbe3}
+              <h2> {fsize:18px;fweight:600;color:#15191e}
+                "Everything else"
+              <p> {fsize:14px;fweight:400;color:#60646c}
+                "Switch a block off and it is gone from the pack for every client."
+              <div> {flex-direction:column;gap:16px}
+                <div> {justify-content:space-between;gap:16px}
+                    <span> {fsize:14px;fweight:400;fweight:600;color:#33383f}
+                      "Greeting with her first name"
+                    <span> {fsize:12px;fweight:400;color:#60646c}
+                      "“Hi Grace” rather than “Dear policyholder”."
+                  <span role="img" aria-label="On"> {width:38px;height:22px;padding:2px;bd-radius:9999px;bg:#138a43;justify-content:flex-end}
+                    <span> {width:18px;height:18px;bd-radius:9999px;bg:#ffffff}
+                <div> {justify-content:space-between;gap:16px}
+                    <span> {fsize:14px;fweight:400;fweight:600;color:#33383f}
+                      "What happens next, and when"
+                    <span> {fsize:12px;fweight:400;color:#60646c}
+                      "Underwriting, the phone interview, and roughly how long each takes."
+                  <span role="img" aria-label="On"> {width:38px;height:22px;padding:2px;bd-radius:9999px;bg:#138a43;justify-content:flex-end}
+                    <span> {width:18px;height:18px;bd-radius:9999px;bg:#ffffff}
+                <div> {justify-content:space-between;gap:16px}
+                    <span> {fsize:14px;fweight:400;fweight:600;color:#33383f}
+                      "The carrier’s customer service number"
+                    <span> {fsize:12px;fweight:400;color:#60646c}
+                      "Some agencies leave this out so the first call comes to them."
+                  <span role="img" aria-label="On"> {width:38px;height:22px;padding:2px;bd-radius:9999px;bg:#138a43;justify-content:flex-end}
+                    <span> {width:18px;height:18px;bd-radius:9999px;bg:#ffffff}
+                <div> {justify-content:space-between;gap:16px}
+                    <span> {fsize:14px;fweight:400;fweight:600;color:#33383f}
+                      "The free-look period"
+                    <span> {fsize:12px;fweight:400;color:#60646c}
+                      "Thirty days in Arizona. Saying it plainly costs nothing and prevents a complaint."
+                  <span role="img" aria-label="On"> {width:38px;height:22px;padding:2px;bd-radius:9999px;bg:#138a43;justify-content:flex-end}
+                    <span> {width:18px;height:18px;bd-radius:9999px;bg:#ffffff}
+                <div> {justify-content:space-between;gap:16px}
+                    <span> {fsize:14px;fweight:400;fweight:600;color:#33383f}
+                      "“Add me to your contacts”"
+                    <span> {fsize:12px;fweight:400;color:#60646c}
+                      "An unknown number at 9am is ignored; a saved one is answered."
+                  <span role="img" aria-label="Off"> {width:38px;height:22px;padding:2px;bd-radius:9999px;bg:#7a828e;justify-content:flex-start}
+                    <span> {width:18px;height:18px;bd-radius:9999px;bg:#ffffff}
+                <div> {justify-content:space-between;gap:16px}
+                    <span> {fsize:14px;fweight:400;fweight:600;color:#33383f}
+                      "The agent’s photo"
+                    <span> {fsize:12px;fweight:400;color:#60646c}
+                      "Off by default. It makes the email heavier and some inboxes clip it."
+                  <span role="img" aria-label="Off"> {width:38px;height:22px;padding:2px;bd-radius:9999px;bg:#7a828e;justify-content:flex-start}
+                    <span> {width:18px;height:18px;bd-radius:9999px;bg:#ffffff}
+          <div> {justify-content:space-between;gap:16px;padding:14px 24px;bd-top:1px solid #d5dbe3;bg:#f1f3f7}
+            <span> {fsize:12px;fweight:400;color:#60646c}
+              "Changes are audited — who, when, and what the value was before. Publishing a new version leaves the old one readable, because an application submitted under it still points at it."
+            <span> {gap:12px}
+              <button type="button"> {justify-content:center;gap:8px;height:40px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+                "Discard"
+              <button type="button"> {justify-content:center;gap:8px;height:40px;padding:0 16px;bd-radius:8px;bg:#ff5900;color:#15191e;bd:1px solid transparent;fsize:14px;fweight:600}
+                "Save changes"
+      <div> {width:300px;flex-direction:column;gap:16px}
+        <div> {flex-direction:column;bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff}
+          <div> {justify-content:space-between;gap:16px;padding:12px 16px;bg:#e4e8ee;bd-bottom:1px solid #d5dbe3}
+            <span> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+              "Preview"
+            <span> {gap:10px}
+              <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#fff3ec;color:#a63800;fsize:12px;fweight:400;fweight:600}
+                "Live"
+          <div> {padding:14px 16px}
+            <div> {fsize:12px;fweight:400;color:#60646c}
+              "To"
+            <div> {fsize:14px;fweight:400;color:#15191e}
+              "grace.o@example.com"
+            <div> {fsize:12px;fweight:400;color:#60646c}
+              "Subject"
+            <div> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+              "Your Gerber Life application — what happens next"
+          <div> {padding:0 16px 16px}
+            <div> {bd:1px solid #d5dbe3;bd-radius:8px;bg:#f1f3f7;padding:14px}
+              <div> {fsize:14px;fweight:400;color:#33383f}
+                "Hi Grace,"
+              <div> {fsize:14px;fweight:400;color:#33383f}
+                "Your application went to Gerber Life today. Here is everything in one place."
+              <div> {gap:8px;padding:9px 0;bd-top:1px solid #d5dbe3}
+                  <span> {fsize:12px;fweight:400;color:#60646c}
+                    "On your bank statement"
+                  <span> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+                    "GERBER LIFE INS"
+                <span> {color:#60646c}
+                  <svg/>
+              <div> {gap:8px;padding:9px 0;bd-top:1px solid #d5dbe3}
+                  <span> {fsize:12px;fweight:400;color:#60646c}
+                    "Amount"
+                  <span> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+                    "$71.20 a month"
+                <span> {color:#60646c}
+                  <svg/>
+              <div> {gap:8px;padding:9px 0;bd-top:1px solid #d5dbe3}
+                  <span> {fsize:12px;fweight:400;color:#60646c}
+                    "Drafted on"
+                  <span> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+                    "The 23rd, every month"
+                <span> {color:#60646c}
+                  <svg/>
+              <div> {gap:8px;padding:9px 0;bd-top:1px solid #d5dbe3}
+                  <span> {fsize:12px;fweight:400;color:#60646c}
+                    "Call me directly"
+                  <span> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+                    "(602) 555–0148"
+                <span> {color:#60646c}
+                  <svg/>
+              <div> {gap:8px;padding:9px 0;bd-top:1px solid #d5dbe3}
+                  <span> {fsize:12px;fweight:400;color:#60646c}
+                    "Free look"
+                  <span> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+                    "30 days from the day the policy arrives"
+              <div> {gap:8px;padding:9px 0;bd-top:1px solid #d5dbe3}
+                  <span> {fsize:12px;fweight:400;color:#60646c}
+                    "Gerber Life customer service"
+                  <span> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+                    "1 (800) 555–0192"
+              <div> {fsize:12px;fweight:400;color:#60646c}
+                "What happens next"
+              <div> {fsize:14px;fweight:400;color:#33383f}
+                "Gerber reviews the application. They may call you for a short phone interview — it takes about fifteen minutes and they ask the same health questions we went through today."
+              <div> {fsize:14px;fweight:400;color:#33383f}
+                "Nothing is taken from your account until the policy is approved."
+              <div> {fsize:14px;fweight:400;color:#33383f}
+                "Rinor"
+                <br>
+                <span> {color:#60646c}
+                  "Northline Insurance · Phoenix, AZ"
+          <div> {padding:12px 16px;bd-top:1px solid #d5dbe3;bg:#f1f3f7;fsize:12px;fweight:400;color:#60646c}
+            "Rendered against Grace Oyelaran’s attempt 2. Sending a test mails it to you, never to her."
+        <div> {padding:14px 16px;bd:1px solid #d5dbe3;bd-left:3px solid #00708a;bd-radius:12px;bg:#e0f2f6}
+          <div> {fsize:14px;fweight:400;fweight:600;color:#005e75}
+            "One per attempt"
+          <p> {fsize:14px;fweight:400;color:#33383f}
+            "A resubmission to a new carrier sends a new pack. A counteroffer that is accepted reissues it."

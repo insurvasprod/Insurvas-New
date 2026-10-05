@@ -27,15 +27,15 @@ const WRITE_ROLES = ["owner"] as const;
 const recordSchema = z.discriminatedUnion("basis", [
   z.object({
     basis: z.literal("written_consent"),
-    phone: z.string().trim().min(1, "Enter a phone number"),
-    consentArtefactId: z.string().uuid("Pick the stored consent certificate"),
+    phone: z.string({ error: "Enter a phone number" }).trim().min(1, "Enter a phone number"),
+    consentArtefactId: z.string({ error: "Pick the stored consent certificate" }).uuid("Pick the stored consent certificate"),
     note: z.string().trim().max(500, "That note is too long").optional(),
   }).strict(),
   z.object({
     basis: z.literal("existing_business_relationship"),
-    phone: z.string().trim().min(1, "Enter a phone number"),
-    relationshipKind: z.enum(["purchase", "inquiry"]),
-    relationshipDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Enter the relationship date"),
+    phone: z.string({ error: "Enter a phone number" }).trim().min(1, "Enter a phone number"),
+    relationshipKind: z.enum(["purchase", "inquiry"], { error: "Say whether the relationship is a purchase or an inquiry" }),
+    relationshipDate: z.string({ error: "Enter the relationship date" }).regex(/^\d{4}-\d{2}-\d{2}$/, "Enter the relationship date"),
     note: z.string().trim().max(500, "That note is too long").optional(),
   }).strict(),
 ]);

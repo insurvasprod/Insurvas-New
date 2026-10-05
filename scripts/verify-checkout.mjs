@@ -1,3 +1,4 @@
+import "./lib/refuseProduction.mjs";
 // SA-5.2 acceptance: hosted checkout, trial start, and the subscription that backlog #47 was
 // missing.
 //

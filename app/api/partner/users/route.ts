@@ -44,6 +44,9 @@ export async function POST(request: NextRequest) {
     const limit = message.match(/max_partner_users:(\d+):(\d+)/);
     if (limit) return NextResponse.json({ error: `Every seat is in use (${limit[1]} of ${limit[2]}). Deactivate a member or ask your agent for more seats.` }, { status: 409 });
     if (message.includes("account_not_active")) return NextResponse.json({ error: "This account is not active and cannot be invited" }, { status: 409 });
+    if (message.includes("agency_account")) return NextResponse.json({ error: "This email belongs to an agency account. Use a separate email." }, { status: 409 });
+    // The caller gets a generic message; the server log keeps the real cause (an Auth or RPC error).
+    console.error("[partner/users] invite failed:", message);
     return NextResponse.json({ error: "Could not invite user" }, { status: 500 });
   }
 }

@@ -1,3 +1,4 @@
+import "./lib/refuseProduction.mjs";
 // bugs_sa.md M3-2 · A real payment that cannot be invoiced must NOT be acknowledged.
 //
 // createInvoiceFromPayment returned a bare null on six different conditions and the webhook

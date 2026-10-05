@@ -1,3 +1,4 @@
+import "./lib/refuseProduction.mjs";
 // bugs_sa.md M3-4 · Manual settlement must be atomic, targeted, and refuse overpayment.
 //
 // The route used to activate EVERY subscription belonging to the tenant, accept more than the

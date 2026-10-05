@@ -1,0 +1,117 @@
+"!doctype html>"
+<html>
+  <body>
+    <x-dc>
+      <div> {width:816px;height:1056px;bg:#f1f3f7;color:#15191e;flex-direction:column}
+        <div> {flex-direction:column;padding:24px 32px 32px}
+          <div .m-stagger> {flex-direction:column;gap:24px}
+            <div> {flex-direction:column;bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff;padding:30px 34px}
+              <div> {justify-content:space-between;gap:24px;bd-bottom:2px solid #15191e}
+                <div> {gap:11px}
+                  <span> {width:30px;height:30px;justify-content:center;bd-radius:8px;bg:#ff5900;color:#15191e;fsize:18px;fweight:600}
+                    "N"
+                    <span> {fsize:18px;fweight:600;color:#15191e}
+                      "Northline Insurance"
+                    <span> {fsize:12px;fweight:400;color:#60646c}
+                      "Final Expense · whole life"
+                  <div> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+                    "Prepared for Grace Oyelaran"
+                  <div> {fsize:12px;fweight:400;color:#60646c}
+                    "28 September 2026"
+                <h1> {fsize:24px;fweight:600;color:#15191e}
+                  "Three ways to cover $15,000"
+                <p> {fsize:16px;fweight:400;color:#33383f}
+                  "All three pay the same $15,000 and all three are whole life, so the price never goes up and the coverage never runs out. They differ in what happens if she passes in the first two years."
+              <div> {grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+                <div> {flex-direction:column;bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff;padding:18px}
+                  <div> {fsize:18px;fweight:600;color:#15191e}
+                    "Gerber Life"
+                  <div> {fsize:14px;fweight:400;color:#60646c}
+                    "Guaranteed Life"
+                  <div> {bd-top:1px solid #d5dbe3}
+                    <div> {fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+                      "Monthly premium"
+                    <div> {fsize:24px;fweight:600;color:#15191e}
+                      "$71.20"
+                    <div> {fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+                      "Coverage"
+                    <div> {fsize:18px;fweight:600;color:#15191e}
+                      "$15,000"
+                  <div> {bd-top:1px solid #d5dbe3}
+                    <div> {fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+                      "If she passes in the first two years"
+                    <div> {fsize:14px;fweight:400;color:#33383f}
+                      "The full $15,000, from the first day."
+                    <div> {fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+                      "After two years"
+                    <div> {fsize:14px;fweight:400;color:#33383f}
+                      "The full $15,000."
+                  <div> {fsize:12px;fweight:400;color:#60646c}
+                    "Costs the most because it pays in full straight away."
+                <div> {flex-direction:column;bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff;padding:18px}
+                  <div> {fsize:18px;fweight:600;color:#15191e}
+                    "Mutual of Omaha"
+                  <div> {fsize:14px;fweight:400;color:#60646c}
+                    "Living Promise"
+                  <div> {bd-top:1px solid #d5dbe3}
+                    <div> {fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+                      "Monthly premium"
+                    <div> {fsize:24px;fweight:600;color:#15191e}
+                      "$68.40"
+                    <div> {fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+                      "Coverage"
+                    <div> {fsize:18px;fweight:600;color:#15191e}
+                      "$15,000"
+                  <div> {bd-top:1px solid #d5dbe3}
+                    <div> {fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+                      "If she passes in the first two years"
+                    <div> {fsize:14px;fweight:400;color:#33383f}
+                      "Everything she has paid in, plus 10%."
+                    <div> {fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+                      "After two years"
+                    <div> {fsize:14px;fweight:400;color:#33383f}
+                      "The full $15,000."
+                  <div> {fsize:12px;fweight:400;color:#60646c}
+                    "Cheaper each month, smaller payout in the first two years."
+                <div> {flex-direction:column;bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff;padding:18px}
+                  <div> {fsize:18px;fweight:600;color:#15191e}
+                    "Americo"
+                  <div> {fsize:14px;fweight:400;color:#60646c}
+                    "Eagle Premier"
+                  <div> {bd-top:1px solid #d5dbe3}
+                    <div> {fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+                      "Monthly premium"
+                    <div> {fsize:24px;fweight:600;color:#15191e}
+                      "$64.10"
+                    <div> {fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+                      "Coverage"
+                    <div> {fsize:18px;fweight:600;color:#15191e}
+                      "$15,000"
+                  <div> {bd-top:1px solid #d5dbe3}
+                    <div> {fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+                      "If she passes in the first two years"
+                    <div> {fsize:14px;fweight:400;color:#33383f}
+                      "Everything she has paid in, plus 10%."
+                    <div> {fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+                      "After two years"
+                    <div> {fsize:14px;fweight:400;color:#33383f}
+                      "The full $15,000."
+                  <div> {fsize:12px;fweight:400;color:#60646c}
+                    "The lowest monthly payment of the three."
+              <div> {bd-top:1px solid #d5dbe3}
+                <h2> {fsize:18px;fweight:600;color:#15191e}
+                  "What happens next"
+                <p> {fsize:16px;fweight:400;color:#33383f}
+                  "Nothing is decided by this sheet. When she picks one, the application takes about twenty minutes on the phone: health questions, who the money goes to, and the bank account the payment comes from. The carrier decides, usually within a week, and she is told either way. The first payment is taken on the 23rd of the month, and nothing is taken before the policy is approved."
+              <div> {bd-top:1px solid #d5dbe3;justify-content:space-between;gap:20px}
+                <span> {fsize:14px;fweight:400;color:#33383f}
+                  <strong> {color:#15191e}
+                    "Rinor Gashi"
+                  "· Arizona resident licence 1204488 · (602) 555–0193"
+                <span> {fsize:12px;fweight:400;color:#60646c}
+                  "Quotes valid 30 days · not a contract"
+            <div> {padding:14px 16px;bd:1px solid #d5dbe3;bd-left:3px solid #60646c;bd-radius:12px;bg:#e4e8ee}
+              <div> {fsize:14px;fweight:400;fweight:600;color:#33383f}
+                "Designer’s note · not printed"
+              <p> {fsize:14px;fweight:400;color:#33383f}
+                "Everything an agent needs and a client does not is absent from this route by construction, not by a flag. There is no per-$1,000 rate, no appointment status, no commission and no advance on this page, because the template that renders it was never given them."

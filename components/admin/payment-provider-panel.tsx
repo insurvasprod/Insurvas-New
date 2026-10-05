@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { notify } from "@/lib/notify";
 
-import { Badge } from "@/components/ui/badge";
+import { StatusChip } from "@/components/ui/status-chip";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -161,12 +161,7 @@ export function PaymentProviderPanel({
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="text-sm font-medium">Failure simulator</span>
               {armed && (
-                <Badge
-                  variant="outline"
-                  className="border-transparent bg-[var(--color-warning)]/10 text-xs text-[var(--color-warning)]"
-                >
-                  Armed
-                </Badge>
+                <StatusChip tone="warning">Armed</StatusChip>
               )}
             </div>
 

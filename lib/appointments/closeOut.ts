@@ -83,7 +83,8 @@ export async function listCloseOutAppointments(
 }
 
 /**
- * Records showed / no_show / cancelled / rescheduled against one pending appointment.
+ * Records showed / no_show / cancelled against one appointment. A reschedule is not an outcome: it
+ * books the new slot (reschedule_appointment), and 'confirmed' is PATCH /api/app/appointments.
  *
  * The RPC owns every rule, and its raised codes are re-thrown unchanged so the route can map them:
  * `APPOINTMENT_NOT_ACTIVE`, `APPOINTMENT_OUTCOME_UNKNOWN`, `ACTOR_NOT_A_MEMBER`,
@@ -95,7 +96,7 @@ export async function markCloseOutOutcome(input: {
   tenantId: string;
   appointmentId: string;
   actorId: string;
-  outcome: "showed" | "no_show" | "cancelled" | "rescheduled";
+  outcome: "showed" | "no_show" | "cancelled";
 }): Promise<void> {
   const db = getSupabaseServiceClient() as unknown as Db;
   const result = await db.rpc("mark_appointment_outcome", {

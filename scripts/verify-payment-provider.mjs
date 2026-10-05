@@ -1,3 +1,4 @@
+import "./lib/refuseProduction.mjs";
 // SA-3.1 acceptance: the provider adapter's database contract and the dummy providers' behaviour,
 // checked against the real database with the same client the app uses.
 //

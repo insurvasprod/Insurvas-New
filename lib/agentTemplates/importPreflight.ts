@@ -5,7 +5,7 @@ import { createHash } from "node:crypto";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { getUsPhone10Digits } from "@/lib/compliance/scrub";
 import { linkLeadsToContacts } from "@/lib/contacts/leadLink";
-import { screenPartnerPhone } from "@/lib/compliance/screening";
+import { linkScreeningAuditsToLeads, screenPartnerPhone } from "@/lib/compliance/screening";
 import { assertOutboundLimit } from "@/lib/metering/outbound";
 import { parseLeadCsvRows, sanitizeImportMapping, type ImportDateOrder, type LeadImportRow } from "@/lib/agentTemplates/csv";
 import {
@@ -17,6 +17,7 @@ import {
 } from "@/lib/agentTemplates/importReviewModel";
 import type { AgentTemplate } from "@/lib/agentTemplates/service";
 import { getTenantTemplateForProductVersion, validateImportValues } from "@/lib/agentTemplates/service";
+import { friendlyImportCommitError } from "@/lib/agentTemplates/errors";
 import { commitLeadImport, ImportCommitRefusal, projectedUsableCostCents, type ImportItem, type ScrubRejection } from "@/lib/agentTemplates/importCommit";
 
 type DbError = { message: string; code?: string };
@@ -92,6 +93,8 @@ type ScreenedAnswer = {
   checkedAt: string | null;
   warning: string | null;
   dncSource?: DncSource | null;
+  /** LA-2.3-9: the screening_audit row, linked to the lead once the commit creates or attaches it. */
+  auditId?: string | null;
 };
 
 export type PreflightPlan = {
@@ -218,7 +221,7 @@ const SAMPLE_LIMIT = 25;
 /** Each screening is ~10 sequential round trips; the same bound importAgentLeads uses. */
 const SCREENING_CONCURRENCY = 20;
 /** Numbers handed to one bounded fan-out; the step loops over these until its budget runs out. */
-const SCREENING_SLICE = 100;
+const SCREENING_SLICE = SCREENING_CONCURRENCY;
 /** How long the first request screens before handing the job to the review screen. */
 const INLINE_BUDGET_MS = 8_000;
 /** How long each later step screens. Well inside the route's maxDuration. */
@@ -412,6 +415,11 @@ async function readBatchByKey(db: Db, tenantId: string, key: string) {
   return existing.error ? null : (existing.data as unknown as BatchRow | null);
 }
 
+/** A refusal while staging, in words (LA-2.2-9): never the raw PostgREST or Postgres text. */
+function stagingError(error: DbError, fallback: string): Error {
+  return friendlyImportCommitError(error) ?? new Error(error.message || fallback);
+}
+
 const ALREADY_IMPORTED =
   "This file was already imported into this campaign with these settings, so it was not staged again. Choose a different campaign or file to import it again.";
 
@@ -452,6 +460,10 @@ export async function preflightImport(input: {
   recordsPurchased?: number | null;
   dateOrder?: ImportDateOrder | null;
 }): Promise<PreflightStart> {
+  // The inline scrub gets what is left of its budget after reading and staging the file, so a slow
+  // database answers with the staged job (202) instead of running past the request limit.
+  const requestStarted = Date.now();
+  const inlineBudget = () => Math.max(0, INLINE_BUDGET_MS - (Date.now() - requestStarted));
   const db = getSupabaseServiceClient() as unknown as Db;
   const csvHash = hashCsv(input.csv);
   const mapping = input.mapping ? sanitizeImportMapping(input.mapping, input.template.template.fields) : null;
@@ -480,7 +492,7 @@ export async function preflightImport(input: {
     if (existing.status === "processing" && plan?.kind === "preflight")
       return { batchId: String(existing.id), plan, progress: null };
     if (existing.status === "processing" && plan?.kind === "screening")
-      return continueJob(db, { ...input, batchId: String(existing.id), job: plan, budgetMs: INLINE_BUDGET_MS });
+      return continueJob(db, { ...input, batchId: String(existing.id), job: plan, budgetMs: inlineBudget() });
     // A failed attempt, or a claim that never got a plan: re-stage onto the same row.
     restageId = String(existing.id);
   }
@@ -549,7 +561,7 @@ export async function preflightImport(input: {
     let updated = await db.from("agent_lead_import_batches").update({ ...base, ...columns }).eq("tenant_id", input.tenantId).eq("id", restageId);
     if (isMissingSchema(updated.error))
       updated = await db.from("agent_lead_import_batches").update(base).eq("tenant_id", input.tenantId).eq("id", restageId);
-    if (updated.error) throw new Error(updated.error.message ?? "Could not stage this import for review");
+    if (updated.error) throw stagingError(updated.error, "Could not stage this import for review");
     batchId = restageId;
   } else {
     const row = {
@@ -573,11 +585,11 @@ export async function preflightImport(input: {
       throw new ImportConflictError("This file is already being checked in another tab. Wait a moment and try again.");
     }
     if (inserted.error || !inserted.data)
-      throw new Error(inserted.error?.message ?? "Could not stage this import for review");
+      throw inserted.error ? stagingError(inserted.error, "Could not stage this import for review") : new Error("Could not stage this import for review");
     batchId = String(inserted.data.id);
   }
 
-  return continueJob(db, { ...input, batchId, job, budgetMs: INLINE_BUDGET_MS });
+  return continueJob(db, { ...input, batchId, job, budgetMs: inlineBudget() });
 }
 
 /** One step of the job, and the plan when that step answered the last number and the file is here. */
@@ -621,7 +633,7 @@ async function continueJob(
     .eq("status", "processing")
     .eq("response->>step", String(job.step))
     .select("id");
-  if (staged.error) throw new Error(staged.error.message ?? "Could not stage this import for review");
+  if (staged.error) throw stagingError(staged.error, "Could not stage this import for review");
   if (!Array.isArray(staged.data) || staged.data.length === 0) {
     // Staged by another tab a moment earlier — the same answers, so the same plan.
     const current = await readBatchById(db, input.tenantId, input.batchId);
@@ -661,8 +673,12 @@ async function screenNextSlice(
   while (asked < pending.length && asked < limit && Date.now() < deadline) {
     const distinctPhones = pending.slice(asked, asked + Math.min(SCREENING_SLICE, limit - asked));
     asked += distinctPhones.length;
+    // A screening that throws (a timed-out read of the tenant's own list, seen live) is an unknown
+    // answer for that number, like `unavailable`: it stays pending, and the rest of the slice keeps
+    // the answers it got instead of the whole step failing.
     const decisions = await mapWithConcurrency(distinctPhones, SCREENING_CONCURRENCY, (phone) =>
-      screenPartnerPhone({ tenantId: input.tenantId, partnerId: null, userId: input.userId, phone }),
+      screenPartnerPhone({ tenantId: input.tenantId, partnerId: null, userId: input.userId, phone })
+        .catch(() => ({ outcome: "unavailable" as const, message: "The scrub could not be completed for this number just now.", resultId: null, version: null, checkedAt: null, warning: null })),
     );
     distinctPhones.forEach((phone, index) => {
       const decision = decisions[index];
@@ -680,6 +696,7 @@ async function screenNextSlice(
         // The tenant's own list is checked first and answers without a stored screening result; a
         // registry answer always has one. That is the only difference the decision exposes.
         dncSource: decision.outcome === "dnc" ? (decision.resultId ? "registry" : "tenant") : null,
+        auditId: decision.auditId,
       };
     });
   }
@@ -695,7 +712,7 @@ async function screenNextSlice(
     .eq("status", "processing")
     .eq("response->>step", String(job.step))
     .select("id");
-  if (written.error) throw new Error(written.error.message ?? "Could not save the screening progress");
+  if (written.error) throw stagingError(written.error, "Could not save the screening progress");
   return Array.isArray(written.data) && written.data.length > 0 ? next : "lost";
 }
 
@@ -1183,6 +1200,15 @@ export async function commitImport(input: {
     // effort: never throws, never creates a contact, and does nothing before 20260924326100. The
     // batch returns one lead id per item, in order.
     await linkLeadsToContacts(input.tenantId, committed.ids.flatMap((id, at) => (items[at]?.values ? [{ id, values: items[at].values as Record<string, unknown> }] : [])));
+
+    // LA-2.3-9: each number's preflight check is linked to the lead it became (or was attached to).
+    // Best effort: never throws, so a committed import is never reported as failed over it.
+    const phoneOfExisting = new Map([...existingByPhone].map(([phone, id]) => [id, phone]));
+    await linkScreeningAuditsToLeads(input.tenantId, committed.ids.map((id, at) => {
+      const item = items[at];
+      const phone = item?.values ? phoneOf(item.values as Record<string, unknown>) : phoneOfExisting.get(String(item?.lead_id ?? "")) ?? null;
+      return { auditId: phone ? plan.screened[phone]?.auditId : null, leadId: id };
+    }));
 
     // Mark the campaign scrubbed, because this import just scrubbed it — the same mark
     // importAgentLeads makes. `campaigns_servable` needs `scrub_status = 'scrubbed'` AND `status =

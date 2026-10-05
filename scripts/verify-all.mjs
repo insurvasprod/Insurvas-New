@@ -1,3 +1,4 @@
+import "./lib/refuseProduction.mjs";
 /**
  * Runs every database-backed verification suite in one pass.
  *

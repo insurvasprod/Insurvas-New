@@ -1,0 +1,145 @@
+<div> {justify-content:space-between;gap:16px;padding:10px 32px;bd-bottom:1px solid #d5dbe3;bg:#ffffff}
+  <span> {fsize:14px;fweight:400;color:#33383f}
+    "Northline Insurance · Growth plan · Owner"
+  <span> {gap:8px}
+    <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e4e8ee;color:#33383f;fsize:12px;fweight:400;fweight:600}
+      "Owner only"
+    <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e0f3e7;color:#0d7038;fsize:12px;fweight:400;fweight:600}
+      <span> {width:6px;height:6px;bd-radius:9999px;bg:#138a43}
+      "Effective-dated and audited"
+<div> {flex-direction:column;padding:24px 32px 32px}
+  <div .m-stagger> {flex-direction:column;gap:24px}
+    <div> {justify-content:space-between;gap:24px}
+        <div> {fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+          "Settings · Sales"
+        <h1> {fsize:32px;fweight:600;color:#15191e}
+          "Quote and QA preferences"
+        <p> {fsize:16px;fweight:400;color:#60646c}
+          "The numbers the pre-submission checks measure against, and what each one does when it is missed."
+      <div> {gap:12px}
+    <div> {gap:24px}
+      <div> {width:236px}
+        <div> {flex-direction:column;bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff}
+          <div> {padding:10px}
+            <a href="#"> {gap:8px;height:36px;padding:0 12px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              "Carriers and products"
+            <a href="#"> {gap:8px;height:36px;padding:0 12px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              "Appointments"
+            <a href="#"> {gap:8px;height:36px;padding:0 12px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              "Underwriting templates"
+            <a href="#"> {gap:8px;height:36px;padding:0 12px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              "Quotation templates"
+            <a href="#"> {gap:8px;height:36px;padding:0 12px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              "Application field sets"
+            <a href="#"> {gap:8px;height:36px;padding:0 12px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              "Carrier field maps"
+            <a href="#"> {gap:8px;height:36px;padding:0 12px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              "Disclosures"
+            <a href="#"> {gap:8px;height:36px;padding:0 12px;bd-radius:8px;bg:#fff3ec;color:#a63800;fweight:600;fsize:14px;fweight:400}
+              "Quote and QA preferences"
+            <a href="#"> {gap:8px;height:36px;padding:0 12px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              "Welcome pack"
+            <a href="#"> {gap:8px;height:36px;padding:0 12px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              "AI assistant"
+            <a href="#"> {gap:8px;height:36px;padding:0 12px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              "Extension"
+            <a href="#"> {gap:8px;height:36px;padding:0 12px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              "Pipeline sync"
+        <div> {flex-direction:column;bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff}
+          <div> {justify-content:space-between;gap:16px;padding:12px 16px;bg:#e4e8ee;bd-bottom:1px solid #d5dbe3}
+            <span> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+              "Quote and QA preferences"
+            <span> {gap:10px}
+              <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e4e8ee;color:#33383f;fsize:12px;fweight:400;fweight:600}
+                "Owner only"
+          <div> {padding:20px 24px;bd-bottom:1px solid #d5dbe3}
+              <h2> {fsize:18px;fweight:600;color:#15191e}
+                "Premium plausibility"
+              <p> {fsize:14px;fweight:400;color:#60646c}
+                "A premium divided by face amount, in thousands. Anything outside the band is flagged on the case."
+              <div> {grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
+                <div> {bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff;padding:16px 18px}
+                  <div> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+                    "Final Expense"
+                  <div> {grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+                    <label>
+                      <span> {fsize:14px;fweight:400;fweight:600;color:#33383f}
+                        "Lowest per $1,000"
+                      <input type="number" value="3.10"> {width:100%;height:44px;padding:0 12px;bd:1px solid #7a828e;bd-radius:8px;bg:#ffffff;fsize:16px;fweight:400;color:#15191e}
+                    <label>
+                      <span> {fsize:14px;fweight:400;fweight:600;color:#33383f}
+                        "Highest per $1,000"
+                      <input type="number" value="4.40"> {width:100%;height:44px;padding:0 12px;bd:1px solid #7a828e;bd-radius:8px;bg:#ffffff;fsize:16px;fweight:400;color:#15191e}
+                  <div> {fsize:12px;fweight:400;color:#60646c}
+                    "Grace Oyelaran’s Gerber quote is $4.75 per $1,000 — above the band, flagged, and correct. She is 67 with congestive heart failure in her history."
+                <div> {bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff;padding:16px 18px}
+                  <div> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+                    "Term life"
+                  <div> {grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+                    <label>
+                      <span> {fsize:14px;fweight:400;fweight:600;color:#33383f}
+                        "Lowest per $1,000"
+                      <input type="number" value="0.90"> {width:100%;height:44px;padding:0 12px;bd:1px solid #7a828e;bd-radius:8px;bg:#ffffff;fsize:16px;fweight:400;color:#15191e}
+                    <label>
+                      <span> {fsize:14px;fweight:400;fweight:600;color:#33383f}
+                        "Highest per $1,000"
+                      <input type="number" value="2.20"> {width:100%;height:44px;padding:0 12px;bd:1px solid #7a828e;bd-radius:8px;bg:#ffffff;fsize:16px;fweight:400;color:#15191e}
+                  <div> {fsize:12px;fweight:400;color:#60646c}
+                    "Nothing is written under Term life yet. The band is here so the first quote is checked rather than trusted."
+                <div> {padding:14px 16px;bd:1px solid #d5dbe3;bd-left:3px solid #00708a;bd-radius:12px;bg:#e0f2f6}
+                  <div> {fsize:14px;fweight:400;fweight:600;color:#005e75}
+                    "A band is a warning, not a rule"
+                  <p> {fsize:14px;fweight:400;color:#33383f}
+                    "A quote outside the band is still allowed. It is flagged because a mistyped premium looks exactly like a good deal."
+          <div> {padding:20px 24px;bd-bottom:1px solid #d5dbe3}
+              <h2> {fsize:18px;fweight:600;color:#15191e}
+                "What each check does when it fires"
+              <p> {fsize:14px;fweight:400;color:#60646c}
+                "Only the appointment check can be set to block. The rest are always warnings."
+              <div> {grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
+                <label>
+                  <span> {fsize:14px;fweight:400;fweight:600;color:#33383f}
+                    "A carrier we are not appointed with"
+                  <select> {width:100%;height:44px;padding:0 12px;bd:1px solid #7a828e;bd-radius:8px;bg:#ffffff;fsize:16px;fweight:400;color:#15191e}
+                    <option>
+                      "Warn"
+                    <option>
+                      "Block"
+                  <span> {fsize:12px;fweight:400;color:#60646c}
+                    "Warn lets an agent quote it and sort the appointment out after. Block stops the case at the Quote step."
+                <label>
+                  <span> {fsize:14px;fweight:400;fweight:600;color:#33383f}
+                    "Draft-date buffer"
+                  <select> {width:100%;height:44px;padding:0 12px;bd:1px solid #7a828e;bd-radius:8px;bg:#ffffff;fsize:16px;fweight:400;color:#15191e}
+                    <option>
+                      "2"
+                    <option>
+                      "3"
+                    <option>
+                      "4"
+                  <span> {fsize:12px;fweight:400;color:#60646c}
+                    "Days after the deposit arrives. Two is the earliest safe day; four is what an agency picks after a bank holds a deposit overnight."
+                <label>
+                  <span> {fsize:14px;fweight:400;fweight:600;color:#33383f}
+                    "Requirement ageing, N"
+                  <input type="number" value="5"> {width:100%;height:44px;padding:0 12px;bd:1px solid #7a828e;bd-radius:8px;bg:#ffffff;fsize:16px;fweight:400;color:#15191e}
+                  <span> {fsize:12px;fweight:400;color:#60646c}
+                    "Amber at 5 days, red at 10. Grace’s APS is 11 days old, which is why it is red on the Pending cases list."
+                <label>
+                  <span> {fsize:14px;fweight:400;fweight:600;color:#33383f}
+                    "Welcome pack"
+                  <select> {width:100%;height:44px;padding:0 12px;bd:1px solid #7a828e;bd-radius:8px;bg:#ffffff;fsize:16px;fweight:400;color:#15191e}
+                    <option>
+                      "Send automatically"
+                    <option>
+                      "Hold for review"
+                  <span> {fsize:12px;fweight:400;color:#60646c}
+                    "On hold, the pack waits in the agent’s queue and nothing goes out until someone opens it."
+          <div> {justify-content:space-between;gap:16px;padding:14px 24px;bd-top:1px solid #d5dbe3;bg:#f1f3f7}
+            <span> {fsize:12px;fweight:400;color:#60646c}
+              "Changes are audited — who, when, and what the value was before. Publishing a new version leaves the old one readable, because an application submitted under it still points at it."
+            <span> {gap:12px}
+              <button type="button"> {justify-content:center;gap:8px;height:40px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+                "Discard"
+              <button type="button"> {justify-content:center;gap:8px;height:40px;padding:0 16px;bd-radius:8px;bg:#ff5900;color:#15191e;bd:1px solid transparent;fsize:14px;fweight:600}
+                "Save changes"

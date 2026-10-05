@@ -78,7 +78,11 @@ export async function GET() {
   const [full, extras, funnel] = await Promise.all([
     db.from("tenant_campaign_costs").select(COST_COLUMNS).eq("tenant_id", auth.context.tenantId).order("name"),
     campaignExtras(auth.context.tenantId, auth.entitlement),
-    campaignFunnel(auth.context.tenantId),
+    // A failure here costs the contacts column, not the campaign list: it is said, not swallowed.
+    campaignFunnel(auth.context.tenantId).catch((error: unknown) => ({
+      rows: null,
+      pending: { missing: ["contacted_leads"], detail: error instanceof Error ? error.message : "Contacts per campaign could not be loaded." } as SchemaGapNotice,
+    })),
   ]);
   const shared = { ...extras, funnel: funnel.rows, canScrub: auth.context.role === "owner", ...(funnel.pending ? { funnelPending: funnel.pending } : {}) };
   if (!full.error)

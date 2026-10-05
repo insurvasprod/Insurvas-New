@@ -3,7 +3,7 @@ import "server-only";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isPendingSchema } from "@/lib/appointments/pendingSchema";
 import { stateFromLeadValues } from "@/lib/callbacks/timezone";
-import { providerName, windowClosedLabel, zoneShort } from "@/lib/dialerScripts/display";
+import { dncExemptionBasisLabel, providerName, windowClosedLabel, zoneShort } from "@/lib/dialerScripts/display";
 import { checkLitigatorForDialPreflight } from "./screening";
 import { getDncDialingStatus, performDncVendorLookup } from "./service";
 import { getUsPhone10Digits, maskDialPhone } from "./scrub";
@@ -32,7 +32,8 @@ export type DialPreflightReport = {
   state: string | null;
   outcome: {
     suppression: "clear" | "listed" | "unavailable";
-    dnc: "clear" | "listed" | "no_vendor" | "unverified";
+    /** "exempt": listed, and cleared by an owner-recorded DNC exemption (LA-2.3-3). Not a refusal. */
+    dnc: "clear" | "listed" | "exempt" | "no_vendor" | "unverified";
     litigator: "clear" | "listed" | "unavailable";
     window: "inside" | "outside" | "unavailable" | "no_state";
   };
@@ -108,16 +109,27 @@ async function windowCheck(db: Db, tenantId: string, state: string, campaignId: 
  * (getDncDialingStatus().blocked), never from an error's wording; any other failure of the lookup
  * is "no vendor answered". Both refuse.
  */
-async function dncRow(normalizedPhone: string, tenantId: string, fetcher?: typeof fetch) {
+async function dncRow(db: Db, normalizedPhone: string, tenantId: string, userId: string, fetcher?: typeof fetch): Promise<{ status: "clear" | "listed" | "exempt" | "no_vendor" | "unverified"; vendorName: string; basis?: string }> {
   const status = await getDncDialingStatus().catch(() => null);
-  if (status?.blocked) return { status: "no_vendor" as const, vendorName: "" };
+  if (status?.blocked) return { status: "no_vendor", vendorName: "" };
+  let decision: { allowed: boolean; vendorName: string };
   try {
-    const decision = await performDncVendorLookup(normalizedPhone, tenantId, fetcher);
-    return { status: decision.allowed ? ("clear" as const) : ("listed" as const), vendorName: decision.vendorName };
+    decision = await performDncVendorLookup(normalizedPhone, tenantId, fetcher);
   } catch {
-    return { status: "unverified" as const, vendorName: "" };
+    return { status: "unverified", vendorName: "" };
   }
+  if (decision.allowed) return { status: "clear", vendorName: decision.vendorName };
+  // LA-2.3-3: the registry lists it, but an owner-recorded exemption (written consent or an
+  // existing business relationship) clears federal/state DNC for this number. use_dnc_exemption
+  // answers AND writes the audited use, here with context 'dial_preflight'. Before 20260925709700
+  // the function is missing (42883 / PGRST202) and the number stays listed.
+  const used = await db.rpc("use_dnc_exemption", { p_tenant_id: tenantId, p_phone: normalizedPhone, p_context: "dial_preflight", p_cleared_lists: ["dnc_registry"], p_lead_id: null, p_attempt_id: null, p_actor: userId });
+  if (used.error && !isPendingSchema(used.error)) console.error(`[dial-preflight] use_dnc_exemption failed: ${used.error.message}`);
+  const row = !used.error && Array.isArray(used.data) ? (used.data[0] as Row | undefined) : undefined;
+  if (row) return { status: "exempt", vendorName: decision.vendorName, basis: text(row.basis) };
+  return { status: "listed", vendorName: decision.vendorName };
 }
+
 
 /**
  * Every check the "Check a number" dialog shows, run read-only for one number. The only writes are
@@ -132,12 +144,14 @@ export async function runDialPreflightChecks(input: { tenantId: string; userId: 
   // ten-digit number cannot be matched against them, which is itself an unanswered check.
   const key = digits ?? input.normalizedPhone.replace(/\D/g, "");
 
+  const leadLookup = digits ? findLead(db, input.tenantId, digits).catch((error: unknown) => { console.error(`[dial-preflight] ${error instanceof Error ? error.message : "lead lookup failed"}`); return undefined; }) : Promise.resolve(null);
   const [lead, suppression, dnc, litigator] = await Promise.all([
-    digits ? findLead(db, input.tenantId, digits).catch((error: unknown) => { console.error(`[dial-preflight] ${error instanceof Error ? error.message : "lead lookup failed"}`); return undefined; }) : Promise.resolve(null),
+    leadLookup,
     suppressionCheck(db, input.tenantId, key),
-    dncRow(input.normalizedPhone, input.tenantId, input.fetcher),
+    dncRow(db, input.normalizedPhone, input.tenantId, input.userId, input.fetcher),
     digits
-      ? checkLitigatorForDialPreflight({ tenantId: input.tenantId, userId: input.userId, phoneDigits: digits, fetcher: input.fetcher })
+      // LA-2.3-9: the litigator check's audit row names the lead this number belongs to, when found.
+      ? leadLookup.then((found) => checkLitigatorForDialPreflight({ tenantId: input.tenantId, userId: input.userId, phoneDigits: digits, leadId: found ? text(found.id) || null : null, fetcher: input.fetcher }))
       : Promise.resolve({ result: "unavailable" as const, vendorName: null, checkedAt: null, cached: false, message: "It needs a ten-digit US number." }),
   ]);
 
@@ -167,6 +181,8 @@ export async function runDialPreflightChecks(input: { tenantId: string; userId: 
   // 2 · the DNC registry, one row: the vendor answers one yes/no, not federal and state separately
   checks.push(dnc.status === "clear"
     ? { key: "dnc", label: "DNC registry", result: "Clear", tone: "success", source: dnc.vendorName || "DNC vendor", age: "live", refuses: false }
+    : dnc.status === "exempt"
+      ? { key: "dnc", label: "DNC registry", result: "Listed · exempt", tone: "warning", source: `${dnc.vendorName || "DNC vendor"} · DNC exemption, ${dncExemptionBasisLabel(dnc.basis)}`, age: "live", refuses: false }
     : dnc.status === "listed"
       ? { key: "dnc", label: "DNC registry", result: "Listed", tone: "error", source: dnc.vendorName || "DNC vendor", age: "live", refuses: true, refusal: `${dnc.vendorName || "The DNC vendor"} lists it on a do-not-call registry.` }
       : { key: "dnc", label: "DNC registry", result: "Unavailable", tone: "warning", source: dnc.status === "no_vendor" ? "No DNC vendor available" : "No vendor answered", age: "live", refuses: true, refusal: dnc.status === "no_vendor" ? "No DNC vendor is available, so the registry could not be checked." : "No DNC vendor answered, so the registry could not be checked." });

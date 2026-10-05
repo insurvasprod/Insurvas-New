@@ -22,6 +22,7 @@ import {
 } from "@/lib/activityLog/types";
 import { AppointmentCloseOutStrip } from "@/components/app/appointment-close-out-strip";
 import { Pill } from "@/components/app/settings/primitives";
+import { Pager } from "@/components/ui/pager";
 
 /**
  * Activity & scorecard, laid out to the UI consistency standard (docs/design/UI-CONSISTENCY.md): one
@@ -44,7 +45,7 @@ type Range = "7" | "30" | "90" | "custom";
 type SetterReport = {
   scope: "team" | "own";
   rows: Array<{ userId: string; name: string; day: string; dials: number; contacts: number; booked: number; showed: number; noShow: number; pending: number; neverClosedOut: number; sold: number; showRatePct: number | null; closedOut: number; closeable: number; coveragePct: number | null; bookPerContactPct: number | null }>;
-  roster: Array<{ userId: string; name: string; role: string; timezone: string; localLabel: string; onShiftNow: boolean }>;
+  roster: Array<{ userId: string; name: string; role: string; timezone: string; localLabel: string; onShiftNow: boolean; hasHours?: boolean }>;
 };
 
 const PAGE_SIZE = 25;
@@ -347,9 +348,6 @@ export function ActivityLogWorkspace({ initialView = "activity", role = "" }: { 
 
   const clearAll = () => { setAgentId(""); setCampaignId(""); setDisposition(""); setSearch(""); setPage(1); };
   const total = report?.total ?? 0;
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  const first = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
-  const last = Math.min(page * PAGE_SIZE, total);
   const noun = view === "integrity" ? (zeroClickOnly ? "outcomes logged without a dial" : "flagged events") : "served leads";
 
   const exportQuery = useMemo(() => {
@@ -494,16 +492,23 @@ export function ActivityLogWorkspace({ initialView = "activity", role = "" }: { 
           <span>{range === "custom" && !windows ? "Choose a from and to date" : windows?.label}</span>
         ) : (
           <>
-            <span className="text-xs leading-normal tracking-[-0.01em] text-muted-foreground">
-              {range === "custom" && !windows
-                ? "Choose a from and to date"
-                : total === 0 ? `No ${noun}` : `Showing ${first}–${last} of ${total.toLocaleString()} ${noun}${inRange != null && inRange !== total ? ` (${inRange.toLocaleString()} served in the window)` : ""} · newest first`}
-              {blockedShown > 0 && ` · ${blockedShown.toLocaleString()} blocked ${blockedShown === 1 ? "dial" : "dials"} between them, not counted`}
-            </span>
-            <span className="flex gap-2">
-              <Button type="button" variant="outline" size="sm" disabled={page <= 1 || loading} onClick={() => setPage((value) => value - 1)}>Previous</Button>
-              <Button type="button" variant="outline" size="sm" disabled={page >= totalPages || loading} onClick={() => setPage((value) => value + 1)}>Next</Button>
-            </span>
+            {range === "custom" && !windows ? (
+              <span>Choose a from and to date</span>
+            ) : (
+              <Pager
+                page={page}
+                total={total}
+                pageSize={PAGE_SIZE}
+                noun={noun}
+                disabled={loading}
+                onPage={setPage}
+                suffix={[
+                  inRange != null && inRange !== total ? `${inRange.toLocaleString()} served in the window` : null,
+                  "newest first",
+                  blockedShown > 0 ? `${blockedShown.toLocaleString()} blocked ${blockedShown === 1 ? "dial" : "dials"} between them, not counted` : null,
+                ].filter(Boolean).join(" · ")}
+              />
+            )}
           </>
         )}
       >
@@ -602,7 +607,7 @@ export function ActivityLogWorkspace({ initialView = "activity", role = "" }: { 
                       <td>{member.role}</td>
                       <td className="tabular-nums">{member.localLabel}</td>
                       <td className="text-muted-foreground">{member.timezone}</td>
-                      <td className={`text-right text-xs font-semibold ${member.onShiftNow ? "text-[var(--success-ink)]" : "text-muted-foreground"}`}>{member.onShiftNow ? "On shift" : "Off shift"}</td>
+                      <td className={`text-right text-xs font-semibold ${member.onShiftNow ? "text-[var(--success-ink)]" : "text-muted-foreground"}`}>{member.hasHours === false ? "No hours set" : member.onShiftNow ? "On shift" : "Off shift"}</td>
                     </tr>
                   ))}
                 </tbody>

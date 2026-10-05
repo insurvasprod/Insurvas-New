@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { isPartnerRole, partnerRoleLabel, type PartnerRole } from "@/lib/partnerAuth/roles";
+import { InsurvasLogo } from "@/components/shared/insurvas-logo";
 
 type TokenState =
   | { status: "checking" }
@@ -94,7 +95,7 @@ export function PartnerSetPasswordForm({
 
   return <div className="portal-partner portal-partner-set-password-page">
     <header className="portal-partner-auth-header">
-      <Link href={loginPath} className="portal-partner-auth-brand inline-flex items-center gap-2.5" aria-label="Insurvas partner portal"><span aria-hidden="true" className="inline-flex size-[26px] shrink-0 items-center justify-center rounded-lg bg-[var(--primary)] text-xs font-semibold text-[var(--on-primary)]">I</span><span className="text-sm font-semibold tracking-[-0.01em] text-foreground">Insurvas partners</span></Link>
+      <Link href={loginPath} className="portal-partner-auth-brand inline-flex items-center gap-2.5" aria-label="Insurvas partner portal"><InsurvasLogo size="auth" /></Link>
       <nav aria-label="Partner setup links"><Link href={loginPath}>Partner portal</Link><a href="mailto:support@insurvas.com">Help</a></nav>
     </header>
     <main className="portal-partner-set-password-main">

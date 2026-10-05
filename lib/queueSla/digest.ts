@@ -3,7 +3,7 @@ import "server-only";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isSchemaGap } from "@/lib/appointments/schemaGap";
 import { zonedParts } from "@/lib/format/dates";
-import { summariseSlaDay, slaJobState, type SlaDaySummary, type SlaJobState } from "./digestView";
+import { runFailedAsWhole, summariseSlaDay, slaJobState, type SlaDaySummary, type SlaJobState } from "./digestView";
 
 /**
  * What the alert centre shows about the unclaimed-SLA job (LA-1.23-6 and -7), read from what the
@@ -67,7 +67,9 @@ export type SlaJobStatus = {
 export async function getSlaJobStatus(tenantId: string, now = new Date()): Promise<SlaJobStatus> {
   const since = new Date(now.getTime() - 86_400_000).toISOString();
   const [run, events] = await Promise.all([
-    db().from("unclaimed_sla_job_runs").select("ok, error, started_at, finished_at").eq("source", "database").order("started_at", { ascending: false }).limit(1).maybeSingle(),
+    // pg_cron's runs only (source 'database'): an app-invoked run writes source 'app', so a manual
+    // `npm run sla:run` never makes a stopped schedule read as running.
+    db().from("unclaimed_sla_job_runs").select("ok, error, report, started_at, finished_at").eq("source", "database").order("started_at", { ascending: false }).limit(1).maybeSingle(),
     // Handled in the last day, and anything still being retried.
     db().from("tenant_lead_sla_events").select("rung, handled_by, skipped_reason, outcome, processed_at, last_error, email_due_at, email_done_at, email_outcome").eq("tenant_id", tenantId).or(`processed_at.gte."${since}",and(processed_at.is.null,last_error.not.is.null)`).limit(2000),
   ]);
@@ -75,14 +77,17 @@ export async function getSlaJobStatus(tenantId: string, now = new Date()): Promi
     if (isSchemaGap(run.error) || isSchemaGap(events.error)) return { ready: false, state: "pending_migration", lastRunAt: null, lastError: null, lastDay: summariseSlaDay([]) };
     throw new Error(`Could not read the SLA job status: ${(run.error ?? events.error).message}`);
   }
-  const latest = run.data as { ok: boolean; error: string | null; started_at: string; finished_at: string | null } | null;
+  const latest = run.data as { ok: boolean; error: string | null; report: unknown; started_at: string; finished_at: string | null } | null;
   const lastRunAt = latest ? latest.finished_at ?? latest.started_at : null;
   const lastDay = summariseSlaDay((events.data ?? []) as Parameters<typeof summariseSlaDay>[0]);
+  // The run row is platform-wide. Only a whole-run failure counts against this workspace, and its
+  // text is not shown: an event failing elsewhere is another workspace's, and so is its message.
+  const wholeRunFailed = latest ? !latest.ok && runFailedAsWhole(latest.report, latest.error) : false;
   return {
     ready: true,
-    state: slaJobState({ lastRunAt, lastRunOk: latest?.ok ?? null, retrying: lastDay.retrying }, now.getTime()),
+    state: slaJobState({ lastRunAt, lastRunOk: latest ? !wholeRunFailed : null, retrying: lastDay.retrying }, now.getTime()),
     lastRunAt,
-    lastError: latest && !latest.ok ? latest.error : null,
+    lastError: lastDay.latestError ?? (wholeRunFailed ? "The job's last run failed before it finished." : null),
     lastDay,
   };
 }

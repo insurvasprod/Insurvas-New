@@ -27,6 +27,7 @@ import { EmptyState, ErrorState, NoMatches } from "@/components/ui/page-states";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
+import { Pager } from "@/components/ui/pager";
 import { NewVendorPanel, VendorRoster } from "@/components/app/vendor-roster";
 import { Callout } from "@/components/app/settings/primitives";
 import { vendorCampaignWarning, vendorTakesCampaigns } from "@/lib/vendors/types";
@@ -52,6 +53,8 @@ type Speed = { vendor_id: string; posted_leads: number; dialled_leads: number; m
 type Pending = { missing: string[]; detail: string };
 /** The shape `outboundLimitSnapshot` returns, already carried by the campaigns payload. */
 type OutboundLimit = { key: string; label: string; usage: number; limit: number | null };
+/** tenant_campaign_funnel (20260925709800): all-time leads, dialable, dialled and contacted per campaign. */
+type Funnel = { leads_received: number; dialable_leads: number; dialed_leads: number; contacted_leads: number; quoted_leads: number };
 type Consent = { vendor_id: string; leads: number; claimed_certificates: number; any_certificate: number; claimed_coverage_pct: number | null; any_coverage_pct: number | null };
 
 /** Cents to dollars. Costs per record are fractional cents, so they keep three decimal places. */
@@ -146,6 +149,8 @@ export function CampaignWorkspace() {
   const [scrubRuns, setScrubRuns] = useState<Record<string, ScrubRun> | null>(null);
   const [testBatches, setTestBatches] = useState<Record<string, boolean> | null>(null);
   const [outcomes, setOutcomes] = useState<Record<string, Outcome> | null>(null);
+  // LA-2.1-3: leads, dialable and contacts per campaign. Null until its migration is applied.
+  const [funnel, setFunnel] = useState<Record<string, Funnel> | null>(null);
   const [canScrub, setCanScrub] = useState(false);
   const [faults, setFaults] = useState<string[]>([]);
   /** The campaign whose scrub this window is driving, one batch per request. */
@@ -169,6 +174,7 @@ export function CampaignWorkspace() {
     setScrubRuns(campaignBody.scrubRuns ?? null);
     setTestBatches(campaignBody.testBatches ?? null);
     setOutcomes(campaignBody.outcomes ?? null);
+    setFunnel(campaignBody.funnel ?? null);
     setCanScrub(Boolean(campaignBody.canScrub));
     setFaults(Array.isArray(campaignBody.faults) ? campaignBody.faults : []);
     // LA-2.22 criterion 4: "every limited screen shows usage against the cap". The route has always
@@ -186,6 +192,7 @@ export function CampaignWorkspace() {
     setPending([
       ...(Array.isArray(vendorBody.pending) ? vendorBody.pending : []),
       ...(campaignBody.pending ? [campaignBody.pending] : []),
+      ...(campaignBody.funnelPending ? [campaignBody.funnelPending] : []),
     ]);
   }).then(() => setLoadError(null)).catch((error: unknown) => {
     const message = error instanceof Error ? error.message : "Could not load this page";
@@ -352,6 +359,9 @@ export function CampaignWorkspace() {
   const currentPage = Math.min(page, pageCount - 1);
   const shown = filtered.slice(currentPage * PAGE_SIZE, currentPage * PAGE_SIZE + PAGE_SIZE);
   const sumRecords = filtered.reduce((sum, campaign) => sum + campaign.records_purchased, 0);
+  const sumLeads = funnel || progress ? filtered.reduce((sum, campaign) => sum + (funnel?.[campaign.campaign_id]?.leads_received ?? progress?.[campaign.campaign_id]?.leads_received ?? 0), 0) : null;
+  const sumDialable = funnel ? filtered.reduce((sum, campaign) => sum + (funnel[campaign.campaign_id]?.dialable_leads ?? 0), 0) : filtered.some((campaign) => campaign.records_usable !== null) ? filtered.reduce((sum, campaign) => sum + (campaign.records_usable ?? 0), 0) : null;
+  const sumContacts = funnel ? filtered.reduce((sum, campaign) => sum + (funnel[campaign.campaign_id]?.contacted_leads ?? 0), 0) : null;
   const sumSpend = filtered.reduce((sum, campaign) => sum + campaign.total_spend_cents, 0);
   const sumUsable = filtered.reduce((sum, campaign) => sum + (campaign.records_usable ?? 0), 0);
   const sumUsableSpend = filtered.filter((campaign) => (campaign.records_usable ?? 0) > 0).reduce((sum, campaign) => sum + campaign.total_spend_cents, 0);
@@ -364,7 +374,8 @@ export function CampaignWorkspace() {
   if (loading) return <PageLoading />;
 
   // Usage against the cap, on the screen where the cap bites. Paused campaigns do not count.
-  const activeLimit = limits.find((item) => item.key === "max_active_campaigns" && item.limit !== null) ?? null;
+  const activeUsage = limits.find((item) => item.key === "max_active_campaigns") ?? null;
+  const activeLimit = activeUsage && activeUsage.limit !== null ? activeUsage : null;
   const atActiveLimit = activeLimit !== null && activeLimit.usage >= (activeLimit.limit ?? 0);
 
   return <div className="m-stagger flex flex-col gap-6 text-[var(--ink)]">
@@ -377,7 +388,7 @@ export function CampaignWorkspace() {
     />
     <StatStrip label="Campaign totals">
       <StatTile label="Vendors" value={vendors.length} footnote={`${buyingVendors} buying now`} />
-      <StatTile label="Active campaigns" value={activeWeights.length} footnote={activeLimit ? `${activeLimit.usage} of ${activeLimit.limit} allowed · ${draftCampaigns} draft` : `${draftCampaigns} draft`} valueTone={atActiveLimit ? "danger" : undefined} />
+      <StatTile label="Active campaigns" value={activeWeights.length} footnote={activeLimit ? `${activeLimit.usage} of ${activeLimit.limit} allowed · ${draftCampaigns} draft` : activeUsage ? `${activeUsage.usage} counted · no plan limit · ${draftCampaigns} draft` : `${draftCampaigns} draft`} valueTone={atActiveLimit ? "danger" : undefined} />
       <StatTile label="Spend this period" value={money(spendCents)} footnote={`across ${spendingVendors} vendor${spendingVendors === 1 ? "" : "s"}`} />
       <StatTile label="Effective cost per dialable lead" value={money2(effectiveCostCents)} valueTone={effectiveCostCents === null ? undefined : "primary"} footnote="after suppression" />
     </StatStrip>
@@ -442,13 +453,7 @@ export function CampaignWorkspace() {
           {filterCount > 0 && <button type="button" className="font-semibold text-[var(--accent-ink)] hover:underline" onClick={() => { setStatusFilter(new Set()); setTypeFilter("all"); setPage(0); }}>Clear filters</button>}
         </div>}
       </>}
-      footer={!loadError && filtered.length > 0 ? <>
-        <span>Showing {currentPage * PAGE_SIZE + 1}&ndash;{currentPage * PAGE_SIZE + shown.length} of {filtered.length} campaign{filtered.length === 1 ? "" : "s"} &middot; draft campaigns first</span>
-        <span className="flex gap-2">
-          <Button type="button" variant="outline" size="sm" disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}>Previous</Button>
-          <Button type="button" variant="outline" size="sm" disabled={currentPage >= pageCount - 1} onClick={() => setPage(currentPage + 1)}>Next</Button>
-        </span>
-      </> : undefined}
+      footer={!loadError && filtered.length > 0 ? <Pager page={currentPage + 1} total={filtered.length} noun="campaigns" pageSize={PAGE_SIZE} onPage={(next) => setPage(next - 1)} suffix="draft campaigns first" /> : undefined}
     >
       {loadError ? <ErrorState title="Campaigns did not load" detail={`This is not a statement that you have none. ${loadError}`} action={<Button variant="outline" onClick={() => void refresh()}>Try again</Button>} />
         : campaigns.length === 0 ? <EmptyState title="No campaigns yet" hint={vendors.length === 0 ? "Start with a vendor — a campaign belongs to one." : "Create a campaign before importing a list, so its leads carry a cost."} />
@@ -458,6 +463,9 @@ export function CampaignWorkspace() {
               <TableHead>Campaign</TableHead>
               <TableHead className="w-[160px]">Vendor</TableHead>
               <TableHead className="w-[110px]">Status</TableHead>
+              <TableHead className="w-[80px] text-right">Leads</TableHead>
+              <TableHead className="w-[84px] text-right">Dialable</TableHead>
+              <TableHead className="w-[90px] text-right">Contacts</TableHead>
               <TableHead className="w-[90px] text-right">Records</TableHead>
               <TableHead className="w-[110px] text-right">Spend</TableHead>
               <TableHead className="w-[110px] text-right">Cost/record</TableHead>
@@ -474,6 +482,9 @@ export function CampaignWorkspace() {
                 const outcome = outcomes?.[campaign.campaign_id] ?? null;
                 const run = scrubRuns?.[campaign.campaign_id] ?? null;
                 const isTest = testBatches?.[campaign.campaign_id] ?? false;
+                const reach = funnel?.[campaign.campaign_id] ?? null;
+                const leadsIn = reach?.leads_received ?? lead?.leads_received ?? null;
+                const dialable = reach?.dialable_leads ?? campaign.records_usable;
                 return <Fragment key={campaign.campaign_id}>
                   <TableRow className={`portal-campaigns-row${open ? " is-open" : ""}`} onClick={() => setOpenId(open ? null : campaign.campaign_id)}>
                     <TableCell><button type="button" className="portal-campaigns-name" aria-expanded={open} onClick={(event) => { event.stopPropagation(); setOpenId(open ? null : campaign.campaign_id); }}>{campaign.name}</button></TableCell>
@@ -485,6 +496,12 @@ export function CampaignWorkspace() {
                         {(campaign.status === "active" || campaign.status === "draft") && campaign.scrub_status !== "scrubbed" && <span className={`portal-status-chip ${campaign.scrub_status === "failed" ? "is-error" : campaign.scrub_status === "scrubbing" ? "is-info" : "is-warning"}`}><span aria-hidden="true" />{SCRUB_LABEL[campaign.scrub_status ?? "unscrubbed"] ?? campaign.scrub_status}</span>}
                       </span>
                     </TableCell>
+                    <TableCell className="text-right tabular-nums">{count(leadsIn)}</TableCell>
+                    <TableCell className="text-right tabular-nums">{count(dialable)}</TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {count(reach?.contacted_leads)}
+                      {reach && reach.dialed_leads > 0 && <span className="block text-[12px] leading-[1.4] font-normal text-[var(--muted)]">{Math.round((100 * reach.contacted_leads) / reach.dialed_leads)}% of {reach.dialed_leads.toLocaleString()} dialled</span>}
+                    </TableCell>
                     <TableCell className="text-right tabular-nums">
                       {campaign.records_purchased > 0 ? campaign.records_purchased.toLocaleString() : "—"}
                       {worked !== null && <span className="block text-[12px] leading-[1.4] font-normal text-[var(--muted)]">{worked}% worked</span>}
@@ -494,7 +511,7 @@ export function CampaignWorkspace() {
                     <TableCell className="text-right tabular-nums">{money2(campaign.cost_per_usable_record_cents)}</TableCell>
                     <TableCell className="text-right tabular-nums">{campaign.mixing_weight}</TableCell>
                   </TableRow>
-                  {open && <TableRow className="portal-campaigns-detail-row"><TableCell colSpan={8}>
+                  {open && <TableRow className="portal-campaigns-detail-row"><TableCell colSpan={11}>
                     <div className="portal-campaigns-detail">
                       <dl>
                         <div><dt>Lead type</dt><dd>{campaign.lead_type}{campaign.product_code ? ` · ${campaign.product_code}` : ""}</dd></div>
@@ -547,6 +564,9 @@ export function CampaignWorkspace() {
               <tr>
                 <td>{filtered.length} campaign{filtered.length === 1 ? "" : "s"}</td>
                 <td /><td />
+                <td className="text-right tabular-nums">{count(sumLeads)}</td>
+                <td className="text-right tabular-nums">{count(sumDialable)}</td>
+                <td className="text-right tabular-nums">{count(sumContacts)}</td>
                 <td className="text-right tabular-nums">{sumRecords.toLocaleString()}</td>
                 <td className="text-right tabular-nums">{money(sumSpend)}</td>
                 <td className="text-right tabular-nums">{money2(sumRecords > 0 ? sumSpend / sumRecords : null)}</td>

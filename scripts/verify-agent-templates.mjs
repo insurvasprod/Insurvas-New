@@ -1,3 +1,4 @@
+import "./lib/refuseProduction.mjs";
 // SA-4.7 live acceptance check. All tenants and platform templates created here are disposable.
 import { SignJWT } from "jose";
 import { createClient } from "@supabase/supabase-js";

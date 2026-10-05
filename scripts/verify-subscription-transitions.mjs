@@ -1,3 +1,4 @@
+import "./lib/refuseProduction.mjs";
 // bugs_sa.md M2-5 · The server must enforce the subscription transition graph, not just the UI.
 //
 // `resume` was a bare status write, so it acted as a universal "make it active": one crafted

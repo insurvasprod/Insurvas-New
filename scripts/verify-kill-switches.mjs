@@ -1,3 +1,4 @@
+import "./lib/refuseProduction.mjs";
 // SA-4.10 · Proves a kill switch actually denies, through the real HTTP stack.
 //
 // Run with: npm run verify:switches   (the dev server must be running)

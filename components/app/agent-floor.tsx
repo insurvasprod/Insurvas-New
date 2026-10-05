@@ -15,6 +15,7 @@ import { TableCard } from "@/components/ui/table-card";
 import { Callout, Pill, st, type PillTone } from "@/components/app/settings/primitives";
 import { productLineLabel } from "@/lib/format/productLine";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { languageKey, languageName, releaseConfirmation } from "@/lib/transferInbox/constants";
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 import { clockTime as zonedClock, dayMonth, dayMonthYear, viewerTimeZone, zonedParts } from "@/lib/format/dates";
@@ -165,18 +166,12 @@ function clockTime(value: string, now: number) {
 
 /* ── languages: a lead's and an agent's are both free text ("Spanish", "es") ── */
 
-const LANGUAGE_CODES: Record<string, string> = { es: "spanish", en: "english", fr: "french", pt: "portuguese", zh: "chinese", vi: "vietnamese", ko: "korean", tl: "tagalog", ar: "arabic", ru: "russian", ht: "haitian creole" };
-function languageKey(value: string) {
-  const lower = value.trim().toLowerCase();
-  return LANGUAGE_CODES[lower] ?? lower;
-}
-function languageName(value: string) {
-  const key = languageKey(value);
-  return key ? key[0].toUpperCase() + key.slice(1) : value;
-}
+// languageKey / languageName are the one reading the claim uses (lib/transferInbox/constants.ts,
+// public.language_key): "es", "es-MX" and "Spanish" are the same language here and in the database.
 /** English needs no pairing; any other recorded language asks who on the floor speaks it. */
 function needsPairing(language: string | null | undefined) {
-  return Boolean(language && language.trim() && languageKey(language) !== "english");
+  const key = languageKey(language);
+  return Boolean(key && key !== "english");
 }
 
 /* ── the queue's judgement calls (unchanged rules) ─────────────────────── */
@@ -701,7 +696,8 @@ export function AgentFloor({ currentUserId, readOnly, role }: { currentUserId: s
   }
 
   async function release(call: Call, action: "unassign" | "end_buffer", acknowledgeLanguage = false) {
-    if (action === "unassign" && !window.confirm(`Give ${call.customer} back to the queue? Nobody will own the transfer until someone claims it. The verification so far is kept for them.`)) return;
+    // Both acts ask first (LA-1.14-9); the language cover prompt below is a second, separate question.
+    if (!acknowledgeLanguage && !window.confirm(releaseConfirmation(action, { customer: call.customer, bufferName: call.buffer?.name, agentName: call.agentName }))) return;
     setSaving(`${action}:${call.id}`);
     const response = await fetch("/api/app/inbound/release", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, work_item_id: call.id, ...(acknowledgeLanguage ? { acknowledge_language: true } : {}) }) });
     const body = await response.json().catch(() => null);

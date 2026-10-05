@@ -33,8 +33,10 @@ export type StateRule = {
   window?: CallingWindow;
   /** Some states forbid solicitation calls on Sundays. */
   noSunday?: boolean;
-  /** And some on state holidays. */
+  /** And some on holidays: the state's own and the federal calendar (20260929201000). */
   noHolidays?: boolean;
+  /** A statute with its own Sunday hours ("noon to 9pm on Sunday"). Absent = the weekday window. */
+  sundayWindow?: CallingWindow;
 };
 
 export type DialRefusal =
@@ -169,7 +171,7 @@ export function canDialNow(input: CanDialInput): DialDecision {
 
   // Federal first, then each tightening. Order does not matter — narrow() is commutative — but it
   // reads in the order the statute stack does.
-  let window = narrow(FEDERAL_WINDOW, rule?.window);
+  let window = narrow(FEDERAL_WINDOW, weekday === 0 && rule?.sundayWindow ? rule.sundayWindow : rule?.window);
   window = narrow(window, input.tenantWindow);
   window = narrow(window, input.campaignWindow);
 
@@ -211,11 +213,25 @@ export function canDialNow(input: CanDialInput): DialDecision {
 
 export type StateRuleInForce = {
   state: string;
+  /** Whole hours, rounded inward, for readers that only know hours. */
   startHour: number;
   endHour: number;
   noSunday: boolean;
+  /** The state's own holidays and the federal calendar both refuse the dial (20260929201000). */
   noHolidays: boolean;
+  /** Minute precision and the Sunday window (20260929201000). Absent before it is applied. */
+  startMinute?: number | null;
+  endMinute?: number | null;
+  sundayStartMinute?: number | null;
+  sundayEndMinute?: number | null;
 };
+
+/** A state rule's window in minutes: its own minutes when known, else its hours. */
+export function stateRuleMinutes(rule: StateRuleInForce, weekday?: number): MinuteWindow {
+  if (weekday === 0 && rule.sundayStartMinute != null && rule.sundayEndMinute != null)
+    return { start: rule.sundayStartMinute, end: rule.sundayEndMinute };
+  return { start: rule.startMinute ?? rule.startHour * 60, end: rule.endMinute ?? rule.endHour * 60 };
+}
 
 export type CallingWindowSettings = {
   federal: CallingWindow;
@@ -227,6 +243,8 @@ export type CallingWindowSettings = {
   stateRules: StateRuleInForce[];
   /** False when the rules function is not present on this deployment. */
   stateRulesAvailable: boolean;
+  /** True once 20260929201000 is live: a state rule that bars holidays bars the federal ones too. */
+  stateCheckReadsFederalHolidays?: boolean;
   /** The agency's three switches (20260924121000); defaults until that is applied. */
   options: CallingWindowOptions;
   /** False until 20260924121000 is applied: minutes, switches and reasons cannot be saved yet. */
@@ -365,8 +383,9 @@ export function effectiveMinutes(
 ): MinuteWindow {
   let { start, end } = FEDERAL_MINUTES;
   if (stateRule) {
-    start = Math.max(start, stateRule.startHour * 60);
-    end = Math.min(end, stateRule.endHour * 60);
+    const own = stateRuleMinutes(stateRule);
+    start = Math.max(start, own.start);
+    end = Math.min(end, own.end);
   }
   if (tenant) {
     start = Math.max(start, tenant.start);

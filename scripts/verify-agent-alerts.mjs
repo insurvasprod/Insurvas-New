@@ -1,3 +1,4 @@
+import "./lib/refuseProduction.mjs";
 // LA-1.25 live acceptance and failure-path checks. Creates only disposable tenants and removes them.
 //
 // The previous version of this suite did two things worth calling out, because both are why it
@@ -16,6 +17,7 @@ import { SignJWT } from "jose";
 import { createClient } from "@supabase/supabase-js";
 import { createFixtureUser, deleteFixtureUser, deleteLa1FixtureTenant } from "./lib/fixtureUser.mjs";
 import { coalesceAlertBatch } from "../lib/agentAlerts/presentation.ts";
+import { AUDIBLE, AUDIBLE_BY_DEFAULT, MIN_GAP_MS, decideSound } from "../lib/notify/sound.ts";
 
 const BASE = process.env.APP_BASE_URL ?? process.env.APP_URL ?? "http://localhost:3000";
 const db = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
@@ -34,6 +36,8 @@ async function api(path, session, options = {}) {
 async function cleanup() {
   await db.from("agent_notifications").delete().eq("tenant_id", tenantId);
   await db.from("agent_notification_settings").delete().eq("tenant_id", tenantId);
+  await db.from("lead_queue").delete().eq("tenant_id", tenantId);
+  await db.from("agent_leads").delete().eq("tenant_id", tenantId);
   await db.from("tenant_users").delete().eq("tenant_id", tenantId);
   await deleteLa1FixtureTenant(db, tenantId);
   if (agentId) await deleteFixtureUser(db, agentId);
@@ -51,10 +55,22 @@ async function main() {
     const session = await cookie(agentId);
 
     // Two alerts of different types, so a filter that removes everything is distinguishable from one
-    // that removes the right thing.
+    // that removes the right thing. Both are workspace alerts, which stay only while their lead is
+    // unclaimed in the queue (lib/agentAlerts/presentation.ts partitionAlertRows) -- one pointing at
+    // a lead with no queue row is "resolved" and retired on the first read. So each links to a real
+    // lead with an unclaimed queue item.
+    const pipeline = await db.from("tenant_pipelines").select("id").eq("tenant_id", tenantId).eq("partner_type", "publisher").eq("is_default", true).single();
+    const stage = pipeline.data ? await db.from("tenant_pipeline_stages").select("id").eq("pipeline_id", pipeline.data.id).eq("is_archived", false).order("position").limit(1).single() : { data: null, error: new Error("no default pipeline") };
+    const template = await db.from("templates").select("id").eq("product_code", "term_life").eq("is_active", true).limit(1).single();
+    if (pipeline.error || stage.error || template.error) throw new Error(pipeline.error?.message ?? stage.error?.message ?? template.error?.message ?? "Fixture dependency missing");
+    const [leadAlertLead, escalationLead] = [randomUUID(), randomUUID()];
+    const leads = await db.from("agent_leads").insert([leadAlertLead, escalationLead].map((id, index) => ({ id, tenant_id: tenantId, template_id: template.data.id, template_version: 1, product_line: "term_life", pipeline_id: pipeline.data.id, stage_id: stage.data.id, values: { full_name: `Alert Prospect ${index + 1}`, age: 70, state: "AZ" }, created_by: agentId, submission_id: randomUUID() })));
+    if (leads.error) throw new Error(leads.error.message);
+    const queued = await db.from("lead_queue").insert([leadAlertLead, escalationLead].map((leadId) => ({ id: randomUUID(), tenant_id: tenantId, lead_id: leadId, product_line: "term_life", pipeline_id: pipeline.data.id, stage_id: stage.data.id })));
+    if (queued.error) throw new Error(queued.error.message);
     const seed = await db.from("agent_notifications").insert([
-      { tenant_id: tenantId, recipient_user_id: agentId, kind: "new_unclaimed_lead", title: "New transfer waiting", body: "Apex Call Center", link: `/app/leads/${randomUUID()}`, source_key: `la125-lead:${stamp}` },
-      { tenant_id: tenantId, recipient_user_id: agentId, kind: "unclaimed_sla_escalation", title: "Nobody has taken this transfer", body: "2 minutes unclaimed", link: `/app/leads/${randomUUID()}`, source_key: `la125-escalation:${stamp}` },
+      { tenant_id: tenantId, recipient_user_id: agentId, kind: "new_unclaimed_lead", title: "New transfer waiting", body: "Apex Call Center", link: `/app/leads/${leadAlertLead}`, source_key: `la125-lead:${stamp}` },
+      { tenant_id: tenantId, recipient_user_id: agentId, kind: "unclaimed_sla_escalation", title: "Nobody has taken this transfer", body: "2 minutes unclaimed", link: `/app/leads/${escalationLead}`, source_key: `la125-escalation:${stamp}` },
     ]);
     if (seed.error) throw new Error(seed.error.message);
 
@@ -104,20 +120,27 @@ async function main() {
     // The delivery logic lives in the shared feed hook; the agent plane's surface for it is the top
     // bar. These were one component until the hook was extracted, which is why both are read here.
     const feed = await readFile("lib/agentAlerts/useAgentAlertFeed.ts", "utf8");
-    const centre = await readFile("components/app/app-top-bar.tsx", "utf8");
+    // The browser-alert controls live in the preferences panel the top bar opens.
+    const centre = await readFile("components/app/agent-alert-preferences.tsx", "utf8");
     // Count inside the delivery function only. The hook legitimately calls playAlertSound from
     // two other places -- its own definition, and the "test sound" button in settings -- so a count
     // across the whole file measures nothing. What matters is that the one code path which runs when
     // alerts arrive calls it once, outside the per-alert loop.
     const deliverStart = feed.indexOf("const deliver = useCallback(");
     const deliverBody = deliverStart < 0 ? "" : feed.slice(deliverStart, feed.indexOf("}, []);", deliverStart));
-    const soundInDelivery = (deliverBody.match(/playAlertSound\(/g) ?? []).length;
-    // lastIndexOf, not indexOf: deliver() has two fresh.forEach calls and the first is the seen-set
-    // bookkeeping that runs BEFORE the sound. Anchoring on it made the sound look like it was inside
-    // the loop when it is not -- a false positive that would have read as a real defect.
-    const loopStart = deliverBody.lastIndexOf("fresh.forEach(");
-    const soundInsideLoop = loopStart >= 0 && deliverBody.slice(loopStart).includes("playAlertSound(");
-    check("the sound is played once per batch, not once per alert", Boolean(deliverBody) && soundInDelivery === 1 && !soundInsideLoop && /if \(batch\.playSound\) playAlertSound\(/.test(deliverBody), JSON.stringify({ callsInDelivery: soundInDelivery, insidePerAlertLoop: soundInsideLoop }));
+    // The sound moved out of deliver() into the notification layer: each fresh alert is one
+    // `notify.arrive` toast, and lib/notify/sound.ts decides the sound -- one per MIN_GAP_MS at most.
+    // So "one sound per batch" is now: deliver() plays nothing itself (a second, legacy player would
+    // give one alert two sounds), every alert goes through `arrive`, and the one sound policy turns a
+    // same-instant burst of ten `arrive`s into exactly one "play".
+    const directSoundCalls = (deliverBody.match(/playAlertSound\(|playFor\(|new Audio\(/g) ?? []).length;
+    const arriveInLoop = /fresh\.forEach\(\(alert\) => \{\s*notify\.arrive\(/.test(deliverBody);
+    let lastPlayedAt = -Infinity; const burstAt = 1_000_000; let plays = 0;
+    for (let index = 0; index < 10; index += 1) {
+      const decision = decideSound("arrive", { primed: true, callOpen: false, muted: false, enabled: true, volume: 70, msSinceLast: burstAt - lastPlayedAt });
+      if (decision === "play") { plays += 1; lastPlayedAt = burstAt; }
+    }
+    check("the sound is played once per batch, not once per alert", Boolean(deliverBody) && directSoundCalls === 0 && arriveInLoop && AUDIBLE.includes("arrive") && plays === 1 && MIN_GAP_MS >= 1000, JSON.stringify({ directSoundCalls, arriveInLoop, playsForTenAtOnce: plays, MIN_GAP_MS }));
 
     // Criterion 3: "denied browser permission degrades to toast plus sound, and offers a clear way to
     // re-enable". The degradation is a matter of ordering in the delivery loop, and it is the kind of
@@ -129,7 +152,8 @@ async function main() {
     const dndReturnAt = deliverBody.indexOf("do_not_disturb || typeof Notification");
     check("a denied browser permission still leaves the toast", toastAt > 0 && permissionGuardAt > toastAt && dndReturnAt > toastAt, JSON.stringify({ toastAt, permissionGuardAt, dndReturnAt }));
     // ...and the sound is decided before any of that, so it survives a denial too.
-    check("a denied browser permission still leaves the sound", deliverBody.indexOf("playAlertSound(") < permissionGuardAt && !/Notification\.permission[^\r\n]*playAlertSound/.test(deliverBody));
+    // The sound rides on the `arrive` toast, so the toast ordering above is also the sound's.
+    check("a denied browser permission still leaves the sound", toastAt > 0 && toastAt < permissionGuardAt && AUDIBLE_BY_DEFAULT.includes("arrive"), JSON.stringify({ toastAt, permissionGuardAt }));
     // ...and there is a way back. The settings panel offers the permission request explicitly rather
     // than relying on the browser ever asking again, which it will not once denied.
     check("the settings panel offers a way to re-enable browser alerts", /requestBrowserAlerts\(\)/.test(centre) && /Notification\.requestPermission\(\)/.test(feed));

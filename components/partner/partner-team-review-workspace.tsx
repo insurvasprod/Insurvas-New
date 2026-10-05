@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import { ArrowRight, Download, X } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
+import { StatusChip } from "@/components/ui/status-chip";
 import { Button } from "@/components/ui/button";
 import { RefreshButton, toolbarControl } from "@/components/ui/data-toolbar";
 import { PageHeader } from "@/components/ui/page-header";
@@ -44,7 +44,7 @@ function SelectedTeammateDrawer({ selected, leads, onClose }: { selected: Select
     <div className="portal-team-review-detail-header justify-end"><button type="button" className="portal-team-review-detail-close" aria-label="Close teammate details" onClick={onClose}><X className="size-5" aria-hidden="true" /></button></div>
     <div className="portal-team-review-detail-person"><span>{initials(selected.user.name)}</span><div><h2>{selected.user.name}</h2><p>{selected.user.role === "partner_admin" ? "Partner admin" : "Partner user"}</p></div></div>
     <dl><div><dt>Leads this period</dt><dd>{selected.stats.submitted}</dd></div><div><dt>Application rate</dt><dd>{selected.stats.submitted ? `${((selected.stats.applications / selected.stats.submitted) * 100).toFixed(1)}%` : "—"}</dd></div><div><dt>In progress</dt><dd>{selected.stats.progress}</dd></div></dl>
-    <div className="portal-team-review-detail-leads"><div className="portal-team-review-detail-leads-heading"><strong>Submitted leads</strong><span>{leads.length} total</span></div>{leads.length ? leads.map((lead) => <article className="portal-team-review-detail-lead" key={lead.id}><div className="portal-team-review-detail-lead-heading"><div><strong>{lead.customer}</strong><span>{lead.product}</span></div><Badge variant="secondary">{lead.stageName || lead.status || "Submitted"}</Badge></div><dl><div><dt>Outcome</dt><dd>{lead.outcome ?? lead.disposition ?? "Awaiting update"}</dd></div><div><dt>Submitted</dt><dd>{formatDate(lead.submittedAt)}</dd></div><div><dt>Last update</dt><dd>{formatDate(lead.updatedAt)}</dd></div></dl>{lead.outcomeNote && <p className="portal-team-review-detail-lead-note">{lead.outcomeNote}</p>}</article>) : <p className="portal-team-review-detail-empty">No leads submitted in this period.</p>}</div>
+    <div className="portal-team-review-detail-leads"><div className="portal-team-review-detail-leads-heading"><strong>Submitted leads</strong><span>{leads.length} total</span></div>{leads.length ? leads.map((lead) => <article className="portal-team-review-detail-lead" key={lead.id}><div className="portal-team-review-detail-lead-heading"><div><strong>{lead.customer}</strong><span>{lead.product}</span></div><StatusChip>{lead.stageName || lead.status || "Submitted"}</StatusChip></div><dl><div><dt>Outcome</dt><dd>{lead.outcome ?? lead.disposition ?? "Awaiting update"}</dd></div><div><dt>Submitted</dt><dd>{formatDate(lead.submittedAt)}</dd></div><div><dt>Last update</dt><dd>{formatDate(lead.updatedAt)}</dd></div></dl>{lead.outcomeNote && <p className="portal-team-review-detail-lead-note">{lead.outcomeNote}</p>}</article>) : <p className="portal-team-review-detail-empty">No leads submitted in this period.</p>}</div>
     <Link href={`/partner/pipeline?closer_id=${selected.user.user_id}`} className="portal-team-review-detail-link">View partner pipeline <ArrowRight className="size-4" aria-hidden="true" /></Link>
   </aside>;
 }

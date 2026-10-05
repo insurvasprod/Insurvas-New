@@ -1,3 +1,4 @@
+import "./lib/refuseProduction.mjs";
 // bugs_sa.md M2-3 · Add-on meter credits must reach ENFORCEMENT, not just the entitlement blob.
 //
 // resolve_tenant_entitlement always stacked plan and add-on credits. check_meter_capacity — the

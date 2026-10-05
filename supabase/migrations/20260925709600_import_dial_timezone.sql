@@ -21,8 +21,14 @@ alter table public.agent_leads drop constraint if exists agent_leads_dial_timezo
 alter table public.agent_leads add constraint agent_leads_dial_timezone_check
   check (dial_timezone is null or dial_timezone ~ '^(America|Pacific)/[A-Za-z_]+(/[A-Za-z_]+)?$');
 
-comment on column public.agent_leads.dial_timezone is
-  'IANA zone the dialer uses instead of the state''s: set at import from a split-zone ZIP (FL panhandle, middle/west TN). Null = use the state''s zone. Cleared when state, zip, postal_code or timezone in values changes.';
+-- Commented from a DO block so the checker, whose role cannot add the column, skips it instead
+-- of failing on a column that does not exist for it.
+do $$
+begin
+  if exists (select 1 from pg_attribute where attrelid = 'public.agent_leads'::regclass and attname = 'dial_timezone' and not attisdropped) then
+    execute format('comment on column public.agent_leads.dial_timezone is %L', 'IANA zone the dialer uses instead of the state''s: set at import from a split-zone ZIP (FL panhandle, middle/west TN). Null = use the state''s zone. Cleared when state, zip, postal_code or timezone in values changes.');
+  end if;
+end $$;
 
 create or replace function public.agent_leads_clear_stale_dial_timezone()
 returns trigger

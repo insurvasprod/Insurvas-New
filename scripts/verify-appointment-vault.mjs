@@ -1,3 +1,4 @@
+import "./lib/refuseProduction.mjs";
 // LA-0.5 live contract checks. Run with: npm run verify:appointment-vault
 import { randomUUID } from "node:crypto";
 import { SignJWT } from "jose";

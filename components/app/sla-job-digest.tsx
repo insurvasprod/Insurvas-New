@@ -1,136 +1,99 @@
-import { CircleCheck, TriangleAlert } from "lucide-react";
+import { Fragment } from "react";
 
+import { PageRefreshButton } from "@/components/app/alert-centre";
+import { Callout } from "@/components/app/settings/primitives";
 import { EmptyState } from "@/components/ui/page-states";
+import { StatStrip, StatTile } from "@/components/ui/stat";
 import { TableCard } from "@/components/ui/table-card";
 import { agoLabel } from "@/lib/format/ago";
 import { weekdayDayMonth } from "@/lib/format/dates";
 import type { SlaDigestDay, SlaJobStatus } from "@/lib/queueSla/digest";
+import { SLA_PENDING_LINE, slaJobWords } from "@/lib/queueSla/digestView";
 
 /**
- * The alert centre's two unclaimed-SLA cards (LA-1.23-6, LA-1.23-7), below the alert lists:
+ * The alert centre's unclaimed-SLA parts (LA-1.23-6, LA-1.23-7), read from what the pg_cron job
+ * writes every minute (20260925709910):
  *
- *   The SLA job     whether the job that sends the escalation alerts, the partner's notice and the
- *                   nurture move is running, and what it did for this workspace in the last day. A
- *                   failing or stopped job is drawn as an alert, because it is one.
- *   Daily digest    escalated and expired transfers by partner, one day per block, in the agency's
- *                   own timezone. Today's block fills as the day goes.
+ *   SlaJobStrip     the page's one stat strip: whether the job runs, and what it did for this
+ *                   workspace in the last 24 hours. A failing or stopped job adds one alert line.
+ *   SlaDigestCard   escalated and expired transfers by partner, one day at a time, in the agency's
+ *                   own timezone. Today's rows fill as the day goes.
  *
- * Server-rendered from what the database job writes every minute (20260925709910).
+ * Until that migration is applied both say so in one line.
  */
 
-const PENDING = "This needs a database update that has not been applied yet.";
-
-function jobHeadline(status: SlaJobStatus, nowMs: number): { tone: "ok" | "alert"; title: string; detail: string } {
-  const ago = status.lastRunAt ? agoLabel(Date.parse(status.lastRunAt), nowMs) : null;
-  switch (status.state) {
-    case "ok":
-      return { tone: "ok", title: "Running every minute", detail: `Last run ${ago}.` };
-    case "failing":
-      return {
-        tone: "alert",
-        title: "The SLA job is failing",
-        detail: `${status.lastError ?? status.lastDay.latestError ?? "A side effect could not be delivered."} Failed items are tried again every minute. Last run ${ago}.`,
-      };
-    case "stale":
-      return { tone: "alert", title: "The SLA job has stopped", detail: `Last run ${ago}. Escalation alerts, partner notices and expiries are not being sent.` };
-    case "never_run":
-      return { tone: "alert", title: "The SLA job has not run yet", detail: "Escalation alerts, partner notices and expiries are sent once it runs." };
-    default:
-      return { tone: "alert", title: "The SLA job is not set up yet", detail: PENDING };
-  }
-}
-
-function Figure({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="flex min-w-[8rem] flex-col gap-0.5">
-      <span className="text-xs text-[var(--muted)]">{label}</span>
-      <span className="text-sm font-semibold tabular-nums text-[var(--ink)]">{value.toLocaleString()}</span>
-    </div>
-  );
-}
-
-export function SlaJobCard({ status, nowMs }: { status: SlaJobStatus; nowMs: number }) {
-  const head = jobHeadline(status, nowMs);
+export function SlaJobStrip({ status, nowMs }: { status: SlaJobStatus; nowMs: number }) {
+  if (!status.ready) return <p className="m-0 text-sm text-[var(--muted)]">{SLA_PENDING_LINE}</p>;
+  const words = slaJobWords(status.state);
   const day = status.lastDay;
+  const ago = status.lastRunAt ? agoLabel(Date.parse(status.lastRunAt), nowMs) : null;
+  const failing = day.retrying + day.gaveUp;
+  const alert = words.alert
+    ? [words.alert, status.state === "failing" ? status.lastError : null, ago ? `Last run ${ago}.` : null].filter(Boolean).join(" ")
+    : null;
   return (
-    <TableCard title="Unclaimed SLA job" action={<span className="text-xs text-[var(--muted)]">Last 24 hours</span>}>
-      {head.tone === "alert" ? (
-        <div className="portal-top-alert border-t border-[var(--border)]" data-severity="critical" role="alert">
-          <TriangleAlert className="size-4 shrink-0" aria-hidden="true" />
-          <span className="min-w-0 flex-1">
-            <span className="portal-top-alert-title">{head.title}</span>
-            <span className="portal-top-alert-body">{head.detail}</span>
-          </span>
-        </div>
-      ) : (
-        <div className="flex gap-2.5 border-t border-[var(--border)] px-4 py-3">
-          <CircleCheck className="mt-0.5 size-4 shrink-0 text-[var(--success)]" aria-hidden="true" />
-          <span className="min-w-0 flex-1">
-            <span className="block text-sm font-semibold text-[var(--ink)]">{head.title}</span>
-            <span className="mt-0.5 block text-xs text-[var(--body)]">{head.detail}</span>
-          </span>
-        </div>
-      )}
-      {status.ready && (
-        <div className="flex flex-wrap gap-x-6 gap-y-3 border-t border-[var(--border)] px-4 py-3">
-          <Figure label="Escalations alerted" value={day.escalationsAlerted} />
-          <Figure label="Partner notices" value={day.partnerNotices} />
-          <Figure label="Nobody-claimed alerts" value={day.nobodyClaimedAlerts} />
-          <Figure label="Moved to nurture" value={day.nurtured} />
-          <Figure label="Escalation emails sent" value={day.emailsSent} />
-          <Figure label="Emails waiting to send" value={day.emailsOwed} />
-          <Figure label="Recorded, not sent" value={day.skipped} />
-          <Figure label="Failing" value={day.retrying + day.gaveUp} />
-        </div>
-      )}
-    </TableCard>
+    <>
+      {alert && <Callout tone="error" title={alert} />}
+      <StatStrip label="Unclaimed SLA job, last 24 hours">
+        <StatTile label="SLA job" value={words.label} valueSize="text" valueTone={status.state === "ok" ? "good" : "danger"} footnote={ago ? `Last run ${ago}` : "No run recorded"} />
+        <StatTile label="Escalations alerted" value={day.escalationsAlerted.toLocaleString()} footnote={`${day.emailsSent.toLocaleString()} emailed · ${day.emailsOwed.toLocaleString()} waiting`} />
+        <StatTile label="Partner notices" value={day.partnerNotices.toLocaleString()} footnote={`${day.nobodyClaimedAlerts.toLocaleString()} nobody-claimed alerts`} />
+        <StatTile label="Moved to nurture" value={day.nurtured.toLocaleString()} reserveFootnote />
+        <StatTile label="Not sent" value={day.skipped.toLocaleString()} footnote="Day-old or already claimed" />
+        <StatTile label="Failing" value={failing.toLocaleString()} valueTone={failing > 0 ? "danger" : undefined} footnote={failing > 0 ? "Retried every minute" : undefined} reserveFootnote />
+      </StatStrip>
+    </>
   );
 }
 
 export function SlaDigestCard({ ready, days }: { ready: boolean; days: SlaDigestDay[] }) {
+  const zones = [...new Set(days.map((day) => day.timezone))].join(", ");
   return (
     <TableCard
       title="Daily digest"
-      action={<span className="text-xs text-[var(--muted)]">Escalated and expired, by partner</span>}
-      footer={ready && days.length > 0 ? <span>Days run midnight to midnight, {[...new Set(days.map((day) => day.timezone))].join(", ")}.</span> : undefined}
+      action={ready ? <PageRefreshButton /> : undefined}
+      footer={ready && days.length > 0 ? <span>Escalated and expired transfers by partner. Days run midnight to midnight, {zones}.</span> : undefined}
     >
       {!ready ? (
-        <EmptyState title="The daily digest is not set up yet" hint={PENDING} />
+        <p className="m-0 border-t border-[var(--border)] px-4 py-3 text-sm text-[var(--muted)]">{SLA_PENDING_LINE}</p>
       ) : days.length === 0 ? (
         <EmptyState title="Nothing escalated or expired this week" hint="Each day's escalated and expired transfers are counted here by partner." />
       ) : (
-        <ul className="border-t border-[var(--border)]">
-          {days.map((day) => (
-            <li key={day.date} className="border-b border-[var(--border)] px-4 py-3 last:border-b-0">
-              <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <span className="text-sm font-semibold text-[var(--ink)]">
-                  {day.today ? `Today so far · ${weekdayDayMonth(day.date)}` : weekdayDayMonth(day.date)}
-                </span>
-                <span className="text-xs text-[var(--body)] tabular-nums">
-                  {day.escalated.toLocaleString()} escalated · {day.expired.toLocaleString()} expired
-                </span>
-              </div>
-              <table className="mt-2 w-full text-xs">
-                <thead>
-                  <tr className="text-left text-[var(--muted)]">
-                    <th scope="col" className="py-1 font-medium">Partner</th>
-                    <th scope="col" className="w-24 py-1 text-right font-medium">Escalated</th>
-                    <th scope="col" className="w-24 py-1 text-right font-medium">Expired</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {day.partners.map((partner) => (
-                    <tr key={partner.partnerId ?? partner.partnerName} className="border-t border-[var(--border)] text-[var(--body)]">
-                      <td className="py-1.5">{partner.partnerName}</td>
-                      <td className="py-1.5 text-right tabular-nums">{partner.escalated.toLocaleString()}</td>
-                      <td className="py-1.5 text-right tabular-nums">{partner.expired.toLocaleString()}</td>
+        <table className="portal-lead-table w-full">
+          <thead>
+            <tr>
+              <th scope="col">Day</th>
+              <th scope="col">Partner</th>
+              <th scope="col" className="text-right">Escalated</th>
+              <th scope="col" className="text-right">Expired</th>
+            </tr>
+          </thead>
+          <tbody>
+            {days.map((day) => {
+              const label = day.today ? `Today so far · ${weekdayDayMonth(day.date)}` : weekdayDayMonth(day.date);
+              const partners = day.partners.length ? day.partners : [{ partnerId: null, partnerName: "No transfers", escalated: 0, expired: 0 }];
+              return (
+                <Fragment key={day.date}>
+                  {partners.map((partner, index) => (
+                    <tr key={`${day.date}:${partner.partnerId ?? partner.partnerName}`}>
+                      {index === 0 && (
+                        <td rowSpan={partners.length} className="align-top font-semibold text-[var(--ink)]">
+                          {label}
+                          <span className="block text-xs font-normal text-[var(--muted)] tabular-nums">
+                            {day.escalated.toLocaleString()} escalated · {day.expired.toLocaleString()} expired
+                          </span>
+                        </td>
+                      )}
+                      <td>{partner.partnerName}</td>
+                      <td className="text-right tabular-nums">{partner.escalated.toLocaleString()}</td>
+                      <td className="text-right tabular-nums">{partner.expired.toLocaleString()}</td>
                     </tr>
                   ))}
-                </tbody>
-              </table>
-            </li>
-          ))}
-        </ul>
+                </Fragment>
+              );
+            })}
+          </tbody>
+        </table>
       )}
     </TableCard>
   );

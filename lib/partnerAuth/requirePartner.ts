@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
+import { holdsAgencyMembership } from "@/lib/auth/planeSeparation";
 import { PARTNER_SESSION_COOKIE, verifyPartnerSessionToken, type PartnerSessionPayload } from "./session";
 import { isPartnerRole, type PartnerRole } from "./roles";
 import { isTenantSuspended } from "@/lib/tenants/suspension";
@@ -38,7 +39,9 @@ const readPartnerContext = cache(async (): Promise<PartnerContext | null> => {
   const supabase = getSupabaseServiceClient();
   // The agency's state rides along in the same round trip: a partner works inside one agency's
   // workspace, so a suspended agency closes the partner portal too (decision 4).
-  const [{ data: membership }, { data: tenant }] = await Promise.all([
+  // An agency account never opens the partner portal, whatever partner_users says
+  // (lib/auth/planeSeparation.ts) — read in the same round trip.
+  const [{ data: membership }, { data: tenant }, isAgencyAccount] = await Promise.all([
     supabase
       .from("partner_users")
       .select("tenant_id, partner_id, role, status, accepted_at, users!partner_users_user_id_fkey!inner(status, session_version), partners!inner(name, status, timezone)")
@@ -47,7 +50,9 @@ const readPartnerContext = cache(async (): Promise<PartnerContext | null> => {
       .eq("user_id", session.sub)
       .maybeSingle(),
     supabase.from("tenants").select("status").eq("id", session.tenantId).maybeSingle<{ status: string }>(),
+    holdsAgencyMembership(session.sub),
   ]);
+  if (isAgencyAccount) return null;
   if (!tenant || isTenantSuspended(tenant.status)) return null;
 
   type PartnerMembershipRow = {

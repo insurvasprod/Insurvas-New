@@ -53,7 +53,7 @@ async function timeRoute(label, method, path, cookie, { warm = 2, n = 5, body, c
   return result;
 }
 
-export async function measure({ db, ID, EMAIL, COUNTS, uid, setTransfers, only, out }) {
+export async function measure({ db, ID, EMAIL, uid, setTransfers, only, out }) {
   const want = (key) => !only || only.split(",").includes(key);
   const results = { at: new Date().toISOString(), tenant: ID.load, emptyTenant: ID.empty, lines: {} };
   const owner = mint("tenant", EMAIL.owner);

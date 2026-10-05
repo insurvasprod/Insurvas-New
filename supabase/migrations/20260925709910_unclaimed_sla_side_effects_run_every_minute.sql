@@ -8,7 +8,7 @@
 -- nothing hosts the app job. User decision (2026-09-25): run them from pg_cron every minute, and
 -- keep only the email with the app.
 --
---   run_unclaimed_sla_side_effects(now, limit)  jsonb, what it did
+--   run_unclaimed_sla_side_effects(now, limit, source)  jsonb, what it did
 --     1. advances the ladder (run_unclaimed_sla, idempotent) so a rung and what it causes land in
 --        the same minute. The ladder's own job keeps running too, and the two skip each other's rows.
 --     2. takes each unprocessed tenant_lead_sla_events row (not leased by the app in the last ten
@@ -33,13 +33,22 @@
 --        again next minute, and after five failures it is given up (gave_up_after_failures).
 --     3. refreshes the daily digest (tenant_sla_daily_digests): escalated and expired per partner,
 --        per day in the agency's own timezone, today so far and yesterday closed. /app/alerts shows it.
---     4. writes one heartbeat row (unclaimed_sla_job_runs) with the report, ok or not. A run that
---        fails as a whole still writes its row, with the error. /app/alerts and the app's heartbeat
---        read it. Rows older than seven days are trimmed on each run.
+--     4. writes one heartbeat row (unclaimed_sla_job_runs) with the report, ok or not, when pg_cron
+--        ran it (source 'database', the default). A run that fails as a whole still writes its row,
+--        with the error. /app/alerts and the app's heartbeat read it, so "running" means pg_cron is
+--        running. The app job calls this with source 'app' and records its own row instead, so a
+--        manual `npm run sla:run` can never make a stopped schedule look alive. Rows older than
+--        seven days are trimmed on each run.
 --
 -- Every insert is keyed (agent_notifications on tenant + recipient + source_key, partner_messages on
 -- event_key, partner_notifications on tenant + recipient + source_key) and every event is marked
 -- processed in the same transaction, so a run repeated, overlapping or retried sends nothing twice.
+--
+-- Reviewed against the live catalog on 2026-09-29: none of the objects below existed, so nothing
+-- live is replaced. Their dependencies were read live and match: run_unclaimed_sla (20260924250100,
+-- quiet expiry), nurture_expired_transfer(uuid, uuid, boolean) (20260924230400), the unique keys on
+-- agent_notifications / partner_notifications (tenant_id, recipient_user_id, source_key) and
+-- partner_messages (event_key where not null), lead_queue UNIQUE(lead_id), pg_cron 1.6.4.
 --
 -- To stop it:   select cron.unschedule('unclaimed-sla-side-effects')
 -- ---------------------------------------------------------------------------
@@ -158,10 +167,12 @@ begin
          and not exists (select 1 from public.tenant_sla_daily_digests dd where dd.tenant_id = t.tenant_id and dd.digest_date = v_day) then
         continue;
       end if;
+      -- A day closes ten minutes after its midnight, so a rung the ladder's own job fired in the
+      -- day's last minute (committed after this read) is still counted in it.
       insert into public.tenant_sla_daily_digests
         (tenant_id, digest_date, timezone, escalated, expired, by_partner, closed, updated_at)
       values
-        (t.tenant_id, v_day, v_tz, v_escalated, v_expired, v_rows, p_now >= v_end, p_now)
+        (t.tenant_id, v_day, v_tz, v_escalated, v_expired, v_rows, p_now >= v_end + interval '10 minutes', p_now)
       on conflict (tenant_id, digest_date) do update
         set timezone = excluded.timezone, escalated = excluded.escalated, expired = excluded.expired,
             by_partner = excluded.by_partner, closed = excluded.closed, updated_at = excluded.updated_at;
@@ -176,7 +187,12 @@ revoke all on function public.refresh_unclaimed_sla_daily_digests(timestamptz) f
 grant execute on function public.refresh_unclaimed_sla_daily_digests(timestamptz) to service_role;
 
 -- ── the side effects ───────────────────────────────────────────────────────
-create or replace function public.run_unclaimed_sla_side_effects(p_now timestamptz default now(), p_limit integer default 500)
+-- An earlier draft had no source argument. It was never applied live, and dropping it keeps a re-run
+-- of this file from leaving two overloads.
+drop function if exists public.run_unclaimed_sla_side_effects(timestamptz, integer);
+
+create or replace function public.run_unclaimed_sla_side_effects(
+  p_now timestamptz default now(), p_limit integer default 500, p_source text default 'database')
 returns jsonb
 language plpgsql
 security definer
@@ -185,6 +201,8 @@ as $function$
 declare
   v_started timestamptz := clock_timestamp();
   v_limit integer := greatest(1, least(coalesce(p_limit, 500), 1000));
+  -- Only pg_cron's run is the heartbeat. The app records its own run (lib/queueSla/monitor.ts).
+  v_heartbeat boolean := coalesce(p_source, 'database') = 'database';
   v_fired integer := 0;
   v_ladder_error text;
   v_digest_error text;
@@ -222,6 +240,9 @@ declare
   v_report jsonb;
   v_ok boolean;
 begin
+  if coalesce(p_source, 'database') not in ('database', 'app') then
+    raise exception using errcode = '22023', message = 'INVALID_SOURCE';
+  end if;
   begin
     -- 1 · the ladder, so a rung fired this minute is acted on this minute
     begin
@@ -450,6 +471,7 @@ begin
     v_ok := v_failed = 0 and v_ladder_error is null and v_digest_error is null;
     v_report := jsonb_build_object(
       'ok', v_ok,
+      'source', coalesce(p_source, 'database'),
       'ladder', jsonb_build_object('fired', v_fired, 'error', v_ladder_error),
       'events', v_events,
       'sent', jsonb_build_object('ownerAlerts', v_owner_alerts, 'offered', v_offered, 'partnerNotices', v_partner_cards,
@@ -463,62 +485,94 @@ begin
       'byTenant', v_by_tenant);
 
     -- 4 · the heartbeat
-    insert into public.unclaimed_sla_job_runs (source, started_at, finished_at, ok, report, error)
-    values ('database', v_started, clock_timestamp(), v_ok, v_report,
-            left(coalesce(v_ladder_error, v_digest_error, v_failures->0->>'error'), 2000));
-    delete from public.unclaimed_sla_job_runs where started_at < p_now - interval '7 days';
+    if v_heartbeat then
+      insert into public.unclaimed_sla_job_runs (source, started_at, finished_at, ok, report, error)
+      values ('database', v_started, clock_timestamp(), v_ok, v_report,
+              left(coalesce(v_ladder_error, v_digest_error, v_failures->0->>'error'), 2000));
+      delete from public.unclaimed_sla_job_runs where started_at < p_now - interval '7 days';
+    end if;
     return v_report;
   exception when others then
     get stacked diagnostics v_err = message_text;
-    v_report := jsonb_build_object('ok', false, 'error', left(v_err, 1000));
-    insert into public.unclaimed_sla_job_runs (source, started_at, finished_at, ok, report, error)
-    values ('database', v_started, clock_timestamp(), false, v_report, left(v_err, 2000));
+    v_report := jsonb_build_object('ok', false, 'source', coalesce(p_source, 'database'), 'error', left(v_err, 1000));
+    if v_heartbeat then
+      insert into public.unclaimed_sla_job_runs (source, started_at, finished_at, ok, report, error)
+      values ('database', v_started, clock_timestamp(), false, v_report, left(v_err, 2000));
+    end if;
     return v_report;
   end;
 end;
 $function$;
 
-revoke all on function public.run_unclaimed_sla_side_effects(timestamptz, integer) from public, anon, authenticated, tenant_app;
-grant execute on function public.run_unclaimed_sla_side_effects(timestamptz, integer) to service_role;
+revoke all on function public.run_unclaimed_sla_side_effects(timestamptz, integer, text) from public, anon, authenticated, tenant_app;
+grant execute on function public.run_unclaimed_sla_side_effects(timestamptz, integer, text) to service_role;
 
 -- ── the schedule ───────────────────────────────────────────────────────────
--- Scheduling under an existing job name replaces that job, so re-running is safe.
+-- cron.schedule under an existing job name (same user) replaces that job's schedule and command,
+-- so re-running this file leaves exactly one job of each name.
 do $$
 begin
-  if not exists (select 1 from pg_extension where extname = 'pg_cron') then
-    raise notice '20260925709910: pg_cron is not installed; the side-effect job is not scheduled';
+  if not has_schema_privilege(current_user, 'public', 'CREATE') then
+    raise notice '20260925709910: not scheduled, % cannot create in public', current_user;
     return;
   end if;
+  if not exists (select 1 from pg_extension where extname = 'pg_cron') then
+    raise exception '20260925709910: pg_cron is not installed; apply 20260924250100 first';
+  end if;
   perform cron.schedule('unclaimed-sla-side-effects', '* * * * *',
-    $cron$select public.run_unclaimed_sla_side_effects(now(), 500)$cron$);
+    $cron$select public.run_unclaimed_sla_side_effects(now(), 500, 'database')$cron$);
   perform cron.schedule('unclaimed-sla-side-effects-log-cleanup', '29 3 * * *',
     $cron$delete from cron.job_run_details
            where jobid in (select jobid from cron.job where jobname = 'unclaimed-sla-side-effects')
              and end_time < now() - interval '7 days'$cron$);
 end $$;
 
--- ── check: run it once on the real rows, plus one built transfer, and roll it all back ─────
+-- ── check: the objects, then one run on the real rows plus built events, all rolled back ─────
 do $$
 declare
   v_q public.lead_queue;
+  v_q2 public.lead_queue;
   v_channel uuid;
   v_esc uuid;
   v_par uuid;
   v_old uuid;
+  v_late uuid;
   v_report jsonb;
   v_owners integer;
+  v_owner_email boolean;
+  v_runs_before bigint;
   v_again jsonb;
   v_counts text;
   v_counts_again text;
+  v_err text;
 begin
   if not has_schema_privilege(current_user, 'public', 'CREATE') then
     raise notice '20260925709910: assertions skipped, % cannot create in public', current_user;
     return;
   end if;
 
-  if exists (select 1 from pg_extension where extname = 'pg_cron')
-     and not exists (select 1 from cron.job where jobname = 'unclaimed-sla-side-effects' and schedule = '* * * * *' and active) then
-    raise exception 'the unclaimed-SLA side-effect job is not scheduled';
+  -- the objects
+  if to_regprocedure('public.run_unclaimed_sla_side_effects(timestamptz, integer, text)') is null
+     or to_regprocedure('public.refresh_unclaimed_sla_daily_digests(timestamptz)') is null
+     or to_regclass('public.unclaimed_sla_job_runs') is null
+     or to_regclass('public.tenant_sla_daily_digests') is null then
+    raise exception '20260925709910 check failed: a function or table is missing';
+  end if;
+  if to_regprocedure('public.run_unclaimed_sla_side_effects(timestamptz, integer)') is not null then
+    raise exception '20260925709910 check failed: the two-argument draft of run_unclaimed_sla_side_effects is still there';
+  end if;
+  if exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+              where n.nspname = 'public' and p.proname in ('run_unclaimed_sla_side_effects', 'refresh_unclaimed_sla_daily_digests')
+                and (not p.prosecdef or not coalesce(p.proconfig::text like '%search_path=public, pg_catalog%', false))) then
+    raise exception '20260925709910 check failed: a function is not security definer with a pinned search_path';
+  end if;
+  if has_function_privilege('tenant_app', 'public.run_unclaimed_sla_side_effects(timestamptz, integer, text)', 'EXECUTE')
+     or has_function_privilege('tenant_app', 'public.refresh_unclaimed_sla_daily_digests(timestamptz)', 'EXECUTE') then
+    raise exception '20260925709910 check failed: tenant_app can execute a side-effect function';
+  end if;
+  if (select count(*) from cron.job where jobname = 'unclaimed-sla-side-effects' and schedule = '* * * * *' and active
+        and command like '%run_unclaimed_sla_side_effects(now(), 500, ''database'')%') <> 1 then
+    raise exception '20260925709910 check failed: the unclaimed-SLA side-effect job is not scheduled exactly once';
   end if;
 
   begin
@@ -539,12 +593,22 @@ begin
      order by q.queued_at desc
      limit 1;
     if v_q.id is null then raise exception 'SKIP no transfer to build the check on'; end if;
+    -- A second transfer that is no longer unclaimed: its late escalation must be recorded, not sent.
+    select q.* into v_q2
+      from public.lead_queue q
+     where q.partner_id is not null and q.id <> v_q.id
+       and q.status in ('completed', 'dropped', 'closed')
+     order by q.queued_at desc
+     limit 1;
+    if v_q2.id is null then raise exception 'SKIP no second transfer to build the check on'; end if;
 
-    select count(*) into v_owners from public.tenant_users tu join public.users u on u.id = tu.user_id
+    select count(*), bool_or(nullif(btrim(u.email), '') is not null) into v_owners, v_owner_email
+      from public.tenant_users tu join public.users u on u.id = tu.user_id
      where tu.tenant_id = v_q.tenant_id and tu.role::text = 'owner' and tu.accepted_at is not null and u.status::text = 'active';
 
-    delete from public.tenant_lead_sla_events where work_item_id = v_q.id;
-    delete from public.agent_notifications where tenant_id = v_q.tenant_id and source_key like 'unclaimed-sla:' || v_q.id::text || ':%';
+    delete from public.tenant_lead_sla_events where work_item_id in (v_q.id, v_q2.id);
+    delete from public.agent_notifications where tenant_id in (v_q.tenant_id, v_q2.tenant_id)
+       and (source_key like 'unclaimed-sla:' || v_q.id::text || ':%' or source_key like 'unclaimed-sla:' || v_q2.id::text || ':%');
     delete from public.partner_messages where event_key = 'unclaimed-sla:' || v_q.id::text || ':partner';
     update public.lead_queue
        set status = 'unclaimed', queued_at = now() - interval '6 minutes', claimed_by = null, claimed_at = null,
@@ -556,17 +620,34 @@ begin
     values (v_q.tenant_id, v_q.id, v_q.lead_id, v_q.partner_id, 'partner', now()) returning id into v_par;
     insert into public.tenant_lead_sla_events (tenant_id, work_item_id, lead_id, partner_id, rung, occurred_at)
     values (v_q.tenant_id, v_q.id, v_q.lead_id, v_q.partner_id, 'warn', now() - interval '25 hours') returning id into v_old;
+    insert into public.tenant_lead_sla_events (tenant_id, work_item_id, lead_id, partner_id, rung, occurred_at)
+    values (v_q2.tenant_id, v_q2.id, v_q2.lead_id, v_q2.partner_id, 'escalate', now()) returning id into v_late;
 
-    v_report := public.run_unclaimed_sla_side_effects(now(), 1000);
+    -- The app's call: does the work, writes no heartbeat (only pg_cron's run is the heartbeat).
+    select count(*) into v_runs_before from public.unclaimed_sla_job_runs where source = 'database';
+    v_report := public.run_unclaimed_sla_side_effects(now(), 1000, 'app');
     raise notice '20260925709910: check run report %', v_report;
-    if coalesce((v_report->>'ok')::boolean, false) is not true then
-      raise exception 'RUN_FAILED %', coalesce(v_report->>'error', v_report->'failures'->0->>'error', v_report::text);
+    if v_report ? 'error' then
+      raise exception 'CHECK the run failed as a whole: %', v_report->>'error';
     end if;
-    if exists (select 1 from public.tenant_lead_sla_events where id in (v_esc, v_par, v_old) and processed_at is null) then
+    if v_report->'ladder'->>'error' is not null or v_report->'digest'->>'error' is not null then
+      raise exception 'CHECK the ladder or the digest failed: % / %', v_report->'ladder'->>'error', v_report->'digest'->>'error';
+    end if;
+    if exists (select 1 from public.tenant_lead_sla_events where id in (v_esc, v_par, v_old, v_late) and processed_at is null) then
+      select last_error into v_err from public.tenant_lead_sla_events
+       where id in (v_esc, v_par, v_old, v_late) and last_error is not null limit 1;
+      if v_err is not null then raise exception 'CHECK a built event failed: %', v_err; end if;
       raise exception 'SKIP the built events were not reached in one run (more than 1000 pending)';
     end if;
+    if coalesce((v_report->>'failed')::integer, 0) > 0 then
+      -- A real row failing is reported, not fatal: it keeps last_error and is retried every minute.
+      raise notice '20260925709910: % real event(s) failed in the check run, first: %', v_report->>'failed', v_report->'failures'->0;
+    end if;
+    if (select count(*) from public.unclaimed_sla_job_runs where source = 'database') <> v_runs_before then
+      raise exception 'CHECK an app-invoked run wrote the pg_cron heartbeat';
+    end if;
 
-    -- escalation: every active owner, email owed
+    -- escalation: every active owner, the wider offer, the email owed when an owner has an address
     if (select count(*) from public.agent_notifications where tenant_id = v_q.tenant_id
          and source_key = 'unclaimed-sla:' || v_q.id::text || ':escalated') <> v_owners then
       raise exception 'CHECK the escalation alert did not reach every active owner';
@@ -577,18 +658,22 @@ begin
                  and tu.role::text <> 'owner') then
       raise exception 'CHECK the escalation alert reached someone who is not an owner';
     end if;
-    if (select handled_by from public.tenant_lead_sla_events where id = v_esc) <> 'database' then
-      raise exception 'CHECK the escalation event was not marked handled by the database';
+    if not exists (select 1 from public.tenant_lead_sla_events where id = v_esc and handled_by = 'database'
+                    and skipped_reason is null and (outcome->>'ownerAlerts')::integer = v_owners) then
+      raise exception 'CHECK the escalation event was not recorded as handled by the database with its owner alerts';
+    end if;
+    if (select email_due_at is not null from public.tenant_lead_sla_events where id = v_esc) is distinct from coalesce(v_owner_email, false) then
+      raise exception 'CHECK the escalation email was not marked owed exactly when an owner has an address';
     end if;
 
     -- partner notice: one row, Design 1's shape, in the active partner channel
     select c.id into v_channel from public.partner_channels c where c.tenant_id = v_q.tenant_id and c.partner_id = v_q.partner_id
        and c.channel_type = 'partner' and c.status = 'active' order by c.created_at limit 1;
-    if not exists (select 1 from public.partner_messages m
-                    where m.event_key = 'unclaimed-sla:' || v_q.id::text || ':partner'
-                      and m.channel_id = v_channel and m.message_kind = 'system_card' and m.card_type is null
-                      and m.card_payload->>'notice' = 'unclaimed_partner_notice' and m.created_by is null
-                      and m.message like '% was not claimed before the response window. Our team has been notified.') then
+    if (select count(*) from public.partner_messages m
+         where m.event_key = 'unclaimed-sla:' || v_q.id::text || ':partner'
+           and m.channel_id = v_channel and m.message_kind = 'system_card' and m.card_type is null
+           and m.card_payload->>'notice' = 'unclaimed_partner_notice' and m.created_by is null
+           and m.message like '% was not claimed before the response window. Our team has been notified.') <> 1 then
       raise exception 'CHECK the partner notice is missing or not in the agreed shape';
     end if;
     -- nobody claimed: owners only, never the partner's channel
@@ -602,16 +687,26 @@ begin
     end if;
 
     -- older than a day: recorded, not sent
-    if (select skipped_reason from public.tenant_lead_sla_events where id = v_old) is distinct from 'older_than_24_hours' then
+    if not exists (select 1 from public.tenant_lead_sla_events where id = v_old
+                    and handled_by = 'skipped' and skipped_reason = 'older_than_24_hours' and processed_at is not null) then
       raise exception 'CHECK a day-old event was not skipped';
     end if;
-
-    -- the heartbeat
-    if not exists (select 1 from public.unclaimed_sla_job_runs where source = 'database' and started_at >= now() and ok) then
-      raise exception 'CHECK the run wrote no heartbeat';
+    -- no longer unclaimed: recorded, not sent
+    if not exists (select 1 from public.tenant_lead_sla_events where id = v_late
+                    and handled_by = 'database' and skipped_reason = 'no_longer_unclaimed' and processed_at is not null)
+       or exists (select 1 from public.agent_notifications where tenant_id = v_q2.tenant_id
+                   and source_key like 'unclaimed-sla:' || v_q2.id::text || ':%') then
+      raise exception 'CHECK a late escalation for a transfer no longer unclaimed was sent or not recorded';
     end if;
 
-    -- a second run sends nothing again
+    -- the digest: an open row (today, in the agency's own day) counts the built escalation
+    if not exists (select 1 from public.tenant_sla_daily_digests d
+                    where d.tenant_id = v_q.tenant_id and d.escalated >= 1 and not d.closed
+                      and d.digest_date between (now() at time zone 'UTC')::date - 1 and (now() at time zone 'UTC')::date + 1) then
+      raise exception 'CHECK the daily digest has no open row counting the escalation';
+    end if;
+
+    -- pg_cron's call: writes the heartbeat, and sends nothing a second time
     select string_agg(x, ',') into v_counts from (
       select (select count(*) from public.agent_notifications where tenant_id = v_q.tenant_id and source_key like 'unclaimed-sla:' || v_q.id::text || ':%')::text as x
       union all select (select count(*) from public.partner_messages where event_key = 'unclaimed-sla:' || v_q.id::text || ':partner')::text
@@ -624,11 +719,14 @@ begin
     if v_counts <> v_counts_again then
       raise exception 'CHECK a second run sent again (% then %)', v_counts, v_counts_again;
     end if;
+    if not exists (select 1 from public.unclaimed_sla_job_runs where source = 'database' and started_at >= now()) then
+      raise exception 'CHECK the pg_cron-style run wrote no heartbeat';
+    end if;
 
     raise exception 'ROLLBACK_OK';
   exception when others then
     if sqlerrm = 'ROLLBACK_OK' then
-      raise notice '20260925709910: ran once on the real rows and a built transfer, then rolled back. Escalation to owners, partner notice, nobody-claimed to owners, day-old skipped, heartbeat, no repeat.';
+      raise notice '20260925709910: ran on the real rows and built events, then rolled back. Escalation to owners, email owed, partner notice, nobody-claimed to owners, day-old and no-longer-unclaimed recorded not sent, digest, heartbeat only from pg_cron, no repeat.';
     elsif sqlerrm like 'SKIP%' then
       raise notice '20260925709910: behaviour check skipped (%)', sqlerrm;
     else

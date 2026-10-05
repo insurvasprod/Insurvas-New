@@ -6,6 +6,8 @@ export type MenuItem = {
   /** Stable namespaced key used by the menu contract, for example `leads.inbound`. */
   key: string;
   label: string;
+  /** A shorter label for the sidebar rail, when the page title is too long for it. */
+  navLabel?: string;
   /** The agent-plane URL. The current app keeps the `/app` namespace for local/public routes. */
   path: string;
   /** Icon name resolved by the shell; keeping the name here keeps the menu serialisable. */
@@ -44,7 +46,7 @@ export const AGENT_MENU: MenuSection[] = [
   {
     id: "home",
     label: "Home",
-    items: [item("Home", { key: "home.dashboard", label: "Dashboard", path: "/app/dashboard", icon: "layout-dashboard", built: true })],
+    items: [item("Home", { key: "home.dashboard", label: "Dashboard", navLabel: "Home", path: "/app/dashboard", icon: "layout-dashboard", built: true })],
   },
   {
     id: "book",
@@ -59,7 +61,7 @@ export const AGENT_MENU: MenuSection[] = [
       // collision already cost something once: LA-2.8's first draft joined `public.appointments`
       // for its appointment tier and would have served leads on the strength of a licensing record.
       item("Book of Business", { key: "book.appointments", label: "Carrier appointments", path: "/app/appointments", icon: "calendar-days", required_feature: "appointment_vault", required_roles: ["owner", "producer"], built: true }),
-      item("Book of Business", { key: "book.discrepancies", label: "Discrepancies", path: "/app/discrepancies", icon: "triangle-alert", required_feature: "discrepancy_report", required_roles: ["owner", "bookkeeper"], blurb: "What the carrier paid against what they owed." }),
+      item("Book of Business", { key: "book.discrepancies", label: "Discrepancies", path: "/app/discrepancies", icon: "triangle-alert", required_feature: "discrepancy_report", required_roles: ["owner", "bookkeeper"], blurb: "What the carrier paid against what they owed.", built: true }),
     ],
   },
   {
@@ -68,7 +70,7 @@ export const AGENT_MENU: MenuSection[] = [
     items: [
       item("Leads", { key: "leads.workspace", label: "Lead workspace", path: "/app/leads", icon: "contact-round", built: true, required_feature: "book_of_business", required_roles: ["owner", "producer", "assistant"] }),
       item("Leads", { key: "leads.floor", label: "Agent Floor", path: "/app/floor", icon: "radio-tower", built: true, required_feature: "inbound_transfers", required_roles: ["owner", "producer", "assistant"] }),
-      item("Leads", { key: "leads.inbound", label: "Inbound transfers", path: "/app/inbound", icon: "phone-incoming", built: true, required_feature: "inbound_transfers", required_roles: ["owner", "producer", "assistant"] }),
+      item("Leads", { key: "leads.inbound", label: "Inbound transfers", navLabel: "Inbound inbox", path: "/app/inbound", icon: "phone-incoming", built: true, required_feature: "inbound_transfers", required_roles: ["owner", "producer", "assistant"] }),
       item("Leads", { key: "leads.partner-chat", label: "Partner chat", path: "/app/partner-chat", icon: "messages-square", built: true, required_feature: "inbound_transfers", required_roles: ["owner", "producer"] }),
       item("Leads", { key: "leads.dialer", label: "Dialer", path: "/app/dialer", icon: "phone-outgoing", built: true, required_feature: "outbound_dialing", required_roles: ["owner", "producer", "setter"] }),
       item("Leads", { key: "leads.import", label: "List import", path: "/app/import", icon: "list-plus", built: true, required_feature: "lead_import", required_roles: ["owner", "producer", "assistant"] }),
@@ -89,9 +91,11 @@ export const AGENT_MENU: MenuSection[] = [
     id: "sell",
     label: "Sell",
     items: [
-      item("Sell", { key: "sell.quoting", label: "Quoting", path: "/app/quoting", icon: "calculator", required_feature: "quoting", required_roles: ["owner", "producer"], blurb: "Compare carrier premiums side by side." }),
-      item("Sell", { key: "sell.applications", label: "Applications", path: "/app/applications", icon: "file-check", required_feature: "applications", required_roles: ["owner", "producer"], blurb: "Carrier applications, filled in-app." }),
-      item("Sell", { key: "sell.draft-dates", label: "Draft dates", path: "/app/draft-dates", icon: "calendar-clock", required_feature: "draft_date_optimizer", required_roles: ["owner", "producer"], blurb: "Pick the draft date least likely to bounce." }),
+      // LA-3 · the sale itself: interview → quote → application → submit → policy number.
+      item("Sell", { key: "sell.applications", label: "Applications", path: "/app/applications", icon: "file-check", built: true, required_feature: "applications", required_roles: ["owner", "producer"], blurb: "Carrier applications, filled in-app." }),
+      item("Sell", { key: "sell.pending", label: "Pending cases", path: "/app/pending", icon: "list-checks", built: true, required_feature: "applications", required_roles: ["owner", "producer"], blurb: "Everything between submitted and issued." }),
+      item("Sell", { key: "sell.quoting", label: "Quotes", path: "/app/quoting", icon: "calculator", built: true, required_feature: "quoting", required_roles: ["owner", "producer"], blurb: "Compare carrier premiums side by side." }),
+      item("Sell", { key: "sell.draft-dates", label: "Draft dates", path: "/app/draft-dates", icon: "calendar-clock", built: true, required_feature: "draft_date_optimizer", required_roles: ["owner", "producer"], blurb: "Pick the draft date least likely to bounce." }),
       item("Sell", { key: "sell.callbacks", label: "Callbacks", path: "/app/callbacks", icon: "calendar-check", required_feature: "callback_calendar", required_roles: ["owner", "producer", "assistant"], built: true }),
       // LA-2.11's day and week calendar, beside Callbacks because they are the two things on Ray's
       // diary. At `/app/calendar` specifically: `book_appointment` has always written its
@@ -118,7 +122,8 @@ export const AGENT_MENU: MenuSection[] = [
     items: [
       item("Insight", { key: "insight.true-cpa", label: "True CPA", path: "/app/true-cpa", icon: "chart-no-axes-combined", required_feature: "true_cpa", required_roles: ["owner", "producer", "bookkeeper"], built: true, blurb: "What your leads actually cost" }),
       item("Insight", { key: "insight.vendor-returns", label: "Vendor returns", path: "/app/vendor-returns", icon: "file-chart-column", required_feature: "true_cpa", required_roles: ["owner", "producer", "bookkeeper"], built: true, blurb: "Prepare evidence-backed claims and reconcile vendor credits." }),
-      item("Insight", { key: "insight.persistency", label: "Persistency", path: "/app/persistency", icon: "trending-up", required_feature: "cohort_persistency", required_roles: ["owner", "producer", "bookkeeper"], blurb: "Which lead source survives." }),
+      item("Insight", { key: "insight.sales-performance", label: "Sales performance", path: "/app/sales-performance", icon: "chart-no-axes-combined", built: true, required_feature: "sales_report", required_roles: ["owner", "producer", "bookkeeper"], blurb: "Funnel, timings and why carriers decline." }),
+      item("Insight", { key: "insight.persistency", label: "Persistency", path: "/app/persistency", icon: "trending-up", required_feature: "cohort_persistency", required_roles: ["owner", "producer", "bookkeeper"], blurb: "Which lead source survives.", built: true }),
       item("Insight", { key: "insight.activity", label: "Activity & scorecard", path: "/app/activity", icon: "list-checks", built: true, required_feature: "outbound_dialing", required_roles: ["owner", "producer", "setter"] }),
       item("Insight", { key: "insight.scoring", label: "Queue scoring", path: "/app/scoring", icon: "brain", built: true, required_feature: "outbound_dialing", required_roles: ["owner", "producer"], blurb: "The order leads are served in, and whether it beats the plain order." }),
     ],
@@ -127,7 +132,7 @@ export const AGENT_MENU: MenuSection[] = [
     id: "partners",
     label: "Partners",
     items: [
-      item("Partners", { key: "partners.publishers", label: "Partners", path: "/app/publishers", icon: "users", required_feature: "publisher_records", required_roles: ["owner", "bookkeeper"], built: true }),
+      item("Partners", { key: "partners.publishers", label: "Partners", navLabel: "Publishers", path: "/app/publishers", icon: "users", required_feature: "publisher_records", required_roles: ["owner", "bookkeeper"], built: true }),
       item("Partners", { key: "partners.review", label: "Partner quality", path: "/app/partner-quality", icon: "chart-no-axes-combined", required_feature: "partner_quality", required_roles: ["owner", "producer", "bookkeeper"], built: true }),
       item("Partners", { key: "partners.payouts", label: "Payout runs", path: "/app/payouts", icon: "wallet-cards", required_feature: "payout_runs", required_roles: ["owner", "bookkeeper"], blurb: "Pay publishers from the ledger, not WhatsApp." }),
       item("Partners", { key: "partners.partner-portal", label: "Partner portal", path: "/app/partner-portal", icon: "external-link", required_feature: "partner_portal", required_roles: ["owner", "bookkeeper"], blurb: "Publishers see their own numbers." }),

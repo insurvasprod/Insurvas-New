@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Check, MapPin, ShieldCheck } from "lucide-react";
 import { notify } from "@/lib/notify";
 
-import { Badge } from "@/components/ui/badge";
+import { StatusChip } from "@/components/ui/status-chip";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
@@ -156,11 +156,11 @@ export function PartnerMarketAccessPanel({
               active appointment pairs can be selected.
             </p>
           </div>
-          <Badge variant="secondary">
+          <StatusChip>
             {source === "tenant_appointments"
               ? "Active appointments"
               : `Inherited from ${source.replace("_", " ")}`}
-          </Badge>
+          </StatusChip>
         </div>
       </CardHeader>
       <CardContent className={cn("space-y-4 p-4", compact && "p-0 pt-3")}>
@@ -191,9 +191,7 @@ export function PartnerMarketAccessPanel({
                   <tr key={carrier.id}>
                     <th className="px-3 py-3 font-medium">{carrier.name}</th>
                     <td className="px-3 py-3">
-                      <Badge variant="secondary" className="text-[11px]">
-                        Active
-                      </Badge>
+                      <StatusChip tone="good">Active</StatusChip>
                     </td>
                     {states.map((state) => {
                       const key = `${carrier.id}:${state}`;

@@ -73,7 +73,8 @@ export function friendlyImportCommitError(error: { message?: string | null; code
   if (/IMPORT_BATCH_NOT_FOUND/.test(raw)) return say("This review is no longer on file. Upload the file again.");
   if (/IMPORT_BATCH_SIZE_INVALID/.test(raw)) return say("A file can hold at most 20,000 rows. Split it and import each part.");
   if (/IMPORT_ITEM_INVALID|IMPORT_BATCH_INVALID|REJECTION_PAYLOAD_INVALID/.test(raw)) return say("One of the rows could not be saved as a lead. Check the file's stage column and upload it again.");
-  if (code === "22P05" || /unsupported Unicode escape sequence|\\u0000|invalid byte sequence/i.test(raw))
+  // PGRST102 "Empty or invalid json": PostgREST refusing the payload, e.g. a broken (lone-surrogate) character in a cell.
+  if (code === "22P05" || code === "PGRST102" || /unsupported Unicode escape sequence|\\u0000|invalid byte sequence|Empty or invalid json|surrogate/i.test(raw))
     return say("A cell in the file holds a hidden character the database cannot store. Re-save the file as plain CSV (UTF-8) and upload it again.");
   if (code === "22001" || /value too long/i.test(raw)) return say("A value in the file is longer than a lead can hold. Shorten it and upload the file again.");
   if (code === "22007" || code === "22008" || /invalid input syntax for type (timestamp|date)|date\/time field value out of range/i.test(raw))

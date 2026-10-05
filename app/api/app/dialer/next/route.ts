@@ -42,15 +42,16 @@ export async function POST() {
       : null;
     // The copy lives here, not in the component, so every caller of this endpoint explains an empty
     // queue the same way. LA-2.8 asks for the reason rather than a blank panel; LA-2.3 asks the
-    // dialer to say when a campaign is held back by its scrub, so the fallback names those
-    // campaigns (emptyQueueReason) and is read only when nothing was served.
+    // dialer to say when a campaign is held back by its scrub. emptyQueueReason works out WHICH
+    // reason applies to this agent (scrub, licences, the window and its next opening, retry timers)
+    // and is read only when nothing was served.
     const emptyReason = served
       ? null
       : refusal
         // 20260925700000: at the open-lead ceiling the pool is closed to this agent; say so,
         // rather than blaming windows and timers for an empty screen they did not cause.
         ?? (atCapacity ? capacityEmptyReason(atCapacity.open, atCapacity.max) : null)
-        ?? (await emptyQueueReason(auth.context.tenantId));
+        ?? (await emptyQueueReason(auth.context.tenantId, auth.context.userId));
     return NextResponse.json(
       {
         served,

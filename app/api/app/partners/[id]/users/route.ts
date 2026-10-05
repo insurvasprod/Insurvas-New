@@ -55,10 +55,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const message = error instanceof Error ? error.message : "Could not invite partner user";
     // The RPC raises `email_exists` (older versions `partner_user_email_exists`); both are a 409.
     if (message.includes("email_exists") || message.includes("duplicate key")) return NextResponse.json({ error: "This email already has partner access or a pending invitation" }, { status: 409 });
+    if (message.includes("agency_account")) return NextResponse.json({ error: "This email belongs to an agency account. Partner access needs a separate email." }, { status: 409 });
     if (message.includes("account_not_active")) return NextResponse.json({ error: "This account is not active and cannot be invited" }, { status: 409 });
     if (message.includes("partner_not_found")) return NextResponse.json({ error: "Partner not found" }, { status: 404 });
     const limit = message.match(/max_partner_users:(\d+):(\d+)/);
     if (limit) return NextResponse.json(partnerLimitBody("max_partner_users", Number(limit[1]), Number(limit[2]), "invite"), { status: 403 });
+    // The caller gets a generic message; the server log keeps the real cause (an Auth or RPC error).
+    console.error("[partners/users] invite failed:", message);
     return NextResponse.json({ error: "Could not invite partner user" }, { status: 500 });
   }
 }

@@ -99,17 +99,21 @@ function ResolvedAlert({ entry }: { entry: CentreEntry }) {
   );
 }
 
-export function AlertCentre({ open, resolved, canClaim }: { open: CentreEntry[]; resolved: CentreEntry[]; canClaim: boolean }) {
+/** The alert centre is server-rendered; Refresh re-reads the whole page (lists, SLA job, digest). */
+export function PageRefreshButton() {
   const router = useRouter();
   const [refreshing, startRefresh] = useTransition();
+  return <RefreshButton onClick={() => startRefresh(() => router.refresh())} refreshing={refreshing} />;
+}
+
+export function AlertCentre({ open, resolved, canClaim }: { open: CentreEntry[]; resolved: CentreEntry[]; canClaim: boolean }) {
   return (
     <>
       <TableCard
         title="Open"
         action={<>
           <span className="text-xs text-[var(--muted)]">{open.length === 1 ? "1 alert open" : `${open.length} alerts open`}</span>
-          {/* The lists are server-rendered; Refresh re-reads them. */}
-          <RefreshButton onClick={() => startRefresh(() => router.refresh())} refreshing={refreshing} />
+          <PageRefreshButton />
         </>}
       >
         {open.length

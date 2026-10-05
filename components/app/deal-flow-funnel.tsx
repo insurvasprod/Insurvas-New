@@ -12,6 +12,7 @@ import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { SectionLoading } from "@/components/ui/page-states";
+import { TableCard } from "@/components/ui/table-card";
 import type { AgentLine, DialFunnel } from "@/lib/dealFlow/dialFunnel";
 import { formatCentsAsCurrency } from "@/lib/money";
 import { cn } from "@/lib/utils";
@@ -116,11 +117,11 @@ export function DealFlowFunnel({ from, to, agentId, isToday }: { from: string; t
       </section>
 
       <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-        <section aria-labelledby="dial-agents-title" className="relative min-w-0 overflow-hidden rounded-lg border border-border bg-card">
-          <div className="flex items-center justify-between gap-3 border-b border-[var(--border)] bg-[var(--surface-alt)] px-4 py-3">
-            <h2 id="dial-agents-title" className="m-0 text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">By agent</h2>
-            <Link href="/app/activity?view=scorecard" className="text-[12px] font-semibold text-[var(--ink)]">Open the scorecard</Link>
-          </div>
+        <TableCard
+          className="min-w-0"
+          title="By agent"
+          action={<Link href="/app/activity?view=scorecard" className="text-xs font-semibold text-[var(--ink)]">Open the scorecard</Link>}
+        >
           {data.agents.length === 0 ? (
             <p className="m-0 px-4 py-6 text-[14px] leading-[1.5] text-[var(--muted)]">Nobody was served or dialed a lead {when}.</p>
           ) : (
@@ -138,7 +139,7 @@ export function DealFlowFunnel({ from, to, agentId, isToday }: { from: string; t
               </table>
             </div>
           )}
-        </section>
+        </TableCard>
 
         <section aria-labelledby="dial-leak-title" className="min-w-0 rounded-lg border border-border bg-card p-5">
           <h2 id="dial-leak-title" className="m-0 text-[18px] leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]">

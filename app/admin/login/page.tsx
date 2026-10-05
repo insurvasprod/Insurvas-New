@@ -8,6 +8,7 @@ import { Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { InsurvasLogo } from "@/components/shared/insurvas-logo";
 
 type Step = "credentials" | "totp";
 
@@ -113,12 +114,7 @@ export default function AdminLoginPage() {
       {/* ── The staff header. Outside the admin shell, so drawn here to the board. ───────────── */}
       <header className="flex flex-wrap items-center justify-between gap-3 bg-[var(--nav-bg)] px-4 py-3.5 sm:px-12">
         <span className="flex items-center gap-2.5">
-          <span
-            aria-hidden="true"
-            className="inline-flex size-[26px] items-center justify-center rounded-md border-[1.5px] border-[var(--nav-muted)] text-xs font-semibold tracking-[-0.01em] text-[var(--nav-ink)]"
-          >
-            I
-          </span>
+          <InsurvasLogo size="sidebar" />
           <span className="text-sm font-semibold uppercase leading-[1.43] tracking-[0.04em] text-[var(--nav-ink)]">
             Insurvas · Super Admin
           </span>

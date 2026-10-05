@@ -4,6 +4,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type FormEvent,
 } from "react";
@@ -31,7 +32,7 @@ import { AffiliateLinksPanel } from "@/components/app/affiliate-links-panel";
 import { PartnerUsersPanel } from "@/components/app/partner-users-panel";
 import { PartnerFormStudio } from "@/components/app/partner-form-studio";
 import { PartnerMarketAccessPanel } from "@/components/app/partner-market-access-panel";
-import { Badge } from "@/components/ui/badge";
+import { StatusChip } from "@/components/ui/status-chip";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -213,12 +214,8 @@ const termText = (term: Term | null) =>
 /** The first commercial terms ever recorded: when the relationship started paying. */
 const earliestTerm = (partner: Partner) =>
   partner.terms.reduce<string | null>((min, term) => (!min || term.effective_from < min ? term.effective_from : min), null);
-const statusVariant = (status: PartnerStatus) =>
-  status === "active"
-    ? "default"
-    : status === "offboarded"
-      ? "outline"
-      : "secondary";
+const statusTone = (status: PartnerStatus) =>
+  status === "active" ? "good" : status === "paused" ? "warning" : "neutral";
 
 function CapacityMetric({
   label,
@@ -306,8 +303,13 @@ export function PartnersWorkspace({
   const [offboardFor, setOffboardFor] = useState<Partner | null>(null);
   const [offboardText, setOffboardText] = useState("");
 
+  // After the first load, a reload (Refresh, or the re-read after every write) keeps the page drawn:
+  // swapping it for the page skeleton unmounted the detail panels and lost their unsaved edits.
+  const hasLoaded = useRef(false);
+  const [refreshing, setRefreshing] = useState(false);
   const load = useCallback(async () => {
-    setLoading(true);
+    if (hasLoaded.current) setRefreshing(true);
+    else setLoading(true);
     try {
       const [response, productResponse] = await Promise.all([
         fetch("/api/app/partners", { cache: "no-store" }),
@@ -366,9 +368,26 @@ export function PartnersWorkspace({
         reason instanceof Error ? reason.message : "Could not load partners",
       );
     } finally {
+      hasLoaded.current = true;
       setLoading(false);
+      setRefreshing(false);
     }
   }, [canManageProductConfig]);
+
+  // After a Team-tab invite or status change: re-read the seat figures (and each partner's user
+  // count) without the product fan-out `load` does and without redrawing the page.
+  const refreshCapacity = useCallback(async () => {
+    try {
+      const response = await fetch("/api/app/partners", { cache: "no-store" });
+      const body = await response.json().catch(() => null);
+      if (!response.ok || !body) return;
+      if (Array.isArray(body.partners)) setPartners(body.partners);
+      if (body.limits) setLimits((current) => ({ ...current, max_partner_users: body.limits.max_partner_users ?? null }));
+      if (body.usage) setUsage(body.usage);
+    } catch {
+      // The panel already re-read its own rows; stale seat figures correct on the next page load.
+    }
+  }, []);
 
   // The API is the source of truth; refresh after every write so status and effective terms are
   // visible immediately without requiring a re-login or a full page refresh.
@@ -618,7 +637,7 @@ export function PartnersWorkspace({
                   middle-click and "Save link as" work, and a large directory does not have to be
                   held in memory first. Same pattern as the deal-flow export. */}
               <Button asChild type="button" variant="outline"><a href="/api/app/partners/export" download aria-label="Export the partner directory as CSV"><Download aria-hidden="true" />Export</a></Button>
-              <Button type="button" onClick={openCreate} disabled={readOnly || everyTypeAtCap} title={everyTypeAtCap ? "Your plan's publisher, marketing partner and affiliate limits are all in use. Upgrade your plan to add another partner." : undefined}>
+              <Button type="button" onClick={openCreate} disabled={readOnly} title={everyTypeAtCap ? "Your plan's publisher, marketing partner and affiliate limits are all in use. Upgrade your plan to add another partner." : undefined}>
                 <Plus aria-hidden="true" />
                 Add partner
               </Button>
@@ -681,7 +700,7 @@ export function PartnersWorkspace({
         {!detailOnly && <TableCard
           className="min-w-0"
           toolbar={
-            <DataToolbar actions={<RefreshButton onClick={() => void load()} refreshing={loading} />}>
+            <DataToolbar actions={<RefreshButton onClick={() => void load()} refreshing={refreshing} />}>
               <ToolbarSearch value={search} onChange={setSearch} placeholder="Search partners" />
               <select
                 aria-label="Filter by partner type"
@@ -787,7 +806,7 @@ export function PartnersWorkspace({
                           <button
                             type="button"
                             className={cn(
-                              "flex min-w-0 items-center gap-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                              "flex w-full min-w-0 items-center gap-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                               selectedPartner && "gap-2",
                             )}
                             // One partner has one page (/app/publishers/[id]) — the same layout whether it
@@ -819,7 +838,7 @@ export function PartnersWorkspace({
                         </td>
                         <td
                           className={cn(
-                            "whitespace-nowrap px-4 py-3 text-muted-foreground",
+                            "px-4 py-3 text-muted-foreground",
                             selectedPartner && "hidden",
                           )}
                         >
@@ -841,18 +860,18 @@ export function PartnersWorkspace({
                             selectedPartner && "hidden",
                           )}
                         >
-                          <Badge variant={statusVariant(partner.status)}>
+                          <StatusChip tone={statusTone(partner.status)}>
                             {PARTNER_STATUS_LABELS[partner.status]}
-                          </Badge>
+                          </StatusChip>
                           {partner.status === "offboarded" && (
-                            <span className="mt-1 block whitespace-nowrap text-xs text-muted-foreground">
+                            <span className="mt-1 block text-xs text-muted-foreground">
                               {partner.offboarded_at ? `${dateLabel(partner.offboarded_at)} · ` : ""}history kept
                             </span>
                           )}
                         </td>
                         <td
                           className={cn(
-                            "whitespace-nowrap px-4 py-3",
+                            "px-4 py-3",
                             selectedPartner && "hidden",
                           )}
                         >
@@ -1136,7 +1155,7 @@ export function PartnersWorkspace({
                                 : `${PARTNER_PAYOUT_MODEL_LABELS[term.payout_model]} · ${money(term.rate_cents)}`}
                             </span>
                             {index === 0 && (
-                              <Badge variant="secondary">Current</Badge>
+                              <StatusChip tone="info">Current</StatusChip>
                             )}
                           </div>
                           <p className="mt-1 text-xs text-muted-foreground">
@@ -1334,9 +1353,15 @@ export function PartnersWorkspace({
               )}
               {detailTab === "team" && (
                 <PartnerUsersPanel
+                  key={selectedPartner.id}
                   partnerId={selectedPartner.id}
                   readOnly={readOnly}
                   offboarded={selectedPartner.status === "offboarded"}
+                  // The admin-assignment route is owner-only; this page's owner flag is the same check.
+                  canAssignAdmin={canManageProductConfig}
+                  seatUsage={usage.partnerUsers}
+                  seatLimit={limits.max_partner_users}
+                  onSeatsChanged={() => void refreshCapacity()}
                 />
               )}
               {detailTab === "activity" && (

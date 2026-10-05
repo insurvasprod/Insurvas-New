@@ -11,6 +11,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { PageLoading } from "@/components/ui/page-loading";
 import { EmptyState, ErrorState, NoMatches, SectionLoading } from "@/components/ui/page-states";
 import { StatStrip, StatTile } from "@/components/ui/stat";
+import { Pager, paginate } from "@/components/ui/pager";
 import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 import { Callout } from "@/components/app/settings/primitives";
@@ -96,7 +97,9 @@ export function SuppressionWorkspace() {
     const params = new URLSearchParams({ limit: "500" });
     if (search.trim()) params.set("search", search.trim());
     if (listType) params.set("listType", listType);
-    const response = await fetch(`/api/app/suppression?${params}`, { cache: "no-store" });
+    // A network failure (a rejected fetch, not a 4xx/5xx) must still end the skeleton with an error.
+    const response = await fetch(`/api/app/suppression?${params}`, { cache: "no-store" }).catch(() => null);
+    if (!response) { setError("Could not reach the server. Check your connection and try again."); setLoaded(null); return; }
     const body = await response.json().catch(() => null);
     if (!response.ok) {
       setError(body?.error ?? "Could not load the suppression list");
@@ -168,9 +171,7 @@ export function SuppressionWorkspace() {
 
   const total = loaded ? loaded.counts.internal + loaded.counts.external : 0;
   const entries = useMemo(() => loaded?.entries ?? [], [loaded]);
-  const pageCount = Math.max(1, Math.ceil(entries.length / PAGE_SIZE));
-  const currentPage = Math.min(page, pageCount - 1);
-  const shown = entries.slice(currentPage * PAGE_SIZE, currentPage * PAGE_SIZE + PAGE_SIZE);
+  const { current: currentPage, rows: shown } = paginate(entries, page + 1, PAGE_SIZE);
   const failing = overview?.feeds.filter((feed) => feed.state === "failing") ?? [];
   const answering = overview?.feeds.filter((feed) => feed.state === "fresh").length ?? 0;
   const typedDigits = normalizeDigits(form.phone);
@@ -218,14 +219,14 @@ export function SuppressionWorkspace() {
                 <Callout tone="success" title={<>Yes — no list here blocks {formatPhone(check.phoneDigits)}{check.exemption && <>. Federal and state DNC are cleared by a recorded {DNC_EXEMPTION_BASIS_LABELS[check.exemption.basis].toLowerCase()}{check.exemption.expiresAt ? `, until ${dayMonthYear(check.exemption.expiresAt)}` : ", until revoked"}</>}.</>} />
               )}
               {check.lists && check.lists.length > 0 && (
-                <table className="mt-3 w-full table-fixed border-collapse text-left">
+                <div className="mt-3 overflow-x-auto"><table className="w-full min-w-[520px] table-fixed border-collapse text-left">
                   <thead><tr><th className={th}>List</th><th className={`${th} w-[160px]`}>Result</th><th className={`${th} w-[170px] text-right`}>Checked</th></tr></thead>
                   <tbody>{check.lists.map((row) => <tr key={row.list} className="m-row">
                     <td className={td}>{LIST_TYPE_LABELS[row.list]}</td>
                     <td className={td}>{row.listed && check.exemption && EXEMPTED_LISTS.has(row.list) ? <StatusChip tone="info" dot={false}>Listed · exempt</StatusChip> : row.listed ? <StatusChip tone="danger" dot={false}>Listed</StatusChip> : <StatusChip tone="good" dot={false}>Clear</StatusChip>}</td>
                     <td className={`${td} text-right tabular-nums`} title={row.since ? `On this list since ${dayMonthYear(row.since)}` : undefined}>{row.listed && row.since ? `since ${dayMonthYear(row.since)}` : "just now"}</td>
                   </tr>)}</tbody>
-                </table>
+                </table></div>
               )}
             </div>
           )}
@@ -235,14 +236,14 @@ export function SuppressionWorkspace() {
           {!overview ? <SectionLoading rows={3} columns={3} label="Loading feed health" /> : overview.feeds.length === 0 ? (
             <EmptyState title="No feeds listed" hint={overview.demo ? "This environment answers lookups locally." : "No DNC scrub vendor is enabled."} />
           ) : (
-            <table className="w-full table-fixed border-collapse text-left">
+            <div className="overflow-x-auto"><table className="w-full min-w-[520px] table-fixed border-collapse text-left">
               <thead><tr><th className={th}>Source</th><th className={`${th} w-[150px]`}>State</th><th className={`${th} w-[150px] text-right`}>Last good answer</th></tr></thead>
               <tbody>{overview.feeds.map((feed) => <tr key={`${feed.type}-${feed.name}`} className="m-row">
                 <td className={td}><span className="block text-foreground">{feed.name}</span><span className="block text-xs text-muted-foreground">{feed.typeLabel}</span></td>
                 <td className={td}>{feed.state === "fresh" ? <StatusChip tone="good">Answering</StatusChip> : feed.state === "failing" ? <StatusChip tone="danger">Failing</StatusChip> : <StatusChip tone="neutral">No calls yet</StatusChip>}</td>
                 <td className={`${td} text-right tabular-nums`}>{feed.lastSuccessAt ? stamp(feed.lastSuccessAt) : "—"}</td>
               </tr>)}</tbody>
-            </table>
+            </table></div>
           )}
         </TableCard>
       </div>
@@ -258,13 +259,7 @@ export function SuppressionWorkspace() {
             </select>
           </DataToolbar>
         }
-        footer={loaded && entries.length > 0 ? <>
-          <span>Showing {currentPage * PAGE_SIZE + 1}&ndash;{currentPage * PAGE_SIZE + shown.length} of {search || listType ? `${entries.length}${loaded.hasMore ? "+" : ""} matching` : total.toLocaleString()} number{total === 1 ? "" : "s"}{loaded.hasMore ? " · the most recent 500 are listed — search to narrow it" : ""}</span>
-          <span className="flex gap-2">
-            <Button type="button" variant="outline" size="sm" disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}>Previous</Button>
-            <Button type="button" variant="outline" size="sm" disabled={currentPage >= pageCount - 1} onClick={() => setPage(currentPage + 1)}>Next</Button>
-          </span>
-        </> : undefined}
+        footer={loaded && entries.length > 0 ? <Pager page={currentPage} total={entries.length} noun={entries.length === 1 ? "number" : "numbers"} onPage={(next) => setPage(next - 1)} pageSize={PAGE_SIZE} suffix={loaded.hasMore ? "the most recent 500 — search to narrow it" : search || listType ? "matching" : undefined} /> : undefined}
       >
         {error ? <ErrorState title="The suppression list did not load" detail={error} action={<Button variant="outline" onClick={() => void load()}>Try again</Button>} />
           : !loaded ? <SectionLoading rows={4} columns={5} label="Loading the suppression list" />

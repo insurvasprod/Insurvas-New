@@ -1,3 +1,4 @@
+import "./lib/refuseProduction.mjs";
 // LA-1.6 live acceptance check. Fixtures are disposable and exercise the real partner API.
 import { createServer } from "node:http";
 import { randomUUID } from "node:crypto";

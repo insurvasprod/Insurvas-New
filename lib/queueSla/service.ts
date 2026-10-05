@@ -9,6 +9,7 @@ import { notifyPartnerUsers } from "@/lib/partnerAlerts/service";
 import { getEntitlement } from "@/lib/entitlements/get";
 import { hasFeature } from "@/lib/entitlements/types";
 import { isSchemaGap } from "@/lib/appointments/schemaGap";
+import { isOlderThanADay } from "./digestView";
 
 export type QueueSlaSettings = {
   tenant_id: string;
@@ -53,8 +54,6 @@ function customerState(values: unknown): string | null {
   return typeof raw === "string" && raw.trim() ? raw.trim().slice(0, 40) : null;
 }
 
-/** A side effect this old is recorded as skipped, never sent (user decision, 20260925709900). */
-const STALE_AFTER_MS = 86_400_000;
 
 type RunFailure = { eventId: string; rung: string; error: string };
 type DatabaseRunReport = {
@@ -132,7 +131,7 @@ async function sendOwedEscalationEmails(): Promise<{ sent: number; settled: numb
       settled += 1;
     };
     try {
-      if (Date.parse(row.email_due_at) < Date.now() - STALE_AFTER_MS) { await settle("older_than_24_hours"); continue; }
+      if (isOlderThanADay(row.email_due_at, Date.now())) { await settle("older_than_24_hours"); continue; }
       const queue = await supabase.from("lead_queue").select("status").eq("tenant_id", row.tenant_id).eq("id", row.work_item_id).maybeSingle();
       if (queue.error) throw new Error(`Could not re-read the transfer: ${queue.error.message}`);
       if (queue.data?.status !== "unclaimed") { await settle("no_longer_unclaimed"); continue; }
@@ -164,8 +163,11 @@ async function sendOwedEscalationEmails(): Promise<{ sent: number; settled: numb
   return { sent, settled, failures };
 }
 
-/** Before 20260925709910: the side effects the database job now does, done here. */
-async function processEvent(event: SlaEvent) {
+/**
+ * Before 20260925709910: the side effects the database job now does, done here. Returns why nothing
+ * was sent when the transfer was claimed or expired since the rung fired, else null.
+ */
+async function processEvent(event: SlaEvent): Promise<"no_longer_unclaimed" | null> {
   const supabase = db();
   // The ladder runs in the database every minute (20260924250100) and this runs whenever the app
   // does, so an escalation or partner notice can be delivered long after its rung fired.
@@ -181,7 +183,7 @@ async function processEvent(event: SlaEvent) {
   // Claimed or expired since the rung fired: "needs attention" and "nobody claimed it" are no longer
   // news, so nothing is sent and the event is marked processed. Warn has no side effect, and
   // expire's nurture is wanted however late it runs.
-  if (tellsSomeone && queueResult.data?.status !== "unclaimed") return;
+  if (tellsSomeone && queueResult.data?.status !== "unclaimed") return "no_longer_unclaimed";
   const lead = leadResult.data;
   const owner = (ownerResult.data ?? []).find((row: { users?: { status?: string } }) => row.users?.status === "active")?.users;
   const partnerName = partnerResult.data?.name ?? "your partner";
@@ -231,6 +233,26 @@ async function processEvent(event: SlaEvent) {
     await postPartnerNotice(event, name, customerState(lead?.values));
     await postPartnerSystemCard({ tenantId: event.tenant_id, partnerId: event.partner_id, leadId: event.lead_id, workItemId: event.work_item_id, eventKey: `unclaimed-sla:${event.work_item_id}:partner`, cardType: "nobody_claimed", message: `${name} was not claimed before the response window. Our team has been notified.` });
   }
+  return null;
+}
+
+/**
+ * Marks an event done by the app. With 20260925709900's columns it says how (handled_by, and the
+ * reason nothing was sent); before them only processed_at and last_error exist, so it falls back.
+ */
+async function markProcessedInApp(eventId: string, now: string, skippedReason: "older_than_24_hours" | "no_longer_unclaimed" | null) {
+  const supabase = db();
+  const recorded = await supabase.from("tenant_lead_sla_events").update({
+    processed_at: now,
+    last_error: null,
+    handled_by: skippedReason === "older_than_24_hours" ? "skipped" : "app",
+    skipped_reason: skippedReason,
+    outcome: { sent: skippedReason === null },
+  }).eq("id", eventId).is("processed_at", null);
+  if (!recorded.error) return;
+  if (!isSchemaGap(recorded.error)) throw new Error(recorded.error.message);
+  const fallback = await supabase.from("tenant_lead_sla_events").update({ processed_at: now, last_error: skippedReason ? `skipped: ${skippedReason.replace(/_/g, " ")}, nothing was sent` : null }).eq("id", eventId).is("processed_at", null);
+  if (fallback.error) throw new Error(fallback.error.message);
 }
 
 /**
@@ -247,10 +269,9 @@ async function processInApp(now: string) {
   let processed = 0;
   for (const event of (claimed.data ?? []) as Array<SlaEvent & { occurred_at?: string }>) {
     try {
-      const stale = event.occurred_at ? Date.parse(event.occurred_at) < Date.now() - STALE_AFTER_MS : false;
-      if (!stale) await processEvent(event);
-      const result = await supabase.from("tenant_lead_sla_events").update({ processed_at: now, last_error: stale ? "skipped: older than 24 hours, nothing was sent" : null }).eq("id", event.id).is("processed_at", null);
-      if (result.error) throw new Error(result.error.message);
+      const stale = isOlderThanADay(event.occurred_at, Date.now());
+      const skipped = stale ? "older_than_24_hours" : await processEvent(event);
+      await markProcessedInApp(event.id, now, skipped);
       processed += 1;
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown SLA side effect failure";
@@ -268,7 +289,9 @@ export async function processUnclaimedSla() {
   // (pg_cron), and marks each event processed. Calling it here as well is safe (it skips rows the
   // other run holds and sends nothing twice), so this path never repeats what pg_cron already did.
   // It only falls back to doing the work itself while that function does not exist.
-  const database = await supabase.rpc("run_unclaimed_sla_side_effects", { p_now: now, p_limit: 500 });
+  // p_source "app": the function writes no heartbeat row for this call (recordUnclaimedSlaRun does),
+  // so a manual run cannot make a stopped pg_cron schedule look alive.
+  const database = await supabase.rpc("run_unclaimed_sla_side_effects", { p_now: now, p_limit: 500, p_source: "app" });
   if (database.error && !isSchemaGap(database.error)) throw new Error(`Could not run the unclaimed SLA side effects: ${database.error.message}`);
   let base: { scanned: number; claimed: number; processed: number; failures: RunFailure[] };
   let emails = { sent: 0, settled: 0 };

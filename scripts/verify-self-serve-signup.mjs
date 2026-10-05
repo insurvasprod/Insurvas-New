@@ -1,3 +1,4 @@
+import "./lib/refuseProduction.mjs";
 import assert from "node:assert/strict";
 import { createHash, randomBytes } from "node:crypto";
 

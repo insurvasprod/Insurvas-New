@@ -49,7 +49,6 @@
  * Needs the dev server on http://localhost:3000 for --measure only. Seeding talks to the database
  * alone, but pings :3000 between batches and stops if it stops answering (it shares the database).
  */
-import { execFileSync } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 
@@ -422,9 +421,12 @@ const lead = (dataset, i, extra) => {
   return { id: uid("lead", `${dataset}:${i}`), tenant_id: ID.load, ...TEMPLATE, created_by: USER.owner, screening_outcome: "clear", preflight_status: "unchecked", ...extra(p) };
 };
 const tagValues = (dataset, values) => ({ ...values, qa_seed: TAG, qa_dataset: dataset });
+/** Batches go in order, so the first and last deterministic ids stand for the whole set (a jsonb count
+ *  over 135k leads outruns the service statement timeout). */
 async function datasetComplete(dataset, expected) {
-  const n = await countOf("agent_leads", (q) => q.eq("tenant_id", ID.load).eq("values->>qa_dataset", dataset));
-  return n >= expected;
+  const ids = [uid("lead", `${dataset}:0`), uid("lead", `${dataset}:${expected - 1}`)];
+  const rows = must(await db.from("agent_leads").select("id").eq("tenant_id", ID.load).in("id", ids), `probe ${dataset}`);
+  return rows.length === 2;
 }
 
 // ── 5,000 partner leads (LA-1.17-12) ────────────────────────────────────────

@@ -143,23 +143,36 @@ export type CadenceRow = {
 };
 
 /**
- * The default cadence, front-loaded.
+ * The default cadence, front-loaded: the spec's +2h, +1d, +1d, +2d (weekend), +3d, +5d.
  *
- * The current production defaults are +4h, +1d, +3d with a ceiling of seven, spread over a
- * fortnight. Most contacts happen in the first 72 hours, so the attempts belong there. This is the
- * table from the task, verbatim.
+ * ONE meaning of "attempt N", the scheduler's (schedule_next_attempt, 20260929201100): the row for
+ * attempt N is the WAIT BEFORE DIAL N, counted from dial N-1. Attempt 1 is the first dial and has
+ * no row. The editor, the ladder (ladder.ts) and the lead record all read it that way, so this
+ * table starts at attempt 2 — an "attempt 1 = 2 hours" row would be one the dialer never reads.
  */
 export const DEFAULT_CADENCE: CadenceRow[] = [
-  { attemptNumber: 1, delayInterval: "2 hours", preferredSlot: null },
-  { attemptNumber: 2, delayInterval: "1 day", preferredSlot: null },
+  { attemptNumber: 2, delayInterval: "2 hours", preferredSlot: null },
   { attemptNumber: 3, delayInterval: "1 day", preferredSlot: null },
-  { attemptNumber: 4, delayInterval: "2 days", preferredSlot: "weekend" },
-  { attemptNumber: 5, delayInterval: "3 days", preferredSlot: null },
-  { attemptNumber: 6, delayInterval: "5 days", preferredSlot: null },
+  { attemptNumber: 4, delayInterval: "1 day", preferredSlot: null },
+  { attemptNumber: 5, delayInterval: "2 days", preferredSlot: "weekend" },
+  { attemptNumber: 6, delayInterval: "3 days", preferredSlot: null },
+  { attemptNumber: 7, delayInterval: "5 days", preferredSlot: null },
 ];
 
-/** After this many attempts the lead is exhausted and moves to nurture. */
+/**
+ * After this many attempts the lead is exhausted and moves to nurture — unless the tenant or the
+ * campaign sets its own max attempts (tenant_cadence_limits, 20260929201100). A recycled lead's own
+ * per-pass ceiling wins over both.
+ */
 export const DEFAULT_CEILING = 7;
+
+/** The range a tenant's max attempts may take (tenant_cadence_limits' check). */
+export const MAX_ATTEMPTS_RANGE = { min: 1, max: 20 } as const;
+
+/** The ceiling the scheduler applies: the lead's recycle ceiling, else the campaign's, the tenant's, seven. */
+export function effectiveCeiling(input: { leadCeiling?: number | null; campaign?: number | null; tenant?: number | null }): number {
+  return input.leadCeiling ?? input.campaign ?? input.tenant ?? DEFAULT_CEILING;
+}
 
 const INTERVAL_PATTERN = /^\s*(\d{1,4})\s+(minute|hour|day|week)s?\s*$/i;
 

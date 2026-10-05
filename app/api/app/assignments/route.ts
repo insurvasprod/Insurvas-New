@@ -122,7 +122,13 @@ export async function GET(request: NextRequest) {
   }
   const auth = await requireFeatureRole("outbound_dialing", allRoles);
   if (auth instanceof NextResponse) return auth;
-  try { return NextResponse.json(await getAssignmentWorkspace(auth.context.tenantId), { headers: { "Cache-Control": "no-store" } }); }
+  try {
+    const workspace = await getAssignmentWorkspace(auth.context.tenantId);
+    // LA-2.12-2: a setter reads who can take work (the lead lists need it) but not the routing rules
+    // or the per-member routing figures — that is configuration, and a setter "cannot see" it.
+    const visible = auth.context.role === "setter" ? { ...workspace, rules: [], insights: null } : workspace;
+    return NextResponse.json(visible, { headers: { "Cache-Control": "no-store" } });
+  }
   catch { return NextResponse.json({ error: "Could not load assignment workspace" }, { status: 500 }); }
 }
 

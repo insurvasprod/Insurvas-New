@@ -24,6 +24,32 @@ export function countersFromLanes(lanes: PartnerLaneCounts, submittedToday: numb
   };
 }
 
+/** partner_lead_pipeline_page's bucket width (20260929140000): 15 minutes of lead creation time. */
+export const SUBMITTED_BUCKET_SECONDS = 900;
+/** How far back the read model's buckets reach. A local day is at most 25 hours long. */
+export const SUBMITTED_BUCKET_WINDOW_MS = 26 * 60 * 60 * 1000;
+
+/**
+ * "Submitted today" from the read model's `submitted_recent` buckets: [bucket, count] pairs where a
+ * bucket is floor(epoch seconds / 900) of the lead's creation. Every zone's midnight is a multiple
+ * of 15 minutes, so the buckets from `since` onward are exactly the leads created since then.
+ * Null when the read model sent no buckets (an older one) or `since` cannot be answered from them;
+ * the caller then counts with its own read.
+ */
+export function submittedSinceFromBuckets(buckets: unknown, since: Date, now: number = Date.now()): number | null {
+  if (!Array.isArray(buckets)) return null;
+  const sinceSeconds = since.getTime() / 1000;
+  if (!Number.isInteger(sinceSeconds) || sinceSeconds % SUBMITTED_BUCKET_SECONDS !== 0) return null;
+  if (now - since.getTime() > SUBMITTED_BUCKET_WINDOW_MS - SUBMITTED_BUCKET_SECONDS * 1000) return null;
+  const first = sinceSeconds / SUBMITTED_BUCKET_SECONDS;
+  let total = 0;
+  for (const entry of buckets) {
+    if (!Array.isArray(entry) || typeof entry[0] !== "number" || typeof entry[1] !== "number") return null;
+    if (entry[0] >= first) total += entry[1];
+  }
+  return total;
+}
+
 /** The UTC instant of 00:00 today in `zone`. Two passes settle a DST boundary. Unknown zone: UTC. */
 export function startOfTodayIn(zone: string, now: number = Date.now()): Date {
   const today = zonedParts(new Date(now), zone);

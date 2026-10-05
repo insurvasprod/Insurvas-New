@@ -355,7 +355,7 @@ export function CallingWindowSettingsPanel() {
               <p className="mt-3 mb-0 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">
                 {feed && refreshedLabel ? `Last refreshed ${refreshedLabel}.` : "Refresh time not recorded yet."}
                 {basis === "notable" && " Showing the states whose rule is tighter than yours."}
-                {everyStateBansHolidays && " State holidays are always blocked."}
+                {everyStateBansHolidays && (loaded.stateCheckReadsFederalHolidays ? " State and federal holidays are always blocked." : " State holidays are always blocked.")}
               </p>
             </>
           )}

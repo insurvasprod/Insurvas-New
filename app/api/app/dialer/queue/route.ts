@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 
-import { DialerWorkflowError, getDialerStats, getQueuePreview } from "@/lib/dialerScripts/service";
+import { DialerWorkflowError, diagnoseEmptyQueue, getDialerStats, getQueuePreview } from "@/lib/dialerScripts/service";
 import { PRIORITY_TIERS } from "@/lib/dialerScripts/display";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 
@@ -32,7 +32,12 @@ export async function GET(request: NextRequest) {
       getQueuePreview({ tenantId: auth.context.tenantId, agentId: auth.context.userId, tiers }),
       getDialerStats({ tenantId: auth.context.tenantId, agentId: auth.context.userId }).catch(() => null),
     ]);
-    return NextResponse.json({ ...preview, stats }, { headers: { "Cache-Control": "no-store" } });
+    // An empty list says why (LA-2.8-6), read-only: the same diagnosis Serve next gives, without
+    // pressing it. Only for the whole list; a priority filter that is empty is just a filter.
+    const empty = preview.available && preview.count === 0 && tiers === null
+      ? await diagnoseEmptyQueue(auth.context.tenantId, auth.context.userId).catch(() => null)
+      : null;
+    return NextResponse.json({ ...preview, stats, emptyReason: empty?.message ?? null, emptyCode: empty?.code ?? null }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     const status = error instanceof DialerWorkflowError ? error.status : 500;
     return NextResponse.json({ error: error instanceof Error ? error.message : "Could not load the queue" }, { status });

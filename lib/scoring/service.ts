@@ -1,7 +1,7 @@
 import "server-only";
 
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
-import { normalizePreview, type QueuePreview } from "@/lib/scoring/preview";
+import { normalizePreview, signalBreakdown, type QueuePreview } from "@/lib/scoring/preview";
 
 type Result<T> = { data: T; error: { message: string; code?: string } | null };
 type Query<T> = PromiseLike<Result<T>> & {
@@ -218,7 +218,20 @@ export async function scoringQueuePreview(tenantId: string, agentUserId: string)
     if (isMissingSchema(result.error)) return null;
     throw new Error(`Could not preview the queue: ${result.error.message}`);
   }
-  return normalizePreview(result.data);
+  const preview = normalizePreview(result.data);
+  // LA-2.13-2 · the per-signal breakdown. score_lead is asked again for each shown lead AT THE
+  // PREVIEW'S OWN INSTANT, so its factors are the ones behind the score on the row (same function,
+  // same time, same weights) and the points add up to it. Read-only (STABLE), bounded by the row
+  // limit, and a failed read leaves that row without a breakdown rather than failing the preview.
+  const at = preview.generatedAt || new Date().toISOString();
+  const breakdowns = await Promise.all(preview.rows.map(async (row) => {
+    if (!row.leadId) return null;
+    const scored = await db.rpc("score_lead", { p_tenant_id: tenantId, p_lead_id: row.leadId, p_at: at });
+    if (scored.error) return null;
+    const out = (Array.isArray(scored.data) ? scored.data[0] : scored.data) as Record<string, unknown> | null;
+    return out ? signalBreakdown(out.signals, SCORING_SIGNALS) : null;
+  }));
+  return { ...preview, rows: preview.rows.map((row, index) => ({ ...row, breakdown: breakdowns[index] })) };
 }
 
 export async function saveScoringSettings(input: {

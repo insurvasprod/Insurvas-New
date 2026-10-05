@@ -261,13 +261,30 @@ export async function performDncDialPreflight(
   phone: string,
   tenantId: string,
   fetcher: typeof fetch = fetch,
-): Promise<{ allowed: boolean; phone: string }> {
+  /** Who and what the exemption's audited use is for (the dial's lead, attempt and agent). */
+  context: { leadId?: string | null; attemptId?: string | null; agentId?: string | null } = {},
+): Promise<{ allowed: boolean; phone: string; exemptionId?: string }> {
   const normalized = normalizeDialPhone(phone);
   const { data: tenantSuppressed, error: suppressionError } = await getSupabaseServiceClient().rpc("is_tenant_phone_suppressed", { p_tenant_id: tenantId, p_phone_digits: normalized });
   if (suppressionError) throw new Error(`Could not check tenant do-not-call list: ${suppressionError.message}`);
   if (tenantSuppressed) return { allowed: false, phone: maskDialPhone(normalized) };
   const decision = await performDncVendorLookup(normalized, tenantId, fetcher);
-  return { allowed: decision.allowed, phone: maskDialPhone(normalized) };
+  if (decision.allowed) return { allowed: true, phone: maskDialPhone(normalized) };
+  // LA-2.3-3: the registry listed it. A recorded written consent or business relationship clears
+  // federal/state DNC (never the agency's own list, checked above, and never a litigator, which is
+  // a separate list). use_dnc_exemption both answers and writes the audit row for this use; before
+  // 20260925709700 it does not exist, and the dial stays refused.
+  const exemption = await getSupabaseServiceClient().rpc("use_dnc_exemption" as never, {
+    p_tenant_id: tenantId,
+    p_phone: normalized,
+    p_context: "dial",
+    p_cleared_lists: ["dnc_registry"],
+    p_lead_id: context.leadId ?? null,
+    p_attempt_id: context.attemptId ?? null,
+    p_actor: context.agentId ?? null,
+  } as never) as unknown as { data: unknown; error: { message: string } | null };
+  const cleared = !exemption.error && Array.isArray(exemption.data) && exemption.data.length > 0;
+  return { allowed: cleared, phone: maskDialPhone(normalized), ...(cleared ? { exemptionId: String((exemption.data as Array<{ exemption_id: string }>)[0].exemption_id) } : {}) };
 }
 
 /**

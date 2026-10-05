@@ -44,6 +44,8 @@ export type ViewContext = PipelineViewContext;
 
 /** Outcomes a board or table cannot apply: they need what only the call path collects. */
 const CALL_PATH_KEYS = new Set(["callback_scheduled", "do_not_call"]);
+/** Where a move came from, when it was the outcome of a call (tenant_lead_stage_events.source; 'inbound' is LA-1.12-10). */
+const STAGE_EVENT_SOURCE_NOTE: Record<string, string> = { inbound: " · inbound call outcome", dialer: " · dialer call outcome" };
 const callPathOnly = (option: MappedDisposition) => CALL_PATH_KEYS.has(option.key) || option.nextAction === "callback" || option.nextAction === "suppress";
 
 export function leadName(lead: ViewLead) {
@@ -488,7 +490,7 @@ export function ListView({
                         <span className="mt-1.5 size-1.5 shrink-0 rounded-full" style={{ background: stagesById.get(event.toStageId)?.stage.color ?? "var(--muted-foreground)" }} aria-hidden="true" />
                         <span>
                           <span className="block font-semibold">{stagesById.get(event.toStageId)?.stage.name ?? "A stage no longer shown"}{event.dispositionKey ? ` — ${dispositionLabel(event.dispositionKey, context)}` : " — corrected by an owner"}</span>
-                          <span className="block text-xs text-muted-foreground">{event.actorName ?? "System"} · {dateTime(event.at, viewerTimeZone())}{event.fromStageId && stagesById.get(event.fromStageId) ? ` · from ${stagesById.get(event.fromStageId)!.stage.name}` : ""}</span>
+                          <span className="block text-xs text-muted-foreground">{event.actorName ?? "System"} · {dateTime(event.at, viewerTimeZone())}{event.fromStageId && stagesById.get(event.fromStageId) ? ` · from ${stagesById.get(event.fromStageId)!.stage.name}` : ""}{STAGE_EVENT_SOURCE_NOTE[event.source] ?? ""}</span>
                         </span>
                       </li>
                     ))}

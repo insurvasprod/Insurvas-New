@@ -1,19 +1,40 @@
--- Inbound transfers, part 1 of 4: the columns and helpers the other three files build on.
+-- Inbound transfers, part 1 of 3: the columns and helpers the other two files build on.
+-- Apply in order: 709850, then 709860, then 709870. Each file checks the one before it.
 --
 --   LA-1.10-2   The inbox row's age. Partner forms collect date_of_birth, not age, so every partner
 --               lead showed an age of "—". lead_values_age() reads values.age when a form recorded
---               one (Design 1's intake now derives it for new submissions) and otherwise works it out
---               from the date of birth, for every lead already in the queue.
+--               one and otherwise works it out from the date of birth, for every lead already in the
+--               queue.
 --   LA-1.10-8   A dropped call can go back in the queue (requeued_at, requeue_count) and
 --   LA-1.11-6   a re-claim resumes the same verification session (file 709860).
 --   LA-1.14-9   A buffer who stays on the call after the handoff ends that involvement on its own
 --               (buffer_ended_at), which is a different act from giving the transfer back.
 --   LA-1.14-10  A caller who asked for another language: language_key(), lead_language_key() and
 --               agent_speaks_language() are the one reading of "who can take this call".
---   LA-1.13-2   deal_flow.buffer_agent, and initial_quote composed from carrier, face and premium.
---   LA-1.12-10  tenant_lead_stage_events accepts 'inbound' as a source. Restated from the live
---               definition and including 'dialer', which Design 3's 20260925711300 adds, so the two
---               files can be applied in either order.
+--   LA-1.13-2   deal_flow.buffer_agent, and an initial quote composed from carrier, face and premium
+--               when nobody gave one.
+--   LA-1.12-10  tenant_lead_stage_events accepts 'inbound' as a source.
+--
+-- Reconciled against the live database on 2026-09-29 (read-only catalog reads):
+--   * The stage-history source check is NOT restated from a fixed list any more. Live it already
+--     allows 'inbound' (20260926000100) and 'application_sync' (LA-3, 20260926101000), the earlier
+--     draft restated it without 'application_sync', which would have failed validation on the first
+--     LA-3 sync row, or dropped LA-3's source. The block below only ever ADDS values, keeping every
+--     value the live check has.
+--   * list_transfer_inbox is restated from its live body (20260924250000), the one change is age.
+--   * The initial-quote trigger never replaces a quote somebody gave (a partner's text, or an agent's
+--     typed quote on a manual deal). It fills the blank. The backfill likewise only fills blanks.
+--   * lead_value_cents reads whole cents only: template currency fields store integer cents, and a
+--     decimal string ("50.72") is a dollar amount this function cannot tell apart, so it is skipped.
+--   * The lead_queue buffer_ended_at backfill is gone: it only touched finished transfers, bumped
+--     their updated_at and broadcast a floor change per row. Finished transfers are excluded by
+--     status instead (end_buffer_involvement in 709860 refuses them).
+--
+-- Down: drop the trigger deal_flow_compose_initial_quote and the functions lead_values_age,
+-- language_key, lead_language_key, agent_speaks_language, compose_initial_quote, lead_value_cents,
+-- deal_flow_compose_initial_quote, restate list_transfer_inbox from 20260924250000, drop the columns
+-- lead_queue.buffer_ended_at/requeued_at/requeue_count and deal_flow.buffer_agent (after 709860 and
+-- 709870 are rolled back). The stage-history source is left as it is (other files use it).
 
 -- ── columns ─────────────────────────────────────────────────────────────────
 alter table public.lead_queue
@@ -28,11 +49,32 @@ create index if not exists deal_flow_buffer_agent_idx
   on public.deal_flow (tenant_id, buffer_agent) where buffer_agent is not null;
 
 -- ── stage history sources ───────────────────────────────────────────────────
-alter table public.tenant_lead_stage_events
-  drop constraint if exists tenant_lead_stage_events_source_check,
-  add constraint tenant_lead_stage_events_source_check
-    check (source = any (array['board', 'table', 'list', 'lead_detail', 'owner_fix', 'dialer', 'inbound'])) not valid;
-alter table public.tenant_lead_stage_events validate constraint tenant_lead_stage_events_source_check;
+-- Adds 'inbound' (and 'dialer', for a replay where 20260925711300 has not run yet) to whatever the
+-- live check allows. A no-op when both are already there, which is the live state on 2026-09-29.
+do $$
+declare
+  v_def text;
+  v_values text[];
+  v_needed constant text[] := array['board', 'table', 'list', 'lead_detail', 'owner_fix', 'dialer', 'inbound'];
+  v_list text;
+begin
+  select pg_get_constraintdef(c.oid) into v_def
+    from pg_constraint c
+   where c.conrelid = 'public.tenant_lead_stage_events'::regclass
+     and c.conname = 'tenant_lead_stage_events_source_check';
+  select coalesce(array_agg(distinct t.m[1]), '{}'::text[]) into v_values
+    from regexp_matches(coalesce(v_def, ''), '''([a-z_]+)''', 'g') as t(m);
+  if v_def is not null and v_values @> v_needed then
+    raise notice '20260925709850: stage history already accepts %', array_to_string(v_values, ', ');
+    return;
+  end if;
+  select string_agg(quote_literal(s.v), ', ' order by s.v) into v_list
+    from (select distinct unnest(v_values || v_needed) as v) s;
+  execute format(
+    'alter table public.tenant_lead_stage_events drop constraint if exists tenant_lead_stage_events_source_check, '
+    || 'add constraint tenant_lead_stage_events_source_check check (source = any (array[%s])) not valid', v_list);
+  execute 'alter table public.tenant_lead_stage_events validate constraint tenant_lead_stage_events_source_check';
+end $$;
 
 -- ── age ─────────────────────────────────────────────────────────────────────
 -- Whole years on p_on. Accepts YYYY-MM-DD (the date field's stored form, optionally with a time)
@@ -74,7 +116,8 @@ $function$;
 
 -- ── language ────────────────────────────────────────────────────────────────
 -- One spelling for a language, whichever way it was written: 'Spanish', 'spanish', 'es', 'es-MX'
--- all read 'spanish'. The same code list the Agent Floor uses. Null when nothing is recorded.
+-- all read 'spanish'. The same code list the Agent Floor uses (lib/transferInbox/constants.ts
+-- languageKey). Null when nothing is recorded.
 create or replace function public.language_key(p_value text)
 returns text
 language sql
@@ -151,7 +194,8 @@ as $function$
   ), '')
 $function$;
 
--- A cents amount from a lead value: template currency fields store integer cents.
+-- A cents amount from a lead value: template currency fields store integer cents. A decimal string
+-- ("50.72") is a dollar amount typed as text and is not read, so it can never show as 51 cents.
 create or replace function public.lead_value_cents(p_values jsonb, p_keys text[])
 returns bigint
 language sql
@@ -159,20 +203,17 @@ immutable
 set search_path = pg_catalog
 as $function$
   select (
-    select round(btrim(p_values->>k)::numeric)::bigint
+    select btrim(p_values->>k)::bigint
       from unnest(p_keys) with ordinality as keys(k, n)
-     where coalesce(btrim(p_values->>k), '') ~ '^[0-9]+(\.[0-9]+)?$'
+     where coalesce(btrim(p_values->>k), '') ~ '^[0-9]{1,15}$'
      order by n
      limit 1
   )
 $function$;
 
--- The three parts come from the deal row itself (an agent recording the application), or, on a new
--- row that has none of them, from the partner's submission. A quote composed only from the
--- submission replaces the partner's own quote text only when it carries the price, so a face amount
--- alone never overwrites "$50.72/mo · 100k 20-yr term". On an edit, only a change to carrier, face
--- or premium recomposes it, so an agent who types their own initial quote keeps it. When nothing is
--- known the given text stays.
+-- An initial quote somebody gave -- the partner's text, or an agent's typed quote on a manual deal --
+-- is never replaced. A blank one is composed from the deal row's carrier, face and premium, or, on a
+-- new row that has none of them, from the partner's submission.
 create or replace function public.deal_flow_compose_initial_quote()
 returns trigger
 language plpgsql
@@ -181,27 +222,19 @@ set search_path = public, pg_catalog
 as $function$
 declare
   v_values jsonb;
-  v_carrier text;
-  v_face bigint;
-  v_premium bigint;
   v_composed text;
 begin
-  if tg_op = 'UPDATE'
-     and new.carrier is not distinct from old.carrier
-     and new.face_amount_cents is not distinct from old.face_amount_cents
-     and new.monthly_premium_cents is not distinct from old.monthly_premium_cents then
+  if nullif(btrim(coalesce(new.initial_quote, '')), '') is not null then
     return new;
   end if;
   v_composed := public.compose_initial_quote(new.carrier, new.face_amount_cents, new.monthly_premium_cents);
   if v_composed is null and tg_op = 'INSERT' then
     select l.values into v_values from public.agent_leads l where l.id = new.lead_id and l.tenant_id = new.tenant_id;
     if v_values is not null and jsonb_typeof(v_values) = 'object' then
-      v_carrier := nullif(btrim(coalesce(v_values->>'carrier', v_values->>'quoted_carrier', v_values->>'preferred_carrier', '')), '');
-      v_face := public.lead_value_cents(v_values, array['face_amount_cents', 'face_amount', 'coverage_amount']);
-      v_premium := public.lead_value_cents(v_values, array['monthly_premium_cents', 'monthly_premium', 'quoted_premium', 'premium']);
-      if v_premium is not null or nullif(btrim(coalesce(new.initial_quote, '')), '') is null then
-        v_composed := public.compose_initial_quote(v_carrier, v_face, v_premium);
-      end if;
+      v_composed := public.compose_initial_quote(
+        nullif(btrim(coalesce(v_values->>'carrier', v_values->>'quoted_carrier', v_values->>'preferred_carrier', '')), ''),
+        public.lead_value_cents(v_values, array['face_amount_cents', 'face_amount', 'coverage_amount']),
+        public.lead_value_cents(v_values, array['monthly_premium_cents', 'monthly_premium', 'quoted_premium', 'premium']));
     end if;
   end if;
   if v_composed is not null then new.initial_quote := left(v_composed, 1000); end if;
@@ -227,7 +260,7 @@ create trigger deal_flow_compose_initial_quote
   for each row execute function public.deal_flow_compose_initial_quote();
 
 -- ── the inbox, with an age for every lead ───────────────────────────────────
--- Restated from the live definition (20260924250000). One change: the age column.
+-- Restated from the live definition (20260924250000, read 2026-09-29). One change: the age column.
 create or replace function public.list_transfer_inbox(p_tenant_id uuid, p_status text default 'unclaimed'::text, p_partner_id uuid default null::uuid, p_product_line text default null::text, p_state text default null::text, p_screening_outcome text default null::text, p_claimed_by uuid default null::uuid)
 returns table(id uuid, lead_id uuid, partner_id uuid, partner_name text, product_line text, status text, owner_user_id uuid, owner_name text, claimed_at timestamp with time zone, queued_at timestamp with time zone, wait_seconds integer, customer text, age text, state text, screening_outcome text, screening_warning text, duplicate_warning boolean, preflight_status text, preflight_result jsonb)
 language sql
@@ -266,7 +299,7 @@ as $function$
       and (p_state is null or coalesce(nullif(btrim(l.values->>'state'), ''), nullif(btrim(l.values->>'state_code'), ''), nullif(btrim(l.values->>'primary_state'), ''), nullif(btrim(l.carrier_state), '')) = p_state)
       and (p_screening_outcome is null or coalesce(q.screening_outcome, l.screening_outcome, 'not_checked') = p_screening_outcome)
     -- The newest 500, so a transfer that just arrived is never the one cut. The bundle's
-    -- truncated flag reads this same 500.
+    -- `truncated` flag reads this same 500.
     order by q.queued_at desc limit 500
   ) newest
   order by newest.queued_at asc
@@ -283,12 +316,6 @@ begin
     raise notice '20260925709850: backfills skipped, % cannot create in public', current_user;
     return;
   end if;
-  -- A buffer on a finished transfer is not still on a call.
-  update public.lead_queue
-     set buffer_ended_at = coalesce(updated_at, now())
-   where buffer_user_id is not null
-     and buffer_ended_at is null
-     and status not in ('buffer_active', 'handed_pending', 'la_active');
   -- The buffer assistant who took each transfer, from the work item that still names them.
   update public.deal_flow d
      set buffer_agent = q.buffer_user_id
@@ -298,19 +325,26 @@ begin
      and q.buffer_user_id is not null
      and d.buffer_agent is null
      and exists (select 1 from public.users u where u.id = q.buffer_user_id);
-  -- Deals whose agent already recorded carrier, face or premium get the composed quote now.
+  -- Deals with no initial quote whose agent already recorded carrier, face or premium get the
+  -- composed one. A quote somebody gave is left exactly as it is.
   update public.deal_flow
      set initial_quote = left(public.compose_initial_quote(carrier, face_amount_cents, monthly_premium_cents), 1000)
-   where public.compose_initial_quote(carrier, face_amount_cents, monthly_premium_cents) is not null
-     and initial_quote is distinct from left(public.compose_initial_quote(carrier, face_amount_cents, monthly_premium_cents), 1000);
+   where nullif(btrim(coalesce(initial_quote, '')), '') is null
+     and public.compose_initial_quote(carrier, face_amount_cents, monthly_premium_cents) is not null;
 end $$;
 
 -- ── assertions ──────────────────────────────────────────────────────────────
+-- Run in the SQL editor they prove this file landed, the checker's role skips them.
 do $$
 begin
   if not has_schema_privilege(current_user, 'public', 'CREATE') then
     raise notice '20260925709850: assertions skipped, % cannot create in public', current_user;
     return;
+  end if;
+  if not exists (select 1 from pg_attribute where attrelid = 'public.lead_queue'::regclass and attname = 'requeue_count' and not attisdropped)
+     or not exists (select 1 from pg_attribute where attrelid = 'public.lead_queue'::regclass and attname = 'buffer_ended_at' and not attisdropped)
+     or not exists (select 1 from pg_attribute where attrelid = 'public.deal_flow'::regclass and attname = 'buffer_agent' and not attisdropped) then
+    raise exception '20260925709850: the requeue, buffer and deal-buffer columns are missing';
   end if;
   if public.lead_values_age('{"date_of_birth":"1960-04-02"}'::jsonb, date '2026-09-25') is distinct from '66' then
     raise exception '20260925709850: age is not worked out from a date of birth';
@@ -332,16 +366,32 @@ begin
      or public.compose_initial_quote(null, null, null) is not null then
     raise exception '20260925709850: the initial quote is not composed from carrier, face and premium';
   end if;
+  if public.lead_value_cents('{"premium":"50.72","monthly_premium_cents":4850}'::jsonb, array['premium', 'monthly_premium_cents']) is distinct from 4850 then
+    raise exception '20260925709850: a decimal dollar string is read as cents';
+  end if;
   if not exists (select 1 from pg_constraint where conname = 'tenant_lead_stage_events_source_check'
-                  and pg_get_constraintdef(oid) like '%inbound%' and pg_get_constraintdef(oid) like '%dialer%') then
+                  and pg_get_constraintdef(oid) like '%''inbound''%' and pg_get_constraintdef(oid) like '%''dialer''%'
+                  and pg_get_constraintdef(oid) like '%''owner_fix''%' and convalidated) then
     raise exception '20260925709850: stage history does not accept inbound and dialer';
+  end if;
+  -- LA-3 (20260926101000) added 'application_sync'. Once it is live it must still be there.
+  if to_regclass('public.tenant_application_stage_map') is not null then
+    if not exists (select 1 from pg_constraint where conname = 'tenant_lead_stage_events_source_check'
+                    and pg_get_constraintdef(oid) like '%''application_sync''%') then
+      raise exception '20260925709850: stage history lost the LA-3 application_sync source';
+    end if;
   end if;
   if not exists (select 1 from pg_proc where pronamespace = 'public'::regnamespace and proname = 'list_transfer_inbox'
                   and position('public.lead_values_age(l.values)' in prosrc) > 0) then
     raise exception '20260925709850: the inbox does not work out age';
   end if;
-  if has_function_privilege('anon', 'public.agent_speaks_language(uuid, uuid, text)', 'execute') then
-    raise exception '20260925709850: agent_speaks_language is callable from the browser';
+  if not exists (select 1 from pg_trigger where tgrelid = 'public.deal_flow'::regclass and tgname = 'deal_flow_compose_initial_quote' and not tgisinternal) then
+    raise exception '20260925709850: the initial-quote trigger is missing';
   end if;
-  -- Coverage: LA-1.10-2, LA-1.13-2 (columns), LA-1.12-10 (source), LA-1.14-9 and LA-1.14-10 (helpers).
+  if has_function_privilege('anon', 'public.agent_speaks_language(uuid, uuid, text)', 'execute')
+     or has_function_privilege('authenticated', 'public.agent_speaks_language(uuid, uuid, text)', 'execute')
+     or has_function_privilege('anon', 'public.list_transfer_inbox(uuid, text, uuid, text, text, text, uuid)', 'execute') then
+    raise exception '20260925709850: a service-only function is callable from the browser';
+  end if;
+  -- Coverage: LA-1.10-2, LA-1.13-2 (columns, quote), LA-1.12-10 (source), LA-1.14-9 and LA-1.14-10 (helpers).
 end $$;

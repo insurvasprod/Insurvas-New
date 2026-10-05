@@ -1,3 +1,4 @@
+import "./lib/refuseProduction.mjs";
 /**
  * Does every RPC the application calls actually exist in the database?
  *

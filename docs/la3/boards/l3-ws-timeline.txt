@@ -1,0 +1,213 @@
+<div> {flex-direction:column;padding:24px 32px 32px}
+  <div .m-stagger> {flex-direction:column;gap:24px}
+    <div> {justify-content:space-between;gap:24px}
+        <div> {fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+          "Sell · Application"
+        <h1> {fsize:32px;fweight:600;color:#15191e}
+          "Grace Oyelaran"
+        <div> {gap:8px}
+          <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#fcefdf;color:#9a4f00;fsize:12px;fweight:400;fweight:600}
+            <span> {width:6px;height:6px;bd-radius:9999px;bg:#b35c00}
+            "Counteroffer pending"
+          <button type="button"> {gap:7px;height:28px;padding:0 10px;bd:1px solid #7a828e;bd-radius:8px;bg:#ffffff;color:#15191e;fsize:12px;fweight:400;fweight:600}
+            "Attempt 2 · Mutual of Omaha"
+            <svg/>
+          <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e4e8ee;color:#33383f;fsize:12px;fweight:400;fweight:600}
+            <span> {width:6px;height:6px;bd-radius:9999px;bg:#60646c}
+            "Final Expense · $15,000"
+          <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e0f2f6;color:#005e75;fsize:12px;fweight:400;fweight:600}
+            <span> {width:6px;height:6px;bd-radius:9999px;bg:#00708a}
+            "Household · 2 applications"
+      <div> {gap:12px}
+        <button type="button"> {justify-content:center;gap:8px;height:40px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+          "Open portal"
+        <button type="button"> {justify-content:center;gap:8px;height:40px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+          "Add spouse"
+    <div> {gap:20px}
+      <div> {width:186px}
+        <div> {flex-direction:column;bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff}
+          <div> {padding:10px}
+            <a href="#"> {gap:9px;height:34px;padding:0 10px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              <span> {width:18px;height:18px;justify-content:center;bd-radius:9999px;bg:#138a43;color:#ffffff}
+                <svg/>
+              "Verify"
+            <a href="#"> {gap:9px;height:34px;padding:0 10px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              <span> {width:18px;height:18px;justify-content:center;bd-radius:9999px;bg:#138a43;color:#ffffff}
+                <svg/>
+              "Interview"
+            <a href="#"> {gap:9px;height:34px;padding:0 10px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              <span> {width:18px;height:18px;justify-content:center;bd-radius:9999px;bg:#138a43;color:#ffffff}
+                <svg/>
+              "Quote"
+            <a href="#"> {gap:9px;height:34px;padding:0 10px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              <span> {width:18px;height:18px;justify-content:center;bd-radius:9999px;bg:#138a43;color:#ffffff}
+                <svg/>
+              "Application"
+            <a href="#"> {gap:9px;height:34px;padding:0 10px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              <span> {width:18px;height:18px;justify-content:center;bd-radius:9999px;bg:#138a43;color:#ffffff}
+                <svg/>
+              "Beneficiaries"
+            <a href="#"> {gap:9px;height:34px;padding:0 10px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              <span> {width:18px;height:18px;justify-content:center;bd-radius:9999px;bg:#138a43;color:#ffffff}
+                <svg/>
+              "Payment"
+            <a href="#"> {gap:9px;height:34px;padding:0 10px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              <span> {width:18px;height:18px;justify-content:center;bd-radius:9999px;bg:#138a43;color:#ffffff}
+                <svg/>
+              "Disclosures"
+            <a href="#"> {gap:9px;height:34px;padding:0 10px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              <span> {width:18px;height:18px;justify-content:center;bd-radius:9999px;bg:#138a43;color:#ffffff}
+                <svg/>
+              "Review"
+            <a href="#"> {gap:9px;height:34px;padding:0 10px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              <span> {width:18px;height:18px;justify-content:center;bd-radius:9999px;bg:#138a43;color:#ffffff}
+                <svg/>
+              "Submit"
+            <a href="#"> {gap:9px;height:34px;padding:0 10px;bd-radius:8px;bg:#fff3ec;color:#a63800;fweight:600;fsize:14px;fweight:400}
+              <span> {width:18px;height:18px;justify-content:center;bd-radius:9999px;bg:#ff5900;color:#15191e;fsize:12px;fweight:400;fweight:600}
+                "10"
+              "After submit"
+            <a href="#"> {gap:9px;height:34px;padding:0 10px;bd-top:1px solid #d5dbe3;bd-radius:0;color:#33383f;fsize:14px;fweight:400;height:auto}
+              "Case timeline"
+      <div> {flex-direction:column;gap:20px}
+        <div> {flex-direction:column;bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff}
+          <div> {justify-content:space-between;gap:16px;padding:12px 16px;bg:#e4e8ee;bd-bottom:1px solid #d5dbe3}
+            <span> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+              "Attempts"
+            <span> {gap:10px}
+              <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e4e8ee;color:#33383f;fsize:12px;fweight:400;fweight:600}
+                <span> {width:6px;height:6px;bd-radius:9999px;bg:#60646c}
+                "3 carriers tried"
+              <button type="button"> {justify-content:center;gap:8px;height:32px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+                "New attempt"
+          <div> {gap:16px;padding:16px 22px;bd-top:1px solid #d5dbe3}
+            <span> {width:30px;height:30px;justify-content:center;bd-radius:9999px;bg:#e4e8ee;fsize:12px;fweight:400;fweight:600}
+              "1"
+              <span> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+                "Mutual of Omaha"
+              <span> {fsize:12px;fweight:400;color:#60646c}
+                "Declined by carrier — health, cardiac. Never edited, never deleted."
+            <span> {fsize:12px;fweight:400;color:#60646c}
+              "12 Sep"
+            <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#fdeaea;color:#b02020;fsize:12px;fweight:400;fweight:600}
+              <span> {width:6px;height:6px;bd-radius:9999px;bg:#c92a2a}
+              "Declined"
+            <a href="#" .m-arrow> {gap:6px;color:#15191e;fsize:14px;fweight:600}
+              "Open"
+              <svg/>
+          <div> {gap:16px;padding:16px 22px;bd-top:1px solid #d5dbe3}
+            <span> {width:30px;height:30px;justify-content:center;bd-radius:9999px;bg:#e4e8ee;fsize:12px;fweight:400;fweight:600}
+              "2"
+              <span> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+                "Gerber Life"
+              <span> {fsize:12px;fweight:400;color:#60646c}
+                "$10,000 offered against $15,000 applied for. Expires 2 Oct."
+            <span> {fsize:12px;fweight:400;color:#60646c}
+              "28 Sep"
+            <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#fcefdf;color:#9a4f00;fsize:12px;fweight:400;fweight:600}
+              <span> {width:6px;height:6px;bd-radius:9999px;bg:#b35c00}
+              "Counteroffer"
+            <a href="#" .m-arrow> {gap:6px;color:#15191e;fsize:14px;fweight:600}
+              "Open"
+              <svg/>
+          <div> {gap:16px;padding:16px 22px;bd-top:1px solid #d5dbe3}
+            <span> {width:30px;height:30px;justify-content:center;bd-radius:9999px;bg:#e4e8ee;fsize:12px;fweight:400;fweight:600}
+              "3"
+              <span> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+                "Americo"
+              <span> {fsize:12px;fweight:400;color:#60646c}
+                "Carried forward: health, medications, address, beneficiaries, payment."
+            <span> {fsize:12px;fweight:400;color:#60646c}
+              "—"
+            <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e0f2f6;color:#005e75;fsize:12px;fweight:400;fweight:600}
+              <span> {width:6px;height:6px;bd-radius:9999px;bg:#00708a}
+              "Draft"
+            <a href="#" .m-arrow> {gap:6px;color:#15191e;fsize:14px;fweight:600}
+              "Open"
+              <svg/>
+        <div> {flex-direction:column;bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff}
+          <div> {justify-content:space-between;gap:16px;padding:12px 16px;bg:#e4e8ee;bd-bottom:1px solid #d5dbe3}
+            <span> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+              "Everything that happened"
+            <span> {gap:10px}
+              <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e4e8ee;color:#33383f;fsize:12px;fweight:400;fweight:600}
+                "18 events"
+          <div> {padding:18px 22px}
+            <div> {flex-direction:column;gap:14px}
+              <div> {gap:12px}
+                <span> {width:7px;height:7px;bd-radius:9999px;bg:#b35c00}
+                  <span> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+                    "Counteroffer received from Gerber Life"
+                  <span> {fsize:12px;fweight:400;color:#60646c}
+                    "28 Sep 2026, 4:02 pm · carrier webhook"
+              <div> {gap:12px}
+                <span> {width:7px;height:7px;bd-radius:9999px;bg:#138a43}
+                  <span> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+                    "Submitted to Gerber Life · GL-40771902"
+                  <span> {fsize:12px;fweight:400;color:#60646c}
+                    "28 Sep 2026, 2:41 pm · Rinor G."
+              <div> {gap:12px}
+                <span> {width:7px;height:7px;bd-radius:9999px;bg:#60646c}
+                  <span> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+                    "QA verdict frozen: pass"
+                  <span> {fsize:12px;fweight:400;color:#60646c}
+                    "28 Sep 2026, 2:39 pm · system"
+              <div> {gap:12px}
+                <span> {width:7px;height:7px;bd-radius:9999px;bg:#138a43}
+                  <span> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+                    "Replacement notice acknowledged, read aloud"
+                  <span> {fsize:12px;fweight:400;color:#60646c}
+                    "28 Sep 2026, 2:14 pm · Rinor G."
+              <div> {gap:12px}
+                <span> {width:7px;height:7px;bd-radius:9999px;bg:#60646c}
+                  <span> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+                    "Draft day set to the 23rd"
+                  <span> {fsize:12px;fweight:400;color:#60646c}
+                    "28 Sep 2026, 2:02 pm · Rinor G. · recommended"
+              <div> {gap:12px}
+                <span> {width:7px;height:7px;bd-radius:9999px;bg:#60646c}
+                  <span> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+                    "SSN revealed"
+                  <span> {fsize:12px;fweight:400;color:#60646c}
+                    "28 Sep 2026, 1:58 pm · Rinor G. · audit row 40771"
+              <div> {gap:12px}
+                <span> {width:7px;height:7px;bd-radius:9999px;bg:#c92a2a}
+                  <span> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+                    "Attempt 1 declined — health, cardiac"
+                  <span> {fsize:12px;fweight:400;color:#60646c}
+                    "12 Sep 2026, 9:20 am · Mutual of Omaha"
+              <div> {gap:12px}
+                <span> {width:7px;height:7px;bd-radius:9999px;bg:#60646c}
+                  <span> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+                    "Case opened from the dialer"
+                  <span> {fsize:12px;fweight:400;color:#60646c}
+                    "11 Sep 2026, 3:40 pm · Rinor G."
+      <div> {width:268px}
+        <div> {flex-direction:column;bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff}
+          <div> {padding:14px;bg:#e0f3e7;bd-bottom:1px solid #d5dbe3}
+            <div> {fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+              "Pre-submission QA"
+            <div> {fsize:18px;fweight:600;color:#0d7038}
+              "Per attempt"
+            <div> {fsize:12px;fweight:400;color:#33383f}
+              "Runs as you type. Every line goes to the field it is about."
+          <a href="#" .m-row> {gap:9px;padding:9px 14px;bd-top:1px solid #d5dbe3}
+            <span> {width:7px;height:7px;bd-radius:9999px;bg:#c92a2a}
+              <span> {fsize:12px;fweight:400;color:#33383f}
+                "Attempt 1 — declined"
+              <span> {fsize:12px;fweight:400;color:#60646c;fsize:11px}
+                "attempt.1.outcome"
+          <a href="#" .m-row> {gap:9px;padding:9px 14px;bd-top:1px solid #d5dbe3}
+            <span> {width:7px;height:7px;bd-radius:9999px;bg:#b35c00}
+              <span> {fsize:12px;fweight:400;color:#33383f}
+                "Attempt 2 — counteroffer pending"
+              <span> {fsize:12px;fweight:400;color:#60646c;fsize:11px}
+                "attempt.2.outcome"
+          <a href="#" .m-row> {gap:9px;padding:9px 14px;bd-top:1px solid #d5dbe3}
+            <span> {width:7px;height:7px;bd-radius:9999px;bg:#60646c}
+              <span> {fsize:12px;fweight:400;color:#33383f}
+                "Attempt 3 — draft, not yet checked"
+              <span> {fsize:12px;fweight:400;color:#60646c;fsize:11px}
+                "attempt.3.qa"
+          <div> {padding:12px 14px;bd-top:1px solid #d5dbe3;bg:#f1f3f7;fsize:12px;fweight:400;color:#60646c}
+            "An attempt keeps its own verdict. Nothing is rewritten when the next one starts."

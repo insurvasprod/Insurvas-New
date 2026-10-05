@@ -2,7 +2,7 @@ import "server-only";
 
 import { getWorkspaceTimezone } from "@/lib/agencyProfile/timezone";
 import { DEFAULT_CADENCE, DEFAULT_CEILING } from "@/lib/cadence/engine";
-import { humanInterval } from "@/lib/cadence/service";
+import { cadenceMaxAttempts, humanInterval } from "@/lib/cadence/service";
 import { callbackWindowFacts, type CallbackWindowFacts } from "@/lib/callbacks/windowFacts";
 import { customerTimezone, stateFromLeadValues } from "@/lib/callbacks/timezone";
 import { getCallingWindows } from "@/lib/callingWindow/service";
@@ -67,8 +67,9 @@ type Chain = Result & {
   maybeSingle(): Result;
 };
 
-// The scheduler's own fallback table (schedule_next_attempt, 20260924230300), for attempts no stored
-// rule covers: attempt 1 is two hours after arrival, and past the sixth every gap is five days.
+// The scheduler's own fallback table (schedule_next_attempt, 20260929201100), for attempts no stored
+// rule covers. Rung N is the wait before dial N: attempt 1 is the first dial and has no wait, attempt
+// 2 is two hours after it, and past the seventh every gap is five days.
 function defaultRule(attempt: number): { delay: string; preferred: string | null } {
   const row = DEFAULT_CADENCE.find((entry) => entry.attemptNumber === attempt);
   return row ? { delay: row.delayInterval, preferred: row.preferredSlot ?? null } : { delay: "5 days", preferred: null };
@@ -121,9 +122,13 @@ export async function getLeadRecord(tenantId: string, leadId: string): Promise<L
   const agencyRules = campaignOwns ? { data: [], error: null } : await rulesQuery(null);
   const rules = ((campaignOwns ? campaignRules.data : agencyRules.error ? [] : agencyRules.data) ?? []) as RuleRow[];
   const ruleFor = new Map(rules.map((row) => [row.attempt_number, row]));
-  // A recycled lead's pass stops at its batch's ceiling (schedule_next_attempt, 20260925706600).
-  const recycle = await loadRecycleFacts(tenantId, leadId, { leadState: leadRow.lead_state, nextDialAfter: leadRow.next_dial_after });
-  const ceiling = recycle.attemptCeiling ?? DEFAULT_CEILING;
+  // A recycled lead's pass stops at its batch's ceiling (schedule_next_attempt, 20260925706600), which
+  // wins over max attempts (the campaign's, else the tenant's, else seven — 20260929201100).
+  const [recycle, maxAttempts] = await Promise.all([
+    loadRecycleFacts(tenantId, leadId, { leadState: leadRow.lead_state, nextDialAfter: leadRow.next_dial_after }),
+    cadenceMaxAttempts(tenantId, leadRow.campaign_id).catch(() => DEFAULT_CEILING),
+  ]);
+  const ceiling = recycle.attemptCeiling ?? maxAttempts;
   const ladder: LadderRow[] = Array.from({ length: ceiling }, (_, index) => {
     const attempt = index + 1;
     const rule = ruleFor.get(attempt);

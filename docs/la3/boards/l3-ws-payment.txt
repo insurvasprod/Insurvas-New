@@ -1,0 +1,226 @@
+<div> {flex-direction:column;padding:24px 32px 32px}
+  <div .m-stagger> {flex-direction:column;gap:24px}
+    <div> {justify-content:space-between;gap:24px}
+        <div> {fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+          "Sell · Application"
+        <h1> {fsize:32px;fweight:600;color:#15191e}
+          "Grace Oyelaran"
+        <div> {gap:8px}
+          <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#fff3ec;color:#a63800;fsize:12px;fweight:400;fweight:600}
+            <span> {width:6px;height:6px;bd-radius:9999px;bg:#ff5900}
+            "In application"
+          <button type="button"> {gap:7px;height:28px;padding:0 10px;bd:1px solid #7a828e;bd-radius:8px;bg:#ffffff;color:#15191e;fsize:12px;fweight:400;fweight:600}
+            "Attempt 2 · Mutual of Omaha"
+            <svg/>
+          <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e4e8ee;color:#33383f;fsize:12px;fweight:400;fweight:600}
+            <span> {width:6px;height:6px;bd-radius:9999px;bg:#60646c}
+            "Final Expense · $15,000"
+          <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e0f2f6;color:#005e75;fsize:12px;fweight:400;fweight:600}
+            <span> {width:6px;height:6px;bd-radius:9999px;bg:#00708a}
+            "Household · 2 applications"
+      <div> {gap:12px}
+        <button type="button"> {justify-content:center;gap:8px;height:40px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+          "Open portal"
+        <button type="button"> {justify-content:center;gap:8px;height:40px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+          "Add spouse"
+    <div> {gap:20px}
+      <div> {width:186px}
+        <div> {flex-direction:column;bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff}
+          <div> {padding:10px}
+            <a href="#"> {gap:9px;height:34px;padding:0 10px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              <span> {width:18px;height:18px;justify-content:center;bd-radius:9999px;bg:#138a43;color:#ffffff}
+                <svg/>
+              "Verify"
+            <a href="#"> {gap:9px;height:34px;padding:0 10px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              <span> {width:18px;height:18px;justify-content:center;bd-radius:9999px;bg:#138a43;color:#ffffff}
+                <svg/>
+              "Interview"
+            <a href="#"> {gap:9px;height:34px;padding:0 10px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              <span> {width:18px;height:18px;justify-content:center;bd-radius:9999px;bg:#138a43;color:#ffffff}
+                <svg/>
+              "Quote"
+            <a href="#"> {gap:9px;height:34px;padding:0 10px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              <span> {width:18px;height:18px;justify-content:center;bd-radius:9999px;bg:#138a43;color:#ffffff}
+                <svg/>
+              "Application"
+            <a href="#"> {gap:9px;height:34px;padding:0 10px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              <span> {width:18px;height:18px;justify-content:center;bd-radius:9999px;bg:#138a43;color:#ffffff}
+                <svg/>
+              "Beneficiaries"
+            <a href="#"> {gap:9px;height:34px;padding:0 10px;bd-radius:8px;bg:#fff3ec;color:#a63800;fweight:600;fsize:14px;fweight:400}
+              <span> {width:18px;height:18px;justify-content:center;bd-radius:9999px;bg:#ff5900;color:#15191e;fsize:12px;fweight:400;fweight:600}
+                "6"
+              "Payment"
+            <a href="#"> {gap:9px;height:34px;padding:0 10px;bd-radius:8px;bg:transparent;color:#60646c;fsize:14px;fweight:400}
+              <span> {width:18px;height:18px;justify-content:center;bd-radius:9999px;bg:#e4e8ee;color:#60646c;fsize:12px;fweight:400;fweight:600}
+                "7"
+              "Disclosures"
+            <a href="#"> {gap:9px;height:34px;padding:0 10px;bd-radius:8px;bg:transparent;color:#60646c;fsize:14px;fweight:400}
+              <span> {width:18px;height:18px;justify-content:center;bd-radius:9999px;bg:#e4e8ee;color:#60646c;fsize:12px;fweight:400;fweight:600}
+                "8"
+              "Review"
+            <a href="#"> {gap:9px;height:34px;padding:0 10px;bd-radius:8px;bg:transparent;color:#60646c;fsize:14px;fweight:400}
+              <span> {width:18px;height:18px;justify-content:center;bd-radius:9999px;bg:#e4e8ee;color:#60646c;fsize:12px;fweight:400;fweight:600}
+                "9"
+              "Submit"
+            <a href="#"> {gap:9px;height:34px;padding:0 10px;bd-radius:8px;bg:transparent;color:#60646c;fsize:14px;fweight:400}
+              <span> {width:18px;height:18px;justify-content:center;bd-radius:9999px;bg:#e4e8ee;color:#60646c;fsize:12px;fweight:400;fweight:600}
+                "10"
+              "After submit"
+            <a href="#"> {gap:9px;height:34px;padding:0 10px;bd-top:1px solid #d5dbe3;bd-radius:0;color:#33383f;fsize:14px;fweight:400;height:auto}
+              "Case timeline"
+      <div> {flex-direction:column;gap:20px}
+        <div> {gap:20px}
+            <div> {flex-direction:column;bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff}
+              <div> {justify-content:space-between;gap:16px;padding:12px 16px;bg:#e4e8ee;bd-bottom:1px solid #d5dbe3}
+                <span> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+                  "How the premium is paid"
+                <span> {gap:10px}
+                  <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e4e8ee;color:#33383f;fsize:12px;fweight:400;fweight:600}
+                    "CVV is never stored"
+              <div> {padding:18px 22px;flex-direction:column;gap:18px}
+                <div> {gap:3px;padding:3px;bd-radius:8px;bg:#e4e8ee}
+                  <button type="button"> {height:34px;padding:0 14px;bd-radius:8px;bg:#ffffff;bd:1px solid #d5dbe3;color:#15191e;fsize:14px;fweight:600}
+                    "ACH"
+                  <button type="button"> {height:34px;padding:0 14px;bd-radius:8px;bg:transparent;bd:1px solid transparent;color:#60646c;fsize:14px;fweight:600}
+                    "Direct Express"
+                  <button type="button"> {height:34px;padding:0 14px;bd-radius:8px;bg:transparent;bd:1px solid transparent;color:#60646c;fsize:14px;fweight:600}
+                    "Debit card"
+                  <button type="button"> {height:34px;padding:0 14px;bd-radius:8px;bg:transparent;bd:1px solid transparent;color:#60646c;fsize:14px;fweight:600}
+                    "Credit card"
+                  <button type="button"> {height:34px;padding:0 14px;bd-radius:8px;bg:transparent;bd:1px solid transparent;color:#60646c;fsize:14px;fweight:600}
+                    "Direct bill"
+                <div> {grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+                  <label>
+                    <span> {fsize:14px;fweight:400;fweight:600;color:#33383f}
+                      "Bank name"
+                    <input type="text" value="Desert Schools FCU"> {width:100%;height:44px;padding:0 12px;bd:1px solid #7a828e;bd-radius:8px;bg:#ffffff;fsize:16px;fweight:400;color:#15191e}
+                  <label>
+                    <span> {fsize:14px;fweight:400;fweight:600;color:#33383f}
+                      "Routing number"
+                    <span> {gap:8px;height:40px;padding:0 8px 0 12px;bd:1px solid #7a828e;bd-radius:8px;bg:#ffffff}
+                      <span> {fsize:14px;fweight:400;color:#15191e}
+                        "••••••8821"
+                      <button type="button"> {gap:6px;height:28px;padding:0 10px;bd:1px solid #7a828e;bd-radius:6px;bg:#ffffff;color:#15191e;fsize:12px;fweight:400;fweight:600}
+                        <svg/>
+                        "Reveal"
+                    <span> {fsize:12px;fweight:400;color:#60646c}
+                      "One field per reveal. Each one writes an audit row."
+                  <label>
+                    <span> {fsize:14px;fweight:400;fweight:600;color:#33383f}
+                      "Account number"
+                    <span> {gap:8px;height:40px;padding:0 8px 0 12px;bd:1px solid #7a828e;bd-radius:8px;bg:#ffffff}
+                      <span> {fsize:14px;fweight:400;color:#15191e}
+                        "••••••••3390"
+                      <button type="button"> {gap:6px;height:28px;padding:0 10px;bd:1px solid #7a828e;bd-radius:6px;bg:#ffffff;color:#15191e;fsize:12px;fweight:400;fweight:600}
+                        <svg/>
+                        "Reveal"
+                    <span> {fsize:12px;fweight:400;color:#60646c}
+                      "One field per reveal. Each one writes an audit row."
+                  <label>
+                    <span> {fsize:14px;fweight:400;fweight:600;color:#33383f}
+                      "Account type"
+                    <select> {width:100%;height:44px;padding:0 12px;bd:1px solid #7a828e;bd-radius:8px;bg:#ffffff;fsize:16px;fweight:400;color:#15191e}
+                      <option>
+                        "Checking"
+                      <option>
+                        "Savings"
+                <div> {padding:14px 16px;bd:1px solid #d5dbe3;bd-left:3px solid #138a43;bd-radius:12px;bg:#e0f3e7}
+                  <div> {fsize:14px;fweight:400;fweight:600;color:#0d7038}
+                    "Routing checksum passes"
+                  <p> {fsize:14px;fweight:400;color:#33383f}
+                    "ABA checksum is run on ACH only. A card uses Luhn instead, and Direct Express uses the Mastercard check."
+              <div> {justify-content:space-between;gap:16px;padding:14px 20px;bd-top:1px solid #d5dbe3;bg:#f1f3f7}
+                <span> {fsize:12px;fweight:400;color:#60646c}
+                  "Switching method clears the fields the old method needed, and nothing else."
+                <span> {gap:12px}
+                  <button type="button"> {justify-content:center;gap:8px;height:40px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+                    "Back to Beneficiaries"
+                  <button type="button"> {justify-content:center;gap:8px;height:40px;padding:0 16px;bd-radius:8px;bg:#ff5900;color:#15191e;bd:1px solid transparent;fsize:14px;fweight:600}
+                    "Continue to Disclosures"
+          <div> {width:320px;flex-direction:column}
+            <div> {flex-direction:column;bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff}
+              <div> {justify-content:space-between;gap:16px;padding:12px 16px;bg:#e4e8ee;bd-bottom:1px solid #d5dbe3}
+                <span> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+                  "Draft date"
+                <span> {gap:10px}
+                  <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e0f3e7;color:#0d7038;fsize:12px;fweight:400;fweight:600}
+                    "Recommended"
+              <div> {padding:18px 22px;flex-direction:column;gap:16px}
+                <div> {gap:14px}
+                  <span> {fsize:40px;fweight:600;color:#15191e}
+                    "23rd"
+                  <span> {fsize:14px;fweight:400;color:#60646c}
+                    "of each month"
+                <div> {padding:14px 16px;bd:1px solid #d5dbe3;bd-left:3px solid #00708a;bd-radius:12px;bg:#e0f2f6}
+                  <div> {fsize:14px;fweight:400;fweight:600;color:#005e75}
+                    "Say this to her"
+                  <p> {fsize:14px;fweight:400;color:#33383f}
+                    "“Your Social Security lands on the third Wednesday. I’ll set the draft for the 23rd, which is two days after the latest that can fall, so it is never early.”"
+                  <div> {fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+                    "Alternates"
+                  <div> {gap:8px}
+                    <button type="button"> {justify-content:center;gap:8px;height:32px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+                      "24th"
+                    <button type="button"> {justify-content:center;gap:8px;height:32px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+                      "25th"
+                    <button type="button"> {justify-content:center;gap:8px;height:32px;padding:0 16px;bd-radius:8px;bg:transparent;color:#15191e;bd:1px solid transparent;fsize:14px;fweight:600}
+                      "Override…"
+                  <div> {fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+                    "The next twelve arrivals"
+                  <div> {gap:6px}
+                    <span> {justify-content:center;width:52px;height:28px;bd:1px solid #d5dbe3;bd-radius:6px;bg:#ffffff;fsize:12px;fweight:400;color:#33383f}
+                      "15 Oct"
+                    <span> {justify-content:center;width:52px;height:28px;bd:1px solid #d5dbe3;bd-radius:6px;bg:#ffffff;fsize:12px;fweight:400;color:#33383f}
+                      "19 Nov"
+                    <span> {justify-content:center;width:52px;height:28px;bd:1px solid #d5dbe3;bd-radius:6px;bg:#ffffff;fsize:12px;fweight:400;color:#33383f}
+                      "17 Dec"
+                    <span> {justify-content:center;width:52px;height:28px;bd:1px solid #d5dbe3;bd-radius:6px;bg:#ffffff;fsize:12px;fweight:400;color:#33383f}
+                      "21 Jan"
+                    <span> {justify-content:center;width:52px;height:28px;bd:1px solid #d5dbe3;bd-radius:6px;bg:#ffffff;fsize:12px;fweight:400;color:#33383f}
+                      "18 Feb"
+                    <span> {justify-content:center;width:52px;height:28px;bd:1px solid #d5dbe3;bd-radius:6px;bg:#ffffff;fsize:12px;fweight:400;color:#33383f}
+                      "18 Mar"
+                    <span> {justify-content:center;width:52px;height:28px;bd:1px solid #d5dbe3;bd-radius:6px;bg:#ffffff;fsize:12px;fweight:400;color:#33383f}
+                      "15 Apr"
+                    <span> {justify-content:center;width:52px;height:28px;bd:1px solid #d5dbe3;bd-radius:6px;bg:#ffffff;fsize:12px;fweight:400;color:#33383f}
+                      "20 May"
+                    <span> {justify-content:center;width:52px;height:28px;bd:1px solid #d5dbe3;bd-radius:6px;bg:#ffffff;fsize:12px;fweight:400;color:#33383f}
+                      "17 Jun"
+                    <span> {justify-content:center;width:52px;height:28px;bd:1px solid #d5dbe3;bd-radius:6px;bg:#ffffff;fsize:12px;fweight:400;color:#33383f}
+                      "15 Jul"
+                    <span> {justify-content:center;width:52px;height:28px;bd:1px solid #d5dbe3;bd-radius:6px;bg:#ffffff;fsize:12px;fweight:400;color:#33383f}
+                      "19 Aug"
+                    <span> {justify-content:center;width:52px;height:28px;bd:1px solid #d5dbe3;bd-radius:6px;bg:#ffffff;fsize:12px;fweight:400;color:#33383f}
+                      "16 Sep"
+                <div> {fsize:12px;fweight:400;color:#60646c}
+                  "Third Wednesday · never later than the 28th · an override is allowed and is logged."
+      <div> {width:268px}
+        <div> {flex-direction:column;bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff}
+          <div> {padding:14px;bg:#e0f3e7;bd-bottom:1px solid #d5dbe3}
+            <div> {fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+              "Pre-submission QA"
+            <div> {fsize:18px;fweight:600;color:#0d7038}
+              "Ready to submit"
+            <div> {fsize:12px;fweight:400;color:#33383f}
+              "Runs as you type. Every line goes to the field it is about."
+          <a href="#" .m-row> {gap:9px;padding:9px 14px;bd-top:1px solid #d5dbe3}
+            <span> {width:7px;height:7px;bd-radius:9999px;bg:#138a43}
+              <span> {fsize:12px;fweight:400;color:#33383f}
+                "Routing number checksum passes"
+              <span> {fsize:12px;fweight:400;color:#60646c;fsize:11px}
+                "bank.routing_number"
+          <a href="#" .m-row> {gap:9px;padding:9px 14px;bd-top:1px solid #d5dbe3}
+            <span> {width:7px;height:7px;bd-radius:9999px;bg:#138a43}
+              <span> {fsize:12px;fweight:400;color:#33383f}
+                "Draft day 23 is inside 1–28"
+              <span> {fsize:12px;fweight:400;color:#60646c;fsize:11px}
+                "payment.draft_day"
+          <a href="#" .m-row> {gap:9px;padding:9px 14px;bd-top:1px solid #d5dbe3}
+            <span> {width:7px;height:7px;bd-radius:9999px;bg:#138a43}
+              <span> {fsize:12px;fweight:400;color:#33383f}
+                "Account type set"
+              <span> {fsize:12px;fweight:400;color:#60646c;fsize:11px}
+                "bank.account_type"
+          <div> {padding:12px 14px;bd-top:1px solid #d5dbe3;bg:#f1f3f7;fsize:12px;fweight:400;color:#60646c}
+            "A failed save here surfaces and keeps the value. Banking details are never lost quietly."

@@ -1,12 +1,14 @@
+import "./lib/refuseProduction.mjs";
 // LA-1.24 live contract checks. Run with: npm run verify:existing-customer-preflight
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { createClient } from "@supabase/supabase-js";
+import { createFixtureUser, deleteFixtureUser } from "./lib/fixtureUser.mjs";
 
 const db = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
 const tenantId = randomUUID(); const otherTenantId = randomUUID(); const stamp = Date.now(); let failures = 0;
 const contactId = randomUUID(); const otherContactId = randomUUID(); const alternatePhoneId = randomUUID();
-const leadIds = [randomUUID(), randomUUID()]; const partnerIds = [randomUUID(), randomUUID()];
+const leadIds = [randomUUID(), randomUUID()]; const partnerIds = [randomUUID(), randomUUID()]; let leadAuthorId = null;
 const check = (label, condition, detail = "") => { if (condition) console.log(`  ok   ${label}`); else { console.log(`  FAIL ${label}${detail ? ` — ${detail}` : ""}`); failures += 1; } };
 async function cleanup() {
   await db.from("agent_leads").delete().in("id", leadIds);
@@ -16,6 +18,7 @@ async function cleanup() {
   // not survive a crash between insert and cleanup.
   await db.from("contacts").delete().in("tenant_id", [tenantId, otherTenantId]);
   await db.from("tenants").delete().in("id", [tenantId, otherTenantId]);
+  if (leadAuthorId) await deleteFixtureUser(db, leadAuthorId);
 }
 async function main() {
   await cleanup();
@@ -39,11 +42,18 @@ async function main() {
     const concurrent = await Promise.all(Array.from({ length: 4 }, () => db.rpc("find_existing_customer_preflight", { p_tenant_id: tenantId, p_full_name: "johnsmyth", p_dob: "1959-03-14", p_phone_digits: "4805550102", p_address_search: null, p_exclude_lead_id: null, p_limit: 20 })));
     check("concurrent pre-flight checks return the same tenant-scoped result", concurrent.every((item) => !item.error && item.data?.some((row) => row.contact_id === contactId) && !(item.data ?? []).some((row) => row.contact_id === otherContactId)));
 
-    const base = await db.from("agent_leads").select("tenant_id, template_id, template_version, tenant_template_id, definition_version, product_line, pipeline_id, stage_id, created_by").limit(1).maybeSingle();
-    if (base.error || !base.data) throw new Error(base.error?.message ?? "No base lead available for lead evidence check");
+    // The lead evidence lives in this suite's own fixture tenant. It used to borrow whichever tenant
+    // owned the first agent_leads row in the database -- writing partners and leads into a real
+    // tenant, and (when that was the 200k-row load-test tenant) timing the lookup out.
+    ({ userId: leadAuthorId } = await createFixtureUser(db, { email: `la124-author-${stamp}@invalid.test`, name: "LA-1.24 author" }));
+    const pipeline = await db.from("tenant_pipelines").select("id").eq("tenant_id", tenantId).eq("partner_type", "publisher").eq("is_default", true).single();
+    const stage = pipeline.data ? await db.from("tenant_pipeline_stages").select("id").eq("pipeline_id", pipeline.data.id).eq("is_archived", false).order("position").limit(1).single() : { data: null, error: new Error("no default pipeline") };
+    const template = await db.from("templates").select("id").eq("product_code", "term_life").eq("is_active", true).limit(1).single();
+    if (pipeline.error || stage.error || template.error) throw new Error(pipeline.error?.message ?? stage.error?.message ?? template.error?.message ?? "Fixture dependency missing");
+    const base = { data: { tenant_id: tenantId, template_id: template.data.id, template_version: 1, product_line: "term_life", pipeline_id: pipeline.data.id, stage_id: stage.data.id, created_by: leadAuthorId } };
     result = await db.from("partners").insert(partnerIds.map((id, index) => ({ slug: `fx-${Math.random().toString(36).slice(2, 10)}`, id, tenant_id: base.data.tenant_id, name: `LA-1.24 partner ${stamp}-${index}`, partner_type: "publisher", status: "active", country: "US", timezone: "America/Phoenix" })));
     if (result.error) throw new Error(result.error.message);
-    result = await db.from("agent_leads").insert(leadIds.map((id, index) => ({ id, tenant_id: base.data.tenant_id, template_id: base.data.template_id, template_version: base.data.template_version, tenant_template_id: base.data.tenant_template_id, definition_version: base.data.definition_version, product_line: base.data.product_line, pipeline_id: base.data.pipeline_id, stage_id: base.data.stage_id, created_by: base.data.created_by, partner_id: partnerIds[index], submission_id: randomUUID(), values: { full_name: "Repeat Customer", date_of_birth: "1959-03-14", phone: `60255500${70 + index}`, outcome: "sold" } })));
+    result = await db.from("agent_leads").insert(leadIds.map((id, index) => ({ id, tenant_id: base.data.tenant_id, template_id: base.data.template_id, template_version: base.data.template_version, product_line: base.data.product_line, pipeline_id: base.data.pipeline_id, stage_id: base.data.stage_id, created_by: base.data.created_by, partner_id: partnerIds[index], submission_id: randomUUID(), values: { full_name: "Repeat Customer", date_of_birth: "1959-03-14", phone: `60255500${70 + index}`, outcome: "sold" } })));
     if (result.error) throw new Error(result.error.message);
     const inserted = await db.from("agent_leads").select("id, values, tenant_id").in("id", leadIds);
     if (inserted.error) throw new Error(inserted.error.message);

@@ -4,7 +4,7 @@ import { audit } from "@/lib/audit/log";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { postPartnerSystemCard } from "@/lib/partnerChat/service";
 import type { PreflightResult } from "@/lib/existingCustomerPreflight/types";
-import { isWithAgent, screeningSignal, transferPhase, TRANSFER_PHASE_LABEL, type InboxSummary } from "./constants";
+import { isWithAgent, languageName, screeningSignal, transferPhase, TRANSFER_PHASE_LABEL, type InboxSummary } from "./constants";
 
 export type InboxFilters = {
   /** `open` is unclaimed plus in progress (20260924170000): what Agent Floor shows, without history. */
@@ -191,6 +191,24 @@ export class ClaimNextError extends Error {
   constructor(public code: "no_transfer_waiting" | "role_not_allowed" | "language_not_spoken" | "schema_pending" | "claim_failed", message: string) { super(message); }
 }
 
+/** What claim_transfer_lead returns. The last three arrive with 20260925709860; absent before it. */
+export type TransferClaim = { work_item_id: string; lead_id: string; active_call_id?: string | null; verification_session_id?: string | null; status: string; claimed_at: string; resumed_verification?: boolean; requeue_count?: number; language?: string | null };
+
+/** LA-1.11-6: the claim reopened the verification session the transfer had when it was given back. */
+export function claimWasResumed(claim: unknown): boolean {
+  return Boolean(claim && typeof claim === "object" && (claim as TransferClaim).resumed_verification === true);
+}
+
+/**
+ * LA-1.14-7: the partner's "Connected" card is posted once per claim. A transfer put back in the
+ * queue and claimed again is a new connection, so each re-claim has its own key; the first claim
+ * keeps the key it always had, so nothing already posted is posted twice.
+ */
+export function claimCardKey(workItemId: string, isBuffer: boolean, requeueCount: number | null | undefined) {
+  const base = `${isBuffer ? "buffer-claim" : "claim"}:${workItemId}`;
+  return requeueCount && requeueCount > 0 ? `${base}:requeue-${requeueCount}` : base;
+}
+
 /**
  * Claim the oldest waiting inbound transfer that matches the inbox filters (claim_next_transfer,
  * 20260924335100). Race-safe in the database: concurrent callers skip each other's locked rows.
@@ -209,13 +227,14 @@ export async function claimNextTransfer(params: { tenantId: string; userId: stri
   });
   if (error) {
     if (error.message === "NO_TRANSFER_WAITING") throw new ClaimNextError("no_transfer_waiting", "No transfer is waiting that matches these filters.");
-    if (error.message === "LANGUAGE_NOT_SPOKEN") throw new ClaimNextError("language_not_spoken", "The next caller asked for a language you do not list.");
+    // 20260925709860: every waiting caller that matches the filters asked for a language this agent does not list.
+    if (error.message === "LANGUAGE_NOT_SPOKEN") throw new ClaimNextError("language_not_spoken", `The callers waiting asked for ${languageName(error.details)}, which is not among your languages. A ${languageName(error.details)}-speaking agent or buffer can take them.`);
     if (error.message === "ROLE_NOT_ALLOWED") throw new ClaimNextError("role_not_allowed", "Your role cannot claim transfers.");
     if (error.code === "42883" || error.code === "PGRST202") throw new ClaimNextError("schema_pending", "This setting needs a database update that has not been applied yet.");
     console.error("[claim-next] claim_next_transfer failed", error.code, error.message, error.details);
     throw new ClaimNextError("claim_failed", "Could not claim the next transfer.");
   }
-  return data as { work_item_id: string; lead_id: string; active_call_id?: string | null; verification_session_id?: string | null; status: string; claimed_at: string };
+  return data as TransferClaim;
 }
 
 /**
@@ -237,18 +256,19 @@ export async function announceTransferClaim(params: { tenantId: string; userId: 
   const leadValues = Array.isArray(claimedLead) ? claimedLead[0]?.values : claimedLead?.values;
   const customer = claimed.data && leadValues !== undefined ? transferCustomerName(leadValues) : "Customer";
   let chatPosted = true;
+  const claim = (params.claim ?? {}) as TransferClaim;
   try {
     const isBuffer = params.role === "assistant";
     const partnerId = claimed.error || !claimed.data ? undefined : claimed.data.partner_id;
+    const eventKey = claimCardKey(params.workItemId, isBuffer, claim.requeue_count);
     await postPartnerClaimMessage(params.tenantId, params.workItemId, params.userId, customer, isBuffer
-      ? { eventKey: `buffer-claim:${params.workItemId}`, message: `${customer} is connected to the buffer agent`, partnerId }
-      : { partnerId });
+      ? { eventKey, message: `${customer} is connected to the buffer agent`, partnerId }
+      : { eventKey, partnerId });
   } catch (chatError) {
     chatPosted = false;
     console.error("Partner claim message failed after claim", chatError);
     await audit({ actorType: "tenant", actorId: params.userId, action: "tenant.transfer_claim_chat_failed", targetType: "lead_queue", targetId: params.workItemId, reason: chatError instanceof Error ? chatError.message : "Unknown chat error", request: params.request }).catch(() => undefined);
   }
-  const claim = (params.claim ?? {}) as { active_call_id?: string; verification_session_id?: string };
-  await audit({ actorType: "tenant", actorId: params.userId, action: "tenant.transfer_claimed", targetType: "lead_queue", targetId: params.workItemId, metadata: { activeCallId: claim.active_call_id ?? null, verificationSessionId: claim.verification_session_id ?? null, chatPosted, ...(params.via === "claim_next" ? { via: "claim_next" } : {}) }, request: params.request });
+  await audit({ actorType: "tenant", actorId: params.userId, action: "tenant.transfer_claimed", targetType: "lead_queue", targetId: params.workItemId, metadata: { activeCallId: claim.active_call_id ?? null, verificationSessionId: claim.verification_session_id ?? null, chatPosted, ...(claimWasResumed(claim) ? { resumedVerification: true, requeueCount: claim.requeue_count ?? null } : {}), ...(params.via === "claim_next" ? { via: "claim_next" } : {}) }, request: params.request });
   return { chatPosted };
 }

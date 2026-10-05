@@ -1,3 +1,4 @@
+import "./lib/refuseProduction.mjs";
 // M2-1 / M2-7 · Plan creation and versioning must retain the full commercial configuration.
 import { createClient } from "@supabase/supabase-js";
 

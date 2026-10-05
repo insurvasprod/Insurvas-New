@@ -1,14 +1,17 @@
--- Inbound transfers, part 2 of 4: who may take a call, giving a transfer back, and resuming it.
--- Needs 20260925709850 (its columns and helpers).
+-- Inbound transfers, part 2 of 3: who may take a call, giving a transfer back, and resuming it.
+-- Needs 20260925709850 (its columns and helpers), the first block refuses to run without it.
 --
 --   LA-1.10-8   A dropped call goes back in the queue (return_transfer_to_queue, reason 'requeue').
 --               It waits again from now, with the SLA ladder reset, exactly as a reopened expired
---               lead does. Any call record still open on an unclaimed transfer is stale by
---               definition, so a claim now closes every one of them, not only those past two hours.
+--               lead does, and its deal row is in progress again. Any call record still open on an
+--               unclaimed transfer is stale by definition, so a claim now closes every one of them,
+--               not only those past two hours.
 --   LA-1.11-6   The re-claim resumes the SAME verification session: its confirmed and corrected
---               fields, and the corrected values already on the lead, are all still there. The
---               disposition walk that recorded the drop starts again from the stage's flow, so the
---               call gets a fresh outcome.
+--               fields, and the corrected values already on the lead, are all still there. The claim
+--               says so (resumed_verification). The disposition walk that recorded the drop starts
+--               again from the stage's flow, so the call gets a fresh outcome.
+--   LA-1.14-7   The claim returns requeue_count, so the partner's "Connected" card is posted once per
+--               claim, a re-claim included, instead of once per transfer.
 --   LA-1.14-9   Two different acts. Unassign (reason 'unassign') gives a transfer being worked back
 --               to the queue: nobody owns it any more. End buffer involvement (end_buffer_involvement)
 --               is the buffer assistant leaving a call the licensed agent now owns: ownership, the
@@ -16,11 +19,33 @@
 --   LA-1.14-10  A caller who asked for another language is claimed only by somebody who speaks it.
 --               A licensed agent who does not may still take the call from a buffer who does,
 --               because that buffer stays on the call (accept_buffer_handoff keeps buffer_user_id).
---               Claim next skips transfers the claimer cannot take.
+--               Claim next skips transfers the claimer cannot take, and says so when those are the
+--               only ones waiting.
 --   LA-1.13-2   The buffer who claims a transfer is written to its deal row (deal_flow.buffer_agent).
 --
--- claim_transfer_lead, claim_next_transfer, offer_buffer_handoff and accept_buffer_handoff are
--- restated from their live definitions (20260912400000, 20260924335100), changed only as above.
+-- Reconciled against the live database on 2026-09-29 (read-only catalog reads). claim_transfer_lead
+-- (20260912400000), claim_next_transfer (20260924335100), offer_buffer_handoff and
+-- accept_buffer_handoff are restated from their LIVE bodies, which no later applied migration
+-- (711300, 711400, 711600, 20260926000100 or the LA-3 files) has changed, the only differences are
+-- the ones listed above. Signatures, SECURITY DEFINER, search_path and the service-role-only grants
+-- match the live functions.
+--
+-- Down: restate the four functions from 20260912400000 / 20260924335100 (their live bodies before
+-- this file) and drop return_transfer_to_queue and end_buffer_involvement.
+
+-- ── precondition ────────────────────────────────────────────────────────────
+do $$
+begin
+  -- The migration checker's role applies nothing, so an earlier file is never there for it.
+  if not has_schema_privilege(current_user, 'public', 'CREATE') then
+    raise notice '20260925709860: precondition skipped, % cannot create in public', current_user;
+    return;
+  end if;
+  if not exists (select 1 from pg_attribute where attrelid = 'public.lead_queue'::regclass and attname = 'requeued_at' and not attisdropped)
+     or to_regprocedure('public.agent_speaks_language(uuid, uuid, text)') is null then
+    raise exception '20260925709860 needs 20260925709850 first (lead_queue.requeued_at and agent_speaks_language are missing)';
+  end if;
+end $$;
 
 -- ── claim ───────────────────────────────────────────────────────────────────
 create or replace function public.claim_transfer_lead(p_tenant_id uuid, p_work_item_id uuid, p_user_id uuid, p_owner_role text)
@@ -91,7 +116,7 @@ begin
   end if;
   return jsonb_build_object('work_item_id', item.id, 'lead_id', item.lead_id, 'submission_id', resolved_submission_id, 'verification_session_id', session_id, 'active_call_id', call_id,
     'owner_user_id', p_user_id, 'owner_role', resolved_role, 'status', claim_status, 'claimed_at', (select claimed_at from public.lead_queue where id = item.id),
-    'resumed_verification', v_resumed, 'language', v_language);
+    'resumed_verification', v_resumed, 'requeue_count', coalesce(item.requeue_count, 0), 'language', v_language);
 end;
 $function$;
 
@@ -107,6 +132,7 @@ set search_path to 'public', 'pg_catalog'
 as $function$
 declare
   v_work_item_id uuid;
+  v_language text;
 begin
   select q.id into v_work_item_id
     from public.lead_queue q
@@ -125,6 +151,22 @@ begin
    for update of q skip locked;
 
   if v_work_item_id is null then
+    -- Say why when the only callers waiting asked for a language this agent does not list.
+    select public.lead_language_key(l.values) into v_language
+      from public.lead_queue q
+      join public.agent_leads l on l.id = q.lead_id and l.tenant_id = q.tenant_id
+     where q.tenant_id = p_tenant_id
+       and q.partner_id is not null
+       and q.status = 'unclaimed'
+       and (p_partner_id is null or q.partner_id = p_partner_id)
+       and (p_product_line is null or q.product_line = p_product_line)
+       and (p_state is null or coalesce(nullif(btrim(l.values->>'state'), ''), nullif(btrim(l.values->>'state_code'), ''), nullif(btrim(l.values->>'primary_state'), ''), nullif(btrim(l.carrier_state), '')) = p_state)
+       and (p_screening_outcome is null or coalesce(q.screening_outcome, l.screening_outcome, 'not_checked') = p_screening_outcome)
+     order by q.queued_at asc, q.id asc
+     limit 1;
+    if v_language is not null then
+      raise exception using errcode = 'P0001', message = 'LANGUAGE_NOT_SPOKEN', detail = v_language;
+    end if;
     raise exception using errcode = 'P0002', message = 'NO_TRANSFER_WAITING';
   end if;
 
@@ -225,7 +267,7 @@ begin
   -- The buffer stays involved (buffer_user_id kept, buffer_ended_at clear) until they end it.
   update public.lead_queue set status = 'la_active', owner_user_id = p_licensed_agent_id, claimed_by = p_licensed_agent_id, owner_role = target_role, buffer_ended_at = null, updated_at = now() where id = queue_row.id;
   update public.buffer_handoffs set status = 'accepted', accepted_at = now(), updated_at = now() where id = handoff_row.id;
-  update public.deal_flow set buffer_agent = coalesce(buffer_agent, handoff_row.buffer_user_id), updated_at = now() where tenant_id = p_tenant_id and lead_id = queue_row.lead_id and buffer_agent is null;
+  update public.deal_flow set buffer_agent = handoff_row.buffer_user_id, updated_at = now() where tenant_id = p_tenant_id and lead_id = queue_row.lead_id and buffer_agent is null;
   insert into public.audit_log (actor_type, actor_id, action, target_type, target_id, ip, user_agent, metadata)
   values ('tenant', p_licensed_agent_id, 'tenant.buffer_handoff_accepted', 'buffer_handoff', handoff_row.id::text, p_ip, p_user_agent,
     jsonb_build_object('workItemId', queue_row.id, 'bufferUserId', handoff_row.buffer_user_id, 'progressPercentage', session_row.progress_percentage, 'language', v_language));
@@ -241,7 +283,7 @@ grant execute on function public.accept_buffer_handoff(uuid, uuid, uuid, text, t
 --   goes back to waiting. The person who has it, or the account owner, may do it. A handoff still
 --   being offered must be accepted or time out first.
 -- p_reason 'requeue': a transfer whose call dropped goes back to waiting. The agent who had it, the
---   agent who recorded the drop, or the account owner, may do it.
+--   agent who recorded the drop, or the account owner, may do it. Its deal row is in progress again.
 -- Either way the transfer waits again from now with the SLA ladder reset, its open call records and
 -- verification session are closed (the session is kept, and the next claim reopens it), and nobody
 -- owns it.
@@ -298,6 +340,9 @@ begin
     else
       delete from public.disposition_walks where tenant_id = p_tenant_id and work_item_id = q.id;
     end if;
+    -- The deal is being worked again, its call_result keeps the drop until the next outcome.
+    update public.deal_flow set status = 'partial', updated_at = now()
+     where tenant_id = p_tenant_id and lead_id = q.lead_id and status = 'dropped';
   end if;
 
   update public.lead_queue
@@ -324,9 +369,9 @@ grant execute on function public.return_transfer_to_queue(uuid, uuid, uuid, text
 -- The buffer leaves a call the licensed agent already owns. Nothing about the transfer's owner,
 -- call record or verification changes. The buffer themselves, the licensed agent who has the
 -- transfer, or the account owner may do it. While the buffer still owns the call (before any
--- handoff) there is nothing to end: they hand off, or unassign. When the caller asked for a
--- language the licensed agent does not list, the buffer was the one covering it, so leaving needs
--- p_acknowledge_language.
+-- handoff) there is nothing to end: they hand off, or unassign. A finished transfer has no call
+-- left to leave. When the caller asked for a language the licensed agent does not list, the buffer
+-- was the one covering it, so leaving needs p_acknowledge_language.
 create or replace function public.end_buffer_involvement(p_tenant_id uuid, p_work_item_id uuid, p_actor uuid, p_acknowledge_language boolean default false)
 returns jsonb
 language plpgsql
@@ -349,10 +394,11 @@ begin
     return jsonb_build_object('work_item_id', q.id, 'buffer_user_id', q.buffer_user_id, 'buffer_ended_at', q.buffer_ended_at, 'duplicate', true);
   end if;
   if q.status in ('buffer_active', 'handed_pending') then raise exception using errcode = 'P0001', message = 'BUFFER_OWNS_CALL'; end if;
+  if q.status not in ('claimed', 'la_active') then raise exception using errcode = 'P0001', message = 'CALL_ENDED'; end if;
   if v_role <> 'owner' and p_actor is distinct from q.buffer_user_id and p_actor is distinct from q.owner_user_id then
     raise exception using errcode = '42501', message = 'RELEASE_OWNER_REQUIRED';
   end if;
-  if q.status in ('claimed', 'la_active') and q.owner_user_id is not null then
+  if q.owner_user_id is not null then
     select public.lead_language_key(l.values) into v_language from public.agent_leads l where l.id = q.lead_id and l.tenant_id = p_tenant_id;
     v_cover_ends := not public.agent_speaks_language(p_tenant_id, q.owner_user_id, v_language);
     if v_cover_ends and not coalesce(p_acknowledge_language, false) then
@@ -385,12 +431,19 @@ begin
   if not exists (select 1 from pg_proc where pronamespace = 'public'::regnamespace and proname = 'claim_transfer_lead'
                   and position('LANGUAGE_NOT_SPOKEN' in prosrc) > 0
                   and position('item.requeued_at is not null' in prosrc) > 0
+                  and position('''resumed_verification''' in prosrc) > 0
+                  and position('''requeue_count''' in prosrc) > 0
                   and position('started_at<now()-interval' in replace(prosrc, ' ', '')) = 0) then
     raise exception '20260925709860: claim_transfer_lead does not gate language, resume a returned session, or still closes only old calls';
   end if;
   if not exists (select 1 from pg_proc where pronamespace = 'public'::regnamespace and proname = 'claim_next_transfer'
-                  and position('agent_speaks_language' in prosrc) > 0 and position('skip locked' in prosrc) > 0) then
+                  and position('agent_speaks_language' in prosrc) > 0 and position('skip locked' in prosrc) > 0
+                  and position('LANGUAGE_NOT_SPOKEN' in prosrc) > 0) then
     raise exception '20260925709860: claim_next_transfer does not skip callers the agent cannot talk to';
+  end if;
+  if not exists (select 1 from pg_proc where pronamespace = 'public'::regnamespace and proname = 'offer_buffer_handoff'
+                  and position('LANGUAGE_NOT_SPOKEN' in prosrc) > 0) then
+    raise exception '20260925709860: offer_buffer_handoff does not check the caller''s language';
   end if;
   if not exists (select 1 from pg_proc where pronamespace = 'public'::regnamespace and proname = 'accept_buffer_handoff'
                   and position('buffer_ended_at = null' in prosrc) > 0 and position('LANGUAGE_NOT_SPOKEN' in prosrc) > 0) then
@@ -400,9 +453,20 @@ begin
      or to_regprocedure('public.end_buffer_involvement(uuid, uuid, uuid, boolean)') is null then
     raise exception '20260925709860: the release functions are missing';
   end if;
-  if has_function_privilege('anon', 'public.return_transfer_to_queue(uuid, uuid, uuid, text)', 'execute')
-     or has_function_privilege('authenticated', 'public.end_buffer_involvement(uuid, uuid, uuid, boolean)', 'execute') then
-    raise exception '20260925709860: a release function is callable from the browser';
+  if not exists (select 1 from pg_proc where pronamespace = 'public'::regnamespace and proname = 'end_buffer_involvement'
+                  and position('CALL_ENDED' in prosrc) > 0) then
+    raise exception '20260925709860: end_buffer_involvement accepts a finished transfer';
   end if;
-  -- Coverage: LA-1.10-8, LA-1.11-6, LA-1.13-2 (buffer on the deal), LA-1.14-9, LA-1.14-10.
+  if not exists (select 1 from pg_proc where oid = 'public.return_transfer_to_queue(uuid, uuid, uuid, text)'::regprocedure and prosecdef
+                  and array_to_string(proconfig, ',') like '%search_path=public%') then
+    raise exception '20260925709860: return_transfer_to_queue is not security definer with a fixed search_path';
+  end if;
+  if has_function_privilege('anon', 'public.return_transfer_to_queue(uuid, uuid, uuid, text)', 'execute')
+     or has_function_privilege('authenticated', 'public.return_transfer_to_queue(uuid, uuid, uuid, text)', 'execute')
+     or has_function_privilege('anon', 'public.end_buffer_involvement(uuid, uuid, uuid, boolean)', 'execute')
+     or has_function_privilege('authenticated', 'public.end_buffer_involvement(uuid, uuid, uuid, boolean)', 'execute')
+     or has_function_privilege('authenticated', 'public.claim_transfer_lead(uuid, uuid, uuid, text)', 'execute') then
+    raise exception '20260925709860: a transfer function is callable from the browser';
+  end if;
+  -- Coverage: LA-1.10-8, LA-1.11-6, LA-1.13-2 (buffer on the deal), LA-1.14-7, LA-1.14-9, LA-1.14-10.
 end $$;

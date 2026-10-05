@@ -1,3 +1,4 @@
+import "./lib/refuseProduction.mjs";
 // LA-0.4 live contract checks. Run with: npm run verify:carrier-library
 import { randomUUID } from "node:crypto";
 import { SignJWT } from "jose";

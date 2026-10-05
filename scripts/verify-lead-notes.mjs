@@ -1,3 +1,4 @@
+import "./lib/refuseProduction.mjs";
 // LA-1.21 live contract checks. Fixtures are disposable and removed in finally.
 import { randomUUID } from "node:crypto";
 import { SignJWT } from "jose";

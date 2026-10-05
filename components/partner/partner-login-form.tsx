@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { LinkArrow } from "@/components/ui/link-arrow";
+import { InsurvasLogo } from "@/components/shared/insurvas-logo";
 
 const validEmail = (value: string) => /^\S+@\S+\.\S+$/.test(value.trim());
 
@@ -66,12 +67,7 @@ export function PartnerLoginForm() {
             className="mb-10 flex items-center gap-2.5 no-underline"
             aria-label="Insurvas partner portal"
           >
-            <span className="inline-flex size-[30px] items-center justify-center rounded-lg bg-[var(--primary)] text-sm font-semibold text-[var(--on-primary)]">
-              I
-            </span>
-            <span className="text-lg font-semibold leading-[1.28] tracking-[-0.015em] text-foreground">
-              Insurvas partners
-            </span>
+            <InsurvasLogo size="auth" />
           </Link>
 
           <div className="text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] text-muted-foreground">

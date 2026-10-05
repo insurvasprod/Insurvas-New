@@ -35,7 +35,37 @@ export type CalendarAppointment = {
   /** 20260925704200: the no-show this appointment rebooks, and — for a no-show — its live rebooking. */
   rebookedFrom: string | null;
   rebookedAs: string | null;
+  /** True when a setter is looking at another setter's booking: the slot is shown, the lead is not. */
+  redacted?: boolean;
 };
+
+/**
+ * LA-2.12-2 · what a setter sees of the diary. Their own bookings in full. Everybody else's as a
+ * taken slot on the agent's calendar: no customer, no lead, no notes, no product, and not who
+ * booked it — "cannot see other setters' leads". The time and the status stay, because a setter
+ * booking into a slot they cannot see as taken is how two people end up in the same hour.
+ */
+export const REDACTED_CUSTOMER = "Booked";
+
+export function redactCalendarForSetter(rows: CalendarAppointment[], viewerId: string): CalendarAppointment[] {
+  return rows.map((row) =>
+    row.bookedByUserId === viewerId
+      ? row
+      : {
+          ...row,
+          leadId: "",
+          customerName: REDACTED_CUSTOMER,
+          notes: null,
+          bookedByUserId: null,
+          bookedByName: null,
+          product: null,
+          faceAmountCents: null,
+          rebookedFrom: null,
+          rebookedAs: null,
+          redacted: true,
+        },
+  );
+}
 
 type Row = Record<string, unknown>;
 type Result<T> = { data: T; error: { message: string; code?: string } | null };
@@ -70,8 +100,10 @@ export async function appointmentsInRange(
     .gte("starts_at_utc", fromIso)
     .lt("starts_at_utc", toIso)
     .order("starts_at_utc", { ascending: true });
-  // `rebooked_from` arrives with 20260925704200; before it, the calendar reads as it always did.
-  let appointments = await read(`${BASE_COLUMNS}, rebooked_from`);
+  // `rebooked_from` arrives with 20260925704200 and `in_app_reminded_at` (the pg_cron reminder)
+  // with 20260929202000; before each, the calendar reads as it did.
+  let appointments = await read(`${BASE_COLUMNS}, rebooked_from, in_app_reminded_at`);
+  if (isSchemaGap(appointments.error)) appointments = await read(`${BASE_COLUMNS}, rebooked_from`);
   const hasRebook = !isSchemaGap(appointments.error);
   if (!hasRebook) appointments = await read(BASE_COLUMNS);
   if (appointments.error) throw new Error(`Could not load the calendar: ${appointments.error.message}`);
@@ -125,7 +157,8 @@ export async function appointmentsInRange(
       bookedByName: text(row.booked_by) ? nameOfUser.get(text(row.booked_by)) ?? "Member" : null,
       product: productLabel(text(lead?.product_line) || text(values.product_line)),
       faceAmountCents: faceAmountCents(values),
-      reminderSentAt: text(row.reminder_sent_at) || null,
+      // Whichever reminder went first: the agent's in-app alert (pg_cron) or the app's email job.
+      reminderSentAt: text(row.in_app_reminded_at) || text(row.reminder_sent_at) || null,
       rebookedFrom: text(row.rebooked_from) || null,
       rebookedAs: rebookedAs.get(text(row.id)) ?? null,
     };
