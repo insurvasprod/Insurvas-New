@@ -127,6 +127,11 @@ export const AGENT_API_POLICIES: AgentApiPolicy[] = [
   { sourceFile: "app/api/app/discrepancies/letter/route.ts", featureKey: "discrepancy_report", allowedRoles: ["owner", "bookkeeper"] },
   { sourceFile: "app/api/app/discrepancies/carrier-contact/route.ts", featureKey: "discrepancy_report", allowedRoles: ["owner", "bookkeeper"] },
   { sourceFile: "app/api/app/discrepancies/letter/pdf/route.ts", featureKey: "discrepancy_report", allowedRoles: ["owner", "bookkeeper"] },
+  // LA-4.1 (Notion sprint) · carrier files: the registry, the upload door, a download, and the
+  // email door's settings. Same holders as statements.
+  { sourceFile: "app/api/app/carrier-files/route.ts", featureKey: "statement_ingestion", allowedRoles: ["owner", "bookkeeper"] },
+  { sourceFile: "app/api/app/carrier-files/[id]/file/route.ts", featureKey: "statement_ingestion", allowedRoles: ["owner", "bookkeeper"] },
+  { sourceFile: "app/api/app/carrier-files/inbound/route.ts", featureKey: "statement_ingestion", allowedRoles: ["owner", "bookkeeper"] },
   // LA-4.8 · persistency by carrier and lead source; a producer reads their own book's.
   { sourceFile: "app/api/app/persistency/route.ts", featureKey: "cohort_persistency", allowedRoles: ["owner", "producer", "bookkeeper"] },
   { sourceFile: "app/api/app/inbound/transfer/route.ts", featureKey: "inbound_transfers", allowedRoles: ["owner", "producer"] },

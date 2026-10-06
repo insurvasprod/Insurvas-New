@@ -53,6 +53,7 @@ export const AGENT_MENU: MenuSection[] = [
     label: "Book of Business",
     items: [
       item("Book of Business", { key: "book.policies", label: "Policies", path: "/app/policies", icon: "book-open", built: true, required_feature: "book_of_business", required_roles: ["owner", "producer", "bookkeeper"], blurb: "The book you already have" }),
+      item("Book of Business", { key: "book.carrier_files", label: "Carrier files", path: "/app/carrier-files", icon: "folder-input", built: true, required_feature: "statement_ingestion", required_roles: ["owner", "bookkeeper"], blurb: "Every policy and commission file a carrier sent, however it arrived: uploaded, emailed in or dropped by a script." }),
       item("Book of Business", { key: "book.statements", label: "Statements", path: "/app/statements", icon: "file-text", built: true, required_feature: "statement_ingestion", required_roles: ["owner", "bookkeeper"], blurb: "Carrier statements imported, matched to policies by a person, and posted to the commission ledger." }),
       item("Book of Business", { key: "book.ledger", label: "Commission ledger", path: "/app/ledger", icon: "receipt", required_feature: "commission_ledger", required_roles: ["owner", "producer", "bookkeeper"], built: true }),
       // "Carrier appointments", not "Appointments". This is LA-0.5's vault — which carriers the
