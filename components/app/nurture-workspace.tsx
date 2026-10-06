@@ -1,17 +1,20 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { RefreshCw } from "lucide-react";
 import { notify } from "@/lib/notify";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { NurtureCampaignReport, NurtureReport, RotationSlot } from "@/lib/nurture/report";
 import { ANGLE_MAX, DEFAULT_PASS_CEILING, MAX_PASS_CEILING, SAID_NO_MIN_DAYS, SCRIPT_MAX, STALLED_MINUTES, type RecycleBatch } from "@/lib/nurture/contract";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageLoading } from "@/components/ui/page-loading";
 import { EmptyState, ErrorState } from "@/components/ui/page-states";
 import { StatStrip, StatTile } from "@/components/ui/stat";
+import { Pager, paginate } from "@/components/ui/pager";
 import { TableCard } from "@/components/ui/table-card";
+import { ViewTabs, fullHeightCard, useFittingPageSize } from "@/components/app/lead-ops-view-tabs";
 import { RefreshButton } from "@/components/ui/data-toolbar";
 import { cn } from "@/lib/utils";
 
@@ -95,7 +98,7 @@ function RuleCard({ campaign, readOnly, busy, batchesReady, viewer, progress, on
   const run = campaign.lastRun;
   const pool = campaign.pool;
   const open = campaign.openBatch;
-  const input = "h-[34px] w-[72px] rounded-lg border border-[var(--border-strong)] bg-card px-2.5 text-sm font-normal";
+  const input = "h-9 w-[72px] rounded-md border border-input bg-background px-2.5 text-sm font-normal";
   const idPrefix = `recycle-${campaign.campaign_id}`;
   const angleOk = angle.trim().length >= 3;
   const startBlocked = !batchesReady ? "Batches need a database update that has not been applied yet."
@@ -188,15 +191,26 @@ function RuleCard({ campaign, readOnly, busy, batchesReady, viewer, progress, on
         </div>
       ) : null}
 
-      {confirming ? (
-        <div className="mt-4 rounded-lg border border-border bg-[var(--canvas)] p-4">
-          <div className="text-sm font-semibold">New batch</div>
-          <div className="mt-3 grid gap-4 md:grid-cols-[minmax(0,1fr)_auto]">
+      <div className="mt-4 flex flex-wrap items-center justify-end gap-3">
+        {startBlocked && !readOnly && <span className="text-xs text-[var(--body)]">{startBlocked}</span>}
+        <Button type="button" variant="outline" disabled={readOnly || busy} onClick={onSave}>{busy && !live ? "Saving…" : "Save rule"}</Button>
+        <Button type="button" disabled={readOnly || busy || Boolean(startBlocked)} title={startBlocked || undefined} onClick={() => setConfirming(true)}>Build a recycle batch</Button>
+      </div>
+
+      {/* The new batch is a dialog rather than a card that pushes the rule down (2026-10-06 redesign).
+          Starting still asks to be confirmed: a cleared lead goes back to the dialer. */}
+      <Dialog open={confirming} onOpenChange={setConfirming}>
+        <DialogContent className="sm:max-w-[640px]">
+          <DialogHeader>
+            <DialogTitle>New batch · {campaign.campaign_name}</DialogTitle>
+            <DialogDescription>{count(campaign.eligibleNow)} match{pool ? ` · ${count(pool.tooRecent)} excluded as too recent` : ""}</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_auto]">
             <div className="flex min-w-0 flex-col gap-3">
               <label htmlFor={`${idPrefix}-angle`} className="text-xs font-semibold uppercase tracking-[0.02em] text-muted-foreground">The new angle — required</label>
-              <textarea id={`${idPrefix}-angle`} value={angle} maxLength={ANGLE_MAX} rows={2} onChange={(event) => setAngle(event.target.value)} placeholder="What is different this time — a new carrier, a lower premium, a different product" className="w-full rounded-lg border border-[var(--border-strong)] bg-card px-3 py-2 text-sm" />
+              <textarea id={`${idPrefix}-angle`} value={angle} maxLength={ANGLE_MAX} rows={2} onChange={(event) => setAngle(event.target.value)} placeholder="What is different this time — a new carrier, a lower premium, a different product" className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" />
               <label htmlFor={`${idPrefix}-script`} className="text-xs font-semibold uppercase tracking-[0.02em] text-muted-foreground">Script — optional</label>
-              <textarea id={`${idPrefix}-script`} value={script} maxLength={SCRIPT_MAX} rows={3} onChange={(event) => setScript(event.target.value)} className="w-full rounded-lg border border-[var(--border-strong)] bg-card px-3 py-2 text-sm" />
+              <textarea id={`${idPrefix}-script`} value={script} maxLength={SCRIPT_MAX} rows={3} onChange={(event) => setScript(event.target.value)} className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" />
             </div>
             <div className="flex flex-col gap-4">
               <Fact label="Attempts this pass">
@@ -205,19 +219,12 @@ function RuleCard({ campaign, readOnly, busy, batchesReady, viewer, progress, on
               <Fact label="Cost to attribute">$0.00 — already paid for</Fact>
             </div>
           </div>
-          <div className="mt-4 flex flex-wrap items-center justify-end gap-3">
-            <span className="text-sm text-[var(--body)]">{count(campaign.eligibleNow)} match{pool ? ` · ${count(pool.tooRecent)} excluded as too recent` : ""}</span>
+          <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setConfirming(false)}>Cancel</Button>
             <Button type="button" disabled={busy || !angleOk || !Number.isInteger(ceiling) || ceiling < 1 || ceiling > MAX_PASS_CEILING} title={angleOk ? undefined : "The angle is required"} onClick={() => { setConfirming(false); onStart({ angle, script, attemptCeiling: ceiling }); }}>{busy ? "Starting…" : "Scrub and create"}</Button>
-          </div>
-        </div>
-      ) : (
-        <div className="mt-4 flex flex-wrap items-center justify-end gap-3">
-          {startBlocked && !readOnly && <span className="text-xs text-[var(--body)]">{startBlocked}</span>}
-          <Button type="button" variant="outline" disabled={readOnly || busy} onClick={onSave}>{busy && !live ? "Saving…" : "Save rule"}</Button>
-          <Button type="button" disabled={readOnly || busy || Boolean(startBlocked)} title={startBlocked || undefined} onClick={() => setConfirming(true)}>Build a recycle batch</Button>
-        </div>
-      )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }
@@ -225,51 +232,69 @@ function RuleCard({ campaign, readOnly, busy, batchesReady, viewer, progress, on
 const SLOT_LOOK: Record<RotationSlot["state"], string> = {
   failed: "border-[var(--error)] bg-[var(--error-surface)] [&>div:first-child]:text-[var(--error-ink)]",
   answered: "border-[var(--success)] bg-[var(--success-surface)] [&>div:first-child]:text-[var(--success-ink)]",
-  next: "border-[var(--primary)] bg-[var(--soft-orange-surface)] [&>div:first-child]:text-[var(--accent-ink)]",
+  next: "border-[var(--primary)] bg-[var(--primary-soft)] [&>div:first-child]:text-[var(--accent-ink)]",
   untried: "border-border bg-card [&>div:first-child]:text-[var(--body)]",
 };
 
 function PastBatches({ batches, baseline }: { batches: RecycleBatch[]; baseline: number | null }) {
-  const head = "px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-[0.02em] text-muted-foreground";
-  const cell = "px-4 py-2.5 align-top text-sm";
+  const [page, setPage] = useState(1);
+  const pageSize = useFittingPageSize(400, 45);
+  const { current, rows } = paginate(batches, page, pageSize);
   return (
-    <TableCard title="Past batches" description={`Contact rate against the ${percent(baseline)} fresh leads got over the same span`}>
+    <TableCard
+      className={fullHeightCard(300)}
+      description={`Contact rate against the ${percent(baseline)} fresh leads got over the same span`}
+      footer={batches.length ? <Pager page={current} total={batches.length} noun="batches" pageSize={pageSize} onPage={setPage} /> : undefined}
+    >
       {batches.length ? (
-        <table className="w-full min-w-[680px] border-collapse">
+        <table className="portal-lead-table w-full min-w-[1260px] text-left text-sm">
           <thead>
-            <tr className="border-y border-border bg-muted/30">
-              <th scope="col" className={head}>Angle</th>
-              <th scope="col" className={head}>Leads</th>
-              <th scope="col" className={cn(head, "text-right")}>Dials</th>
-              <th scope="col" className={cn(head, "text-right")}>Contacts</th>
-              <th scope="col" className={cn(head, "text-right")}>Rate</th>
-              <th scope="col" className={cn(head, "text-right")}>Policies</th>
+            <tr>
+              <th scope="col">Angle</th>
+              <th scope="col" className="w-[170px]">Campaign</th>
+              <th scope="col" className="w-[110px]">Started</th>
+              <th scope="col" className="w-[140px]">By</th>
+              <th scope="col" className="w-[84px] text-right">Dials / lead</th>
+              <th scope="col" className="w-[84px] text-right">Cleared</th>
+              <th scope="col" className="w-[84px] text-right">Blocked</th>
+              <th scope="col" className="w-[70px] text-right">Held</th>
+              <th scope="col" className="w-[76px] text-right">Waiting</th>
+              <th scope="col" className="w-[70px] text-right">Dials</th>
+              <th scope="col" className="w-[84px] text-right">Contacts</th>
+              <th scope="col" className="w-[84px] text-right">Reached</th>
+              <th scope="col" className="w-[70px] text-right">Rate</th>
+              <th scope="col" className="w-[76px] text-right">Policies</th>
             </tr>
           </thead>
-          <tbody>
-            {batches.map((batch) => {
+          <tbody className="m-seq">
+            {rows.map((batch) => {
               const better = batch.contactRate != null && baseline != null ? batch.contactRate >= baseline : null;
               return (
-                <tr key={batch.id} className="m-row border-t border-border first:border-t-0">
-                  <td className={cell}>
-                    <div className="font-semibold">{batch.angle}</div>
-                    <div className="mt-0.5 text-xs text-muted-foreground">{batch.campaignName} · {stamp(batch.createdAt)}{batch.createdByName ? ` · ${batch.createdByName}` : ""} · {batch.attemptCeiling} {batch.attemptCeiling === 1 ? "dial" : "dials"} a lead{batch.status === "screening" ? " · still screening" : ""}</div>
+                <tr key={batch.id} className="m-row">
+                  <td className="max-w-[260px]">
+                    <span className="block truncate font-semibold" title={batch.angle}>{batch.angle}</span>
+                    {batch.status === "screening" && <span className="sr-only">still screening</span>}
                   </td>
-                  <td className={cn(cell, "tabular-nums")}>
-                    {count(batch.cleared)} cleared
-                    <div className="text-xs text-muted-foreground">{count(batch.blocked)} blocked · {count(batch.failed)} held{batch.pending ? ` · ${count(batch.pending)} waiting` : ""}</div>
-                  </td>
-                  <td className={cn(cell, "text-right tabular-nums")}>{count(batch.dials)}</td>
-                  <td className={cn(cell, "text-right tabular-nums")}>{count(batch.contacts)}<div className="text-xs text-muted-foreground">{plural(batch.leadsReached, "lead")} reached</div></td>
-                  <td className={cn(cell, "text-right font-semibold tabular-nums", better === true && "text-[var(--success-ink)]", better === false && "text-[var(--error-ink)]")}>{percent(batch.contactRate)}</td>
-                  <td className={cn(cell, "text-right tabular-nums")}>{count(batch.policies)}</td>
+                  <td className="max-w-[170px] truncate" title={batch.campaignName}>{batch.campaignName}</td>
+                  <td className="whitespace-nowrap text-muted-foreground">{stamp(batch.createdAt)}{batch.status === "screening" ? " · screening" : ""}</td>
+                  <td className="max-w-[140px] truncate" title={batch.createdByName ?? undefined}>{batch.createdByName ?? "—"}</td>
+                  <td className="text-right tabular-nums">{batch.attemptCeiling}</td>
+                  <td className="text-right tabular-nums">{count(batch.cleared)}</td>
+                  <td className="text-right tabular-nums">{count(batch.blocked)}</td>
+                  <td className="text-right tabular-nums">{count(batch.failed)}</td>
+                  <td className="text-right tabular-nums">{batch.pending ? count(batch.pending) : "—"}</td>
+                  <td className="text-right tabular-nums">{count(batch.dials)}</td>
+                  <td className="text-right tabular-nums">{count(batch.contacts)}</td>
+                  <td className="text-right tabular-nums">{count(batch.leadsReached)}</td>
+                  <td className={cn("text-right font-semibold tabular-nums", better === true && "text-[var(--success-ink)]", better === false && "text-[var(--error-ink)]")}>{percent(batch.contactRate)}</td>
+                  <td className="text-right tabular-nums">{count(batch.policies)}</td>
                 </tr>
               );
             })}
           </tbody>
         </table>
       ) : (
-        <p className="border-t border-border px-4 py-6 text-sm text-muted-foreground">No batch has run yet.</p>
+        <EmptyState title="No batch has run yet" hint="Build a recycle batch from a campaign's rule; its dials, contacts and policies are counted here." />
       )}
     </TableCard>
   );
@@ -281,6 +306,7 @@ export function NurtureWorkspace() {
   const [saving, setSaving] = useState<string | null>(null);
   const [openIdle, setOpenIdle] = useState<string | null>(null);
   const [progress, setProgress] = useState<Progress | null>(null);
+  const [tab, setTab] = useState<"rules" | "batches" | "cadence">("rules");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -358,7 +384,7 @@ export function NurtureWorkspace() {
     if (batchId) await screen(batchId, campaign.campaign_id);
   }
 
-  const header = <PageHeader title="Lead recycling" actions={<RefreshButton onClick={() => void load()} refreshing={loading} />} />;
+  const header = <PageHeader title="Lead recycling" />;
 
   if (!data) {
     if (loading) return <PageLoading />;
@@ -397,26 +423,28 @@ export function NurtureWorkspace() {
     <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
       {header}
 
+      {/* Four figures an operator acts on (2026-10-06 redesign). "In nurture" is the Eligible
+          tile's footnote; the recycled contact rate is the conversion tile's, or its own tile when
+          the conversion read is unavailable. */}
       <StatStrip label="Recycling totals">
-        <StatTile label="In nurture" value={count(totals.inNurture)} footnote={pool ? `${count(pool.exhaustedNoOutcome)} never reached · ${count(pool.saidNo)} said no` : `across ${campaigns.length} ${campaigns.length === 1 ? "rule" : "rules"}`} />
-        <StatTile label="Eligible today" value={count(totals.eligibleNow)} footnote={pool ? `${count(pool.tooRecent)} too recent · ${count(pool.never)} never` : "before the fresh scrub"} />
+        <StatTile label="Eligible today" value={count(totals.eligibleNow)} footnote={pool ? `of ${count(totals.inNurture)} in nurture · ${count(pool.tooRecent)} too recent · ${count(pool.never)} never` : `of ${count(totals.inNurture)} in nurture · before the fresh scrub`} />
         <StatTile label="Recycled this month" value={count(totals.recycledThisMonth)} valueTone={totals.recycledThisMonth > 0 ? "good" : undefined} footnote={change == null ? `none in ${lastMonthName}` : `${change >= 0 ? "+" : "−"}${Math.abs(change)}% vs ${lastMonthName}`} />
         <StatTile label="Blocked on re-screening" value={count(totals.blockedThisMonth)} valueTone={totals.blockedThisMonth > 0 ? "danger" : undefined} footnote="suppressed since import" />
-        <StatTile
-          label="Recycled contact rate"
-          value={contactRate?.recycled == null ? "—" : `${contactRate.recycled.toFixed(1)}%`}
-          valueTone={contactRate?.recycled == null ? undefined : "primary"}
-          footnote={contactRate?.fresh == null ? "no fresh dials to compare" : `vs ${contactRate.fresh.toFixed(1)}% fresh`}
-          action={<Link href="/app/activity" className="text-xs font-semibold text-foreground hover:underline">Scorecard</Link>}
-        />
         {/* LA-2.20-6 / W3.5: conversion, recycled against fresh, all time — policies per 100 leads worked on each side. */}
         {data.conversion
           ? <StatTile
               label="Recycled conversion"
               value={percent(data.conversion.recycled.percent)}
-              footnote={`vs ${percent(data.conversion.fresh.percent)} fresh · ${plural(data.conversion.recycled.policies, "policy", "policies")} from ${count(data.conversion.recycled.leads)} recycled${recycledAllTime ? ` · ${percent(recycledAllTime.contactRate)} contact` : ""}`}
+              footnote={`vs ${percent(data.conversion.fresh.percent)} fresh · ${plural(data.conversion.recycled.policies, "policy", "policies")} from ${count(data.conversion.recycled.leads)} recycled · ${contactRate?.recycled == null ? "no contact rate yet" : `${contactRate.recycled.toFixed(1)}% contact${contactRate.fresh == null ? "" : ` vs ${contactRate.fresh.toFixed(1)}%`}`}`}
+              action={<Link href="/app/activity" className="text-xs font-semibold text-foreground hover:underline">Scorecard</Link>}
             />
-          : recycledAllTime && <StatTile label="Recycled all time" value={count(recycledAllTime.recycled)} footnote={`${percent(recycledAllTime.contactRate)} contact · ${plural(recycledAllTime.policies, "policy", "policies")}`} />}
+          : <StatTile
+              label="Recycled contact rate"
+              value={contactRate?.recycled == null ? "—" : `${contactRate.recycled.toFixed(1)}%`}
+              valueTone={contactRate?.recycled == null ? undefined : "primary"}
+              footnote={`${contactRate?.fresh == null ? "no fresh dials to compare" : `vs ${contactRate.fresh.toFixed(1)}% fresh`}${recycledAllTime ? ` · ${count(recycledAllTime.recycled)} recycled, ${plural(recycledAllTime.policies, "policy", "policies")}` : ""}`}
+              action={<Link href="/app/activity" className="text-xs font-semibold text-foreground hover:underline">Scorecard</Link>}
+            />}
       </StatStrip>
 
       {!batchesReady && (
@@ -425,72 +453,131 @@ export function NurtureWorkspace() {
         </p>
       )}
 
-      <div className="flex flex-col gap-5">
-        {working.map((campaign) => <div key={campaign.campaign_id}>{card(campaign)}</div>)}
-        {/* A campaign with nothing in nurture and nothing ever recycled has no run to preview; a full
-            card for each would bury the ones that do. They stay one line each, and open to the same
-            rule card when someone wants to set the rule ahead of time. */}
-        {idle.length > 0 && (
-          <TableCard title={working.length ? "Nothing in nurture yet" : "No campaign has anything in nurture yet"} description={`${idle.length} ${idle.length === 1 ? "campaign" : "campaigns"}`}>
-            {idle.map((campaign) => (
-              <div key={campaign.campaign_id} className="border-t border-border">
-                <div className="m-row flex flex-wrap items-center gap-3 px-4 py-2.5">
-                  <span className="min-w-0 flex-grow truncate text-sm font-semibold">{campaign.campaign_name}</span>
-                  <span className="text-xs text-muted-foreground">after {campaign.rule.wait_days} days · up to {campaign.rule.max_recycles} per lead · {campaign.rule.allowed_dispositions.map(label).join(", ") || "no outcomes chosen"}</span>
-                  <span className="inline-flex rounded-full bg-[var(--surface-alt)] px-2.5 py-[3px] text-xs font-semibold text-[var(--body)]">{label(campaign.status)}</span>
-                  <Button type="button" variant="outline" size="sm" aria-expanded={openIdle === campaign.campaign_id} onClick={() => setOpenIdle((current) => (current === campaign.campaign_id ? null : campaign.campaign_id))}>{openIdle === campaign.campaign_id ? "Close" : "Edit rule"}</Button>
-                </div>
-                {openIdle === campaign.campaign_id && (
-                  <div className="border-t border-border bg-[var(--canvas)] p-3">{card(campaign)}</div>
-                )}
-              </div>
-            ))}
+      <ViewTabs
+        label="Recycling views"
+        value={tab}
+        onChange={setTab}
+        tabs={[
+          { key: "rules", label: "Recycle rules", count: campaigns.length },
+          { key: "batches", label: "Past batches", count: batches.length },
+          { key: "cadence", label: "Cadence & rotation" },
+        ]}
+        actions={<RefreshButton onClick={() => void load()} refreshing={loading} />}
+      />
+
+      {/* Recycle rules (2026-10-06): one row per campaign — the rule, what it would pick up now, the last
+          run and any batch in flight — instead of a full card each (twelve cards ran ~5,000px). "Open rule"
+          shows the full rule card (every control, the never-included line, Build a recycle batch) in a
+          pop-up. Campaigns with work come first. */}
+      {tab === "rules" && (
+        campaigns.length ? (
+          <TableCard className="flex flex-col lg:h-[calc(100dvh-var(--top-bar-h)-347px)] [&>*:nth-child(1)]:min-h-0 [&>*:nth-child(1)]:flex-1 [&>*:nth-child(1)]:overflow-auto [&_thead_th]:sticky [&_thead_th]:top-0 [&_thead_th]:z-[1] [&_thead_th]:bg-card">
+            <table className="portal-lead-table w-full min-w-[980px] text-left text-sm">
+              <thead>
+                <tr>
+                  <th scope="col">Campaign</th>
+                  <th scope="col" className="w-[110px]">Status</th>
+                  <th scope="col" className="w-[100px] text-right">Rests</th>
+                  <th scope="col" className="w-[70px] text-right">Cap</th>
+                  <th scope="col" className="w-[200px]">Recycles after</th>
+                  <th scope="col" className="w-[100px] text-right">Eligible now</th>
+                  <th scope="col" className="w-[100px] text-right">Too recent</th>
+                  <th scope="col" className="w-[190px]">Last run</th>
+                  <th scope="col" className="w-[140px]">Batch</th>
+                  <th scope="col" className="w-[110px] text-right"><span className="sr-only">Actions</span></th>
+                </tr>
+              </thead>
+              <tbody className="m-seq">
+                {[...working, ...idle].map((campaign) => {
+                  const live = progress?.campaignId === campaign.campaign_id;
+                  const active = campaign.status === "active";
+                  return (
+                    <tr key={campaign.campaign_id} className="m-row">
+                      <td className="max-w-[260px] truncate font-semibold" title={campaign.campaign_name}>{campaign.campaign_name}</td>
+                      <td><span className={cn("inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-semibold", active ? "bg-[var(--success-surface)] text-[var(--success-ink)]" : "bg-[var(--surface-alt)] text-[var(--body)]")}>{label(campaign.status)}</span></td>
+                      <td className="text-right tabular-nums">{plural(campaign.rule.wait_days, "day")}</td>
+                      <td className="text-right tabular-nums">{campaign.rule.max_recycles}</td>
+                      <td className="max-w-[200px] truncate" title={campaign.rule.allowed_dispositions.map(label).join(", ")}>{campaign.rule.allowed_dispositions.map(label).join(", ") || <span className="text-muted-foreground">no outcomes chosen</span>}</td>
+                      <td className="text-right font-semibold tabular-nums">{count(campaign.eligibleNow)}</td>
+                      <td className="text-right tabular-nums text-muted-foreground">{campaign.pool ? count(campaign.pool.tooRecent) : "—"}</td>
+                      <td className="whitespace-nowrap text-xs tabular-nums">{campaign.lastRun ? <span title={`Last run ${stamp(campaign.lastRun.at)}`}><span className="text-[var(--success-ink)]">{count(campaign.lastRun.cleared)} cleared</span> · <span className="text-[var(--error-ink)]">{count(campaign.lastRun.blocked)} blocked</span>{campaign.lastRun.failed ? <> · <span className="text-[var(--warning-ink)]">{count(campaign.lastRun.failed)} held</span></> : null}</span> : <span className="text-muted-foreground">never run</span>}</td>
+                      <td className="whitespace-nowrap text-xs">{live ? <span className="font-semibold text-[var(--info-ink)]">Screening now</span> : campaign.openBatch ? <span className="font-semibold text-[var(--warning-ink)]" title={`“${campaign.openBatch.angle}”`}>Being screened</span> : <span className="text-muted-foreground">—</span>}</td>
+                      <td className="text-right">
+                        <Button type="button" variant="outline" size="sm" onClick={() => setOpenIdle(campaign.campaign_id)}>Open rule</Button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </TableCard>
-        )}
-        {!campaigns.length && (
+        ) : (
           <TableCard>
             <EmptyState title="No campaigns are configured yet" hint="Create a campaign under Vendors & campaigns before setting a recycle rule." />
           </TableCard>
-        )}
-      </div>
+        )
+      )}
+      {(() => {
+        const opened = campaigns.find((campaign) => campaign.campaign_id === openIdle);
+        return (
+          <Dialog open={Boolean(opened)} onOpenChange={(open) => { if (!open) setOpenIdle(null); }}>
+            <DialogContent className="max-h-[90dvh] overflow-y-auto p-0 sm:max-w-[960px] [&>section]:border-0 [&>section]:shadow-none">
+              <DialogTitle className="sr-only">Recycle rule{opened ? ` · ${opened.campaign_name}` : ""}</DialogTitle>
+              {opened && card(opened)}
+            </DialogContent>
+          </Dialog>
+        );
+      })()}
 
-      <div className="flex flex-col gap-6 xl:flex-row">
-        <div className="flex min-w-0 flex-grow flex-col gap-6">
+      {tab === "batches" && <PastBatches batches={batches} baseline={batchBaseline} />}
+
+      {tab === "cadence" && (
+        <div className="flex flex-col gap-6 xl:flex-row xl:items-start">
           <TableCard
+            className="min-w-0 flex-grow"
             title="Retry cadence"
             action={
               <>
-                {cadence && <span className="inline-flex whitespace-nowrap rounded-full bg-[var(--soft-orange-surface)] px-2.5 py-[3px] text-xs font-semibold text-[var(--accent-ink)]">{cadence.first72} of {cadence.total} inside 72 hours</span>}
+                {cadence && <span className="inline-flex whitespace-nowrap rounded-full bg-[var(--primary-soft)] px-2.5 py-0.5 text-xs font-semibold text-[var(--accent-ink)]">{cadence.first72} of {cadence.total} inside 72 hours</span>}
                 <Button asChild variant="outline"><Link href="/app/settings#cadence">Edit cadence</Link></Button>
               </>
             }
             footer={cadence?.usingDefaults ? "No cadence is saved, so this is the dialer's built-in schedule." : undefined}
           >
             {cadence ? (
-              cadence.steps.map((step) => (
-                <div key={step.attempt} className={cn("m-row flex flex-wrap items-center gap-3.5 border-t border-border px-4 py-2.5", step.offsetMs <= 72 * 3_600_000 && "bg-[var(--soft-orange-surface)]")}>
-                  <span className="inline-flex size-[22px] items-center justify-center rounded-full bg-[var(--surface-alt)] text-xs font-semibold tabular-nums">{step.attempt}</span>
-                  <span className="inline-flex h-[34px] w-[110px] items-center rounded-lg border border-[var(--border-strong)] bg-card px-2.5 text-sm">{step.interval ? `+${step.interval}` : "immediately"}</span>
-                  <span className="w-[180px] text-sm text-[var(--body)]">{step.attempt === 1 ? "on import" : step.slot ? PREFERRED[step.slot] ?? step.slot : "a slot not yet tried"}</span>
-                  <span className="flex-grow text-xs text-muted-foreground">{offset(step.offsetMs)}{step.attempt === cadence.total ? " · then exhausted" : ""}</span>
-                </div>
-              ))
+              <table className="portal-lead-table w-full min-w-[620px] text-left text-sm">
+                <thead>
+                  <tr>
+                    <th scope="col" className="w-[80px]">Attempt</th>
+                    <th scope="col" className="w-[130px]">Wait</th>
+                    <th scope="col" className="w-[220px]">Slot</th>
+                    <th scope="col">When</th>
+                  </tr>
+                </thead>
+                <tbody className="m-seq">
+                  {cadence.steps.map((step) => (
+                    <tr key={step.attempt} className={cn("m-row", step.offsetMs <= 72 * 3_600_000 && "bg-[var(--primary-soft)]")}>
+                      <td className="tabular-nums font-semibold">{step.attempt}</td>
+                      <td className="tabular-nums">{step.interval ? `+${step.interval}` : "immediately"}</td>
+                      <td>{step.attempt === 1 ? "on import" : step.slot ? PREFERRED[step.slot] ?? step.slot : "a slot not yet tried"}</td>
+                      <td className="text-muted-foreground">{offset(step.offsetMs)}{step.attempt === cadence.total ? " · then exhausted" : ""}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             ) : (
               <p className="border-t border-border px-4 py-6 text-sm text-muted-foreground">The cadence could not be read.</p>
             )}
           </TableCard>
 
-          <PastBatches batches={batches} baseline={batchBaseline} />
-        </div>
-
-        <div className="flex w-full shrink-0 flex-col gap-6 xl:w-[480px]">
-          <section className="rounded-lg border border-border bg-card p-5 shadow-[0_1px_2px_rgba(16,20,26,.05)]">
-            <h2 className="text-lg font-semibold leading-[1.28] tracking-[-0.015em]">Slot rotation</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {rotation ? <><Link href={`/app/leads/${rotation.leadId}`} className="hover:underline">{rotation.leadName}</Link> · attempt {rotation.attempt} of {rotation.ceiling}</> : "No lead is mid-cadence right now"}
-            </p>
+          <TableCard
+            className="w-full shrink-0 xl:w-[480px]"
+            title="Slot rotation"
+            description={rotation ? undefined : "No lead is mid-cadence right now"}
+            action={rotation ? <span className="text-sm text-muted-foreground"><Link href={`/app/leads/${rotation.leadId}`} className="font-semibold text-foreground hover:underline">{rotation.leadName}</Link> · attempt {rotation.attempt} of {rotation.ceiling}</span> : undefined}
+          >
             {rotation && (
-              <div className="mt-4 grid grid-cols-3 gap-1.5 sm:grid-cols-6">
+              <div className="grid grid-cols-3 gap-1.5 border-t border-border p-4 sm:grid-cols-6">
                 {rotation.slots.map((slot) => (
                   <div key={slot.slot} className={cn("rounded-lg border px-2 py-2.5 text-center", SLOT_LOOK[slot.state])}>
                     <div className="text-xs font-semibold">{SLOT_HOURS[slot.slot] ?? slot.slot}</div>
@@ -499,9 +586,9 @@ export function NurtureWorkspace() {
                 ))}
               </div>
             )}
-          </section>
+          </TableCard>
         </div>
-      </div>
+      )}
     </div>
   );
 }

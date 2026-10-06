@@ -25,6 +25,8 @@ export type OwnProfile = {
   licenceNumbers: Record<string, string>;
   /** False until migration 20260924200000 is applied: the numbers are then shown as unavailable and not saved. */
   licenceNumbersReady: boolean;
+  /** When the profile picture last changed (it versions the picture's address); null when there is none. */
+  avatarVersion: string | null;
 };
 
 const blankToNull = (value: string | null | undefined) => {

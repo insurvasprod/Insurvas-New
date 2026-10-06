@@ -38,7 +38,7 @@ export default async function SettingsPage() {
     <div className="m-stagger portal-settings-page flex flex-col gap-6">
       <PageHeader title="Settings" />
 
-      <AgentSettingsTabs team={team} workspace={workspace} tabs={SETTINGS_SECTIONS} />
+      <AgentSettingsTabs team={team} workspace={workspace} tabs={SETTINGS_SECTIONS} readOnly={guard.entitlement.access === "read_only"} />
     </div>
   );
 }

@@ -7,6 +7,7 @@ import { ChevronDown, FileText, Store, Upload } from "lucide-react";
 import { notify } from "@/lib/notify";
 
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageLoading } from "@/components/ui/page-loading";
 import { StatStrip, StatTile } from "@/components/ui/stat";
@@ -127,6 +128,8 @@ export function LeadImportWorkspace() {
   const [sheetNote, setSheetNote] = useState<string | null>(null);
   /** The import settings could not be read; the page offers a retry instead of loading forever. */
   const [loadFailed, setLoadFailed] = useState(false);
+  /** The product's lead record, on demand rather than as a table under the form. */
+  const [fieldsOpen, setFieldsOpen] = useState(false);
   const router = useRouter();
   const storageOk = useSyncExternalStore(noSubscription, sessionStorageWorks, () => true);
 
@@ -369,7 +372,10 @@ export function LeadImportWorkspace() {
   if (!info && !loadFailed) return <PageLoading rows={6} />;
 
   return <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
-    <PageHeader title="List import" />
+    <PageHeader
+      title="List import"
+      actions={info && info.fields.length > 0 ? <Button type="button" variant="outline" onClick={() => setFieldsOpen(true)}>Expected fields</Button> : undefined}
+    />
 
     {loadFailed && !info && <p role="alert" className="flex flex-wrap items-center gap-3 rounded-lg border border-[var(--error)]/30 bg-[var(--error-surface)] px-4 py-2.5 text-sm text-[var(--error-ink)]">
       The import settings could not be loaded.
@@ -397,21 +403,21 @@ export function LeadImportWorkspace() {
           ? <div className="flex min-w-0 items-center gap-3 rounded-lg border border-border bg-card px-4 py-3">
               <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-[8px] bg-[var(--surface-alt)] text-[var(--muted)]"><FileText className="size-5" aria-hidden /></span>
               <span className="min-w-0 flex-1">
-                <strong className="block truncate text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">{file.name}</strong>
-                <span className="block text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)] tabular-nums">{fileRows.toLocaleString()} rows · {formatBytes(file.size)}</span>
-                {sheetNote && <span className="block text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">{sheetNote}</span>}
+                <strong className="block truncate text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">{file.name}</strong>
+                <span className="block text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)] tabular-nums">{fileRows.toLocaleString()} rows · {formatBytes(file.size)}</span>
+                {sheetNote && <span className="block text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">{sheetNote}</span>}
               </span>
               <Button type="button" variant="outline" onClick={reset}>Replace</Button>
             </div>
           : <div
-              className={cn("flex min-w-0 flex-col items-center rounded-lg border border-dashed bg-card px-6 py-10 text-center", dragging ? "border-[var(--primary)] bg-[var(--brand-50)]" : "border-[var(--border-strong)]")}
+              className={cn("flex min-w-0 flex-col items-center rounded-lg border border-dashed bg-card px-6 py-10 text-center", dragging ? "border-[var(--primary)] bg-[var(--primary-soft)]" : "border-[var(--border-strong)]")}
               onDragOver={(event) => { event.preventDefault(); setDragging(true); }}
               onDragLeave={() => setDragging(false)}
               onDrop={(event) => { event.preventDefault(); setDragging(false); void takeFile(event.dataTransfer.files?.[0]); }}
             >
               <span className="inline-flex size-[34px] items-center justify-center rounded-full bg-[var(--surface-alt)] text-[var(--muted)]"><Upload className="size-4" aria-hidden /></span>
-              <p className="mt-2.5 text-[18px] leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]">Drop a vendor CSV or Excel file here</p>
-              <p className="mt-1.5 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">{reading ? "Reading the workbook…" : `.csv or .xlsx · up to ${(info?.maxRows ?? 20000).toLocaleString()} rows per file`}</p>
+              <p className="mt-2.5 text-base leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]">Drop a vendor CSV or Excel file here</p>
+              <p className="mt-1.5 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">{reading ? "Reading the workbook…" : `.csv or .xlsx · up to ${(info?.maxRows ?? 20000).toLocaleString()} rows per file`}</p>
               <input id="lead-csv" className="peer sr-only" type="file" accept={`.csv,text/csv,${XLSX_TYPES}`} disabled={reading} onChange={(event) => void takeFile(event.target.files?.[0])} />
               <Button asChild variant="outline" className="mt-4 cursor-pointer peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-focus-visible:ring-offset-2">
                 <label htmlFor="lead-csv">Choose file</label>
@@ -429,13 +435,13 @@ export function LeadImportWorkspace() {
           </span>}
           bodyClassName="flex flex-col gap-1.5"
         >
-          <p className="m-0 flex items-center gap-2 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--body)]">
+          <p className="m-0 flex items-center gap-2 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--body)]">
             {mapConfirmed
               ? <Pill tone="success" dot>Confirmed</Pill>
               : <><Pill tone="warning" dot>Not confirmed</Pill>Check each column before the scrub.</>}
           </p>
-          {dateOrderToSend && (datePicked || dates.ambiguous === 0) && <p className="m-0 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">Slash dates are read {dateOrderToSend === "dmy" ? "day first" : "month first (US)"}.</p>}
-          {saveNote && <p role="status" className="m-0 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">{saveNote}</p>}
+          {dateOrderToSend && (datePicked || dates.ambiguous === 0) && <p className="m-0 text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">Slash dates are read {dateOrderToSend === "dmy" ? "day first" : "month first (US)"}.</p>}
+          {saveNote && <p role="status" className="m-0 text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">{saveNote}</p>}
         </SettingsCard>}
 
         {canMap && file && <ColumnMappingDialog
@@ -462,7 +468,7 @@ export function LeadImportWorkspace() {
 
         {csv && <TableCard title="CSV preview" description={`First ${preview.rows.length} row${preview.rows.length === 1 ? "" : "s"} of the file.`}>
           {preview.error
-            ? <p role="alert" className="border-t border-border px-4 py-3 text-[14px] leading-[1.5] text-[var(--error-ink)]">{preview.error}</p>
+            ? <p role="alert" className="border-t border-border px-4 py-3 text-sm leading-[1.5] text-[var(--error-ink)]">{preview.error}</p>
             : <table className={st.table}>
                 <thead><tr className={st.headRow}>{preview.headers.map((header, index) => <th scope="col" key={`${header}-${index}`} className={st.th}>{header}</th>)}</tr></thead>
                 <tbody>{preview.rows.map((row, rowIndex) => <tr key={rowIndex}>{preview.headers.map((_, cellIndex) => <td key={cellIndex} className={cn(st.td, "whitespace-nowrap")}>{row[cellIndex] ?? ""}</td>)}</tr>)}</tbody>
@@ -471,7 +477,7 @@ export function LeadImportWorkspace() {
 
         {csv && validation && <SettingsCard pad={20} title="Validation summary">
           {validation.error
-            ? <p role="alert" className="text-[14px] leading-[1.5] text-[var(--error-ink)]">{validation.error} Correct the file and choose it again.</p>
+            ? <p role="alert" className="text-sm leading-[1.5] text-[var(--error-ink)]">{validation.error} Correct the file and choose it again.</p>
             : <div className="flex flex-col gap-3">
                 <div role="status" className="flex flex-wrap items-center gap-2">
                   <Pill tone="success" dot>{validation.validRows.toLocaleString()} row{validation.validRows === 1 ? "" : "s"} ready</Pill>
@@ -481,7 +487,7 @@ export function LeadImportWorkspace() {
                     <ChevronDown className={cn("size-4 transition-transform", errorsOpen && "rotate-180")} aria-hidden />
                   </Button>}
                 </div>
-                {errorsOpen && validation.rowErrors.length > 0 && <ul className="m-0 flex list-none flex-col gap-1 rounded-[8px] border border-[var(--border)] bg-[var(--surface-alt)] p-3 text-[14px] leading-[1.5] text-[var(--body)]">
+                {errorsOpen && validation.rowErrors.length > 0 && <ul className="m-0 flex list-none flex-col gap-1 rounded-[8px] border border-[var(--border)] bg-[var(--surface-alt)] p-3 text-sm leading-[1.5] text-[var(--body)]">
                   {validation.rowErrors.map((item) => <li key={item.rowNumber}>{item.message}</li>)}
                   {validation.moreRowErrors > 0 && <li className="text-[var(--muted)]">and {validation.moreRowErrors.toLocaleString()} more row{validation.moreRowErrors === 1 ? "" : "s"} with problems</li>}
                 </ul>}
@@ -515,7 +521,7 @@ export function LeadImportWorkspace() {
               </Field>
               <Field label="Batch cost" htmlFor="lead-cost" hint="What this file cost, in dollars and cents. Optional." error={cost === "invalid" ? "Enter an amount like 4,500.00, up to $1,000,000." : undefined}>
                 <span className="relative block">
-                  <span aria-hidden className="pointer-events-none absolute top-[calc(50%+3px)] left-3 -translate-y-1/2 text-[16px] text-[var(--muted)]">$</span>
+                  <span aria-hidden className="pointer-events-none absolute top-[calc(50%+3px)] left-3 -translate-y-1/2 text-base text-[var(--muted)]">$</span>
                   <input id="lead-cost" className={cn(control, "pl-7 tabular-nums")} inputMode="decimal" autoComplete="off" placeholder="0.00" value={costText} onChange={(event) => setCostText(event.target.value)} aria-invalid={cost === "invalid" || undefined} />
                 </span>
               </Field>
@@ -532,12 +538,18 @@ export function LeadImportWorkspace() {
           <Button type="submit" className="w-full" disabled={Boolean(blockedReason) || saving} aria-describedby={blockedReason ? "import-continue-note" : undefined}>
             {saving ? "Checking…" : "Continue to review"}
           </Button>
-          {blockedReason && <p id="import-continue-note" className="mt-2 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">{blockedReason}</p>}
+          {blockedReason && <p id="import-continue-note" className="mt-2 text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">{blockedReason}</p>}
         </div>
       </div>
     </form>
 
-    {info && info.fields.length > 0 && <TableCard title="Expected fields" description={`The ${info.product.name} lead record.`}>
+    {info && info.fields.length > 0 && <Dialog open={fieldsOpen} onOpenChange={setFieldsOpen}>
+      <DialogContent className="sm:max-w-[560px]">
+        <DialogHeader>
+          <DialogTitle>Expected fields</DialogTitle>
+          <DialogDescription>The {info.product.name} lead record.</DialogDescription>
+        </DialogHeader>
+        <div className="max-h-[60dvh] min-w-0 overflow-y-auto rounded-lg border border-border">
       <table className={st.table}>
         <thead><tr className={st.headRow}><th scope="col" className={st.th}>Field</th><th scope="col" className={st.th}>Type</th><th scope="col" className={st.th}>Required</th></tr></thead>
         <tbody>
@@ -548,6 +560,8 @@ export function LeadImportWorkspace() {
           </tr>)}
         </tbody>
       </table>
-    </TableCard>}
+        </div>
+      </DialogContent>
+    </Dialog>}
   </div>;
 }

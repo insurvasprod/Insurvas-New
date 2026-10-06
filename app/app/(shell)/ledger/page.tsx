@@ -3,7 +3,7 @@ import Link from "next/link";
 import { guardPage } from "@/lib/entitlements/guardPage";
 import { hasFeature, isDisabledForTenant } from "@/lib/entitlements/types";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
-import { ExpectedEntriesTable, ReconciliationTable, StatementEntriesTable } from "@/components/app/ledger-statement-sections";
+import { LedgerViews } from "@/components/app/ledger-statement-sections";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { StatementImportButton } from "@/components/app/statement-import";
 import { Button } from "@/components/ui/button";
@@ -32,7 +32,7 @@ import { hasTenantPermission, roleCanViewCommission } from "@/lib/tenantAuth/per
  * Where a policy has both, the reconciliation table compares them for the statement periods.
  *
  * The stat strip counts the reported half; with no expected entry and no statement the page shows
- * the empty state under it. Otherwise the tables follow.
+ * the empty state under it. Otherwise the tables follow, one at a time as tabs (2026-10-06).
  */
 
 const wholeMoney = (cents: number) => `${cents < 0 ? "−" : ""}$${Math.round(Math.abs(cents) / 100).toLocaleString("en-US")}`;
@@ -106,20 +106,17 @@ export default async function LedgerPage({ searchParams }: { searchParams: Promi
 
   const expectedSummary = `${wholeMoney(totals.grossCents)} gross · ${wholeMoney(totals.advancesCents)} advanced · ${wholeMoney(totals.chargebacksCents)} charged back · ${totals.exposureCents > 0 ? `${wholeMoney(totals.exposureCents)} still exposed` : "nothing exposed"} · derived from ${plural(ledger.policiesRead, "policy", "policies")}`;
 
-  return (
-    <div className="m-stagger flex flex-col gap-6">
-      <PageHeader
-        title="Commission ledger"
-        actions={
-          <>
-            {handlesStatements && statementsOnPlan && statements.statementsImported > 0 && (
-              <Button asChild type="button" variant="outline"><Link href="/app/statements">Statement history</Link></Button>
-            )}
-            {importControl}
-          </>
-        }
-      />
+  const headerActions = (
+    <>
+      {handlesStatements && statementsOnPlan && statements.statementsImported > 0 && (
+        <Button asChild type="button" variant="outline"><Link href="/app/statements">Statement history</Link></Button>
+      )}
+      {importControl}
+    </>
+  );
 
+  const notices = (
+    <>
       {readOnly && <div role="status" className={`${alert} border-l-[var(--warning)] bg-[var(--warning-surface)] text-[var(--warning-ink)]`}>Your account is read-only. Reading remains available; new money records are disabled.</div>}
       {importBlocked && !readOnly && <div role="status" className={`${alert} border-l-[var(--warning)] bg-[var(--warning-surface)] text-[var(--warning-ink)]`}>{importBlocked}</div>}
       {/* Proposed and unmatched lines post nothing until a person decides them. */}
@@ -143,21 +140,38 @@ export default async function LedgerPage({ searchParams }: { searchParams: Promi
         <StatTile label="Advances" value={wholeMoney(reportedTotals.advancesCents)} footnote={note("paid ahead of earning")} />
         <StatTile label="Chargebacks" value={wholeMoney(reportedTotals.chargebacksCents)} valueTone={reportedTotals.chargebacksCents !== 0 ? "danger" : undefined} footnote={note(chargebackLines ? `${plural(chargebackLines, "line", "lines")} taken back` : "none reported")} />
       </StatStrip>
+    </>
+  );
+
+  // 2026-10-06 redesign: with entries, the lists are tabs under the title (LedgerViews) and the
+  // header's actions move to the right of the tab row; with none, the empty state follows the strip.
+  return (
+    <div className="m-stagger flex flex-col gap-6">
+      <PageHeader title="Commission ledger" actions={isEmpty ? headerActions : undefined} />
 
       {isEmpty ? (
-        <TableCard>
-          <EmptyState
-            title="Nothing is recorded yet"
-            hint={`${ledger.policiesRead === 0 ? "Your book has no policies to price" : "No policy in your book can be priced by the carrier library yet"}${statements.available ? ", and no carrier statement has been imported." : ", and carrier statement import is waiting on a database update."}`}
-            action={<Button asChild type="button" variant="outline"><Link href="/app/policies">Review policy transactions</Link></Button>}
-          />
-        </TableCard>
-      ) : (
         <>
-          {reconciliation.length > 0 && <ReconciliationTable rows={reconciliation} policies={policyLabels} />}
-          {reported.length > 0 && <StatementEntriesTable entries={reported} canOpenStatements={handlesStatements && statementsOnPlan} />}
-          {entries.length > 0 && <ExpectedEntriesTable entries={entries} summary={expectedSummary} />}
+          {notices}
+          <TableCard>
+            <EmptyState
+              title="Nothing is recorded yet"
+              hint={`${ledger.policiesRead === 0 ? "Your book has no policies to price" : "No policy in your book can be priced by the carrier library yet"}${statements.available ? ", and no carrier statement has been imported." : ", and carrier statement import is waiting on a database update."}`}
+              action={<Button asChild type="button" variant="outline"><Link href="/app/policies">Review policy transactions</Link></Button>}
+            />
+          </TableCard>
         </>
+      ) : (
+        <LedgerViews
+          reconciliation={reconciliation}
+          policies={policyLabels}
+          reported={reported}
+          canOpenStatements={handlesStatements && statementsOnPlan}
+          expected={entries}
+          expectedSummary={expectedSummary}
+          actions={headerActions}
+        >
+          {notices}
+        </LedgerViews>
       )}
     </div>
   );

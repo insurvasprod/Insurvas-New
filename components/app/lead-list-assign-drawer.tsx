@@ -212,10 +212,10 @@ export function LeadListAssignDrawer({ campaignId, listName, assignable }: { cam
         >
           <div className="flex shrink-0 items-start justify-between gap-4 border-b border-[var(--border)] px-[22px] py-[18px]">
             <div className="min-w-0">
-              <DialogPrimitive.Title className="m-0 text-[18px] leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]">
+              <DialogPrimitive.Title className="m-0 text-base leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]">
                 Assign {leads(total)}
               </DialogPrimitive.Title>
-              <DialogPrimitive.Description className="mt-[5px] text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">
+              <DialogPrimitive.Description className="mt-[5px] text-sm leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">
                 {listName} · the usable remainder
               </DialogPrimitive.Description>
             </div>
@@ -235,13 +235,13 @@ export function LeadListAssignDrawer({ campaignId, listName, assignable }: { cam
 
           <div className="flex min-h-0 flex-1 flex-col gap-[18px] overflow-y-auto p-[22px]">
             <div className="block">
-              <label htmlFor={modeId} className="text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]">Assign by</label>
+              <label htmlFor={modeId} className="text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]">Assign by</label>
               <select id={modeId} className={control} value={mode} disabled={busy} onChange={(event) => { setMode(event.target.value as LeadListAssignMode); setChanged(false); setCommitError(""); }}>
                 {(Object.keys(MODE_LABEL) as LeadListAssignMode[]).map((value) => <option key={value} value={value}>{MODE_LABEL[value]}</option>)}
               </select>
               {/* The board said "what the dialer already follows"; the dialer serves what is assigned
                   and follows no rules. Assign next is what walks the chain. */}
-              <span className="mt-1.5 block text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">The chain is what Assign next follows. Overriding it here is a one-off.</span>
+              <span className="mt-1.5 block text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">The chain is what Assign next follows. Overriding it here is a one-off.</span>
             </div>
 
             {mode !== "chain" && (
@@ -250,7 +250,7 @@ export function LeadListAssignDrawer({ campaignId, listName, assignable }: { cam
                   <Callout tone="error" title="Could not load the members">{membersError}</Callout>
                 ) : mode === "owner" ? (
                   <div className="block">
-                    <label htmlFor={ownerId} className="text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]">Owner</label>
+                    <label htmlFor={ownerId} className="text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]">Owner</label>
                     <select id={ownerId} className={control} value={owner} disabled={busy || !members} onChange={(event) => { setOwner(event.target.value); setChanged(false); }}>
                       <option value="">Choose a member…</option>
                       {(members ?? []).map((member) => (
@@ -260,18 +260,18 @@ export function LeadListAssignDrawer({ campaignId, listName, assignable }: { cam
                   </div>
                 ) : (
                   <fieldset className="m-0 min-w-0 border-0 p-0">
-                    <legend className="p-0 text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]">Members, in turn</legend>
+                    <legend className="p-0 text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]">Members, in turn</legend>
                     {!members ? (
                       <div className="mt-1.5 rounded-[8px] border border-[var(--border-strong)]"><SectionLoading rows={3} columns={2} label="Loading members" /></div>
                     ) : members.length === 0 ? (
-                      <p className="mt-1.5 text-[14px] leading-[1.5] text-[var(--muted)]">Nobody in this workspace can be given leads yet.</p>
+                      <p className="mt-1.5 text-sm leading-[1.5] text-[var(--muted)]">Nobody in this workspace can be given leads yet.</p>
                     ) : (
                       <div className="mt-1.5 max-h-[220px] overflow-y-auto rounded-[8px] border border-[var(--border-strong)]">
                         {members.map((member, index) => {
                           const id = `${ids}-rr-${member.id}`;
                           const checked = rotation.includes(member.id);
                           return (
-                            <label key={member.id} htmlFor={id} className={cn("flex cursor-pointer items-center gap-3 px-3 py-2.5 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--body)] hover:bg-[var(--surface-alt)]", index > 0 && "border-t border-[var(--border)]")}>
+                            <label key={member.id} htmlFor={id} className={cn("flex cursor-pointer items-center gap-3 px-3 py-2.5 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--body)] hover:bg-[var(--surface-alt)]", index > 0 && "border-t border-[var(--border)]")}>
                               <input
                                 id={id}
                                 type="checkbox"
@@ -281,17 +281,17 @@ export function LeadListAssignDrawer({ campaignId, listName, assignable }: { cam
                                 onChange={(event) => { setRotation((current) => event.target.checked ? [...current, member.id] : current.filter((value) => value !== member.id)); setChanged(false); }}
                               />
                               <span className="min-w-0 flex-1 truncate font-semibold text-[var(--ink)]">{member.name}</span>
-                              <span className="shrink-0 text-[12px] tabular-nums text-[var(--muted)]">{count(member.currentOpen)} of {count(member.capacity)} open</span>
+                              <span className="shrink-0 text-xs tabular-nums text-[var(--muted)]">{count(member.currentOpen)} of {count(member.capacity)} open</span>
                             </label>
                           );
                         })}
                       </div>
                     )}
-                    <span className="mt-1.5 block text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">Each lead goes to the next member in this order who may take it.</span>
+                    <span className="mt-1.5 block text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">Each lead goes to the next member in this order who may take it.</span>
                   </fieldset>
                 )}
                 <div className="block">
-                  <label htmlFor={reasonId} className="text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]">
+                  <label htmlFor={reasonId} className="text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]">
                     Reason<span className="text-[var(--error-ink)]"> *</span>
                   </label>
                   <textarea
@@ -307,9 +307,9 @@ export function LeadListAssignDrawer({ campaignId, listName, assignable }: { cam
                     className={cn(control, "h-auto min-h-[88px] resize-y py-2.5")}
                   />
                   {reasonTouched && reasonMissing ? (
-                    <span role="alert" className="mt-1.5 block text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--error-ink)]">Give a reason for overriding the rule chain.</span>
+                    <span role="alert" className="mt-1.5 block text-xs leading-[1.5] tracking-[-0.01em] text-[var(--error-ink)]">Give a reason for overriding the rule chain.</span>
                   ) : (
-                    <span className="mt-1.5 block text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">Recorded on every move and in the audit log. It also lets a move go through inside a household&apos;s rest days.</span>
+                    <span className="mt-1.5 block text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">Recorded on every move and in the audit log. It also lets a move go through inside a household&apos;s rest days.</span>
                   )}
                 </div>
               </>
@@ -318,16 +318,16 @@ export function LeadListAssignDrawer({ campaignId, listName, assignable }: { cam
             {changed && <Callout tone="warning" title={LIST_CHANGED_MESSAGE}>Nothing was assigned. The numbers below are from a fresh run.</Callout>}
 
             <div>
-              <div className="mb-2 text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]">
+              <div className="mb-2 text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]">
                 {mode === "chain" ? "What the chain would do" : "What this would do"}
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[440px] border-collapse" aria-busy={state.status === "loading"}>
                   <thead>
                     <tr className="bg-[var(--surface-alt)]">
-                      <th scope="col" className="px-3 py-2 text-left text-[12px] leading-[1.33] font-semibold tracking-[0.02em] text-[var(--muted)] uppercase">Owner</th>
-                      <th scope="col" className="w-[110px] px-3 py-2 text-right text-[12px] leading-[1.33] font-semibold tracking-[0.02em] text-[var(--muted)] uppercase">Gets</th>
-                      <th scope="col" className="w-[210px] px-3 py-2 text-left text-[12px] leading-[1.33] font-semibold tracking-[0.02em] text-[var(--muted)] uppercase">Why</th>
+                      <th scope="col" className="px-3 py-2 text-left text-xs leading-[1.33] font-semibold tracking-[0.02em] text-[var(--muted)] uppercase">Owner</th>
+                      <th scope="col" className="w-[110px] px-3 py-2 text-right text-xs leading-[1.33] font-semibold tracking-[0.02em] text-[var(--muted)] uppercase">Gets</th>
+                      <th scope="col" className="w-[210px] px-3 py-2 text-left text-xs leading-[1.33] font-semibold tracking-[0.02em] text-[var(--muted)] uppercase">Why</th>
                     </tr>
                   </thead>
                   <tbody className="m-seq">
@@ -373,12 +373,12 @@ export function LeadListAssignDrawer({ campaignId, listName, assignable }: { cam
               </div>
               {capacitySkips && (
                 // User decision: capacity is respected, with no override from here.
-                <p className="mt-2 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--warning-ink)]">
+                <p className="mt-2 text-xs leading-[1.5] tracking-[-0.01em] text-[var(--warning-ink)]">
                   Agents at capacity get no more. <Link href="/app/assignments" className="font-semibold text-inherit underline underline-offset-2">Raise capacity on Lead assignment</Link> to assign more.
                 </p>
               )}
               {lapsing.length > 0 && (
-                <p className="mt-2 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--warning-ink)]">
+                <p className="mt-2 text-xs leading-[1.5] tracking-[-0.01em] text-[var(--warning-ink)]">
                   {lapsing.slice(0, 3).map(({ name, entry }) => `${name}'s own ${entry.state} licence is valid through ${shortDate(entry.expiresOn)}; the ${entry.state} leads they get here return to the pool on ${lapseDay(entry)}.`).join(" ")}
                   {lapsing.length > 3 ? ` And ${lapsing.length - 3} more.` : ""}
                 </p>
@@ -394,13 +394,13 @@ export function LeadListAssignDrawer({ campaignId, listName, assignable }: { cam
             {commitError && <Callout tone="error" title="Nothing was assigned">{commitError}</Callout>}
 
             {/* The per-lead picker (lead-list-workspace's hash view) stays one click away. */}
-            <p className="text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">
+            <p className="text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">
               Rather choose the leads yourself? <Link href={`/app/lead-lists#${campaignId}`} className="font-semibold text-[var(--accent-ink)] underline-offset-2 hover:underline">Pick leads one by one</Link>
             </p>
           </div>
 
           <div className="flex shrink-0 flex-wrap items-center justify-between gap-4 border-t border-[var(--border)] bg-[var(--canvas)] px-[22px] py-3.5">
-            <span className="max-w-[380px] text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">
+            <span className="max-w-[380px] text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">
               {/* The board said "with the rule version"; rules have no version number, so the entry
                   carries each published rule's id, priority and last change instead. */}
               Written to the audit log as one entry, with the rules as published.
@@ -427,13 +427,13 @@ export function LeadListAssignDrawer({ campaignId, listName, assignable }: { cam
 }
 
 function Cell({ children, className }: { children: ReactNode; className?: string }) {
-  return <td className={cn("border-t border-[var(--border)] px-3 py-2 text-left text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--body)]", className)}>{children}</td>;
+  return <td className={cn("border-t border-[var(--border)] px-3 py-2 text-left text-sm leading-[1.5] tracking-[-0.02em] text-[var(--body)]", className)}>{children}</td>;
 }
 
 function PlainRow({ children }: { children: ReactNode }) {
   return (
     <tr>
-      <td colSpan={3} className="border-t border-[var(--border)] px-3 py-3 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">{children}</td>
+      <td colSpan={3} className="border-t border-[var(--border)] px-3 py-3 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">{children}</td>
     </tr>
   );
 }

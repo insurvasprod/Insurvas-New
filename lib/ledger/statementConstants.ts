@@ -220,7 +220,16 @@ export type UnmatchedStatementLine = {
   insuredName: string | null;
   amountCents: number | null;
   kind: StatementLineKind | null;
+  /** A line a person set aside on purpose; only in the queue when re-matching was asked to include them. */
+  leftUnmatched?: boolean;
 };
+
+/**
+ * Before migration 20261006100000: re-matching still works for unmatched lines, but cannot include
+ * the lines a person left unmatched.
+ */
+export const REMATCH_LEFT_UNMATCHED_PENDING_MESSAGE =
+  "Re-matching the lines you left unmatched needs a database update. Re-match without that option until it is applied.";
 
 export type StatementLineDecision =
   | { line_id: string; action: "accept" | "reject" | "leave_unmatched" }

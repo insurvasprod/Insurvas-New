@@ -124,6 +124,9 @@ export const AGENT_API_POLICIES: AgentApiPolicy[] = [
   // LA-4.4 / 4.5 · what the carriers appear to owe, and a person's decision on each finding.
   { sourceFile: "app/api/app/discrepancies/route.ts", featureKey: "discrepancy_report", allowedRoles: ["owner", "bookkeeper"] },
   { sourceFile: "app/api/app/discrepancies/[id]/route.ts", featureKey: "discrepancy_report", allowedRoles: ["owner", "bookkeeper"] },
+  { sourceFile: "app/api/app/discrepancies/letter/route.ts", featureKey: "discrepancy_report", allowedRoles: ["owner", "bookkeeper"] },
+  { sourceFile: "app/api/app/discrepancies/carrier-contact/route.ts", featureKey: "discrepancy_report", allowedRoles: ["owner", "bookkeeper"] },
+  { sourceFile: "app/api/app/discrepancies/letter/pdf/route.ts", featureKey: "discrepancy_report", allowedRoles: ["owner", "bookkeeper"] },
   // LA-4.8 · persistency by carrier and lead source; a producer reads their own book's.
   { sourceFile: "app/api/app/persistency/route.ts", featureKey: "cohort_persistency", allowedRoles: ["owner", "producer", "bookkeeper"] },
   { sourceFile: "app/api/app/inbound/transfer/route.ts", featureKey: "inbound_transfers", allowedRoles: ["owner", "producer"] },
@@ -255,6 +258,8 @@ export const AGENT_API_POLICIES: AgentApiPolicy[] = [
   // Your own profile: every role reads and edits their own record, so requireTenant() with no role
   // list; the ids come only from the verified session.
   { sourceFile: "app/api/app/profile/route.ts", featureKey: null },
+  // The same person's own profile picture, the same rule: requireTenant() and the session's user only.
+  { sourceFile: "app/api/app/profile/avatar/route.ts", featureKey: null },
   // Alert preferences are a cross-cutting agent setting, not a paid module. The route still
   // resolves tenant and current membership server-side via requireTenant().
   { sourceFile: "app/api/app/notifications/route.ts", featureKey: null },

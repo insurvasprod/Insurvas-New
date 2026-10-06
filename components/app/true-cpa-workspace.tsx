@@ -3,19 +3,23 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { DataToolbar, FilterButton, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
+import { ClearFiltersButton, DataToolbar, FilterButton, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageLoading } from "@/components/ui/page-loading";
 import { Pager } from "@/components/ui/pager";
-import { ErrorState, NoMatches, SectionLoading } from "@/components/ui/page-states";
+import { EmptyState, ErrorState, NoMatches, SectionLoading } from "@/components/ui/page-states";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 import type { ScorecardStage, VendorScorecardLeadResult, VendorScorecardReport, VendorScorecardRow, VendorScorecardVendorRow } from "@/lib/vendorScorecard/types";
 import { CampaignComparisonWorkspace } from "./campaign-comparison-workspace";
 import { CampaignSpeedToLead } from "@/components/app/campaign-speed-to-lead";
+import { cn } from "@/lib/utils";
+import { FILL_CARD, useFittingRows } from "./use-fitting-rows";
 
-const PAGE_SIZE = 25;
+/** One view at a time (2026-10-06 redesign): the stacked tables below the scorecard became tabs. */
+type View = "scorecard" | "funnel" | "curves" | "speed" | "compare";
 /** The persistency toggle's window. User decision: 60 days. Mirrors SCORECARD_PERSIST_DAYS on the server. */
 const PERSIST_DAYS = 60;
 const MONTHS_LONG = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -128,10 +132,10 @@ const METRICS_APART = "Undialable rate and claim acceptance answer different que
  * True CPA (p-app-true-cpa): what each vendor and campaign costs through an issued policy.
  *
  * Laid out to the UI consistency standard (docs/design/UI-CONSISTENCY.md): the header, one strip of
- * the headline figures, then the scorecard table with its period and filters in the table's own
- * toolbar, then the secondary tables (funnel, the leads behind a figure, slot and attempt curves,
- * speed to lead, consent, campaign comparison). The period and filters are a draft that Apply
- * commits, so a change of vendor does not fire three reloads.
+ * the headline figures, then one row of views (scorecard, funnel, slot and attempt curves, speed to
+ * lead and consent, campaign comparison) with the report's period and filters on its right, which
+ * every view reads; the leads behind a figure open in a side panel. The period and filters are a
+ * draft that Apply commits, so a change of vendor does not fire three reloads.
  *
  * The Scorecard concept (LA-2 §14, "which vendor should I buy from again"): a By vendor / By campaign
  * view over the report's vendor_rows, cheapest-policy-first ranking with test batches left out, a
@@ -156,6 +160,19 @@ export function TrueCpaWorkspace({ initialReport = null }: { initialReport?: Ven
   const [grain, setGrain] = useState<Grain>("vendor");
   const [sort, setSort] = useState<Sort>("cost");
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [view, setView] = useState<View>("scorecard");
+  // Header, strip, view row, toolbar, column heads and pager around the scorecard's rows.
+  const pageSize = useFittingRows(480, 41);
+  // The filter popover closes on a click outside it or Esc, like the inbox's.
+  const filtersRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!filtersOpen) return;
+    const onPointer = (event: MouseEvent) => { if (filtersRef.current && !filtersRef.current.contains(event.target as Node)) setFiltersOpen(false); };
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setFiltersOpen(false); };
+    document.addEventListener("mousedown", onPointer);
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("mousedown", onPointer); document.removeEventListener("keydown", onKey); };
+  }, [filtersOpen]);
   // Refresh re-reads the applied scope; the query string alone would not change.
   const [reloadKey, setReloadKey] = useState(0);
 
@@ -219,7 +236,6 @@ export function TrueCpaWorkspace({ initialReport = null }: { initialReport?: Ven
     if (drillSpec?.key === spec.key) { setDrillSpec(null); setDrillResult(null); setDrillError(null); return; }
     setDrillSpec(spec); setDrillResult(null);
     void loadDrill(spec, 0);
-    requestAnimationFrame(() => document.getElementById("cpa-leads")?.scrollIntoView({ behavior: "smooth", block: "nearest" }));
   }
 
   /** A line's figure: its campaign (or vendor) and a stage. */
@@ -259,9 +275,9 @@ export function TrueCpaWorkspace({ initialReport = null }: { initialReport?: Ven
     return sortLines(allLines.filter((line) => !needle || line.label.toLowerCase().includes(needle)), sort);
   }, [allLines, search, sort]);
   const tint = useMemo(() => extremes(allLines), [allLines]);
-  const pageCount = Math.max(1, Math.ceil(lines.length / PAGE_SIZE));
+  const pageCount = Math.max(1, Math.ceil(lines.length / pageSize));
   const currentPage = Math.min(page, pageCount - 1);
-  const shown = lines.slice(currentPage * PAGE_SIZE, currentPage * PAGE_SIZE + PAGE_SIZE);
+  const shown = lines.slice(currentPage * pageSize, currentPage * pageSize + pageSize);
   const totals = report?.totals;
   const exportUrl = `/api/app/true-cpa?${query}&format=csv`;
   const persistOn = report?.persist_days != null;
@@ -272,6 +288,9 @@ export function TrueCpaWorkspace({ initialReport = null }: { initialReport?: Ven
   const noun = effectiveGrain === "vendor" ? "vendor" : "campaign";
 
   const clearFilters = () => setDraft((current) => ({ ...current, vendorId: "", campaignId: "", productCode: "", persist: false }));
+  /** Clear turns the filters off and applies at once: the table shows everything again. */
+  const clearAndApply = () => { const next = { ...draft, vendorId: "", campaignId: "", productCode: "", persist: false }; setFiltersOpen(false); setDraft(next); setApplied(next); setSearch(""); setPage(0); };
+  const closeDrill = () => { setDrillSpec(null); setDrillResult(null); setDrillError(null); };
 
   // First paint without a server-rendered report: the page's one loading look.
   if (loading && !report && !error) return <PageLoading />;
@@ -285,87 +304,119 @@ export function TrueCpaWorkspace({ initialReport = null }: { initialReport?: Ven
     { key: "applied", label: "Applied", value: totals.applied_leads ?? totals.applications, note: `${number(totals.applications)} application${totals.applications === 1 ? "" : "s"}`, cost: totals.effective_cost_per_application_cents, costLabel: "per application", stage: "applied" as ScorecardStage },
     { key: "issued", label: "Issued", value: totals.issued_policies, note: "policies", cost: totals.effective_cost_per_issued_policy_cents, costLabel: "per issued policy", stage: "issued" as ScorecardStage },
   ] : [];
+  const tabs: { key: View; label: string }[] = [
+    { key: "scorecard", label: "Scorecard" },
+    { key: "funnel", label: "Funnel" },
+    { key: "curves", label: "Contact curves" },
+    { key: "speed", label: "Speed & consent" },
+    { key: "compare", label: "Compare campaigns" },
+  ];
+  const appliedFilters = filterCount + (applied.persist ? 1 : 0);
 
   return <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
     <PageHeader title="True CPA" description="What each vendor and campaign actually costs through an issued policy." />
 
+    {/* Four figures (2026-10-06 redesign): applications ride on Issued's footnote and open from the
+        funnel's Applied step. */}
     <StatStrip label="True CPA totals">
       <StatTile label="Net spend" value={loading ? "…" : dollars(totals?.net_spend_cents)} footnote={longRange(applied.from, applied.to)} action={<RowsLink label="the leads this spend bought" onClick={() => openDrill(totalDrill("received"))} />} />
       <StatTile label="Leads received" value={loading ? "…" : number(totals?.leads_received)} footnote={totals && totals.leads_received ? `${number(totals.dialable_leads)} dialable` : "after suppression"} action={<RowsLink label="the leads received" onClick={() => openDrill(totalDrill("received"))} />} />
-      <StatTile label="Applications" value={loading ? "…" : number(totals?.applications)} footnote={share(totals?.applications, totals?.leads_received, "of leads")} reserveFootnote action={<RowsLink label="the leads with an application" onClick={() => openDrill(totalDrill("applied"))} />} />
-      <StatTile label="Issued policies" value={loading ? "…" : number(totals?.issued_policies)} valueTone={totals?.issued_policies ? "good" : undefined} footnote={persistOn ? `in force after ${report?.persist_days} days${totals?.policies_not_yet_measurable ? ` · ${number(totals.policies_not_yet_measurable)} too recent` : ""}` : share(totals?.issued_policies, totals?.applications, "of applications")} reserveFootnote action={<RowsLink label="the leads with an issued policy" onClick={() => openDrill(totalDrill("issued"))} />} />
+      <StatTile label="Issued policies" value={loading ? "…" : number(totals?.issued_policies)} valueTone={totals?.issued_policies ? "good" : undefined} footnote={persistOn ? `in force after ${report?.persist_days} days${totals?.policies_not_yet_measurable ? ` · ${number(totals.policies_not_yet_measurable)} too recent` : ""}` : [totals ? `${number(totals.applications)} applications` : null, share(totals?.issued_policies, totals?.applications, "of applications")].filter(Boolean).join(" · ") || undefined} reserveFootnote action={<RowsLink label="the leads with an issued policy" onClick={() => openDrill(totalDrill("issued"))} />} />
       <StatTile label="True CPA" value={loading ? "…" : dollars(totals?.effective_cost_per_issued_policy_cents)} valueTone={totals?.effective_cost_per_issued_policy_cents != null ? "primary" : undefined} footnote={persistOn ? "per persisting policy" : "per issued policy"} action={<RowsLink label="the policies behind it" onClick={() => openDrill(totalDrill("issued"))} />} />
     </StatStrip>
 
     {report && !upgraded && <p className={notice} role="status">A database update is pending: net spend is lifetime spend, and the vendor view, test batches, persistency filter, speed and consent are unavailable until it is applied.</p>}
     {report && upgraded && (totals?.unallocated_spend_campaigns ?? 0) > 0 && <p className={notice} role="status">{plural(totals?.unallocated_spend_campaigns ?? 0, "campaign")} with spend but no records purchased {totals?.unallocated_spend_campaigns === 1 ? "is" : "are"} left out of Net spend and True CPA. Enter the records purchased on the campaign.</p>}
 
-    <TableCard
+    {/* Views on the left; the report's scope (period and filters), which every view reads, on the
+        right. The scope is a draft that Apply commits, so a change of vendor does not fire three reloads. */}
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <div role="tablist" aria-label="True CPA views" className="inline-flex h-9 w-fit flex-wrap gap-0.5 rounded-md bg-[var(--canvas)] p-0.5">
+        {tabs.map((item) => (
+          <button key={item.key} type="button" role="tab" aria-selected={view === item.key} onClick={() => setView(item.key)} className={cn("inline-flex h-8 items-center rounded-md border px-3 text-sm font-semibold tracking-[-0.01em]", view === item.key ? "border-border bg-card text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}>{item.label}</button>
+        ))}
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <input type="date" aria-label="From" className={toolbarControl} value={draft.from} max={draft.to} onChange={(event) => setDraft((current) => ({ ...current, from: event.target.value || current.from }))} />
+        <input type="date" aria-label="To" className={toolbarControl} value={draft.to} min={draft.from} onChange={(event) => setDraft((current) => ({ ...current, to: event.target.value || current.to }))} />
+        <div ref={filtersRef} className="relative">
+          <FilterButton open={filtersOpen} onClick={() => setFiltersOpen((open) => !open)} count={appliedFilters} />
+          {filtersOpen && <div role="group" aria-label="Filter the scorecard" className="absolute top-[calc(100%+6px)] right-0 z-30 grid w-[320px] gap-3 rounded-xl border border-[var(--border-strong)] bg-card p-4 shadow-[var(--shadow-overlay)]">
+            <select aria-label="Vendor" className={toolbarControl} value={draft.vendorId} onChange={(event) => setDraft((current) => ({ ...current, vendorId: event.target.value, campaignId: "" }))}><option value="">All vendors</option>{vendors.map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select>
+            <select aria-label="Campaign" className={toolbarControl} value={draft.campaignId} onChange={(event) => setDraft((current) => ({ ...current, campaignId: event.target.value }))}><option value="">All campaigns</option>{(report?.rows ?? []).filter((row) => !draft.vendorId || row.vendor_id === draft.vendorId).map((row) => <option key={row.campaign_id} value={row.campaign_id}>{row.campaign_name}</option>)}</select>
+            <select aria-label="Product" className={toolbarControl} value={draft.productCode} onChange={(event) => setDraft((current) => ({ ...current, productCode: event.target.value }))}><option value="">All products</option>{products.map((product) => <option key={product} value={product}>{product.replaceAll("_", " ")}</option>)}</select>
+            <label className="inline-flex items-center gap-2 text-sm text-foreground" htmlFor="scorecard-persist" title={upgraded ? undefined : "Needs a database update that has not been applied yet."}>
+              <input id="scorecard-persist" type="checkbox" checked={draft.persist} disabled={!upgraded} onChange={(event) => setDraft((current) => ({ ...current, persist: event.target.checked }))} />
+              <span>Only policies still in force after {PERSIST_DAYS} days</span>
+            </label>
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="ghost" onClick={clearFilters}>Clear</Button>
+              <Button type="button" onClick={apply}>Apply</Button>
+            </div>
+          </div>}
+        </div>
+        {appliedFilters > 0 && <ClearFiltersButton onClick={clearAndApply} />}
+        {pending && <Button type="button" onClick={apply}>Apply</Button>}
+      </div>
+    </div>
+
+    {view === "scorecard" && <TableCard
+      className={`${FILL_CARD} min-h-[calc(100dvh-var(--top-bar-h)-330px)]`}
       toolbar={
         <DataToolbar
           actions={<>
-            {pending && <Button type="button" onClick={apply}>Apply</Button>}
             <Button asChild variant="outline"><a href={exportUrl}><Download aria-hidden="true" />Export</a></Button>
             <RefreshButton onClick={refresh} refreshing={loading} />
           </>}
         >
           <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setPage(0); }} placeholder="Search vendor, campaign" />
-          <input type="date" aria-label="From" className={toolbarControl} value={draft.from} max={draft.to} onChange={(event) => setDraft((current) => ({ ...current, from: event.target.value || current.from }))} />
-          <input type="date" aria-label="To" className={toolbarControl} value={draft.to} min={draft.from} onChange={(event) => setDraft((current) => ({ ...current, to: event.target.value || current.to }))} />
-          <FilterButton open={filtersOpen} onClick={() => setFiltersOpen((open) => !open)} count={filterCount} />
-          <select aria-label="Rows" className={toolbarControl} value={effectiveGrain} onChange={(event) => { setGrain(event.target.value as Grain); setPage(0); }}>
-            <option value="vendor" disabled={Boolean(report) && !upgraded}>By vendor</option>
-            <option value="campaign">By campaign</option>
-          </select>
+          <div role="radiogroup" aria-label="Rows" className="inline-flex h-9 gap-0.5 rounded-md border border-input bg-background p-0.5">
+            {([["vendor", "By vendor"], ["campaign", "By campaign"]] as const).map(([key, text]) => (
+              <button key={key} type="button" role="radio" aria-checked={effectiveGrain === key} disabled={key === "vendor" && Boolean(report) && !upgraded} onClick={() => { setGrain(key); setPage(0); }} className={cn("inline-flex h-7 items-center rounded px-2.5 text-sm font-semibold disabled:opacity-50", effectiveGrain === key ? "bg-[var(--primary-soft)] text-foreground" : "text-muted-foreground hover:text-foreground")}>{text}</button>
+            ))}
+          </div>
           <select aria-label="Sort" className={toolbarControl} value={sort} onChange={(event) => { setSort(event.target.value as Sort); setPage(0); }}>
             <option value="cost">Cheapest policy first</option>
             <option value="spend">Highest spend first</option>
           </select>
-          {filtersOpen && <div className="flex w-full flex-wrap items-center gap-2" role="group" aria-label="Filter the scorecard">
-            <select aria-label="Vendor" className={toolbarControl} value={draft.vendorId} onChange={(event) => setDraft((current) => ({ ...current, vendorId: event.target.value, campaignId: "" }))}><option value="">All vendors</option>{vendors.map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select>
-            <select aria-label="Campaign" className={toolbarControl} value={draft.campaignId} onChange={(event) => setDraft((current) => ({ ...current, campaignId: event.target.value }))}><option value="">All campaigns</option>{(report?.rows ?? []).filter((row) => !draft.vendorId || row.vendor_id === draft.vendorId).map((row) => <option key={row.campaign_id} value={row.campaign_id}>{row.campaign_name}</option>)}</select>
-            <select aria-label="Product" className={toolbarControl} value={draft.productCode} onChange={(event) => setDraft((current) => ({ ...current, productCode: event.target.value }))}><option value="">All products</option>{products.map((product) => <option key={product} value={product}>{product.replaceAll("_", " ")}</option>)}</select>
-            <label className="inline-flex h-9 items-center gap-2 text-sm text-foreground" htmlFor="scorecard-persist" title={upgraded ? undefined : "Needs a database update that has not been applied yet."}>
-              <input id="scorecard-persist" type="checkbox" checked={draft.persist} disabled={!upgraded} onChange={(event) => setDraft((current) => ({ ...current, persist: event.target.checked }))} />
-              <span>Only policies still in force after {PERSIST_DAYS} days</span>
-            </label>
-            <Button type="button" variant="ghost" onClick={clearFilters}>Clear</Button>
-          </div>}
         </DataToolbar>
       }
       footer={<Pager
         page={currentPage + 1}
         total={lines.length}
         noun={`${noun}s`}
-        pageSize={PAGE_SIZE}
+        pageSize={pageSize}
         onPage={(next) => setPage(next - 1)}
         suffix={`${sort === "cost" ? "cheapest policy first, test batches last" : "highest spend first"}${report ? ` · computed ${new Date(report.generated_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` : ""}`}
       />}
     >
       {error && !report ? <ErrorState title="The scorecard did not load" detail={error} action={<Button variant="outline" onClick={refresh}>Try again</Button>} />
         : loading ? <SectionLoading rows={6} columns={8} />
-        : lines.length === 0 ? (search ? <NoMatches noun={`${noun}s`} onClear={() => { setSearch(""); setPage(0); }} /> : <p className="px-4 py-8 text-center text-sm text-muted-foreground">No campaign has spend or leads in this period.</p>)
-        : <table className="w-full min-w-[1400px] table-fixed border-collapse text-left">
+        : lines.length === 0 ? (search ? <NoMatches noun={`${noun}s`} onClear={() => { setSearch(""); setPage(0); }} /> : <EmptyState title="Nothing in this period" hint="No campaign has spend or leads in this period." />)
+        : <table className="w-full min-w-[1560px] border-collapse text-left">
           <thead><tr>
             <th scope="col" className={th}>{effectiveGrain === "vendor" ? "Vendor" : <>Vendor &amp; campaign</>}</th>
-            <th scope="col" className={`${th} w-[80px] text-right`}>Leads</th>
-            <th scope="col" className={`${th} w-[80px] text-right`}>Dialable</th>
-            <th scope="col" className={`${th} w-[80px] text-right`}>Dialled</th>
-            <th scope="col" className={`${th} w-[80px] text-right`}>Contact</th>
-            <th scope="col" className={`${th} w-[100px] text-right`}>Cost / contact</th>
-            <th scope="col" className={`${th} w-[76px] text-right`}>Quoted</th>
-            <th scope="col" className={`${th} w-[110px] text-right`} title={METRICS_APART}>Undialable rate<span className="block text-xs font-normal normal-case tracking-normal">Low is good</span></th>
-            <th scope="col" className={`${th} w-[64px] text-right`}>Apps</th>
-            <th scope="col" className={`${th} w-[70px] text-right`}>Issued</th>
-            <th scope="col" className={`${th} w-[105px] text-right`}>Net spend</th>
-            <th scope="col" className={`${th} w-[105px] text-right`} title="A dash means no issued policy is attributed yet. It is never $0.00.">True CPA</th>
-            <th scope="col" className={`${th} w-[120px] text-right`} title={METRICS_APART}>Claim acceptance<span className="block text-xs font-normal normal-case tracking-normal">High is good</span></th>
-            <th scope="col" className={`${th} w-[110px]`}>Lineage</th>
+            <th scope="col" className={th}><span className="sr-only">Flags</span></th>
+            <th scope="col" className={`${th} text-right`}>Per record</th>
+            <th scope="col" className={`${th} text-right`}>Bought</th>
+            <th scope="col" className={`${th} text-right`}>Leads</th>
+            <th scope="col" className={`${th} text-right`}>Dialable</th>
+            <th scope="col" className={`${th} text-right`}>Dialled</th>
+            <th scope="col" className={`${th} text-right`}>Contact</th>
+            <th scope="col" className={`${th} text-right`}>Cost / contact</th>
+            <th scope="col" className={`${th} text-right`}>Quoted</th>
+            <th scope="col" className={`${th} text-right`} title={METRICS_APART}>Undialable rate<span className="block text-xs font-normal normal-case tracking-normal">Low is good</span></th>
+            <th scope="col" className={`${th} text-right`}>Apps</th>
+            <th scope="col" className={`${th} text-right`}>Issued</th>
+            <th scope="col" className={`${th} text-right`}>Net spend</th>
+            <th scope="col" className={`${th} text-right`} title="A dash means no issued policy is attributed yet. It is never $0.00.">True CPA</th>
+            <th scope="col" className={`${th} text-right`} title={METRICS_APART}>Claim acceptance<span className="block text-xs font-normal normal-case tracking-normal">High is good</span></th>
+            <th scope="col" className={th}>Lineage</th>
           </tr></thead>
           <tbody>
             {shown.map((line) => {
               const open = Boolean(drillSpec?.key.startsWith(`${line.row ? "campaign" : "vendor"}:${line.key}:`));
-              const tone = open ? "bg-[var(--soft-orange-surface)]" : line.key === tint.best ? "bg-[var(--success-surface)]" : line.key === tint.worst ? "bg-[var(--error-surface)]" : "";
+              const tone = open ? "bg-[var(--primary-soft)]" : line.key === tint.best ? "bg-[var(--success-surface)]" : line.key === tint.worst ? "bg-[var(--error-surface)]" : "";
               const activate = () => { if (line.row) drill(line.row); else openVendor(line.vendorId); };
               // Every figure in the line opens its own rows. Before 20260925709800 only a
               // campaign's leads can be listed, so the other figures stay plain text.
@@ -376,16 +427,19 @@ export function TrueCpaWorkspace({ initialReport = null }: { initialReport?: Ven
                   : text;
               };
               return <tr key={line.key} className={`m-row cursor-pointer ${tone}`} onClick={activate}>
-                <td className={td}>
-                  <button type="button" aria-expanded={line.row ? open : undefined} className="text-left text-sm tracking-[-0.02em] text-[var(--body)] hover:underline" onClick={(event) => { event.stopPropagation(); activate(); }}>{line.label}</button>
-                  <span className="mt-0.5 flex flex-wrap items-center gap-1.5">
+                <td className={`${td} max-w-[300px]`}>
+                  <button type="button" aria-expanded={line.row ? open : undefined} title={line.label} className="block max-w-full truncate text-left text-sm tracking-[-0.02em] text-[var(--body)] hover:underline" onClick={(event) => { event.stopPropagation(); activate(); }}>{line.label}</button>
+                </td>
+                <td className={`${td} whitespace-nowrap`}>
+                  <span className="flex items-center gap-1.5">
                     {line.isTest && <StatusChip tone="info">Test batch</StatusChip>}
                     {!line.isTest && line.small && <StatusChip tone="warning">Small sample</StatusChip>}
                     {line.key === tint.best && <StatusChip tone="good">Cheapest policy</StatusChip>}
                     {line.key === tint.worst && <StatusChip tone="danger">Dearest policy</StatusChip>}
                   </span>
-                  <span className="block text-xs leading-normal text-muted-foreground tabular-nums">{line.costPerRecord != null ? `${dollars(line.costPerRecord)} / record · ` : ""}{plural(line.records, "record")} bought</span>
                 </td>
+                <td className={`${td} text-right tabular-nums`}>{line.costPerRecord != null ? dollars(line.costPerRecord) : "—"}</td>
+                <td className={`${td} text-right tabular-nums`} title={`${plural(line.records, "record")} bought`}>{number(line.records)}</td>
                 <td className={`${td} text-right tabular-nums`}>{figure(line.leads, "received")}</td>
                 <td className={`${td} text-right tabular-nums`}>{figure(line.dialable, "dialable")}</td>
                 <td className={`${td} text-right tabular-nums`}>{figure(line.dialed, "dialed")}</td>
@@ -398,18 +452,18 @@ export function TrueCpaWorkspace({ initialReport = null }: { initialReport?: Ven
                 <td className={`${td} text-right tabular-nums`}>{figure(line.netSpend == null ? null : line.leads, "received", dollars(line.netSpend))}</td>
                 <td className={`${td} text-right font-semibold tabular-nums ${line.key === tint.best ? "text-[var(--success-ink)]" : line.key === tint.worst ? "text-[var(--error-ink)]" : line.isTest ? "text-muted-foreground" : "text-foreground"}`}>{figure(line.cpi == null ? null : line.issued, "issued", dollars(line.cpi))}</td>
                 <td className={`${td} text-right tabular-nums`}>{percent(line.claimAcceptance)}</td>
-                <td className={td}>{line.warnings ? <StatusChip tone="warning">{line.warnings} to review</StatusChip> : <StatusChip tone="good">Linked</StatusChip>}</td>
+                <td className={`${td} whitespace-nowrap`}>{line.warnings ? <StatusChip tone="warning">{line.warnings} to review</StatusChip> : <StatusChip tone="good">Linked</StatusChip>}</td>
               </tr>;
             })}
           </tbody>
         </table>}
-    </TableCard>
+    </TableCard>}
 
     {/* The funnel (LA-2.17-2): bought, dialable, dialled, contacted, quoted, applied, issued, each
         with its cost where the spec asks for one (a dash with none, never $0), and each opening
         its rows. Dialled and quoted need 20260925709800; until then they say so. */}
-    {totals && <TableCard title="Funnel" description="Leads received in the period, and what became of them in it.">
-      <table className="w-full min-w-[860px] table-fixed border-collapse text-left">
+    {view === "funnel" && (totals ? <TableCard title="Funnel" description="Leads received in the period, and what became of them in it.">
+      <table className="w-full min-w-[860px] border-collapse text-left">
         <thead><tr>{funnel.map((step) => <th key={step.key} scope="col" className={th}>{step.label}</th>)}</tr></thead>
         <tbody><tr>
           {funnel.map((step) => {
@@ -425,48 +479,9 @@ export function TrueCpaWorkspace({ initialReport = null }: { initialReport?: Ven
           })}
         </tr></tbody>
       </table>
-    </TableCard>}
+    </TableCard> : <TableCard>{loading ? <SectionLoading rows={2} columns={7} /> : <ErrorState title="The scorecard did not load" detail={error ?? "No figures for this period."} action={<Button variant="outline" onClick={refresh}>Try again</Button>} />}</TableCard>)}
 
-    {drillSpec && <div id="cpa-leads" className="scroll-mt-4">
-      <TableCard
-        title={`${drillSpec.title.charAt(0).toUpperCase()}${drillSpec.title.slice(1)}${drillResult?.total != null ? ` · ${plural(drillResult.total, "lead")}` : ""}`}
-        // The whole selection's sums, so the rows reconcile with the figure that was clicked.
-        description={drillResult?.sums ? `All ${plural(drillResult.sums.leads, "lead")} here: ${plural(drillResult.sums.attempts, "attempt")} in the period · ${number(drillResult.sums.dialed_leads)} dialled · ${number(drillResult.sums.contacted_leads)} contacted · ${number(drillResult.sums.quoted_leads)} quoted · ${plural(drillResult.sums.applications, "application")} · ${plural(drillResult.sums.issued_policies, "issued policy", "issued policies")}` : undefined}
-        action={<Button type="button" variant="outline" onClick={() => { setDrillSpec(null); setDrillResult(null); setDrillError(null); }}>Close</Button>}
-        // Server-side pages of the drill: the shared Pager, page n is offset (n-1) x limit.
-        footer={drillResult && drillResult.drillReady && drillResult.total != null ? <Pager
-          page={Math.floor(drillResult.offset / drillResult.limit) + 1}
-          total={drillResult.total}
-          noun="leads"
-          pageSize={drillResult.limit}
-          onPage={(next) => { if (!detailLoading) void loadDrill(drillSpec, (next - 1) * drillResult.limit); }}
-        /> : undefined}
-      >
-        {drillResult && !drillResult.drillReady && <p className="border-t border-border bg-[var(--warning-surface)] px-4 py-2.5 text-xs leading-normal text-[var(--warning-ink)]">
-          {drillResult.has_more ? "Only the newest 500 leads are listed. " : ""}Attempts and contacts are all time until a pending database update is applied.
-        </p>}
-        {detailLoading ? <SectionLoading rows={3} columns={6} />
-          : drillError ? <p className="border-t border-border px-4 py-6 text-sm text-[var(--error-ink)]" role="alert">{drillError}</p>
-          : !drillResult || drillResult.rows.length === 0 ? <p className="border-t border-border px-4 py-6 text-sm text-muted-foreground">No leads match this figure in the selected period.</p>
-          : <table className="w-full min-w-[860px] border-collapse text-left">
-            <thead><tr><th scope="col" className={th}>Lead</th><th scope="col" className={th}>Campaign</th><th scope="col" className={th}>Product</th><th scope="col" className={`${th} text-right`}>Attempts</th><th scope="col" className={`${th} text-right`}>Contacts</th>{drillResult.drillReady && <th scope="col" className={th}>Quoted</th>}<th scope="col" className={`${th} text-right`}>Applications</th><th scope="col" className={`${th} text-right`}>Issued</th><th scope="col" className={th}>Attribution</th><th scope="col" className={`${th} text-right`}><span className="sr-only">Open</span></th></tr></thead>
-            <tbody>{drillResult.rows.map((lead) => <tr key={lead.lead_id} className="m-row">
-              <td className={`${td} tabular-nums`}>{lead.lead_date}{drillResult.drillReady && lead.dialable === false && <span className="ml-1.5"><StatusChip tone="neutral" dot={false}>Undialable</StatusChip></span>}</td>
-              <td className={td}>{lead.campaign_name}</td>
-              <td className={td}>{lead.product_line.replaceAll("_", " ")}</td>
-              <td className={`${td} text-right tabular-nums`}>{lead.attempts}</td>
-              <td className={`${td} text-right tabular-nums`}>{lead.contacts}</td>
-              {drillResult.drillReady && <td className={td}>{lead.quoted ? "Yes" : "—"}</td>}
-              <td className={`${td} text-right tabular-nums`}>{lead.applications}</td>
-              <td className={`${td} text-right tabular-nums`}>{lead.issued_policies}</td>
-              <td className={td}>{lead.attribution_status === "linked" ? <StatusChip tone="good">Linked</StatusChip> : <StatusChip tone="warning">Review</StatusChip>}</td>
-              <td className={`${td} text-right`}><Button asChild variant="outline" size="sm"><a href={`/app/leads/${lead.lead_id}`}>View</a></Button></td>
-            </tr>)}</tbody>
-          </table>}
-      </TableCard>
-    </div>}
-
-    {report && <div className="grid gap-6 xl:grid-cols-2">
+    {view === "curves" && report && <div className="grid items-start gap-6 xl:grid-cols-2">
       {[
         { title: "Contact rate by slot", items: report.contact_rate_by_slot.map((item) => ({ key: item.slot, label: item.slot.replaceAll("_", " "), rate: item.rate_percent, contacts: item.contacts, attempts: item.attempts, share: null as number | null, spec: { key: `slot:${item.slot}`, title: `leads dialled in the ${item.slot.replaceAll("_", " ")} slot`, params: { stage: "received", slot: item.slot } } as DrillSpec })) },
         { title: "Attempts-to-contact curve", items: report.attempts_to_contact.map((item) => ({ key: String(item.attempt_number), label: `Attempt ${item.attempt_number}`, rate: item.rate_percent, contacts: item.contacts, attempts: item.attempts, share: item.share_of_contacts_percent, spec: { key: `attempt:${item.attempt_number}`, title: `leads with an attempt ${item.attempt_number} outcome`, params: { stage: "received", attempt_number: String(item.attempt_number) } } as DrillSpec })) },
@@ -479,7 +494,9 @@ export function TrueCpaWorkspace({ initialReport = null }: { initialReport?: Ven
           <span className="w-[200px] shrink-0 text-right tabular-nums"><strong className="font-semibold text-foreground">{percent(item.rate)}</strong> <span className="text-xs text-muted-foreground">({item.contacts}/{item.attempts}){item.share != null ? ` · ${item.share}% of contacts` : ""}</span></span>
         </div>) : <p className="border-t border-border px-4 py-6 text-sm text-muted-foreground">No completed dispositions in this period.</p>}
       </TableCard>)}
+    </div>}
 
+    {view === "speed" && report && <div className="grid items-start gap-6 xl:grid-cols-2">
       <TableCard title="Speed to lead" description="Arrival to first dial, median · real-time posted leads · all time">
         {!upgraded ? <p className="border-t border-border px-4 py-6 text-sm text-muted-foreground">Needs a database update that has not been applied yet.</p>
           : speedRows.length ? speedRows.map((row) => <div key={row.vendor_id} className="border-t border-border px-4 py-2.5">
@@ -502,7 +519,59 @@ export function TrueCpaWorkspace({ initialReport = null }: { initialReport?: Ven
       </TableCard>
     </div>}
 
-    <CampaignComparisonWorkspace rows={report?.rows ?? []} defaultFrom={applied.from} defaultTo={applied.to} />
+    {(view === "curves" || view === "speed") && !report && <TableCard>{loading ? <SectionLoading rows={4} columns={3} /> : <ErrorState title="The scorecard did not load" detail={error ?? "No figures for this period."} action={<Button variant="outline" onClick={refresh}>Try again</Button>} />}</TableCard>}
+
+    {view === "compare" && <CampaignComparisonWorkspace rows={report?.rows ?? []} defaultFrom={applied.from} defaultTo={applied.to} />}
+
+    {/* The leads behind a figure (LA-2.17-7), in a side panel opened on demand: X or Esc closes it,
+        and a second click on the same figure does too. */}
+    <Dialog open={drillSpec !== null} onOpenChange={(next) => { if (!next) closeDrill(); }}>
+      <DialogContent className="top-0 right-0 left-auto flex h-full max-h-none w-full max-w-[min(100%,980px)] translate-x-0 translate-y-0 flex-col gap-0 rounded-none border-y-0 border-r-0 p-0 sm:max-w-[min(100%,980px)]">
+        {drillSpec && <>
+          <div className="border-b border-border px-5 py-4 pr-12">
+            <DialogTitle>{`${drillSpec.title.charAt(0).toUpperCase()}${drillSpec.title.slice(1)}${drillResult?.total != null ? ` · ${plural(drillResult.total, "lead")}` : ""}`}</DialogTitle>
+            {/* The whole selection's sums, so the rows reconcile with the figure that was clicked. */}
+            <DialogDescription className="mt-1">{drillResult?.sums ? `All ${plural(drillResult.sums.leads, "lead")} here: ${plural(drillResult.sums.attempts, "attempt")} in the period · ${number(drillResult.sums.dialed_leads)} dialled · ${number(drillResult.sums.contacted_leads)} contacted · ${number(drillResult.sums.quoted_leads)} quoted · ${plural(drillResult.sums.applications, "application")} · ${plural(drillResult.sums.issued_policies, "issued policy", "issued policies")}` : "The leads behind this figure, in the report's period and filters."}</DialogDescription>
+          </div>
+          {drillResult && !drillResult.drillReady && <p className="border-b border-border bg-[var(--warning-surface)] px-5 py-2.5 text-xs leading-normal text-[var(--warning-ink)]">
+            {drillResult.has_more ? "Only the newest 500 leads are listed. " : ""}Attempts and contacts are all time until a pending database update is applied.
+          </p>}
+          <div className="min-h-0 flex-1 overflow-auto">
+            {detailLoading ? <SectionLoading rows={6} columns={6} />
+              : drillError ? <p className="px-5 py-6 text-sm text-[var(--error-ink)]" role="alert">{drillError}</p>
+              : !drillResult || drillResult.rows.length === 0 ? <p className="px-5 py-6 text-sm text-muted-foreground">No leads match this figure in the selected period.</p>
+              : <table className="w-full min-w-[860px] border-collapse text-left">
+                <thead><tr><th scope="col" className={th}>Lead</th><th scope="col" className={th}>Dialable</th><th scope="col" className={th}>Campaign</th><th scope="col" className={th}>Product</th><th scope="col" className={`${th} text-right`}>Attempts</th><th scope="col" className={`${th} text-right`}>Contacts</th>{drillResult.drillReady && <th scope="col" className={th}>Quoted</th>}<th scope="col" className={`${th} text-right`}>Applications</th><th scope="col" className={`${th} text-right`}>Issued</th><th scope="col" className={th}>Attribution</th><th scope="col" className={`${th} text-right`}><span className="sr-only">Open</span></th></tr></thead>
+                <tbody>{drillResult.rows.map((lead) => <tr key={lead.lead_id} className="m-row">
+                  <td className={`${td} whitespace-nowrap tabular-nums`}>{lead.lead_date}</td>
+                  <td className={`${td} whitespace-nowrap`}>{drillResult.drillReady && lead.dialable === false ? <StatusChip tone="neutral" dot={false}>Undialable</StatusChip> : <span className="text-muted-foreground">—</span>}</td>
+                  <td className={`${td} max-w-[220px] truncate`} title={lead.campaign_name}>{lead.campaign_name}</td>
+                  <td className={`${td} whitespace-nowrap`}>{lead.product_line.replaceAll("_", " ")}</td>
+                  <td className={`${td} text-right tabular-nums`}>{lead.attempts}</td>
+                  <td className={`${td} text-right tabular-nums`}>{lead.contacts}</td>
+                  {drillResult.drillReady && <td className={td}>{lead.quoted ? "Yes" : "—"}</td>}
+                  <td className={`${td} text-right tabular-nums`}>{lead.applications}</td>
+                  <td className={`${td} text-right tabular-nums`}>{lead.issued_policies}</td>
+                  <td className={td}>{lead.attribution_status === "linked" ? <StatusChip tone="good">Linked</StatusChip> : <StatusChip tone="warning">Review</StatusChip>}</td>
+                  <td className={`${td} text-right`}><Button asChild variant="outline" size="sm"><a href={`/app/leads/${lead.lead_id}`}>View</a></Button></td>
+                </tr>)}</tbody>
+              </table>}
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border bg-[var(--canvas)] px-5 py-2.5 text-xs text-muted-foreground">
+            {/* Server-side pages of the drill: the shared Pager, page n is offset (n-1) x limit. */}
+            <span className="flex flex-wrap items-center gap-3">{drillResult && drillResult.drillReady && drillResult.total != null ? <Pager
+              page={Math.floor(drillResult.offset / drillResult.limit) + 1}
+              total={drillResult.total}
+              noun="leads"
+              pageSize={drillResult.limit}
+              disabled={detailLoading}
+              onPage={(next) => { if (!detailLoading) void loadDrill(drillSpec, (next - 1) * drillResult.limit); }}
+            /> : null}</span>
+            <Button type="button" variant="outline" onClick={closeDrill}>Close</Button>
+          </div>
+        </>}
+      </DialogContent>
+    </Dialog>
   </div>;
 }
 

@@ -1,11 +1,13 @@
 /**
- * LA-2.2-1 · an Excel workbook, read in the browser, turned into the SAME CSV text the importer
- * already checks — so mapping, validation, the scrub and the dedupe are unchanged, and the server
- * never sees anything but CSV (user decision: ExcelJS in the browser).
+ * LA-2.2-1 · an Excel workbook turned into the SAME CSV text the importer already checks, so
+ * mapping, validation, the scrub and the dedupe are unchanged. The lead importer reads workbooks in
+ * the browser and sends only CSV (user decision: ExcelJS in the browser). Carrier statements
+ * (LA-4.1) send the workbook itself; the server reads it with this same code, so the preview and
+ * the import see identical lines.
  *
  * Pure: the conversion takes plain cell values (what ExcelJS hands back) and a number format per
- * cell, so it is tested without a workbook. `readXlsxAsCsv` is the thin browser wrapper that loads
- * ExcelJS on demand and feeds it through.
+ * cell, so it is tested without a workbook. `readXlsxAsCsv` is the thin wrapper that loads ExcelJS
+ * on demand and feeds it through; it runs in the browser and on the server.
  */
 
 /** A cell as ExcelJS reports it: a primitive, a Date, or one of its object shapes. */
@@ -95,8 +97,8 @@ export function isXlsxFile(file: { name: string; type?: string }) {
 }
 
 /**
- * The first worksheet of an .xlsx file, as CSV text. Browser only: ExcelJS is loaded when the first
- * Excel file is chosen, so a CSV import never downloads it.
+ * The first visible worksheet of an .xlsx file, as CSV text. ExcelJS is loaded on demand, so a
+ * browser importing a CSV never downloads it. The statement import also calls this on the server.
  */
 export async function readXlsxAsCsv(buffer: ArrayBuffer): Promise<{ csv: string; sheetName: string; sheets: number }> {
   const ExcelJS = (await import("exceljs")).default;

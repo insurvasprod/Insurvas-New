@@ -10,13 +10,15 @@ import { PageHeader } from "@/components/ui/page-header";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
+import { EmptyState } from "@/components/ui/page-states";
+import { TabbedSections } from "@/components/app/book-views";
 import { getCarrierLibrary } from "@/lib/carriers/service";
 import { DISCREPANCY_KIND_LABELS } from "@/lib/discrepancies/compute";
 import { listDiscrepancies } from "@/lib/discrepancies/service";
 import { computeLedger } from "@/lib/ledger/compute";
 import { statusChangedAt, type BookPolicyRow } from "@/lib/ledger/service";
 import { STATEMENT_KIND_LABELS, isRecordId, statementDay, statementMoney, statementPeriod } from "@/lib/ledger/statementConstants";
-import { getStatementLedger } from "@/lib/ledger/statementService";
+import { getPolicyStatementLines } from "@/lib/ledger/statementService";
 import { leadSourceOf } from "@/lib/persistency/service";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isSchemaGap } from "@/lib/supabase/schemaGap";
@@ -33,6 +35,10 @@ import { roleCanViewCommission } from "@/lib/tenantAuth/permissions";
  *
  * Owner, producer and bookkeeper, as the Policies page. A producer opens only a policy they
  * recorded, the same scoping the ledger applies; another workspace's id is simply not found.
+ *
+ * Every read is this policy's own (getPolicyStatementLines, listDiscrepancies({ policyId }),
+ * leadSourceOf), so the page costs the same in a book of 100 policies or 10,000. The figures are
+ * computeLedger([this policy]), the same function and library the ledger page applies per policy.
  */
 type Loose = { from(table: string): { select(columns: string): { eq(column: string, value: unknown): { eq(column: string, value: unknown): { maybeSingle(): PromiseLike<{ data: BookPolicyRow | null; error: { message: string; code?: string } | null }> } } } } };
 
@@ -62,10 +68,19 @@ export default async function PolicyPage({ params }: { params: Promise<{ id: str
   const today = new Date().toISOString().slice(0, 10);
   const statementsOn = hasFeature(guard.entitlement, "statement_ingestion") || hasFeature(guard.entitlement, "commission_ledger");
   const seesDiscrepancies = hasFeature(guard.entitlement, "discrepancy_report") && ["owner", "bookkeeper"].includes(guard.role);
+  // Everything below is read for THIS policy only (LA-4.9): its lines, its findings, its source.
+  let discrepanciesFailed = false;
   const [library, statements, discrepancies, leadSource] = await Promise.all([
     getCarrierLibrary(tenantId),
-    statementsOn ? getStatementLedger({ tenantId, canView }) : Promise.resolve(null),
-    seesDiscrepancies ? listDiscrepancies(tenantId).catch(() => ({ available: false, items: [] })) : Promise.resolve(null),
+    statementsOn ? getPolicyStatementLines(tenantId, row) : Promise.resolve(null),
+    seesDiscrepancies
+      ? listDiscrepancies(tenantId, { policyId: row.id }).catch((error) => {
+        // A failed read is said on the page, never shown as "no discrepancy".
+        console.error("[policy] discrepancies", error);
+        discrepanciesFailed = true;
+        return null;
+      })
+      : Promise.resolve(null),
     leadSourceOf(tenantId, row.policy_number),
   ]);
   const ledger = computeLedger([{
@@ -90,6 +105,74 @@ export default async function PolicyPage({ params }: { params: Promise<{ id: str
     </Link>
   );
 
+  // Each section fills the viewport under the header, strip and tab row (2026-10-06 redesign).
+  const fill = "flex min-h-[calc(100dvh-var(--top-bar-h)-380px)] flex-col [&>*:first-child]:flex-1";
+  const expectedTable = (
+    <TableCard className={fill} footer={<span>{expected.length.toLocaleString("en-US")} {expected.length === 1 ? "entry" : "entries"}, each from a commission schedule row</span>}>
+      {expected.length === 0 ? (
+        <EmptyState title="Nothing expected yet" hint={row.status === "pending" ? "A pending policy has not been issued, so nothing is expected yet." : "Entries appear here as the commission schedule posts them for this policy."} />
+      ) : (
+        <table className="portal-lead-table w-full min-w-[640px] text-left text-sm">
+          <thead><tr><th className="w-[130px]">Date</th><th>Entry</th><th className="w-[120px] text-right">Rate</th><th className="w-[130px] text-right">Amount</th></tr></thead>
+          <tbody>
+            {expected.map((entry) => (
+              <tr key={entry.id}>
+                <td className="tabular-nums">{statementDay(entry.postedOn)}</td>
+                <td>{entry.kind === "advance" ? "Advance" : entry.kind === "chargeback" ? "Chargeback" : `Commission, year ${entry.policyYear}`}</td>
+                <td className="text-right tabular-nums">{entry.rateBp === null ? "—" : `${(entry.rateBp / 100).toLocaleString("en-US", { maximumFractionDigits: 2 })}%`}</td>
+                <td className={`text-right font-semibold tabular-nums ${entry.amountCents < 0 ? "text-[var(--error-ink)]" : "text-foreground"}`}>{statementMoney(entry.amountCents)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </TableCard>
+  );
+  const reportedTable = statements ? (
+    <TableCard className={fill} footer={<span>Accepted lines on statements that are not voided</span>}>
+      {lines.length === 0 ? (
+        <EmptyState title="No statement line yet" hint="No accepted statement line pays this policy yet. Lines appear here once a carrier statement that names it is accepted." />
+      ) : (
+        <table className="portal-lead-table w-full min-w-[720px] text-left text-sm">
+          <thead><tr><th className="w-[130px]">Posted</th><th>Statement</th><th className="w-[80px] text-right">Row</th><th className="w-[130px]">Kind</th><th className="w-[130px] text-right">Amount</th></tr></thead>
+          <tbody>
+            {lines.map((line) => (
+              <tr key={line.id}>
+                <td className="tabular-nums">{statementDay(line.postedOn)}</td>
+                <td className="max-w-[360px] truncate"><Link href={`/app/statements/${line.statementId}`} title={`${line.carrierName} · ${statementPeriod(line.periodStart, line.periodEnd)}`} className="font-semibold text-foreground underline-offset-2 hover:underline">{line.carrierName} · {statementPeriod(line.periodStart, line.periodEnd)}</Link></td>
+                <td className="text-right tabular-nums">{line.lineNumber}</td>
+                <td>{STATEMENT_KIND_LABELS[line.kind]}</td>
+                <td className={`text-right font-semibold tabular-nums ${line.amountCents < 0 ? "text-[var(--error-ink)]" : "text-foreground"}`}>{statementMoney(line.amountCents)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </TableCard>
+  ) : null;
+  const discrepancyTable = (
+    <TableCard className={fill} footer={<Link href="/app/discrepancies" className="font-semibold underline-offset-2 hover:underline">Work them in Discrepancies</Link>}>
+      <table className="portal-lead-table w-full min-w-[600px] text-left text-sm">
+        <thead><tr><th className="w-[200px]">Kind</th><th>What happened</th><th className="w-[120px] text-right">Owed</th></tr></thead>
+        <tbody>
+          {open.map((item) => (
+            <tr key={item.id}>
+              <td className="font-semibold text-foreground">{DISCREPANCY_KIND_LABELS[item.kind].label}</td>
+              <td className="max-w-[520px] truncate" title={item.detail?.explanation}>{item.detail?.explanation}</td>
+              <td className="text-right font-semibold tabular-nums">{statementMoney(item.owedCents)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </TableCard>
+  );
+  // Open discrepancies lead when there are any: they are the one thing on this page to act on.
+  const sections = [
+    ...(open.length > 0 ? [{ key: "discrepancies", label: "Open discrepancies", count: open.length, content: discrepancyTable }] : []),
+    { key: "expected", label: "What your contract expects", count: expected.length, content: expectedTable },
+    ...(reportedTable ? [{ key: "reported", label: "What the carrier reported", count: lines.length, content: reportedTable }] : []),
+  ];
+
   return (
     <div className="m-stagger flex flex-col gap-6">
       {back}
@@ -98,6 +181,10 @@ export default async function PolicyPage({ params }: { params: Promise<{ id: str
         description={`${row.carrier} · ${row.product} · ${statementMoney(row.annual_premium_cents)} a year · issued ${statementDay(row.effective_date)} · lead source ${leadSource}`}
         actions={<StatusChip tone={status.tone}>{status.label}</StatusChip>}
       />
+
+      {discrepanciesFailed && (
+        <p role="status" className="m-0 rounded-md bg-[var(--warning-surface)] px-3 py-2 text-sm text-[var(--warning-ink)]">This policy&rsquo;s discrepancies could not be loaded just now, so none are shown. Reload to try again.</p>
+      )}
 
       {ledger.gaps.length > 0 && (
         <div role="status" className="rounded-lg border border-border border-l-[3px] border-l-[var(--warning)] bg-[var(--warning-surface)] px-4 py-3 text-sm text-[var(--warning-ink)]">
@@ -117,64 +204,8 @@ export default async function PolicyPage({ params }: { params: Promise<{ id: str
         />
       </StatStrip>
 
-      {open.length > 0 && (
-        <TableCard title="Open discrepancies" footer={<Link href="/app/discrepancies" className="font-semibold underline-offset-2 hover:underline">Work them in Discrepancies</Link>}>
-          <table className="portal-lead-table w-full min-w-[600px] text-left text-sm">
-            <thead><tr><th>Kind</th><th>What happened</th><th className="w-[120px] text-right">Owed</th></tr></thead>
-            <tbody>
-              {open.map((item) => (
-                <tr key={item.id} className="align-top">
-                  <td className="font-semibold text-foreground">{DISCREPANCY_KIND_LABELS[item.kind].label}</td>
-                  <td>{item.detail?.explanation}</td>
-                  <td className="text-right font-semibold tabular-nums">{statementMoney(item.owedCents)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </TableCard>
-      )}
-
-      <TableCard title="What your contract expects" footer={<span>{expected.length.toLocaleString("en-US")} {expected.length === 1 ? "entry" : "entries"}, each from a commission schedule row</span>}>
-        {expected.length === 0 ? (
-          <p className="px-6 py-8 text-center text-sm text-muted-foreground">{row.status === "pending" ? "A pending policy has not been issued, so nothing is expected yet." : "Nothing is expected yet."}</p>
-        ) : (
-          <table className="portal-lead-table w-full min-w-[640px] text-left text-sm">
-            <thead><tr><th className="w-[130px]">Date</th><th>Entry</th><th className="w-[120px] text-right">Rate</th><th className="w-[130px] text-right">Amount</th></tr></thead>
-            <tbody>
-              {expected.map((entry) => (
-                <tr key={entry.id}>
-                  <td className="tabular-nums">{statementDay(entry.postedOn)}</td>
-                  <td>{entry.kind === "advance" ? "Advance" : entry.kind === "chargeback" ? "Chargeback" : `Commission, year ${entry.policyYear}`}</td>
-                  <td className="text-right tabular-nums">{entry.rateBp === null ? "—" : `${(entry.rateBp / 100).toLocaleString("en-US", { maximumFractionDigits: 2 })}%`}</td>
-                  <td className={`text-right font-semibold tabular-nums ${entry.amountCents < 0 ? "text-[var(--error-ink)]" : "text-foreground"}`}>{statementMoney(entry.amountCents)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </TableCard>
-
-      {statements && (
-        <TableCard title="What the carrier reported" footer={<span>Accepted lines on statements that are not voided</span>}>
-          {lines.length === 0 ? (
-            <p className="px-6 py-8 text-center text-sm text-muted-foreground">No accepted statement line pays this policy yet.</p>
-          ) : (
-            <table className="portal-lead-table w-full min-w-[640px] text-left text-sm">
-              <thead><tr><th className="w-[130px]">Posted</th><th>Statement</th><th className="w-[130px]">Kind</th><th className="w-[130px] text-right">Amount</th></tr></thead>
-              <tbody>
-                {lines.map((line) => (
-                  <tr key={line.id}>
-                    <td className="tabular-nums">{statementDay(line.postedOn)}</td>
-                    <td><Link href={`/app/statements/${line.statementId}`} className="font-semibold text-foreground underline-offset-2 hover:underline">{line.carrierName} · {statementPeriod(line.periodStart, line.periodEnd)}</Link><span className="block text-xs text-muted-foreground">row {line.lineNumber}</span></td>
-                    <td>{STATEMENT_KIND_LABELS[line.kind]}</td>
-                    <td className={`text-right font-semibold tabular-nums ${line.amountCents < 0 ? "text-[var(--error-ink)]" : "text-foreground"}`}>{statementMoney(line.amountCents)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </TableCard>
-      )}
+      {/* The ledger, the carrier's lines and any open discrepancy: one at a time, as tabs. */}
+      <TabbedSections label="This policy's records" sections={sections} />
     </div>
   );
 }

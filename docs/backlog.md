@@ -3810,19 +3810,31 @@ The extension (LA-3.12–3.14) works when sideloaded; publishing is pending.
 
 ---
 
-### 210. 🔴 Is persistency a Ledger feature or Advanced only?
+### 210. ✅ DECIDED 2026-10-06 — persistency is on every plan, from Ledger up
+
+**Decision (owner):** add it to Ledger. Migration `20261007100000_la_4_persistency_on_ledger.sql` grants `cohort_persistency` to every plan that holds `statement_ingestion` (basic, pro, advance), keeping the plans nested, and refreshes the subscribed tenants' entitlements. The verifier's reviewed lists follow.
+
+**Was:**
 
 Today `cohort_persistency` is on `advance` only. The product docs make persistency the core idea for every agent, and the *Four Tiers* brief says not to cripple outcome-improving features. Decide before LA-4.8 ships; it is a plan-feature data change, not code.
 
 ---
 
-### 211. 🔴 Grace period before a policy counts as "never paid"
+### 211. ✅ DECIDED 2026-10-06 — 45 days, as built
+
+**Decision (owner):** keep `NEVER_PAID_GRACE_DAYS = 45` (`lib/discrepancies/compute.ts`). It applies only when a **reviewed** statement from that carrier covers the period.
+
+**Was:**
 
 LA-4.4 proposes 45 days after issue, and only when a statement from that carrier covers a later period. Confirm, or make it a per-carrier setting.
 
 ---
 
-### 212. 🔴 Does "suspended can still read" cover a suspended agency, or only a suspended subscription?
+### 212. ✅ DECIDED 2026-10-06 — a suspended agency stays locked out
+
+**Decision (owner):** keep the lockout. A tenant suspension is the platform's own action (abuse, fraud, legal). A **subscription** suspension keeps read-only access, which LA-4.10 verified (`verify-entitlements`: suspended → `read_only`, features kept).
+
+**Was:**
 
 A suspended subscription keeps read access (`requireFeature(..., {write:true})` refuses writes). A suspended tenant (`tenants.status`) closes every session in `requireTenant.ts`. The product rule is "never lock a customer out of his own book"; decide whether a tenant suspension should follow it.
 
@@ -3831,3 +3843,9 @@ A suspended subscription keeps read access (`requireFeature(..., {write:true})` 
 ### 213. 🔴 Database compute size
 
 The NANO instance ran out of memory and took the API down on 2026-09-30 (PGRST002). Upgrade to Micro or above before LA-4's statement storage and discrepancy refresh add load.
+
+---
+
+### 214. ✅ DECIDED 2026-10-06 — "paid at the wrong rate" needs the carrier's premium or rate
+
+**Decision (owner):** accept it. `mis_rated` is found only when a statement line carries a rate column, or a premium to divide by. Without one, the same shortfall is reported as `short_paid` with the same amount owed, so no money is missed and only the label is less specific. The rate is not estimated from the book's premium, which would risk false findings when a premium changes mid-year.

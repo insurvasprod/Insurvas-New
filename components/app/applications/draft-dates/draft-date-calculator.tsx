@@ -8,10 +8,12 @@
  */
 
 import { useMemo, useState } from "react";
+import { ChevronRight } from "lucide-react";
 
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/page-states";
+import { StatTile } from "@/components/ui/stat";
 import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 import { Field, control } from "@/components/app/settings/primitives";
@@ -79,11 +81,13 @@ export function DraftDateCalculator() {
             ) : rec.kind === "not_applicable" ? (
               <p className="text-sm text-[var(--muted)]">{rec.why}</p>
             ) : (
-              <div className="flex flex-col gap-4 rounded-[12px] border border-[var(--border)] bg-[var(--brand-50)] p-5">
-                <div>
-                  <div className="text-xs font-semibold uppercase tracking-[0.02em] text-[var(--muted)]">{shown === recommended ? (rec.kind === "neutral" ? "Best guess" : "Recommended draft day") : "Draft day"}</div>
-                  <div className="mt-1 text-[32px] font-semibold leading-[1.13] tracking-[-0.025em] tabular-nums text-[var(--ink)]">{shown === null ? "—" : ordinal(shown)}</div>
-                </div>
+              <div className="flex flex-col gap-4 rounded-lg border border-[var(--border)] bg-[var(--primary-soft)] p-4">
+                {/* The figure in the system's StatTile type (2026-10-06 redesign: no off-scale 32px). */}
+                <StatTile
+                  className="border-0 bg-transparent p-0 shadow-none"
+                  label={shown === recommended ? (rec.kind === "neutral" ? "Best guess" : "Recommended draft day") : "Draft day"}
+                  value={shown === null ? "—" : ordinal(shown)}
+                />
                 {aloud && <ReadAloud title="Read this back to them, word for word" text={aloud} />}
                 {others.length > 0 && (
                   <div className="flex flex-wrap items-center gap-3">
@@ -101,9 +105,13 @@ export function DraftDateCalculator() {
             )}
           </div>
 
-          <div className="flex flex-col gap-3 border-t border-[var(--border)] px-5 py-[18px]">
-            <h3 className="text-xs font-semibold uppercase tracking-[0.02em] text-[var(--muted)]">How each income type pays</h3>
-            <dl className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
+          {/* Reference, not the answer: folded until it is wanted (2026-10-06 redesign). */}
+          <details className="group border-t border-[var(--border)] px-5 py-3">
+            <summary className="flex h-9 cursor-pointer list-none items-center gap-2 text-xs font-semibold uppercase tracking-[0.02em] text-[var(--muted)] outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+              <ChevronRight className="size-4 transition-transform group-open:rotate-90" aria-hidden="true" />
+              How each income type pays
+            </summary>
+            <dl className="grid gap-x-6 gap-y-4 pt-2 pb-2 sm:grid-cols-2">
               {HOW_EACH_PAYS.map((row) => (
                 <div key={row.label} className="min-w-0">
                   <dt className="text-xs font-semibold uppercase tracking-[0.02em] text-[var(--muted)]">{row.label}</dt>
@@ -111,7 +119,7 @@ export function DraftDateCalculator() {
                 </div>
               ))}
             </dl>
-          </div>
+          </details>
         </StepCard>
 
         <TableCard

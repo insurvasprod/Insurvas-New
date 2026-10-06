@@ -7,7 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { LICENCE_NUMBER_MAX, OWN_NAME_MAX, OWN_PHONE_MAX, type OwnProfile } from "@/lib/users/ownProfile";
+import { AVATAR_TYPES, avatarFileProblem } from "@/lib/users/avatarRules";
 import { notify } from "@/lib/notify";
+import { Upload } from "lucide-react";
 
 /**
  * The profile form: identity on top, producer numbers below, one Save.
@@ -16,6 +18,89 @@ import { notify } from "@/lib/notify";
  * confirmation, not a profile field. Licensed states are shown, not edited — the owner records
  * them on Team & access and assignment reads them. The person fills in the numbers.
  */
+function initialsOf(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return "?";
+  return (parts[0][0] + (parts.length > 1 ? parts[parts.length - 1][0] : "")).toUpperCase();
+}
+
+/**
+ * The profile picture: the photo (or the initials), Upload photo and Remove. It saves on its own,
+ * straight away — choosing a file is the decision, so it does not wait for Save profile.
+ */
+function ProfilePicture({ name, version, onChange }: { name: string; version: string | null; onChange: (version: string | null) => void }) {
+  const [busy, setBusy] = useState<"upload" | "remove" | null>(null);
+  const [problem, setProblem] = useState<string | null>(null);
+
+  async function upload(file: File) {
+    const refused = avatarFileProblem(file);
+    if (refused) { setProblem(refused); return; }
+    setBusy("upload");
+    setProblem(null);
+    try {
+      const form = new FormData();
+      form.set("file", file);
+      const response = await fetch("/api/app/profile/avatar", { method: "POST", body: form });
+      const result = (await response.json().catch(() => null)) as { avatar?: { version: string }; error?: string } | null;
+      if (!response.ok || !result?.avatar) { setProblem(result?.error ?? "Your picture could not be saved."); return; }
+      onChange(result.avatar.version);
+      notify.done("Profile picture updated");
+    } catch {
+      setProblem("Your picture could not be uploaded. Check your connection and try again.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function remove() {
+    setBusy("remove");
+    setProblem(null);
+    try {
+      const response = await fetch("/api/app/profile/avatar", { method: "DELETE" });
+      const result = (await response.json().catch(() => null)) as { error?: string } | null;
+      if (!response.ok) { setProblem(result?.error ?? "Your picture could not be removed."); return; }
+      onChange(null);
+      notify.done("Profile picture removed");
+    } catch {
+      setProblem("Your picture could not be removed. Check your connection and try again.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-4 sm:col-span-2">
+      <span className="inline-flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[var(--primary-soft)] text-lg font-semibold text-[var(--accent-ink)]">
+        {version
+          // eslint-disable-next-line @next/next/no-img-element -- a session-bound redirect to a signed URL; next/image cannot optimise it
+          ? <img src={`/api/app/profile/avatar?v=${encodeURIComponent(version)}`} alt="Your profile picture" className="size-full object-cover" />
+          : <span aria-hidden="true">{initialsOf(name)}</span>}
+      </span>
+      <div className="flex min-w-0 flex-col gap-1.5">
+        <div className="flex flex-wrap items-center gap-2">
+          <Button asChild variant="outline" disabled={busy !== null}>
+            <label className="cursor-pointer">
+              <Upload aria-hidden="true" />
+              {busy === "upload" ? "Uploading…" : version ? "Change photo" : "Upload photo"}
+              <input
+                type="file"
+                accept={AVATAR_TYPES.join(",")}
+                className="sr-only"
+                disabled={busy !== null}
+                onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (file) void upload(file); }}
+              />
+            </label>
+          </Button>
+          {version && <Button type="button" variant="ghost" disabled={busy !== null} onClick={() => void remove()}>{busy === "remove" ? "Removing…" : "Remove"}</Button>}
+        </div>
+        {problem
+          ? <p role="alert" className="text-xs text-[var(--error-ink)]">{problem}</p>
+          : <p className="text-xs text-[var(--muted)]">JPG, PNG or WebP, up to 2 MB. Shown in the top bar.</p>}
+      </div>
+    </div>
+  );
+}
+
 export function OwnProfileForm({ initial }: { initial: OwnProfile }) {
   const router = useRouter();
   const [profile, setProfile] = useState(initial);
@@ -75,6 +160,11 @@ export function OwnProfileForm({ initial }: { initial: OwnProfile }) {
           <p className="mt-0.5 text-sm text-[var(--muted)]">{profile.roleLabel} · {profile.workspaceName}</p>
         </header>
         <div className="grid gap-4 px-5 py-4 sm:grid-cols-2">
+          <ProfilePicture
+            name={profile.name}
+            version={profile.avatarVersion}
+            onChange={(version) => { setProfile((current) => ({ ...current, avatarVersion: version })); router.refresh(); }}
+          />
           <div className="flex flex-col gap-1.5 sm:col-span-2">
             <Label htmlFor="profile-name">Name</Label>
             <Input id="profile-name" value={name} maxLength={OWN_NAME_MAX} required autoComplete="name" onChange={(event) => setName(event.target.value)} />

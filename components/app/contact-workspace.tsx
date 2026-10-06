@@ -4,14 +4,16 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 
 import { notify } from "@/lib/notify";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
+import { ClearFiltersButton, DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageLoading } from "@/components/ui/page-loading";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
+import { Pager, paginate } from "@/components/ui/pager";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { TableCard } from "@/components/ui/table-card";
-import { Callout, DashedCard, Field, Pill, SettingsCard, btn, control, st } from "@/components/app/settings/primitives";
+import { Callout, Field, Pill, control } from "@/components/app/settings/primitives";
+import { ViewTabs, fullHeightCard, useFittingPageSize } from "@/components/app/lead-ops-view-tabs";
 import { cn } from "@/lib/utils";
 import { dobConflict, matchedOnLabel } from "@/lib/contacts/matchPolicy";
 import type { ContactDirectory, ContactRow, ContactWorkspace as Workspace, DuplicateMatch, FieldSchemaRow, RecentMerge, ReviewPair, ReviewQueue } from "@/lib/contacts/types";
@@ -157,7 +159,7 @@ function PairCard({ side, title, contact, other, rows, selection, onSelect, head
   return (
     <section aria-label={title} className="flex min-w-0 flex-1 flex-col rounded-[12px] border border-[var(--border)] bg-[var(--surface)]">
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5 rounded-t-[12px] border-b border-[var(--border)] bg-[var(--surface-alt)] px-4 py-3">
-        <span className="text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">{title}</span>
+        <span className="text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">{title}</span>
         <span className="flex flex-wrap items-center justify-end gap-2.5">{headerSlot}</span>
       </div>
       {rows.map((row) => {
@@ -172,9 +174,9 @@ function PairCard({ side, title, contact, other, rows, selection, onSelect, head
             ) : (
               <span aria-hidden className="w-[15px] shrink-0" />
             )}
-            <span className="w-[130px] shrink-0 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">{row.label}</span>
-            <span className={cn("min-w-0 flex-1 text-[14px] leading-[1.5] tracking-[-0.02em] break-words", differs && "font-semibold")}>{value}</span>
-            {differs && row.note && <span className="shrink-0 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">{row.note}</span>}
+            <span className="w-[130px] shrink-0 text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">{row.label}</span>
+            <span className={cn("min-w-0 flex-1 text-sm leading-[1.5] tracking-[-0.02em] break-words", differs && "font-semibold")}>{value}</span>
+            {differs && row.note && <span className="shrink-0 text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">{row.note}</span>}
           </>
         );
         const rowClass = cn("flex items-center gap-2.5 border-t border-[var(--border)] px-3.5 py-[9px]", differs ? "bg-[var(--warning-surface)] text-[var(--ink)]" : "text-[var(--muted)]", choice && !disabled && "cursor-pointer");
@@ -221,7 +223,10 @@ export function ContactWorkspace({ readOnly = false }: { readOnly?: boolean }) {
   const [formError, setFormError] = useState<string | null>(null);
   const [field, setField] = useState({ field_key: "", label: "", type: "text" });
   const [fieldError, setFieldError] = useState<string | null>(null);
-  const [showAllMerges, setShowAllMerges] = useState(false);
+  const [tab, setTab] = useState<"review" | "directory" | "merges">("review");
+  const [fieldsOpen, setFieldsOpen] = useState(false);
+  const [mergePage, setMergePage] = useState(1);
+  const pageSize = useFittingPageSize(400, 45);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const directoryState = useRef({ q: "", page: 0 });
   // Search fires as the reader types; only the newest request may paint the table.
@@ -362,6 +367,8 @@ export function ContactWorkspace({ readOnly = false }: { readOnly?: boolean }) {
       setForm(emptyForm); setAddOpen(false);
       const outcome = body.outcome as string;
       const mergeId = typeof body.mergeId === "string" ? body.mergeId : null;
+      // A pair waiting for review is the next thing to look at, so the queue's tab comes forward.
+      if (outcome === "review") setTab("review");
       if (outcome === "auto_merged") notify.done("Probable duplicate auto-merged", { detail: "Same date of birth, and the phone or address matched. Undo it from Recent merges if that is wrong.", action: mergeId ? { label: "Undo", onClick: () => void undo(mergeId) } : undefined });
       else if (outcome === "review") notify.warn("Possible duplicate: waiting for review", { detail: "Compare the two records under Duplicate check and choose what to keep." });
       else notify.done("Contact created");
@@ -408,21 +415,7 @@ export function ContactWorkspace({ readOnly = false }: { readOnly?: boolean }) {
     } finally { setBusy(null); }
   }
 
-  const header = (
-    <PageHeader
-      title="Duplicate check"
-      actions={
-        <>
-          <Button asChild variant="outline"><a href="/api/app/contacts/export">Export CSV</a></Button>
-          <label htmlFor="contact-import-file" className={cn(buttonVariants({ variant: "outline" }), "cursor-pointer focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2", (readOnly || busy === "import") && "pointer-events-none opacity-40")}>
-            {busy === "import" ? "Importing…" : "Import contacts"}
-            <input id="contact-import-file" type="file" accept=".csv,text/csv" className="sr-only" disabled={readOnly || busy === "import"} onChange={(event) => void importFile(event)} />
-          </label>
-          <Button type="button" disabled={readOnly} onClick={() => { setFormError(null); setAddOpen(true); }}>Add contact</Button>
-        </>
-      }
-    />
-  );
+  const header = <PageHeader title="Duplicate check" />;
 
   if (!workspace || !directory) {
     if (!loadError) return <PageLoading />;
@@ -439,10 +432,9 @@ export function ContactWorkspace({ readOnly = false }: { readOnly?: boolean }) {
   const pair = current.pair;
   const writeBlocked = readOnly || busy !== null;
   const conflict = pair ? dobConflict(pair.incoming.dob, pair.existing) : false;
-  const shownMerges = showAllMerges ? merges : merges.slice(0, 5);
-  const firstRow = directory.total ? directory.page * directory.pageSize + 1 : 0;
-  const lastRow = directory.page * directory.pageSize + directory.rows.length;
+  const { current: mergePageNow, rows: shownMerges } = paginate(merges, mergePage, pageSize);
   const clearSearch = () => { setSearch(""); void loadDirectory("", 0); };
+  const contactFields = schema.filter((item) => item.entity === "contact");
 
   return (
     <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
@@ -457,8 +449,32 @@ export function ContactWorkspace({ readOnly = false }: { readOnly?: boolean }) {
 
       {readOnly && <Callout tone="warning" title="This workspace is read-only: adding, importing, merging and undoing are paused." />}
 
-      <div className="flex min-w-0 flex-col gap-5 lg:flex-row lg:items-start">
-        <div className="flex min-w-0 flex-1 flex-col gap-3">
+      {/* 2026-10-06 redesign: the queue, the directory and the merge history were three stacked
+          sections; they are tabs now, with the page's actions on the same row. */}
+      <ViewTabs
+        label="Duplicate check views"
+        value={tab}
+        onChange={setTab}
+        tabs={[
+          { key: "review", label: "Review queue", count: current.total },
+          { key: "directory", label: "Contacts", count: directory.total },
+          { key: "merges", label: "Recent merges", count: merges.length },
+        ]}
+        actions={
+          <>
+            <Button type="button" variant="outline" onClick={() => { setFieldError(null); setFieldsOpen(true); }}>Custom fields</Button>
+            <Button asChild variant="outline"><a href="/api/app/contacts/export">Export CSV</a></Button>
+            <label htmlFor="contact-import-file" className={cn(buttonVariants({ variant: "outline" }), "cursor-pointer focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2", (readOnly || busy === "import") && "pointer-events-none opacity-40")}>
+              {busy === "import" ? "Importing…" : "Import contacts"}
+              <input id="contact-import-file" type="file" accept=".csv,text/csv" className="sr-only" disabled={readOnly || busy === "import"} onChange={(event) => void importFile(event)} />
+            </label>
+            <Button type="button" disabled={readOnly} onClick={() => { setFormError(null); setAddOpen(true); }}>Add contact</Button>
+          </>
+        }
+      />
+
+      {tab === "review" && (
+        <div className="flex min-w-0 flex-col gap-3">
           {pair ? (
             <>
               <div className="flex min-w-0 flex-col gap-5 md:flex-row">
@@ -474,7 +490,7 @@ export function ContactWorkspace({ readOnly = false }: { readOnly?: boolean }) {
                   headerSlot={<>
                     <Pill tone={pair.review.confidence === "high" ? "warning" : "neutral"}>{Math.min(100, Math.round(pair.review.score * 100))}% · {pair.review.confidence === "high" ? "High" : "Medium"}</Pill>
                     {conflict && <Pill tone="error">DOB differs</Pill>}
-                    <span className="text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">on {matchedOnLabel(pair.review.matched_on)}</span>
+                    <span className="text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">on {matchedOnLabel(pair.review.matched_on)}</span>
                   </>}
                   action={<Button type="button" variant="outline" className="w-full" disabled={writeBlocked} onClick={() => void merge("existing")}>{busy === "merge" ? "Merging…" : "Keep existing"}</Button>}
                 />
@@ -489,162 +505,179 @@ export function ContactWorkspace({ readOnly = false }: { readOnly?: boolean }) {
                   disabled={writeBlocked}
                   headerSlot={current.total > 1 ? (
                     <span className="flex items-center gap-1.5">
-                      <button type="button" aria-label="Previous pair" className={btn("row", "h-7 px-1.5")} disabled={current.index === 0 || busy === "queue"} onClick={() => void goToPair(current.index - 1)}><ChevronIcon direction="left" /></button>
-                      <span className="text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)] tabular-nums">{current.index + 1} of {current.total}</span>
-                      <button type="button" aria-label="Next pair" className={btn("row", "h-7 px-1.5")} disabled={current.index >= current.total - 1 || busy === "queue"} onClick={() => void goToPair(current.index + 1)}><ChevronIcon direction="right" /></button>
+                      <Button type="button" variant="outline" size="icon" aria-label="Previous pair" disabled={current.index === 0 || busy === "queue"} onClick={() => void goToPair(current.index - 1)}><ChevronIcon direction="left" /></Button>
+                      <span className="text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)] tabular-nums">{current.index + 1} of {current.total}</span>
+                      <Button type="button" variant="outline" size="icon" aria-label="Next pair" disabled={current.index >= current.total - 1 || busy === "queue"} onClick={() => void goToPair(current.index + 1)}><ChevronIcon direction="right" /></Button>
                     </span>
-                  ) : <span className="text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">1 of 1</span>}
+                  ) : <span className="text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">1 of 1</span>}
                   action={<Button type="button" className="w-full" disabled={writeBlocked} onClick={() => void merge("incoming")}>{busy === "merge" ? "Merging…" : "Keep new"}</Button>}
                 />
               </div>
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                 <Button type="button" variant="ghost" disabled={writeBlocked} onClick={() => void dismiss()}>{busy === "dismiss" ? "Saving…" : "Not the same person"}</Button>
-                {pair.review.created_at && <span className="text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">Waiting {age(pair.review.created_at)}</span>}
+                {pair.review.created_at && <span className="text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">Waiting {age(pair.review.created_at)}</span>}
               </div>
             </>
           ) : (
-            <DashedCard title="No pairs waiting">
-              {queue.ready
-                ? "Possible duplicates from Add contact and Import contacts wait here side by side."
-                : "Matches found by Add contact appear here. Imported matches are not kept until a database update is applied."}
-            </DashedCard>
+            <TableCard>
+              <EmptyState
+                title="No pairs waiting"
+                hint={queue.ready
+                  ? "Possible duplicates from Add contact and Import contacts wait here side by side."
+                  : "Matches found by Add contact appear here. Imported matches are not kept until a database update is applied."}
+              />
+            </TableCard>
           )}
         </div>
+      )}
 
-        <TableCard className="min-w-0 lg:w-[320px] lg:shrink-0" title="Recent merges">
-          {merges.length ? (
-            <ul className="m-0 list-none border-t border-[var(--border)] p-0">
-              {shownMerges.map((row: RecentMerge) => (
-                <li key={row.id} className="flex items-center gap-2.5 border-t border-[var(--border)] px-4 py-2.5 first:border-t-0">
-                  <span className="min-w-0 flex-1">
-                    <span className="flex flex-wrap items-center gap-1.5 text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">
-                      <span className="min-w-0 break-words">{row.keptName}</span>
-                      {row.source === "auto" && <Pill tone="neutral">Auto</Pill>}
-                    </span>
-                    <span className="block text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">
-                      {ago(row.mergedAt)}{shortName(row.actorName) ? ` · ${shortName(row.actorName)}` : ""}
-                      {!row.reversedAt && !row.undoable ? " · undo the later merge first" : ""}
-                    </span>
-                  </span>
-                  {row.reversedAt ? (
-                    <Pill tone="neutral">Undone</Pill>
-                  ) : (
-                    <Button type="button" size="sm" variant="outline" aria-label={`Undo merge into ${row.keptName}`} disabled={writeBlocked || !row.undoable} onClick={() => void undo(row.id)}>{busy === `undo:${row.id}` ? "Undoing…" : "Undo"}</Button>
-                  )}
-                </li>
-              ))}
-              {merges.length > 5 && (
-                <li className="border-t border-[var(--border)] px-4 py-2">
-                  <button type="button" className={btn("row", "px-0")} onClick={() => setShowAllMerges((value) => !value)}>{showAllMerges ? "Show fewer" : `Show all ${merges.length}`}</button>
-                </li>
-              )}
-            </ul>
-          ) : (
-            <p className="m-0 border-t border-[var(--border)] px-4 py-3 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">No merges yet.</p>
-          )}
+      {tab === "directory" && (
+        <TableCard
+          className={fullHeightCard(300)}
+          toolbar={
+            <DataToolbar
+              actions={
+                <>
+                  {directory.query && <ClearFiltersButton onClick={clearSearch} />}
+                  <RefreshButton onClick={() => void loadDirectory(directory.query, directory.page)} refreshing={directoryLoading} />
+                </>
+              }
+            >
+              <ToolbarSearch value={search} onChange={onSearch} placeholder="Search name, phone, email, city" label="Search contacts" className="sm:w-72" />
+              {stats.flaggedContacts ? <Pill tone="warning">{stats.flaggedContacts.toLocaleString()} duplicate-suspected</Pill> : null}
+            </DataToolbar>
+          }
+          footer={<Pager page={directory.page + 1} total={directory.total} noun={directory.total === 1 ? "contact" : "contacts"} pageSize={directory.pageSize} disabled={directoryLoading} onPage={(next) => void loadDirectory(directory.query, next - 1)} />}
+        >
+          <div aria-busy={directoryLoading}>
+            {directory.rows.length ? (
+              <table aria-label="Contact directory" className="portal-lead-table w-full min-w-[980px] text-left text-sm">
+                <thead>
+                  <tr>
+                    <th scope="col">Contact</th>
+                    <th scope="col" className="w-[160px]">Phone</th>
+                    <th scope="col" className="w-[220px]">Household</th>
+                    <th scope="col" className="w-[140px]">Date of birth</th>
+                    <th scope="col" className="w-[80px] text-right">Leads</th>
+                    <th scope="col" className="w-[190px]">Flag</th>
+                  </tr>
+                </thead>
+                <tbody className="m-seq">
+                  {directory.rows.map((row) => {
+                    const open = expanded === row.id;
+                    const name = `${row.first_name} ${row.last_name}`;
+                    return [
+                      <tr key={row.id} className="m-row">
+                        <td className="max-w-[260px]">
+                          <button type="button" title={name} aria-expanded={open} aria-controls={`contact-detail-${row.id}`} className="block max-w-full cursor-pointer truncate text-left font-semibold text-foreground hover:underline" onClick={() => setExpanded(open ? null : row.id)}>{name}</button>
+                        </td>
+                        <td className="whitespace-nowrap tabular-nums">{formatPhone(row.primary_phone)}</td>
+                        <td className="max-w-[220px] truncate" title={row.household_label ?? undefined}>{row.household_label ?? "—"}</td>
+                        <td className="whitespace-nowrap tabular-nums">{formatDob(row.dob)}</td>
+                        <td className="text-right tabular-nums">{row.lead_count ? row.lead_count.toLocaleString() : "—"}</td>
+                        <td>{row.open_review === null ? "—" : row.open_review ? <Pill tone="warning" dot>Duplicate suspected</Pill> : <Pill tone="neutral" dot>No open match</Pill>}</td>
+                      </tr>,
+                      open ? (
+                        <tr key={`${row.id}-detail`} id={`contact-detail-${row.id}`}>
+                          <td colSpan={6} className="bg-[var(--surface-alt)]">
+                            <dl className="m-0 grid gap-x-6 gap-y-2 sm:grid-cols-2 lg:grid-cols-4">
+                              {[
+                                ["Address", [row.address_line1, row.city, row.household_state || row.state, row.postal_code].filter(Boolean).join(", ") || "—"],
+                                ["Phones", row.phones.map((item) => formatPhone(item.phone)).join(", ") || "—"],
+                                ["Emails", row.emails.map((item) => item.email).join(", ") || "—"],
+                                ["Custom fields", customFieldsText(row.custom_fields, schema)],
+                              ].map(([label, value]) => (
+                                <div key={label} className="min-w-0">
+                                  <dt className="text-xs leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]">{label}</dt>
+                                  <dd className="m-0 mt-0.5 break-words text-sm leading-[1.5] text-[var(--ink)]">{value}</dd>
+                                </div>
+                              ))}
+                            </dl>
+                          </td>
+                        </tr>
+                      ) : null,
+                    ];
+                  })}
+                </tbody>
+              </table>
+            ) : directory.query ? (
+              <NoMatches noun="contacts" onClear={clearSearch} />
+            ) : (
+              <EmptyState title="No contacts yet" hint="Add a contact or import a CSV; each one is checked for duplicates first." />
+            )}
+          </div>
         </TableCard>
-      </div>
+      )}
 
-      <TableCard
-        title="Contact directory"
-        toolbar={
-          <DataToolbar actions={<RefreshButton onClick={() => void loadDirectory(directory.query, directory.page)} refreshing={directoryLoading} />}>
-            <ToolbarSearch value={search} onChange={onSearch} placeholder="Search name, phone, email, city" label="Search contacts" className="sm:w-72" />
-            {stats.flaggedContacts ? <Pill tone="warning">{stats.flaggedContacts.toLocaleString()} duplicate-suspected</Pill> : null}
-          </DataToolbar>
-        }
-        footer={
-          <>
-            <span className="tabular-nums" role="status">
-              {directory.total ? `Showing ${firstRow.toLocaleString()}–${lastRow.toLocaleString()} of ${directory.total.toLocaleString()} contact${directory.total === 1 ? "" : "s"}` : "No contacts to show"}
-            </span>
-            <span className="flex gap-2">
-              <Button type="button" variant="outline" size="sm" disabled={directory.page === 0 || directoryLoading} onClick={() => void loadDirectory(directory.query, directory.page - 1)}>Previous</Button>
-              <Button type="button" variant="outline" size="sm" disabled={lastRow >= directory.total || directoryLoading} onClick={() => void loadDirectory(directory.query, directory.page + 1)}>Next</Button>
-            </span>
-          </>
-        }
-      >
-        <div aria-busy={directoryLoading}>
-          {directory.rows.length ? (
-            <table aria-label="Contact directory" className={cn(st.table, "min-w-[720px]")}>
+      {tab === "merges" && (
+        <TableCard
+          className={fullHeightCard(300)}
+          footer={merges.length ? <Pager page={mergePageNow} total={merges.length} noun="merges" pageSize={pageSize} onPage={setMergePage} /> : undefined}
+        >
+          {merges.length ? (
+            <table aria-label="Recent merges" className="portal-lead-table w-full min-w-[760px] text-left text-sm">
               <thead>
-                <tr className={st.headRow}>
-                  <th scope="col" className={st.th}>Contact</th>
-                  <th scope="col" className={cn(st.th, "w-[160px]")}>Phone</th>
-                  <th scope="col" className={cn(st.th, "w-[220px]")}>Household</th>
-                  <th scope="col" className={cn(st.th, "w-[80px]")}>Leads</th>
-                  <th scope="col" className={cn(st.th, "w-[170px]")}>Flag</th>
+                <tr>
+                  <th scope="col">Kept contact</th>
+                  <th scope="col" className="w-[90px]">Source</th>
+                  <th scope="col" className="w-[130px]">When</th>
+                  <th scope="col" className="w-[160px]">By</th>
+                  <th scope="col" className="w-[220px]">Undo</th>
+                  <th scope="col" className="w-[100px] text-right"><span className="sr-only">Actions</span></th>
                 </tr>
               </thead>
               <tbody className="m-seq">
-                {directory.rows.map((row) => {
-                  const open = expanded === row.id;
-                  return [
-                    <tr key={row.id} className="m-row">
-                      <td className={st.td}>
-                        <button type="button" aria-expanded={open} aria-controls={`contact-detail-${row.id}`} className="cursor-pointer text-left text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--body)] hover:text-[var(--ink)] hover:underline" onClick={() => setExpanded(open ? null : row.id)}>{row.first_name} {row.last_name}</button>
-                      </td>
-                      <td className={cn(st.td, "tabular-nums whitespace-nowrap")}>{formatPhone(row.primary_phone)}</td>
-                      <td className={st.td}>{row.household_label ?? "—"}</td>
-                      <td className={cn(st.td, "tabular-nums")}>{row.lead_count ? row.lead_count.toLocaleString() : "—"}</td>
-                      <td className={st.td}>{row.open_review === null ? "—" : row.open_review ? <Pill tone="warning" dot>Duplicate suspected</Pill> : <Pill tone="neutral" dot>No open match</Pill>}</td>
-                    </tr>,
-                    open ? (
-                      <tr key={`${row.id}-detail`} id={`contact-detail-${row.id}`}>
-                        <td colSpan={5} className={cn(st.td, "bg-[var(--surface-alt)]")}>
-                          <dl className="m-0 grid gap-x-6 gap-y-2 sm:grid-cols-2 lg:grid-cols-3">
-                            {[
-                              ["Date of birth", formatDob(row.dob)],
-                              ["Address", [row.address_line1, row.city, row.household_state || row.state, row.postal_code].filter(Boolean).join(", ") || "—"],
-                              ["Phones", row.phones.map((item) => formatPhone(item.phone)).join(", ") || "—"],
-                              ["Emails", row.emails.map((item) => item.email).join(", ") || "—"],
-                              ["Custom fields", customFieldsText(row.custom_fields, schema)],
-                            ].map(([label, value]) => (
-                              <div key={label} className="min-w-0">
-                                <dt className="text-[12px] leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]">{label}</dt>
-                                <dd className="m-0 mt-0.5 break-words text-[14px] leading-[1.5] text-[var(--ink)]">{value}</dd>
-                              </div>
-                            ))}
-                          </dl>
-                        </td>
-                      </tr>
-                    ) : null,
-                  ];
-                })}
+                {shownMerges.map((row: RecentMerge) => (
+                  <tr key={row.id} className="m-row">
+                    <td className="max-w-[280px] truncate font-semibold text-foreground" title={row.keptName}>{row.keptName}</td>
+                    <td>{row.source === "auto" ? <Pill tone="neutral">Auto</Pill> : <span className="text-muted-foreground">Manual</span>}</td>
+                    <td className="whitespace-nowrap text-muted-foreground">{ago(row.mergedAt)}</td>
+                    <td className="max-w-[160px] truncate" title={row.actorName ?? undefined}>{shortName(row.actorName) ?? "—"}</td>
+                    <td className="text-muted-foreground">{row.reversedAt ? <Pill tone="neutral">Undone</Pill> : row.undoable ? "Can be undone" : "Undo the later merge first"}</td>
+                    <td className="text-right">
+                      {!row.reversedAt && (
+                        <Button type="button" size="sm" variant="outline" aria-label={`Undo merge into ${row.keptName}`} disabled={writeBlocked || !row.undoable} onClick={() => void undo(row.id)}>{busy === `undo:${row.id}` ? "Undoing…" : "Undo"}</Button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
-          ) : directory.query ? (
-            <NoMatches noun="contacts" onClear={clearSearch} />
           ) : (
-            <EmptyState title="No contacts yet" hint="Add a contact or import a CSV; each one is checked for duplicates first." />
+            <EmptyState title="No merges yet" hint="Every merge from the review queue, an import or Add contact lands here, and can be undone." />
           )}
-        </div>
-      </TableCard>
+        </TableCard>
+      )}
 
-      <SettingsCard title="Custom contact fields" sub="Imported from and exported to custom_<key> columns." pad={20}>
-        <form onSubmit={saveField} className="grid gap-3 sm:grid-cols-[1fr_1fr_180px_auto] sm:items-end">
-          <Field label="Key" htmlFor="field-key"><input id="field-key" className={fieldControl} placeholder="preferred_language" value={field.field_key} disabled={readOnly} onChange={(event) => setField((value) => ({ ...value, field_key: event.target.value }))} /></Field>
-          <Field label="Label" htmlFor="field-label"><input id="field-label" className={fieldControl} placeholder="Preferred language" value={field.label} disabled={readOnly} onChange={(event) => setField((value) => ({ ...value, label: event.target.value }))} /></Field>
-          <Field label="Type" htmlFor="field-type">
-            <select id="field-type" className={fieldControl} value={field.type} disabled={readOnly} onChange={(event) => setField((value) => ({ ...value, type: event.target.value }))}>
-              <option value="text">Text</option><option value="number">Number</option><option value="date">Date</option><option value="single_select">Single select</option><option value="multi_select">Multi select</option><option value="boolean">Boolean</option><option value="currency">Currency (cents)</option><option value="phone">Phone</option>
-            </select>
-          </Field>
-          <Button type="submit" disabled={readOnly || busy === "field"}>{busy === "field" ? "Saving…" : "Add field"}</Button>
-        </form>
-        {fieldError && <p role="alert" className="mt-2 text-[12px] leading-[1.5] text-[var(--error-ink)]">{fieldError}</p>}
-        <div className="mt-4 flex flex-wrap gap-2">
-          {schema.filter((item) => item.entity === "contact").map((item) => <Pill key={`${item.entity}-${item.field_key}`} tone="neutral">{item.label} · {item.type}</Pill>)}
-          {!schema.some((item) => item.entity === "contact") && <span className="text-[14px] leading-[1.5] text-[var(--muted)]">No custom fields yet.</span>}
-        </div>
-      </SettingsCard>
+      <Dialog open={fieldsOpen} onOpenChange={(open) => { if (busy !== "field") setFieldsOpen(open); }}>
+        <DialogContent className="sm:max-w-[640px]">
+          <DialogHeader>
+            <DialogTitle>Custom contact fields</DialogTitle>
+            <DialogDescription>Imported from and exported to custom_&lt;key&gt; columns.</DialogDescription>
+          </DialogHeader>
+          <form onSubmit={saveField} className="grid gap-3 sm:grid-cols-[1fr_1fr_160px_auto] sm:items-end">
+            <Field label="Key" htmlFor="field-key"><input id="field-key" className={fieldControl} placeholder="preferred_language" value={field.field_key} disabled={readOnly} onChange={(event) => setField((value) => ({ ...value, field_key: event.target.value }))} /></Field>
+            <Field label="Label" htmlFor="field-label"><input id="field-label" className={fieldControl} placeholder="Preferred language" value={field.label} disabled={readOnly} onChange={(event) => setField((value) => ({ ...value, label: event.target.value }))} /></Field>
+            <Field label="Type" htmlFor="field-type">
+              <select id="field-type" className={fieldControl} value={field.type} disabled={readOnly} onChange={(event) => setField((value) => ({ ...value, type: event.target.value }))}>
+                <option value="text">Text</option><option value="number">Number</option><option value="date">Date</option><option value="single_select">Single select</option><option value="multi_select">Multi select</option><option value="boolean">Boolean</option><option value="currency">Currency (cents)</option><option value="phone">Phone</option>
+              </select>
+            </Field>
+            <Button type="submit" disabled={readOnly || busy === "field"}>{busy === "field" ? "Saving…" : "Add field"}</Button>
+          </form>
+          {fieldError && <p role="alert" className="m-0 text-xs leading-[1.5] text-[var(--error-ink)]">{fieldError}</p>}
+          <div className="flex flex-wrap gap-2">
+            {contactFields.map((item) => <Pill key={`${item.entity}-${item.field_key}`} tone="neutral">{item.label} · {item.type}</Pill>)}
+            {!contactFields.length && <span className="text-sm leading-[1.5] text-[var(--muted)]">No custom fields yet.</span>}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={addOpen} onOpenChange={(open) => { if (busy !== "create") setAddOpen(open); }}>
-        <DialogContent className="rounded-[12px] border-[var(--border)] bg-[var(--surface)] sm:max-w-[600px]">
+        <DialogContent className="sm:max-w-[600px]">
           <DialogHeader>
-            <DialogTitle className="text-[18px] text-[var(--ink)]">Add contact</DialogTitle>
-            <DialogDescription className="text-[14px] text-[var(--muted)]">Checked for duplicates before it is saved.</DialogDescription>
+            <DialogTitle>Add contact</DialogTitle>
+            <DialogDescription>Checked for duplicates before it is saved.</DialogDescription>
           </DialogHeader>
           <form onSubmit={create} className="grid gap-4 sm:grid-cols-2">
             <Field label="First name" htmlFor="contact-first_name" required><input id="contact-first_name" className={control} required value={form.first_name} onChange={(event) => setForm((value) => ({ ...value, first_name: event.target.value }))} /></Field>
@@ -656,7 +689,7 @@ export function ContactWorkspace({ readOnly = false }: { readOnly?: boolean }) {
             <Field label="Address line 1" htmlFor="contact-address_line1" className="sm:col-span-2"><input id="contact-address_line1" className={control} value={form.address_line1} onChange={(event) => setForm((value) => ({ ...value, address_line1: event.target.value }))} /></Field>
             <Field label="City" htmlFor="contact-city"><input id="contact-city" className={control} value={form.city} onChange={(event) => setForm((value) => ({ ...value, city: event.target.value }))} /></Field>
             <Field label="Postal code" htmlFor="contact-postal_code"><input id="contact-postal_code" type="tel" className={control} value={form.postal_code} onChange={(event) => setForm((value) => ({ ...value, postal_code: event.target.value }))} /></Field>
-            {formError && <p role="alert" className="m-0 text-[12px] leading-[1.5] text-[var(--error-ink)] sm:col-span-2">{formError}</p>}
+            {formError && <p role="alert" className="m-0 text-xs leading-[1.5] text-[var(--error-ink)] sm:col-span-2">{formError}</p>}
             <DialogFooter className="sm:col-span-2">
               <Button type="button" variant="ghost" disabled={busy === "create"} onClick={() => setAddOpen(false)}>Cancel</Button>
               <Button type="submit" disabled={readOnly || busy === "create"}>{busy === "create" ? "Saving…" : "Add contact"}</Button>

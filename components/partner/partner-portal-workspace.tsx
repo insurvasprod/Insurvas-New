@@ -1730,10 +1730,10 @@ function LegacyPartnerPortalWorkspace({
           <div className="mt-5 grid gap-3 sm:grid-cols-3">
             <a
               href="#submit"
-              className="rounded-lg border bg-card p-4 transition-colors hover:border-[var(--color-blue)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="rounded-lg border bg-card p-4 transition-colors hover:border-[var(--color-brand)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <Send
-                className="size-5 text-[var(--color-blue)]"
+                className="size-5 text-[var(--color-brand)]"
                 aria-hidden="true"
               />
               <p className="mt-3 font-semibold">Submit leads</p>
@@ -1743,7 +1743,7 @@ function LegacyPartnerPortalWorkspace({
             </a>
             <a
               href="#pipeline"
-              className="rounded-lg border bg-card p-4 transition-colors hover:border-[var(--color-blue)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="rounded-lg border bg-card p-4 transition-colors hover:border-[var(--color-brand)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <CheckCircle2
                 className="size-5 text-[var(--color-success)]"
@@ -1756,10 +1756,10 @@ function LegacyPartnerPortalWorkspace({
             </a>
             <a
               href="#team"
-              className="rounded-lg border bg-card p-4 transition-colors hover:border-[var(--color-blue)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="rounded-lg border bg-card p-4 transition-colors hover:border-[var(--color-brand)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <Users
-                className="size-5 text-[var(--color-blue)]"
+                className="size-5 text-[var(--color-brand)]"
                 aria-hidden="true"
               />
               <p className="mt-3 font-semibold">Manage team</p>

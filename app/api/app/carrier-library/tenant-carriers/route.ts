@@ -1,6 +1,7 @@
-import { NextResponse, type NextRequest } from "next/server";
+import { after, NextResponse, type NextRequest } from "next/server";
 
 import { audit } from "@/lib/audit/log";
+import { refreshDiscrepanciesQuietly } from "@/lib/discrepancies/service";
 import { z } from "zod";
 
 import { saveCarrierRequirement, saveTenantCarrier } from "@/lib/carriers/service";
@@ -16,6 +17,9 @@ export async function POST(request: NextRequest) {
   try {
     const row = await saveTenantCarrier(auth.context.tenantId, parsed.data);
     await audit({ actorType: "tenant", actorId: auth.context.userId, action: "tenant.carrier_configured", targetType: "tenant_carrier", targetId: row.id, metadata: { carrierId: row.carrier_id, contractLevelBp: row.contract_level_bp, effectiveFrom: row.effective_from }, request });
+    // What the contract expects changed, so what the carrier owes did too (LA-4.5 option a). After the response.
+    const tenantId = auth.context.tenantId;
+    after(() => refreshDiscrepanciesQuietly(tenantId));
     return NextResponse.json({ tenantCarrier: row }, { status: 201 });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Could not save carrier contract" }, { status: 400 });

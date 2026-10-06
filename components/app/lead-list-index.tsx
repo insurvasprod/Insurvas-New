@@ -3,11 +3,12 @@
 import { useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
+import { ClearFiltersButton, DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { TableCard } from "@/components/ui/table-card";
+import { fullHeightCard, useFittingPageSize } from "@/components/app/lead-ops-view-tabs";
 
 /**
  * The lead-list index: what each bought list is worth, whether it can be dialled at all, how much
@@ -28,7 +29,6 @@ export type LeadListIndexRow = {
 type ListState = "working" | "stalling" | "exhausted" | "blocked" | "empty";
 type StateFilter = "all" | "not_exhausted" | ListState;
 
-const PAGE_SIZE = 10;
 const STALL_MS = 7 * 86_400_000;
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const STATE_UI: Record<ListState, { label: string; chip: string; dot: string }> = {
@@ -97,9 +97,11 @@ export function LeadListIndex({ lists, licensedStates, onOpen, nowAt, onRefresh 
   onRefresh?: () => Promise<unknown> | void;
 }) {
   const [vendor, setVendor] = useState("");
-  const [stateFilter, setStateFilter] = useState<StateFilter>("not_exhausted");
+  const [stateFilter, setStateFilter] = useState<StateFilter>("all");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
+  // As many rows as fit under the header, the strip and the toolbar (the transfer inbox's rule).
+  const PAGE_SIZE = useFittingPageSize(400, 45);
   const [refreshing, setRefreshing] = useState(false);
 
   const vendors = useMemo(() => [...new Set(lists.map((list) => list.vendorName))].sort(), [lists]);
@@ -148,8 +150,16 @@ export function LeadListIndex({ lists, licensedStates, onOpen, nowAt, onRefresh 
       )}
 
       <TableCard
+        className={fullHeightCard(300)}
         toolbar={
-          <DataToolbar actions={onRefresh ? <RefreshButton onClick={() => void refresh()} refreshing={refreshing} /> : undefined}>
+          <DataToolbar
+            actions={filtered || onRefresh ? (
+              <>
+                {filtered && <ClearFiltersButton onClick={clearFilters} />}
+                {onRefresh && <RefreshButton onClick={() => void refresh()} refreshing={refreshing} />}
+              </>
+            ) : undefined}
+          >
             <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Search file, vendor, campaign" />
             <select aria-label="Vendor" value={vendor} onChange={(event) => { setVendor(event.target.value); setPage(1); }} className={toolbarControl}>
               <option value="">All vendors</option>
@@ -164,7 +174,6 @@ export function LeadListIndex({ lists, licensedStates, onOpen, nowAt, onRefresh 
               <option value="blocked">Cannot be dialed</option>
               <option value="empty">Nothing imported</option>
             </select>
-            {filtered && <Button type="button" variant="ghost" onClick={clearFilters}>Clear</Button>}
           </DataToolbar>
         }
         footer={<Pager page={current} total={shown.length} noun="lists" pageSize={PAGE_SIZE} onPage={setPage} suffix={shown.length < lists.length ? `${lists.length} in all · newest upload first` : "newest upload first"} />}
@@ -174,10 +183,13 @@ export function LeadListIndex({ lists, licensedStates, onOpen, nowAt, onRefresh 
         ) : shown.length === 0 ? (
           <NoMatches noun="lists" onClear={clearFilters} />
         ) : (
-          <table className="portal-lead-table w-full min-w-[1040px] text-left text-sm">
+          <table className="portal-lead-table w-full min-w-[1240px] text-left text-sm">
             <thead>
               <tr>
                 <th>List</th>
+                <th className="w-[150px]">Vendor</th>
+                <th className="w-[84px] text-right">Bought</th>
+                <th className="w-[78px]">Uploaded</th>
                 <th className="w-[78px] text-right">Usable</th>
                 <th className="w-[104px] text-right">Cost / usable</th>
                 <th className="w-[150px]">Territory</th>
@@ -194,14 +206,14 @@ export function LeadListIndex({ lists, licensedStates, onOpen, nowAt, onRefresh 
                 const fresh = list.byState.fresh ?? 0;
                 return (
                   <tr key={list.campaignId} className="m-row cursor-pointer" onClick={() => onOpen(list)}>
-                    <td className="max-w-[340px]">
-                      <button type="button" onClick={(event) => { event.stopPropagation(); onOpen(list); }} className="block max-w-full truncate text-left text-sm font-semibold leading-normal tracking-[-0.02em] text-foreground hover:underline">
+                    <td className="max-w-[300px]">
+                      <button type="button" title={list.campaignName} onClick={(event) => { event.stopPropagation(); onOpen(list); }} className="block max-w-full truncate text-left text-sm font-semibold leading-normal tracking-[-0.02em] text-foreground hover:underline">
                         {list.campaignName}
                       </button>
-                      <span className="block truncate text-xs leading-normal text-muted-foreground">
-                        {[list.vendorName, `${list.recordsPurchased.toLocaleString()} bought`, shortDate(list.createdAt)].filter(Boolean).join(" · ")}
-                      </span>
                     </td>
+                    <td className="max-w-[150px] truncate" title={list.vendorName}>{list.vendorName}</td>
+                    <td className="text-right tabular-nums">{list.recordsPurchased.toLocaleString()}</td>
+                    <td className="whitespace-nowrap text-muted-foreground">{shortDate(list.createdAt) || "—"}</td>
                     <td className="text-right tabular-nums">{state === "blocked" || state === "empty" ? "—" : list.leadsReceived.toLocaleString()}</td>
                     <td className="text-right tabular-nums">{cost == null || state === "blocked" ? "—" : `$${(cost / 100).toFixed(3)}`}</td>
                     <td>

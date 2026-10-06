@@ -71,7 +71,7 @@ export function DeltaChip({
 
 /* ── Meter ──────────────────────────────────────────────────────────────────────────────────── */
 
-// `primary` is the one orange bar allowed: progress the reader is actively working through
+// `primary` is the one brand-green bar allowed: progress the reader is actively working through
 // (a setup checklist), never a measurement they merely observe.
 export type MeterTone = "neutral" | "good" | "info" | "warning" | "danger" | "primary";
 

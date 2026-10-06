@@ -4,6 +4,8 @@ export type SetupChecklistStep = {
   key: string;
   label: string;
   path: string;
+  /** What the link does, said on the row and to a screen reader: not every step is a settings tab. */
+  action: string;
   complete: boolean;
 };
 
@@ -22,12 +24,12 @@ export type SetupChecklist = {
  * the component. The two steps that are not settings go to the screens that actually own them.
  */
 const SETUP_STEPS = [
-  { key: "carriers", label: "Add your carriers", path: "/app/settings#carrier-library" },
+  { key: "carriers", label: "Add your carriers", path: "/app/settings#carrier-library", action: "Open settings tab" },
   // LA-4.6: straight to the import, which is the activation step ("You appear to be owed $X").
-  { key: "statement", label: "Upload a carrier statement", path: "/app/statements?import=1" },
-  { key: "appointments", label: "Confirm your appointments", path: "/app/settings#states-licences" },
-  { key: "lead-sources", label: "Add your lead sources", path: "/app/publishers" },
-  { key: "phone", label: "Connect your phone number", path: "/app/settings#agency-profile" },
+  { key: "statement", label: "Upload a carrier statement", path: "/app/statements?import=1", action: "Import a statement" },
+  { key: "appointments", label: "Confirm your appointments", path: "/app/settings#states-licences", action: "Open settings tab" },
+  { key: "lead-sources", label: "Add your lead sources", path: "/app/publishers", action: "Open lead sources" },
+  { key: "phone", label: "Connect your phone number", path: "/app/settings#agency-profile", action: "Open settings tab" },
 ] as const;
 
 /**

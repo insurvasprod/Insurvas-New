@@ -25,10 +25,30 @@
  *   · a pending policy has not been issued and is never a discrepancy;
  *   · a carrier with no statement covering the period is never "never paid" — no statement is not
  *     the same as no payment;
+ *   · only a REVIEWED statement is evidence (user decision 2026-10-06): an unreviewed one is no
+ *     coverage for "never paid", and the days it covers are not judged at all (`pending`), because
+ *     an undecided line may be the very payment a finding would call missing. An accepted line
+ *     counts as received wherever it sits;
  *   · a lapsed policy's chargeback is expected, never "unexpected";
  *   · a difference under RECONCILE_TOLERANCE_CENTS is rounding, not a discrepancy;
- *   · each finding has a fingerprint (kind · policy · period) that is the same every time the same
- *     facts are found, so a refresh updates it instead of adding a second one.
+ *   · each finding has a fingerprint (kind · policy · where it started) that is the same every time
+ *     the same facts are found, so a refresh updates it instead of adding a second one.
+ *
+ * Fingerprints (v2, migration 20261006110000). Each is anchored where the problem STARTED, so a
+ * later statement grows the same finding instead of replacing it (and a dispute is not lost):
+ *
+ *   never_paid             kind|policy|issue:<effective date>    the policy has been unpaid since issue
+ *   short_paid, mis_rated  kind|policy|from:<first period start> the shortfall began in that period
+ *   duplicate_chargeback   kind|policy|from:<first chargeback period start>
+ *   unexpected_chargeback  kind|policy|<period start>~<period end>, one per chargeback period: each
+ *                          chargeback on an active policy is its own event
+ *
+ * A finding a person resolved or wrote off stays that way unless it gets WORSE (planRefresh): then
+ * it reopens, so a carrier that short-pays again is never hidden by last year's decision.
+ *
+ * v1 (before the migration) keyed never_paid and both chargeback kinds by policy alone, and
+ * short_paid / mis_rated by every period reported. `fingerprints: "v1"` reproduces it exactly, so the
+ * app can run before the migration re-keys the stored rows.
  *
  * Pure (no I/O), tested in compute.test.mjs.
  */
@@ -124,6 +144,8 @@ function paidRate(line: ReceivedEntry): number | null {
   return null;
 }
 
+export type FingerprintVersion = "v1" | "v2";
+
 export function computeDiscrepancies(input: {
   policies: DiscrepancyPolicy[];
   expected: ExpectedEntry[];
@@ -132,15 +154,32 @@ export function computeDiscrepancies(input: {
   today: string;
   graceDays?: number;
   toleranceCents?: number;
+  /** v2 unless the stored rows have not been re-keyed yet (see the header). */
+  fingerprints?: FingerprintVersion;
+  /**
+   * Statements a person has not finished reviewing (in review, or a PDF waiting for its lines). The
+   * periods they cover are not judged yet, for their carrier: nothing expected or received inside
+   * them counts, so an undecided line can neither hide a payment nor be double counted against
+   * another statement covering the same days (user decision 2026-10-06: only a reviewed statement
+   * is evidence).
+   */
+  pending?: CoveredPeriod[];
 }): DiscrepancyFinding[] {
+  const v2 = (input.fingerprints ?? "v2") === "v2";
   const grace = input.graceDays ?? NEVER_PAID_GRACE_DAYS;
   const tolerance = input.toleranceCents ?? RECONCILE_TOLERANCE_CENTS;
   const findings: DiscrepancyFinding[] = [];
   const policyById = new Map(input.policies.map((policy) => [policy.id, policy]));
+  const pending = input.pending ?? [];
+  const underReview = (carrierId: string | null, day: string) => Boolean(carrierId) && pending.some((period) => period.carrierId === carrierId && day >= period.periodStart && day <= period.periodEnd);
+  const judged = {
+    expected: input.expected.filter((entry) => !underReview(policyById.get(entry.policyId)?.carrierId ?? null, entry.postedOn)),
+    received: input.received.filter((line) => !underReview(line.carrierId, line.postedOn)),
+  };
   const expectedByPolicy = new Map<string, ExpectedEntry[]>();
-  for (const entry of input.expected) expectedByPolicy.set(entry.policyId, [...(expectedByPolicy.get(entry.policyId) ?? []), entry]);
+  for (const entry of judged.expected) expectedByPolicy.set(entry.policyId, [...(expectedByPolicy.get(entry.policyId) ?? []), entry]);
   const receivedByPolicy = new Map<string, ReceivedEntry[]>();
-  for (const line of input.received) receivedByPolicy.set(line.policyId, [...(receivedByPolicy.get(line.policyId) ?? []), line]);
+  for (const line of judged.received) receivedByPolicy.set(line.policyId, [...(receivedByPolicy.get(line.policyId) ?? []), line]);
 
   // ── never paid ───────────────────────────────────────────────────────────────
   for (const policy of input.policies) {
@@ -158,7 +197,7 @@ export function computeDiscrepancies(input: {
     const lastCovered = evidence.map((period) => period.periodEnd).sort().at(-1) as string;
     const periods = evidence.map((period) => ({ start: period.periodStart, end: period.periodEnd })).sort((a, b) => a.start.localeCompare(b.start));
     findings.push({
-      fingerprint: `never_paid|${policy.id}`,
+      fingerprint: v2 ? `never_paid|${policy.id}|issue:${policy.effectiveDate.slice(0, 10)}` : `never_paid|${policy.id}`,
       kind: "never_paid",
       policyId: policy.id,
       carrierId: policy.carrierId,
@@ -178,10 +217,10 @@ export function computeDiscrepancies(input: {
   }
 
   // ── short-paid and paid at the wrong rate ─────────────────────────────────────
-  const commissionLines = input.received.filter((line) => line.kind !== "chargeback");
+  const commissionLines = judged.received.filter((line) => line.kind !== "chargeback");
   const priced = new Set(input.expected.map((entry) => entry.policyId));
   const rows = reconcileStatements(
-    input.expected.filter((entry) => entry.kind !== "chargeback"),
+    judged.expected.filter((entry) => entry.kind !== "chargeback"),
     commissionLines.map((line) => ({ policyId: line.policyId, amountCents: line.amountCents, periodStart: line.periodStart, periodEnd: line.periodEnd })),
     priced,
     tolerance,
@@ -199,7 +238,7 @@ export function computeDiscrepancies(input: {
     const kind: DiscrepancyKind = misRated ? "mis_rated" : "short_paid";
     const owed = -row.differenceCents;
     findings.push({
-      fingerprint: `${kind}|${row.policyId}|${periodKey(row.periods)}`,
+      fingerprint: v2 ? `${kind}|${row.policyId}|from:${row.periods[0]?.start ?? ""}` : `${kind}|${row.policyId}|${periodKey(row.periods)}`,
       kind,
       policyId: row.policyId,
       carrierId: policy.carrierId,
@@ -233,17 +272,30 @@ export function computeDiscrepancies(input: {
     const base = { policyId, carrierId: policy.carrierId, periodStart: periods[0].start, periodEnd: periods.at(-1)?.end ?? null };
 
     if (policy.status === "active") {
-      findings.push({
-        ...base,
-        fingerprint: `unexpected_chargeback|${policyId}`,
-        kind: "unexpected_chargeback",
-        owedCents: taken,
-        detail: {
-          expectedCents: 0, receivedCents: -taken, allowedCents: 0, takenCents: taken, periods,
-          expectedEntryIds: [], receivedLineIds: chargebacks.map((line) => line.id), statementIds: [...new Set(chargebacks.map((line) => line.statementId))],
-          explanation: `${money(taken)} charged back, but your book has this policy in force. If it lapsed, update its status; otherwise the carrier owes it back.`,
-        },
-      });
+      // v2: each chargeback period is its own event, so a new chargeback is never hidden by an old
+      // one a person already resolved. v1 summed them into one finding per policy.
+      const groups = v2
+        ? periods.map((period) => ({ period, lines: chargebacks.filter((line) => line.periodStart === period.start && line.periodEnd === period.end) }))
+        : [{ period: null, lines: chargebacks }];
+      for (const group of groups) {
+        const groupTaken = group.lines.reduce((total, line) => total + Math.abs(line.amountCents), 0);
+        // Under the tolerance is rounding, as everywhere else (v2; v1 kept every chargeback).
+        if (v2 && groupTaken < tolerance) continue;
+        const groupPeriods = group.period ? [group.period] : periods;
+        findings.push({
+          ...base,
+          periodStart: groupPeriods[0].start,
+          periodEnd: groupPeriods.at(-1)?.end ?? null,
+          fingerprint: group.period ? `unexpected_chargeback|${policyId}|${group.period.start}~${group.period.end}` : `unexpected_chargeback|${policyId}`,
+          kind: "unexpected_chargeback",
+          owedCents: groupTaken,
+          detail: {
+            expectedCents: 0, receivedCents: -groupTaken, allowedCents: 0, takenCents: groupTaken, periods: groupPeriods,
+            expectedEntryIds: [], receivedLineIds: group.lines.map((line) => line.id), statementIds: [...new Set(group.lines.map((line) => line.statementId))],
+            explanation: `${money(groupTaken)} charged back, but your book has this policy in force. If it lapsed, update its status; otherwise the carrier owes it back.`,
+          },
+        });
+      }
       continue;
     }
 
@@ -255,7 +307,7 @@ export function computeDiscrepancies(input: {
     if (excess < tolerance) continue;
     findings.push({
       ...base,
-      fingerprint: `duplicate_chargeback|${policyId}`,
+      fingerprint: v2 ? `duplicate_chargeback|${policyId}|from:${periods[0].start}` : `duplicate_chargeback|${policyId}`,
       kind: "duplicate_chargeback",
       owedCents: excess,
       detail: {
@@ -269,6 +321,72 @@ export function computeDiscrepancies(input: {
 
   const weight: Record<DiscrepancyKind, number> = { never_paid: 0, unexpected_chargeback: 1, duplicate_chargeback: 2, mis_rated: 3, short_paid: 4 };
   return findings.sort((a, b) => b.owedCents - a.owedCents || weight[a.kind] - weight[b.kind] || a.fingerprint.localeCompare(b.fingerprint));
+}
+
+/** A stored finding, as much of it as the refresh needs. */
+export type StoredFinding = {
+  id: string;
+  fingerprint: string;
+  status: "open" | "disputed" | "resolved" | "written_off" | "cleared";
+  owedCents: number;
+  statusChangedBy: string | null;
+  statusChangedAt: string | null;
+};
+
+export type RefreshWrite = {
+  finding: DiscrepancyFinding;
+  status: StoredFinding["status"];
+  /** Who and when for the status this write leaves: the stored ones, or (null, now) when the refresh changed it. */
+  statusChangedBy: string | null;
+  statusChangedAt: string | null;
+};
+
+export type RefreshPlan = {
+  writes: RefreshWrite[];
+  /** Stored open or disputed findings that no longer apply. */
+  clearIds: string[];
+  /** New findings, and cleared ones that apply again. */
+  opened: number;
+  /** Resolved or written-off findings reopened because they got worse. */
+  reopened: number;
+};
+
+/**
+ * What a refresh changes, decided without I/O (refreshDiscrepancies applies it):
+ *
+ *   · a new finding is opened;
+ *   · a cleared one that applies again is reopened;
+ *   · an open or disputed one keeps its status and gets today's figures;
+ *   · a resolved or written-off one is left as the person decided, UNLESS the carrier now owes at
+ *     least `toleranceCents` more than when it was decided: then it reopens. A decision covers the
+ *     money it was made about, not money the carrier takes or withholds afterwards;
+ *   · an open or disputed one that no longer applies is cleared.
+ *
+ * Applying the same plan's result again changes nothing (refresh is idempotent).
+ */
+export function planRefresh(stored: StoredFinding[], findings: DiscrepancyFinding[], now: string, toleranceCents = RECONCILE_TOLERANCE_CENTS): RefreshPlan {
+  const byFingerprint = new Map(stored.map((row) => [row.fingerprint, row]));
+  const writes: RefreshWrite[] = [];
+  let opened = 0;
+  let reopened = 0;
+  for (const finding of findings) {
+    const row = byFingerprint.get(finding.fingerprint);
+    if (!row || row.status === "cleared") {
+      opened += 1;
+      writes.push({ finding, status: "open", statusChangedBy: null, statusChangedAt: row ? now : null });
+      continue;
+    }
+    if (row.status === "resolved" || row.status === "written_off") {
+      if (finding.owedCents < row.owedCents + toleranceCents) continue;
+      reopened += 1;
+      writes.push({ finding, status: "open", statusChangedBy: null, statusChangedAt: now });
+      continue;
+    }
+    writes.push({ finding, status: row.status, statusChangedBy: row.statusChangedBy, statusChangedAt: row.statusChangedAt });
+  }
+  const live = new Set(findings.map((finding) => finding.fingerprint));
+  const clearIds = stored.filter((row) => !live.has(row.fingerprint) && (row.status === "open" || row.status === "disputed")).map((row) => row.id);
+  return { writes, clearIds, opened, reopened };
 }
 
 /** The total owed, and the split by kind, over findings (or stored rows) still open or disputed. */

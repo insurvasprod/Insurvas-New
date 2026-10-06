@@ -1,3 +1,4 @@
+import { EMAIL_WRAPPER_STYLE } from "./brand.ts";
 import { sendEmail, type EmailDelivery } from "./transport.ts";
 
 /**
@@ -22,7 +23,7 @@ export async function sendTrialReminder(input: {
     text: input.text,
     // The reminder bodies are plain prose with paragraph breaks; wrapping them in the shared HTML
     // shell would mean maintaining the wording twice.
-    html: `<div style="font-family:Inter,Segoe UI,Arial,sans-serif;color:#1a1b1c;line-height:1.6;max-width:560px">${
+    html: `<div style="${EMAIL_WRAPPER_STYLE}">${
       input.text.split("\n\n").map((p) => `<p>${p.replaceAll("\n", "<br>")}</p>`).join("")
     }</div>`,
     templateKey: "subscription.trial_ending",

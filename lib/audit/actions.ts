@@ -226,6 +226,8 @@ export const AUDIT_ACTIONS = [
   "tenant.queue_sla_settings_updated",
   "tenant.agent_notification_settings_updated",
   "tenant.own_profile_updated",
+  "tenant.own_avatar_updated",
+  "tenant.own_avatar_removed",
   "tenant.workspace_switched",
   "tenant.lead_sla_warned",
   "tenant.lead_sla_escalated",
@@ -348,6 +350,8 @@ export const AUDIT_ACTIONS = [
   // LA-4.4 / 4.5 · discrepancies (20261002110000).
   "tenant.discrepancy_status_changed",
   "tenant.dispute_letter_generated",
+  // LA-4.5 follow-up · where a carrier's dispute letters go (20261007110000).
+  "tenant.carrier_commission_contact_saved",
   "state_disclosure.published",
   "state_disclosure.updated",
   "state_disclosure.withdrawn",
@@ -585,6 +589,8 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   "tenant.agent_notification_settings_updated":
     "Agent notification settings updated",
   "tenant.own_profile_updated": "Own profile updated",
+  "tenant.own_avatar_updated": "Profile picture updated",
+  "tenant.own_avatar_removed": "Profile picture removed",
   "tenant.workspace_switched": "Switched workspace",
   "tenant.lead_sla_warned": "Lead SLA warning fired",
   "tenant.lead_sla_escalated": "Lead SLA escalated",
@@ -682,6 +688,7 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   "tenant.commission_statement_reprocessed": "Carrier statement re-read from its stored file; the earlier import is voided and kept",
   "tenant.discrepancy_status_changed": "Commission discrepancy marked disputed, resolved, written off or reopened",
   "tenant.dispute_letter_generated": "Commission dispute letter prepared for a carrier",
+  "tenant.carrier_commission_contact_saved": "Carrier's commissions address saved for dispute letters",
   "state_disclosure.published": "Required call disclosure published for one or more states",
   "state_disclosure.updated": "Required call disclosure wording or effective date changed",
   "state_disclosure.withdrawn": "Required call disclosure withdrawn",

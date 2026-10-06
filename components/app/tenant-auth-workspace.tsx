@@ -504,7 +504,7 @@ export function TenantAuthWorkspace({
                     key={plan.id}
                     className={`flex w-full cursor-pointer items-center gap-3 rounded-lg px-3.5 py-3 text-left ${
                       checked
-                        ? "border-[1.5px] border-[var(--primary)] bg-[var(--soft-orange-surface)]"
+                        ? "border-[1.5px] border-[var(--primary)] bg-[var(--primary-soft)]"
                         : "border border-[var(--border-strong)] bg-card"
                     }`}
                   >

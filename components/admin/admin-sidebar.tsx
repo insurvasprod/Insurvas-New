@@ -86,7 +86,7 @@ const OPEN_GROUPS_KEY = "insurvas.admin.sidebar.openGroups";
 const DEFAULT_OPEN_GROUPS: string[] = [];
 
 const ACTIVE_STYLE = {
-  background: "var(--soft-orange-surface)",
+  background: "var(--primary-soft)",
   boxShadow: "inset 2px 0 0 var(--primary)",
 } as const;
 
@@ -94,7 +94,7 @@ type Props = { nodes: SidebarNode[]; adminName: string; roleLabel: string };
 
 /**
  * The staff rail. The same rail as the agent's (p-adm-home draws them one-for-one): 264px, 33px
- * items at 14px, 30px uppercase headings led by their arrow, one orange chip for the page you are
+ * items at 14px, 30px uppercase headings led by their arrow, one accent chip for the page you are
  * on, and a card at the foot. It stays on the product's one palette — the board's navy and blue are
  * the palette the design system replaced, not a staff identity.
  */
@@ -137,7 +137,7 @@ export function AdminSidebar({ nodes, adminName, roleLabel }: Props) {
         aria-current={active ? "page" : undefined}
         title={rail ? entry.label : undefined}
         // 8px radius, 14px label, 33px tall — the artboard's rail item. The active one is the
-        // only orange object on the column: a soft-orange chip with a 2px bar cut into its left
+        // only accent object on the column: a soft accent chip with a 2px bar cut into its left
         // edge, so "where am I" is answered by a shape rather than by a slightly bolder grey.
         className={`flex h-[33px] shrink-0 items-center gap-2 rounded-lg text-sm leading-normal tracking-[-0.02em] transition-all focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)] ${
           // Children sit flush with the headings, as the board draws them — no extra indent.
@@ -240,7 +240,7 @@ export function AdminSidebar({ nodes, adminName, roleLabel }: Props) {
                     className="block rounded-lg px-3 py-2 text-sm transition-colors hover:bg-muted"
                     style={{
                       fontWeight: 500,
-                      background: active ? "var(--soft-orange-surface)" : "transparent",
+                      background: active ? "var(--primary-soft)" : "transparent",
                       color: active ? "var(--accent-ink)" : undefined,
                     }}
                   >
@@ -255,9 +255,10 @@ export function AdminSidebar({ nodes, adminName, roleLabel }: Props) {
     });
   }
 
-  const brand = (
+  // The admin rail and drawer are always dark; the white phone bar follows the theme.
+  const brand = (tone?: "dark") => (
     <div className="flex items-center gap-2.5">
-      <InsurvasLogo size="sidebar" />
+      <InsurvasLogo size="sidebar" tone={tone} />
     </div>
   );
 
@@ -286,7 +287,7 @@ export function AdminSidebar({ nodes, adminName, roleLabel }: Props) {
         >
           <Menu className="size-5" aria-hidden="true" />
         </button>
-        {brand}
+        {brand()}
       </header>
 
       {mobileOpen && (
@@ -303,7 +304,7 @@ export function AdminSidebar({ nodes, adminName, roleLabel }: Props) {
             className="portal-agent-sidebar-mobile-drawer absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col overflow-y-auto"
           >
             <div className="portal-agent-sidebar-brand flex items-center justify-between">
-              {brand}
+              {brand("dark")}
               <button
                 type="button"
                 onClick={() => setMobileOpen(false)}
@@ -337,9 +338,9 @@ export function AdminSidebar({ nodes, adminName, roleLabel }: Props) {
           style={{ borderBottom: "1px solid var(--nav-line)" }}
         >
           {collapsed ? (
-            <InsurvasLogo size="compact" variant="symbol" alt="Insurvas staff" />
+            <InsurvasLogo size="compact" variant="symbol" tone="dark" alt="Insurvas staff" />
           ) : (
-            brand
+            brand("dark")
           )}
         </div>
 

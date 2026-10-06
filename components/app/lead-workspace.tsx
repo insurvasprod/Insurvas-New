@@ -11,9 +11,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageLoading } from "@/components/ui/page-loading";
-import { ErrorState, NoMatches, SectionLoading } from "@/components/ui/page-states";
+import { ErrorState, SectionLoading } from "@/components/ui/page-states";
 import { TableCard } from "@/components/ui/table-card";
-import { DataToolbar, FilterButton, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
+import { ClearFiltersButton, DataToolbar, FilterButton, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import type { TemplateField, TemplateRow } from "@/lib/templates/constants";
 import type { PipelineStage } from "@/lib/pipelines/types";
 import { pruneHiddenTemplateValues, templateFormFieldVisible } from "@/lib/templates/visibility";
@@ -27,7 +27,6 @@ type PageData = { template: { assignment: { template_version: number }; template
 type LeadDetail = { lead: Lead & { product_line: string; definition_version: number }; template: TemplateRow; queue: { status: string; owner_user_id: string | null; claimed_at: string | null; disposition: string | null } | null; partner: { name: string; partner_type: string } | null; stage: PipelineStage | null; submitter: { name: string } | null; owner: { name: string } | null; screening: { outcome: string | null; warning: string | null }; timeline: Array<{ id: string; label: string; at: string; actor: string; detail: string | null }>; readOnly: boolean };
 
 /** The combined view. A sentinel rather than a pipeline id, because it is not one. */
-const ALL = "all";
 /** Leads whose stage is archived or belongs to no stage on this board. */
 const UNMAPPED = "__unmapped";
 
@@ -113,10 +112,14 @@ function PipelineCard({ lead, selected, readOnly, now, money, late, onSelect, on
   );
 }
 
+/** Cards per board column before "Show more". */
+const BOARD_PAGE = 20;
+
 function PipelineBoard({ stages, leads, selectedId, readOnly, now, money, context, onSelect, onStageChange }: { stages: PipelineStage[]; leads: Lead[]; selectedId: string | null; readOnly: boolean; now: number; money: boolean; context: ViewContext | null; onSelect: (lead: Lead) => void; onStageChange: (lead: Lead, stage: string) => void }) {
   const [draggedId, setDraggedId] = useState<string | null>(null); const [dragOver, setDragOver] = useState<string | null>(null);
-  // A terminal "closed" column is history, not work: collapsed until asked for.
-  const [openTerminal, setOpenTerminal] = useState<Record<string, boolean>>({});
+  // A column draws BOARD_PAGE cards and pages on with "Show more": a board is scrolled down a column,
+  // so it grows in place rather than flipping pages, and a busy stage no longer draws every card at once.
+  const [shown, setShown] = useState<Record<string, number>>({});
   const activeStages = stages.filter((stage) => !stage.is_archived).sort((a, b) => a.position - b.position);
   const live = new Set(activeStages.map((stage) => stage.id));
   // A lead on an archived stage, or a stage this pipeline no longer has, still gets a column — it
@@ -127,7 +130,7 @@ function PipelineBoard({ stages, leads, selectedId, readOnly, now, money, contex
     ...(unmapped.length ? [{ id: UNMAPPED, name: "Unmapped", color: "var(--muted-foreground)", stage: null }] : []),
   ];
   return (
-    <div className="flex min-w-0 gap-3 overflow-x-auto pb-1.5" style={{ height: "max(480px, calc(100vh - 360px))" }}>
+    <div className="flex min-w-0 gap-3 overflow-x-auto pb-1.5" style={{ height: "max(480px, calc(100dvh - var(--top-bar-h) - 244px))" }}>
       {columns.map((column) => {
         const columnLeads = column.id === UNMAPPED ? unmapped : leads.filter((lead) => lead.stage_id === column.id);
         const premium = columnLeads.reduce((sum, lead) => sum + (lead.monthly_premium_cents ?? 0), 0);
@@ -136,12 +139,11 @@ function PipelineBoard({ stages, leads, selectedId, readOnly, now, money, contex
         const dropTarget = column.id !== UNMAPPED && !readOnly && (!context || enterable);
         const late = columnLeads.filter((lead) => isOverdue(lead, context, now)).length;
         const allowed = column.stage ? context?.stageRules[column.id]?.timeAllowedMinutes : null;
-        const collapsed = column.stage?.stage_type === "lost" && !openTerminal[column.id] && columnLeads.length > 0;
         return (
           <section
             key={column.id}
             aria-label={`${column.name}: ${columnLeads.length} ${columnLeads.length === 1 ? "lead" : "leads"}`}
-            className={cn("flex min-h-0 min-w-[220px] flex-1 basis-0 flex-col overflow-hidden rounded-lg border border-border bg-[var(--surface-alt)]", dragOver === column.id && "border-[var(--primary)] bg-[var(--soft-orange-surface)]")}
+            className={cn("flex min-h-0 min-w-[264px] flex-1 basis-0 flex-col overflow-hidden rounded-lg border border-border bg-[var(--surface-alt)]", dragOver === column.id && "border-[var(--primary)] bg-[var(--primary-soft)]")}
             onDragOver={(event) => { if (column.id === UNMAPPED || readOnly) return; event.preventDefault(); setDragOver(column.id); }}
             onDragLeave={() => setDragOver(null)}
             onDrop={(event) => { event.preventDefault(); setDragOver(null); const lead = leads.find((item) => item.id === draggedId); setDraggedId(null); if (!lead || lead.stage_id === column.id) return; if (!dropTarget) { notify.block(`No disposition lands on ${column.name}, so a lead cannot be moved there. An owner maps one under Settings › Dispositions.`); return; } onStageChange(lead, column.id); }}
@@ -156,9 +158,14 @@ function PipelineBoard({ stages, leads, selectedId, readOnly, now, money, contex
               </div>
             </header>
             <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-2.5">
-              {collapsed ? (
-                <Button type="button" variant="outline" size="sm" onClick={() => setOpenTerminal((state) => ({ ...state, [column.id]: true }))}>Show {columnLeads.length.toLocaleString()} closed</Button>
-              ) : columnLeads.map((lead) => <PipelineCard key={lead.id} lead={lead} selected={lead.id === selectedId} readOnly={readOnly} now={now} money={money} late={isOverdue(lead, context, now)} onSelect={() => onSelect(lead)} onDragStart={() => setDraggedId(lead.id)} />)}
+              {/* Closed columns show their leads like every other column — no "Show closed" click first. */}
+              {columnLeads.slice(0, shown[column.id] ?? BOARD_PAGE).map((lead) => <PipelineCard key={lead.id} lead={lead} selected={lead.id === selectedId} readOnly={readOnly} now={now} money={money} late={isOverdue(lead, context, now)} onSelect={() => onSelect(lead)} onDragStart={() => setDraggedId(lead.id)} />)}
+              {columnLeads.length > (shown[column.id] ?? BOARD_PAGE) && (
+                <div className="flex flex-col items-center gap-1.5 pt-1">
+                  <span className="text-xs tabular-nums text-muted-foreground">Showing {(shown[column.id] ?? BOARD_PAGE).toLocaleString()} of {columnLeads.length.toLocaleString()}</span>
+                  <Button type="button" variant="outline" size="sm" onClick={() => setShown((state) => ({ ...state, [column.id]: (state[column.id] ?? BOARD_PAGE) + BOARD_PAGE }))}>Show {Math.min(BOARD_PAGE, columnLeads.length - (shown[column.id] ?? BOARD_PAGE))} more</Button>
+                </div>
+              )}
               {columnLeads.length === 0 && <div className="lead-column-empty">{readOnly ? "No leads here" : column.stage && context && !enterable ? "No disposition lands here" : "Drop a lead here"}</div>}
             </div>
           </section>
@@ -214,23 +221,20 @@ export function LeadWorkspace() {
   // on screen — so they were counted in the filters and rendered nowhere. Choosing is now explicit,
   // and the board only ever shows the leads that belong to the pipeline being shown.
   const pipelines = useMemo(() => data?.pipelines ?? [], [data]);
-  // `all` is a view, not a pipeline. Every pipeline has its own stage vocabulary — five here with
-  // 12, 0, 2, 7 and 5 stages — so there is no honest single set of columns across them. Rather than
-  // invent one, All shows the combined list in the table and stacks a section per pipeline on the
-  // board. Everything downstream branches on `isAll` rather than on a fake pipeline object.
-  const isAll = pipelineId === ALL;
-  const activePipeline = useMemo(() => (isAll ? undefined : pipelines.find((item) => item.id === pipelineId) ?? pipelines.find((item) => item.partner_type === "marketing") ?? pipelines[0]), [pipelines, pipelineId, isAll]);
+  // One pipeline on screen at a time, chosen from the pipeline tabs above the list. Every pipeline has
+  // its own stages, so there is no honest single set of columns across them, and the old "All
+  // pipelines" view stacked one board per pipeline down a long scroll.
+  const activePipeline = useMemo(() => pipelines.find((item) => item.id === pipelineId) ?? pipelines.find((item) => item.partner_type === "marketing") ?? pipelines[0], [pipelines, pipelineId]);
   const allStages = useMemo(() => activePipeline?.stages ?? [], [activePipeline]);
-  // A lead is filed into exactly one pipeline, so the new-lead form needs one even in the All view,
-  // where no single pipeline is on screen. It falls back to the same default the board picks.
-  const formPipeline = useMemo(() => activePipeline ?? pipelines.find((item) => item.partner_type === "marketing") ?? pipelines[0], [activePipeline, pipelines]);
+  // A new lead is filed into the pipeline on screen.
+  const formPipeline = activePipeline;
   const formStages = useMemo(() => { const stages = formPipeline?.stages ?? []; const live = stages.filter((stage) => !stage.is_archived); return live.length ? live : stages; }, [formPipeline]);
-  const leadsInPipeline = useMemo(() => (data?.leads ?? []).filter((lead) => isAll || !activePipeline || lead.pipeline_id === activePipeline.id), [data, activePipeline, isAll]);
+  const leadsInPipeline = useMemo(() => (data?.leads ?? []).filter((lead) => !activePipeline || lead.pipeline_id === activePipeline.id), [data, activePipeline]);
   const countFor = useCallback((id: string) => (data?.leads ?? []).filter((lead) => lead.pipeline_id === id).length, [data]);
   // One lookup across every pipeline, so the table and stage filter can resolve a
   // stage id without knowing which board it came from.
   const stageIndex = useMemo(() => { const map = new Map<string, { stage: PipelineStage; pipelineName: string }>(); for (const pipeline of pipelines) for (const stage of pipeline.stages) map.set(stage.id, { stage, pipelineName: pipeline.name }); return map; }, [pipelines]);
-  const filterStages = useMemo(() => (isAll ? [...stageIndex.values()].filter((entry) => !entry.stage.is_archived) : allStages.filter((stage) => !stage.is_archived).map((stage) => ({ stage, pipelineName: "" }))), [isAll, stageIndex, allStages]);
+  const filterStages = useMemo(() => allStages.filter((stage) => !stage.is_archived).map((stage) => ({ stage, pipelineName: "" })), [allStages]);
   const isOwner = data?.role === "owner";
   // Scoped to the pipeline on screen, so the filter menus never offer a value that would return
   // nothing here.
@@ -272,7 +276,7 @@ export function LeadWorkspace() {
   const toggle = (lead: Lead) => setSelected((current) => (current?.id === lead.id ? null : lead));
   const selectedStages = selected ? pipelines.find((item) => item.id === selected.pipeline_id)?.stages ?? [] : [];
 
-  const stageLabel = (stageId: string) => { const entry = stageIndex.get(stageId); return entry ? (entry.pipelineName && isAll ? `${entry.pipelineName} · ${entry.stage.name}` : entry.stage.name) : "Unknown stage"; };
+  const stageLabel = (stageId: string) => stageIndex.get(stageId)?.stage.name ?? "Unknown stage";
   const filterChips: Array<{ key: string; label: string; clear: () => void }> = [
     ...(product ? [{ key: "product", label: product, clear: () => setProduct("") }] : []),
     ...(stageFilter ? [{ key: "stage", label: stageLabel(stageFilter), clear: () => setStageFilter("") }] : []),
@@ -299,10 +303,26 @@ export function LeadWorkspace() {
 
       <div className="lead-workspace-grid">
         <TableCard
-          className="min-w-0"
+          // Full height in every view: the card reaches the bottom of the window even when a view is short.
+          className="min-w-0 min-h-[calc(100dvh-var(--top-bar-h)-121px)]"
           toolbar={
-            // Enter in the search box searches (server side); the hidden submit is for screen readers
-            // that announce the form.
+            <div className="flex w-full flex-col gap-3">
+              {/* One pipeline per page: each is a tab with its lead count. */}
+              {pipelines.length > 0 && (
+                <div role="tablist" aria-label="Pipeline" className="-mx-4 -mt-3 flex overflow-x-auto overflow-y-hidden border-b border-border px-4">
+                  {pipelines.map((item) => {
+                    const active = item.id === activePipeline?.id;
+                    return (
+                      <button key={item.id} type="button" role="tab" aria-selected={active} onClick={() => selectPipeline(item.id)} className={cn("-mb-px inline-flex h-9 shrink-0 items-center gap-2 border-b-2 px-3 text-sm font-semibold tracking-[-0.01em] whitespace-nowrap", active ? "border-[var(--primary)] text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}>
+                        {item.name}
+                        <span className={cn("rounded-full px-1.5 text-xs tabular-nums", active ? "bg-[var(--primary-soft)] text-[var(--accent-ink)]" : "bg-[var(--surface-alt)] text-muted-foreground")}>{countFor(item.id).toLocaleString()}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            {/* Enter in the search box searches (server side); the hidden submit is for screen readers
+                that announce the form. */}
             <form onSubmit={applySearch} className="w-full">
               <DataToolbar
                 actions={
@@ -317,12 +337,6 @@ export function LeadWorkspace() {
                 }
               >
                 <ToolbarSearch value={search} onChange={setSearch} placeholder="Search name, phone, policy" />
-                {pipelines.length > 0 && (
-                  <select aria-label="Pipeline" className={toolbarControl} value={isAll ? ALL : activePipeline?.id ?? ""} onChange={(event) => selectPipeline(event.target.value)}>
-                    <option value={ALL}>All pipelines ({data.leads.length})</option>
-                    {pipelines.map((item) => <option key={item.id} value={item.id}>{item.name} ({countFor(item.id)})</option>)}
-                  </select>
-                )}
                 <FilterButton open={moreFilters} onClick={() => setMoreFilters((value) => !value)} count={activeFilters} />
                 {moreFilters && (
                   <>
@@ -339,17 +353,18 @@ export function LeadWorkspace() {
                     {chip.label}<X className="size-3" aria-hidden="true" />
                   </button>
                 ))}
-                {(activeFilters > 0 || query) && <Button type="button" variant="ghost" onClick={resetFilters}>Clear</Button>}
+                {(activeFilters > 0 || query) && <ClearFiltersButton onClick={resetFilters} />}
                 <button type="submit" className="sr-only">Search</button>
               </DataToolbar>
             </form>
+            </div>
           }
         >
           {/* The board's columns sit inset; Stages, Table and List render bare, edge to edge in the card. */}
           <div className={view === "board" ? "p-3" : undefined}>
             {view === "stages" && (
               <StagesView
-                pipelines={isAll ? pipelines : activePipeline ? [activePipeline] : []}
+                pipelines={activePipeline ? [activePipeline] : []}
                 leads={visibleLeads}
                 context={context}
                 isOwner={isOwner}
@@ -358,7 +373,7 @@ export function LeadWorkspace() {
             )}
             {view === "list" && (
               <ListView
-                pipelines={isAll ? pipelines : activePipeline ? [activePipeline] : []}
+                pipelines={activePipeline ? [activePipeline] : []}
                 leads={visibleLeads}
                 context={context}
                 now={now}
@@ -367,22 +382,7 @@ export function LeadWorkspace() {
               />
             )}
             {view === "board" ? (
-              isAll ? (
-                <div className="flex flex-col gap-6">
-                  {pipelines.filter((item) => visibleLeads.some((lead) => lead.pipeline_id === item.id)).map((item) => {
-                    const owned = visibleLeads.filter((lead) => lead.pipeline_id === item.id);
-                    return (
-                      <section key={item.id} className="flex flex-col gap-2">
-                        <header className="flex items-baseline gap-2"><h2 className="text-sm font-semibold">{item.name}</h2><span className="text-xs text-muted-foreground">{owned.length} {owned.length === 1 ? "lead" : "leads"}</span></header>
-                        <PipelineBoard stages={item.stages} leads={owned} selectedId={selected?.id ?? null} readOnly={data.readOnly} now={now} money={money} context={context} onSelect={toggle} onStageChange={updateStage} />
-                      </section>
-                    );
-                  })}
-                  {visibleLeads.length === 0 && <NoMatches noun="leads" onClear={resetFilters} />}
-                </div>
-              ) : (
-                <PipelineBoard stages={allStages} leads={visibleLeads} selectedId={selected?.id ?? null} readOnly={data.readOnly} now={now} money={money} context={context} onSelect={toggle} onStageChange={updateStage} />
-              )
+              <PipelineBoard stages={allStages} leads={visibleLeads} selectedId={selected?.id ?? null} readOnly={data.readOnly} now={now} money={money} context={context} onSelect={toggle} onStageChange={updateStage} />
             ) : view === "table" ? (
               <TableView
                 leads={visibleLeads}

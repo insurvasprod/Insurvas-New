@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { DataToolbar, FilterButton, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
+import { ClearFiltersButton, DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageLoading } from "@/components/ui/page-loading";
 import { EmptyState, ErrorState, NoMatches } from "@/components/ui/page-states";
@@ -15,6 +15,7 @@ import { defaultPartnerQualityPeriod, percentChange, percentOf, pointChange, scr
 import type { PartnerQualityMetric, PartnerQualityReport, PartnerQualityRow } from "@/lib/partnerQuality/types";
 import { cn } from "@/lib/utils";
 import { count, downloadCsv, MetricCell, metricLabel, paginate, Pager, partnerTypeLabel, percent, NO_COST_HINT, PeriodInputs, periodQuery, Prior, SortButton, useDrilldown, type Period } from "./partner-quality-parts";
+import { FILL_CARD, useFittingRows } from "./use-fitting-rows";
 
 type SortKey = "partner_name" | "sent" | "claimed" | "worked" | "submitted" | "screening_pass" | "duplicates" | "conversion_rate" | "disqualification_rate";
 
@@ -42,11 +43,12 @@ export function PartnerQualityWorkspace({ initialPeriod }: { initialPeriod?: Per
   const [error, setError] = useState("");
   const [sort, setSort] = useState<{ key: SortKey; direction: "asc" | "desc" }>({ key: "sent", direction: "desc" });
   const [search, setSearch] = useState("");
-  const [filtersOpen, setFiltersOpen] = useState(false);
   const [typeFilter, setTypeFilter] = useState("all");
   // LA-1.18: a partner with no leads in the period shows a zero row by default. Idle is a finding.
   const [hideEmpty, setHideEmpty] = useState(false);
   const [page, setPage] = useState(1);
+  // Header, strip, toolbar, column heads and pager above and below the rows; a row carries its "prev".
+  const pageSize = useFittingRows(410, 57);
   const drilldown = useDrilldown();
 
   const load = useCallback(async (next: Period) => {
@@ -102,8 +104,8 @@ export function PartnerQualityWorkspace({ initialPeriod }: { initialPeriod?: Per
 
   const needle = search.trim().toLowerCase();
   const shown = rows.filter((row) => (!hideEmpty || row.sent > 0) && (typeFilter === "all" || row.partner_type === typeFilter) && (!needle || row.partner_name.toLowerCase().includes(needle)));
-  const { current, rows: pageRows } = paginate(shown, page);
-  const activeFilters = (hideEmpty ? 1 : 0) + (typeFilter !== "all" ? 1 : 0);
+  const { current, rows: pageRows } = paginate(shown, page, pageSize);
+  const filtered = hideEmpty || typeFilter !== "all" || needle !== "";
   const clearFilters = () => { setSearch(""); setTypeFilter("all"); setHideEmpty(false); setPage(1); };
   const detailHref = (row: PartnerQualityRow) => `/app/partner-quality/${row.partner_id}?${periodQuery(active)}`;
   const open = (row: PartnerQualityRow, metric: PartnerQualityMetric) => drilldown.open({ label: `${row.partner_name} · ${metricLabel(metric)}`, partnerId: row.partner_id, metric, period: active });
@@ -114,59 +116,59 @@ export function PartnerQualityWorkspace({ initialPeriod }: { initialPeriod?: Per
       shown.map((row) => [row.partner_name, partnerTypeLabel(row.partner_type), row.sent, row.claimed, row.worked, row.submitted, screeningPassRate(row), row.duplicates, row.duplicate_rate, row.conversion_rate, row.disqualification_rate, row.previous.sent, row.previous.submitted, row.previous.conversion_rate]));
   }
 
-  const th = (key: SortKey, label: string, width: string, hint?: string) => <th className={cn(width, "text-right")} title={hint}><SortButton label={label} active={sort.key === key} onClick={() => toggleSort(key)} /></th>;
+  const th = (key: SortKey, label: string, hint?: string) => <th className="text-right" title={hint}><SortButton label={label} active={sort.key === key} onClick={() => toggleSort(key)} /></th>;
 
-  return <div className="m-stagger portal-partner-quality-page flex flex-col gap-6">
+  return <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
     <PageHeader title="Partner quality" description="Lead quality and conversion by partner, against the prior period." />
 
+    {/* Four figures an operator acts on (2026-10-06 redesign). Partners with leads rides on Leads
+        sent and the duplicate rate on Screening pass; both stay columns and drill-downs below. */}
     <StatStrip label="Partner quality totals">
-      <StatTile label="Leads sent" value={count(total.sent)} delta={sentChange == null ? undefined : { value: sentChange }} footnote={`prev ${count(previous.sent)}`} />
-      <StatTile label="Screening pass" value={total.sent ? percent(pass) : "—"} valueTone={pass != null && pass < 90 ? "warning" : undefined} delta={total.sent ? ptsDelta(pass, previousPass, "up") : undefined} footnote={`${count(screeningFlags(total.screening))} flagged`} />
+      <StatTile label="Leads sent" value={count(total.sent)} delta={sentChange == null ? undefined : { value: sentChange }} footnote={`prev ${count(previous.sent)} · ${count(withLeads)} of ${data.rows.length} partners sent (prev ${count(previousWithLeads)})`} />
+      <StatTile label="Screening pass" value={total.sent ? percent(pass) : "—"} valueTone={pass != null && pass < 90 ? "warning" : undefined} delta={total.sent ? ptsDelta(pass, previousPass, "up") : undefined} footnote={`${count(screeningFlags(total.screening))} flagged · ${total.sent ? percent(duplicateRate) : "—"} duplicates`} />
       <StatTile label="Conversion" value={total.sent ? percent(conversion) : "—"} delta={total.sent ? ptsDelta(conversion, percentOf(previous.submitted, previous.sent), "up") : undefined} footnote={`${count(total.submitted)} submitted`} />
-      <StatTile label="Duplicate rate" value={total.sent ? percent(duplicateRate) : "—"} delta={total.sent ? ptsDelta(duplicateRate, percentOf(previous.duplicates, previous.sent), "down") : undefined} footnote={`${count(total.duplicates)} leads`} />
       <StatTile label="DQ rate" value={total.sent ? percent(dqRate) : "—"} delta={total.sent ? ptsDelta(dqRate, percentOf(previous.disqualified, previous.sent), "down") : undefined} footnote={`${count(total.disqualified)} leads`} />
-      <StatTile label="Partners with leads" value={count(withLeads)} delta={{ value: withLeads - previousWithLeads, unit: "" }} footnote={`of ${data.rows.length}`} />
     </StatStrip>
 
     <TableCard
+      className={`${FILL_CARD} min-h-[calc(100dvh-var(--top-bar-h)-260px)]`}
       toolbar={<>
         <DataToolbar actions={<>
+          {filtered && <ClearFiltersButton onClick={clearFilters} />}
           <Button type="button" variant="outline" onClick={exportCsv} disabled={shown.length === 0}><Download aria-hidden="true" />Export</Button>
           <RefreshButton onClick={() => void load(period)} refreshing={loading} />
         </>}>
           <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Search partners" />
           <PeriodInputs value={active} onChange={changePeriod} />
-          <FilterButton open={filtersOpen} onClick={() => setFiltersOpen((value) => !value)} count={activeFilters} />
-        </DataToolbar>
-        {filtersOpen && <div className="flex w-full flex-wrap items-center gap-4">
           <select aria-label="Partner type" className={toolbarControl} value={typeFilter} onChange={(event) => { setTypeFilter(event.target.value); setPage(1); }}>
             <option value="all">All types</option>
             {PARTNER_TYPES.map((type) => <option key={type} value={type}>{PARTNER_TYPE_LABELS[type]}</option>)}
           </select>
-          <label className="inline-flex items-center gap-2 text-sm"><input type="checkbox" checked={hideEmpty} onChange={(event) => { setHideEmpty(event.target.checked); setPage(1); }} className="size-4 accent-[var(--primary)]" />Only partners with leads</label>
-          {activeFilters > 0 && <Button type="button" variant="ghost" onClick={clearFilters}>Clear filters</Button>}
-        </div>}
+          {/* LA-1.18: idle partners show by default; this narrows to the ones that sent something. */}
+          <Button type="button" variant="outline" aria-pressed={hideEmpty} className={cn(hideEmpty && "border-[var(--primary)] bg-[var(--primary-soft)]")} onClick={() => { setHideEmpty((value) => !value); setPage(1); }}>With leads only</Button>
+        </DataToolbar>
         {error && <p role="alert" className="w-full text-sm text-destructive">{error}</p>}
       </>}
-      footer={<Pager page={current} total={shown.length} noun="partners" onPage={setPage} suffix={`${SORT_LABEL[sort.key]} first`} />}
+      footer={<Pager page={current} total={shown.length} pageSize={pageSize} noun="partners" onPage={setPage} suffix={`${SORT_LABEL[sort.key]} first`} />}
     >
       {data.rows.length === 0
         ? <EmptyState title="No partners yet" hint="Partners appear here once they are added under Partners." />
         : shown.length === 0
           ? <NoMatches noun="partners" onClear={clearFilters} />
-          : <table className="portal-lead-table w-full min-w-[1160px] text-left text-sm">
+          : <table className="portal-lead-table w-full min-w-[1200px] text-left text-sm">
               <thead>
                 <tr>
                   <th><SortButton label="Partner" active={sort.key === "partner_name"} onClick={() => toggleSort("partner_name")} /></th>
-                  {th("sent", "Sent", "w-[96px]")}
-                  {th("claimed", "Claimed", "w-[100px]")}
-                  {th("worked", "Worked", "w-[96px]")}
-                  {th("submitted", "Submitted", "w-[110px]")}
-                  {th("screening_pass", "Screening pass", "w-[130px]")}
-                  {th("duplicates", "Duplicates", "w-[110px]")}
-                  {th("conversion_rate", "Conversion", "w-[116px]", NO_COST_HINT)}
-                  {th("disqualification_rate", "DQ %", "w-[90px]")}
-                  <th className="w-[84px] text-right"><span className="sr-only">View</span></th>
+                  <th>Type</th>
+                  {th("sent", "Sent")}
+                  {th("claimed", "Claimed")}
+                  {th("worked", "Worked")}
+                  {th("submitted", "Submitted")}
+                  {th("screening_pass", "Screening pass")}
+                  {th("duplicates", "Duplicates")}
+                  {th("conversion_rate", "Conversion", NO_COST_HINT)}
+                  {th("disqualification_rate", "DQ %")}
+                  <th className="text-right"><span className="sr-only">View</span></th>
                 </tr>
               </thead>
               <tbody className="m-seq">
@@ -174,11 +176,9 @@ export function PartnerQualityWorkspace({ initialPeriod }: { initialPeriod?: Per
                   const prior = row.previous;
                   const rowPass = screeningPassRate(row);
                   return (
-                    <tr key={row.partner_id} className={cn("m-row", index === 0 && current === 1 && sort.key === "sent" && sort.direction === "desc" && row.sent > 0 && "bg-[var(--soft-orange-surface)]")}>
-                      <td>
-                        <Link href={detailHref(row)} className="block font-semibold text-foreground underline-offset-4 hover:underline">{row.partner_name}</Link>
-                        <span className="block text-xs text-muted-foreground">{partnerTypeLabel(row.partner_type)}</span>
-                      </td>
+                    <tr key={row.partner_id} className={cn("m-row", index === 0 && current === 1 && sort.key === "sent" && sort.direction === "desc" && row.sent > 0 && "bg-[var(--primary-soft)]")}>
+                      <td className="max-w-[280px]"><Link href={detailHref(row)} title={row.partner_name} className="block truncate font-semibold text-foreground underline-offset-4 hover:underline">{row.partner_name}</Link></td>
+                      <td className="whitespace-nowrap text-muted-foreground">{partnerTypeLabel(row.partner_type)}</td>
                       <td className="text-right"><MetricCell label={`${row.partner_name}: sent ${row.sent}; open leads`} onClick={() => open(row, "sent")}>{count(row.sent)}</MetricCell><Prior label="Sent" value={count(prior.sent)} /></td>
                       <td className="text-right"><MetricCell label={`${row.partner_name}: claimed ${row.claimed}; open leads`} onClick={() => open(row, "claimed")}>{count(row.claimed)}</MetricCell><Prior label="Claimed" value={count(prior.claimed)} /></td>
                       <td className="text-right"><MetricCell label={`${row.partner_name}: worked ${row.worked}; open leads`} onClick={() => open(row, "worked")}>{count(row.worked)}</MetricCell><Prior label="Worked" value={count(prior.worked)} /></td>

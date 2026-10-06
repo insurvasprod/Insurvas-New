@@ -148,7 +148,7 @@ export function PartnerMarketAccessPanel({
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <CardTitle className="flex items-center gap-2 text-base">
-              <ShieldCheck className="size-4 text-[var(--color-blue)]" />
+              <ShieldCheck className="size-4 text-[var(--color-brand)]" />
               Carrier &amp; State access
             </CardTitle>
             <p className="mt-1 text-sm text-muted-foreground">
@@ -164,7 +164,7 @@ export function PartnerMarketAccessPanel({
         </div>
       </CardHeader>
       <CardContent className={cn("space-y-4 p-4", compact && "p-0 pt-3")}>
-        <div className="flex items-start gap-2 rounded-md border border-[var(--color-blue)]/20 bg-[var(--color-blue-faint)] p-3 text-xs text-[var(--color-accent-ink)]">
+        <div className="flex items-start gap-2 rounded-md border border-[var(--color-brand)]/20 bg-[var(--color-brand-faint)] p-3 text-xs text-[var(--color-accent-ink)]">
           <MapPin className="mt-0.5 size-4 shrink-0" />
           <p>
             Partners must select <strong>Product, Carrier, and State</strong>
@@ -204,7 +204,7 @@ export function PartnerMarketAccessPanel({
                               className={cn(
                                 "mx-auto flex size-8 cursor-pointer items-center justify-center rounded-md border transition-colors",
                                 checked
-                                  ? "border-[var(--color-orange)] bg-[var(--color-orange-faint)] text-[var(--color-orange)]"
+                                  ? "border-[var(--primary)] bg-[var(--primary-soft)] text-[var(--accent-ink)]"
                                   : "border-input hover:bg-muted/50",
                               )}
                               title={`${carrier.name} in ${state}`}

@@ -4,6 +4,7 @@ import { ChevronLeft } from "lucide-react";
 
 import { LeadListAssignDrawer } from "@/components/app/lead-list-assign-drawer";
 import { LeadListClaimButton } from "@/components/app/lead-list-claim-button";
+import { TabbedPanels } from "@/components/app/lead-ops-view-tabs";
 import { Button } from "@/components/ui/button";
 import { LinkArrow } from "@/components/ui/link-arrow";
 import { PageHeader } from "@/components/ui/page-header";
@@ -253,6 +254,108 @@ export function LeadListDetailView({
     `${money(d.totalSpendCents)} for ${count(d.recordsPurchased)} records${d.firstImportAt ? `, imported ${longDay(d.firstImportAt, timeZone)}` : ", nothing imported yet"}`,
   ].filter(Boolean).join(" · ");
 
+  const removalsCard = (
+    <TableCard
+      title={`Where the ${count(removed)} went`}
+      action={
+        claimableCents > 0 ? (
+          <Chip tone={windowOpen ? "good" : "neutral"}>
+            {money(claimableCents)} claimable
+            {d.returnDaysLeft != null && ` · ${windowOpen ? `${d.returnDaysLeft} ${d.returnDaysLeft === 1 ? "day" : "days"} left` : "window closed"}`}
+          </Chip>
+        ) : undefined
+      }
+      footer={
+        removed > 0 && d.costPerRecordCents != null && d.costPerUsableCents != null ? (
+          <span>
+            Each usable record cost <strong className="text-foreground">{perRecord(d.costPerUsableCents)}</strong>, not {perRecord(d.costPerRecordCents)}
+            {postCreditCents != null && d.claims.pendingCents > 0
+              ? <> · <strong className="text-foreground">{perRecord(postCreditCents)}</strong> if the {money(d.claims.pendingCents)} still claimable is credited</>
+              : null}
+          </span>
+        ) : undefined
+      }
+    >
+      <table className="portal-lead-table w-full min-w-[620px]! text-left text-sm">
+        <thead>
+          <tr>
+            <th>Removed at import</th>
+            <th className="w-[140px]">Outcome</th>
+            <th className="w-[74px] text-right">Rows</th>
+            <th className="w-[100px] text-right">Claimable</th>
+            <th className="w-[100px] text-right"><span className="sr-only">Claim</span></th>
+          </tr>
+        </thead>
+        <tbody className="m-seq">
+          {d.removals.map((row) => {
+            const ui = REMOVAL[row.reason];
+            return (
+              <tr key={row.reason} className="m-row">
+                <td>{ui.label}{row.rescrubRows > 0 && <span className="block text-xs text-[var(--muted)]">{count(row.rescrubRows)} found by a later re-scrub · not claimable</span>}</td>
+                <td><Chip tone={ui.tone}>{ui.chip}</Chip></td>
+                <td className="text-right tabular-nums">{count(row.rows)}</td>
+                <td className="text-right tabular-nums">{row.claimableCents == null ? "—" : money(row.claimableCents)}</td>
+                <td className="text-right">
+                  {canSeeMoney && row.claimableCents != null && row.claimableRows > 0 && windowOpen && (
+                    <LinkArrow href={`${exportHref}&reason=${row.reason}`} download aria-label={`Claim: download the ${row.claimableRows} ${ui.label} rows for the vendor`}>Claim</LinkArrow>
+                  )}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+        <tfoot>
+          <tr className="bg-[var(--surface-alt)] text-sm font-semibold text-foreground [&>td]:border-t [&>td]:border-[var(--border-strong)] [&>td]:px-3 [&>td]:py-2.5">
+            <td>{count(d.recordsUsable)} usable + {count(removed)} removed</td>
+            <td />
+            <td className="text-right tabular-nums">{count(d.recordsUsable + removed)}</td>
+            <td className="text-right tabular-nums">{money(claimableCents)}</td>
+            <td />
+          </tr>
+        </tfoot>
+      </table>
+    </TableCard>
+  );
+
+  const mappingCard = (
+    <TableCard
+      title="Column mapping"
+      action={
+        <>
+          {d.mapping.saved && <Chip tone="good">Saved for {d.vendorName}</Chip>}
+          <Button asChild type="button" variant="outline">
+            <Link href="/app/import">Edit mapping</Link>
+          </Button>
+        </>
+      }
+    >
+      {d.mapping.rows.length > 0 ? (
+        <table className="portal-lead-table w-full min-w-[620px]! text-left text-sm">
+          <thead>
+            <tr>
+              <th className="w-[190px]">Their header</th>
+              <th>Our field</th>
+              <th className="w-[200px]">Sample</th>
+              <th className="w-[110px]"><span className="sr-only">Status</span></th>
+            </tr>
+          </thead>
+          <tbody className="m-seq">
+            {d.mapping.rows.map((row) => (
+              <tr key={row.header} className="m-row">
+                <td>{row.header}</td>
+                <td>{row.fieldLabel ?? "— not mapped"}</td>
+                <td className="max-w-[200px] truncate" title={row.sample || undefined}>{row.sample || <span className="text-muted-foreground">—</span>}</td>
+                <td>{row.field ? <Chip tone="good" dot>Remembered</Chip> : <Chip tone="neutral" dot>Ignored</Chip>}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : (
+        <EmptyState title={`No mapping saved for ${d.vendorName}`} hint="Save one on the import screen and later files from this vendor map themselves." />
+      )}
+    </TableCard>
+  );
+
   return (
     <div className="m-stagger flex flex-col gap-6">
       <Link
@@ -326,109 +429,21 @@ export function LeadListDetailView({
         />
       </StatStrip>
 
+      {/* 2026-10-06 redesign: the three long sections are tabs, one at a time; health and consent
+          stay beside them, always in view. */}
       <div className="flex flex-col gap-6 xl:flex-row xl:items-start">
-        <div className="flex min-w-0 flex-grow flex-col gap-6">
-          <TableCard
-            title={`Where the ${count(removed)} went`}
-            action={
-              claimableCents > 0 ? (
-                <Chip tone={windowOpen ? "good" : "neutral"}>
-                  {money(claimableCents)} claimable
-                  {d.returnDaysLeft != null && ` · ${windowOpen ? `${d.returnDaysLeft} ${d.returnDaysLeft === 1 ? "day" : "days"} left` : "window closed"}`}
-                </Chip>
-              ) : undefined
-            }
-            footer={
-              removed > 0 && d.costPerRecordCents != null && d.costPerUsableCents != null ? (
-                <span>
-                  Each usable record cost <strong className="text-foreground">{perRecord(d.costPerUsableCents)}</strong>, not {perRecord(d.costPerRecordCents)}
-                  {postCreditCents != null && d.claims.pendingCents > 0
-                    ? <> · <strong className="text-foreground">{perRecord(postCreditCents)}</strong> if the {money(d.claims.pendingCents)} still claimable is credited</>
-                    : null}
-                </span>
-              ) : undefined
-            }
-          >
-            <table className="portal-lead-table w-full min-w-[620px]! text-left text-sm">
-              <thead>
-                <tr>
-                  <th>Removed at import</th>
-                  <th className="w-[140px]">Outcome</th>
-                  <th className="w-[74px] text-right">Rows</th>
-                  <th className="w-[100px] text-right">Claimable</th>
-                  <th className="w-[100px] text-right"><span className="sr-only">Claim</span></th>
-                </tr>
-              </thead>
-              <tbody className="m-seq">
-                {d.removals.map((row) => {
-                  const ui = REMOVAL[row.reason];
-                  return (
-                    <tr key={row.reason} className="m-row">
-                      <td>{ui.label}{row.rescrubRows > 0 && <span className="block text-[12px] text-[var(--muted)]">{count(row.rescrubRows)} found by a later re-scrub · not claimable</span>}</td>
-                      <td><Chip tone={ui.tone}>{ui.chip}</Chip></td>
-                      <td className="text-right tabular-nums">{count(row.rows)}</td>
-                      <td className="text-right tabular-nums">{row.claimableCents == null ? "—" : money(row.claimableCents)}</td>
-                      <td className="text-right">
-                        {canSeeMoney && row.claimableCents != null && row.claimableRows > 0 && windowOpen && (
-                          <LinkArrow href={`${exportHref}&reason=${row.reason}`} download aria-label={`Claim: download the ${row.claimableRows} ${ui.label} rows for the vendor`}>Claim</LinkArrow>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-              <tfoot>
-                <tr className="bg-[var(--surface-alt)] text-sm font-semibold text-foreground [&>td]:border-t [&>td]:border-[var(--border-strong)] [&>td]:px-3 [&>td]:py-2.5">
-                  <td>{count(d.recordsUsable)} usable + {count(removed)} removed</td>
-                  <td />
-                  <td className="text-right tabular-nums">{count(d.recordsUsable + removed)}</td>
-                  <td className="text-right tabular-nums">{money(claimableCents)}</td>
-                  <td />
-                </tr>
-              </tfoot>
-            </table>
-          </TableCard>
-
-          {d.poolBlockers && d.poolBlockers.total > 0 && <PoolBlockersCard pool={d.poolBlockers} />}
-
-          <TableCard
-            title="Column mapping"
-            action={
-              <>
-                {d.mapping.saved && <Chip tone="good">Saved for {d.vendorName}</Chip>}
-                <Button asChild type="button" variant="outline">
-                  <Link href="/app/import">Edit mapping</Link>
-                </Button>
-              </>
-            }
-          >
-            {d.mapping.rows.length > 0 ? (
-              <table className="portal-lead-table w-full min-w-[620px]! table-fixed text-left text-sm">
-                <thead>
-                  <tr>
-                    <th className="w-[190px]">Their header</th>
-                    <th>Our field</th>
-                    <th className="w-[200px]">Sample</th>
-                    <th className="w-[110px]"><span className="sr-only">Status</span></th>
-                  </tr>
-                </thead>
-                <tbody className="m-seq">
-                  {d.mapping.rows.map((row) => (
-                    <tr key={row.header} className="m-row">
-                      <td>{row.header}</td>
-                      <td>{row.fieldLabel ?? "— not mapped"}</td>
-                      <td className="max-w-[200px] truncate">{row.sample || <span className="text-muted-foreground">—</span>}</td>
-                      <td>{row.field ? <Chip tone="good" dot>Remembered</Chip> : <Chip tone="neutral" dot>Ignored</Chip>}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            ) : (
-              <EmptyState title={`No mapping saved for ${d.vendorName}`} hint="Save one on the import screen and later files from this vendor map themselves." />
-            )}
-          </TableCard>
+        <div className="min-w-0 flex-grow">
+          <TabbedPanels
+            label="List sections"
+            tabs={[
+              { key: "removals", label: "Removed at import", count: removed, panel: removalsCard },
+              ...(d.poolBlockers && d.poolBlockers.total > 0
+                ? [{ key: "pool", label: "Not being served", count: d.poolBlockers.total, panel: <PoolBlockersCard pool={d.poolBlockers} /> }]
+                : []),
+              { key: "mapping", label: "Column mapping", count: d.mapping.rows.length, panel: mappingCard },
+            ]}
+          />
         </div>
-
         <div className="flex w-full shrink-0 flex-col gap-6 xl:w-[420px]">
           <TableCard title="List health">
             <div className="px-4 pb-1.5">

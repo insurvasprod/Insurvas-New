@@ -74,7 +74,7 @@ export function LandingTour() {
                   className={`relative overflow-hidden rounded-xl border px-4 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${selected ? "border-[var(--primary)] bg-[color-mix(in_srgb,var(--primary)_8%,var(--card))]" : "border-border bg-card hover:border-[var(--border-strong)]"}`}
                 >
                   <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
-                    <Icon className={`size-4 ${selected ? "text-[var(--primary)]" : "text-muted-foreground"}`} aria-hidden="true" />
+                    <Icon className={`size-4 ${selected ? "text-[var(--accent-ink)]" : "text-muted-foreground"}`} aria-hidden="true" />
                     {item.label}
                   </span>
                   {/* The autoplay clock: a bar that fills across the selected tab. */}

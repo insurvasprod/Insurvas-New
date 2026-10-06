@@ -13,6 +13,7 @@ import { ApplicationError, db, isMissingSchema, rows, SchemaPendingError } from 
 import { attemptHead, fail, type Actor } from "./requirements";
 import { getCaseView } from "./service";
 import type { AttemptView, CaseView } from "./types";
+import { EMAIL_WRAPPER_STYLE } from "@/lib/email/brand";
 
 /**
  * LA-3.20 welcome pack: on submit, a PDF of what the client agreed to — carrier, amount, draft day,
@@ -278,7 +279,7 @@ async function claim(tenantId: string, row: PackRow, reissue: boolean) {
 }
 
 function htmlOf(body: string) {
-  return `<div style="font-family:Inter,Segoe UI,Arial,sans-serif;color:#1a1b1c;line-height:1.6;max-width:560px">${escapeHtml(body).split("\n").map((l) => (l ? `<p style="margin:0 0 8px">${l}</p>` : "")).join("")}</div>`;
+  return `<div style="${EMAIL_WRAPPER_STYLE}">${escapeHtml(body).split("\n").map((l) => (l ? `<p style="margin:0 0 8px">${l}</p>` : "")).join("")}</div>`;
 }
 
 async function deliver(actor: Actor, ctx: Awaited<ReturnType<typeof context>>, row: PackRow, facts: WelcomeFacts, letter: { subject: string; body: string }, opts: { explicit: boolean; reissue: boolean }): Promise<Delivery> {

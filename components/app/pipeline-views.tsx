@@ -297,7 +297,7 @@ export function TableView({
       <div className="flex min-h-[3.25rem] flex-wrap items-center gap-2 border-b border-border px-4 py-2">
         <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Saved views">
           {views.map(([key, label]) => (
-            <button key={key} type="button" aria-pressed={saved === key} onClick={() => { setSaved(key); setPage(1); }} disabled={key === "overdue" && !context?.schemaReady} title={key === "overdue" && !context?.schemaReady ? "Needs time allowed per stage (database update 20260925100000)" : undefined} className={cn("inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs font-semibold disabled:opacity-50", saved === key ? "border-[var(--primary)] bg-[var(--soft-orange-surface)] text-[var(--accent-ink)]" : "border-border bg-card text-[var(--body)]")}>
+            <button key={key} type="button" aria-pressed={saved === key} onClick={() => { setSaved(key); setPage(1); }} disabled={key === "overdue" && !context?.schemaReady} title={key === "overdue" && !context?.schemaReady ? "Needs time allowed per stage (database update 20260925100000)" : undefined} className={cn("inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs font-semibold disabled:opacity-50", saved === key ? "border-[var(--primary)] bg-[var(--primary-soft)] text-[var(--accent-ink)]" : "border-border bg-card text-[var(--body)]")}>
               {label}<span className="tabular-nums opacity-70">{counts[key].toLocaleString()}</span>
             </button>
           ))}
@@ -333,7 +333,7 @@ export function TableView({
                 const stage = stageName(lead.stage_id);
                 const late = isOverdue(lead, context, now);
                 return (
-                  <tr key={lead.id} className={cn("m-row", selected.has(lead.id) && "bg-[var(--soft-orange-surface)]")}>
+                  <tr key={lead.id} className={cn("m-row", selected.has(lead.id) && "bg-[var(--primary-soft)]")}>
                     <td><input type="checkbox" aria-label={`Select ${leadName(lead)}`} checked={selected.has(lead.id)} onChange={() => toggle(lead.id)} className="size-4 accent-[var(--primary)]" /></td>
                     <td><button type="button" className="font-semibold text-foreground underline-offset-4 hover:underline" onClick={() => onOpen(lead)}>{leadName(lead)}</button></td>
                     <td className="text-[var(--body)]">{lead.submitter_name ?? "Workspace"}</td>
@@ -367,6 +367,9 @@ export function TableView({
 
 // ── List ─────────────────────────────────────────────────────────────────────────────────────
 
+/** Leads per page inside one List group. */
+const LIST_GROUP_PAGE = 10;
+
 export function ListView({
   pipelines, leads, context, now, readOnly, onMove,
 }: {
@@ -380,6 +383,8 @@ export function ListView({
   const [groupBy, setGroupBy] = useState<"stage" | "owner">("stage");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  // Each group pages on its own, so a long stage does not push the others off the screen.
+  const [groupPages, setGroupPages] = useState<Record<string, number>>({});
   const [history, setHistory] = useState<{ leadId: string; events: StageEvent[] | null; error: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const stagesById = useMemo(() => new Map(pipelines.flatMap((pipeline) => pipeline.stages.map((stage) => [stage.id, { stage, pipeline }] as const))), [pipelines]);
@@ -433,18 +438,20 @@ export function ListView({
       <div className="flex flex-col xl:flex-row xl:items-start">
         <section aria-label="Leads" className="flex min-w-0 flex-col xl:w-[60%] xl:self-stretch xl:border-r xl:border-border">
           {groups.map((group) => {
-            const open = expanded[group.id] ?? !group.terminal;
+            // Every group starts open, closed stages included; the header still folds one away.
+            const open = expanded[group.id] ?? true;
+            const page = paginate(group.items, groupPages[group.id] ?? 1, LIST_GROUP_PAGE);
             return (
               <div key={group.id}>
                 <button type="button" onClick={() => setExpanded((state) => ({ ...state, [group.id]: !open }))} aria-expanded={open} className="flex w-full items-center justify-between gap-3 border-t border-border bg-[var(--surface-alt)] px-4 py-1.5 text-left first:border-t-0">
                   <span className="flex items-center gap-2"><span className="size-1.5 rounded-full" style={{ background: group.color }} aria-hidden="true" /><span className="text-xs font-semibold">{group.name}</span><span className="text-xs text-muted-foreground tabular-nums">{group.items.length} {group.items.length === 1 ? "lead" : "leads"}</span></span>
                   <span className="text-xs text-muted-foreground">{group.rule}{open ? "" : " · show"}</span>
                 </button>
-                {open && group.items.map((lead) => {
+                {open && page.rows.map((lead) => {
                   const active = lead.id === selectedId;
                   const late = isOverdue(lead, context, now);
                   return (
-                    <button key={lead.id} type="button" onClick={() => setSelectedId(active ? null : lead.id)} aria-pressed={active} className={cn("flex w-full items-center gap-2.5 border-t border-border px-4 py-2 text-left", active ? "bg-[var(--soft-orange-surface)] shadow-[inset_3px_0_0_var(--primary)]" : "bg-card hover:bg-[var(--surface-alt)]")}>
+                    <button key={lead.id} type="button" onClick={() => setSelectedId(active ? null : lead.id)} aria-pressed={active} className={cn("flex w-full items-center gap-2.5 border-t border-border px-4 py-2 text-left", active ? "bg-[var(--primary-soft)] shadow-[inset_3px_0_0_var(--primary)]" : "bg-card hover:bg-[var(--surface-alt)]")}>
                       <span className={cn("inline-flex size-[26px] shrink-0 items-center justify-center rounded-full text-[11px] font-bold", active ? "bg-[var(--primary)] text-[var(--primary-foreground)]" : "bg-[var(--surface-alt)] text-[var(--body)]")}>{initials(leadName(lead))}</span>
                       <span className="min-w-0 flex-grow">
                         <span className="block truncate text-sm font-semibold">{leadName(lead)}</span>
@@ -458,6 +465,11 @@ export function ListView({
                     </button>
                   );
                 })}
+                {open && page.pages > 1 && (
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border bg-[var(--canvas)] px-4 py-2 text-xs text-muted-foreground">
+                    <Pager page={page.current} total={group.items.length} pageSize={LIST_GROUP_PAGE} noun="leads" onPage={(next) => setGroupPages((state) => ({ ...state, [group.id]: next }))} />
+                  </div>
+                )}
               </div>
             );
           })}
@@ -467,7 +479,7 @@ export function ListView({
         <section aria-label="Selected lead" className="flex min-w-0 flex-grow flex-col border-t border-border xl:border-t-0">
           {selected ? (
             <>
-              <div className="border-b border-border bg-[var(--soft-orange-surface)] px-4 py-3">
+              <div className="border-b border-border bg-[var(--primary-soft)] px-4 py-3">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="truncate text-base font-semibold">{leadName(selected)}</p>

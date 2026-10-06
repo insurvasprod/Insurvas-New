@@ -54,6 +54,18 @@ spend — **do not merge those two pages.**
 - Tile grid from `visibleDashboardTiles(availableFeatures, role)`, filtered by feature **and** role.
 - Tiles come from the registry. **Do not hard-code a tile in the page.** The registry is the
   documented extension point — "modules register data here; the dashboard renderer does not change".
+- **"Owed to you" (`book.owed`, LA-4.6; owner and bookkeeper, `discrepancy_report`).** It is the
+  activation figure and opens `/app/discrepancies`. Its value is the page's total to the cent
+  (`statementMoney` over the open and disputed findings: one read, no recompute). Its caption is the
+  number of items, and its detail is the split ("4 never paid, 14 paid short, …"). It never shows a
+  $0 that nothing checked:
+  - "—" with "import a statement" before any statement stands;
+  - "—" with "review your statement" while statements stand but none is reviewed and nothing was
+    found;
+  - "$0.00" only when reviewed statements agree with the contract.
+- **Setup checklist, statement step:** "Upload a carrier statement" opens `/app/statements?import=1`
+  (the import dialog) and is done once any non-voided statement stands, whatever the onboarding
+  state.
 
 ### Fix while you are here — D-10 and D-11, both Sev A/B
 The registry has **two** tiles and both are owner-only. Every non-owner gets an empty grid and this:
@@ -1195,102 +1207,465 @@ and a relative timestamp.
 
 ## 22. Policies — `/app/policies`
 
-**Files:** `app/app/(shell)/policies/page.tsx` (23), `components/app/policies-workspace.tsx` (107)
-**Mockup:** `22-agent-policies.png` — authoritative
-**Gate:** `book_of_business` · `owner`, `producer`, `bookkeeper` · read-only badge when applicable
-**Data:** `GET /api/app/policies`, `POST /api/app/policies`
+> Rewritten 2026-10-06 (LA-4.11) to match the built page. The 2026-09-18 prompt described guidance
+> cards and a "Ready for your first policy?" strip, which UI-CONSISTENCY §3 removed.
 
-**Purpose:** the book of business.
+**Files:** `app/app/(shell)/policies/page.tsx`, `components/app/policies-workspace.tsx`
+
+**Mockup:** `22-agent-policies.png`, read through [UI-CONSISTENCY.md](UI-CONSISTENCY.md), which wins where they differ.
+
+**Gate:**
+- feature `book_of_business`;
+- owner, producer and bookkeeper.
+- Read-only: Add and Import are disabled, with one warning line. Download template stays.
+
+**Data:** `GET` / `POST` / `PATCH /api/app/policies`. A create, import or edit recomputes the discrepancies after the response (LA-4.5).
+
+**Purpose:** the book of business. Every other money screen multiplies it by the carrier library.
 
 ### Must do
-- Summary: active policies, annual premium, carriers, renewals due.
-- Table with search and a status filter.
-- Add policy manually.
-- Import policy CSV; download the CSV template.
-- **A genuinely good empty state — keep it.** "No policies yet", one line, and three routes out
-  (Import CSV, Add manually, Download template). This is the model for every other empty state in
-  the product.
-- Guidance cards: what appears here, import checklist, visibility & controls by role.
-- Read-only shows the badge and disables writes.
-
-### Fix while you are here
-- **D-01:** eyebrow is `22 / Licensed agent`. Should be `Book of Business`.
-
-### Controls
-| Control | Destination / effect |
-|---|---|
-| Add policy / Add a policy manually | `POST /api/app/policies` |
-| Import policies / Import CSV / Import policy CSV | `POST` with parsed rows |
-| Download CSV template | static template |
-| Search / status filter | local or re-fetch |
-| Cancel / Close | dismisses the mode |
-| Try again | re-fetch |
-
-**Note:** three buttons currently open the same import mode ("Import policies", "Import CSV",
-"Import policy CSV"). Reduce to one label used consistently — "Import policies" in the header,
-"Import policy CSV" in the empty state is acceptable; three names for one action is not.
-
-### Layout
-`max-w-7xl`. Four metric cards with tinted icon tiles. Table on a panel. Three guidance cards at
-`lg:grid-cols-3`. A closing "Ready for your first policy?" strip.
-
-The guidance cards are the right idea but must not outweigh the data — once policies exist, they
-belong below the fold or behind a disclosure.
+- **`PageHeader` "Policies".** Its actions are Download CSV template, Add policy, and Import policies (primary, last).
+- **One `StatStrip`:**
+  - Active policies (across N carriers);
+  - Annual premium (in force);
+  - Carriers (with an active policy);
+  - Renewals due (next 30 days; warning tone when any).
+- **One `TableCard`:**
+  - search and the status filter in its `DataToolbar`;
+  - the insured's name links to `/app/policies/[id]` (§23e);
+  - `Pager` in the footer.
+- **States:**
+  - loading is `SectionLoading`;
+  - an error is `ErrorState` with Try again, never "No policies yet";
+  - empty is `EmptyState` "No policies yet · Import a carrier file or add a policy by hand."
+- **Import** reads a CSV against the template and shows its errors before anything is saved. **Add** is one form.
+- The lapse date of a lapsed or cancelled policy is `status_changed_at` (LA-4.7), which only a change of status moves.
 
 ### Must not
 - Show `$0` annual premium when the fetch failed.
-- Keep the guidance cards above the table once the book is populated.
 - Offer a delete. A policy is a record.
+- Put explanatory cards around the table.
 
 ---
 
 ## 23. Commission ledger — `/app/ledger`
 
-**File:** `app/app/(shell)/ledger/page.tsx` (93) — all inline, no workspace component
-**Mockup:** `18-agent-commission-ledger.png` — authoritative
-**Gate:** `commission_ledger` · `owner`, `producer`, `bookkeeper`
-**Data:** none. **This page has no data source.**
+> Rewritten 2026-10-06 (LA-4.11). The 2026-09-18 prompt said "this page has no data source" and
+> kept Import statement disabled. Since LA-0.7 and LA-4 it is the comparison the whole module rests on.
 
-**Purpose:** trace each commission from policy or statement to the amount recorded.
+**Files:** `app/app/(shell)/ledger/page.tsx`, `components/app/ledger-statement-sections.tsx`
 
-**Read this before designing:** the page is entirely static. Four metrics hard-coded to `$0`/`0`, an
-empty state, and three guidance cards. Statement ingestion does not exist, so three buttons are
-permanently `disabled` with the honest title "Carrier statement ingestion is not available yet".
+**Mockup:** `18-agent-commission-ledger.png`, read through [UI-CONSISTENCY.md](UI-CONSISTENCY.md).
 
-That is **correct behaviour** — a disabled control with a stated reason, the
-`void-invoice-dialog` pattern. Do not "fix" it by making the buttons look active.
+**Gate:**
+- feature `commission_ledger`;
+- owner, producer (their own policies only) and bookkeeper;
+- read-only: one warning line, and every view stays readable.
+
+**Data:** `GET /api/app/ledger`, which returns entries, totals, gaps, `policiesRead`, and the statement ledger with its reconciliation.
+
+**Purpose:** trace each commission from the policy or the statement to the amount recorded, in two halves that are never mixed:
+- **Reported:** accepted statement lines.
+- **Expected:** the book times the carrier library's schedules and advance rules.
 
 ### Must do
-- Keep the four metric cards showing `0`/`$0` **only because the true value is zero** (no ingestion
-  means no entries). The moment a data source exists, unmeasured values must become `—`.
-- Keep the disabled buttons disabled, with their `title` explanations intact.
-- "Ledger settings" links to `/app/settings` for owners and is disabled with an explanation for
-  others — an owner-only link rendered as an enabled control for a producer would 403.
-- Keep the three guidance cards: how the ledger works (3 steps), audit trail (what each entry will
-  retain), supported source data.
-- Keep the read-only note when the account is suspended.
-- **Keep "Nothing is recorded automatically without a source."** It is the page's whole promise.
+- **`PageHeader` "Commission ledger".** Statements and Import statement appear as actions while the ledger is empty.
+- **One `StatStrip` over REPORTED money only.** "Nothing is recorded automatically without a source":
+  - Entries (from N statements);
+  - Gross commission;
+  - Advances;
+  - Chargebacks (danger tone when any).
+- **One-line status rows when they apply:**
+  - read-only;
+  - import blocked (with the reason);
+  - "N statement lines are waiting for someone to accept a match · Review in Statements".
+- **Tabs, one at a time:**
+  - **Expected against reported:** per policy, Agrees / Paid short / Paid over / No expected figure, within the $1 tolerance;
+  - **Reported by carriers:** each accepted line, with who accepted it and how it was matched;
+  - **Expected from your book:** each computed entry, with its schedule rate.
+- **Gaps.** A policy the library cannot price is listed with its reason, never guessed at.
+- **The book is read whole,** paged past PostgREST's 1,000-row cap (LA-4.7, `readPaged`).
+
+### Must not
+- Invent a commission figure, or count an expected entry as recorded.
+- Mix reported and expected money in one figure.
+- Show `$0` when the honest answer is "could not be read".
+
+---
+
+## 23a. Statements and the import — `/app/statements` · LA-4.1–4.3
+
+> Added 2026-10-06. LA-4 built carrier statement ingestion, so §23's "ingestion does not exist"
+> is out of date. §23 is rewritten when the ledger is next touched.
+
+**Files:**
+- `app/app/(shell)/statements/page.tsx`
+- `components/app/statements-table.tsx`, `unmatched-lines-table.tsx`
+- `components/app/statement-import.tsx` (the dialog)
+- `components/app/book-of-business-views.tsx` (`ViewTabs`)
+
+**Mockup:** NONE — design from [UI-CONSISTENCY.md](UI-CONSISTENCY.md) and [BRAND.md](BRAND.md).
+
+**Gate:**
+- feature `statement_ingestion`;
+- roles owner and bookkeeper (`statements.view`); others get `RoleGateNotice`;
+- read-only: every list stays readable, and Import is disabled with "Importing is paused while the account is read-only."
+
+**Data:**
+- `GET /api/app/statements`
+- `POST /api/app/statements/preview` (JSON, writes nothing)
+- `POST /api/app/statements` (multipart: the file itself)
+- `GET /api/app/statements/[id]/file` (60-second link)
+- `GET`/`POST /api/app/statements/unmatched`
+
+**Purpose:** get a carrier's statement in, exactly as the carrier sent it, and show what still waits for a person.
+
+### Must do
+- **List.** Every statement, newest first. Voided ones stay listed, marked voided. A statement is never deleted.
+- **Two views:**
+  - "Statements"
+  - "Unmatched lines" (`?view=unmatched`), the queue across all statements
+
+  Both are `ViewTabs` with counts, on one row with the page actions (Commission ledger, Import statement), as on the Agent Floor. When there are no statements, the actions sit in the `PageHeader`.
+- **One `StatStrip`:**
+  - Statements (footnote: N voided)
+  - To review
+  - Lines waiting
+  - Accepted (posted to the ledger)
+- **Import dialog, three steps:**
+  1. File, carrier, period.
+     - CSV, Excel (.xlsx) or PDF, up to 4 MB.
+     - The file is checked by name and first bytes, and an unreadable one gets a sentence the person can act on.
+     - For Excel, show the sheet that will be read: the first visible one.
+     - The browser hashes the original file (SHA-256) here.
+  2. Columns.
+     - Use the carrier's remembered mapping if it fits; otherwise guess from the headers.
+     - Policy number and amount are required. Premium and rate are optional.
+  3. Preview.
+     - The `StatStrip` (Lines, Proposed matches, No match yet, Could not read) and the first 25 lines, unreadable ones first.
+     - A file already imported for this carrier and period, by the original file's hash, shows the duplicate notice and disables Import.
+- **PDF.** Steps 2 and 3 are skipped. The PDF is stored and opens on the statement for typing its lines (LA-4.2). No AI reads it.
+- **Import sends the file itself.** The server keeps the original byte for byte, reads it the same way, and opens the statement's review screen.
+- **Failures:** a file that cannot be stored means nothing is imported, and the person is told to try again. A failed import leaves no statement and no orphaned file.
+- **`?import=1`** opens the dialog. The dashboard checklist links here.
 
 ### Controls
 | Control | Destination / effect |
 |---|---|
-| Import statement | **disabled** — ingestion unbuilt |
-| Ledger settings | `/app/settings` (owner) · disabled otherwise |
-| Import a carrier statement | **disabled** |
-| Review policy transactions | `/app/policies` |
+| Statements / Unmatched lines tabs | `/app/statements`, `/app/statements?view=unmatched` |
+| Commission ledger | `/app/ledger` |
+| Import statement | opens the dialog · disabled with reason when read-only or before the migration |
+| Next: columns / Preview / Back | dialog steps; Preview calls `statements/preview` |
+| Import N line(s) for review | `POST /api/app/statements` → `/app/statements/[id]` |
+| Store PDF and enter its lines | `POST /api/app/statements` (PDF) → `/app/statements/[id]` |
+| Statement row | `/app/statements/[id]` |
+| Include N left unmatched (unmatched view) | `ToolbarCheckbox`, off by default; shown when any standing statement has lines left unmatched |
+| Re-match N (unmatched view) | `POST /api/app/statements/unmatched` `{ action: "rematch", include_left_unmatched? }` · write |
+| Search / filters / Refresh | inside each `TableCard`'s `DataToolbar` |
 
 ### Layout
-`max-w-7xl`. Eyebrow `Commissions` — the one page whose eyebrow is already sensible, though
-`00-FOUNDATION.md` would derive `Book of Business` from the menu; either is defensible, pick one
-and apply it everywhere.
-
-Empty state is large and central with an icon medallion. Guidance at `lg:grid-cols-3`.
+- `PageHeader` (one title, one sentence), then the tabs-and-actions row, then the `StatStrip`, then one `TableCard` with its `DataToolbar` and `Pager`.
+- A blocked state (read-only, migration pending) is one warning line, not a card.
+- In the dialog, every select is `toolbarControl` (36px). Mapping hints are field hints, not paragraphs.
 
 ### Must not
-- Invent a commission figure.
-- Enable a control whose backend does not exist.
-- Remove the "no source, no record" line.
-- Show `—` while the honest answer is genuinely zero.
+- Parse a PDF, or send it to any provider.
+- Store anything but the bytes the person chose. The download must equal the upload.
+- Write a statement row when the file was not stored.
+- Hash the CSV text of an Excel file for the duplicate check. The import hashes the original bytes, so the preview must too.
+- Post anything to the ledger on import. Lines post only when a person accepts a match.
+- Offer a delete. Void with a reason instead.
+
+---
+
+## 23b. One statement: PDF entry and review — `/app/statements/[id]` · LA-4.2–4.3
+
+> Added 2026-10-06, completed with LA-4.3 the same day: PDF entry (LA-4.2), then name matching,
+> re-match and re-process (LA-4.3).
+
+**Files:**
+- `app/app/(shell)/statements/[id]/page.tsx`
+- `components/app/statement-manual-entry.tsx` (the PDF beside the entry grid, and "Original file")
+- `components/app/statement-review.tsx` (lines, decisions, re-process, void)
+
+**Mockup:** NONE — design from [UI-CONSISTENCY.md](UI-CONSISTENCY.md) and [BRAND.md](BRAND.md).
+
+**Gate:**
+- feature `statement_ingestion`;
+- roles owner and bookkeeper; others get `RoleGateNotice`;
+- an id from another workspace is `notFound()`.
+
+**Read-only:**
+- the statement, its lines and its PDF stay readable;
+- the PDF entry grid is **not shown**, only one warning line;
+- review decisions are disabled with their reason.
+
+**Data:**
+- `GET /api/app/statements/[id]`
+- `GET /api/app/statements/[id]/file` (60-second link, inline for the viewer, `?download=1` to save)
+- `POST /api/app/statements/[id]/lines`:
+  - `add_manual_lines`;
+  - `{ decisions }`;
+  - `rematch`
+- `POST /api/app/statements/[id]` (`reprocess`, `void`)
+
+**Purpose:** turn one carrier statement into lines a person has accepted, matched by hand or set aside. For a PDF, a person first types the lines in.
+
+### Must do
+- **Header.** One `PageHeader`:
+  - the title is "Carrier · period";
+  - the description reads: file name · kind (CSV / Excel, sheet "…" / PDF) · imported date and by whom · line count, or "lines not entered yet";
+  - the actions are "Original file" (only when the original was kept), then Re-process and Void.
+- **A PDF waiting for its lines** (`awaiting_entry`):
+  - Two columns at `xl` that scroll on their own: the carrier's PDF in a viewer (60-second link, `SectionLoading` while it opens, the error sentence if it cannot), and the entry grid in a `TableCard`.
+  - Grid columns: #, Policy number, Insured, Amount, Kind ("From the sign" or a kind), Date, Remove.
+  - The footer reads "N lines entered", then Clear (asks first), Add line, and "Record N line(s) for review".
+  - Each line is checked as it is typed, by the same rules the server uses. The first problem disables Record, and its sentence is the button's title and one warning line under the grid.
+  - **Typed lines are read exactly like a file's lines:** one shared reader (`readStatementLine`) and the same matcher, so a typed statement reviews like an imported one.
+  - **Typed lines are kept as a draft in this browser** until they are recorded, so leaving the page loses nothing. A failed record keeps the draft. A successful one clears it.
+  - Recording sends all lines once and moves the statement to review.
+  - A statement that is not waiting for lines answers 409 with "This statement is not waiting for its lines to be entered."
+- **Review** (every other state):
+  - one `StatStrip`: Lines, Waiting, Accepted, Set aside;
+  - the lines `TableCard`, with view tabs (All lines, Waiting for a person, Accepted, Left unmatched, Could not read) and per-line Accept / Reject / Match… / Leave unmatched.
+- **Name matching (LA-4.3).**
+  - A line whose policy number matches nothing is proposed by insured name, with this statement's carrier only, when exactly one policy has that name. When several do, the amount breaks the tie: the one policy whose expected ledger entry is within $1.
+  - It is always a proposal, never accepted automatically. Its note reads "Insured name and carrier match (…)" or "Insured name, carrier and amount match (…)" and ends "Check before accepting".
+- **Re-match (LA-4.3, option c, decided 2026-10-06).**
+  - "Re-match N" proposes matches again for the waiting lines, against the book as it is now.
+  - When the statement has lines left unmatched on purpose, a `ToolbarCheckbox` "Include N left unmatched" sits just before the button. It is off by default, and ticking it adds those lines to N.
+  - With nothing waiting and the box clear, the button reads "Re-match 0", disabled, with the reason as its title.
+  - A policy a person already turned down for a line is never proposed for it again. The database enforces this too.
+- **Re-process (LA-4.3).**
+  - Re-reads the stored original with the same or new column choices.
+  - The new statement links back to this one, and this one is voided and kept, in one transaction.
+  - Offered only for a CSV or Excel statement whose original was kept.
+- **Voided:** one error line saying who voided it, when, and why. Its lines no longer post.
+- **Re-processed:** one status line linking to the earlier, voided import.
+
+### Controls
+| Control | Destination / effect |
+|---|---|
+| ← Statements | `/app/statements` |
+| Original file | 60-second download link, saved under the carrier's file name |
+| Add line / Remove line / Clear | local grid only (Clear asks first) |
+| Record N line(s) for review | `POST statements/[id]/lines` `add_manual_lines` · write · disabled while a line has a problem |
+| Accept / Reject / Match… / Leave unmatched | `POST statements/[id]/lines` `{ decisions }` · write |
+| Include N left unmatched | toggles whether Re-match takes the set-aside lines too · off by default |
+| Re-match N | `POST statements/[id]/lines` `{ action: "rematch", include_left_unmatched? }` · write · disabled at 0 |
+| Re-process statement | `POST statements/[id]` `reprocess` · write (LA-4.3) |
+| Void statement | `POST statements/[id]` `void` with a reason · write · confirm step "Keep it" |
+
+### Layout
+- A back link, then `PageHeader`, then optional one-line status or alert rows, then either the entry columns or (`StatStrip` + lines `TableCard`).
+- No explanatory paragraph under the grid. The kind and date rules are the column headers' titles.
+- Controls are 36px; row buttons are `size="sm"`.
+
+### Must not
+- Read, parse or send the PDF anywhere. Only the person reads it.
+- Show the entry grid to a read-only account, even disabled.
+- Read typed lines with different rules from a file's lines.
+- Lose typed lines on navigation or on a failed record.
+- Post anything to the ledger when lines are recorded. They are proposals until accepted.
+
+---
+
+## 23c. Discrepancies and the dispute letter — `/app/discrepancies`, `/app/discrepancies/letter` · LA-4.4–4.5
+
+> Added 2026-10-06.
+
+**Files:**
+- `app/app/(shell)/discrepancies/page.tsx`
+- `components/app/discrepancies-workspace.tsx`
+- `app/app/discrepancies/letter/page.tsx` (outside the shell, so it prints as a letter)
+- `components/app/dispute-letter-actions.tsx`
+
+**Mockup:** NONE — design from [UI-CONSISTENCY.md](UI-CONSISTENCY.md) and [BRAND.md](BRAND.md).
+
+**Gate:**
+- feature `discrepancy_report`;
+- roles owner and bookkeeper (`statements.view`). An assistant or producer sees `RoleGateNotice`, and the API answers 403.
+
+**Read-only:**
+- reads the page and every finding;
+- opens and prints letters;
+- cannot change a status, so the decision buttons and "mark disputed" are not offered.
+
+**Data:**
+- `GET /api/app/discrepancies` (list and total)
+- `PATCH /api/app/discrepancies` (one decision on several findings · write)
+- `GET`/`PATCH /api/app/discrepancies/[id]`
+- `POST /api/app/discrepancies/letter` (records a printed letter; reading, so read-only may)
+
+**Purpose:** "You appear to be owed $X". Every dollar traces to what the contract expects against what the carrier reported, and each one can be worked to an end.
+
+### Must do
+- **The page only reads (user decision 2026-10-06, option a).** Opening it, or `GET` on the list, never recomputes or writes. The findings are recomputed after each change to their facts:
+  - statement import, decisions, void and typed lines;
+  - creating, editing or lapsing a policy;
+  - a contract level, commission schedule or advance rule.
+
+  Those happen after the response (`after()`), so they never slow the change.
+- **One `StatStrip` "Owed to you":**
+  - You appear to be owed (open + disputed);
+  - Never paid;
+  - Short or wrong rate;
+  - Chargebacks.
+- **One `TableCard`:**
+  - the `DataToolbar` holds search, kind, carrier and status filters, the actions, and Refresh;
+  - rows are selectable, except cleared ones;
+  - row decisions are Resolved / Write off, or Reopen.
+- **Status:**
+  - open → disputed → resolved, or written off;
+  - "No longer applies" (cleared) is the refresh's alone.
+  - A resolved or written-off finding reopens by itself only when the carrier owes more than when it was decided (LA-4.4).
+- **Detail dialog:**
+  - expected / received / owed;
+  - the arithmetic sentence;
+  - the kind's meaning;
+  - the note;
+  - the status, and its **History** (every change, newest first, with who; "when a statement changed" for the refresh's).
+- **Dispute letter (`Dispute letter (N)`).**
+  - It needs the selection to be one carrier's. Otherwise the button is disabled with the reason.
+  - It opens the letter in a new tab.
+- **The letter** lists exactly `letterItems`: the selected findings for that carrier that still apply.
+  - It shows the agency (name, address, NPN), the date, and the recipient.
+  - The recipient is editable. It starts "<Carrier> / Commissions Department", prints as written, and is remembered per carrier on that computer, because the carrier library holds no commissions address.
+  - "Re:" carries the writing number.
+  - The table has policy, insured, problem with its arithmetic, period, expected, paid and owed.
+  - **The total is the sum of the rows shown.**
+  - It ends with the sender's signature block.
+- **Print** records the letter in the audit log once per print, not on opening or reloading.
+- For an account that can decide, Print also offers "Mark the N open findings as disputed", on by default. Disputed, resolved and written-off findings are left alone. If the record fails, it still prints and says so.
+- **The letter prints black on white** whatever the screen theme. Its controls are `print:hidden`.
+
+### Controls
+| Control | Destination / effect |
+|---|---|
+| Statements | `/app/statements` |
+| Search / Kind / Carrier / Status / Refresh | in the `DataToolbar` (Refresh re-reads) |
+| Row checkbox | selects for the letter or bulk dispute |
+| Mark disputed (selection) | `PATCH /api/app/discrepancies` `{ ids, status: "disputed" }` · write |
+| Dispute letter (N) | `/app/discrepancies/letter?carrier=…&ids=…` in a new tab · disabled with reason unless one carrier |
+| Resolved / Write off / Reopen | `PATCH /api/app/discrepancies` `{ ids: [id], status }` · write |
+| Open (row) | the detail dialog |
+| Letter · To | editable recipient, remembered per carrier in this browser |
+| Letter · Mark … as disputed | `ToolbarCheckbox`, writers only, on by default |
+| Letter · Print | `POST /api/app/discrepancies/letter`, then the PATCH when ticked, then `window.print()` |
+
+### Layout
+- `PageHeader` (one title, one sentence, Statements), then the `StatStrip`, then the `TableCard`.
+- The letter is a single 768px column with `text-sm` and relaxed leading. Its table uses `text-sm`, with `text-xs` for the arithmetic under each problem. There are no `text-[Npx]` sizes.
+
+### Must not
+- Recompute or write when the page, the list or a letter is opened.
+- Offer a person "cleared".
+- Put two carriers on one letter, or a cleared finding on any letter.
+- Show a total that is not the sum of the letter's rows.
+- Email the letter. It is printed, or saved as PDF from the print dialog.
+
+---
+
+## 23d. Persistency — `/app/persistency` · LA-4.8
+
+> Added 2026-10-06.
+
+**Files:**
+- `app/app/(shell)/persistency/page.tsx`
+- `components/app/persistency-tables.tsx` (`PersistencyTable`)
+- `components/app/book-views.tsx` (`TabbedSections`)
+
+**Mockup:** NONE — design from [UI-CONSISTENCY.md](UI-CONSISTENCY.md).
+
+**Gate:**
+- feature `cohort_persistency`;
+- owner, producer (their own book only, as the ledger scopes it) and bookkeeper. Others get `RoleGateNotice`.
+- Reading only, so read-only changes nothing here.
+
+**Data:** `GET /api/app/persistency`.
+
+**Purpose:** of the policies old enough to judge, how many were still in force at months 3, 6, 9 and 13. Month 9 leads, against the 65% line carriers judge an agent by.
+
+### Must do
+- **`StatStrip`:**
+  - Month 9 first, with the alive/eligible count and "carriers look for 65%"; red below it, green above;
+  - then months 3, 6 and 13.
+- **Three breakdowns, one at a time** (`TabbedSections` with counts):
+  - **By issue cohort:** one row per quarter issued ("2026 Q1"), newest first;
+  - **By carrier;**
+  - **By lead source.**
+
+  Every issued policy is in exactly one row of each.
+- **Each breakdown is a `PersistencyTable`:**
+  - `TableCard`;
+  - `DataToolbar` with search, then Clear, then Refresh;
+  - the shared `Pager`, with the footer suffix "a rate needs 5 policies old enough to count".
+- **A cell:**
+  - shows the rate, with alive/eligible beside it;
+  - shows **"—" alone** when fewer than 5 policies are old enough, or none are yet;
+  - always carries its counts and the reason in its title and `aria-label`.
+  - A month-9 rate under 65% is red.
+- **Lead source:**
+  - comes from the issued-policy record (vendor, else campaign), joined by the policy number normalised the way statement matching normalises it;
+  - otherwise "Unattributed".
+- **If the lead-source tables cannot be read,** one warning line says so ("…every policy shows as Unattributed. Refresh to try again."). A table that does not exist yet is honestly empty.
+- **No issued policies:** one `EmptyState` saying when the first figure appears.
+
+### Must not
+- Show a percentage, or a count beside the dash, for a cell under 5 policies.
+- Count a policy too young for the month as alive, or count a pending one at all.
+- Let a read error pass for "Unattributed".
+- Call a client function from the server page. The shared formatter `persistencyPct` lives in `lib/persistency/compute.ts`.
+
+---
+
+## 23e. One policy's money — `/app/policies/[id]` · LA-4.9
+
+> Added 2026-10-06. This replaces 06-MOCKUP-INDEX's "Policy detail does not exist": it is built,
+> linked from the insured's name on Policies.
+
+**Files:** `app/app/(shell)/policies/[id]/page.tsx`
+
+**Mockup:** NONE — design from [UI-CONSISTENCY.md](UI-CONSISTENCY.md).
+
+**Gate:**
+- feature `book_of_business`;
+- owner, producer (only a policy they recorded) and bookkeeper. An assistant gets `RoleGateNotice`, so no money is shown.
+- Another workspace's id, or a malformed one, is `notFound()`.
+- The Open discrepancies tab needs `discrepancy_report` and owner or bookkeeper.
+
+**Purpose:** everything about one policy's money on one page, with the same figures the ledger has for it.
+
+### Must do
+- A back link "← Policies".
+- **One `PageHeader`:**
+  - title "Insured · policy number";
+  - description: carrier · product · premium a year · issued date · lead source ("Unattributed", or "unavailable right now" when it could not be read);
+  - the status chip as its action.
+- **One `StatStrip`:**
+  - Advance received (expected beside it);
+  - Earned to date (charged back beside it);
+  - Carrier paid (its accepted line count; warning tone when short);
+  - Chargeback exposure (until the window ends, and the clawback type).
+- **Tabs, one at a time:**
+  - **Open discrepancies,** first when there are any, because they are the one thing to act on, with a link to Discrepancies;
+  - **What your contract expects:** each ledger entry with date, kind, rate and amount;
+  - **What the carrier reported:** each accepted line, linked to its statement.
+- **The figures are `computeLedger([this policy])`**, the ledger page's own function and library. They equal that policy's rows on the ledger (checked live: $1,192.80 earned, $198.80 paid from 2 lines, $994.00 open short-paid).
+- **Every read is this policy's own:**
+  - `getPolicyStatementLines`;
+  - `listDiscrepancies({ policyId })`;
+  - `leadSourceOf`, which reads the issued-record candidates for this number, then one vendor or campaign.
+
+  So the page costs the same in any size of book.
+- **Failures:**
+  - a discrepancy read that fails is one warning line ("…could not be loaded just now"), never "no discrepancy";
+  - a contract gap (no schedule) is one warning line naming what to fix in Settings.
+
+### Must not
+- Read the whole tenant's ledger, findings or lead sources for one policy.
+- Show money to an assistant, or another producer's policy to a producer.
+- Offer edits here. The policy is edited on Policies, and findings are worked on Discrepancies.
 
 ---
 

@@ -197,7 +197,7 @@ export function ImportScreeningBridge({ progress: initial }: { progress: Screeni
         caption={`${pct}%${minutes !== null && left > 0 ? ` · about ${minutes.toLocaleString()} min left` : ""}`}
         ariaLabel={`Screening: ${pct}% of numbers checked`}
       />
-      <p role="status" className="m-0 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--body)]">
+      <p role="status" className="m-0 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--body)]">
         {left > 0
           ? "Progress is saved as it goes; you can leave this page."
           : "Every number has an answer. Building the review…"}

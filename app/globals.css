@@ -1,4 +1,3 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 @import "tailwindcss";
 
 /*
@@ -15,7 +14,7 @@
   --color-card-foreground: var(--color-text-dark);
   --color-popover: var(--color-card-bg);
   --color-popover-foreground: var(--color-text-dark);
-  --color-primary: var(--color-blue);
+  --color-primary: var(--color-brand);
   --color-primary-foreground: var(--color-on-primary);
   --color-secondary: var(--surface-alt);
   --color-secondary-foreground: var(--color-text-dark);
@@ -32,98 +31,101 @@
   --radius-md: 8px;
   --radius-lg: 12px;
   --radius-xl: 16px;
-  --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  /* Montserrat is loaded and self-hosted by next/font in app/layout.tsx (--font-montserrat). */
+  --font-sans: var(--font-montserrat), 'Montserrat', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  /* Display (campaign banners, the hero): Coolvetica per the brand guide, once its licensed files are
+     added with next/font/local; Montserrat 600 until then. */
+  --font-display: var(--font-montserrat), 'Montserrat', system-ui, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
 /*
- * ── Design tokens: Insurvas orange (#ff5900) on ink (#15191e) ──
+ * ── Design tokens: Insurvas green (#07d6a0) on deep olive (#0d4037) — the 2026 brand ──
  *
- * The names in the first group are the design system's and are canonical. The --color-* and
- * --portal-* names beneath them are ALIASES pointing at those, kept so every existing component
- * and the ~900 portal classes keep working untouched. The aliases go away in a later pass; nothing
- * should be written against them from here on.
+ * Source: the designer's guide, docs/design/BRAND.md ("Data Highway"). The bright green is for
+ * action, active state and the isotype; deep olive is the ink of headlines, the navigation rail and
+ * the footer. The neutral ramp (canvas, surfaces, borders) is the product's own, tuned for depth and
+ * WCAG — the guide's #fcfcfd canvas measured 1.03:1 behind a white card, which is invisible.
  *
- * One identity now. The separate blue for admin/tenant and orange for the portals is gone: both
- * ran the same token names, so deleting the portal override block is the whole merge.
+ * The names in the first group are canonical. The --color-* and --portal-* names beneath them are
+ * ALIASES, kept so every existing component keeps working; nothing new should be written against them.
+ *
+ * Contrast that shapes the choices (lib/design/brandContrast.test.mjs asserts all of it):
+ *   - bright green is NEVER text: as text on white it measures 1.8:1. Text in the brand colour is
+ *     --accent-ink (#00735a), 5.8:1 on white and 4.6:1 on the grey band.
+ *   - a filled green button carries ink, not white: ink on #07d6a0 is 6.2:1, white is 1.8:1.
+ *
+ * The admin console keeps its own accent (app/admin/admin-plane.css), by decision.
  */
 :root {
   /* Action */
-  --primary:        #ff5900;
-  --accent-hover:   #e65000;
-  --accent-pressed: #cc4700;
+  --primary:        #07d6a0;
+  --accent-hover:   #08bf8b;
+  /* The guide's pressed shade (#008769) under ink text is 2.5:1; this keeps 4.5:1 while pressed. */
+  --accent-pressed: #08ba8d;
 
-  /* Text */
-  --ink:   #10141a;
+  /* Text. Ink is the brand's deep olive (11:1 on white). */
+  --ink:   #0d4037;
   --body:  #2f343c;
   --muted: #59606b;
 
   /* Surfaces */
   /* The ramp is the whole reason the product read as one flat sheet. canvas was #fcfcfd against
      a #ffffff card — 1.03:1, which is invisible: a card could not be seen against the page it sat
-     on. The page is now a real grey (1.11:1 behind a card) and the grouped band a real step
-     (1.23:1), so depth comes from the ramp before a single shadow is spent. */
-  --canvas:              #f1f3f7;
-  --surface:             #ffffff;
-  --surface-alt:         #e4e8ee;
-  --surface-sunken:      #dbe0e8;
-  --soft-orange-surface: #fff0e6;
-  --developer-bg:        #eaedf2;
+     on. The page is a real grey (1.11:1 behind a card) and the grouped band a real step (1.23:1),
+     so depth comes from the ramp before a single shadow is spent. */
+  --canvas:         #f1f3f7;
+  --surface:        #ffffff;
+  --surface-alt:    #e4e8ee;
+  --surface-sunken: #dbe0e8;
+  /* The soft green ground: the rail's active chip, action chips, a selected row. */
+  --primary-soft:   #dcfaf0;
+  --developer-bg:   #eaedf2;
 
-  /* Lines. A divider and a control's edge are different jobs. --border is a rule; --border-strong
-     is the thing that says "type here", so WCAG 1.4.11 wants 3:1 against its surface. The source
-     direction's #c9cdd2 measured 1.60:1 on white; this is 3.35:1 on white and 3.13:1 on the
-     grouped band, which is the lightest value that clears both. */
+  /* Lines. --border is a rule; --border-strong is the edge that says "type here" (3:1, WCAG 1.4.11). */
   --border:        #d5dbe3;
   --border-strong: #7a828e;
 
-  /* The focus ring is its own token now. --primary measures 2.83:1 on the new canvas and was
-     already 2.56:1 on surface-alt under the old one, so the ring was failing 1.4.11 wherever a
-     form sat on a band. This clears 3:1 on all four grounds (3.01–3.99) and still reads orange. */
-  --ring-color:    #e04e00;
+  /* The focus ring: mid green, 4.6:1 on white and 3.6:1 on the grey band (>= 3:1 for a ring). */
+  --ring-color:    #008769;
 
-  /* Semantic */
+  /* Semantic. Success is a deeper, yellower green than the brand so "approved" never reads as
+     "brand"; info is blue so "in progress" never reads as either. */
   --success: #117a3d;
   --warning: #a35200;
   --error:   #c62828;
-  /* New. "Verifying", "in review", "scheduled" were all being told in grey because the palette
-     had no colour for in-progress. */
-  --info:    #00708a;
+  --info:    #2563b8;
 
-  /* The ground each status sits on. A chip with a tinted ground and a dot is legible across a
-     queue at a glance; grey text has to be read row by row. */
   --success-surface: #e0f3e7;
   --warning-surface: #fcefdf;
   --error-surface:   #fdeaea;
-  --info-surface:    #e0f2f6;
+  --info-surface:    #e3edfa;
 
-  /* What goes ON a filled surface. Ink rather than white: white on #ff5900 measures 3.14:1 and a
-     14px semibold button label needs 4.5:1. Ink on that same orange is 5.62:1. */
-  --on-primary: #15191e;
+  /* What goes ON a filled surface. */
+  --on-primary: #0d4037;
   --on-danger:  #ffffff;
   --on-dark:    #fcfcfd;
 
-  /* Brand-coloured TEXT on a light surface — a section heading, a link. The fill colour is not
-     readable as text (3.14:1); this is 6.59:1. */
-  --accent-ink: #a63800;
+  /* Brand-coloured TEXT on a light surface — a link, an active label. */
+  --accent-ink: #00735a;
 
-  /* The only two shadows in the product. Depth otherwise comes from a surface band and a 1px
-     border, so a resting card carries no shadow at all. */
-  --shadow-rest:    0 1px 2px rgba(16, 20, 26, .05);
+  /* The only shadows in the product. --shadow-brand is the guide's feature-card hover, for
+     clickable marketing cards only; data tables never lift. */
+  --shadow-rest:    0 1px 2px rgba(13, 64, 55, .06);
   --shadow-hover:   0 4px 16px rgba(0, 0, 0, .12);
+  --shadow-brand:   0 4px 16px rgba(7, 214, 160, .15);
   --shadow-overlay: 0 24px 64px rgba(0, 0, 0, .24);
 
-  /* The semantic fills, again as TEXT. `success` and `warning` are fills first: as 14px type they
-     measure 4.13:1 and 4.40:1 on `surface-alt`, under the 4.5:1 bar. These clear it on all three
-     grounds. Same idea as `accent-ink`, and the fills themselves are unchanged. */
+  /* The semantic fills, again as TEXT (4.5:1 on every light ground). */
   --success-ink: #0c6633;
   --warning-ink: #8a4600;
   --error-ink:   #ab1f1f;
-  --info-ink:    #005e75;
-  /* Data hues (Foundations §3): six series colours, validated for lightness band, colour-blind separation and 3:1 on surface. For charts only — never for status or chrome. */
-  --data-1: #e04e00;
+  --info-ink:    #1d4f9a;
+  /* Data hues: six series colours, 3:1 on surface. Charts only — never status or chrome. Series 1 is
+     the brand's mid green (the bright green fails 3:1 as a mark on white). */
+  --data-1: #0a8769;
   --data-2: #4457c7;
-  --data-3: #2f7d31;
+  --data-3: #e04e00;
   --data-4: #b02a9b;
   --data-5: #8a5a00;
   --data-6: #0091a8;
@@ -134,40 +136,38 @@
   --on-error:   #ffffff;
   --on-info:    #ffffff;
 
-  /* Dark grounds: the footer and the announcement bar, and nothing else. */
-  --footer-bg: #10141a;
+  /* Dark grounds: the footer and the announcement bar — the guide's deep olive. */
+  --footer-bg: #0d4037;
   --logo-gray: #98a1ac;
 
-  /* Categorical data. Six hues in a fixed order, never cycled — a seventh series folds into
-     "Other". Validated: lightness band, chroma floor, and a worst adjacent pair of ΔE 14.4 under
-     deuteranopia against a target of 8. Never reused for status. */
-  --cat-1: #e04e00;
+  /* Categorical data, fixed order, never cycled; never reused for status. */
+  --cat-1: #0a8769;
   --cat-2: #4457c7;
-  --cat-3: #2f7d31;
+  --cat-3: #e04e00;
   --cat-4: #b02a9b;
   --cat-5: #8a5a00;
   --cat-6: #0091a8;
 
-  /* The ramp, for what consumes it directly */
-  --brand-50:  #fff3ec;
-  --brand-100: #ffe2d0;
-  --brand-200: #ffc09a;
-  --brand-300: #ff9d61;
-  --brand-400: #ff7530;
-  --brand-500: #ff5900;
-  --brand-600: #e65000;
-  --brand-700: #15191e;
-  --brand-800: #0f1216;
-  --brand-900: #090b0e;
+  /* The ramp. 700-900 stay the deep olive family: dark panels (the auth brand panel) read them. */
+  --brand-50:  #effdf8;
+  --brand-100: #c5ffed;
+  --brand-200: #8ff5d5;
+  --brand-300: #4ee8bb;
+  --brand-400: #22dcab;
+  --brand-500: #07d6a0;
+  --brand-600: #0a8769;
+  --brand-700: #0d4037;
+  --brand-800: #0a3029;
+  --brand-900: #06211c;
 
   /* ── Aliases. Temporary; they resolve through the tokens above, so themes need not repeat them ── */
   --color-page-bg:        var(--canvas);
   --color-card-bg:        var(--surface);
   --color-row-bg:         var(--surface-alt);
-  --color-blue:           var(--primary);
-  --color-blue-hover:     var(--accent-hover);
-  --color-blue-light:     var(--brand-100);
-  --color-blue-faint:     var(--soft-orange-surface);
+  --color-brand:          var(--primary);
+  --color-brand-hover:    var(--accent-hover);
+  --color-brand-light:    var(--brand-100);
+  --color-brand-faint:    var(--primary-soft);
   --color-text-dark:      var(--ink);
   --color-text-mid:       var(--body);
   --color-text-muted:     var(--muted);
@@ -187,10 +187,6 @@
   --color-info-surface:    var(--info-surface);
   --color-surface-sunken:  var(--surface-sunken);
 
-  /* Names referenced by components or CSS that were never defined before this pass, so they
-     silently resolved to nothing. Pointed at the tokens they clearly meant. */
-  --color-orange:       var(--primary);
-  --color-orange-faint: var(--soft-orange-surface);
   --color-surface:      var(--surface);
   --color-text:         var(--ink);
   --portal-body:        var(--body);
@@ -201,15 +197,17 @@
 
   --portal-primary:       var(--primary);
 
-  /* The rail. It is not the page's surface and it is not the page's ink: a navigation column
-     drawn in the same white as the work beside it has no edge, so the eye has to find the border
-     to know where the product stops and the page begins. These five are the only dark values in
-     the light theme, and they are the same in both themes — a dark rail does not get darker. */
-  --nav-bg:      #1b2028;
-  --nav-ink:     #e8ebef;
-  --nav-muted:   #98a0ab;
-  --nav-line:    #2b323b;
-  --nav-success: #45c07d;
+  /* The rail: the guide's deep-olive navigation. Same in both themes — a dark rail does not get
+     darker. Muted text is 6:1 on it, the active marker (bright green) 6.2:1. */
+  --nav-bg:      #0d4037;
+  --nav-ink:     #eaf6f2;
+  --nav-muted:   #9fc4b8;
+  --nav-line:    #1d5649;
+  --nav-success: #07d6a0;
+  /* The page you are on: white on a green-tinted chip (about 8:1), the icon in the bright green. */
+  --nav-active-bg:   rgba(7, 214, 160, .16);
+  --nav-active-ink:  #ffffff;
+  --nav-active-icon: #07d6a0;
   --portal-primary-hover: var(--accent-hover);
   --portal-canvas:        var(--canvas);
   --portal-panel:         var(--surface);
@@ -223,65 +221,60 @@
 /*
  * Dark.
  *
- * Derived here, not in the source direction, and checked: every text pair clears 4.5:1 on its own
- * ground and every control edge clears 3:1.
- *
- * Not an inversion. Two decisions worth keeping: surfaces get LIGHTER as they come forward
- * (canvas -> surface -> surface-alt), which is how depth reads on a dark ground; and the orange
- * does NOT shift, because it measures 5.45:1 on the dark card and moving it would cost the one
- * colour the product is recognised by.
+ * Derived from the brand (the guide defines light only) and checked: every text pair clears 4.5:1 on
+ * its own ground and every control edge 3:1. Surfaces are near-black with a trace of the olive and get
+ * LIGHTER as they come forward; the bright green does not shift (9.6:1 on the dark card), and brand
+ * text lightens to a mint so it reads on the dark grounds.
  */
 .dark {
-  --primary:        #ff5900;
-  --accent-hover:   #ff7530;
-  --accent-pressed: #e65000;
+  --primary:        #07d6a0;
+  --accent-hover:   #2fe0b0;
+  --accent-pressed: #08bf8b;
 
-  --ink:   #f5f7f9;
-  --body:  #ccd2d9;
-  --muted: #98a1ac;
+  --ink:   #f2f7f5;
+  --body:  #c9d6d1;
+  --muted: #93a69f;
 
-  --canvas:              #0a0d11;
-  --surface:             #161b21;
-  --surface-alt:         #1f252d;
-  --surface-sunken:      #05070a;
-  --soft-orange-surface: #2c1a11;
-  --developer-bg:        #11151a;
+  --canvas:         #08110f;
+  --surface:        #0f1a17;
+  --surface-alt:    #16241f;
+  --surface-sunken: #040a08;
+  --primary-soft:   #0f3a30;
+  --developer-bg:   #0c1613;
 
-  --border:        #2a323c;
-  --border-strong: #69737f;
-  --ring-color:    #ff7530;
+  --border:        #22342e;
+  --border-strong: #5f7a71;
+  --ring-color:    #07d6a0;
 
   --success: #45c07d;
   --warning: #e2973a;
   --error:   #f0837c;
-  --info:    #3fc2da;
+  --info:    #7fb0ff;
 
   --success-surface: #11291d;
   --warning-surface: #2b1e0d;
   --error-surface:   #2d1412;
-  --info-surface:    #0c2429;
+  --info-surface:    #10203a;
 
-  --on-primary: #15191e;
+  --on-primary: #0d4037;
   --on-danger:  #2a0b08;
   --on-dark:    #fcfcfd;
 
-  --accent-ink: #ff9d61;
+  --accent-ink: #4fe3bb;
 
-  /* A black shadow all but disappears on a dark canvas, so both are deepened rather than reused. */
+  /* A black shadow all but disappears on a dark canvas, so they are deepened rather than reused. */
   --shadow-rest:    0 1px 2px rgba(0, 0, 0, .55);
   --shadow-hover:   0 4px 16px rgba(0, 0, 0, .5);
+  --shadow-brand:   0 4px 16px rgba(7, 214, 160, .18);
   --shadow-overlay: 0 24px 64px rgba(0, 0, 0, .7);
 
-  /* The dark semantics are already light enough to read as text (6.2:1 at worst), so the ink is
-     the fill. What flips is the glyph on them: near-white on a light green measures 2.25:1. */
   --success-ink: #45c07d;
   --warning-ink: #e2973a;
   --error-ink:   #f0837c;
-  --info-ink:    #3fc2da;
-  /* Data hues, dark: selected against #161b21, not lightened from the light ones (Foundations §3). */
-  --data-1: #f2610d;
+  --info-ink:    #7fb0ff;
+  --data-1: #2fd6a6;
   --data-2: #6a72db;
-  --data-3: #3f9e46;
+  --data-3: #f2610d;
   --data-4: #c452b0;
   --data-5: #b0821f;
   --data-6: #1ba3bd;
@@ -289,35 +282,31 @@
   --on-success: #08150e;
   --on-warning: #1c1207;
   --on-error:   #2a0b08;
-  --on-info:    #04161a;
+  --on-info:    #08142a;
 
-  --footer-bg: #05070a;
+  --footer-bg: #06211c;
   --logo-gray: #6b7480;
 
-  /* Selected against the dark surface, not lightened from the light steps: a pastel set failed the
-     dark lightness band outright, which is why these are more saturated than they look. */
-  --cat-1: #f2610d;
+  --cat-1: #2fd6a6;
   --cat-2: #6a72db;
-  --cat-3: #3f9e46;
+  --cat-3: #f2610d;
   --cat-4: #c452b0;
   --cat-5: #b0821f;
   --cat-6: #1ba3bd;
 
-  --brand-50:  #2a1a12;
-  --brand-100: #3b2217;
-  --brand-200: #5a3420;
-  --brand-300: #8a4a25;
-  --brand-400: #cc4700;
-  --brand-500: #ff5900;
-  --brand-600: #ff7530;
-  --brand-700: #181c21;
-  --brand-800: #101318;
-  --brand-900: #0a0c0f;
+  --brand-50:  #0f2a23;
+  --brand-100: #12392f;
+  --brand-200: #165042;
+  --brand-300: #0a8769;
+  --brand-400: #08bf8b;
+  --brand-500: #07d6a0;
+  --brand-600: #2fe0b0;
+  --brand-700: #0d4037;
+  --brand-800: #0a3029;
+  --brand-900: #06211c;
 
-  /* The one alias a theme still has to restate, because it is a literal rather than a token. In the
-     old file this line was missing from the dark portal block, so the softest rule in the product
-     rendered as a bright white line on a dark panel. */
-  --color-border-light: #1e2833;
+  /* The one alias a theme still has to restate, because it is a literal rather than a token. */
+  --color-border-light: #1a2a25;
 }
 
 /*
@@ -414,9 +403,9 @@
 @keyframes m-draw  { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 @keyframes m-sheen { from { background-position: -640px 0; } to { background-position: 640px 0; } }
 @keyframes m-pulse {
-  0%   { box-shadow: 0 0 0 0 rgba(255, 89, 0, .42); }
-  70%  { box-shadow: 0 0 0 7px rgba(255, 89, 0, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(255, 89, 0, 0); }
+  0%   { box-shadow: 0 0 0 0 rgba(7, 214, 160, .42); }
+  70%  { box-shadow: 0 0 0 7px rgba(7, 214, 160, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(7, 214, 160, 0); }
 }
 @keyframes m-deny {
   0%, 100% { transform: translateX(0); }
@@ -583,7 +572,7 @@
   transition: background-color var(--t-micro) var(--e), border-color var(--t-micro) var(--e), color var(--t-micro) var(--e);
 }
 .portal-top-icon:hover { background: var(--surface-alt); border-color: var(--border-strong); }
-.portal-top-icon[aria-expanded="true"] { background: var(--soft-orange-surface); border-color: var(--primary); color: var(--accent-ink); }
+.portal-top-icon[aria-expanded="true"] { background: var(--primary-soft); border-color: var(--primary); color: var(--accent-ink); }
 .portal-top-icon-alert { color: var(--error-ink); }
 .portal-top-badge {
   position: absolute; top: 2px; right: 2px;
@@ -602,12 +591,12 @@
   transition: background-color var(--t-micro) var(--e), border-color var(--t-micro) var(--e);
 }
 .portal-top-account:hover { background: var(--surface-alt); border-color: var(--border-strong); }
-.portal-top-account[aria-expanded="true"] { background: var(--soft-orange-surface); border-color: var(--primary); }
+.portal-top-account[aria-expanded="true"] { background: var(--primary-soft); border-color: var(--primary); }
 .portal-top-account-name { font-size: .875rem; line-height: 1.5; letter-spacing: -.02em; font-weight: 500; color: var(--ink); }
 @media (max-width: 1099px) { .portal-top-account-name { display: none; } }
 .portal-top-avatar {
   display: inline-flex; width: 26px; height: 26px; align-items: center; justify-content: center;
-  border-radius: 999px; background: var(--soft-orange-surface); color: var(--accent-ink);
+  border-radius: 999px; background: var(--primary-soft); color: var(--accent-ink);
   font-size: 11px; font-weight: 600; line-height: 1;
 }
 .portal-top-avatar-lg { width: 34px; height: 34px; font-size: .875rem; flex-shrink: 0; }
@@ -766,7 +755,7 @@ a.portal-top-foot-action { text-decoration: none; }
 }
 
 .portal-sound-controls-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
-.portal-secondary-button { border: 1px solid var(--portal-line); border-radius: 8px; background: var(--portal-panel); padding: .5rem .75rem; font-size: .875rem; font-weight: 600; }
+.portal-secondary-button { border: 1px solid var(--portal-line); border-radius: 999px; background: var(--portal-panel); padding: .5rem .75rem; font-size: .875rem; font-weight: 600; }
 .portal-secondary-button:hover { background: var(--portal-canvas); }
 .portal-toggle { position: relative; display: inline-flex; cursor: pointer; }
 .portal-toggle input { position: absolute; opacity: 0; }
@@ -865,7 +854,7 @@ a.portal-top-foot-action { text-decoration: none; }
 .portal-lead-detail-page > div > [role="tablist"] + div { min-width: 0; }
 .portal-lead-detail-page [data-slot="card"] { transition: border-color 150ms ease, box-shadow 150ms ease; }
 .portal-lead-detail-page [data-slot="card"]:hover { border-color: color-mix(in srgb, var(--portal-primary), var(--portal-line) 78%); }
-.portal-lead-detail-page [data-slot="button"] { border-radius: 8px; }
+.portal-lead-detail-page [data-slot="button"] { border-radius: 999px; }
 .portal-lead-detail-page [role="tablist"] + div > div > [data-slot="card"] { border-radius: 12px; }
 .portal-lead-detail-page [role="tablist"] + div > div > [data-slot="card"] [data-slot="card-header"] { border-bottom: 1px solid var(--portal-line); }
 .portal-lead-detail-page [role="tablist"] + div > div > [data-slot="card"] [data-slot="card-title"] { font-size: 1rem; }
@@ -893,7 +882,7 @@ a.portal-top-foot-action { text-decoration: none; }
 .portal-partner-quality-page { color: var(--portal-ink); }
 .portal-partner-quality-page [data-slot="card"] { border-color: var(--portal-line); border-radius: 12px; background: var(--portal-panel); box-shadow: none; }
 .portal-partner-quality-page [data-slot="card-header"] { border-bottom: 1px solid transparent; }
-.portal-partner-quality-page [data-slot="button"] { border-radius: 8px; }
+.portal-partner-quality-page [data-slot="button"] { border-radius: 999px; }
 .portal-partner-quality-page [data-slot="button"]:focus-visible,
 .portal-partner-quality-page button:focus-visible,
 .portal-partner-quality-page input:focus-visible { outline: 2px solid var(--ring-color); outline-offset: 2px; }
@@ -937,7 +926,7 @@ a.portal-top-foot-action { text-decoration: none; }
 .portal-partners-page { color: var(--portal-ink); }
 .portal-partners-page [data-slot="card"],
 .portal-partners-page aside { border-color: var(--portal-line); border-radius: 12px; background: var(--portal-panel); box-shadow: none; }
-.portal-partners-page [data-slot="button"] { border-radius: 8px; }
+.portal-partners-page [data-slot="button"] { border-radius: 999px; }
 .portal-partners-page [data-slot="button"][data-variant="default"] { background: var(--portal-primary); color: var(--on-primary); }
 .portal-partners-page [data-slot="button"][data-variant="default"]:hover { background: var(--portal-primary-hover); }
 .portal-partners-page [data-slot="button"]:focus-visible,
@@ -977,8 +966,8 @@ a.portal-top-foot-action { text-decoration: none; }
 .portal-partners-page aside [role="tab"][aria-selected="false"] { border-color: transparent !important; color: var(--portal-muted); }
 .portal-partners-page aside [role="tab"][aria-selected="false"]:hover { color: var(--portal-ink); }
 .portal-partners-page aside [class*="rounded-lg"][class*="border"] { border-color: var(--portal-line); background: var(--portal-panel); }
-.portal-partners-page aside [class*="bg-[var(--color-blue-faint)]"] { background: var(--surface-alt); }
-.portal-partners-page aside [class*="bg-[var(--color-blue-light)]"] { background: var(--surface-alt); color: var(--ink); }
+.portal-partners-page aside [class*="bg-[var(--color-brand-faint)]"] { background: var(--surface-alt); }
+.portal-partners-page aside [class*="bg-[var(--color-brand-light)]"] { background: var(--surface-alt); color: var(--ink); }
 .portal-partners-page aside [data-slot="badge"][data-variant="default"] { background: color-mix(in srgb, var(--success) 12%, transparent); color: var(--success-ink); }
 .portal-partners-page aside input[type="checkbox"] { accent-color: var(--portal-primary); }
 .portal-partners-page [role="dialog"] { border-color: var(--portal-line); box-shadow: var(--shadow-overlay); }
@@ -1199,7 +1188,7 @@ a.portal-top-foot-action { text-decoration: none; }
 .portal-partner-dashboard-page > div > div:first-child { border-bottom: 1px solid var(--portal-line); padding-bottom: 1.25rem; }
 /* title size now comes from PageHeader — one 32px title everywhere inside the shell */
 .portal-partner-dashboard-page [data-slot="card"] { border-color: var(--portal-line); border-radius: 12px; background: var(--portal-panel); box-shadow: none; }
-.portal-partner-dashboard-page [data-slot="button"] { border-radius: 8px; }
+.portal-partner-dashboard-page [data-slot="button"] { border-radius: 999px; }
 .portal-partner-dashboard-page [data-slot="button"][data-variant="default"] { background: var(--portal-primary); color: var(--on-primary); }
 .portal-partner-dashboard-page [data-slot="button"][data-variant="default"]:hover { background: var(--portal-primary-hover); }
 .portal-partner-dashboard-page [data-slot="button"]:focus-visible,
@@ -1230,7 +1219,7 @@ a.portal-top-foot-action { text-decoration: none; }
 .portal-partner-messages-page [data-slot="card"] { border-color: var(--portal-line); border-radius: 12px; background: var(--portal-panel); box-shadow: none; }
 .portal-partner-messages-page [data-slot="card-header"] { border-bottom: 1px solid var(--portal-line); }
 .portal-partner-messages-page [data-slot="card-title"] { font-size: 1.35rem; letter-spacing: -.025em; }
-.portal-partner-messages-page [data-slot="button"] { border-radius: 8px; }
+.portal-partner-messages-page [data-slot="button"] { border-radius: 999px; }
 .portal-partner-messages-page [data-slot="button"][data-variant="default"] { background: var(--portal-primary); color: var(--on-primary); }
 .portal-partner-messages-page [data-slot="button"][data-variant="default"]:hover { background: var(--portal-primary-hover); }
 .portal-partner-messages-page [data-slot="button"]:focus-visible,
@@ -1246,7 +1235,7 @@ a.portal-top-foot-action { text-decoration: none; }
 .portal-partner-pipeline-page [data-slot="card"] { border-color: var(--portal-line); border-radius: 12px; background: var(--portal-panel); box-shadow: none; }
 .portal-partner-pipeline-page [data-slot="card-header"] { border-bottom: 1px solid var(--portal-line); }
 .portal-partner-pipeline-page [data-slot="card-title"] { font-size: 1.35rem; letter-spacing: -.025em; }
-.portal-partner-pipeline-page [data-slot="button"] { border-radius: 8px; }
+.portal-partner-pipeline-page [data-slot="button"] { border-radius: 999px; }
 .portal-partner-pipeline-page [data-slot="button"][data-variant="default"] { background: var(--portal-primary); color: var(--on-primary); }
 .portal-partner-pipeline-page [data-slot="button"][data-variant="default"]:hover { background: var(--portal-primary-hover); }
 .portal-partner-pipeline-page [data-slot="button"]:focus-visible,
@@ -1416,7 +1405,7 @@ a.portal-top-foot-action { text-decoration: none; }
 .portal-partner-submit-main > .portal-partner-submit-consent > p { margin: 12px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; letter-spacing: -.01em; }
 .portal-partner-submit-actions { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; }
 .portal-partner-submit-actions > span { display: flex; flex-wrap: wrap; gap: 12px; }
-.portal-partner-submit-actions [data-slot="button"] { height: 44px; padding: 0 16px; border-radius: 8px; font-size: 14px; }
+.portal-partner-submit-actions [data-slot="button"] { height: 44px; padding: 0 16px; border-radius: 999px; font-size: 14px; }
 
 /* readiness: four checks, each a chip that is green only when it is true, then the facts */
 .portal-partner-submit-readiness { position: sticky; top: calc(var(--top-bar-h) + 1rem); flex: 0 0 340px; width: 340px; padding: 20px; }
@@ -1476,7 +1465,7 @@ a.portal-top-foot-action { text-decoration: none; }
 .portal-partner-invite-card input { border-color: var(--portal-line); border-radius: 8px; background: var(--portal-panel); }
 /* The address the invitation is bound to: read-only, so it sits on the grey ground with a lock. */
 .portal-partner-invite-card input.portal-partner-invite-bound { height: 44px; border-color: var(--border); background: var(--surface-alt); color: var(--muted); font-size: 16px; }
-.portal-partner-invite-card [data-slot="button"] { min-height: 2.75rem; border-radius: 8px; }
+.portal-partner-invite-card [data-slot="button"] { min-height: 2.75rem; border-radius: 999px; }
 .portal-partner-invite-card [data-slot="button"][data-variant="default"] { background: var(--portal-primary); color: var(--on-primary); font-weight: 600; }
 .portal-partner-invite-card [data-slot="button"][data-variant="default"]:hover { background: var(--portal-primary-hover); }
 .portal-partner-invite-card [data-slot="button"]:focus-visible,
@@ -1560,7 +1549,7 @@ a.portal-top-foot-action { text-decoration: none; }
 .portal-auth-footer a:hover { color: var(--accent-ink); text-decoration: underline; text-underline-offset: 3px; }
 .portal-auth-plan-empty { color: var(--portal-muted); font-size: .8rem; }
 .portal-signout-wrap { display: grid; gap: .35rem; }
-.portal-signout-button { border-radius: 8px; transition: transform 120ms ease, background-color 150ms ease, border-color 150ms ease, color 150ms ease; }
+.portal-signout-button { border-radius: 999px; transition: transform 120ms ease, background-color 150ms ease, border-color 150ms ease, color 150ms ease; }
 .portal-signout-button:active { transform: translateY(1px) scale(.99); }
 .portal-signout-button:focus-visible { outline: 2px solid var(--ring-color); outline-offset: 2px; }
 .portal-signout-error { color: var(--error-ink); font-size: .72rem; line-height: 1.35; }
@@ -1621,7 +1610,7 @@ a.portal-top-foot-action { text-decoration: none; }
 .portal-set-password-requirements li[data-met="true"] { color: var(--portal-ink); }
 .portal-set-password-requirements li[data-met="true"] > span { border-color: var(--success); background: var(--success); color: var(--on-primary); }
 .portal-set-password-error { border: 1px solid color-mix(in srgb, var(--color-danger), var(--portal-line) 60%); border-radius: 8px; background: color-mix(in srgb, var(--color-danger), transparent 95%); padding: .7rem .8rem; color: var(--error-ink); font-size: .82rem; }
-.portal-set-password-submit { min-height: 2.8rem; border-radius: 8px; background: var(--portal-primary); color: var(--on-primary); font-weight: 600; }
+.portal-set-password-submit { min-height: 2.8rem; border-radius: 999px; background: var(--portal-primary); color: var(--on-primary); font-weight: 600; }
 .portal-set-password-submit:hover { background: var(--portal-primary-hover); }
 .portal-set-password-return { border-bottom: 1px solid var(--portal-line); padding: 1.2rem 0 1.35rem; text-align: center; font-size: .82rem; }
 .portal-set-password-return a { color: var(--portal-muted); text-decoration: none; }
@@ -1692,6 +1681,11 @@ html.theme-switching *, html.theme-switching *::before, html.theme-switching *::
   body {
     background: var(--surface);
   }
+  /* LA-4 · a page that sets its own black-on-white print colours (the dispute letter) is paper in
+     either theme: in dark mode --surface would print a near-black page around a white letter. */
+  body:has([data-print-paper]) {
+    background: #fff;
+  }
   main {
     padding: 0 !important;
   }
@@ -1760,9 +1754,14 @@ html.theme-switching *, html.theme-switching *::before, html.theme-switching *::
   vertical-align: middle;
 }
 .insurvas-logo-image { object-fit: contain; object-position: center; }
-.insurvas-logo-wordmark.insurvas-logo-sidebar { width: 126px; height: 26px; }
-.insurvas-logo-wordmark.insurvas-logo-auth { width: 148px; height: 31px; }
-.insurvas-logo-wordmark.insurvas-logo-public { width: 142px; height: 29px; }
+/* The horizontal logo is 4.28:1 (isotype + wordmark); boxes keep that ratio so nothing letterboxes. */
+.insurvas-logo-wordmark.insurvas-logo-sidebar { width: 137px; height: 32px; }
+.insurvas-logo-wordmark.insurvas-logo-auth { width: 163px; height: 38px; }
+.insurvas-logo-wordmark.insurvas-logo-public { width: 154px; height: 36px; }
+/* A logo with no `tone` follows the theme: the light file on light, the on-dark file in .dark. */
+.insurvas-logo-theme-dark { display: none; }
+.dark .insurvas-logo-theme-light { display: none; }
+.dark .insurvas-logo-theme-dark { display: block; }
 .insurvas-logo-symbol.insurvas-logo-compact { width: 28px; height: 28px; }
 .insurvas-logo-symbol.insurvas-logo-sidebar { width: 28px; height: 28px; }
 .insurvas-agent-brand-compact,
@@ -1798,7 +1797,7 @@ html.theme-switching *, html.theme-switching *::before, html.theme-switching *::
 .portal-agent-nav-link:focus-visible,
 .portal-agent-nav-disclosure:focus-visible,
 .portal-agent-module-button:focus-visible { outline: 2px solid var(--ring-color); outline-offset: 2px; }
-.portal-agent-nav-link.is-active { border-color: transparent; background: var(--soft-orange-surface); box-shadow: inset 2px 0 0 var(--portal-primary); color: var(--accent-ink); }
+.portal-agent-nav-link.is-active { border-color: transparent; background: var(--primary-soft); box-shadow: inset 2px 0 0 var(--portal-primary); color: var(--accent-ink); }
 .portal-agent-nav-link.is-active .portal-agent-nav-icon { color: var(--accent-ink); }
 .portal-agent-nav-link-copy,
 .portal-agent-nav-disclosure-copy { display: flex; min-width: 0; flex: 1 1 auto; align-items: center; gap: .5rem; }
@@ -1888,7 +1887,7 @@ html.theme-switching *, html.theme-switching *::before, html.theme-switching *::
 .portal-agent-chat-list { display: grid; max-height: none; flex: 1; overflow-y: auto; }
 .portal-agent-chat-conversation { position: relative; display: flex; min-width: 0; align-items: flex-start; gap: .7rem; border-left: 3px solid transparent; border-bottom: 1px solid var(--portal-line); background: transparent; padding: .8rem .85rem .8rem .75rem; text-align: left; transition: background-color 150ms ease, border-color 150ms ease; }
 .portal-agent-chat-conversation:hover { background: var(--portal-group); }
-.portal-agent-chat-conversation.is-selected { border-left-color: var(--accent-ink); background: var(--soft-orange-surface); }
+.portal-agent-chat-conversation.is-selected { border-left-color: var(--accent-ink); background: var(--primary-soft); }
 .portal-agent-chat-avatar { display: inline-flex; width: 2.45rem; height: 2.45rem; flex: 0 0 2.45rem; align-items: center; justify-content: center; border-radius: 999px; background: var(--surface-alt); color: var(--accent-ink); font-size: .75rem; font-weight: 600; }
 .portal-agent-chat-avatar-large { width: 2.8rem; height: 2.8rem; font-size: .82rem; }
 .portal-agent-chat-conversation-copy { display: grid; min-width: 0; flex: 1; gap: .15rem; }
@@ -1931,7 +1930,7 @@ html.theme-switching *, html.theme-switching *::before, html.theme-switching *::
 .portal-agent-chat-file-chips > span > svg { width: .8rem; height: .8rem; flex: 0 0 auto; color: var(--accent-ink); }
 .portal-agent-chat-file-chips > span > button { display: inline-flex; align-items: center; justify-content: center; margin-left: .1rem; color: var(--portal-muted); }
 .portal-agent-chat-file-chips > span > button svg { width: .72rem; height: .72rem; }
-.portal-agent-chat-primary { display: inline-flex; min-height: 2.2rem; align-items: center; justify-content: center; gap: .4rem; border-radius: 8px; background: var(--portal-primary); padding: .45rem .85rem; color: var(--on-primary); font-size: 12px; font-weight: 600; }
+.portal-agent-chat-primary { display: inline-flex; min-height: 2.2rem; align-items: center; justify-content: center; gap: .4rem; border-radius: 999px; background: var(--portal-primary); padding: .45rem .85rem; color: var(--on-primary); font-size: 12px; font-weight: 600; }
 .portal-agent-chat-primary:hover { background: var(--portal-primary-hover); }
 .portal-agent-chat-primary:disabled { cursor: not-allowed; opacity: .5; }
 .portal-agent-chat-send svg { width: .85rem; height: .85rem; }
@@ -2042,7 +2041,7 @@ html.theme-switching *, html.theme-switching *::before, html.theme-switching *::
 /* title size now comes from PageHeader — one 32px title everywhere inside the shell */
 
 /* Lead workspace: board-first operations surface with a compact master/detail preview. */
-.lead-workspace-page { max-width: 1440px; margin: 0 auto; padding: 0 0 2rem; color: var(--ink); } /* title size now comes from PageHeader — one 32px title everywhere inside the shell */
+.lead-workspace-page { width: 100%; min-width: 0; padding: 0; color: var(--ink); } /* title size now comes from PageHeader — one 32px title everywhere inside the shell */
 .eyebrow { display: block; color: var(--muted); font-size: .65rem; font-weight: 600; letter-spacing: .11em; }
 .lead-workspace-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1rem; align-items: start; }
 .has-preview .lead-workspace-grid { grid-template-columns: minmax(0, 1fr) minmax(300px, 34%); }
@@ -2057,7 +2056,7 @@ html.theme-switching *, html.theme-switching *::before, html.theme-switching *::
 .lead-preview-header h2 { margin-top: .25rem; overflow: hidden; font-size: 1.1rem; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .lead-preview-header p { margin-top: .15rem; color: var(--muted); font-size: 12px; line-height: 1.5; }
 .lead-preview-close { align-self: flex-start; border-radius: 6px; padding: .25rem; color: var(--muted); }
-.lead-preview-close:hover { background: var(--soft-orange-surface); color: var(--accent-ink); }
+.lead-preview-close:hover { background: var(--primary-soft); color: var(--accent-ink); }
 .lead-preview-tabs { display: flex; gap: 1.1rem; border-bottom: 1px solid var(--border); padding: 0 1rem; }
 .lead-preview-tabs button { border-bottom: 2px solid transparent; padding: .65rem 0 .55rem; color: var(--muted); font-size: 14px; font-weight: 600; }
 .lead-preview-tabs button.is-active { border-color: var(--primary); color: var(--ink); }
@@ -2179,7 +2178,7 @@ html.theme-switching *, html.theme-switching *::before, html.theme-switching *::
  * sheet and every screenshot of the product looked like a document rather than an application.
  * The artboards draw it dark: a 264px column in --nav-bg with no right border, a hairline brand
  * block at the top, links in --nav-ink, only the section headings in --nav-muted, and exactly one
- * orange thing on it — the page you are on, which gets the soft orange chip and a 2px inset bar.
+ * green thing on it — the page you are on, which gets the soft green chip and a 2px inset bar.
  * Child rows sit flush with the headings (no indent, no guide line), as p-nav-profile draws them.
  *
  * All three portals share these class names, so this is the agent, admin and partner rail at once.
@@ -2232,15 +2231,16 @@ html.theme-switching *, html.theme-switching *::before, html.theme-switching *::
   background: rgba(255, 255, 255, .06);
   color: var(--nav-ink);
 }
-/* The one orange object on the rail. */
+/* The one brand-green object on the rail: a translucent green chip, light text, a bright green bar
+   (the --nav-active-* tokens; the admin console maps them back to its own chip). */
 .portal-agent-nav-link.is-active,
 .portal-agent-nav-link.is-active:hover {
-  background: var(--soft-orange-surface);
+  background: var(--nav-active-bg);
   box-shadow: inset 2px 0 0 var(--portal-primary);
-  color: var(--accent-ink);
+  color: var(--nav-active-ink);
   font-weight: 500; /* the chip carries it; the board keeps the weight of its neighbours */
 }
-.portal-agent-nav-link.is-active .portal-agent-nav-icon { color: var(--accent-ink); }
+.portal-agent-nav-link.is-active .portal-agent-nav-icon { color: var(--nav-active-icon); }
 
 /* Section headings are labels, not buttons that happen to be quiet. LA-1 and LA-2 are headings
    too — they used to be 55px two-line blocks with an icon tile, heavier than anything they head. */
@@ -2500,7 +2500,7 @@ html.theme-switching *, html.theme-switching *::before, html.theme-switching *::
 .partner-lane-header h3 { margin: 0; color: var(--body); font-size: 14px; line-height: 1.5; font-weight: 600; letter-spacing: -.02em; }
 .partner-lane-header span { margin: 0; color: var(--body); font-size: 14px; line-height: 1.5; font-weight: 600; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
 /* The lane's name and its count both take the lane's ink, on the lane's ground (board). */
-.partner-lane[data-lane="claimed"] .partner-lane-header { background: var(--soft-orange-surface); }
+.partner-lane[data-lane="claimed"] .partner-lane-header { background: var(--primary-soft); }
 .partner-lane[data-lane="claimed"] .partner-lane-header :is(h3, span) { color: var(--accent-ink); }
 .partner-lane[data-lane="verification"] .partner-lane-header { background: var(--info-surface); }
 .partner-lane[data-lane="verification"] .partner-lane-header :is(h3, span) { color: var(--info-ink); }
@@ -2556,7 +2556,7 @@ html.theme-switching *, html.theme-switching *::before, html.theme-switching *::
 .portal-gate-card { box-sizing: border-box; width: 620px; max-width: 100%; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); padding: 32px; color: var(--ink); }
 .portal-gate-lead { text-align: center; }
 .portal-gate-icon { display: inline-flex; width: 52px; height: 52px; align-items: center; justify-content: center; border-radius: 9999px; }
-.portal-gate-icon.is-accent { background: color-mix(in srgb, var(--primary) 10%, var(--surface)); color: var(--primary); }
+.portal-gate-icon.is-accent { background: color-mix(in srgb, var(--primary) 10%, var(--surface)); color: var(--accent-ink); }
 .portal-gate-icon.is-error { background: var(--error-surface); color: var(--error); }
 .portal-gate-icon.is-warning { background: var(--warning-surface); color: var(--warning-ink); }
 .portal-gate-icon.is-info { background: var(--info-surface); color: var(--info-ink); }
@@ -2564,7 +2564,7 @@ html.theme-switching *, html.theme-switching *::before, html.theme-switching *::
 .portal-gate-lead p { margin: 10px 0 0; color: var(--muted); font-size: 16px; line-height: 1.5; letter-spacing: -.02em; }
 .portal-gate-lead p strong { color: var(--ink); font-weight: 600; }
 .portal-gate-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin-top: 24px; }
-.portal-gate-actions [data-slot="button"] { height: 44px; padding: 0 16px; border-radius: 8px; font-size: 14px; }
+.portal-gate-actions [data-slot="button"] { height: 44px; padding: 0 16px; border-radius: 999px; font-size: 14px; }
 .portal-gate-facts { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; margin-top: 24px; }
 .portal-gate-facts.is-pair { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .portal-gate-facts > section, .portal-gate-reach { box-sizing: border-box; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); padding: 20px; }
@@ -2611,7 +2611,7 @@ html.theme-switching *, html.theme-switching *::before, html.theme-switching *::
 .portal-callbacks-who small, .portal-callbacks-when small { display: block; overflow: hidden; color: var(--muted); font-size: 12px; line-height: 1.5; letter-spacing: -.01em; text-overflow: ellipsis; white-space: nowrap; }
 .portal-callbacks-when { flex: 0 0 150px; width: 150px; font-variant-numeric: tabular-nums; }
 .portal-callbacks-actions { display: flex; flex: 0 0 auto; gap: 8px; justify-content: flex-end; }
-.portal-callbacks-actions [data-slot="button"] { height: 32px; padding: 0 16px; border-radius: 8px; font-size: 14px; }
+.portal-callbacks-actions [data-slot="button"] { height: 32px; padding: 0 16px; border-radius: 999px; font-size: 14px; }
 .portal-callbacks-link { align-self: center; color: var(--accent-ink); font-size: 14px; font-weight: 600; }
 .portal-callbacks-empty { margin: 0; padding: 24px 16px; color: var(--muted); font-size: 14px; line-height: 1.5; }
 .portal-status-chip.is-accent > span { background: var(--primary); }
@@ -2630,7 +2630,7 @@ html.theme-switching *, html.theme-switching *::before, html.theme-switching *::
 .portal-callbacks-checks { display: flex; flex-direction: column; gap: 10px; }
 .portal-callbacks-checks > span { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
 .portal-callbacks-checks small { color: var(--muted); font-size: 12px; line-height: 1.5; letter-spacing: -.01em; }
-.portal-callbacks-card [data-slot="button"] { height: 44px; border-radius: 8px; font-size: 14px; }
+.portal-callbacks-card [data-slot="button"] { height: 44px; border-radius: 999px; font-size: 14px; }
 .portal-callbacks-card-more { display: flex; flex-wrap: wrap; gap: 16px; margin-top: -4px; }
 .portal-callbacks-card-more button { border: 0; background: none; padding: 0; color: var(--accent-ink); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
 .portal-callbacks-card-more button:disabled { color: var(--muted); cursor: default; }

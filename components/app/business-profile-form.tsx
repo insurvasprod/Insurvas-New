@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
 const chip = (on: boolean) =>
   cn(
     "rounded-lg px-3.5 py-2.5 text-sm font-semibold tracking-[-0.02em]",
-    on ? "border-[1.5px] border-[var(--primary)] bg-[var(--soft-orange-surface)] text-[var(--accent-ink)]" : "border border-[var(--border-strong)] bg-card text-[var(--body)]",
+    on ? "border-[1.5px] border-[var(--primary)] bg-[var(--primary-soft)] text-[var(--accent-ink)]" : "border border-[var(--border-strong)] bg-card text-[var(--body)]",
   );
 
 function Stepper() {

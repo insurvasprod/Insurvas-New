@@ -3,6 +3,7 @@ import { cache } from "react";
 
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { TENANT_ROLE_LABELS, type TenantRole } from "./roles";
+import { readAvatar } from "@/lib/users/avatar";
 
 /**
  * Who the top bar says you are.
@@ -12,7 +13,7 @@ import { TENANT_ROLE_LABELS, type TenantRole } from "./roles";
  * two more columns on the hot path.
  */
 export async function readTopBarIdentity(input: { userId: string; tenantId: string; role: TenantRole }) {
-  const { user, tenant } = await prefetchTopBarIdentity(input.userId, input.tenantId);
+  const { user, tenant, avatar } = await prefetchTopBarIdentity(input.userId, input.tenantId);
   return {
     // A blank name is possible on an invited account that has not finished onboarding; the email
     // is the next best thing a person recognises as themselves.
@@ -20,6 +21,8 @@ export async function readTopBarIdentity(input: { userId: string; tenantId: stri
     email: user?.email ?? "",
     roleLabel: TENANT_ROLE_LABELS[input.role],
     workspaceName: tenant?.name?.trim() || "Your workspace",
+    // The profile picture's version, so the bar can show it in place of the initials; null when none.
+    avatarVersion: avatar?.version ?? null,
   };
 }
 
@@ -31,9 +34,11 @@ export async function readTopBarIdentity(input: { userId: string; tenantId: stri
  */
 export const prefetchTopBarIdentity = cache(async (userId: string, tenantId: string) => {
   const supabase = getSupabaseServiceClient();
-  const [{ data: user }, { data: tenant }] = await Promise.all([
+  const [{ data: user }, { data: tenant }, avatar] = await Promise.all([
     supabase.from("users").select("name, email").eq("id", userId).maybeSingle<{ name: string | null; email: string | null }>(),
     supabase.from("tenants").select("name").eq("id", tenantId).maybeSingle<{ name: string | null }>(),
+    // Its own read: before 20261005120000 the column is missing and this is simply "no picture".
+    readAvatar(userId),
   ]);
-  return { user, tenant };
+  return { user, tenant, avatar };
 });

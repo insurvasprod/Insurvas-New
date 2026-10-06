@@ -27,9 +27,9 @@ export function PartnerInviteResultPanel({ result }: { result: PartnerInviteResu
   }
 
   return (
-    <div className="space-y-3 rounded-lg border border-border bg-[var(--color-blue-faint)] p-4" role="status">
+    <div className="space-y-3 rounded-lg border border-border bg-[var(--color-brand-faint)] p-4" role="status">
       <div className="flex items-start gap-2 text-sm">
-        <Mail className="mt-0.5 size-4 shrink-0 text-[var(--color-blue)]" aria-hidden="true" />
+        <Mail className="mt-0.5 size-4 shrink-0 text-[var(--color-brand)]" aria-hidden="true" />
         <p className="text-muted-foreground">
           {result.delivered
             ? result.mode === "existing_account"

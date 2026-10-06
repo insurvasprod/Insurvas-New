@@ -17,15 +17,20 @@
  * Mounted in the page header of the ledger and the statements history, as each page's primary
  * action. Only rendered for a viewer who may import; everyone else gets the disabled button and its
  * reason from the page.
+ *
+ * 2026-10-06 redesign: the preview's figures are the shared StatStrip, and every select is the
+ * same 36px control as the toolbars.
  */
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
+import { toolbarControl } from "@/components/ui/data-toolbar";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { StatStrip, StatTile } from "@/components/ui/stat";
 import { isXlsxFile, readXlsxAsCsv } from "@/lib/agentTemplates/xlsx";
 import { STATEMENT_FILE_ACCEPT, statementFileKind, statementFileProblem } from "@/lib/ledger/statementFile";
 import {
@@ -42,6 +47,7 @@ import {
 import { readStatementHeaders, sanitizeStatementMapping, statementMappingProblem, suggestStatementMapping } from "@/lib/ledger/statementParse";
 
 type Step = "file" | "map" | "preview";
+const selectClass = `${toolbarControl} w-full`;
 type FileKind = "csv" | "xlsx" | "pdf";
 
 function lastMonth(): { start: string; end: string } {
@@ -56,6 +62,17 @@ async function postJson<T>(url: string, body: unknown): Promise<T> {
   const data = (await response.json().catch(() => ({}))) as T & { error?: string };
   if (!response.ok) throw new Error(data.error ?? "Something went wrong; nothing was imported.");
   return data;
+}
+
+/** The original file's SHA-256, the hash the import stores and checks duplicates by (LA-4.1). */
+async function sha256Hex(file: File): Promise<string | undefined> {
+  try {
+    const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());
+    return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+  } catch {
+    // No Web Crypto (an insecure origin): the import still refuses a duplicate, only later.
+    return undefined;
+  }
 }
 
 async function postForm<T>(url: string, form: FormData): Promise<T> {
@@ -87,7 +104,7 @@ export function StatementMappingFields({ headers, mapping, onChange, idPrefix = 
             </div>
             <select
               id={`${idPrefix}-${field}`}
-              className="portal-import-select"
+              className={selectClass}
               value={mapping[field] ?? ""}
               onChange={(event) => onChange({ ...mapping, [field]: event.target.value || undefined })}
             >
@@ -118,6 +135,7 @@ export function StatementImportButton({
   const [fileKind, setFileKind] = useState<FileKind | null>(null);
   const [sheetName, setSheetName] = useState<string | null>(null);
   const [csvText, setCsvText] = useState("");
+  const [fileSha256, setFileSha256] = useState<string | undefined>(undefined);
   const [headers, setHeaders] = useState<string[]>([]);
   const [carrierId, setCarrierId] = useState("");
   const [period, setPeriod] = useState(lastMonth);
@@ -132,7 +150,7 @@ export function StatementImportButton({
   const fileProblem = !file || (fileKind !== "pdf" && !csvText) ? "Choose the carrier's statement file: CSV, Excel or PDF." : !carrierId ? "Choose the carrier this statement is from." : !period.start || !period.end ? "Enter the period the statement covers." : period.end < period.start ? "The period ends before it starts." : null;
 
   function reset() {
-    setStep("file"); setFileName(""); setFile(null); setFileKind(null); setSheetName(null); setCsvText(""); setHeaders([]); setCarrierId(""); setPeriod(lastMonth());
+    setStep("file"); setFileName(""); setFile(null); setFileKind(null); setSheetName(null); setCsvText(""); setFileSha256(undefined); setHeaders([]); setCarrierId(""); setPeriod(lastMonth());
     setMapping({}); setMappingSource(null); setPreview(null); setBusy(false); setError(null);
   }
 
@@ -148,7 +166,7 @@ export function StatementImportButton({
 
   async function chooseFile(next: File | undefined) {
     setError(null); setPreview(null);
-    setFile(null); setFileKind(null); setSheetName(null); setCsvText(""); setHeaders([]); setFileName("");
+    setFile(null); setFileKind(null); setSheetName(null); setCsvText(""); setFileSha256(undefined); setHeaders([]); setFileName("");
     if (!next) return;
     const problem = statementFileProblem(next);
     if (problem) { setError(problem); return; }
@@ -172,6 +190,7 @@ export function StatementImportButton({
     try { nextHeaders = readStatementHeaders(text); } catch (reason) { setError(reason instanceof Error ? reason.message : "The file could not be read."); return; }
     if (!nextHeaders.length) { setError("The file has no header row."); return; }
     setFile(next); setFileKind(kind); setFileName(next.name); setCsvText(text); setHeaders(nextHeaders);
+    setFileSha256(await sha256Hex(next));
     chooseMapping(nextHeaders, carrierId);
   }
 
@@ -180,7 +199,7 @@ export function StatementImportButton({
     if (headers.length) chooseMapping(headers, id);
   }
 
-  const body = () => ({ carrier_id: carrierId, period_start: period.start, period_end: period.end, file_name: fileName, csv_text: csvText, mapping });
+  const body = () => ({ carrier_id: carrierId, period_start: period.start, period_end: period.end, file_name: fileName, csv_text: csvText, mapping, file_sha256: fileSha256 });
 
   async function runPreview() {
     setBusy(true); setError(null);
@@ -240,7 +259,7 @@ export function StatementImportButton({
               </div>
               <div className="grid gap-1.5">
                 <Label htmlFor="statement-carrier">Carrier</Label>
-                <select id="statement-carrier" className="portal-import-select" value={carrierId} onChange={(event) => chooseCarrier(event.target.value)}>
+                <select id="statement-carrier" className={selectClass} value={carrierId} onChange={(event) => chooseCarrier(event.target.value)}>
                   <option value="">Choose the carrier…</option>
                   {carriers.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}
                 </select>
@@ -278,20 +297,12 @@ export function StatementImportButton({
                   </p>
                 </div>
               )}
-              <dl className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-                {[
-                  ["Lines", preview.totalLines.toLocaleString("en-US")],
-                  ["Proposed matches", preview.proposedLines.toLocaleString("en-US")],
-                  ["No match yet", preview.unmatchedLines.toLocaleString("en-US")],
-                  ["Could not read", preview.errorLines.toLocaleString("en-US")],
-                  ["Net on statement", statementMoney(preview.netCents)],
-                ].map(([label, value]) => (
-                  <div key={label} className="rounded-lg border border-border bg-[var(--surface-alt)] px-3 py-2">
-                    <dt className="text-xs font-semibold uppercase tracking-[0.02em] text-muted-foreground">{label}</dt>
-                    <dd className="mt-1 text-base font-semibold tabular-nums">{value}</dd>
-                  </div>
-                ))}
-              </dl>
+              <StatStrip label="What the file holds">
+                <StatTile label="Lines" value={preview.totalLines.toLocaleString("en-US")} footnote={`${statementMoney(preview.netCents)} net on statement`} />
+                <StatTile label="Proposed matches" value={preview.proposedLines.toLocaleString("en-US")} />
+                <StatTile label="No match yet" value={preview.unmatchedLines.toLocaleString("en-US")} />
+                <StatTile label="Could not read" value={preview.errorLines.toLocaleString("en-US")} valueTone={preview.errorLines > 0 ? "warning" : undefined} />
+              </StatStrip>
               <div className="overflow-x-auto rounded-lg border border-border">
                 <table className="portal-lead-table w-full min-w-[720px] text-left text-sm">
                   <thead>
@@ -365,7 +376,7 @@ export function StatementImportButton({
             )}
             {step === "preview" && preview && (
               <Button type="button" disabled={busy || Boolean(preview.duplicate)} title={preview.duplicate ? "Already imported for this carrier and period" : undefined} onClick={() => void runImport()}>
-                {busy ? "Importing…" : `Import ${preview.totalLines.toLocaleString("en-US")} lines for review`}
+                {busy ? "Importing…" : `Import ${preview.totalLines.toLocaleString("en-US")} ${preview.totalLines === 1 ? "line" : "lines"} for review`}
               </Button>
             )}
           </DialogFooter>

@@ -19,7 +19,6 @@ import {
   ChevronLeft,
   Download,
   Edit3,
-  Info,
   MapPin,
   MoreHorizontal,
   Pause,
@@ -66,8 +65,10 @@ import { PartnerOnboarding } from "@/components/app/partner-onboarding";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { PageLoading } from "@/components/ui/page-loading";
 import { TableCard } from "@/components/ui/table-card";
-import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
+import { ClearFiltersButton, DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { NoMatches } from "@/components/ui/page-states";
+import { Pager, paginate } from "@/components/ui/pager";
+import { FILL_CARD, useFittingRows } from "@/components/app/use-fitting-rows";
 import { productLineLabel } from "@/lib/format/productLine";
 import { PARTNER_LIMIT_KEYS, capacityLabel } from "@/lib/partners/limits";
 import { partnerLimitMessage } from "@/lib/partnerLimits/copy";
@@ -136,15 +137,17 @@ type PartnerDraft = {
 type DetailTab =
   "overview" | "terms" | "products" | "markets" | "forms" | "team" | "activity";
 
-// The board's strip: Overview, Team, Products, Forms, Commercial terms, then More.
-const primaryDetailTabs: DetailTab[] = [
+// The board's strip: Overview, Team, Products, Forms, Commercial terms, then the two that sat
+// behind "More" — all on the one row now there is no side column beside it (2026-10-06 redesign).
+const detailTabs: DetailTab[] = [
   "overview",
   "team",
   "products",
   "forms",
   "terms",
+  "markets",
+  "activity",
 ];
-const secondaryDetailTabs: DetailTab[] = ["markets", "activity"];
 
 const detailTabLabel = (tab: DetailTab) =>
   tab === "markets"
@@ -299,6 +302,9 @@ export function PartnersWorkspace({
   const [statusFilter, setStatusFilter] = useState<"all" | PartnerStatus>(
     "all",
   );
+  const [listPage, setListPage] = useState(1);
+  // Header, capacity strip, toolbar, column heads and pager around the directory's rows.
+  const listPageSize = useFittingRows(400, 49);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [offboardFor, setOffboardFor] = useState<Partner | null>(null);
   const [offboardText, setOffboardText] = useState("");
@@ -559,6 +565,9 @@ export function PartnersWorkspace({
       );
     });
   }, [partners, search, statusFilter, typeFilter]);
+  const { current: listCurrent, rows: listRows } = paginate(filteredPartners, listPage, listPageSize);
+  const listFiltered = search.trim() !== "" || typeFilter !== "all" || statusFilter !== "all";
+  const clearListFilters = () => { setSearch(""); setTypeFilter("all"); setStatusFilter("all"); setListPage(1); };
   const selectedPartner =
     partners.find((partner) => partner.id === selectedId) ?? null;
   const selectedProducts = selectedPartner
@@ -585,9 +594,9 @@ export function PartnersWorkspace({
   if (loading) return <PageLoading />;
 
   return (
-    <div className="m-stagger portal-partners-page flex flex-col gap-6 pb-6">
+    <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
       {readOnly && (
-        <div className="portal-partners-readonly rounded-lg border border-[var(--color-warning)]/30 bg-[var(--color-warning)]/10 px-4 py-3 text-sm text-foreground">
+        <div role="status" className="rounded-lg border border-[var(--warning)]/30 bg-[var(--warning-surface)] px-4 py-2.5 text-sm text-[var(--warning-ink)]">
           Your account is read-only. You can review partner records, but changes
           are unavailable until billing is restored.
         </div>
@@ -679,34 +688,27 @@ export function PartnersWorkspace({
           <Button
             type="button"
             variant="outline"
-            size="sm"
             onClick={() => setSelectedId(null)}
           >
-            <X className="mr-1.5 size-4" aria-hidden="true" />
+            <X aria-hidden="true" />
             Close details
           </Button>
         </div>
       )}
-      <div
-        className={cn(
-          "portal-partners-master-detail grid gap-4 transition-[grid-template-columns] duration-300 ease-in-out",
-          detailOnly
-            ? "is-detail-only lg:grid-cols-1"
-            : selectedPartner
-            ? "is-selected lg:grid-cols-[minmax(220px,24%)_minmax(0,1fr)]"
-            : "lg:grid-cols-1",
-        )}
-      >
+      <div className="flex min-w-0 flex-col gap-4">
         {!detailOnly && <TableCard
-          className="min-w-0"
+          className={`${FILL_CARD} min-h-[calc(100dvh-var(--top-bar-h)-260px)] min-w-0`}
           toolbar={
-            <DataToolbar actions={<RefreshButton onClick={() => void load()} refreshing={refreshing} />}>
-              <ToolbarSearch value={search} onChange={setSearch} placeholder="Search partners" />
+            <DataToolbar actions={<>
+              {listFiltered && <ClearFiltersButton onClick={clearListFilters} />}
+              <RefreshButton onClick={() => void load()} refreshing={refreshing} />
+            </>}>
+              <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setListPage(1); }} placeholder="Search partners" />
               <select
                 aria-label="Filter by partner type"
                 className={cn(toolbarControl, selectedPartner && "hidden")}
                 value={typeFilter}
-                onChange={(event) => setTypeFilter(event.target.value as typeof typeFilter)}
+                onChange={(event) => { setTypeFilter(event.target.value as typeof typeFilter); setListPage(1); }}
               >
                 <option value="all">All types</option>
                 {PARTNER_TYPES.map((type) => (
@@ -719,7 +721,7 @@ export function PartnersWorkspace({
                 aria-label="Filter by partner status"
                 className={cn(toolbarControl, selectedPartner && "hidden")}
                 value={statusFilter}
-                onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}
+                onChange={(event) => { setStatusFilter(event.target.value as typeof statusFilter); setListPage(1); }}
               >
                 <option value="all">All statuses</option>
                 {(["draft", "active", "paused", "offboarded"] as PartnerStatus[]).map((status) => (
@@ -730,165 +732,68 @@ export function PartnersWorkspace({
               </select>
             </DataToolbar>
           }
+          footer={<Pager page={listCurrent} total={filteredPartners.length} pageSize={listPageSize} noun="partners" onPage={setListPage} suffix={`${partners.length} partner records in all`} />}
         >
             {filteredPartners.length === 0 ? (
-              <NoMatches noun="partners" onClear={() => { setSearch(""); setTypeFilter("all"); setStatusFilter("all"); }} />
+              <NoMatches noun="partners" onClear={clearListFilters} />
             ) : (
-              <div className="overflow-x-auto">
-                <table
-                  className={cn(
-                    "w-full table-fixed text-left text-sm",
-                    selectedPartner ? "min-w-0" : "min-w-[840px]",
-                  )}
-                >
-                  <thead className="border-b bg-muted/30 text-xs text-muted-foreground">
-                    <tr>
-                      <th
-                        className={cn(
-                          "w-full px-4 py-3 font-medium",
-                          selectedPartner && "px-2",
-                        )}
-                      >
-                        Partner
-                      </th>
-                      <th
-                        className={cn(
-                          "px-4 py-3 font-medium",
-                          selectedPartner && "hidden",
-                        )}
-                      >
-                        Type
-                      </th>
-                      <th
-                        className={cn(
-                          "px-4 py-3 font-medium",
-                          selectedPartner && "hidden",
-                        )}
-                      >
-                        Approved for
-                      </th>
-                      <th
-                        className={cn(
-                          "px-4 py-3 font-medium",
-                          selectedPartner && "hidden",
-                        )}
-                      >
-                        Status
-                      </th>
-                      <th
-                        className={cn(
-                          "px-4 py-3 font-medium",
-                          selectedPartner && "hidden",
-                        )}
-                      >
-                        This month
-                      </th>
-                      <th
-                        className={cn(
-                          "px-4 py-3 font-medium",
-                          selectedPartner && "hidden",
-                        )}
-                      >
-                        Last submission
-                      </th>
-                      <th className="w-20 px-2 py-3 text-right font-medium">
-                        Actions
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y">
-                    {filteredPartners.map((partner) => (
-                      <tr
-                        key={partner.id}
-                        className={`transition-colors hover:bg-muted/30 ${selectedPartner?.id === partner.id ? "bg-[var(--color-blue-faint)]" : ""}`}
-                      >
-                        <td className="w-full px-4 py-3">
+              <table className={cn("portal-lead-table w-full text-left text-sm", selectedPartner ? "min-w-0" : "min-w-[1080px]")}>
+                <thead>
+                  <tr>
+                    <th>Partner</th>
+                    {!selectedPartner && <th>Contact email</th>}
+                    {!selectedPartner && <th>Type</th>}
+                    {!selectedPartner && <th>Approved for</th>}
+                    {!selectedPartner && <th>Status</th>}
+                    {!selectedPartner && <th className="text-right" title="Transfers this month">Transfers (month)</th>}
+                    {!selectedPartner && <th className="text-right" title="Completed this month">Completed</th>}
+                    {!selectedPartner && <th className="text-right" title="Dropped this month">Dropped</th>}
+                    {!selectedPartner && <th>Last submission</th>}
+                    <th className="text-right"><span className="sr-only">Actions</span></th>
+                  </tr>
+                </thead>
+                <tbody className="m-seq">
+                  {listRows.map((partner) => {
+                    const products = partner.approved_products.length ? partner.approved_products.map(productLineLabel).join(" · ") : "Nothing yet";
+                    const dropHeavy = partner.transfers_this_month >= 10 && partner.dropped_this_month / partner.transfers_this_month >= 0.15;
+                    return (
+                      <tr key={partner.id} className={cn("m-row", selectedPartner?.id === partner.id && "bg-[var(--primary-soft)]")}>
+                        <td className="max-w-[260px]">
                           <button
                             type="button"
-                            className={cn(
-                              "flex w-full min-w-0 items-center gap-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                              selectedPartner && "gap-2",
-                            )}
+                            className="flex w-full min-w-0 items-center gap-2.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                             // One partner has one page (/app/publishers/[id]) — the same layout whether it
                             // was opened from here or from a link, so the two can never drift apart.
                             onClick={() => router.push(`/app/publishers/${partner.id}`)}
                           >
-                            <span
-                              className={cn(
-                                "flex size-9 shrink-0 items-center justify-center rounded-md bg-[var(--color-blue-light)] text-sm font-semibold text-[var(--color-accent-ink)]",
-                                selectedPartner && "size-8",
-                              )}
-                            >
+                            <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-[var(--primary-soft)] text-xs font-semibold text-[var(--accent-ink)]" aria-hidden="true">
                               {partner.name.slice(0, 1).toUpperCase()}
                             </span>
-                            <span className="min-w-0">
-                              <span className="block truncate font-semibold">
-                                {partner.name}
-                              </span>
-                              <span
-                                className={cn(
-                                  "block truncate text-xs text-muted-foreground",
-                                  selectedPartner && "hidden",
-                                )}
-                              >
-                                {partner.contact_email || "No contact email"}
-                              </span>
-                            </span>
+                            <span className="truncate font-semibold text-foreground" title={partner.name}>{partner.name}</span>
                           </button>
                         </td>
-                        <td
-                          className={cn(
-                            "px-4 py-3 text-muted-foreground",
-                            selectedPartner && "hidden",
-                          )}
-                        >
-                          {PARTNER_TYPE_LABELS[partner.partner_type]}
-                        </td>
-                        <td
-                          className={cn(
-                            "px-4 py-3 text-muted-foreground",
-                            selectedPartner && "hidden",
-                          )}
-                        >
-                          <span className="line-clamp-2">
-                            {partner.approved_products.length ? partner.approved_products.map(productLineLabel).join(" · ") : "Nothing yet"}
-                          </span>
-                        </td>
-                        <td
-                          className={cn(
-                            "px-4 py-3",
-                            selectedPartner && "hidden",
-                          )}
-                        >
-                          <StatusChip tone={statusTone(partner.status)}>
-                            {PARTNER_STATUS_LABELS[partner.status]}
-                          </StatusChip>
-                          {partner.status === "offboarded" && (
-                            <span className="mt-1 block text-xs text-muted-foreground">
-                              {partner.offboarded_at ? `${dateLabel(partner.offboarded_at)} · ` : ""}history kept
+                        {!selectedPartner && <td className="max-w-[220px] truncate text-muted-foreground" title={partner.contact_email ?? undefined}>{partner.contact_email || "No contact email"}</td>}
+                        {!selectedPartner && <td className="whitespace-nowrap text-muted-foreground">{PARTNER_TYPE_LABELS[partner.partner_type]}</td>}
+                        {!selectedPartner && <td className="max-w-[220px] truncate text-muted-foreground" title={products}>{products}</td>}
+                        {!selectedPartner && (
+                          <td className="whitespace-nowrap">
+                            <span className="inline-flex items-center gap-2">
+                              <StatusChip tone={statusTone(partner.status)}>
+                                {PARTNER_STATUS_LABELS[partner.status]}
+                              </StatusChip>
+                              {partner.status === "offboarded" && (
+                                <span className="text-xs text-muted-foreground">
+                                  {partner.offboarded_at ? `${dateLabel(partner.offboarded_at)} · ` : ""}history kept
+                                </span>
+                              )}
                             </span>
-                          )}
-                        </td>
-                        <td
-                          className={cn(
-                            "px-4 py-3",
-                            selectedPartner && "hidden",
-                          )}
-                        >
-                          <span className="tabular-nums">{partner.transfers_this_month} {partner.transfers_this_month === 1 ? "transfer" : "transfers"}</span>
-                          <span className="block text-xs tabular-nums text-muted-foreground">
-                            {partner.completed_this_month} completed · <span className={partner.transfers_this_month >= 10 && partner.dropped_this_month / partner.transfers_this_month >= 0.15 ? "font-semibold text-[var(--warning-ink)]" : undefined}>{partner.dropped_this_month} dropped</span>
-                          </span>
-                        </td>
-                        <td
-                          className={cn(
-                            "whitespace-nowrap px-4 py-3 text-muted-foreground",
-                            selectedPartner && "hidden",
-                          )}
-                        >
-                          {dateLabel(partner.last_submission)}
-                        </td>
-                        <td className="w-20 px-2 py-3 text-right">
+                          </td>
+                        )}
+                        {!selectedPartner && <td className="text-right tabular-nums">{partner.transfers_this_month}</td>}
+                        {!selectedPartner && <td className="text-right tabular-nums">{partner.completed_this_month}</td>}
+                        {!selectedPartner && <td className={cn("text-right tabular-nums", dropHeavy && "font-semibold text-[var(--warning-ink)]")}>{partner.dropped_this_month}</td>}
+                        {!selectedPartner && <td className="whitespace-nowrap text-muted-foreground">{dateLabel(partner.last_submission)}</td>}
+                        <td className="text-right">
                           {selectedPartner?.id === partner.id ? (
                             <Button
                               type="button"
@@ -908,15 +813,11 @@ export function PartnersWorkspace({
                           )}
                         </td>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    );
+                  })}
+                </tbody>
+              </table>
             )}
-            <div className="border-t px-4 py-3 text-xs text-muted-foreground">
-              Showing {filteredPartners.length} of {partners.length} partner
-              records
-            </div>
         </TableCard>}
         {detailOnly && !selectedPartner && (
           <div className="rounded-lg border border-border bg-card px-5 py-10 text-center text-sm text-muted-foreground">
@@ -926,67 +827,42 @@ export function PartnersWorkspace({
         )}
         {detailOnly && selectedPartner && (
           <div className="flex min-w-0 flex-col gap-6" aria-label={`${selectedPartner.name} details`}>
-            <div className="flex flex-wrap gap-2">
-              <span className={cn("inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-[3px] text-xs font-semibold", STATUS_CHIP[selectedPartner.status])}>
-                <span className="size-1.5 rounded-full bg-current opacity-80" aria-hidden="true" />
-                {PARTNER_STATUS_LABELS[selectedPartner.status]}
-              </span>
-              <span className="inline-flex whitespace-nowrap rounded-full bg-[var(--surface-alt)] px-2.5 py-[3px] text-xs font-semibold text-[var(--body)]">{PARTNER_TYPE_LABELS[selectedPartner.partner_type]}</span>
-              <span className="inline-flex whitespace-nowrap rounded-full bg-[var(--soft-orange-surface)] px-2.5 py-[3px] text-xs font-semibold text-[var(--accent-ink)]">
-                {selectedPartner.active_user_count} portal {selectedPartner.active_user_count === 1 ? "user" : "users"}
-              </span>
-            </div>
-
-            <section className="rounded-lg border border-border bg-card p-5 shadow-[0_1px_2px_rgba(16,20,26,.05)]">
-              <div className="grid grid-cols-2 gap-x-6 gap-y-4 md:grid-cols-3 xl:grid-cols-5">
-                <PartnerFact label="Submitted">{selectedPartner.lead_volume_this_month.toLocaleString()} this month</PartnerFact>
-                <PartnerFact label="Last submission">{dateLabel(selectedPartner.last_submission)}</PartnerFact>
-                <PartnerFact label="Approved products">{selectedProducts.length ? `${selectedProducts.filter((product) => product.approved).length} of ${selectedProducts.length}` : "—"}</PartnerFact>
-                <PartnerFact label="Pays">{termText(selectedPartner.active_term)}</PartnerFact>
-                <PartnerFact label="Since">{earliestTerm(selectedPartner) ? dateLabel(earliestTerm(selectedPartner)) : "—"}</PartnerFact>
+            {/* The key facts in one compact block (2026-10-06 redesign): state chips, then the figures. */}
+            <section className="flex flex-wrap items-center gap-x-8 gap-y-3 rounded-lg border border-border bg-card px-5 py-4 shadow-[0_1px_2px_rgba(16,20,26,.05)]">
+              <div className="flex flex-wrap gap-2">
+                <span className={cn("inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-semibold", STATUS_CHIP[selectedPartner.status])}>
+                  <span className="size-1.5 rounded-full bg-current opacity-80" aria-hidden="true" />
+                  {PARTNER_STATUS_LABELS[selectedPartner.status]}
+                </span>
+                <span className="inline-flex whitespace-nowrap rounded-full bg-[var(--surface-alt)] px-2.5 py-0.5 text-xs font-semibold text-[var(--body)]">{PARTNER_TYPE_LABELS[selectedPartner.partner_type]}</span>
+                <span className="inline-flex whitespace-nowrap rounded-full bg-[var(--primary-soft)] px-2.5 py-0.5 text-xs font-semibold text-[var(--accent-ink)]">
+                  {selectedPartner.active_user_count} portal {selectedPartner.active_user_count === 1 ? "user" : "users"}
+                </span>
               </div>
+              <PartnerFact label="Submitted">{selectedPartner.lead_volume_this_month.toLocaleString()} this month</PartnerFact>
+              <PartnerFact label="Last submission">{dateLabel(selectedPartner.last_submission)}</PartnerFact>
+              <PartnerFact label="Approved products">{selectedProducts.length ? `${selectedProducts.filter((product) => product.approved).length} of ${selectedProducts.length}` : "—"}</PartnerFact>
+              <PartnerFact label="Pays">{termText(selectedPartner.active_term)}</PartnerFact>
+              <PartnerFact label="Since">{earliestTerm(selectedPartner) ? dateLabel(earliestTerm(selectedPartner)) : "—"}</PartnerFact>
             </section>
 
-            <div className="flex flex-col gap-6 xl:flex-row xl:items-start">
-              <section className="min-w-0 flex-grow overflow-visible rounded-lg border border-border bg-card shadow-[0_1px_2px_rgba(16,20,26,.05)]">
+            <div className="flex min-w-0 flex-col gap-6">
+              <section className="min-w-0 overflow-visible rounded-lg border border-border bg-card shadow-[0_1px_2px_rgba(16,20,26,.05)]">
                 <nav className="flex flex-wrap items-center gap-x-6 border-b border-border px-5" aria-label="Partner detail sections">
-                  {primaryDetailTabs.map((tab) => (
+                  {detailTabs.map((tab) => (
                     <button
                       type="button"
                       aria-current={detailTab === tab ? "page" : undefined}
                       key={tab}
                       onClick={() => setDetailTab(tab)}
                       className={cn(
-                        "-mb-px h-10 shrink-0 border-b-2 px-1 text-sm font-semibold leading-[1.43] tracking-[-0.01em] outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                        "-mb-px h-9 shrink-0 border-b-2 px-1 text-sm font-semibold tracking-[-0.01em] outline-none focus-visible:ring-2 focus-visible:ring-ring",
                         detailTab === tab ? "border-[var(--primary)] text-foreground" : "border-transparent text-muted-foreground hover:text-foreground",
                       )}
                     >
                       {detailTabLabel(tab)}
                     </button>
                   ))}
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <button
-                        type="button"
-                        className={cn(
-                          "-mb-px inline-flex h-10 items-center gap-1 border-b-2 px-1 text-sm font-semibold leading-[1.43] tracking-[-0.01em] outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                          secondaryDetailTabs.includes(detailTab) ? "border-[var(--primary)] text-foreground" : "border-transparent text-muted-foreground hover:text-foreground",
-                        )}
-                      >
-                        {secondaryDetailTabs.includes(detailTab) ? detailTabLabel(detailTab) : "More"}
-                        <ChevronDown className="size-3.5" aria-hidden="true" />
-                      </button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="start" className="w-44">
-                      <DropdownMenuGroup>
-                        {secondaryDetailTabs.map((tab) => (
-                          <DropdownMenuItem key={tab} aria-current={detailTab === tab ? "page" : undefined} onSelect={() => setDetailTab(tab)} className={cn(detailTab === tab && "font-semibold")}>
-                            {detailTabLabel(tab)}
-                          </DropdownMenuItem>
-                        ))}
-                      </DropdownMenuGroup>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
                 </nav>
             <div className="space-y-5 p-5">
               {detailTab === "overview" && (
@@ -998,17 +874,25 @@ export function PartnersWorkspace({
                     approved={partnerProducts[selectedPartner.id] ? { count: selectedProducts.filter((product) => product.approved).length, total: selectedProducts.length } : null}
                     lastSubmission={selectedPartner.last_submission}
                   />
+                  {/* Compliance: the screening dependency, said once and kept visible. */}
+                  <p role="note" className="rounded-lg border border-[var(--error)]/30 bg-[var(--error-surface)] px-4 py-2.5 text-sm text-[var(--body)]">
+                    <strong className="font-semibold text-[var(--error-ink)]">The lead form must keep its phone field.</strong> Phone is required for screening and cannot be deleted from a partner form.
+                  </p>
                   <section>
-                    <h2 className="text-lg font-semibold leading-[1.28] tracking-[-0.015em]">Products this partner may submit</h2>
-                    <p className="mt-1 text-sm text-muted-foreground">Enable for the business first, then approve the subset for this partner. The dependency is the design.</p>
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <h3 className="text-base font-semibold">Products this partner may submit</h3>
+                      {canManageProductConfig && !readOnly && selectedPartner.status !== "offboarded" && (
+                        <Button type="button" variant="outline" onClick={() => setDetailTab("products")}>Change approvals</Button>
+                      )}
+                    </div>
                     {selectedProducts.length > 0 ? (
-                      <div className="mt-3.5 overflow-x-auto">
+                      <div className="mt-3 overflow-x-auto rounded-lg border border-border">
                         <table className="portal-lead-table w-full min-w-[520px]! text-left text-sm">
                           <thead>
                             <tr>
                               <th>Product</th>
-                              <th className="w-[200px]">Enabled for the business</th>
-                              <th className="w-[200px]">Approved for {selectedPartner.name}</th>
+                              <th>Enabled for the business</th>
+                              <th>Approved for {selectedPartner.name}</th>
                             </tr>
                           </thead>
                           <tbody className="m-seq">
@@ -1023,69 +907,36 @@ export function PartnersWorkspace({
                         </table>
                       </div>
                     ) : (
-                      <p className="mt-3 rounded-lg border border-dashed border-border p-3 text-sm text-muted-foreground">
+                      <p className="mt-3 text-sm text-muted-foreground">
                         {canManageProductConfig ? "No products are set up for this workspace yet." : "Product approvals are managed by the account owner."}
                       </p>
                     )}
-                    {canManageProductConfig && !readOnly && selectedPartner.status !== "offboarded" && (
-                      <Button type="button" variant="outline" size="sm" className="mt-3 h-8 border-[var(--border-strong)] px-3" onClick={() => setDetailTab("products")}>Change approvals</Button>
-                    )}
                   </section>
-                  <div className="rounded-lg border border-border border-l-[3px] border-l-[var(--error)] bg-[var(--error-surface)] px-4 py-3.5 text-sm leading-normal tracking-[-0.02em]">
-                    <p className="font-semibold text-[var(--error-ink)]">The lead form must keep its phone field</p>
-                    <p className="mt-1.5 text-[var(--body)]">Phone is required for screening and cannot be deleted from a partner form. The studio refuses it, not just the API.</p>
-                  </div>
-                  <div className="grid gap-3">
-                    <section className="rounded-lg border p-4">
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <section className="rounded-lg border border-border p-4">
                       <div className="flex items-center justify-between gap-2">
                         <h3 className="text-sm font-semibold">Contact</h3>
-                        {!readOnly &&
-                          selectedPartner.status !== "offboarded" && (
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 px-2 text-xs"
-                              onClick={() => openEdit(selectedPartner)}
-                            >
-                              Edit
-                            </Button>
-                          )}
+                        {!readOnly && selectedPartner.status !== "offboarded" && (
+                          <Button type="button" variant="ghost" size="sm" onClick={() => openEdit(selectedPartner)}>Edit</Button>
+                        )}
                       </div>
-                      <div className="mt-3 space-y-2 text-sm">
-                        {selectedPartner.contact_name && (
-                          <p className="font-medium">
-                            {selectedPartner.contact_name}
-                          </p>
-                        )}
-                        {selectedPartner.contact_email && (
-                          <p className="break-all text-muted-foreground">
-                            {selectedPartner.contact_email}
-                          </p>
-                        )}
+                      <div className="mt-2 space-y-1.5 text-sm">
+                        {selectedPartner.contact_name && <p className="font-medium">{selectedPartner.contact_name}</p>}
+                        {selectedPartner.contact_email && <p className="break-all text-muted-foreground">{selectedPartner.contact_email}</p>}
                         <p className="flex items-center gap-2 text-muted-foreground">
                           <MapPin className="size-3.5" aria-hidden="true" />
                           {selectedPartner.country} · {selectedPartner.timezone}
                         </p>
                       </div>
                     </section>
-                    <section className="rounded-lg border p-4">
+                    <section className="rounded-lg border border-border p-4">
                       <div className="flex items-center justify-between gap-2">
                         <h3 className="text-sm font-semibold">Notes</h3>
-                        {!readOnly &&
-                          selectedPartner.status !== "offboarded" && (
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 px-2 text-xs"
-                              onClick={() => openEdit(selectedPartner)}
-                            >
-                              {selectedPartner.notes ? "Edit" : "Add"}
-                            </Button>
-                          )}
+                        {!readOnly && selectedPartner.status !== "offboarded" && (
+                          <Button type="button" variant="ghost" size="sm" onClick={() => openEdit(selectedPartner)}>{selectedPartner.notes ? "Edit" : "Add"}</Button>
+                        )}
                       </div>
-                      <p className="mt-3 whitespace-pre-wrap text-sm text-muted-foreground">
+                      <p className="mt-2 line-clamp-4 whitespace-pre-wrap text-sm text-muted-foreground" title={selectedPartner.notes ?? undefined}>
                         {selectedPartner.notes || "No notes added yet."}
                       </p>
                     </section>
@@ -1096,162 +947,52 @@ export function PartnersWorkspace({
                       readOnly={readOnly}
                     />
                   )}
-                  <div className="rounded-lg border border-[var(--color-blue)]/25 bg-[var(--color-blue-faint)] p-3 text-sm">
-                    <p className="flex items-start gap-2 font-medium">
-                      <Info
-                        className="mt-0.5 size-4 shrink-0 text-[var(--color-blue)]"
-                        aria-hidden="true"
-                      />
-                      History is never deleted.
-                    </p>
-                    <p className="mt-1 pl-6 text-xs text-muted-foreground">
-                      Leads, submissions, terms, and partner-user history stay
-                      available for audit and reporting.
-                    </p>
-                  </div>
                 </div>
               )}
               {detailTab === "terms" && (
                 <section className="space-y-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <h3 className="text-sm font-semibold">
-                        Commercial terms
-                      </h3>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        New rates apply from their effective date. Past leads
-                        keep their original terms.
-                      </p>
-                    </div>
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <p className="text-sm text-muted-foreground">
+                      New rates apply from their effective date. Past leads keep their original terms.
+                    </p>
                     {!readOnly && selectedPartner.status !== "offboarded" && (
                       <Button
                         type="button"
-                        size="sm"
                         variant="outline"
                         onClick={() => {
                           setTermDate(new Date().toISOString().slice(0, 10));
-                          setTermFor(
-                            termFor === selectedPartner.id
-                              ? null
-                              : selectedPartner.id,
-                          );
+                          setTermFor(selectedPartner.id);
                         }}
                       >
+                        <Plus aria-hidden="true" />
                         Add terms
                       </Button>
                     )}
                   </div>
                   {selectedPartner.terms.length > 0 ? (
-                    <div className="divide-y rounded-lg border">
-                      {selectedPartner.terms.map((term, index) => (
-                        <div
-                          key={term.id}
-                          className={`p-3 text-sm ${index === 0 ? "bg-[var(--color-blue-faint)]" : ""}`}
-                        >
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <span className="font-semibold">
-                              {term.payout_model === "revenue_share"
-                                ? `${((term.rate_pct_bp ?? 0) / 100).toFixed(2)}% revenue share`
-                                : `${PARTNER_PAYOUT_MODEL_LABELS[term.payout_model]} · ${money(term.rate_cents)}`}
-                            </span>
-                            {index === 0 && (
-                              <StatusChip tone="info">Current</StatusChip>
-                            )}
-                          </div>
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            Effective {dateLabel(term.effective_from)}
-                          </p>
-                        </div>
-                      ))}
+                    <div className="overflow-x-auto rounded-lg border border-border">
+                      <table className="portal-lead-table w-full min-w-[520px]! text-left text-sm">
+                        <thead><tr><th>Terms</th><th>Effective</th><th className="text-right"><span className="sr-only">State</span></th></tr></thead>
+                        <tbody>
+                          {selectedPartner.terms.map((term, index) => (
+                            <tr key={term.id} className={index === 0 ? "bg-[var(--primary-soft)]" : undefined}>
+                              <td className="font-semibold">
+                                {term.payout_model === "revenue_share"
+                                  ? `${((term.rate_pct_bp ?? 0) / 100).toFixed(2)}% revenue share`
+                                  : `${PARTNER_PAYOUT_MODEL_LABELS[term.payout_model]} · ${money(term.rate_cents)}`}
+                              </td>
+                              <td className="whitespace-nowrap text-muted-foreground">{dateLabel(term.effective_from)}</td>
+                              <td className="text-right">{index === 0 && <StatusChip tone="info">Current</StatusChip>}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
                     </div>
                   ) : (
-                    <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+                    <p className="text-sm text-muted-foreground">
                       No commercial terms recorded yet.
                     </p>
                   )}
-                  {termFor === selectedPartner.id &&
-                    !readOnly &&
-                    selectedPartner.status !== "offboarded" && (
-                      <form
-                        onSubmit={(event) =>
-                          void saveTerm(event, selectedPartner.id)
-                        }
-                        className="space-y-3 rounded-lg border bg-muted/20 p-3"
-                      >
-                        <div className="space-y-1.5">
-                          <Label htmlFor={`term-model-${selectedPartner.id}`}>
-                            Payout model
-                          </Label>
-                          <select
-                            id={`term-model-${selectedPartner.id}`}
-                            className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
-                            value={termModel}
-                            onChange={(event) =>
-                              setTermModel(
-                                event.target.value as PartnerPayoutModel,
-                              )
-                            }
-                          >
-                            {PARTNER_PAYOUT_MODELS.map((model) => (
-                              <option key={model} value={model}>
-                                {PARTNER_PAYOUT_MODEL_LABELS[model]}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                        <div className="grid gap-3 sm:grid-cols-2">
-                          <div className="space-y-1.5">
-                            <Label htmlFor={`term-rate-${selectedPartner.id}`}>
-                              {termModel === "revenue_share"
-                                ? "Share (%)"
-                                : "Rate ($)"}
-                            </Label>
-                            <Input
-                              id={`term-rate-${selectedPartner.id}`}
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              value={termRate}
-                              onChange={(event) =>
-                                setTermRate(event.target.value)
-                              }
-                              required
-                            />
-                          </div>
-                          <div className="space-y-1.5">
-                            <Label htmlFor={`term-date-${selectedPartner.id}`}>
-                              Effective from
-                            </Label>
-                            <Input
-                              id={`term-date-${selectedPartner.id}`}
-                              type="date"
-                              value={termDate}
-                              onChange={(event) =>
-                                setTermDate(event.target.value)
-                              }
-                              required
-                            />
-                          </div>
-                        </div>
-                        <div className="flex gap-2">
-                          <Button
-                            type="submit"
-                            size="sm"
-                            disabled={busy !== null}
-                          >
-                            Save terms
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setTermFor(null)}
-                          >
-                            Cancel
-                          </Button>
-                        </div>
-                      </form>
-                    )}
                 </section>
               )}
               {detailTab === "products" && (
@@ -1365,72 +1106,111 @@ export function PartnersWorkspace({
                 />
               )}
               {detailTab === "activity" && (
-                <section className="space-y-4">
-                  <div>
-                    <h3 className="text-sm font-semibold">Partner activity</h3>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      Every lifecycle change, terms update, invitation, and
-                      access change is audit-logged.
-                    </p>
-                  </div>
-                  <div className="rounded-lg border border-dashed p-4 text-sm">
-                    <p className="font-medium">Preserved operational history</p>
-                    {/* This used to link to /app/audit-log, which is not a route — the agent plane
-                        has no audit-log viewer, so the link rendered a 404 inside the shell. The
-                        events are still recorded; what is missing is a screen for them. Naming
-                        only what can actually be opened is the honest version. */}
-                    <p className="mt-1 text-muted-foreground">
-                      Every change is recorded and kept. Review the leads
-                      connected to this partner in the lead workspace; the
-                      audit trail itself is available to your account
-                      administrator.
-                    </p>
-                    <Button asChild variant="link" className="mt-2 h-auto p-0">
-                      <Link href="/app/leads">
-                        <ArrowRight
-                          className="mr-1.5 size-3.5"
-                          aria-hidden="true"
-                        />
-                        Open lead workspace
-                      </Link>
-                    </Button>
-                  </div>
+                <section className="space-y-3 text-sm">
+                  {/* This used to link to /app/audit-log, which is not a route — the agent plane
+                      has no audit-log viewer, so the link rendered a 404 inside the shell. The
+                      events are still recorded; what is missing is a screen for them. Naming
+                      only what can actually be opened is the honest version. */}
+                  <p className="text-muted-foreground">
+                    Every lifecycle change, terms update, invitation, and access change is
+                    audit-logged and kept. Review the leads connected to this partner in the lead
+                    workspace; the audit trail itself is available to your account administrator.
+                  </p>
+                  <Button asChild variant="outline">
+                    <Link href="/app/leads">
+                      <ArrowRight aria-hidden="true" />
+                      Open lead workspace
+                    </Link>
+                  </Button>
                 </section>
               )}
             </div>
               </section>
-
-              <div className="flex w-full shrink-0 flex-col gap-4 xl:w-[360px]">
-                <section className="rounded-lg border border-border bg-card p-5 shadow-[0_1px_2px_rgba(16,20,26,.05)]">
-                  <h2 className="text-lg font-semibold leading-[1.28] tracking-[-0.015em]">Commercial terms</h2>
-                  {selectedPartner.active_term ? (
-                    <div className="mt-3.5 grid grid-cols-2 gap-x-6 gap-y-4">
-                      <PartnerFact label="Model">{PARTNER_PAYOUT_MODEL_LABELS[selectedPartner.active_term.payout_model]}</PartnerFact>
-                      <PartnerFact label="Rate">{selectedPartner.active_term.payout_model === "revenue_share" ? `${((selectedPartner.active_term.rate_pct_bp ?? 0) / 100).toFixed(2)}%` : money(selectedPartner.active_term.rate_cents)}</PartnerFact>
-                      <PartnerFact label="Effective">{dateLabel(selectedPartner.active_term.effective_from)}</PartnerFact>
-                      <PartnerFact label="Earlier terms">{Math.max(0, selectedPartner.terms.length - 1)}</PartnerFact>
-                    </div>
-                  ) : (
-                    <p className="mt-3 text-sm text-muted-foreground">No commercial terms are recorded yet.</p>
-                  )}
-                  <Button type="button" variant="outline" size="sm" className="mt-3.5 h-9 border-[var(--border-strong)] px-4" onClick={() => setDetailTab("terms")}>
-                    {selectedPartner.active_term ? "Terms history" : "Add terms"}
-                  </Button>
-                </section>
-                <section className="rounded-lg border border-border bg-card p-5 shadow-[0_1px_2px_rgba(16,20,26,.05)]">
-                  <h2 className="text-lg font-semibold leading-[1.28] tracking-[-0.015em]">Form studio</h2>
-                  <p className="mt-2.5 text-sm text-muted-foreground">New partner forms use the published revision immediately; forms already submitted keep the revision they were filled on. Inherited defaults can be restored per product inside the studio.</p>
-                  <Button type="button" variant="outline" size="sm" className="mt-3.5 h-9 border-[var(--border-strong)] px-4" onClick={() => setDetailTab("forms")}>Open studio</Button>
-                </section>
-                <div className="rounded-lg border border-border border-l-[3px] border-l-[var(--warning)] bg-[var(--warning-surface)] px-4 py-3.5 text-sm leading-normal tracking-[-0.02em]">
-                  <p className="font-semibold text-[var(--warning-ink)]">Offboarding is typed, not clicked</p>
-                  <p className="mt-1.5 text-[var(--body)]">It asks for <strong>OFFBOARD</strong> exactly, and the record survives: records and users remain visible for audit and reporting. No data is ever permanently deleted.</p>
-                </div>
-              </div>
             </div>
           </div>
         )}
       </div>
+      {/* Commercial terms are added in a dialog (2026-10-06 redesign), not a form that pushes the history down. */}
+      <Dialog open={selectedPartner !== null && termFor === selectedPartner.id && !readOnly && selectedPartner.status !== "offboarded"} onOpenChange={(open) => { if (!open) setTermFor(null); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add terms</DialogTitle>
+            <DialogDescription>New rates apply from their effective date. Past leads keep their original terms.</DialogDescription>
+          </DialogHeader>
+          {selectedPartner && (
+            <form
+              onSubmit={(event) =>
+                void saveTerm(event, selectedPartner.id)
+              }
+              className="space-y-4"
+            >
+              <div className="space-y-1.5">
+                <Label htmlFor={`term-model-${selectedPartner.id}`}>
+                  Payout model
+                </Label>
+                <select
+                  id={`term-model-${selectedPartner.id}`}
+                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
+                  value={termModel}
+                  onChange={(event) =>
+                    setTermModel(
+                      event.target.value as PartnerPayoutModel,
+                    )
+                  }
+                >
+                  {PARTNER_PAYOUT_MODELS.map((model) => (
+                    <option key={model} value={model}>
+                      {PARTNER_PAYOUT_MODEL_LABELS[model]}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor={`term-rate-${selectedPartner.id}`}>
+                    {termModel === "revenue_share"
+                      ? "Share (%)"
+                      : "Rate ($)"}
+                  </Label>
+                  <Input
+                    id={`term-rate-${selectedPartner.id}`}
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={termRate}
+                    onChange={(event) =>
+                      setTermRate(event.target.value)
+                    }
+                    required
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor={`term-date-${selectedPartner.id}`}>
+                    Effective from
+                  </Label>
+                  <Input
+                    id={`term-date-${selectedPartner.id}`}
+                    type="date"
+                    value={termDate}
+                    onChange={(event) =>
+                      setTermDate(event.target.value)
+                    }
+                    required
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setTermFor(null)}>
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={busy !== null}>
+                  Save terms
+                </Button>
+              </DialogFooter>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
       <Dialog open={offboardFor !== null} onOpenChange={(open) => { if (!open) setOffboardFor(null); }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>

@@ -26,6 +26,7 @@ export default async function AppointmentsPage() {
     <CarrierAppointmentsPage
       canEdit={guard.role === "owner" && guard.entitlement.access === "full"}
       isOwner={guard.role === "owner"}
+      readOnlyReason={guard.entitlement.access === "read_only" ? "Your account is read-only: appointments and licences can be read but not changed until the subscription is reactivated." : null}
     />
   );
 }

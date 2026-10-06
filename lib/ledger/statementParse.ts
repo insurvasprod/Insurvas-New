@@ -200,53 +200,64 @@ export function parseStatementCsv(text: string, mapping: StatementMapping): Pars
   if (body.length > MAX_STATEMENT_LINES) throw new Error(`A statement can hold at most ${MAX_STATEMENT_LINES.toLocaleString("en-US")} lines; this file has ${body.length.toLocaleString("en-US")}.`);
 
   const column = (field: StatementField) => (mapping[field] ? headers.indexOf(mapping[field] as string) : -1);
-  const at = { policyNumber: column("policyNumber"), amount: column("amount"), kind: column("kind"), lineDate: column("lineDate"), insuredName: column("insuredName"), premium: column("premium"), rate: column("rate") };
+  const at = Object.fromEntries(STATEMENT_FIELDS.map((field) => [field, column(field)])) as Record<StatementField, number>;
 
   const lines = body.map((cells, index): ParsedStatementLine => {
     const raw: Record<string, string> = {};
     headers.forEach((header, position) => { raw[header] = cells[position] ?? ""; });
     // Cells beyond the header are kept too: verbatim means nothing is dropped.
     for (let extra = headers.length; extra < cells.length; extra += 1) raw[`Column ${extra + 1}`] = cells[extra];
-    const cell = (position: number) => (position < 0 ? "" : (cells[position] ?? "").trim());
-
-    const errors: string[] = [];
-    const policyNumber = cell(at.policyNumber).slice(0, 120) || null;
-    const insuredName = cell(at.insuredName).slice(0, 200) || null;
-
-    const amountText = cell(at.amount);
-    let amountCents = parseAmountCents(amountText);
-    if (!amountText) errors.push("No amount on this line.");
-    else if (amountCents === null) errors.push(`“${amountText}” is not an amount.`);
-
-    let kind: StatementLineKind | null = null;
-    let kindFrom: ParsedStatementLine["kindFrom"] = null;
-    const kindText = cell(at.kind);
-    if (kindText) {
-      kind = parseStatementKind(kindText);
-      kindFrom = kind ? "column" : null;
-      if (!kind) errors.push(`“${kindText}” is not advance, commission, chargeback or adjustment.`);
-    } else if (amountCents !== null) {
-      kind = amountCents < 0 ? "chargeback" : "commission";
-      kindFrom = "sign";
-    }
-    if (kind === "chargeback" && amountCents !== null) amountCents = -Math.abs(amountCents);
-
-    const dateText = cell(at.lineDate);
-    const lineDate = dateText ? parseStatementDate(dateText) : null;
-    if (dateText && !lineDate) errors.push(`“${dateText}” is not a date.`);
-
-    const premiumText = cell(at.premium);
-    const premiumRead = premiumText ? parseAmountCents(premiumText) : null;
-    const premiumCents = premiumRead === null ? null : Math.abs(premiumRead);
-    if (premiumText && premiumRead === null) errors.push(`“${premiumText}” is not a premium.`);
-
-    const rateText = cell(at.rate);
-    const rateBp = rateText ? parseRateBp(rateText) : null;
-    if (rateText && rateBp === null) errors.push(`“${rateText}” is not a commission rate.`);
-
-    const error = errors.length ? errors.join(" ") : null;
-    return { lineNumber: index + 1, raw, policyNumber, insuredName, amountCents, kind, kindFrom, lineDate, premiumCents, rateBp, error };
+    const values = Object.fromEntries(STATEMENT_FIELDS.map((field) => [field, at[field] < 0 ? "" : cells[at[field]] ?? ""])) as StatementLineValues;
+    return readStatementLine(values, index + 1, raw);
   });
 
   return { headers, lines };
+}
+
+/** One line's values as text, by field: a file's cells, or what a person typed from a PDF. */
+export type StatementLineValues = Partial<Record<StatementField, string>>;
+
+/**
+ * One statement line, read by the rules every line follows: a file's row (parseStatementCsv) and a
+ * line typed from a PDF (LA-4.2) both come through here, so they cannot be read differently.
+ */
+export function readStatementLine(values: StatementLineValues, lineNumber: number, raw: Record<string, string>): ParsedStatementLine {
+  const cell = (field: StatementField) => (values[field] ?? "").trim();
+  const errors: string[] = [];
+  const policyNumber = cell("policyNumber").slice(0, 120) || null;
+  const insuredName = cell("insuredName").slice(0, 200) || null;
+
+  const amountText = cell("amount");
+  let amountCents = parseAmountCents(amountText);
+  if (!amountText) errors.push("No amount on this line.");
+  else if (amountCents === null) errors.push(`“${amountText}” is not an amount.`);
+
+  let kind: StatementLineKind | null = null;
+  let kindFrom: ParsedStatementLine["kindFrom"] = null;
+  const kindText = cell("kind");
+  if (kindText) {
+    kind = parseStatementKind(kindText);
+    kindFrom = kind ? "column" : null;
+    if (!kind) errors.push(`“${kindText}” is not advance, commission, chargeback or adjustment.`);
+  } else if (amountCents !== null) {
+    kind = amountCents < 0 ? "chargeback" : "commission";
+    kindFrom = "sign";
+  }
+  if (kind === "chargeback" && amountCents !== null) amountCents = -Math.abs(amountCents);
+
+  const dateText = cell("lineDate");
+  const lineDate = dateText ? parseStatementDate(dateText) : null;
+  if (dateText && !lineDate) errors.push(`“${dateText}” is not a date.`);
+
+  const premiumText = cell("premium");
+  const premiumRead = premiumText ? parseAmountCents(premiumText) : null;
+  const premiumCents = premiumRead === null ? null : Math.abs(premiumRead);
+  if (premiumText && premiumRead === null) errors.push(`“${premiumText}” is not a premium.`);
+
+  const rateText = cell("rate");
+  const rateBp = rateText ? parseRateBp(rateText) : null;
+  if (rateText && rateBp === null) errors.push(`“${rateText}” is not a commission rate.`);
+
+  const error = errors.length ? errors.join(" ") : null;
+  return { lineNumber, raw, policyNumber, insuredName, amountCents, kind, kindFrom, lineDate, premiumCents, rateBp, error };
 }

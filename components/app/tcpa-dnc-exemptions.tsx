@@ -5,12 +5,13 @@ import { ShieldCheck } from "lucide-react";
 import { notify } from "@/lib/notify";
 
 import { Button } from "@/components/ui/button";
-import { DataToolbar, RefreshButton, ToolbarSearch } from "@/components/ui/data-toolbar";
+import { ClearFiltersButton, DataToolbar, RefreshButton, ToolbarSearch } from "@/components/ui/data-toolbar";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { EmptyState, ErrorState, NoMatches, SectionLoading } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
 import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
+import { Segmented } from "@/components/app/view-tabs";
 import { formatPhone, normalizeDigits } from "@/lib/suppression/constants";
 import {
   CLEARED_LIST_LABELS,
@@ -32,7 +33,8 @@ import {
  * exists." The user's decision: an owner records one per number — written consent with a stored
  * consent certificate attached, or an existing business relationship with its date (18 months after
  * a purchase, 3 months after an inquiry). It clears federal and state DNC for that number only,
- * never the agency's own list and never a litigator, and every use is listed here.
+ * never the agency's own list and never a litigator, and every use is listed here (the Uses view,
+ * 2026-10-06: all of them, paged, where the card used to show only the last ten under the table).
  */
 
 type Loaded = { schemaReady: boolean; exemptions: DncExemption[]; uses: DncExemptionUse[]; canEdit: boolean };
@@ -55,16 +57,15 @@ const STATE_CHIP: Record<DncExemption["state"], { tone: "good" | "neutral" | "wa
   certificate_gone: { tone: "warning", label: "Certificate not held" },
 };
 
-const th = "bg-[var(--surface-alt)] px-3 py-2 text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] text-muted-foreground";
-const td = "border-t border-border px-3 py-2 text-sm leading-normal tracking-[-0.02em] text-[var(--body)] align-top";
+const th = "bg-[var(--surface-alt)] px-3 py-2 text-left text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] whitespace-nowrap text-muted-foreground";
+const td = "border-t border-border px-3 py-2 text-sm leading-normal tracking-[-0.02em] text-[var(--body)]";
 const field = "h-9 w-full rounded-lg border border-[var(--border-strong)] bg-card px-3 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring";
 const today = () => new Date().toISOString().slice(0, 10);
-const PAGE_SIZE = 10;
 
 type Draft = { phone: string; basis: DncExemptionBasis; consentArtefactId: string; relationshipKind: RelationshipKind; relationshipDate: string; note: string };
 const EMPTY: Draft = { phone: "", basis: "existing_business_relationship", consentArtefactId: "", relationshipKind: "purchase", relationshipDate: "", note: "" };
 
-export function TcpaDncExemptions({ onChanged }: { onChanged?: () => void }) {
+export function TcpaDncExemptions({ onChanged, className, pageSize = 10 }: { onChanged?: () => void; className?: string; pageSize?: number }) {
   const [loaded, setLoaded] = useState<Loaded | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reload, setReload] = useState(0);
@@ -78,6 +79,7 @@ export function TcpaDncExemptions({ onChanged }: { onChanged?: () => void }) {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [refreshing, setRefreshing] = useState(false);
+  const [view, setView] = useState<"exemptions" | "uses">("exemptions");
 
   useEffect(() => {
     let live = true;
@@ -154,68 +156,100 @@ export function TcpaDncExemptions({ onChanged }: { onChanged?: () => void }) {
   const numberOf = new Map(exemptions.map((row) => [row.id, row.phoneDigits]));
   const query = search.replace(/\D/g, "");
   const matching = query ? exemptions.filter((row) => row.phoneDigits.includes(query)) : exemptions;
-  const { current, rows: shown } = paginate(matching, page, PAGE_SIZE);
+  const { current, rows: shown } = paginate(matching, page, pageSize);
+  const matchingUses = query ? (loaded?.uses ?? []).filter((use) => (use.phoneDigits || numberOf.get(use.exemptionId) || "").includes(query)) : (loaded?.uses ?? []);
+  const usesPage = paginate(matchingUses, page, pageSize);
+  const anyRevoked = shown.some((row) => row.state === "revoked");
 
   return (
     <TableCard
-      title="DNC exemptions"
+      className={className}
       toolbar={
         <DataToolbar
           actions={<>
             {loaded?.canEdit && loaded.schemaReady && <Button variant="outline" onClick={() => setOpen(true)}><ShieldCheck aria-hidden="true" />Record an exemption</Button>}
+            {query && <ClearFiltersButton onClick={() => { setSearch(""); setPage(1); }} />}
             <RefreshButton onClick={() => { setRefreshing(true); setReload((value) => value + 1); }} refreshing={refreshing} />
           </>}
         >
           <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Search numbers" label="Search exemptions by number" />
+          {/* Every use of an exemption is part of its record: its own view, never cut to the last ten. */}
+          <Segmented
+            label="Exemptions or their uses"
+            value={view}
+            onChange={(next) => { setView(next); setPage(1); }}
+            options={[
+              { key: "exemptions", label: "Exemptions", count: loaded?.schemaReady ? exemptions.length : null },
+              { key: "uses", label: "Uses", count: loaded?.schemaReady ? loaded.uses.length : null },
+            ]}
+          />
         </DataToolbar>
       }
-      footer={loaded?.schemaReady && matching.length > 0 ? <Pager page={current} total={matching.length} noun={matching.length === 1 ? "exemption" : "exemptions"} onPage={setPage} pageSize={PAGE_SIZE} /> : undefined}
+      footer={loaded?.schemaReady && view === "exemptions" && matching.length > 0
+        ? <Pager page={current} total={matching.length} noun={matching.length === 1 ? "exemption" : "exemptions"} onPage={setPage} pageSize={pageSize} />
+        : loaded?.schemaReady && view === "uses" && matchingUses.length > 0
+          ? <Pager page={usesPage.current} total={matchingUses.length} noun={matchingUses.length === 1 ? "use" : "uses"} onPage={setPage} pageSize={pageSize} suffix="newest first" />
+          : undefined}
     >
       {error ? <ErrorState title="DNC exemptions did not load" detail={error} action={<Button variant="outline" onClick={() => setReload((value) => value + 1)}>Try again</Button>} />
         : !loaded ? <SectionLoading rows={2} columns={6} label="Loading DNC exemptions" />
         : !loaded.schemaReady ? <p className="px-4 py-3 text-sm text-[var(--warning-ink)]" role="note">DNC exemptions need a database update — until it is applied, federal and state DNC numbers cannot be cleared.</p>
-        : exemptions.length === 0 ? <EmptyState title="No exemptions recorded" hint="Federal and state DNC numbers are refused until an owner records consent or a business relationship." />
-        : matching.length === 0 ? <NoMatches noun="exemptions" onClear={() => { setSearch(""); setPage(1); }} />
-        : <>
-          <table className="w-full min-w-[900px] table-fixed border-collapse text-left">
+        : view === "uses" ? (
+          loaded.uses.length === 0 ? <EmptyState title="No exemption has been used yet" hint="Each time an exemption clears a dial or a check, it is listed here." />
+          : matchingUses.length === 0 ? <NoMatches noun="uses" onClear={() => { setSearch(""); setPage(1); }} />
+          : <table className="w-full min-w-[900px] border-collapse text-left">
             <thead><tr>
-              <th className={`${th} w-[150px]`}>Number</th>
-              <th className={th}>Basis</th>
-              <th className={`${th} w-[150px]`}>State</th>
-              <th className={`${th} w-[170px]`}>Recorded</th>
-              <th className={`${th} w-[130px] text-right`}>Uses</th>
-              <th className={`${th} w-[100px] text-right`}><span className="sr-only">Action</span></th>
+              <th className={th}>When</th>
+              <th className={th}>Number</th>
+              <th className={th}>Used for</th>
+              <th className={th}>Cleared</th>
+              <th className={th}>Who</th>
+              <th className={`${th} text-right`}>Lead</th>
             </tr></thead>
-            <tbody>{shown.map((row) => <tr key={row.id} className="m-row">
-              <td className={`${td} font-semibold tabular-nums text-foreground`}>{formatPhone(row.phoneDigits)}</td>
-              <td className={td}>
-                {DNC_EXEMPTION_BASIS_LABELS[row.basis]}
-                <span className="block text-xs text-muted-foreground">
-                  {row.basis === "written_consent"
-                    ? <>{PROVIDER[row.certificateProvider ?? ""] ?? "Certificate"}{row.certificateUrl ? <> · <a className="text-[var(--accent-ink)] hover:underline" href={row.certificateUrl} target="_blank" rel="noreferrer">certificate</a></> : null} · no expiry</>
-                    : <>{row.relationshipKind ? RELATIONSHIP_KIND_LABELS[row.relationshipKind] : "Relationship"} on {day(row.relationshipDate)} · expires {day(row.expiresAt)}</>}
-                  {row.note ? ` · “${row.note}”` : ""}
-                </span>
-              </td>
-              <td className={td}>
-                <StatusChip tone={STATE_CHIP[row.state].tone}>{STATE_CHIP[row.state].label}</StatusChip>
-                {row.state === "revoked" && row.revokeReason && <span className="mt-1 block text-xs text-muted-foreground">{row.revokeReason}{row.revokedByName ? ` · ${row.revokedByName}` : ""}</span>}
-              </td>
-              <td className={`${td} tabular-nums`}>{day(row.recordedAt)}<span className="block text-xs text-muted-foreground">{row.recordedByName ?? "—"}</span></td>
-              <td className={`${td} text-right tabular-nums`}>{row.uses.toLocaleString()}{row.lastUsedAt && <span className="block text-xs text-muted-foreground">last {stamp(row.lastUsedAt)}</span>}</td>
-              <td className={`${td} text-right`}>{loaded.canEdit && row.state !== "revoked" ? <Button type="button" variant="outline" size="sm" className="text-[var(--error-ink)]" onClick={() => { setRevoking(row); setReason(""); }}>Revoke</Button> : null}</td>
+            <tbody>{usesPage.rows.map((use) => <tr key={use.id} className="m-row">
+              <td className={`${td} whitespace-nowrap tabular-nums`}>{stamp(use.usedAt)}</td>
+              <td className={`${td} whitespace-nowrap font-semibold tabular-nums text-foreground`}>{formatPhone(use.phoneDigits || numberOf.get(use.exemptionId) || "")}</td>
+              <td className={td}>{EXEMPTION_USE_LABELS[use.context] ?? use.context}</td>
+              <td className={td}>{use.clearedLists.map((list) => CLEARED_LIST_LABELS[list] ?? list).join(" and ") || "DNC"}</td>
+              <td className={td}>{use.userName ?? "—"}</td>
+              <td className={`${td} text-right`}>{use.leadId ? <a className="text-[var(--accent-ink)] hover:underline" href={`/app/leads/${use.leadId}`}>Open lead</a> : "—"}</td>
             </tr>)}</tbody>
           </table>
-          {loaded.uses.length > 0 && <div className="border-t border-border px-4 py-3">
-            <h3 className="text-xs font-semibold uppercase tracking-[0.02em] text-muted-foreground">Recent uses</h3>
-            <ul className="mt-1.5 grid gap-1 text-sm leading-normal text-[var(--body)]">
-              {loaded.uses.slice(0, 10).map((use) => <li key={use.id} className="tabular-nums">
-                {stamp(use.usedAt)} · <span className="font-semibold text-foreground">{formatPhone(use.phoneDigits || numberOf.get(use.exemptionId) || "")}</span> · {EXEMPTION_USE_LABELS[use.context] ?? use.context} cleared {use.clearedLists.map((list) => CLEARED_LIST_LABELS[list] ?? list).join(" and ") || "DNC"}
-                {use.userName ? ` · ${use.userName}` : ""}{use.leadId ? <> · <a className="text-[var(--accent-ink)] hover:underline" href={`/app/leads/${use.leadId}`}>lead</a></> : null}
-              </li>)}
-            </ul>
-          </div>}
-        </>}
+        )
+        : exemptions.length === 0 ? <EmptyState title="No exemptions recorded" hint="Federal and state DNC numbers are refused until an owner records consent or a business relationship." />
+        : matching.length === 0 ? <NoMatches noun="exemptions" onClear={() => { setSearch(""); setPage(1); }} />
+        : <table className="w-full min-w-[1280px] border-collapse text-left">
+            <thead><tr>
+              <th className={th}>Number</th>
+              <th className={th}>Basis</th>
+              <th className={th}>Evidence</th>
+              <th className={th}>Expires</th>
+              <th className={th}>State</th>
+              <th className={th}>Note</th>
+              <th className={th}>Recorded</th>
+              <th className={`${th} text-right`}>Uses</th>
+              <th className={th}>Last used</th>
+              {anyRevoked && <th className={th}>Revoked because</th>}
+              <th className={`${th} text-right`}><span className="sr-only">Action</span></th>
+            </tr></thead>
+            <tbody>{shown.map((row) => <tr key={row.id} className="m-row">
+              <td className={`${td} whitespace-nowrap font-semibold tabular-nums text-foreground`}>{formatPhone(row.phoneDigits)}</td>
+              <td className={`${td} whitespace-nowrap`}>{DNC_EXEMPTION_BASIS_LABELS[row.basis]}</td>
+              <td className={`${td} whitespace-nowrap`}>
+                {row.basis === "written_consent"
+                  ? <>{PROVIDER[row.certificateProvider ?? ""] ?? "Certificate"}{row.certificateUrl ? <> · <a className="text-[var(--accent-ink)] hover:underline" href={row.certificateUrl} target="_blank" rel="noreferrer">certificate</a></> : null}</>
+                  : <>{row.relationshipKind ? RELATIONSHIP_KIND_LABELS[row.relationshipKind] : "Relationship"} on {day(row.relationshipDate)}</>}
+              </td>
+              <td className={`${td} whitespace-nowrap tabular-nums`}>{row.basis === "written_consent" ? "No expiry" : day(row.expiresAt)}</td>
+              <td className={td}><StatusChip tone={STATE_CHIP[row.state].tone}>{STATE_CHIP[row.state].label}</StatusChip></td>
+              <td className={`${td} min-w-[180px]`}><span className="line-clamp-2" title={row.note ?? undefined}>{row.note ? `“${row.note}”` : "—"}</span></td>
+              <td className={`${td} whitespace-nowrap tabular-nums`}>{day(row.recordedAt)}{row.recordedByName ? <span className="text-muted-foreground"> · {row.recordedByName}</span> : null}</td>
+              <td className={`${td} text-right tabular-nums`}>{row.uses.toLocaleString()}</td>
+              <td className={`${td} whitespace-nowrap tabular-nums`}>{row.lastUsedAt ? stamp(row.lastUsedAt) : "—"}</td>
+              {anyRevoked && <td className={`${td} min-w-[180px]`}>{row.state === "revoked" && row.revokeReason ? <span className="line-clamp-2" title={row.revokeReason}>{row.revokeReason}{row.revokedByName ? ` · ${row.revokedByName}` : ""}</span> : "—"}</td>}
+              <td className={`${td} text-right`}>{loaded.canEdit && row.state !== "revoked" ? <Button type="button" variant="outline" size="sm" className="text-[var(--error-ink)]" onClick={() => { setRevoking(row); setReason(""); }}>Revoke</Button> : null}</td>
+            </tr>)}</tbody>
+          </table>}
 
       <Dialog open={open} onOpenChange={(next) => { setOpen(next); if (!next) { setCertificates(null); setCertificatesFor(null); } }}>
         <DialogContent>

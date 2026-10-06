@@ -216,7 +216,7 @@ export function FieldMapsReview({ initialMaps, carriers, sample, notice, lastFil
                 {pageRows.map((g) => {
                   const target = g.draft ?? g.live;
                   return (
-                    <tr key={g.key} className={cn("m-row", target && target.id === selectedId && "bg-[var(--soft-orange-surface)]")}>
+                    <tr key={g.key} className={cn("m-row", target && target.id === selectedId && "bg-[var(--primary-soft)]")}>
                       <td className="font-semibold text-[var(--ink)]">{g.carrierName}</td>
                       <td>{g.productLabel}</td>
                       <td>

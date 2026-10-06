@@ -20,16 +20,27 @@ export type AgentSettingsTab = {
   short?: string;
 };
 
+/** Sections a read-only account can still act in: Billing is how the account is reactivated. */
+const READ_ONLY_EXEMPT = new Set(["billing"]);
+
 export function AgentSettingsTabs({
   tabs,
   team,
   workspace,
   initialTab = "agency-profile",
+  readOnly = false,
 }: {
   tabs: AgentSettingsTab[];
   team: TeamSnapshot;
   workspace: WorkspaceSnapshot;
   initialTab?: string;
+  /**
+   * A read-only (suspended) account (LA-4.10): every section stays readable, and every form control
+   * in it is disabled through one <fieldset disabled>, so no panel can forget to. The server refuses
+   * the writes anyway; this says so before anyone tries. Billing stays usable, since that is where
+   * the account is put right.
+   */
+  readOnly?: boolean;
 }) {
   const firstAvailable = tabs.find((tab) => !tab.disabled)?.id ?? tabs[0]?.id ?? initialTab;
   const [activeId, setActiveId] = useState(initialTab);
@@ -168,7 +179,14 @@ export function AgentSettingsTabs({
             key={active.id}
           >
             <SettingsSectionProvider value={{ title: active.label, description: active.short ?? active.description }}>
-              {renderActiveContent()}
+              {readOnly && !READ_ONLY_EXEMPT.has(active.id) ? (
+                <>
+                  <p role="status" className="m-0 mb-4 rounded-md bg-[var(--warning-surface)] px-3 py-2 text-sm text-[var(--warning-ink)]">
+                    Your account is read-only, so settings can be read but not changed. Reactivate the subscription in Billing to change them.
+                  </p>
+                  <fieldset disabled aria-disabled="true" className="m-0 min-w-0 border-0 p-0">{renderActiveContent()}</fieldset>
+                </>
+              ) : renderActiveContent()}
             </SettingsSectionProvider>
           </section>
         )}

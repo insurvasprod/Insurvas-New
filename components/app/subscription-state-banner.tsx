@@ -22,7 +22,7 @@ export function SubscriptionStateBanner({ status }: { status: SubscriptionStatus
             </p>
           </div>
         </div>
-        <p className="font-semibold text-[var(--color-blue)]">Contact your administrator</p>
+        <p className="font-semibold text-[var(--color-brand)]">Contact your administrator</p>
       </div>
     );
   }

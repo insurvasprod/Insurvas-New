@@ -1,27 +1,31 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { toolbarControl } from "@/components/ui/data-toolbar";
 import { EmptyState, SectionLoading } from "@/components/ui/page-states";
-import { Callout, Pill, control, st } from "@/components/app/settings/primitives";
+import { Callout, Pill, st } from "@/components/app/settings/primitives";
 import { productLineLabel } from "@/lib/format/productLine";
 import { agoLabel } from "@/lib/format/ago";
 import { cn } from "@/lib/utils";
 import { dateTime, viewerTimeZone } from "@/lib/format/dates";
 import { attemptOfCeiling, consentLabel, dncExemptionLine, localClock, minuteLabel, shortDate, slotLabel, sourceLabel, SUPPRESSION_LISTS, windowClosedLabel, zoneShort } from "@/lib/dialerScripts/display";
-import { unapprovedDisclosureLine } from "@/lib/dialerScripts/disclosureStatus";
-import { Kbd, SECTION_LABELS, barHead, barTitle, body14, card, fieldLabel, h2, label, scriptSections, small, value } from "@/components/app/dialer/model";
+import { Kbd, barHead, barTitle, body14, card, h2, label, small, value } from "@/components/app/dialer/model";
 import type { useDialer } from "@/components/app/dialer/use-dialer";
 import { useNow } from "@/components/app/applications/outcome/use-now";
+import { useState } from "react";
+import { CalendarPlus, ChevronDown } from "lucide-react";
+import { BookAppointmentDialog } from "@/components/app/dialer/book-appointment-dialog";
 
 /** Lifted from dialer-workspace.tsx (UX-6) unchanged; state comes from useDialer. */
 export function DialerLeadColumn({ d, readOnly }: { d: ReturnType<typeof useDialer>; readOnly: boolean }) {
   const now = useNow();
-  const { canAuthor, searchMode, panel, panelError, attempt, loading, working, confirmed, dialled, rebuttal, setRebuttal, editingScript, setEditingScript, draftSections, setDraftSections, served, emptyReason, rebuttalQuery, setRebuttalQuery, outcomeLabel, saveCurrentScript, prepareAttempt, confirmRead, dial, loadingPanel, eligibility, blockers, callReady, customerZone, slotFacts, reasonParts, stateName, stackHits, campaignLine, visibleRebuttals, phoneLabel, cityState, disclosureUnapproved } = d;
+  const [complianceOpen, setComplianceOpen] = useState(false);
+  const [bookOpen, setBookOpen] = useState(false);
+  const { searchMode, panel, panelError, attempt, loading, working, confirmed, dialled, served, emptyReason, outcomeLabel, prepareAttempt, confirmRead, dial, loadingPanel, eligibility, blockers, callReady, customerZone, slotFacts, reasonParts, stateName, stackHits, campaignLine, phoneLabel, cityState, disclosureUnapproved, calendar } = d;
+  const canBook = !readOnly && Boolean(calendar && calendar.agents.length > 0);
   return (
     <>
     {/* ── centre: the lead ────────────────────────────────────────────── */}
-    <div className="contents min-w-0 flex-1 flex-col gap-4 lg:flex">
+    <div className="contents min-w-0 flex-1 flex-col gap-4 lg:flex lg:min-h-0 lg:overflow-y-auto lg:pr-1">
       {panelError && <div className="max-lg:order-1"><Callout tone="error" title={`Could not load this lead: ${panelError}`} /></div>}
       {(loading || loadingPanel) && (
         <section className={cn(card, "max-lg:order-1")} aria-label="Lead">
@@ -52,6 +56,11 @@ export function DialerLeadColumn({ d, readOnly }: { d: ReturnType<typeof useDial
                 ].filter(Boolean).join(" · ")}
               </p>
             </div>
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+            {/* Book an appointment opens once the call is being prepared, beside Start call (2026-10-06). */}
+            {attempt && canBook && (
+              <Button type="button" variant="outline" onClick={() => setBookOpen(true)}><CalendarPlus aria-hidden="true" />Book appointment</Button>
+            )}
             {!attempt ? (
               <Button type="button" onClick={() => void prepareAttempt(searchMode)} disabled={readOnly || working || !callReady} title={!callReady ? blockers[0] : undefined} aria-keyshortcuts={readOnly ? undefined : "C"}>
                 {readOnly ? "Read-only account" : searchMode ? "Log inbound return call" : "Click to call"}{!readOnly && <Kbd>C</Kbd>}
@@ -63,7 +72,9 @@ export function DialerLeadColumn({ d, readOnly }: { d: ReturnType<typeof useDial
                 {working ? "Checking…" : eligibility?.allowed ? "Start call" : "Dialing blocked"}<Kbd>D</Kbd>
               </Button>
             )}
+            </div>
           </div>
+          <BookAppointmentDialog d={d} open={bookOpen} onOpenChange={setBookOpen} />
           <dl className="m-0 mt-4 grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-4">
             {[
               ["Campaign", panel.campaign?.name ?? "—"],
@@ -79,6 +90,17 @@ export function DialerLeadColumn({ d, readOnly }: { d: ReturnType<typeof useDial
           {(!served || served.leadId !== panel.lead.id) && reasonParts.length > 0 && (
             <p className={cn(small, "mt-2")}><span className="font-semibold text-[var(--ink)]">Last chosen: </span>{reasonParts.join(" · ")}</p>
           )}
+          {/* A served lead: why the queue chose it and the lock you hold (LA-2.8), one line here since
+              the "Served to you" card left the queue column (2026-10-06); the setter's notes with it. */}
+          {served && served.leadId === panel.lead.id && (
+            <>
+              <p className={cn(small, "mt-2")}>
+                <span className="font-semibold text-[var(--ink)]">Served to you{served.tierName ? ` · ${served.tierName.replaceAll("_", " ")}` : ""}: </span>
+                {[reasonParts.join(" · ") || served.selectionReason || "from the queue", served.lockedUntil ? `locked to you until ${new Date(served.lockedUntil).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` : "held by you"].join(" · ")}
+              </p>
+              {served.appointmentNotes && <p className={cn(body14, "mt-2")}><span className="font-semibold text-[var(--ink)]">Setter notes: </span>{served.appointmentNotes}</p>}
+            </>
+          )}
 
           {!panel.disclosure.configured && (
             <div className="mt-4 border-t border-[var(--border)] pt-4">
@@ -86,17 +108,9 @@ export function DialerLeadColumn({ d, readOnly }: { d: ReturnType<typeof useDial
               <p className="mt-1.5 text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--error-ink)]">{panel.disclosure.requiredText}</p>
             </div>
           )}
-          {/* D15: the wording on file is still the seeded placeholder, not compliance-approved.
-              Dialing is not blocked by it (the user's decision); it is said plainly instead. */}
-          {disclosureUnapproved && <div className="mt-4"><Callout tone="warning" title={unapprovedDisclosureLine(stateName ?? panel.disclosure.state)} /></div>}
-          {/* The wording is on screen as soon as the lead loads, and cannot be hidden. Recording
-              that it was read is still what unlocks the dial (confirm-to-dial kept). */}
-          {panel.disclosure.configured && !attempt && (
-            <div className="mt-4 border-t border-[var(--border)] pt-4">
-              <p className={label}>{stateName ?? panel.disclosure.state} requires this wording · cannot be hidden</p>
-              <p className="mt-1.5 text-[16px] leading-[1.5] tracking-[-0.02em] whitespace-pre-line text-[var(--body)]">{panel.disclosure.requiredText}</p>
-            </div>
-          )}
+          {/* The state's wording appears once a call is being prepared, with the read-and-record step
+              that unlocks the dial (confirm-to-dial kept). It is not shown before then (user decision
+              2026-10-06); a placeholder text is still flagged under Eligibility & compliance. */}
           {attempt && (
             <div className="mt-4 border-t border-[var(--border)] pt-4">
               <p className={label}>{panel.disclosure.configured ? `${stateName ?? panel.disclosure.state} requires this wording · cannot be hidden` : `Required disclosure · ${panel.disclosure.state || "unknown state"}`}</p>
@@ -121,10 +135,25 @@ export function DialerLeadColumn({ d, readOnly }: { d: ReturnType<typeof useDial
         </section>
 
         <section className={cn(card, "p-5 max-lg:order-3")} aria-label="Eligibility and compliance">
-          <div className="flex items-center justify-between gap-4">
-            <h2 className={h2}>Eligibility &amp; compliance</h2>
-            <Pill tone={callReady ? "success" : "error"} dot>{callReady ? "Allowed" : "Blocked"}</Pill>
-          </div>
+          {/* Collapsible (user decision 2026-10-06). Closed, it keeps the verdict, a one-line summary
+              and every blocker in view: what stops the dial is never folded away. */}
+          <h2 className={cn(h2, "m-0")}>
+            <button type="button" onClick={() => setComplianceOpen((open) => !open)} aria-expanded={complianceOpen} aria-controls="dialer-compliance-detail" className="flex w-full items-center gap-3 text-left">
+              <ChevronDown aria-hidden="true" className={cn("size-4 shrink-0 text-[var(--muted)] transition-transform", !complianceOpen && "-rotate-90")} />
+              <span className="flex-1">Eligibility &amp; compliance</span>
+              <Pill tone={callReady ? "success" : "error"} dot>{callReady ? "Allowed" : "Blocked"}</Pill>
+            </button>
+          </h2>
+          {!complianceOpen && (
+            <p className={cn(small, "mt-1.5 truncate pl-7")}>
+              {[
+                `Consent: ${consentLabel(panel.consent)}`,
+                !panel.disclosure.configured ? "No disclosure on file" : disclosureUnapproved ? "Disclosure is a placeholder" : "Disclosure approved",
+                eligibility?.licence ? (eligibility.licence.status === "live" ? `${eligibility.licence.state} licence live` : `Licence ${eligibility.licence.status === "refused" ? "refused" : "unchecked"}`) : null,
+                panel.window ? (panel.window.allowed && panel.window.endMinute !== null ? `Window open until ${minuteLabel(panel.window.endMinute)}` : "Window closed") : null,
+              ].filter(Boolean).join(" · ")}
+            </p>
+          )}
           {/* The licence's refusal is the server's sentence here, with every other reason the
               call cannot be placed. */}
           {blockers.length > 0 && (
@@ -132,6 +161,7 @@ export function DialerLeadColumn({ d, readOnly }: { d: ReturnType<typeof useDial
               {blockers.map((line) => <li key={line} className="text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--error-ink)]">{line}</li>)}
             </ul>
           )}
+          {complianceOpen && <div id="dialer-compliance-detail">
           <dl className="m-0 mt-3 grid grid-cols-2 gap-x-6 gap-y-3">
             <div className="min-w-0"><dt className={label}>Consent on file</dt><dd className={cn(value, "m-0")}>{consentLabel(panel.consent)}</dd></div>
             {/* D15: whether the state's wording is the approved text or still the placeholder. */}
@@ -199,70 +229,7 @@ export function DialerLeadColumn({ d, readOnly }: { d: ReturnType<typeof useDial
               })}
             </dl>
           </div>
-        </section>
-
-        <section className={cn(card, "flex flex-col overflow-hidden max-lg:order-4")} aria-label="Suggested script">
-          <div className={cn(barHead, "flex-wrap")}>
-            <span className={barTitle}>Suggested script</span>
-            <span className="flex flex-wrap items-center gap-2">
-              <Pill tone="neutral">{panel.script.version ? `Version ${panel.script.version}` : "Default script"}</Pill>
-              {canAuthor && <Button type="button" variant="outline" onClick={() => setEditingScript((open) => !open)}>{editingScript ? "Cancel" : "Edit"}</Button>}
-              {canAuthor && <Button type="button" variant="outline" onClick={() => void saveCurrentScript()} disabled={!editingScript || working} title={!editingScript ? "Edit the script first" : undefined}>Save new version</Button>}
-            </span>
-          </div>
-          {editingScript ? (
-            <div className="space-y-3 px-5 py-4">
-              {/* LA-2.23: an unknown variable resolves to nothing, so the editor names the ones that exist. */}
-              <p className={small}>
-                Variables: <code>{"{{first_name}}"}</code>, <code>{"{{state}}"}</code>, <code>{"{{age}}"}</code>, <code>{"{{agent_name}}"}</code>, <code>{"{{agency_name}}"}</code>, <code>{"{{product}}"}</code>, <code>{"{{consent_date}}"}</code> — anything else is replaced with nothing rather than shown.
-              </p>
-              {scriptSections.map((key) => (
-                <div key={key}>
-                  <label htmlFor={`script-${key}`} className={fieldLabel}>{SECTION_LABELS[key]}</label>
-                  <textarea id={`script-${key}`} className={cn(control, "h-auto min-h-24 py-2 text-[14px]")} value={draftSections[key] ?? ""} onChange={(event) => setDraftSections((current) => ({ ...current, [key]: event.target.value }))} />
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="px-5 py-4">
-              <p className="m-0 text-[16px] leading-[1.5] tracking-[-0.02em] text-[var(--body)]">&ldquo;{String(panel.script.sections.opening ?? "")}&rdquo;</p>
-              {scriptSections.slice(1).map((key) => (
-                <div key={key} className="mt-3">
-                  <p className={label}>{SECTION_LABELS[key]}</p>
-                  <p className={cn(body14, "mt-1")}>{String(panel.script.sections[key] ?? "")}</p>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-
-        <section className={cn(card, "flex flex-col overflow-hidden max-lg:order-5")} aria-label="Rebuttals">
-          <div className={cn(barHead, "flex-wrap")}>
-            <span className={barTitle}>Rebuttals</span>
-            {/* LA-2.23-3: search the library by objection, response or key ("number", "spouse"). */}
-            <input
-              type="search"
-              aria-label="Search rebuttals"
-              placeholder="Search rebuttals"
-              className={cn(toolbarControl, "w-full min-w-0 sm:w-[220px]")}
-              value={rebuttalQuery}
-              onChange={(event) => setRebuttalQuery(event.target.value)}
-              onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); setRebuttalQuery(""); } }}
-            />
-          </div>
-          <div className="grid gap-2 p-4">
-            {visibleRebuttals.map((item) => {
-              // One match while searching opens by itself: the answer is one keystroke away.
-              const open = rebuttal === item.id || (rebuttalQuery.trim() !== "" && visibleRebuttals.length === 1);
-              return (
-                <button key={item.id} type="button" onClick={() => setRebuttal(rebuttal === item.id ? null : item.id)} aria-expanded={open} className="rounded-[8px] border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-left hover:bg-[var(--canvas)]">
-                  <span className="block text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">{item.label}</span>
-                  {open && <span className={cn(body14, "mt-1 block")}>{item.body}</span>}
-                </button>
-              );
-            })}
-            {visibleRebuttals.length === 0 && <p className={cn(small, "m-0 py-2 text-center")} role="status">No rebuttal matches &ldquo;{rebuttalQuery.trim()}&rdquo;.</p>}
-          </div>
+          </div>}
         </section>
 
         <section className={cn(card, "flex flex-col overflow-hidden max-lg:order-7")} aria-label="Recent call history">

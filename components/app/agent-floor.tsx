@@ -3,13 +3,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Check } from "lucide-react";
+import { Check, Inbox, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { DataToolbar, RefreshButton, ToolbarSearch } from "@/components/ui/data-toolbar";
+import { ClearFiltersButton, DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageLoading } from "@/components/ui/page-loading";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
+import { Pager, paginate } from "@/components/ui/pager";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { TableCard } from "@/components/ui/table-card";
 import { Callout, Pill, st, type PillTone } from "@/components/app/settings/primitives";
@@ -21,6 +22,18 @@ import { cn } from "@/lib/utils";
 import { clockTime as zonedClock, dayMonth, dayMonthYear, viewerTimeZone, zonedParts } from "@/lib/format/dates";
 
 type Availability = "ready" | "on_break" | "off";
+
+/** Rows per page on every floor list: short enough that the queue and the roster both fit on screen. */
+const FLOOR_PAGE = 10;
+type FloorPages = { calls: number; roster: number; queue: number; callbacks: number };
+type FloorTab = "calls" | "roster" | "callbacks";
+
+/** The viewer's calendar day of an instant, as the date input writes it ("2026-10-05"). */
+function localDay(value: string) {
+  const at = new Date(value);
+  return Number.isNaN(at.getTime()) ? "" : at.toLocaleDateString("en-CA");
+}
+const FIRST_PAGES: FloorPages = { calls: 1, roster: 1, queue: 1, callbacks: 1 };
 
 type Lead = {
   id: string;
@@ -88,6 +101,8 @@ type Callback = {
   customerName: string;
   customerTime: string;
   customerTimezone: string;
+  /** When it is due, in UTC; the date filter compares it with the chosen day. */
+  scheduledAtUtc?: string;
   note: string | null;
   isOverdue: boolean;
   isDueToday: boolean;
@@ -298,12 +313,13 @@ function PendingHandoffs({ items, readOnly, saving, now, onAccept }: { items: Ha
   );
 }
 
-function Roster({ members, searching, now, currentUserId, isOwner, canAsk, readOnly, saving, onAsk }: { members: Member[]; searching: boolean; now: number; currentUserId: string; isOwner: boolean; canAsk: boolean; readOnly: boolean; saving: string | null; onAsk: (member: Member) => void }) {
-  const rows = members
+function Roster({ members, searching, now, currentUserId, isOwner, canAsk, readOnly, saving, page, onPage, onAsk, toolbar }: { members: Member[]; searching: boolean; now: number; currentUserId: string; isOwner: boolean; canAsk: boolean; readOnly: boolean; saving: string | null; page: number; onPage: (page: number) => void; onAsk: (member: Member) => void; toolbar: React.ReactNode }) {
+  const sorted = members
     .map((member) => ({ member, state: rosterState(member, now) }))
     .sort((a, b) => STATE_ORDER.indexOf(a.state) - STATE_ORDER.indexOf(b.state) || a.member.name.localeCompare(b.member.name));
+  const { current, rows } = paginate(sorted, page, FLOOR_PAGE);
   return (
-    <TableCard title="Roster">
+    <TableCard toolbar={toolbar} footer={sorted.length ? <Pager page={current} total={sorted.length} pageSize={FLOOR_PAGE} noun="agents" onPage={onPage} /> : undefined}>
       {rows.length === 0 ? (
         searching
           ? <NoMatches noun="agents" />
@@ -314,8 +330,8 @@ function Roster({ members, searching, now, currentUserId, isOwner, canAsk, readO
             <tr className={st.headRow}>
               <th scope="col" className={st.th}>Agent</th>
               <th scope="col" className={cn(st.th, "w-[112px]")}>Status</th>
-              <th scope="col" className={cn(st.th, "w-[160px]")}>Doing</th>
-              <th scope="col" className={cn(st.th, "w-[76px]")}>On call</th>
+              <th scope="col" className={cn(st.th, "w-[280px]")}>Doing</th>
+              <th scope="col" className={cn(st.th, "w-[100px]")}>On call</th>
               <th scope="col" className={cn(st.th, "w-[132px] text-right")}><span className="sr-only">Action</span></th>
             </tr>
           </thead>
@@ -337,7 +353,7 @@ function Roster({ members, searching, now, currentUserId, isOwner, canAsk, readO
                   </td>
                   <td className={st.td}><Pill tone={pill.tone} dot>{pill.label}</Pill></td>
                   <td className={st.td}>{doingLabel(member, state, now)}</td>
-                  <td className={cn(st.td, "tabular-nums")}>{onCall && member.call ? callClock(secondsSince(member.call.startedAt, now)) : "—"}</td>
+                  <td className={cn(st.td, "whitespace-nowrap tabular-nums")}>{onCall && member.call ? callClock(secondsSince(member.call.startedAt, now)) : "—"}</td>
                   <td className={cn(st.td, "text-right")}>
                     {onCall && member.call ? (
                       <Button asChild size="sm" variant="outline"><Link href={`/app/leads/${member.call.leadId}`}>Open lead</Link></Button>
@@ -361,46 +377,84 @@ function Roster({ members, searching, now, currentUserId, isOwner, canAsk, readO
  * Who is talking: one row per OPEN call record, which is a different fact from "claimed a while
  * ago". A record open past four hours is one nobody closed, and the row says so.
  */
-function OnCalls({ calls, now, currentUserId, isOwner, readOnly, saving, onRelease }: { calls: Call[]; now: number; currentUserId: string; isOwner: boolean; readOnly: boolean; saving: string | null; onRelease: (call: Call, action: "unassign" | "end_buffer") => void }) {
-  if (!calls.length) return null;
+function OnCalls({ calls, filtered, now, currentUserId, isOwner, readOnly, saving, page, onPage, onRelease, toolbar }: { calls: Call[]; filtered: boolean; now: number; currentUserId: string; isOwner: boolean; readOnly: boolean; saving: string | null; page: number; onPage: (page: number) => void; onRelease: (call: Call, action: "unassign" | "end_buffer") => void; toolbar: React.ReactNode }) {
   const sorted = [...calls].sort((a, b) => new Date(a.startedAt).getTime() - new Date(b.startedAt).getTime());
+  const { current, rows } = paginate(sorted, page, FLOOR_PAGE);
   return (
-    <TableCard title="On a call now" action={<span className="text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">{calls.length} open call {calls.length === 1 ? "record" : "records"}</span>}>
-      <ul className="m-0 list-none border-t border-[var(--border)] p-0">
-        {sorted.map((call) => {
-          const seconds = secondsSince(call.startedAt, now);
-          const stale = seconds > 4 * 3600;
-          return (
-            <li key={call.activeCallId} className="flex flex-wrap items-center gap-3 border-t border-[var(--border)] px-4 py-3 first:border-t-0">
-              <span className="min-w-0 flex-1">
-                <span className="block text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">{call.agentName} <span className="font-normal text-[var(--muted)]">→</span> {call.customer}</span>
-                <span className={st.sub}>
-                  {[call.partnerName, productLineLabel(call.productLine), call.verificationPercent != null ? `verification ${call.verificationPercent}%` : "no verification open"].filter(Boolean).join(" · ")}
-                </span>
-                {call.buffer && <span className={st.sub}>Buffer {call.buffer.name} is still on the call</span>}
-              </span>
-              <span className={cn("shrink-0 text-right text-[14px] leading-[1.5] font-semibold tabular-nums", stale ? "text-[var(--warning-ink)]" : "text-[var(--success-ink)]")}>
-                {callClock(seconds)}
-                {stale && <span className="block text-[12px] font-normal">never closed</span>}
-              </span>
-              <span className="flex shrink-0 flex-wrap justify-end gap-2">
-                {/* Two different acts (LA-1.14-9): the buffer leaving a call the agent keeps, and the agent giving the transfer back. */}
-                {call.buffer && (isOwner || call.buffer.userId === currentUserId || call.agentId === currentUserId) && (
-                  <Button type="button" size="sm" variant="outline" disabled={readOnly || saving === `end_buffer:${call.id}`} onClick={() => onRelease(call, "end_buffer")}>
-                    {saving === `end_buffer:${call.id}` ? "Ending…" : "End buffer involvement"}
-                  </Button>
-                )}
-                {(isOwner || call.agentId === currentUserId) && (
-                  <Button type="button" size="sm" variant="outline" disabled={readOnly || saving === `unassign:${call.id}`} onClick={() => onRelease(call, "unassign")}>
-                    {saving === `unassign:${call.id}` ? "Unassigning…" : "Unassign"}
-                  </Button>
-                )}
-                <Button asChild size="sm" variant="outline"><Link href={`/app/leads/${call.leadId}`}>Open lead</Link></Button>
-              </span>
-            </li>
-          );
-        })}
-      </ul>
+    <TableCard toolbar={toolbar} footer={sorted.length ? <Pager page={current} total={sorted.length} pageSize={FLOOR_PAGE} noun="calls" suffix="longest first" onPage={onPage} /> : undefined}>
+      {rows.length === 0 ? (
+        filtered
+          ? <NoMatches noun="calls" />
+          : <EmptyState title="Nobody is on a call" hint="A call shows here from the moment an agent picks up a transfer until its outcome is recorded." />
+      ) : (
+        <table className={st.table}>
+          <thead>
+            <tr className={st.headRow}>
+              <th scope="col" className={st.th}>Agent</th>
+              <th scope="col" className={st.th}>Customer</th>
+              <th scope="col" className={st.th}>Source</th>
+              <th scope="col" className={cn(st.th, "w-[150px]")}>Verification</th>
+              <th scope="col" className={cn(st.th, "w-[110px] text-right")}>On call</th>
+              <th scope="col" className={cn(st.th, "text-right")}><span className="sr-only">Actions</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((call) => {
+              const seconds = secondsSince(call.startedAt, now);
+              // A record open past four hours is one nobody closed, and the row says so.
+              const stale = seconds > 4 * 3600;
+              const mine = call.agentId === currentUserId;
+              const percent = call.verificationPercent;
+              return (
+                <tr key={call.activeCallId} className="m-row">
+                  <td className={st.td}>
+                    <span className="font-semibold text-[var(--ink)]">{call.agentName}</span>
+                    {mine && <span className="text-[12px] text-[var(--muted)]"> · you</span>}
+                    {call.buffer && <span className={st.sub}>Buffer {call.buffer.name} still on the call</span>}
+                  </td>
+                  <td className={st.td}>
+                    <Link className="font-semibold text-[var(--ink)] hover:underline" href={`/app/leads/${call.leadId}`}>{call.customer}</Link>
+                    <span className={st.sub}>{[call.state, call.language ? languageName(call.language) : null].filter((part) => part && part !== "—").join(" · ")}</span>
+                  </td>
+                  <td className={st.td}>
+                    {call.partnerName}
+                    <span className={st.sub}>{productLineLabel(call.productLine)}</span>
+                  </td>
+                  <td className={st.td}>
+                    {percent == null ? <span className="text-[var(--muted)]">Not started</span> : (
+                      <span className="flex items-center gap-2">
+                        <span aria-hidden className="block h-1.5 w-16 overflow-hidden rounded-full bg-[var(--surface-alt)]"><span className={cn("block h-full rounded-full", percent >= 100 ? "bg-[var(--success)]" : "bg-[var(--info)]")} style={{ width: `${Math.min(100, percent)}%` }} /></span>
+                        <span className="tabular-nums">{percent}%</span>
+                      </span>
+                    )}
+                  </td>
+                  <td className={cn(st.td, "text-right tabular-nums font-semibold", stale ? "text-[var(--warning-ink)]" : "text-[var(--success-ink)]")}>
+                    {callClock(seconds)}
+                    {stale && <span className="block text-[12px] font-normal">never closed</span>}
+                  </td>
+                  <td className={cn(st.td, "whitespace-nowrap text-right")}>
+                    <span className="inline-flex flex-nowrap justify-end gap-2">
+                      {mine && <Button asChild size="sm"><Link href={`/app/inbound/${call.id}/verification`}>{percent != null && percent >= 100 ? "Record outcome" : "Verify"}</Link></Button>}
+                      {/* Two different acts (LA-1.14-9): the buffer leaving a call the agent keeps, and the agent giving the transfer back. */}
+                      {call.buffer && (isOwner || call.buffer.userId === currentUserId || mine) && (
+                        <Button type="button" size="sm" variant="outline" disabled={readOnly || saving === `end_buffer:${call.id}`} onClick={() => onRelease(call, "end_buffer")}>
+                          {saving === `end_buffer:${call.id}` ? "Ending…" : "End buffer"}
+                        </Button>
+                      )}
+                      {(isOwner || mine) && (
+                        <Button type="button" size="sm" variant="outline" disabled={readOnly || saving === `unassign:${call.id}`} onClick={() => onRelease(call, "unassign")}>
+                          {saving === `unassign:${call.id}` ? "Unassigning…" : "Unassign"}
+                        </Button>
+                      )}
+                      <Button asChild size="sm" variant="outline"><Link href={`/app/leads/${call.leadId}`}>Open lead</Link></Button>
+                    </span>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
     </TableCard>
   );
 }
@@ -414,18 +468,27 @@ function Fact({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
-function TransferQueue({ items, totalWaiting, now, thresholds, expandedId, readOnly, saving, members, toolbar, footer, onClearSearch, onToggle, onClaim, onNudge }: { items: Lead[]; totalWaiting: number; now: number; thresholds: FloorData["waitThresholds"]; expandedId: string | null; readOnly: boolean; saving: string | null; members: Member[]; toolbar: React.ReactNode; footer: React.ReactNode; onClearSearch: () => void; onToggle: (id: string) => void; onClaim: (id: string) => void; onNudge: (id: string) => void }) {
+function TransferQueue({ items, totalWaiting, now, thresholds, expandedId, readOnly, saving, members, toolbar, liveStatus, page, onPage, onClearSearch, onToggle, onClaim, onNudge, onClose }: { items: Lead[]; totalWaiting: number; now: number; thresholds: FloorData["waitThresholds"]; expandedId: string | null; readOnly: boolean; saving: string | null; members: Member[]; toolbar: React.ReactNode; liveStatus: React.ReactNode; page: number; onPage: (page: number) => void; onClearSearch: () => void; onToggle: (id: string) => void; onClaim: (id: string) => void; onNudge: (id: string) => void; onClose: () => void }) {
   // Who could take a non-English lead right now: free (available) members whose recorded languages include it.
   const freeSpeakers = (language: string) => members.filter((member) => rosterState(member, now) === "available" && (member.languages ?? []).some((spoken) => languageKey(spoken) === languageKey(language)));
+  const { current, rows } = paginate(items, page, FLOOR_PAGE);
+  const offset = (current - 1) * FLOOR_PAGE;
   return (
-    <TableCard title="Transfer queue" action={<span className="text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">longest first</span>} toolbar={toolbar} footer={footer}>
+    <TableCard
+      className="flex max-h-full min-h-0 w-full flex-col shadow-[0_12px_32px_rgba(0,0,0,.22)] [&>*:nth-child(3)]:min-h-0 [&>*:nth-child(3)]:flex-1 [&>*:nth-child(3)]:overflow-y-auto"
+      title={`Transfer queue · ${totalWaiting}`}
+      action={<Button type="button" variant="ghost" size="sm" onClick={onClose} aria-label="Close the transfer queue"><X aria-hidden="true" /></Button>}
+      toolbar={toolbar}
+      footer={<Pager page={current} total={items.length} pageSize={FLOOR_PAGE} noun="waiting transfers" onPage={onPage} suffix={liveStatus} />}
+    >
       {items.length === 0 ? (
         totalWaiting
           ? <NoMatches noun="waiting transfers" onClear={onClearSearch} />
           : <EmptyState title="Nobody is waiting" hint="A new inbound transfer appears here the moment a partner sends it." />
       ) : (
         <ol className="m-0 list-none p-0">
-          {items.map((item, index) => {
+          {rows.map((item, rowIndex) => {
+            const index = offset + rowIndex;
             const wait = secondsSince(item.queuedAt, now);
             const expanded = item.id === expandedId;
             const eligibility = eligibilityFor(item);
@@ -492,9 +555,14 @@ function TransferQueue({ items, totalWaiting, now, thresholds, expandedId, readO
   );
 }
 
-function CallbacksTable({ items, searching }: { items: Callback[]; searching: boolean }) {
+function CallbacksTable({ items, searching, page, onPage, toolbar }: { items: Callback[]; searching: boolean; page: number; onPage: (page: number) => void; toolbar: React.ReactNode }) {
+  const { current, rows } = paginate(items, page, FLOOR_PAGE);
+  const viewAll = <Link href="/app/callbacks" className="font-semibold text-[var(--accent-ink)] hover:underline">Open Callbacks</Link>;
   return (
-    <TableCard title="Upcoming callbacks" action={<Button asChild variant="outline"><Link href="/app/callbacks">View all</Link></Button>}>
+    <TableCard
+      toolbar={toolbar}
+      footer={<Pager page={current} total={items.length} pageSize={FLOOR_PAGE} noun="callbacks" onPage={onPage} suffix={viewAll} />}
+    >
       {items.length === 0 ? (
         searching
           ? <NoMatches noun="callbacks" />
@@ -513,7 +581,7 @@ function CallbacksTable({ items, searching }: { items: Callback[]; searching: bo
             </tr>
           </thead>
           <tbody>
-            {items.map((callback) => {
+            {rows.map((callback) => {
               // listCallbacks falls back to "Lead" and "Assigned agent" when it has nothing; those are not values.
               const product = callback.productName && callback.productName !== "Lead" ? productLineLabel(callback.productName) : "—";
               const owner = callback.assigneeName && callback.assigneeName !== "Assigned agent" ? callback.assigneeName : "—";
@@ -523,11 +591,11 @@ function CallbacksTable({ items, searching }: { items: Callback[]; searching: bo
                     {callback.customerTime}
                     {callback.isOverdue && <span className="ml-2"><Pill tone="error">Overdue</Pill></span>}
                   </td>
-                  <td className={st.td}><Link className="font-semibold text-[var(--ink)] hover:underline" href={`/app/leads/${callback.leadId}`}>{callback.customerName}</Link></td>
+                  <td className={cn(st.td, "whitespace-nowrap")}><Link className="font-semibold text-[var(--ink)] hover:underline" href={`/app/leads/${callback.leadId}`}>{callback.customerName}</Link></td>
                   <td className={st.td}>{product}</td>
-                  <td className={st.td}>{owner}</td>
-                  <td className={st.td}>{callback.customerTimezone}</td>
-                  <td className={st.td}>{callback.note || "No callback note."}</td>
+                  <td className={cn(st.td, "whitespace-nowrap")}>{owner}</td>
+                  <td className={cn(st.td, "whitespace-nowrap")}>{callback.customerTimezone}</td>
+                  <td className={st.td}><span className="line-clamp-2 max-w-[420px]" title={callback.note ?? undefined}>{callback.note || "No callback note."}</span></td>
                   <td className={cn(st.td, "text-right")}><Button asChild size="sm" variant="outline"><Link href={`/app/leads/${callback.leadId}`}>Open</Link></Button></td>
                 </tr>
               );
@@ -637,11 +705,53 @@ export function AgentFloor({ currentUserId, readOnly, role }: { currentUserId: s
     return () => window.clearInterval(timer);
   }, [availability, readOnly]);
 
+  // One list on screen at a time, picked with the tabs under the title. Search, the date and the
+  // tab's own filter narrow that list; the transfer queue has its own search in its side panel.
+  const [tab, setTab] = useState<FloorTab>("calls");
+  const [day, setDay] = useState("");
+  const [agentFilter, setAgentFilter] = useState("");
+  const [rosterFilter, setRosterFilter] = useState<RosterState | "">("");
+  const [ownerFilter, setOwnerFilter] = useState("");
+  const [queueSearch, setQueueSearch] = useState("");
+  const [queueOpen, setQueueOpen] = useState(false);
   const normalizedSearch = search.trim().toLowerCase();
   const matches = useCallback((value: string | null | undefined) => !normalizedSearch || String(value ?? "").toLowerCase().includes(normalizedSearch), [normalizedSearch]);
-  const members = useMemo(() => (floor?.members ?? []).filter((member) => [member.name, member.call?.customer, member.call?.partnerName].some(matches)), [floor?.members, matches]);
-  const waiting = useMemo(() => (floor?.waiting ?? []).filter((item) => [item.customer, item.productLine, productLineLabel(item.productLine), item.state, item.partnerName, item.ownerName, item.language].some(matches)), [floor?.waiting, matches]);
-  const callbacks = useMemo(() => (floor?.callbacks ?? []).filter((item) => [item.customerName, item.customerTime, item.customerTimezone, item.note, item.productName, item.assigneeName].some(matches)), [floor?.callbacks, matches]);
+  const onDay = useCallback((value: string | null | undefined) => !day || (value ? localDay(value) === day : false), [day]);
+  const members = useMemo(() => (floor?.members ?? []).filter((member) => [member.name, member.call?.customer, member.call?.partnerName].some(matches) && (!rosterFilter || rosterState(member, now) === rosterFilter) && onDay(member.call?.startedAt ?? member.statusChangedAt ?? member.lastSeenAt)), [floor?.members, matches, rosterFilter, now, onDay]);
+  const queueNeedle = queueSearch.trim().toLowerCase();
+  const waiting = useMemo(() => (floor?.waiting ?? []).filter((item) => !queueNeedle || [item.customer, item.productLine, productLineLabel(item.productLine), item.state, item.partnerName, item.ownerName, item.language].some((value) => String(value ?? "").toLowerCase().includes(queueNeedle))), [floor?.waiting, queueNeedle]);
+  const callbacks = useMemo(() => (floor?.callbacks ?? []).filter((item) => [item.customerName, item.customerTime, item.customerTimezone, item.note, item.productName, item.assigneeName].some(matches) && (!ownerFilter || item.assigneeName === ownerFilter) && (!day || onDay(item.scheduledAtUtc))), [floor?.callbacks, matches, ownerFilter, day, onDay]);
+  const onCalls = useMemo(() => (floor?.onCalls ?? []).filter((call) => [call.agentName, call.customer, call.partnerName, call.buffer?.name, productLineLabel(call.productLine)].some(matches) && (!agentFilter || call.agentName === agentFilter) && onDay(call.startedAt)), [floor?.onCalls, matches, agentFilter, onDay]);
+  const callAgents = useMemo(() => [...new Set((floor?.onCalls ?? []).map((call) => call.agentName))].sort(), [floor?.onCalls]);
+  const callbackOwners = useMemo(() => [...new Set((floor?.callbacks ?? []).map((item) => item.assigneeName).filter((name): name is string => Boolean(name) && name !== "Assigned agent"))].sort(), [floor?.callbacks]);
+  // One page per list. Any new search or filter starts every list again at its first page.
+  const [pages, setPages] = useState<FloorPages>(FIRST_PAGES);
+  const pageTo = (list: keyof FloorPages) => (page: number) => setPages((current) => ({ ...current, [list]: page }));
+  const changeSearch = (value: string) => { setSearch(value); setPages(FIRST_PAGES); };
+  const refilter = <T,>(set: (value: T) => void) => (value: T) => { set(value); setPages(FIRST_PAGES); };
+  const filtersOn = Boolean(normalizedSearch || day || (tab === "calls" && agentFilter) || (tab === "roster" && rosterFilter) || (tab === "callbacks" && ownerFilter));
+  const clearFilters = () => { setSearch(""); setDay(""); setAgentFilter(""); setRosterFilter(""); setOwnerFilter(""); setPages(FIRST_PAGES); };
+
+  // A new transfer while the panel is shut: the bookmark shows a short note beside it.
+  const [arrival, setArrival] = useState<string | null>(null);
+  const seenWaiting = useRef<Set<string> | null>(null);
+  useEffect(() => {
+    const ids = new Set((floor?.waiting ?? []).map((item) => item.id));
+    const seen = seenWaiting.current;
+    seenWaiting.current = ids;
+    if (!seen || queueOpen) return;
+    const fresh = (floor?.waiting ?? []).filter((item) => !seen.has(item.id));
+    if (!fresh.length) return;
+    setArrival(fresh.length === 1 ? `New transfer: ${fresh[0].customer}` : `${fresh.length} new transfers waiting`);
+    const timer = window.setTimeout(() => setArrival(null), 8000);
+    return () => window.clearTimeout(timer);
+  }, [floor?.waiting, queueOpen]);
+  useEffect(() => {
+    if (!queueOpen) return;
+    const close = (event: KeyboardEvent) => { if (event.key === "Escape") setQueueOpen(false); };
+    window.addEventListener("keydown", close);
+    return () => window.removeEventListener("keydown", close);
+  }, [queueOpen]);
   // "Ask to pick up" is always about the head of the queue — the longest wait — whatever the search shows.
   const headOfQueue = useMemo(() => [...(floor?.waiting ?? [])].sort((a, b) => new Date(a.queuedAt).getTime() - new Date(b.queuedAt).getTime())[0] ?? null, [floor?.waiting]);
 
@@ -655,7 +765,10 @@ export function AgentFloor({ currentUserId, readOnly, role }: { currentUserId: s
     const longest = waits.length ? Math.max(...waits) : 0;
     const closed = floor.closedTransfers ?? { thisHour: null, previousHour: null };
     const delta = closed.thisHour !== null && closed.previousHour !== null ? closed.thisHour - closed.previousHour : null;
-    return { onFloor, available, average, longest, closed, delta };
+    const staleCalls = floor.onCalls.filter((call) => secondsSince(call.startedAt, now) > 4 * 3600).length;
+    const dueToday = floor.callbacks.filter((item) => item.isDueToday && !item.isOverdue).length;
+    const overdue = floor.callbacks.filter((item) => item.isOverdue).length;
+    return { onFloor, available, average, longest, closed, delta, staleCalls, dueToday, overdue };
   }, [floor, now]);
 
   async function claim(workItemId: string) {
@@ -715,17 +828,13 @@ export function AgentFloor({ currentUserId, readOnly, role }: { currentUserId: s
   const updated = lastUpdated ? `${shortDuration(secondsSince(lastUpdated, now))} ago` : "just now";
   const statusDisabled = readOnly || availability === null;
 
-  const header = (
-    <PageHeader
-      title="Agent Floor"
-      actions={
-        <>
-          <StatusButton pressed={availability === "off"} disabled={statusDisabled} onClick={() => setAvailability("off")}>Go offline</StatusButton>
-          <StatusButton pressed={availability === "on_break"} disabled={statusDisabled} onClick={() => setAvailability("on_break")}>Wrap-up</StatusButton>
-          <StatusButton pressed={availability === "ready"} disabled={statusDisabled} onClick={() => setAvailability("ready")}>Available</StatusButton>
-        </>
-      }
-    />
+  const header = <PageHeader title="Agent Floor" />;
+  const statusButtons = (
+    <div role="group" aria-label="Your status" className="flex flex-wrap items-center gap-2">
+      <StatusButton pressed={availability === "off"} disabled={statusDisabled} onClick={() => setAvailability("off")}>Go offline</StatusButton>
+      <StatusButton pressed={availability === "on_break"} disabled={statusDisabled} onClick={() => setAvailability("on_break")}>Wrap-up</StatusButton>
+      <StatusButton pressed={availability === "ready"} disabled={statusDisabled} onClick={() => setAvailability("ready")}>Available</StatusButton>
+    </div>
   );
 
   if (!floor) {
@@ -742,22 +851,79 @@ export function AgentFloor({ currentUserId, readOnly, role }: { currentUserId: s
 
   const thresholds = floor.waitThresholds;
   const k = kpis!;
-  const searching = normalizedSearch !== "";
+  const waitingCount = floor.waiting.length;
+  const liveStatus = (
+    <span className="inline-flex items-center gap-1.5" role="status">
+      <span aria-hidden className={cn("size-1.5 rounded-full", realtimeStatus === "subscribed" ? "bg-[var(--success)]" : "bg-[var(--muted)]")} />
+      <span className="font-semibold text-[var(--body)]">{liveLabel}</span> · updated {updated}
+    </span>
+  );
+  const tabs: Array<{ key: FloorTab; label: string; count: number }> = [
+    { key: "calls", label: "On a call now", count: floor.onCalls.length },
+    { key: "roster", label: "Roster", count: floor.members.length },
+    { key: "callbacks", label: "Upcoming callbacks", count: floor.callbacks.length },
+  ];
+  // The toolbar is the same on every tab — search, date, the tab's own filter, Refresh — so the
+  // controls never move when the agent switches lists.
+  const toolbar = (
+    <DataToolbar
+      actions={<>
+        {filtersOn && <ClearFiltersButton onClick={clearFilters} />}
+        <RefreshButton onClick={() => void refresh()} refreshing={refreshing} />
+      </>}
+    >
+      <ToolbarSearch value={search} onChange={changeSearch} placeholder={tab === "calls" ? "Search agent, customer, partner" : tab === "roster" ? "Search agent or customer" : "Search customer, note, owner"} />
+      <input type="date" aria-label={tab === "callbacks" ? "Due on" : tab === "calls" ? "Call started on" : "Active on"} className={toolbarControl} value={day} onChange={(event) => refilter(setDay)(event.target.value)} />
+      {tab === "calls" && (
+        <select aria-label="Filter calls by agent" className={toolbarControl} value={agentFilter} onChange={(event) => refilter(setAgentFilter)(event.target.value)}>
+          <option value="">All agents</option>
+          {callAgents.map((name) => <option key={name} value={name}>{name}</option>)}
+        </select>
+      )}
+      {tab === "roster" && (
+        <select aria-label="Filter the roster by status" className={toolbarControl} value={rosterFilter} onChange={(event) => refilter(setRosterFilter)(event.target.value as RosterState | "")}>
+          <option value="">All statuses</option>
+          {STATE_ORDER.map((state) => <option key={state} value={state}>{STATE_PILL[state].label}</option>)}
+        </select>
+      )}
+      {tab === "callbacks" && (
+        <select aria-label="Filter callbacks by owner" className={toolbarControl} value={ownerFilter} onChange={(event) => refilter(setOwnerFilter)(event.target.value)}>
+          <option value="">All owners</option>
+          {callbackOwners.map((name) => <option key={name} value={name}>{name}</option>)}
+        </select>
+      )}
+    </DataToolbar>
+  );
 
   return (
     <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
       {header}
 
+      {/* Under the title: which list to look at on the left, your own status on the right. */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div role="tablist" aria-label="Floor lists" className="inline-flex h-9 gap-0.5 rounded-md bg-[var(--canvas)] p-0.5">
+          {tabs.map((item) => (
+            <button
+              key={item.key}
+              type="button"
+              role="tab"
+              aria-selected={tab === item.key}
+              onClick={() => { setTab(item.key); setPages(FIRST_PAGES); }}
+              className={cn("inline-flex h-8 items-center gap-1.5 rounded-md border px-3 text-sm font-semibold tracking-[-0.01em]", tab === item.key ? "border-border bg-card text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}
+            >
+              {item.label}
+              <span className="rounded-full bg-[var(--surface-alt)] px-1.5 text-xs tabular-nums text-muted-foreground">{item.count}</span>
+            </button>
+          ))}
+        </div>
+        {statusButtons}
+      </div>
+
       <StatStrip label="Floor totals">
         <StatTile label="Agents available" value={`${k.available} of ${k.onFloor}`} footnote="on the floor now" />
-        <StatTile label="In queue" value={floor.waiting.length} footnote={`avg wait ${waitLabel(k.average)}`} />
-        <StatTile label="Longest wait" value={waitLabel(k.longest)} valueTone={k.longest >= thresholds.redSeconds ? "danger" : k.longest >= thresholds.amberSeconds ? "warning" : undefined} footnote={`Escalates at ${thresholdLabel(thresholds.redSeconds)}`} />
-        <StatTile
-          label="Closed this hour"
-          value={k.closed.thisHour ?? "—"}
-          valueTone={k.closed.thisHour ? "good" : undefined}
-          footnote={k.closed.thisHour === null ? "Could not be counted" : k.delta === null ? "No comparison yet" : k.delta === 0 ? "Same as last hour" : `${k.delta > 0 ? "+" : "−"}${Math.abs(k.delta)} vs last hour`}
-        />
+        <StatTile label="On a call" value={floor.onCalls.length} valueTone={k.staleCalls ? "warning" : undefined} footnote={k.staleCalls ? `${k.staleCalls} open over 4 hours` : "open call records"} />
+        <StatTile label="Waiting transfers" value={waitingCount} valueTone={k.longest >= thresholds.redSeconds ? "danger" : k.longest >= thresholds.amberSeconds ? "warning" : undefined} footnote={waitingCount ? `longest ${waitLabel(k.longest)} · escalates at ${thresholdLabel(thresholds.redSeconds)}` : "nobody waiting"} />
+        <StatTile label="Callbacks due today" value={k.dueToday} valueTone={k.overdue ? "danger" : undefined} footnote={k.overdue ? `${k.overdue} overdue` : "none overdue"} />
       </StatStrip>
 
       {readOnly && <Callout tone="warning" title="This account is suspended and read-only: picking up, nudging, handoffs and status changes are off." />}
@@ -766,42 +932,56 @@ export function AgentFloor({ currentUserId, readOnly, role }: { currentUserId: s
 
       <PendingHandoffs items={floor.pendingHandoffs} readOnly={readOnly} saving={saving} now={now} onAccept={(id, workItemId) => void accept(id, workItemId)} />
 
-      <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
-        <div className="flex min-w-0 flex-1 flex-col gap-6">
-          <OnCalls calls={floor.onCalls} now={now} currentUserId={currentUserId} isOwner={role === "owner"} readOnly={readOnly} saving={saving} onRelease={(call, action) => void release(call, action)} />
-          <Roster members={members} searching={searching} now={now} currentUserId={currentUserId} isOwner={role === "owner"} canAsk={Boolean(headOfQueue)} readOnly={readOnly} saving={saving} onAsk={(member) => headOfQueue && void sendNudge(headOfQueue.id, member)} />
+      {tab === "calls" && <OnCalls calls={onCalls} filtered={filtersOn} now={now} currentUserId={currentUserId} isOwner={role === "owner"} readOnly={readOnly} saving={saving} page={pages.calls} onPage={pageTo("calls")} onRelease={(call, action) => void release(call, action)} toolbar={toolbar} />}
+      {tab === "roster" && <Roster members={members} searching={filtersOn} now={now} currentUserId={currentUserId} isOwner={role === "owner"} canAsk={Boolean(headOfQueue)} readOnly={readOnly} saving={saving} page={pages.roster} onPage={pageTo("roster")} onAsk={(member) => headOfQueue && void sendNudge(headOfQueue.id, member)} toolbar={toolbar} />}
+      {tab === "callbacks" && <CallbacksTable items={callbacks} searching={filtersOn} page={pages.callbacks} onPage={pageTo("callbacks")} toolbar={toolbar} />}
+
+      {/* The transfer queue hangs off the right edge like a bookmark, with the waiting count on it,
+          and opens as a side panel over the page. A transfer that arrives while it is shut shows a
+          short note beside the bookmark. */}
+      {!queueOpen && (
+        <div className="fixed right-0 top-1/2 z-40 flex -translate-y-1/2 items-center gap-2">
+          {arrival && (
+            <button type="button" onClick={() => { setQueueOpen(true); setArrival(null); }} className="m-row max-w-[260px] rounded-lg border border-border bg-card px-3 py-2 text-left text-sm font-semibold text-foreground shadow-[0_8px_24px_rgba(0,0,0,.18)]" role="status">
+              {arrival}
+              <span className="block text-xs font-normal text-muted-foreground">Open the queue to pick it up</span>
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => { setQueueOpen(true); setArrival(null); }}
+            aria-label={`Open the transfer queue, ${waitingCount} waiting`}
+            className={cn("flex flex-col items-center gap-2 rounded-l-lg border border-r-0 border-border bg-card px-2 py-3 shadow-[0_4px_16px_rgba(0,0,0,.14)] hover:bg-[var(--surface-alt)]", waitingCount && "border-[var(--primary)]")}
+          >
+            <Inbox className="size-4 text-[var(--accent-ink)]" aria-hidden="true" />
+            <span className="text-xs font-semibold text-foreground [writing-mode:vertical-rl]">Transfer queue</span>
+            <span className={cn("inline-flex min-w-6 items-center justify-center rounded-full px-1.5 text-xs font-semibold tabular-nums", waitingCount ? "bg-[var(--primary)] text-[var(--primary-foreground)]" : "bg-[var(--surface-alt)] text-muted-foreground")}>{waitingCount}</span>
+          </button>
         </div>
-        <div className="flex min-w-0 flex-col gap-6 lg:w-[460px] lg:shrink-0">
+      )}
+      {queueOpen && (
+        <aside aria-label="Transfer queue" className="fixed bottom-4 right-4 z-40 flex w-[min(520px,max(360px,30vw))] max-w-[calc(100vw-32px)] [&>section]:h-full [&>section]:max-h-none" style={{ top: "calc(var(--top-bar-h) + 16px)" }}>
           <TransferQueue
             items={waiting}
-            totalWaiting={floor.waiting.length}
+            totalWaiting={waitingCount}
             now={now}
             thresholds={thresholds}
             expandedId={expandedId}
             readOnly={readOnly}
             saving={saving}
-            members={members}
-            toolbar={
-              <DataToolbar actions={<RefreshButton onClick={() => void refresh()} refreshing={refreshing} />}>
-                {/* One search for the whole floor: it narrows the queue, the roster and the callbacks together. */}
-                <ToolbarSearch value={search} onChange={setSearch} placeholder="Search the floor" />
-              </DataToolbar>
-            }
-            footer={
-              <span className="inline-flex items-center gap-1.5" role="status">
-                <span aria-hidden className={cn("size-1.5 rounded-full", realtimeStatus === "subscribed" ? "bg-[var(--success)]" : "bg-[var(--muted)]")} />
-                <span className="font-semibold text-[var(--body)]">{liveLabel}</span> · updated {updated}
-              </span>
-            }
-            onClearSearch={() => setSearch("")}
+            members={floor.members}
+            toolbar={<ToolbarSearch value={queueSearch} onChange={(value) => { setQueueSearch(value); setPages((current) => ({ ...current, queue: 1 })); }} placeholder="Search the queue" className="sm:w-full" />}
+            liveStatus={liveStatus}
+            page={pages.queue}
+            onPage={pageTo("queue")}
+            onClearSearch={() => setQueueSearch("")}
             onToggle={(id) => setExpandedId((current) => (current === id ? null : id))}
             onClaim={(id) => void claim(id)}
             onNudge={(id) => void sendNudge(id, null)}
+            onClose={() => setQueueOpen(false)}
           />
-        </div>
-      </div>
-
-      <CallbacksTable items={callbacks} searching={searching} />
+        </aside>
+      )}
     </div>
   );
 }

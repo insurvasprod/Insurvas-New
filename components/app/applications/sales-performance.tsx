@@ -4,12 +4,13 @@ import { useMemo, useRef, useState, type ReactNode } from "react";
 import { Download } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { DataToolbar, FilterButton, RefreshButton, toolbarControl } from "@/components/ui/data-toolbar";
+import { ClearFiltersButton, DataToolbar, RefreshButton, toolbarControl } from "@/components/ui/data-toolbar";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState, SectionLoading } from "@/components/ui/page-states";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
+import { ViewTabs } from "@/components/app/book-of-business-views";
 import { downloadCsv } from "@/components/app/partner-quality-parts";
 import { REQUIREMENT_KIND_LABEL } from "@/lib/applications/constants";
 import { dayMonth } from "@/lib/applications/listRules";
@@ -37,7 +38,6 @@ const RANGES = [
 ] as const;
 type RangeKey = (typeof RANGES)[number]["key"];
 
-const tabClass = (active: boolean) => `-mb-px inline-flex h-10 items-center border-b-2 px-1 text-sm font-semibold leading-[1.43] tracking-[-0.01em] outline-none focus-visible:ring-2 focus-visible:ring-ring ${active ? "border-[var(--primary)] text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`;
 const count = (n: number) => n.toLocaleString("en-US");
 
 /** "63.5% (198/312)" — the rate and the two numbers it comes from, every time; under MIN_CASES, the count greyed. */
@@ -78,7 +78,6 @@ export function SalesPerformance({ report: initialReport, sample = false, timeZo
   const [range, setRange] = useState<RangeKey>("90");
   const [custom, setCustom] = useState({ from: initialReport.from, to: initialReport.to });
   const [filters, setFilters] = useState<Filters>(NO_FILTERS);
-  const [filtersOpen, setFiltersOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [now] = useState(() => Date.now());
@@ -151,9 +150,11 @@ export function SalesPerformance({ report: initialReport, sample = false, timeZo
   const exportRequirements = () => downloadCsv(`requirement-days-${period}.csv`, ["Requirement", ...report.timing.rows.flatMap((c) => [`${c.name} median days`, `${c.name} n`]), "All median days", "All n"],
     report.timing.requirements.map((r) => [REQUIREMENT_KIND_LABEL[r.kind], ...report.timing.rows.flatMap((c) => [r.byCarrier[c.carrierId]?.value ?? null, r.byCarrier[c.carrierId]?.n ?? 0]), r.all.value, r.all.n]));
 
+  // 2026-10-06 redesign: the date range and the four filters sit on the toolbar's one line (no
+  // Filters panel), Clear shows only while a filter is on, and Refresh is last.
   const toolbar = (
-    <>
-      <DataToolbar actions={<>
+    <DataToolbar actions={<>
+        {panelCount > 0 && <ClearFiltersButton onClick={() => change({ filters: NO_FILTERS })} />}
         <Button type="button" variant="outline" onClick={exporters[tab]} aria-label={`Export ${TABS.find((x) => x.key === tab)?.label.toLowerCase()} as CSV`}><Download aria-hidden="true" />Export</Button>
         <RefreshButton onClick={refresh} refreshing={loading || sampleRefresh.refreshing} />
       </>}>
@@ -167,31 +168,23 @@ export function SalesPerformance({ report: initialReport, sample = false, timeZo
             <input type="date" aria-label="To" className={toolbarControl} value={custom.to} min={custom.from} onChange={(event) => { if (event.target.value) change({ custom: { ...custom, to: event.target.value } }); }} />
           </span>
         )}
-        <FilterButton open={filtersOpen} onClick={() => setFiltersOpen((v) => !v)} count={panelCount} aria-controls="report-filters" />
-      </DataToolbar>
-      {filtersOpen && (
-        <div id="report-filters" className="flex w-full flex-wrap items-center gap-2">
-          <select aria-label="Carrier" className={toolbarControl} value={filters.carrierId} onChange={(event) => setFilter("carrierId", event.target.value)}>
-            <option value="">All carriers</option>
-            {report.options.carriers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
-          <select aria-label="Product" className={toolbarControl} value={filters.productCode} onChange={(event) => setFilter("productCode", event.target.value)}>
-            <option value="">All products</option>
-            {report.options.products.map((p) => <option key={p.code} value={p.code}>{p.label}</option>)}
-          </select>
-          <select aria-label="Lead source" className={toolbarControl} value={filters.source} onChange={(event) => setFilter("source", event.target.value)}>
-            <option value="">All lead sources</option>
-            {report.options.sources.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
-          </select>
-          <select aria-label="Producer" className={toolbarControl} value={filters.producerId} onChange={(event) => setFilter("producerId", event.target.value)}>
-            <option value="">All producers</option>
-            {report.options.producers.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
-          {panelCount > 0 && <Button type="button" variant="ghost" onClick={() => change({ filters: NO_FILTERS })}>Clear filters</Button>}
-        </div>
-      )}
-      {error && <p role="alert" className="w-full text-sm text-destructive">{error}</p>}
-    </>
+        <select aria-label="Carrier" className={toolbarControl} value={filters.carrierId} onChange={(event) => setFilter("carrierId", event.target.value)}>
+          <option value="">All carriers</option>
+          {report.options.carriers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+        <select aria-label="Product" className={toolbarControl} value={filters.productCode} onChange={(event) => setFilter("productCode", event.target.value)}>
+          <option value="">All products</option>
+          {report.options.products.map((p) => <option key={p.code} value={p.code}>{p.label}</option>)}
+        </select>
+        <select aria-label="Lead source" className={toolbarControl} value={filters.source} onChange={(event) => setFilter("source", event.target.value)}>
+          <option value="">All lead sources</option>
+          {report.options.sources.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+        </select>
+        <select aria-label="Producer" className={toolbarControl} value={filters.producerId} onChange={(event) => setFilter("producerId", event.target.value)}>
+          <option value="">All producers</option>
+          {report.options.producers.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
+    </DataToolbar>
   );
 
   let body: ReactNode;
@@ -321,15 +314,14 @@ export function SalesPerformance({ report: initialReport, sample = false, timeZo
       <PageHeader
         title="Sales performance"
         description="Where applications stop, and which reason belongs to which carrier."
-        actions={<Button type="button" variant="outline" onClick={() => setTab("funnel")} disabled={tab === "funnel"} title={tab === "funnel" ? "The funnel is open" : undefined}>Open the funnel</Button>}
       />
-      {sample && <SampleDataNotice />}
 
-      <div role="tablist" aria-label="Sales performance views" className="flex flex-wrap gap-6 border-b border-border">
-        {TABS.map((item) => (
-          <button key={item.key} id={`sales-tab-${item.key}`} type="button" role="tab" aria-selected={tab === item.key} aria-controls="sales-panel" onClick={() => setTab(item.key)} className={tabClass(tab === item.key)}>{item.label}</button>
-        ))}
+      {/* The views on the left, the page action on the right: one row under the title. */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <ViewTabs label="Sales performance views" tabs={TABS.map((item) => ({ key: item.key, label: item.label }))} active={tab} onChange={setTab} controls="sales-panel" />
+        <Button type="button" variant="outline" onClick={() => setTab("funnel")} disabled={tab === "funnel"} title={tab === "funnel" ? "The funnel is open" : undefined}>Open the funnel</Button>
       </div>
+      {sample && <SampleDataNotice />}
 
       <StatStrip label="Sales totals">
         <StatTile label="Submitted" value={count(t.submitted)} footnote={windowLabel} />
@@ -338,8 +330,10 @@ export function SalesPerformance({ report: initialReport, sample = false, timeZo
         <StatTile label="Counteroffered" value={count(t.counteroffered.n)} valueTone={t.counteroffered.n > 0 ? "warning" : undefined} footnote={tileRate(t.counteroffered, "submitted")} />
       </StatStrip>
 
-      <div id="sales-panel" role="tabpanel" aria-labelledby={`sales-tab-${tab}`} className="flex flex-col gap-6">
-        <TableCard toolbar={toolbar} footer={footer}>{body}</TableCard>
+      {error && <p role="alert" className="rounded-md bg-[var(--error-surface)] px-3 py-2 text-sm text-[var(--error-ink)]">{error}</p>}
+
+      <div id="sales-panel" role="tabpanel" aria-labelledby={`sales-panel-tab-${tab}`} className="flex flex-col gap-6">
+        <TableCard className={secondary ? undefined : "flex min-h-[calc(100dvh-var(--top-bar-h)-400px)] flex-col [&>.overflow-x-auto]:flex-1"} toolbar={toolbar} footer={footer}>{body}</TableCard>
         {!loading && secondary}
       </div>
     </div>

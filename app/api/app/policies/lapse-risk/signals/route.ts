@@ -1,7 +1,8 @@
-import { NextResponse, type NextRequest } from "next/server";
+import { after, NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 
 import { audit } from "@/lib/audit/log";
+import { refreshDiscrepanciesQuietly } from "@/lib/discrepancies/service";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import { LAPSE_RESOLUTIONS, LAPSE_SIGNAL_KINDS, LAPSE_SIGNAL_NOTE_MAX, OTHER_NOTE_MIN } from "@/lib/lapseRisk/model";
 import { LapseRiskError, recordLapseSignal, resolveLapseSignals } from "@/lib/lapseRisk/service";
@@ -98,6 +99,10 @@ export async function PATCH(request: NextRequest) {
         metadata: { changed: ["status"], from: result.previousStatus, to: result.policyStatus, via: "lapse_risk" },
         request,
       });
+      // A lapse changes what the carrier owes (a chargeback is now expected): LA-4.5 option a, the
+      // findings follow every change to their facts instead of being recomputed when the page opens.
+      const tenantId = auth.context.tenantId;
+      after(() => refreshDiscrepanciesQuietly(tenantId));
     }
     return NextResponse.json({ ok: true, resolved: result.resolved, policyStatus: result.policyStatus });
   } catch (error) {

@@ -12,7 +12,7 @@ import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
  * GET lists each line still without a match. POST `{ action: "rematch" }` proposes matches again
  * for all of them against the book as it is now (policy number first, then insured name + carrier).
  * Proposals only: a person still accepts each one on its statement. Lines a person left unmatched
- * on purpose are not touched.
+ * on purpose join the re-match only with `include_left_unmatched: true` (the person's choice).
  *
  * Owner and bookkeeper only, the two roles that hold `statements.view`.
  */
@@ -38,7 +38,8 @@ export async function POST(request: NextRequest) {
   const body = rematchSchema.safeParse(await request.json().catch(() => null));
   if (!body.success) return badRequest(body.error);
   try {
-    const result = await rematchStatementLines(auth.context.tenantId, auth.context.userId);
+    const includeLeftUnmatched = body.data.include_left_unmatched === true;
+    const result = await rematchStatementLines(auth.context.tenantId, auth.context.userId, { includeLeftUnmatched });
     if (result.proposed > 0) {
       await audit({
         actorType: "tenant",
@@ -46,7 +47,7 @@ export async function POST(request: NextRequest) {
         action: "tenant.statement_lines_rematched",
         targetType: "tenant",
         targetId: auth.context.tenantId,
-        metadata: { tenantId: auth.context.tenantId, proposedMatches: result.proposed, statements: result.statements, lines: result.lines.map((line) => ({ lineId: line.line_id, statementId: line.statement_id, lineNumber: line.line_number, policyId: line.policy_id, method: line.method })) },
+        metadata: { tenantId: auth.context.tenantId, includeLeftUnmatched, proposedMatches: result.proposed, statements: result.statements, lines: result.lines.map((line) => ({ lineId: line.line_id, statementId: line.statement_id, lineNumber: line.line_number, policyId: line.policy_id, method: line.method, was: line.was ?? "unmatched" })) },
         request,
       });
     }

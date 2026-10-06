@@ -1139,7 +1139,7 @@ function Preview({
         The Partner Portal shows these fields, in this order, with these controls.
       </p>
       <div className="mt-4 space-y-3">
-        <div className="rounded-md border border-[var(--color-blue)]/20 bg-[var(--color-blue-faint)] p-3 text-xs text-[var(--color-accent-ink)]">
+        <div className="rounded-md border border-[var(--color-brand)]/20 bg-[var(--color-brand-faint)] p-3 text-xs text-[var(--color-accent-ink)]">
           Product, Carrier, and State are required before the partner can
           continue.
         </div>

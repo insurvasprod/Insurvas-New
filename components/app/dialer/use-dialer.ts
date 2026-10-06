@@ -157,8 +157,9 @@ export function useDialer({ readOnly = false, role = "producer", requestedLeadId
    * Book the qualified lead onto an agent's calendar. The server owns every rule — the customer's
    * legal window at the booked instant, working hours, blocked time, the daily cap and the slot race.
    */
-  async function bookAppointment() {
-    if (!panel || !bookAgent || !bookSlot || booking) return;
+  /** True when the appointment was booked (the booking pop-up closes on it). */
+  async function bookAppointment(): Promise<boolean> {
+    if (!panel || !bookAgent || !bookSlot || booking) return false;
     setBooking(true);
     try {
       const response = await fetch("/api/app/appointments", {
@@ -167,10 +168,11 @@ export function useDialer({ readOnly = false, role = "producer", requestedLeadId
         body: JSON.stringify({ lead_id: panel.lead.id, agent_user_id: bookAgent, starts_at_utc: bookSlot, notes: bookNotes.trim() || null }),
       });
       const body = await response.json().catch(() => null);
-      if (!response.ok) { notify.block("Could not book the appointment", { detail: errorText(body, "The server refused the slot.") }); return; }
+      if (!response.ok) { notify.block("Could not book the appointment", { detail: errorText(body, "The server refused the slot.") }); return false; }
       notify.win("Appointment booked", { detail: body.appointment?.reason ?? undefined });
       setBookSlot(""); setBookNotes("");
-    } catch { notify.fail("Could not book the appointment"); }
+      return true;
+    } catch { notify.fail("Could not book the appointment"); return false; }
     finally { setBooking(false); }
   }
 

@@ -410,7 +410,7 @@ function ActivityPanel({ data }: { data: DashboardToday }) {
 
 /* ── Outcomes: the week's dispositions as a ring ─────────────────────────── */
 
-// One orange palette: conversations in the brand's oranges, everything else in neutrals.
+// One brand palette: conversations in the brand's greens, everything else in neutrals.
 // Mid-range shades only: brand-700/800 all but vanish on the dark card, brand-100/200 on the light one.
 const CONTACT_SHADES = ["var(--brand-600)", "var(--brand-400)", "var(--brand-300)", "var(--brand-500)", "color-mix(in srgb, var(--brand-400) 55%, var(--brand-200))"];
 const OTHER_SHADES = [75, 58, 44, 32, 24].map((mix) => `color-mix(in srgb, var(--color-muted-foreground) ${mix}%, var(--color-card))`);

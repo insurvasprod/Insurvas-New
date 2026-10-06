@@ -25,10 +25,13 @@ export const statementImportSchema = z.object({
   file_name: z.string().trim().min(1, "The file needs a name").max(255),
   csv_text: z.string().min(1, "The file is empty").max(MAX_STATEMENT_BYTES, "The file is larger than 5 MB"),
   mapping: mappingSchema,
+  // LA-4.1: the original file's SHA-256, so the preview's duplicate check compares what the import
+  // stores. Optional: older clients send only the text.
+  file_sha256: z.string().regex(/^[0-9a-f]{64}$/, "Choose the file again; its fingerprint could not be read").optional(),
 }).strict();
 
 export function toImportInput(body: z.infer<typeof statementImportSchema>): StatementImportInput {
-  return { carrierId: body.carrier_id, periodStart: body.period_start, periodEnd: body.period_end, fileName: body.file_name, csvText: body.csv_text, mapping: body.mapping };
+  return { carrierId: body.carrier_id, periodStart: body.period_start, periodEnd: body.period_end, fileName: body.file_name, csvText: body.csv_text, mapping: body.mapping, fileSha256: body.file_sha256 };
 }
 
 const fileFieldsSchema = z.object({
@@ -82,8 +85,11 @@ export const manualLinesSchema = z.object({
   }).strict()).min(1, "Enter at least one line").max(2000, "Enter at most 2,000 lines at a time"),
 }).strict();
 
-/** LA-4.3 · re-propose matches for this statement's unmatched lines. */
-export const rematchSchema = z.object({ action: z.literal("rematch") }).strict();
+/**
+ * LA-4.3 · re-propose matches for unmatched lines; `include_left_unmatched` adds the lines a person
+ * set aside on purpose (user decision 2026-10-06, option c). Off unless asked.
+ */
+export const rematchSchema = z.object({ action: z.literal("rematch"), include_left_unmatched: z.boolean().optional() }).strict();
 
 /** LA-4.3 · re-read the statement from its stored original, optionally with new column choices. */
 export const statementReprocessSchema = z.object({ action: z.literal("reprocess"), mapping: mappingSchema.optional() }).strict();

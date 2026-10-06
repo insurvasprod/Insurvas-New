@@ -9,10 +9,10 @@ import type { RealtimeChannel } from "@supabase/supabase-js";
 
 import { Callout, KeyValues, Pill, SettingsMeter, st, type PillTone } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
-import { DataToolbar, FilterButton, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
+import { ClearFiltersButton, DataToolbar, FilterButton, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageLoading } from "@/components/ui/page-loading";
-import { EmptyState, NoMatches } from "@/components/ui/page-states";
+import { EmptyState, NoMatches, SectionLoading } from "@/components/ui/page-states";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { TableCard } from "@/components/ui/table-card";
 import { productLineLabel } from "@/lib/format/productLine";
@@ -92,11 +92,28 @@ type Status = "unclaimed" | "claimed" | "all";
 type Filters = { status: Status; partnerId: string; productLine: string; state: string; screeningOutcome: string; claimedBy: string };
 type Realtime = "connecting" | "connected" | "offline";
 
-const DEFAULT_FILTERS: Filters = { status: "unclaimed", partnerId: "", productLine: "", state: "", screeningOutcome: "", claimedBy: "" };
-/** "Clear filters" removes every chip, including the status one: that is All transfers. */
-const CLEARED_FILTERS: Filters = { ...DEFAULT_FILTERS, status: "all" };
+// The inbox opens on every transfer with no filter on: a chip already set on arrival read as a
+// filter someone forgot to clear. Waiting ones still sort first (longest wait first).
+const DEFAULT_FILTERS: Filters = { status: "all", partnerId: "", productLine: "", state: "", screeningOutcome: "", claimedBy: "" };
+/** "Clear filters" removes every chip: that is All transfers. */
+const CLEARED_FILTERS: Filters = DEFAULT_FILTERS;
 const STATUS_LABEL: Record<Status, string> = { unclaimed: "waiting", claimed: "claimed", all: "all" };
-const PAGE_SIZE = 25;
+const PARTNER_PAGE = 10;
+
+/**
+ * Rows per page: as many as fit the screen under the header, strip and toolbar, so the pager sits
+ * at the bottom of the window rather than a scroll away. Recomputed when the window is resized.
+ */
+function useFittingPageSize(reserved: number, rowHeight: number) {
+  const [size, setSize] = useState(10);
+  useEffect(() => {
+    const fit = () => setSize(Math.min(50, Math.max(5, Math.floor((window.innerHeight - reserved) / rowHeight))));
+    fit();
+    window.addEventListener("resize", fit);
+    return () => window.removeEventListener("resize", fit);
+  }, [reserved, rowHeight]);
+  return size;
+}
 
 /* ── formatting ─────────────────────────────────────────────────────────── */
 
@@ -203,6 +220,11 @@ export function TransferInbox({ readOnly, role }: { readOnly: boolean; role: str
   const router = useRouter();
   const [extras, setExtras] = useState<Extras | null>(null);
   const [recovering, setRecovering] = useState(false);
+  // Two views under the title, as on the Agent Floor: the transfers, and today's report by partner.
+  const [tab, setTab] = useState<"transfers" | "partners">("transfers");
+  const [partnerSearch, setPartnerSearch] = useState("");
+  const [partnerPage, setPartnerPage] = useState(1);
+  const PAGE_SIZE = useFittingPageSize(470, 57);
 
   // Lost transfers and today-by-partner change slowly; every 30 seconds, not on every realtime change.
   const loadExtras = useCallback(async () => {
@@ -371,12 +393,7 @@ export function TransferInbox({ readOnly, role }: { readOnly: boolean; role: str
     return items.filter((item) => [item.customer, item.partnerName, item.productLine, productLineLabel(item.productLine), item.state, item.ownerName ?? "", ageLabel(item.age), signalOf(item).label].some((value) => value.toLowerCase().includes(term)));
   }, [data?.items, search]);
 
-  const header = (
-    <PageHeader
-      title="Inbound transfers"
-      actions={<Button type="button" onClick={() => void claimNext()} disabled={readOnly || claimingNext}>{claimingNext ? "Claiming…" : "Claim next"}</Button>}
-    />
-  );
+  const header = <PageHeader title="Inbound transfers" />;
 
   if (!data) {
     if (!error) return <PageLoading />;
@@ -416,11 +433,40 @@ export function TransferInbox({ readOnly, role }: { readOnly: boolean; role: str
     <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
       {header}
 
+      {/* Views on the left, the one action on the right — the same line as the Agent Floor's. */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div role="tablist" aria-label="Inbound views" className="inline-flex h-9 w-fit gap-0.5 rounded-md bg-[var(--canvas)] p-0.5">
+        {([["transfers", "Transfers", data.items.length], ["partners", "Today by partner", extras?.byPartner.length ?? 0]] as const).map(([key, label, count]) => (
+          <button
+            key={key}
+            type="button"
+            role="tab"
+            aria-selected={tab === key}
+            onClick={() => setTab(key)}
+            className={cn("inline-flex h-8 items-center gap-1.5 rounded-md border px-3 text-sm font-semibold tracking-[-0.01em]", tab === key ? "border-border bg-card text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}
+          >
+            {label}
+            <span className="rounded-full bg-[var(--surface-alt)] px-1.5 text-xs tabular-nums text-muted-foreground">{count}</span>
+          </button>
+        ))}
+      </div>
+        <Button type="button" onClick={() => void claimNext()} disabled={readOnly || claimingNext}>{claimingNext ? "Claiming…" : "Claim next"}</Button>
+      </div>
+
+      {tab === "partners" && <TodayByPartner extras={extras} search={partnerSearch} onSearch={(value) => { setPartnerSearch(value); setPartnerPage(1); }} page={partnerPage} onPage={setPartnerPage} onRefresh={() => void loadExtras()} />}
+
+      {tab === "transfers" && <>
       <StatStrip label="Transfer queue summary">
-        <StatTile label="Waiting" value={summary ? summary.waiting : "—"} footnote={!summary ? "summary unavailable" : summary.waiting ? `longest ${duration(summary.longestWaitSeconds)}` : "nothing waiting"} />
-        <StatTile label="Claimed" value={summary ? summary.claimed : "—"} valueTone="warning" footnote={!summary ? "summary unavailable" : `${summary.claimedWithoutCall} with no open call record`} />
-        <StatTile label="Needs review" value={summary ? summary.needsReview : "—"} valueTone={summary && summary.needsReview > 0 ? "danger" : undefined} footnote="screening" />
-        <StatTile label="Average wait" value={summary && summary.waiting ? duration(summary.averageWaitSeconds) : "—"} valueTone={summary && summary.waiting ? averageTone : undefined} footnote={sla ? `target under ${target(sla.escalateSeconds)}` : "SLA target unavailable"} />
+        {/* What needs doing now (waiting, needs review), who holds the rest, and whether today's
+            transfers are reaching an outcome. The wait times live on Waiting: an "average wait" card
+            read "—" whenever nobody was waiting, which is most of the day. */}
+        <StatTile label="Waiting" value={summary ? summary.waiting : "—"} valueTone={summary && summary.waiting ? averageTone : undefined} footnote={!summary ? "summary unavailable" : summary.waiting ? `longest ${duration(summary.longestWaitSeconds)} · avg ${duration(summary.averageWaitSeconds)}${sla ? ` · target ${target(sla.escalateSeconds)}` : ""}` : sla ? `nothing waiting · target under ${target(sla.escalateSeconds)}` : "nothing waiting"} />
+        <StatTile label="Needs review" value={summary ? summary.needsReview : "—"} valueTone={summary && summary.needsReview > 0 ? "danger" : undefined} footnote="screening not clear" />
+        <StatTile label="With an agent" value={summary ? summary.claimed : "—"} valueTone={summary && summary.claimedWithoutCall > 0 ? "warning" : undefined} footnote={!summary ? "summary unavailable" : summary.claimedWithoutCall ? `${summary.claimedWithoutCall} with no open call` : "all on a call"} />
+        {(() => {
+          const today = (extras?.byPartner ?? []).reduce((sum, partner) => ({ sent: sum.sent + partner.sent, completed: sum.completed + partner.completed }), { sent: 0, completed: 0 });
+          return <StatTile label="Completed today" value={extras ? today.completed : "—"} valueTone={today.completed ? "good" : undefined} footnote={!extras ? "loading today" : today.sent ? `${Math.round((today.completed / today.sent) * 100)}% of ${today.sent} sent today` : "nothing sent today"} />;
+        })()}
       </StatStrip>
 
       {extras && extras.lost.length > 0 && (
@@ -471,7 +517,7 @@ export function TransferInbox({ readOnly, role }: { readOnly: boolean; role: str
 
       {/* overflow-visible: the Filters popover must paint outside the card, over the rows below. */}
       <TableCard
-        className="relative z-30 overflow-visible [&>div:first-child]:rounded-t-lg [&>div:last-child]:rounded-b-lg"
+        className="relative z-20 overflow-visible [&>div:first-child]:rounded-t-lg [&>div:last-child]:rounded-b-lg"
         toolbar={
           <DataToolbar actions={<RefreshButton onClick={() => void refresh()} refreshing={refreshing} />}>
             <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Search loaded transfers" />
@@ -493,7 +539,7 @@ export function TransferInbox({ readOnly, role }: { readOnly: boolean; role: str
               )}
             </div>
             {chips.map((chip) => <Chip key={chip.label} label={chip.label} onRemove={() => change(chip.clear)} />)}
-            {filtered && <button type="button" onClick={clearFilters} className="cursor-pointer rounded-md border-0 bg-transparent px-1.5 py-1 text-[12px] leading-[1.5] font-semibold tracking-[-0.01em] text-[var(--accent-ink)] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]">Clear filters</button>}
+            {filtered && <ClearFiltersButton onClick={clearFilters} />}
           </DataToolbar>
         }
         footer={
@@ -561,32 +607,7 @@ export function TransferInbox({ readOnly, role }: { readOnly: boolean; role: str
         )}
       </TableCard>
 
-      {extras && extras.byPartner.length > 0 && (
-        <TableCard title="Today by partner" footer={<span>Flagged = screening was not clear</span>}>
-          <table className={cn(st.table, "min-w-[520px]")}>
-            <thead>
-              <tr className={st.headRow}>
-                <th scope="col" className={st.th}>Partner</th>
-                <th scope="col" className={cn(st.th, "w-[90px] text-right")}>Sent</th>
-                <th scope="col" className={cn(st.th, "w-[110px] text-right")}>Completed</th>
-                <th scope="col" className={cn(st.th, "w-[90px] text-right")}>Dropped</th>
-                <th scope="col" className={cn(st.th, "w-[90px] text-right")}>Flagged</th>
-              </tr>
-            </thead>
-            <tbody>
-              {extras.byPartner.map((partner) => (
-                <tr key={partner.partnerId}>
-                  <td className={st.td}>{partner.name}{partner.status === "paused" && <span className="ml-2 text-[12px] text-[var(--warning-ink)]">paused</span>}</td>
-                  <td className={cn(st.td, "text-right tabular-nums")}>{partner.sent}</td>
-                  <td className={cn(st.td, "text-right tabular-nums")}>{partner.completed}</td>
-                  <td className={cn(st.td, "text-right tabular-nums", partner.dropped > 0 && "text-[var(--warning-ink)]")}>{partner.dropped}</td>
-                  <td className={cn(st.td, "text-right tabular-nums", partner.flagged > 0 && "font-semibold text-[var(--error-ink)]")}>{partner.flagged}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </TableCard>
-      )}
+      </>}
 
       <TransferDrawer
         item={selected}
@@ -602,6 +623,74 @@ export function TransferInbox({ readOnly, role }: { readOnly: boolean; role: str
     </div>
   );
 }
+/**
+ * Today by partner, as its own report tab: today's totals across every partner, then one row per
+ * partner with what it sent and how much of it reached an outcome. Busiest partners first.
+ */
+function TodayByPartner({ extras, search, onSearch, page, onPage, onRefresh }: { extras: Extras | null; search: string; onSearch: (value: string) => void; page: number; onPage: (page: number) => void; onRefresh: () => void }) {
+  const partners = extras?.byPartner ?? [];
+  const term = search.trim().toLowerCase();
+  const rows = [...partners]
+    .filter((partner) => !term || partner.name.toLowerCase().includes(term))
+    .sort((a, b) => b.sent - a.sent || b.completed - a.completed || a.name.localeCompare(b.name));
+  const totals = partners.reduce((sum, partner) => ({ sent: sum.sent + partner.sent, completed: sum.completed + partner.completed, dropped: sum.dropped + partner.dropped, flagged: sum.flagged + partner.flagged }), { sent: 0, completed: 0, dropped: 0, flagged: 0 });
+  const active = partners.filter((partner) => partner.sent > 0).length;
+  const rate = (part: number, whole: number) => (whole ? `${Math.round((part / whole) * 100)}%` : "—");
+  const pages = Math.max(1, Math.ceil(rows.length / PARTNER_PAGE));
+  const current = Math.min(Math.max(1, page), pages);
+  const shown = rows.slice((current - 1) * PARTNER_PAGE, current * PARTNER_PAGE);
+  return (
+    <>
+      <StatStrip label="Today's transfers by partner">
+        <StatTile label="Sent today" value={totals.sent} footnote={`from ${active} of ${partners.length} ${partners.length === 1 ? "partner" : "partners"}`} />
+        <StatTile label="Completed" value={totals.completed} valueTone={totals.completed ? "good" : undefined} footnote={totals.sent ? `${rate(totals.completed, totals.sent)} of sent` : "nothing sent yet"} />
+        <StatTile label="Dropped" value={totals.dropped} valueTone={totals.dropped ? "warning" : undefined} footnote={totals.sent ? `${rate(totals.dropped, totals.sent)} of sent` : "nothing sent yet"} />
+        <StatTile label="Flagged" value={totals.flagged} valueTone={totals.flagged ? "danger" : undefined} footnote="screening not clear" />
+      </StatStrip>
+      <TableCard
+        toolbar={
+          <DataToolbar actions={<RefreshButton onClick={onRefresh} />}>
+            <ToolbarSearch value={search} onChange={onSearch} placeholder="Search partners" />
+          </DataToolbar>
+        }
+        footer={<Pager page={current} total={rows.length} pageSize={PARTNER_PAGE} noun="partners" suffix="busiest first · flagged = screening was not clear" onPage={onPage} />}
+      >
+        {!extras ? <SectionLoading rows={5} columns={5} label="Loading today by partner" />
+          : rows.length === 0 ? (term ? <NoMatches noun="partners" onClear={() => onSearch("")} /> : <EmptyState title="No partners yet" hint="Partners appear here once they are set up under Partners." />)
+          : (
+            <table className={cn(st.table, "min-w-[640px]")}>
+              <thead>
+                <tr className={st.headRow}>
+                  <th scope="col" className={st.th}>Partner</th>
+                  <th scope="col" className={cn(st.th, "w-[90px] text-right")}>Sent</th>
+                  <th scope="col" className={cn(st.th, "w-[110px] text-right")}>Completed</th>
+                  <th scope="col" className={cn(st.th, "w-[90px] text-right")}>Dropped</th>
+                  <th scope="col" className={cn(st.th, "w-[90px] text-right")}>Flagged</th>
+                  <th scope="col" className={cn(st.th, "w-[130px] text-right")}>Completion</th>
+                </tr>
+              </thead>
+              <tbody>
+                {shown.map((partner) => (
+                  <tr key={partner.partnerId} className="m-row">
+                    <td className={st.td}>
+                      <Link href={`/app/publishers/${partner.partnerId}`} className="font-semibold text-[var(--ink)] hover:underline">{partner.name}</Link>
+                      {partner.status === "paused" && <span className="ml-2 text-[12px] text-[var(--warning-ink)]">paused</span>}
+                    </td>
+                    <td className={cn(st.td, "text-right tabular-nums")}>{partner.sent}</td>
+                    <td className={cn(st.td, "text-right tabular-nums")}>{partner.completed}</td>
+                    <td className={cn(st.td, "text-right tabular-nums", partner.dropped > 0 && "text-[var(--warning-ink)]")}>{partner.dropped}</td>
+                    <td className={cn(st.td, "text-right tabular-nums", partner.flagged > 0 && "font-semibold text-[var(--error-ink)]")}>{partner.flagged}</td>
+                    <td className={cn(st.td, "text-right tabular-nums")}>{rate(partner.completed, partner.sent)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+      </TableCard>
+    </>
+  );
+}
+
 function FilterField({ id, label, children }: { id: string; label: string; children: ReactNode }) {
   return (
     <div className="min-w-0">

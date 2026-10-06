@@ -45,7 +45,7 @@ export function SetupChecklist({ checklist }: { checklist: SetupChecklistData })
             <li key={step.key} className="block border-t border-border">
               <Link
                 href={step.path}
-                aria-label={`${step.label} — open settings tab`}
+                aria-label={`${step.label}${step.complete ? " (done)" : ""} — ${step.action.toLowerCase()}`}
                 className="group flex items-center gap-3 py-2.5 outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               >
                 <span
@@ -71,7 +71,7 @@ export function SetupChecklist({ checklist }: { checklist: SetupChecklistData })
                   data-slot="link-arrow"
                   className="inline-flex shrink-0 items-center gap-1.5 text-sm font-semibold tracking-[-0.01em] text-foreground"
                 >
-                  Open settings tab
+                  {step.action}
                   <svg
                     viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"
                     strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"

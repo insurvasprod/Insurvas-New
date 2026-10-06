@@ -5,14 +5,17 @@ import Link from "next/link";
 import { ChevronDown, Plus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
+import { ClearFiltersButton, DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageLoading } from "@/components/ui/page-loading";
 import { EmptyState, NoMatches, SectionLoading } from "@/components/ui/page-states";
+import { Pager, paginate } from "@/components/ui/pager";
 import { StatStrip, StatTile } from "@/components/ui/stat";
+import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 import { RebookButton } from "@/components/app/appointment-rebook";
+import { ViewTabs } from "@/components/app/view-tabs";
 import { faceLabel } from "@/lib/appointments/appointmentFacts";
 import { clockLabel, intervalsFor, openSlots, wallClock, zonedInstant, type BlockRepeat, type PickerContext } from "@/lib/appointments/calendarMath";
 
@@ -25,6 +28,10 @@ import { clockLabel, intervalsFor, openSlots, wallClock, zonedInstant, type Bloc
  *
  * Two clocks, always. The grid runs on the diary owner's time; a card whose customer lives in another
  * zone also says what time it is for them, because one of the two is the one somebody is late for.
+ *
+ * 2026-10-06 redesign: Week, Day and List are tabs under the strip with "Book an appointment" on the
+ * same row; the card reaches the bottom of the window and the grid scrolls inside it; the list's
+ * facts are columns and its actions the last one.
  */
 
 type Appointment = {
@@ -54,7 +61,22 @@ const WEEKDAY_LONG = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "F
 const MONTH_LONG = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const LIVE = new Set(["booked", "confirmed", "showed", "no_show"]);
 const STATUS_LABEL: Record<string, string> = { booked: "Booked", confirmed: "Confirmed", pending: "Awaiting close-out", showed: "Showed", no_show: "No-show", cancelled: "Cancelled", rescheduled: "Rescheduled" };
+const STATUS_TONE: Record<string, StatusTone> = { booked: "action", confirmed: "good", pending: "warning", showed: "good", no_show: "danger", cancelled: "neutral", rescheduled: "neutral" };
+/** The card reaches the bottom of the window; the grid or list scrolls inside it. */
+const FILL = "flex h-[calc(100dvh-var(--top-bar-h)-330px)] min-h-[420px] flex-col [&>*:nth-child(2)]:min-h-0 [&>*:nth-child(2)]:flex-1 [&>*:nth-child(2)]:overflow-y-auto";
 const REPEAT_LABEL: Record<string, string> = { daily: "Blocked every day", weekdays: "Blocked every weekday", weekly: "Blocked every week", yearly: "Blocked every year" };
+
+/** Rows per page that fit the window under the page's chrome (the Inbound list's rule). */
+function useFittingPageSize(reserved: number, rowHeight: number) {
+  const [size, setSize] = useState(10);
+  useEffect(() => {
+    const fit = () => setSize(Math.min(50, Math.max(5, Math.floor((window.innerHeight - reserved) / rowHeight))));
+    fit();
+    window.addEventListener("resize", fit);
+    return () => window.removeEventListener("resize", fit);
+  }, [reserved, rowHeight]);
+  return size;
+}
 
 /** Read outside render, so a paint never moves "now". */
 function nowMs() {
@@ -99,7 +121,7 @@ function theirTime(iso: string, zone: string, diaryZone: string) {
 }
 
 const TONE: Record<string, string> = {
-  booked: "bg-[var(--soft-orange-surface)] border-l-[var(--primary)]",
+  booked: "bg-[var(--primary-soft)] border-l-[var(--primary)]",
   confirmed: "bg-[var(--success-surface)] border-l-[var(--success)]",
   showed: "bg-[var(--success-surface)] border-l-[var(--success)]",
   no_show: "bg-[var(--warning-surface)] border-l-[var(--warning)]",
@@ -133,6 +155,8 @@ export function AppointmentCalendar({ highlightId }: { highlightId?: string }) {
   const [loadedOnce, setLoadedOnce] = useState(false);
   const [error, setError] = useState("");
   const [booking, setBooking] = useState<{ agentUserId: string; startIso: string | null } | null>(null);
+  const [listPage, setListPage] = useState(1);
+  const pageSize = useFittingPageSize(480, 45);
 
   // "Now" is read once mounted, so the server and the browser never disagree about the week.
   useEffect(() => {
@@ -348,20 +372,13 @@ export function AppointmentCalendar({ highlightId }: { highlightId?: string }) {
     void load();
   }
 
+  const filtered = Boolean(needle || status || agentId);
+  const clearFilters = () => { setSearch(""); setStatus(""); setAgentId(""); setListPage(1); };
+  const { current: listCurrent, rows: listPageRows } = paginate(listRows, listPage, pageSize);
+
   return (
     <div className="m-stagger flex flex-col gap-6">
-      <PageHeader
-        title="Calendar"
-        actions={
-          <>
-            <Button type="button" variant="outline" onClick={() => { setView("day"); setAnchor(nowMs()); }}>Day</Button>
-            <Button type="button" disabled={!context} onClick={() => setBooking({ agentUserId: selected, startIso: null })}>
-              <Plus aria-hidden="true" />
-              Book an appointment
-            </Button>
-          </>
-        }
-      />
+      <PageHeader title="Calendar" />
 
       <StatStrip label="Calendar figures">
         <StatTile label="This week" value={weekLive.length} footnote={noHours ? "no working hours set" : context ? `of ${slotTotal} slots` : "—"} />
@@ -371,26 +388,40 @@ export function AppointmentCalendar({ highlightId }: { highlightId?: string }) {
       </StatStrip>
 
       {error && (
-        <div role="alert" className="rounded-lg border border-border border-l-[3px] border-l-[var(--error)] bg-[var(--error-surface)] px-4 py-3 text-sm text-[var(--error-ink)]">
+        <div role="alert" className="rounded-lg border border-border border-l-[3px] border-l-[var(--error)] bg-[var(--error-surface)] px-4 py-2.5 text-sm text-[var(--error-ink)]">
           {error}{" "}
           <button type="button" className="font-semibold underline underline-offset-2" onClick={refresh}>Try again</button>
         </div>
       )}
 
+      {/* The views on the left; booking — the page's one action — on the right. */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <ViewTabs
+          label="View"
+          value={view}
+          onChange={(next) => { setView(next); setListPage(1); }}
+          tabs={[
+            { key: "week", label: "Week" },
+            { key: "day", label: "Day" },
+            { key: "list", label: "List", count: listRows.length },
+          ]}
+        />
+        <Button type="button" disabled={!context} onClick={() => setBooking({ agentUserId: selected, startIso: null })}>
+          <Plus aria-hidden="true" />
+          Book an appointment
+        </Button>
+      </div>
+
       <TableCard
+        className={FILL}
         toolbar={
           <DataToolbar
             actions={<>
-              <span role="group" aria-label="View" className="inline-flex h-9 gap-[3px] rounded-md bg-[var(--surface-alt)] p-[3px]">
-                {([["week", "Week"], ["day", "Day"], ["list", "List"]] as const).map(([key, label]) => (
-                  <button key={key} type="button" aria-pressed={view === key} onClick={() => setView(key)} className={`h-[30px] rounded-[5px] px-3 text-sm font-semibold ${view === key ? "bg-card text-foreground shadow-[0_1px_2px_rgba(16,20,26,.08)]" : "bg-transparent text-muted-foreground"}`}>{label}</button>
-                ))}
-              </span>
-              <span className="text-sm text-muted-foreground">{zone}</span>
+              {filtered && <ClearFiltersButton onClick={clearFilters} />}
               <RefreshButton onClick={refresh} refreshing={loading} />
             </>}
           >
-            <ToolbarSearch value={search} onChange={setSearch} placeholder="Search by customer" />
+            <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setListPage(1); }} placeholder="Search by customer" />
             <label className={`${toolbarControl} relative inline-flex cursor-pointer items-center gap-2 font-semibold`}>
               {rangeLabel}<ChevronDown className="size-4 text-muted-foreground" aria-hidden="true" />
               {/* The native picker sits over the control, so the whole label opens it. */}
@@ -398,23 +429,27 @@ export function AppointmentCalendar({ highlightId }: { highlightId?: string }) {
                 type="date"
                 aria-label={view === "day" ? "Choose a day" : "Choose a week"}
                 className="absolute inset-0 cursor-pointer opacity-0"
-                onChange={(event) => { if (event.target.value) setAnchor(new Date(`${event.target.value}T12:00:00`).getTime()); }}
+                onChange={(event) => { if (event.target.value) { setAnchor(new Date(`${event.target.value}T12:00:00`).getTime()); setListPage(1); } }}
               />
             </label>
-            <select aria-label="Calendar of" value={agentId} onChange={(event) => setAgentId(event.target.value)} className={toolbarControl}>
+            {/* Back to today (the header's old "Day" button): today's day, or the week around it. */}
+            <Button type="button" variant="outline" onClick={() => { setAnchor(nowMs()); setListPage(1); }}>Today</Button>
+            <select aria-label="Calendar of" value={agentId} onChange={(event) => { setAgentId(event.target.value); setListPage(1); }} className={toolbarControl}>
               <option value="">{me && agents.some(([id]) => id === me) ? "My calendar" : "First with hours"}</option>
               {agents.map(([id, name]) => <option key={id} value={id}>{name}{id === me ? " (you)" : ""}</option>)}
             </select>
-            <select aria-label="Status" value={status} onChange={(event) => setStatus(event.target.value)} className={toolbarControl}>
+            <select aria-label="Status" value={status} onChange={(event) => { setStatus(event.target.value); setListPage(1); }} className={toolbarControl}>
               <option value="">Every status</option>
               {Object.entries(STATUS_LABEL).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
             </select>
           </DataToolbar>
         }
-        footer={view === "list" ? <span>{listRows.length} appointment{listRows.length === 1 ? "" : "s"} in this {range ? "week" : "range"} · times in {zone}</span> : undefined}
+        footer={view === "list"
+          ? <Pager page={listCurrent} total={listRows.length} pageSize={pageSize} noun={listRows.length === 1 ? "appointment" : "appointments"} suffix={`this ${range ? "week" : "range"} · times in ${zone}`} onPage={setListPage} />
+          : <span>Times in {zone}{context && !noHours ? ` · ${agentName}` : ""}</span>}
       >
         {view !== "list" && (
-          <div className="p-5">
+          <div className="p-4">
             {context == null ? (
               <p className="py-8 text-center text-sm text-muted-foreground">Availability could not be loaded.</p>
             ) : noHours ? (
@@ -432,7 +467,7 @@ export function AppointmentCalendar({ highlightId }: { highlightId?: string }) {
                   return (
                     <span key={dateKey(day)} className={`flex items-center gap-2 pb-1 text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] ${isToday ? "text-[var(--accent-ink)]" : isPast ? "text-muted-foreground opacity-70" : "text-foreground"}`}>
                       {WEEKDAY[day.weekday]} {day.day}
-                      {isToday && <span className="rounded-full bg-[var(--soft-orange-surface)] px-2 py-px text-xs font-semibold normal-case tracking-normal text-[var(--accent-ink)]">Today</span>}
+                      {isToday && <span className="rounded-full bg-[var(--primary-soft)] px-2 py-px text-xs font-semibold normal-case tracking-normal text-[var(--accent-ink)]">Today</span>}
                     </span>
                   );
                 })}
@@ -452,7 +487,7 @@ export function AppointmentCalendar({ highlightId }: { highlightId?: string }) {
                         const isNext = grid.nextFree === `${index}:${minute}`;
                         return (
                           <button key={index} type="button" onClick={() => setBooking({ agentUserId: cell.agentUserId, startIso: cell.startIso })} className="group text-left" aria-label={`Book ${WEEKDAY_LONG[days[index].weekday]} ${time}`}>
-                            <span className={`flex min-h-[52px] items-center rounded-lg border border-dashed px-2.5 py-2 text-sm leading-normal transition-colors group-hover:border-solid group-hover:border-[var(--primary)] group-hover:bg-[var(--soft-orange-surface)] ${isNext ? "border-[var(--primary)] font-semibold text-[var(--accent-ink)]" : "border-[var(--border-strong)] text-muted-foreground"}`}>
+                            <span className={`flex min-h-[52px] items-center rounded-lg border border-dashed px-2.5 py-2 text-sm leading-normal transition-colors group-hover:border-solid group-hover:border-[var(--primary)] group-hover:bg-[var(--primary-soft)] ${isNext ? "border-[var(--primary)] font-semibold text-[var(--accent-ink)]" : "border-[var(--border-strong)] text-muted-foreground"}`}>
                               <span className="group-hover:hidden">{isNext ? "Next free" : "Free"}</span>
                               <span className="hidden font-semibold text-[var(--accent-ink)] group-hover:inline">+ Book</span>
                             </span>
@@ -496,49 +531,50 @@ export function AppointmentCalendar({ highlightId }: { highlightId?: string }) {
         {view === "list" && (
           loading && appointments.length === 0 ? <SectionLoading rows={4} columns={6} label="Loading appointments" />
           : listRows.length === 0 ? (
-            needle || status || agentId
-              ? <NoMatches noun="appointments" onClear={() => { setSearch(""); setStatus(""); setAgentId(""); }} />
+            filtered
+              ? <NoMatches noun="appointments" onClear={clearFilters} />
               : <EmptyState title="Nothing booked this week" hint="Book an appointment, or press a Free slot in the week view." />
           ) : (
-            <table className="portal-callback-table w-full min-w-[860px] text-left text-sm">
-              <thead><tr><th className="w-[150px]">When</th><th>Customer</th><th className="w-[170px]">Their time</th><th className="w-[140px]">Agent</th><th className="w-[120px]">Status</th><th>Notes</th></tr></thead>
+            <table className="portal-callback-table w-full min-w-[1180px] text-left text-sm">
+              <thead><tr><th>When</th><th>Customer</th><th>Product</th><th>Their time</th><th>Agent</th><th>Status</th><th>Reminder</th><th>Notes</th><th className="text-right"><span className="sr-only">Actions</span></th></tr></thead>
               <tbody>
-                {listRows.map((item) => {
+                {listPageRows.map((item) => {
                   const clock = wallClock(item.startsAtUtc, zone);
+                  const steps = stepsFor(item);
+                  const noShow = item.status === "no_show" && !item.redacted;
+                  const product = [item.product, faceLabel(item.faceAmountCents ?? null)].filter(Boolean).join(" · ");
                   return (
-                    <tr key={item.appointmentId} className={item.appointmentId === highlightId ? "bg-[var(--soft-orange-surface)]" : ""}>
+                    <tr key={item.appointmentId} className={item.appointmentId === highlightId ? "bg-[var(--primary-soft)]" : ""}>
                       <td className="whitespace-nowrap tabular-nums">{WEEKDAY[clock.weekday]} {clock.day} · {clockLabel(clock.minutes)}</td>
-                      <td>
+                      <td className="max-w-[200px] truncate">
                         {item.redacted
                           ? <span className="text-muted-foreground">Booked by another setter</span>
-                          : <Link href={`/app/leads/${item.leadId}`} className="font-semibold text-foreground hover:underline">{item.customerName}</Link>}
-                        {(item.product || item.faceAmountCents) && <span className="block text-xs text-muted-foreground">{[item.product, faceLabel(item.faceAmountCents ?? null)].filter(Boolean).join(" · ")}</span>}
+                          : <Link href={`/app/leads/${item.leadId}`} className="font-semibold text-foreground hover:underline" title={item.customerName}>{item.customerName}</Link>}
                       </td>
+                      <td className="max-w-[180px] truncate text-muted-foreground" title={product || undefined}>{product || "—"}</td>
                       <td className="whitespace-nowrap tabular-nums">{theirTime(item.startsAtUtc, item.customerTimezone, zone)?.replace("their time ", "") ?? "Same as yours"}</td>
-                      <td>{item.agentName}</td>
-                      <td>
-                        {STATUS_LABEL[item.status] ?? item.status}
-                        {item.reminderSentAt && (item.status === "booked" || item.status === "confirmed") && <span className="block text-xs text-muted-foreground">Reminder sent</span>}
-                        {stepsFor(item).length > 0 && (
-                          <span className="mt-1 flex flex-wrap items-center gap-2">
-                            {stepsFor(item).map((step) => (
-                              <Button key={step} type="button" size="sm" variant={step === "no_show" ? "outline" : "default"} disabled={stepping === item.appointmentId} onClick={() => void takeStep(item, step)}>
-                                {stepping === item.appointmentId ? "Saving…" : STEP_LABEL[step]}
-                              </Button>
-                            ))}
-                          </span>
-                        )}
-                        {item.status === "no_show" && !item.redacted && (
-                          <span className="mt-1 flex flex-wrap items-center gap-2">
-                            {/* Decided 2026-09-25: the dialer opens on this lead and checks the calling window when it dials. */}
-                            <Button asChild size="sm"><Link href={`/app/dialer?lead=${item.leadId}`}>Call now</Link></Button>
-                            {item.rebookedAs
-                              ? <span className="text-xs text-muted-foreground">Rebooked</span>
-                              : <RebookButton appointmentId={item.appointmentId} agentUserId={item.agentUserId} customerName={item.customerName} onRebooked={() => { void load(); }} />}
-                          </span>
-                        )}
+                      <td className="max-w-[160px] truncate" title={item.agentName}>{item.agentName}</td>
+                      <td className="whitespace-nowrap"><StatusChip tone={STATUS_TONE[item.status] ?? "neutral"}>{STATUS_LABEL[item.status] ?? item.status}</StatusChip></td>
+                      <td className="whitespace-nowrap text-muted-foreground">{item.reminderSentAt && (item.status === "booked" || item.status === "confirmed") ? "Sent" : "—"}</td>
+                      <td className="max-w-[220px] truncate text-muted-foreground" title={item.notes ?? undefined}>{item.notes ?? "—"}</td>
+                      <td className="whitespace-nowrap text-right">
+                        <span className="inline-flex items-center justify-end gap-2">
+                          {steps.map((step) => (
+                            <Button key={step} type="button" size="sm" variant={step === "no_show" ? "outline" : "default"} disabled={stepping === item.appointmentId} onClick={() => void takeStep(item, step)}>
+                              {stepping === item.appointmentId ? "Saving…" : STEP_LABEL[step]}
+                            </Button>
+                          ))}
+                          {noShow && (
+                            <>
+                              {/* Decided 2026-09-25: the dialer opens on this lead and checks the calling window when it dials. */}
+                              <Button asChild size="sm"><Link href={`/app/dialer?lead=${item.leadId}`}>Call now</Link></Button>
+                              {item.rebookedAs
+                                ? <span className="text-xs text-muted-foreground">Rebooked</span>
+                                : <RebookButton appointmentId={item.appointmentId} agentUserId={item.agentUserId} customerName={item.customerName} onRebooked={() => { void load(); }} />}
+                            </>
+                          )}
+                        </span>
                       </td>
-                      <td className="max-w-[260px] truncate text-muted-foreground" title={item.notes ?? undefined}>{item.notes ?? "—"}</td>
                     </tr>
                   );
                 })}
@@ -629,7 +665,7 @@ function BookingDialog({ context, initial, agents, nowAt, onClose, onBooked }: {
     onBooked();
   }
 
-  const field = "mt-1.5 block h-10 w-full rounded-lg border border-[var(--border-strong)] bg-card px-3 text-sm font-normal normal-case tracking-normal text-foreground";
+  const field = "mt-1.5 block h-9 w-full rounded-lg border border-[var(--border-strong)] bg-card px-3 text-sm font-normal normal-case tracking-normal text-foreground";
   const labelClass = "block text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] text-muted-foreground";
 
   return (

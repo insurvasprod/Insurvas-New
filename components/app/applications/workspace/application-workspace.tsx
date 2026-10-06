@@ -85,7 +85,7 @@ function StepRail() {
   const { step, goTo, attempt } = ws;
   const submitted = attempt.status !== "draft" && attempt.status !== "ready";
   return (
-    <nav aria-label="Application steps" className="w-full shrink-0 lg:w-[186px]">
+    <nav aria-label="Application steps" className="w-full shrink-0 lg:sticky lg:top-20 lg:w-[186px]">
       <div className="flex flex-col rounded-[12px] border border-[var(--border)] bg-[var(--surface)]">
         <div className="flex flex-col p-2.5">
           {NUMBERED.map((s, i) => {
@@ -102,7 +102,7 @@ function StepRail() {
                 onClick={() => goTo(s.key)}
                 className={cn(
                   "flex h-[34px] items-center gap-[9px] rounded-[8px] px-2.5 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60",
-                  active ? "bg-[var(--brand-50)] font-semibold text-[var(--accent-ink)]" : done ? "text-[var(--body)] hover:bg-[var(--surface-alt)]" : "text-[var(--muted)] hover:bg-[var(--surface-alt)]",
+                  active ? "bg-[var(--primary-soft)] font-semibold text-[var(--accent-ink)]" : done ? "text-[var(--body)] hover:bg-[var(--surface-alt)]" : "text-[var(--muted)] hover:bg-[var(--surface-alt)]",
                 )}
               >
                 <span
@@ -168,6 +168,18 @@ function Workspace() {
       <PageHeader
         title={insured === "spouse" ? ((spouseName || spouseOption) ? `${spouseName || spouseOption} · spouse` : `${caseView.clientName}'s spouse`) : caseView.clientName}
         actions={<>
+          {/* Which application is on screen, then what to do with it: one group, top right (2026-10-06 redesign). */}
+          {household && (
+            <select aria-label="Insured" className={toolbarControl} value={insured} onChange={(e) => selectAttempt(0, e.target.value as "primary" | "spouse")}>
+              <option value="primary">{caseView.clientName}</option>
+              <option value="spouse">{spouseOption ? `${spouseOption} (spouse)` : "Spouse"}</option>
+            </select>
+          )}
+          {attemptsForInsured.length > 0 && (
+            <select aria-label="Attempt" className={toolbarControl} value={attempt.attemptNo} onChange={(e) => selectAttempt(Number(e.target.value))}>
+              {attemptsForInsured.map((a) => <option key={a.id} value={a.attemptNo}>Attempt {a.attemptNo} · {a.carrierName ?? "no carrier yet"}</option>)}
+            </select>
+          )}
           <Button type="button" variant="outline" onClick={openPortal} disabled={!attempt.carrierPortalUrl} title={attempt.carrierPortalUrl ? undefined : "Choose a carrier with a portal address first"}>
             <ExternalLink aria-hidden="true" />Open portal
           </Button>
@@ -178,20 +190,11 @@ function Workspace() {
           )}
         </>}
       />
+      {/* The case's key facts in one line under the title. */}
       <div className="-mt-3 flex flex-wrap items-center gap-2">
         <AttemptStatusChip status={attempt.status} outcome={attempt.outcome} />
-        {attemptsForInsured.length > 0 && (
-          <select aria-label="Attempt" className={toolbarControl} value={attempt.attemptNo} onChange={(e) => selectAttempt(Number(e.target.value))}>
-            {attemptsForInsured.map((a) => <option key={a.id} value={a.attemptNo}>Attempt {a.attemptNo} · {a.carrierName ?? "no carrier yet"}</option>)}
-          </select>
-        )}
-        {household && (
-          <select aria-label="Insured" className={toolbarControl} value={insured} onChange={(e) => selectAttempt(0, e.target.value as "primary" | "spouse")}>
-            <option value="primary">{caseView.clientName}</option>
-            <option value="spouse">{spouseOption ? `${spouseOption} (spouse)` : "Spouse"}</option>
-          </select>
-        )}
         {productChip && <StatusChip tone="neutral" dot>{productChip}</StatusChip>}
+        {attempt.carrierName && <StatusChip tone="neutral" dot={false}>{attempt.carrierName}</StatusChip>}
         {household && <StatusChip tone="info">Household · {liveInsureds} applications</StatusChip>}
       </div>
       {sample && <SampleDataNotice />}

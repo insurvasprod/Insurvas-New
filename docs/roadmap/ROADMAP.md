@@ -49,9 +49,9 @@ So one early lapse wipes out roughly 26 good sales, and Ray finds out 3–9 mont
 
 | Code | Customer-facing name | Price | What it is |
 |---|---|---|---|
-| `basic` | **Ledger** | $99/mo | Book of business, statements, commission ledger, discrepancies, appointment vault. No CRM. |
+| `basic` | **Ledger** | $99/mo | Book of business, statements, commission ledger, discrepancies, appointment vault, persistency (decided 2026-10-06). No CRM. |
 | `pro` | **Basic** | $249/mo | Ledger plus inbound, outbound, sell (quote, apply, draft-date optimiser) and compliance basics |
-| `advance` | **Advanced** | $449/mo | Basic plus retention, insight (true CPA, persistency), partners and payouts, accounting, litigation packet |
+| `advance` | **Advanced** | $449/mo | Basic plus retention, insight (true CPA), partners and payouts, accounting, litigation packet |
 | *(new)* `agency` | **Agency** | $799/mo + $79/seat | Advanced plus team, hierarchy and overrides, splits, team QA; assistant seats at $29 |
 
 **Principles we hold:**
@@ -68,7 +68,7 @@ So one early lapse wipes out roughly 26 good sales, and Ray finds out 3–9 mont
 | 1 | Acquisition: inbound | Partner intake, transfers, verification, dispositions, Agent Floor | Built (LA-1) |
 | 2 | Acquisition: outbound | Lists, scrub gate, cadence, queue, dialer, callbacks, vendor scorecard | Built (LA-2). The dialer hands calls to the phone through `tel:` links; there is **no telephony** yet |
 | 3 | Sell | Underwriting, quotes, application, draft-date optimiser, QA, submission, after-submit | Built (LA-3). The AI assistant (3.3) is blocked on decision 4 |
-| 4 | **Book of Business** | Policies, statements, ledger, discrepancies, persistency | **About 40%.** CSV only, exact match only; no discrepancy engine or page, no persistency, no "owed" figure → [LA-4](../la4/TASKS.md) |
+| 4 | **Book of Business** | Policies, statements, ledger, discrepancies, persistency | **Built and verified 2026-10-06** (LA-4.1–4.11 and the phase gate: CSV + XLSX → owed traced → letter) → [LA-4](../la4/TASKS.md) |
 | 5 | Retention | Lapse scoring, chargeback radar, payment repair, win-back | A manual lapse board, with no score → [LA-5](../la5/TASKS.md) |
 | 6 | Compliance | Consent, DNC, recordings, litigation packet | Consent locker, DNC/TCPA and appointment vault are built. No recording or litigation packet → [LA-6](../la6/TASKS.md) |
 | 7 | Accounting and partners | Payout runs, disputes, P&L, tax, true CPA | True CPA and vendor returns are built. No payouts, P&L or tax → [LA-7](../la7/TASKS.md) |
@@ -126,7 +126,7 @@ These are recorded in [backlog.md](../backlog.md) as entries 206–213.
 2. **HTTP email provider with bounce webhooks:** needed for LA-3.20 and SA-4.11.
 3. **Telephony vendor:** needed for the real dialer, screen pop, call recording and the litigation packet.
 4. **Chrome Web Store publishing** of the carrier extension.
-5. **Is persistency a Ledger feature or Advanced only?** Today `cohort_persistency` is on Advanced only.
+5. ~~**Is persistency a Ledger feature or Advanced only?**~~ **Decided 2026-10-06: on every plan, from Ledger up** (backlog #210, migration 20261007100000).
 6. **Grace period before "never paid":** proposed at 45 days after issue.
 7. **Does "suspended can still read" cover a suspended agency (tenant), or only a suspended subscription?** Today a tenant suspension locks everyone out.
 8. **Database compute:** the NANO instance caused the 2026-09-30 outage; Micro or above is recommended.

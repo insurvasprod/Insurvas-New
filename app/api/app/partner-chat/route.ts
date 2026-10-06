@@ -38,7 +38,8 @@ export async function GET() {
     // The per-partner facts line is extra: if it cannot be read, the chat still loads without it.
     const facts = getWorkspaceTimezone(auth.context.tenantId).catch(() => null).then((zone) => getPartnerChannelFacts(auth.context.tenantId, zone)).catch((error) => { console.error("[partner-chat] partner facts failed", error); return []; });
     const [channels, directory, partnerFacts] = await Promise.all([getAgentChatChannels(auth.context.tenantId, auth.context.userId), getAgentChatDirectory(auth.context.tenantId), facts]);
-    return NextResponse.json({ channels, directory, partnerFacts }, { headers: { "Cache-Control": "no-store" } });
+    // viewerId: the signed-in person's own id, so the thread can set their messages on the right.
+    return NextResponse.json({ channels, directory, partnerFacts, viewerId: auth.context.userId }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     console.error("[partner-chat] channel or directory load failed", error);
     return NextResponse.json({ error: "Could not load partner channels" }, { status: 503 });

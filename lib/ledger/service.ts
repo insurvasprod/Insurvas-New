@@ -3,6 +3,7 @@ import "server-only";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { getCarrierLibrary } from "@/lib/carriers/service";
 import { isSchemaGap } from "@/lib/supabase/schemaGap";
+import { readPaged, type PageResult } from "@/lib/supabase/readPaged";
 import { computeLedger, totalsOf, type LedgerPolicy, type LedgerResult } from "./compute";
 
 /**
@@ -29,22 +30,14 @@ export type BookPolicyRow = {
 type Page = PromiseLike<{ data: unknown[] | null; error: { message: string; code?: string } | null }>;
 type Ranged = { order(column: string, options?: { ascending?: boolean }): Ranged; range(from: number, to: number): Page };
 type Loose = { from(table: string): { select(columns: string): { eq(column: string, value: unknown): Ranged } } };
-const PAGE = 1000;
 const COLUMNS_V1 = "id, policy_number, insured_name, carrier, product, effective_date, annual_premium_cents, status, updated_at, created_by";
 const COLUMNS = `${COLUMNS_V1}, status_changed_at`;
 
-/** Every policy in the book, paged, with its status date when the column exists. */
+/** Every policy in the book, paged (readPaged), with its status date when the column exists. */
 export async function readBook(tenantId: string): Promise<BookPolicyRow[]> {
-  const read = async (columns: string) => {
-    const rows: BookPolicyRow[] = [];
-    for (let start = 0; ; start += PAGE) {
-      const page = await (getSupabaseServiceClient() as unknown as Loose).from("tenant_policies").select(columns).eq("tenant_id", tenantId).order("effective_date", { ascending: false }).order("id").range(start, start + PAGE - 1);
-      if (page.error) return { rows, error: page.error };
-      const data = (page.data ?? []) as BookPolicyRow[];
-      rows.push(...data);
-      if (data.length < PAGE) return { rows, error: null };
-    }
-  };
+  // Ordered along the tenant's own rows (tenant_id is fixed), ending in id so pages never overlap.
+  const read = (columns: string) => readPaged<BookPolicyRow>((from, to) =>
+    (getSupabaseServiceClient() as unknown as Loose).from("tenant_policies").select(columns).eq("tenant_id", tenantId).order("effective_date", { ascending: false }).order("id").range(from, to) as PromiseLike<PageResult<BookPolicyRow>>);
   let result = await read(COLUMNS);
   if (result.error && isSchemaGap(result.error)) result = await read(COLUMNS_V1);
   if (result.error) throw new Error(`Could not load policies: ${result.error.message}`);

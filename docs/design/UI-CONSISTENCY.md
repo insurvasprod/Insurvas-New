@@ -14,7 +14,7 @@ pointing here. Three questions they used to answer differently are settled:
 |---|---|---|
 | Eyebrow above the title | **None.** `PageHeader` ignores the prop. Auth and onboarding cards (`AuthCard`) may show a step label ("Step 1 of 3"). | FOUNDATION's "eyebrow is the menu section" rule |
 | Figures | **`StatStrip` + `StatTile` only**, at most one strip, under the header (§4) | the 3–5 metric-card grid in FOUNDATION and the page prompts |
-| Colour identity | **Two, by plane.** Orange (`app/globals.css`) for the agent and partner apps and the public site. Blue for the admin console only (user decision 1), applied as token overrides in `app/admin/admin-plane.css`, so components never name a colour. | FOUNDATION §1's split, whose blue marketing/legal pages and old hex values are out of date |
+| Colour identity | **The 2026 brand: green, by plane** ([BRAND.md](BRAND.md)). Bright green `#07d6a0` for action and deep olive `#0d4037` for ink, the rail and the top bar, in `app/globals.css`, for the agent and partner apps and the public site. The admin console keeps its own blue and neutral ink (user decision), as token overrides in `app/admin/admin-plane.css`. Components never name a colour. The bright green is never text on a light ground; use `--accent-ink`. `lib/design/brandContrast.test.mjs` enforces it. | FOUNDATION §1's split, and the orange identity of 2026-09 |
 
 **The rules are enforced.** `lib/design/uiConsistency.test.mjs` counts each mechanically checkable
 rule per file (raw tables, extra headers, tall controls, hex colours, `text-[Npx]`, eyebrows,

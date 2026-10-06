@@ -9,6 +9,8 @@
 // text, a screen reader, and a spam filter all read it, and an email with an empty text part
 // scores worse for deliverability.
 
+import { EMAIL_BRAND, EMAIL_WRAPPER_STYLE } from "./brand.ts";
+
 export const EMAIL_TEMPLATE_KEYS = [
   "user.invitation",
   "user.password_reset",
@@ -35,15 +37,16 @@ export function escapeHtml(value: string): string {
     .replaceAll("'", "&#039;");
 }
 
-const BRAND = "#00407f";
 
 /** One shell for every email, so they look like they come from the same company. */
 function layout(headline: string, bodyHtml: string): string {
   return [
-    `<div style="font-family:Inter,Segoe UI,Arial,sans-serif;color:#1a1b1c;line-height:1.6;max-width:560px">`,
-    `<h2 style="margin:0 0 16px;font-size:20px;font-weight:800;color:${BRAND}">${headline}</h2>`,
+    `<div style="${EMAIL_WRAPPER_STYLE}">`,
+    // The brand bar: a thin bright-green rule over a deep-olive headline (docs/design/BRAND.md).
+    `<div style="height:4px;width:48px;border-radius:999px;background:${EMAIL_BRAND.green};margin:0 0 16px"></div>`,
+    `<h2 style="margin:0 0 16px;font-size:20px;font-weight:700;letter-spacing:-0.02em;color:${EMAIL_BRAND.ink}">${headline}</h2>`,
     bodyHtml,
-    `<p style="margin-top:28px;padding-top:16px;border-top:1px solid #e2e8f0;font-size:12px;color:#64748b">`,
+    `<p style="margin-top:28px;padding-top:16px;border-top:1px solid ${EMAIL_BRAND.rule};font-size:12px;color:${EMAIL_BRAND.muted}">`,
     `Insurvas &middot; you are receiving this because someone used this address to create or manage an Insurvas account.`,
     `</p>`,
     `</div>`,
@@ -52,10 +55,10 @@ function layout(headline: string, bodyHtml: string): string {
 
 function button(url: string, label: string): string {
   return (
-    `<p><a href="${escapeHtml(url)}" style="display:inline-block;background:${BRAND};color:#fff;` +
-    `text-decoration:none;padding:12px 20px;border-radius:8px;font-weight:700">${label}</a></p>` +
+    `<p><a href="${escapeHtml(url)}" style="display:inline-block;background:${EMAIL_BRAND.green};color:${EMAIL_BRAND.ink};` +
+    `text-decoration:none;padding:12px 20px;border-radius:999px;font-weight:600">${label}</a></p>` +
     // Buttons get stripped or fail to render often enough that the raw URL has to be present too.
-    `<p style="font-size:12px;color:#64748b">If the button does not work, paste this into your browser:<br>` +
+    `<p style="font-size:12px;color:${EMAIL_BRAND.muted}">If the button does not work, paste this into your browser:<br>` +
     `<span style="word-break:break-all">${escapeHtml(url)}</span></p>`
   );
 }

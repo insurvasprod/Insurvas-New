@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { DISCREPANCY_KIND_LABELS } from "@/lib/discrepancies/compute";
-import { DISCREPANCY_SCHEMA_PENDING_MESSAGE, listDiscrepancies, owedToYou, refreshDiscrepancies } from "@/lib/discrepancies/service";
+import { DISCREPANCY_SCHEMA_PENDING_MESSAGE, listDiscrepancies, owedToYou } from "@/lib/discrepancies/service";
 import { statementMoney } from "@/lib/ledger/statementConstants";
 import { hasTenantPermission } from "@/lib/tenantAuth/permissions";
 
@@ -18,7 +18,8 @@ import { hasTenantPermission } from "@/lib/tenantAuth/permissions";
  * Every figure is a comparison the agent can follow — what the contract expects against what the
  * carrier reported on its accepted statement lines — and each finding names its kind: never paid,
  * short-paid, paid at the wrong rate, charged back twice, or charged back while in force. The page
- * recomputes on open, so a policy edited since the last statement is reflected.
+ * only reads: the findings are recomputed after each change to their facts (user decision
+ * 2026-10-06, option a), so opening it writes nothing, for a read-only account or anyone else.
  *
  * Owner and bookkeeper (`statements.view`), as the menu item. A read-only account reads it and can
  * print a letter, but cannot record decisions.
@@ -33,13 +34,8 @@ export default async function DiscrepanciesPage() {
   }
 
   const tenantId = guard.context.tenantId;
-  let refreshFailed = false;
-  try {
-    await refreshDiscrepancies(tenantId);
-  } catch (error) {
-    console.error("[discrepancies] refresh on open", error);
-    refreshFailed = true;
-  }
+  // Reading only (LA-4.5, option a): the findings are recomputed after every change to their facts
+  // (statements, policies, contracts, schedules), never because someone opened this page.
   const [list, owed] = await Promise.all([listDiscrepancies(tenantId), owedToYou(tenantId)]);
   const readOnly = guard.entitlement.access === "read_only";
   const chargebacks = owed.byKind.duplicate_chargeback.cents + owed.byKind.unexpected_chargeback.cents;
@@ -51,7 +47,7 @@ export default async function DiscrepanciesPage() {
     id: item.id, kind: item.kind, status: item.status, owedCents: item.owedCents, policyNumber: item.policyNumber, insuredName: item.insuredName,
     carrierId: item.carrierId, carrierName: item.carrierName, periodStart: item.periodStart, periodEnd: item.periodEnd,
     expectedCents: item.detail?.expectedCents ?? 0, receivedCents: item.detail?.receivedCents ?? 0, explanation: item.detail?.explanation ?? "",
-    note: item.note, statusChangedByName: item.statusChangedByName, statusChangedAt: item.statusChangedAt,
+    note: item.note, statusChangedByName: item.statusChangedByName, statusChangedAt: item.statusChangedAt, history: item.history,
   }));
 
   return (
@@ -64,9 +60,6 @@ export default async function DiscrepanciesPage() {
 
       {!list.available && (
         <div role="status" className="rounded-lg border border-border border-l-[3px] border-l-[var(--warning)] bg-[var(--warning-surface)] px-4 py-3 text-sm text-[var(--warning-ink)]">{DISCREPANCY_SCHEMA_PENDING_MESSAGE}</div>
-      )}
-      {list.available && refreshFailed && (
-        <div role="status" className="rounded-lg border border-border border-l-[3px] border-l-[var(--warning)] bg-[var(--warning-surface)] px-4 py-3 text-sm text-[var(--warning-ink)]">These figures could not be brought up to date just now; they are as of the last statement change. Refresh to try again.</div>
       )}
 
       {list.available && (

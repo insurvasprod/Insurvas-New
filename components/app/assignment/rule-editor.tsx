@@ -82,26 +82,26 @@ export function RuleEditor({
             </Field>
           )}
           {draft.matchType === "product" && (
-            <label className="mt-2 flex items-center gap-2 text-[14px] text-[var(--body)]">
+            <label className="mt-2 flex items-center gap-2 text-sm text-[var(--body)]">
               <input type="checkbox" checked={draft.licensedOnly} disabled={!canManage} onChange={(event) => onChange({ licensedOnly: event.target.checked })} />
               Licensed agents only
             </label>
           )}
           {draft.matchType === "campaign" && (
             <fieldset className="m-0 min-w-0 border-0 p-0">
-              <legend className="text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]">Campaigns</legend>
+              <legend className="text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]">Campaigns</legend>
               {campaignCount > 8 && <div className="mt-1.5"><ToolbarSearch value={campaignFilter} onChange={onCampaignFilter} placeholder="Find a campaign" label="Find a campaign" /></div>}
-              {campaignCount === 0 ? <p className="mt-1.5 text-[12px] text-[var(--muted)]">This workspace has no campaigns yet. Add them on Lead vendors.</p> : (
+              {campaignCount === 0 ? <p className="mt-1.5 text-xs text-[var(--muted)]">This workspace has no campaigns yet. Add them on Lead vendors.</p> : (
                 <div className="mt-2 flex max-h-44 flex-wrap gap-x-4 gap-y-2 overflow-y-auto">
                   {campaigns.map((campaign) => (
-                    <label key={campaign.id} className="flex items-center gap-1.5 text-[14px] text-[var(--body)]">
+                    <label key={campaign.id} className="flex items-center gap-1.5 text-sm text-[var(--body)]">
                       <input type="checkbox" checked={draft.campaignIds.includes(campaign.id)} disabled={!canManage} onChange={(event) => onChange({ campaignIds: event.target.checked ? [...draft.campaignIds, campaign.id] : draft.campaignIds.filter((value) => value !== campaign.id) })} />
                       {campaign.name}
                     </label>
                   ))}
                 </div>
               )}
-              {problem && <span role="alert" className="mt-1.5 block text-[12px] text-[var(--error-ink)]">{problem}</span>}
+              {problem && <span role="alert" className="mt-1.5 block text-xs text-[var(--error-ink)]">{problem}</span>}
             </fieldset>
           )}
         </div>
@@ -117,8 +117,8 @@ export function RuleEditor({
         />
       )}
       <fieldset className="m-0 mt-4 min-w-0 border-0 p-0">
-        <legend className="text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]">Goes to</legend>
-        <span className="block text-[12px] leading-[1.5] text-[var(--muted)]">
+        <legend className="text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]">Goes to</legend>
+        <span className="block text-xs leading-[1.5] text-[var(--muted)]">
           {draft.strategy === "least_loaded" ? "Whoever holds the fewest open leads first; this order breaks ties." : "In this order, round-robin."} None ticked is the whole roster.
         </span>
         <div className="mt-2 max-w-[260px]">
@@ -133,11 +133,11 @@ export function RuleEditor({
           >
             {RULE_STRATEGIES.map((strategy) => <option key={strategy} value={strategy}>{STRATEGY_LABEL[strategy]}</option>)}
           </select>
-          {!routerSchema && <span id={`${id}-strategy-pending`} className="mt-1 block text-[12px] leading-[1.5] text-[var(--muted)]">{SCHEMA_PENDING_MESSAGE}</span>}
+          {!routerSchema && <span id={`${id}-strategy-pending`} className="mt-1 block text-xs leading-[1.5] text-[var(--muted)]">{SCHEMA_PENDING_MESSAGE}</span>}
         </div>
         <div className="mt-2 flex flex-wrap gap-x-4 gap-y-2">
           {members.map((member) => (
-            <label key={member.id} className="flex items-center gap-1.5 text-[14px] text-[var(--body)]">
+            <label key={member.id} className="flex items-center gap-1.5 text-sm text-[var(--body)]">
               <input type="checkbox" checked={draft.assigneeIds.includes(member.id)} disabled={!canManage} onChange={(event) => onChange({ assigneeIds: event.target.checked ? [...draft.assigneeIds, member.id] : draft.assigneeIds.filter((value) => value !== member.id) })} />
               {member.name} <span className="text-[var(--muted)]">· {roleLabel(member.role)}</span>
             </label>
@@ -173,8 +173,8 @@ export function ConditionsEditor({
   const full = conditions.length >= MAX_EXTRA_CONDITIONS;
   return (
     <fieldset className="m-0 mt-4 min-w-0 border-0 p-0">
-      <legend className="text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]">And also</legend>
-      <span className="block text-[12px] leading-[1.5] text-[var(--muted)]">
+      <legend className="text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]">And also</legend>
+      <span className="block text-xs leading-[1.5] text-[var(--muted)]">
         Every condition here must match as well, such as a state and a product. Up to {MAX_EXTRA_CONDITIONS + 1} conditions per rule.
       </span>
       {conditions.map((condition, position) => {
@@ -190,10 +190,10 @@ export function ConditionsEditor({
             </div>
             <div className="min-w-0">
               {condition.type === "campaign" ? (
-                campaigns.length === 0 ? <p className="m-0 text-[12px] text-[var(--muted)]">This workspace has no campaigns yet.</p> : (
+                campaigns.length === 0 ? <p className="m-0 text-xs text-[var(--muted)]">This workspace has no campaigns yet.</p> : (
                   <div className="flex max-h-32 flex-wrap gap-x-4 gap-y-2 overflow-y-auto" role="group" aria-label={`Condition ${position + 2} campaigns`}>
                     {campaigns.map((campaign) => (
-                      <label key={campaign.id} className="flex items-center gap-1.5 text-[14px] text-[var(--body)]">
+                      <label key={campaign.id} className="flex items-center gap-1.5 text-sm text-[var(--body)]">
                         <input type="checkbox" checked={condition.campaignIds.includes(campaign.id)} disabled={!canManage} onChange={(event) => update(condition.key, { campaignIds: event.target.checked ? [...condition.campaignIds, campaign.id] : condition.campaignIds.filter((value) => value !== campaign.id) })} />
                         {campaign.name}
                       </label>
@@ -212,14 +212,14 @@ export function ConditionsEditor({
                     placeholder={condition.type === "language" ? "spanish, es" : condition.type === "product" ? "final_expense" : "TX, NM"}
                   />
                   {condition.type === "product" && (
-                    <label className="mt-2 flex items-center gap-2 text-[14px] text-[var(--body)]">
+                    <label className="mt-2 flex items-center gap-2 text-sm text-[var(--body)]">
                       <input type="checkbox" checked={condition.licensedOnly} disabled={!canManage} onChange={(event) => update(condition.key, { licensedOnly: event.target.checked })} />
                       Licensed agents only
                     </label>
                   )}
                 </>
               )}
-              {problem && <span role="alert" className="mt-1.5 block text-[12px] text-[var(--error-ink)]">{problem}</span>}
+              {problem && <span role="alert" className="mt-1.5 block text-xs text-[var(--error-ink)]">{problem}</span>}
             </div>
             {canManage && (
               <Button type="button" variant="ghost" size="sm" aria-label={`Remove condition ${position + 2}`} onClick={() => onChange(conditions.filter((item) => item.key !== condition.key))}>Remove</Button>
@@ -238,7 +238,7 @@ export function ConditionsEditor({
           >
             <PlusIcon />Add an AND condition
           </Button>
-          <span id={`${id}-and-why`} className="ml-2 text-[12px] text-[var(--muted)]">
+          <span id={`${id}-and-why`} className="ml-2 text-xs text-[var(--muted)]">
             {!routerSchema ? SCHEMA_PENDING_MESSAGE : full ? `A rule has at most ${MAX_EXTRA_CONDITIONS + 1} conditions.` : ""}
           </span>
         </div>

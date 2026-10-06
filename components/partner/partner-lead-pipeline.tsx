@@ -36,7 +36,7 @@ const PAGE_SIZE = 25;
 /** Each lane's header ground and ink, as the board draws them. */
 const LANE_TONE: Record<(typeof PARTNER_LANES)[number]["key"], string> = {
   new: "bg-[var(--surface-alt)] text-[var(--body)]",
-  claimed: "bg-[var(--soft-orange-surface)] text-[var(--accent-ink)]",
+  claimed: "bg-[var(--primary-soft)] text-[var(--accent-ink)]",
   verification: "bg-[var(--info-surface)] text-[var(--info-ink)]",
   converted: "bg-[var(--success-surface)] text-[var(--success-ink)]",
 };

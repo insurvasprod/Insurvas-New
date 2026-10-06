@@ -35,7 +35,7 @@ export function ImportStepper({ current }: { current: ImportStep }) {
               <li className="flex shrink-0 items-center gap-2.5" aria-current={active ? "step" : undefined}>
                 <span
                   className={cn(
-                    "inline-flex size-6 items-center justify-center rounded-full text-[12px] leading-[1.5] font-semibold tracking-[-0.01em]",
+                    "inline-flex size-6 items-center justify-center rounded-full text-xs leading-[1.5] font-semibold tracking-[-0.01em]",
                     done
                       ? "bg-[var(--success)] text-[var(--on-success)]"
                       : active
@@ -45,7 +45,7 @@ export function ImportStepper({ current }: { current: ImportStep }) {
                 >
                   {done ? <Check className="size-3.5" strokeWidth={3} aria-hidden /> : step}
                 </span>
-                <span className={cn("text-[14px] leading-[1.5] font-semibold tracking-[-0.02em]", done || active ? "text-[var(--ink)]" : "text-[var(--muted)]")}>
+                <span className={cn("text-sm leading-[1.5] font-semibold tracking-[-0.02em]", done || active ? "text-[var(--ink)]" : "text-[var(--muted)]")}>
                   {label}
                   {done && <span className="sr-only"> (done)</span>}
                 </span>

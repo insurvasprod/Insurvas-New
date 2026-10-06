@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Download } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { DataToolbar, FilterButton, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
+import { ClearFiltersButton, DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
@@ -13,6 +13,7 @@ import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 import { downloadCsv } from "@/components/app/partner-quality-parts";
+import { useFittingPageSize } from "@/components/app/book-views";
 import { dayMonth, localDay, type QuoteOutcome, type QuoteRow } from "@/lib/applications/listRules";
 import { premiumPer1000 } from "@/lib/quotes/math";
 import { caseHref, clientLinkClass, useLiveRefresh } from "./applications-list";
@@ -42,14 +43,15 @@ const average = (values: number[]) => (values.length ? Math.round(values.reduce(
 
 export function QuotesList({ rows: initialRows, sample = false, timeZone = "UTC" }: { rows: QuoteRow[]; sample?: boolean; timeZone?: string }) {
   const [rows, setRows] = useState(initialRows);
-  const [range, setRange] = useState<RangeKey>("30");
+  // No filter on entry (2026-10-06 redesign): the list opens on every quote, newest first.
+  const [range, setRange] = useState<RangeKey>("all");
   const [search, setSearch] = useState("");
   const [outcome, setOutcome] = useState<"all" | QuoteOutcome>("all");
   const [carrier, setCarrier] = useState("all");
   const [product, setProduct] = useState("all");
-  const [filtersOpen, setFiltersOpen] = useState(false);
   const [page, setPage] = useState(1);
   const [now] = useState(() => Date.now());
+  const pageSize = useFittingPageSize(500, 45);
   const pick = useCallback((body: unknown) => (body as { quotes?: QuoteRow[] } | null)?.quotes ?? null, []);
   const { refresh, refreshing, error } = useLiveRefresh({ sample, url: "/api/app/quotes", pick, apply: setRows });
 
@@ -66,8 +68,8 @@ export function QuotesList({ rows: initialRows, sample = false, timeZone = "UTC"
     && (carrier === "all" || row.carrierName === carrier)
     && (product === "all" || row.productLabel === product)
     && (!needle || [row.clientName, row.carrierName, row.productLabel].some((value) => value.toLowerCase().includes(needle))));
-  const { current, rows: pageRows } = paginate(shown, page);
-  const panelCount = (outcome !== "all" ? 1 : 0) + (carrier !== "all" ? 1 : 0) + (product !== "all" ? 1 : 0);
+  const { current, rows: pageRows } = paginate(shown, page, pageSize);
+  const filtered = needle !== "" || range !== "all" || outcome !== "all" || carrier !== "all" || product !== "all";
   const clearFilters = () => { setSearch(""); setOutcome("all"); setCarrier("all"); setProduct("all"); setRange("all"); setPage(1); };
 
   // The strip reads the calendar month, as its labels say.
@@ -88,7 +90,6 @@ export function QuotesList({ rows: initialRows, sample = false, timeZone = "UTC"
     <div className="m-stagger flex flex-col gap-6">
       <PageHeader
         title="Quotes"
-        description="Every quote ever captured, including the ones that were not taken."
         actions={<Button type="button" variant="outline" onClick={exportCsv} disabled={shown.length === 0} title={shown.length === 0 ? "Nothing to export" : undefined}><Download aria-hidden="true" />Export</Button>}
       />
       {sample && <SampleDataNotice />}
@@ -101,50 +102,49 @@ export function QuotesList({ rows: initialRows, sample = false, timeZone = "UTC"
       </StatStrip>
 
       <TableCard
+        className="flex min-h-[calc(100dvh-var(--top-bar-h)-300px)] flex-col [&>*:nth-child(2)]:flex-1"
         toolbar={<>
-          <DataToolbar actions={<RefreshButton onClick={() => void refresh()} refreshing={refreshing} />}>
-            <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Search a client, carrier or product" />
+          <DataToolbar actions={<>
+            {filtered && <ClearFiltersButton onClick={clearFilters} />}
+            <RefreshButton onClick={() => void refresh()} refreshing={refreshing} />
+          </>}>
+            <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Search client, carrier, product" />
             <select aria-label="Captured" className={toolbarControl} value={range} onChange={(event) => { setRange(event.target.value as RangeKey); setPage(1); }}>
               {RANGES.map((r) => <option key={r.key} value={r.key}>{r.label}</option>)}
             </select>
-            <FilterButton open={filtersOpen} onClick={() => setFiltersOpen((value) => !value)} count={panelCount} aria-controls="quote-filters" />
+            <select aria-label="Outcome" className={toolbarControl} value={outcome} onChange={(event) => { setOutcome(event.target.value as "all" | QuoteOutcome); setPage(1); }}>
+              <option value="all">Every outcome</option>
+              {OUTCOMES.map((o) => <option key={o} value={o}>{OUTCOME[o].label}</option>)}
+            </select>
+            <select aria-label="Carrier" className={toolbarControl} value={carrier} onChange={(event) => { setCarrier(event.target.value); setPage(1); }}>
+              <option value="all">All carriers</option>
+              {carriers.map((name) => <option key={name} value={name}>{name}</option>)}
+            </select>
+            <select aria-label="Product" className={toolbarControl} value={product} onChange={(event) => { setProduct(event.target.value); setPage(1); }}>
+              <option value="all">All products</option>
+              {products.map((name) => <option key={name} value={name}>{name}</option>)}
+            </select>
           </DataToolbar>
-          {filtersOpen && (
-            <div id="quote-filters" className="flex w-full flex-wrap items-center gap-2">
-              <select aria-label="Outcome" className={toolbarControl} value={outcome} onChange={(event) => { setOutcome(event.target.value as "all" | QuoteOutcome); setPage(1); }}>
-                <option value="all">Every outcome</option>
-                {OUTCOMES.map((o) => <option key={o} value={o}>{OUTCOME[o].label}</option>)}
-              </select>
-              <select aria-label="Carrier" className={toolbarControl} value={carrier} onChange={(event) => { setCarrier(event.target.value); setPage(1); }}>
-                <option value="all">All carriers</option>
-                {carriers.map((name) => <option key={name} value={name}>{name}</option>)}
-              </select>
-              <select aria-label="Product" className={toolbarControl} value={product} onChange={(event) => { setProduct(event.target.value); setPage(1); }}>
-                <option value="all">All products</option>
-                {products.map((name) => <option key={name} value={name}>{name}</option>)}
-              </select>
-              {panelCount > 0 && <Button type="button" variant="ghost" onClick={() => { setOutcome("all"); setCarrier("all"); setProduct("all"); setPage(1); }}>Clear filters</Button>}
-            </div>
-          )}
           {error && <p role="alert" className="w-full text-sm text-destructive">{error}</p>}
         </>}
-        footer={<Pager page={current} total={shown.length} noun="quotes" onPage={setPage} suffix="most recent first" />}
+        footer={<Pager page={current} total={shown.length} pageSize={pageSize} noun="quotes" onPage={setPage} suffix={filtered ? `filtered from ${rows.length}` : "most recent first"} />}
       >
         {rows.length === 0
           ? <EmptyState title="No quotes yet" hint="A quote is saved from a case's Quote step, while you compare carriers with the client." />
           : shown.length === 0
             ? <NoMatches noun="quotes" onClear={clearFilters} />
-            : <table className="portal-lead-table w-full min-w-[1000px] text-left text-sm">
+            : <table className="portal-lead-table w-full min-w-[1080px] text-left text-sm">
                 <thead>
                   <tr>
-                    <th className="w-[150px]">Client</th>
-                    <th className="w-[138px]">Carrier</th>
-                    <th className="w-[118px]">Product</th>
-                    <th className="w-[96px]">Face</th>
-                    <th className="w-[96px]">Monthly</th>
-                    <th className="w-[110px]">Per $1,000</th>
-                    <th className="w-[74px]">State</th>
-                    <th className="w-[96px]">Captured</th>
+                    <th>Client</th>
+                    <th className="w-[90px]">Insured</th>
+                    <th className="w-[150px]">Carrier</th>
+                    <th className="w-[130px]">Product</th>
+                    <th className="w-[100px] text-right">Face</th>
+                    <th className="w-[100px] text-right">Monthly</th>
+                    <th className="w-[110px] text-right">Per $1,000</th>
+                    <th className="w-[70px]">State</th>
+                    <th className="w-[100px]">Captured</th>
                     <th className="w-[130px]">Outcome</th>
                   </tr>
                 </thead>
@@ -155,15 +155,13 @@ export function QuotesList({ rows: initialRows, sample = false, timeZone = "UTC"
                     const rate = per1000(row);
                     return (
                       <tr key={row.id} className="m-row">
-                        <td>
-                          <Link href={href} className={clientLinkClass}>{row.clientName}</Link>
-                          {row.insuredRole === "spouse" && <span className="block text-xs text-muted-foreground">spouse</span>}
-                        </td>
-                        <td>{row.carrierName}</td>
-                        <td>{row.productLabel}</td>
-                        <td className="tabular-nums">{face(row.faceAmountCents)}</td>
-                        <td className="tabular-nums">{money(row.monthlyPremiumCents)}</td>
-                        <td className="tabular-nums">{row.per1000Warning ? <StatusChip tone="warning" dot={false} title={row.per1000Warning}>{dollars(rate)}</StatusChip> : dollars(rate)}</td>
+                        <td className="max-w-[220px] truncate" title={row.clientName}><Link href={href} className={clientLinkClass}>{row.clientName}</Link></td>
+                        <td>{row.insuredRole === "spouse" ? "Spouse" : "Primary"}</td>
+                        <td className="max-w-[150px] truncate" title={row.carrierName}>{row.carrierName}</td>
+                        <td className="max-w-[130px] truncate" title={row.productLabel}>{row.productLabel}</td>
+                        <td className="text-right tabular-nums">{face(row.faceAmountCents)}</td>
+                        <td className="text-right tabular-nums">{money(row.monthlyPremiumCents)}</td>
+                        <td className="text-right tabular-nums">{row.per1000Warning ? <StatusChip tone="warning" dot={false} title={row.per1000Warning}>{dollars(rate)}</StatusChip> : dollars(rate)}</td>
                         <td>{row.state ?? "—"}</td>
                         <td className="tabular-nums">{dayMonth(row.createdAt, timeZone)}</td>
                         <td><StatusChip tone={o.tone} dot>{o.label}</StatusChip></td>

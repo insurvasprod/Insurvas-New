@@ -114,7 +114,7 @@ export default function AdminLoginPage() {
       {/* ── The staff header. Outside the admin shell, so drawn here to the board. ───────────── */}
       <header className="flex flex-wrap items-center justify-between gap-3 bg-[var(--nav-bg)] px-4 py-3.5 sm:px-12">
         <span className="flex items-center gap-2.5">
-          <InsurvasLogo size="sidebar" />
+          <InsurvasLogo size="sidebar" tone="dark" />
           <span className="text-sm font-semibold uppercase leading-[1.43] tracking-[0.04em] text-[var(--nav-ink)]">
             Insurvas · Super Admin
           </span>

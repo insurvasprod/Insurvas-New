@@ -112,6 +112,8 @@ export type TopBarUser = {
   email: string;
   roleLabel: string;
   workspaceName: string;
+  /** Set when the person has a profile picture; it versions the picture's address. */
+  avatarVersion?: string | null;
 };
 
 type TopBarWorkspace = { tenantId: string; name: string; roleLabel: string; current: boolean };
@@ -129,6 +131,13 @@ const PREFERENCES_BACK: Record<PreferencesOrigin, string> = {
   alerts: "Back to alerts",
   account: "Back to your account",
 };
+
+/** The profile picture when there is one (served by /api/app/profile/avatar), else the initials. */
+function AvatarFace({ user }: { user: TopBarUser }) {
+  if (!user.avatarVersion) return <>{initials(user.name)}</>;
+  // eslint-disable-next-line @next/next/no-img-element -- a session-bound redirect to a signed URL; next/image cannot optimise it
+  return <img src={`/api/app/profile/avatar?v=${encodeURIComponent(user.avatarVersion)}`} alt="" className="size-full rounded-full object-cover" />;
+}
 
 function initials(name: string) {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -531,7 +540,7 @@ export function TopBarShell({
           onClick={() => toggle("account")}
           className="portal-top-account"
         >
-          <span className="portal-top-avatar" aria-hidden="true">{initials(user.name)}</span>
+          <span className="portal-top-avatar" aria-hidden="true"><AvatarFace user={user} /></span>
           <span className="portal-top-account-name">{user.name.split(/\s+/)[0]}</span>
           <ChevronDown className="size-3.5 text-[var(--muted)]" aria-hidden="true" />
         </button>
@@ -649,7 +658,7 @@ export function TopBarShell({
         {menu === "account" && (
           <section aria-label="Your account" className="portal-top-panel portal-top-panel-account m-swap">
             <div className="portal-top-identity">
-              <span className="portal-top-avatar portal-top-avatar-lg" aria-hidden="true">{initials(user.name)}</span>
+              <span className="portal-top-avatar portal-top-avatar-lg" aria-hidden="true"><AvatarFace user={user} /></span>
               <span>
                 <span className="portal-top-identity-name">{user.name}</span>
                 <span className="portal-top-identity-email">{user.email}</span>

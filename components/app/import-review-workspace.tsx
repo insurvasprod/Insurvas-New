@@ -95,7 +95,7 @@ function InfoTip({ id, label, children }: { id: string; label: string; children:
         id={id}
         role="tooltip"
         className={cn(
-          "absolute bottom-full left-1/2 z-10 mb-2 w-[260px] -translate-x-1/2 rounded-[8px] border border-[var(--border)] bg-[var(--surface)] p-2.5 text-[12px] leading-[1.5] font-normal tracking-[-0.01em] text-[var(--body)] shadow-[var(--shadow-overlay)]",
+          "absolute bottom-full left-1/2 z-10 mb-2 w-[260px] -translate-x-1/2 rounded-[8px] border border-[var(--border)] bg-[var(--surface)] p-2.5 text-xs leading-[1.5] font-normal tracking-[-0.01em] text-[var(--body)] shadow-[var(--shadow-overlay)]",
           open ? "block" : "hidden",
         )}
       >
@@ -257,10 +257,10 @@ export function ImportReviewWorkspace({ plan, csv }: { plan: ReviewPlan; csv: st
             <td className={st.td}>{row.detail ?? "Ready"}</td>
           </tr>)}</tbody>
         </table>
-        <p className="px-3 py-2 text-[12px] leading-[1.5] text-[var(--muted)]">Showing the first {samples.length} of {(counts[bucket] ?? 0).toLocaleString()}. Upload the file again to list every row.</p>
+        <p className="px-3 py-2 text-xs leading-[1.5] text-[var(--muted)]">Showing the first {samples.length} of {(counts[bucket] ?? 0).toLocaleString()}. Upload the file again to list every row.</p>
       </div>;
     }
-    if (!parsed) return <p className="text-[14px] text-[var(--error-ink)]">The file in this tab could not be read to list these rows.</p>;
+    if (!parsed) return <p className="text-sm text-[var(--error-ink)]">The file in this tab could not be read to list these rows.</p>;
     const headers = parsed[0] ?? [];
     const shown = numbers.slice(0, listing[bucket] ?? LIST_PAGE);
     const withWhy = bucket === "unreadable" || bucket === "invalid_phone";
@@ -282,7 +282,7 @@ export function ImportReviewWorkspace({ plan, csv }: { plan: ReviewPlan; csv: st
           })}</tbody>
         </table>
       </div>
-      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] px-3 py-2 text-[12px] leading-[1.5] text-[var(--muted)]">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] px-3 py-2 text-xs leading-[1.5] text-[var(--muted)]">
         <span className="tabular-nums">Showing {shown.length.toLocaleString()} of {numbers.length.toLocaleString()} · read from the file in this tab</span>
         {shown.length < numbers.length && <Button type="button" variant="ghost" size="sm" onClick={() => setListing((current) => ({ ...current, [bucket]: (current[bucket] ?? LIST_PAGE) + LIST_PAGE }))}>Show {Math.min(LIST_PAGE, numbers.length - shown.length)} more</Button>}
       </div>
@@ -292,9 +292,9 @@ export function ImportReviewWorkspace({ plan, csv }: { plan: ReviewPlan; csv: st
   function decisionFieldset(decision: Decision, bucket: ReviewBucket) {
     const radio = "mt-1 size-4 shrink-0 accent-[var(--primary)]";
     const option = "flex cursor-pointer gap-2.5 rounded-[8px] border border-[var(--border)] bg-[var(--surface)] p-3";
-    const title = "block text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]";
-    const help = "block text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]";
-    const legend = "mb-2 text-[12px] leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]";
+    const title = "block text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]";
+    const help = "block text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]";
+    const legend = "mb-2 text-xs leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]";
     if (decision === "dnc")
       return <fieldset className="m-0 flex min-w-0 flex-col gap-2 border-0 p-0">
         <legend className={legend}>What should happen to do-not-call rows?</legend>
@@ -303,7 +303,7 @@ export function ImportReviewWorkspace({ plan, csv }: { plan: ReviewPlan; csv: st
         <label className={option}><input type="radio" className={radio} name={`dnc-${bucket}`} checked={dnc === "suppress"} onChange={() => setDnc("suppress")} />
           <span><strong className={title}>Import and suppress</strong><span className={help}>Keep the record and add the number to your do-not-call list permanently. It can never be dialed.</span></span></label>
         {/* Said plainly, because the missing option is the one people look for. */}
-        <p className="text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--body)]">There is no option to dial these. This choice applies to both do-not-call checks.</p>
+        <p className="text-xs leading-[1.5] tracking-[-0.01em] text-[var(--body)]">There is no option to dial these. This choice applies to both do-not-call checks.</p>
       </fieldset>;
     if (decision === "existing")
       return <fieldset className="m-0 flex min-w-0 flex-col gap-2 border-0 p-0">

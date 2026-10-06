@@ -56,7 +56,8 @@ export function TableCard({
       )}
 
       {toolbar && (
-        <div className="flex flex-wrap items-center gap-2 border-t border-border bg-[var(--surface-alt)] px-4 py-3">
+        // A rule above and below: the filters read as their own band, apart from the column headers.
+        <div className="flex flex-wrap items-center gap-2 border-y border-border bg-[var(--surface-alt)] px-4 py-3">
           {toolbar}
         </div>
       )}

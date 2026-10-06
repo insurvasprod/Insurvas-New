@@ -28,7 +28,7 @@ function Chip({ tone, children }: { tone: "good" | "action"; children: ReactNode
   const style =
     tone === "good"
       ? { chip: "bg-[var(--success-surface)] text-[var(--success-ink)]", dot: "bg-[var(--success)]" }
-      : { chip: "bg-[var(--soft-orange-surface)] text-[var(--accent-ink)]", dot: "bg-[var(--primary)]" };
+      : { chip: "bg-[var(--primary-soft)] text-[var(--accent-ink)]", dot: "bg-[var(--primary)]" };
   return (
     <span className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-[3px] text-xs font-semibold leading-normal tracking-[-0.01em] ${style.chip}`}>
       <span className={`size-1.5 shrink-0 rounded-full ${style.dot}`} aria-hidden="true" />
@@ -39,7 +39,7 @@ function Chip({ tone, children }: { tone: "good" | "action"; children: ReactNode
 
 function AddressRow({ label, email, chip, highlight }: { label: string; email: string; chip: ReactNode; highlight?: boolean }) {
   return (
-    <div className={`flex items-center justify-between gap-4 px-4 py-3.5 ${highlight ? "border-t border-border bg-[var(--soft-orange-surface)]" : "bg-card"}`}>
+    <div className={`flex items-center justify-between gap-4 px-4 py-3.5 ${highlight ? "border-t border-border bg-[var(--primary-soft)]" : "bg-card"}`}>
       <span className="min-w-0">
         <span className="block text-xs leading-normal tracking-[-0.01em] text-muted-foreground">{label}</span>
         <span className="mt-0.5 block break-all text-base font-semibold leading-normal tracking-[-0.02em] text-foreground">{email}</span>

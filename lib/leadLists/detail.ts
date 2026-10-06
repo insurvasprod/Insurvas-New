@@ -168,6 +168,9 @@ function listLeads(db: Db, tenantId: string, campaignId: string, withCeiling: bo
         .eq("tenant_id", tenantId)
         .eq("campaign_id", campaignId)
         .eq("lead_queue.tenant_id", tenantId)
+        // Along agent_leads (tenant_id, campaign_id, created_at desc); id alone sent the planner down
+        // the primary key across every tenant (see leadListsReport).
+        .order("created_at", { ascending: false })
         .order("id", { ascending: true })
         .range(start, start + PAGE - 1),
     "the leads in this list",

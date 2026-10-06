@@ -16,7 +16,7 @@ import type { ReactNode } from "react";
  * behind it. The mix version drifted with the surface it landed on and could not be measured; these
  * grounds are fixed values, and their inks clear 4.5:1 on them (6.1–6.4:1) in both themes.
  *
- * `action` is the one tone allowed to be orange, for a row the reader must do something about.
+ * `action` is the one tone in the brand green, for a row the reader must do something about.
  *
  * UX-5 (2026-10-03): the one chip. The settings `Pill` is a thin alias over this, and `Badge` is
  * being retired call site by call site (lib/design/uiConsistency.test.mjs counts both down). Text is
@@ -30,7 +30,7 @@ const TONE: Record<StatusTone, { chip: string; dot: string }> = {
   info:    { chip: "bg-[var(--info-surface)] text-[var(--info-ink)]",       dot: "bg-[var(--info)]" },
   warning: { chip: "bg-[var(--warning-surface)] text-[var(--warning-ink)]", dot: "bg-[var(--warning)]" },
   danger:  { chip: "bg-[var(--error-surface)] text-[var(--error-ink)]",     dot: "bg-[var(--error)]" },
-  action:  { chip: "bg-[var(--soft-orange-surface)] text-[var(--accent-ink)]", dot: "bg-[var(--primary)]" },
+  action:  { chip: "bg-[var(--primary-soft)] text-[var(--accent-ink)]", dot: "bg-[var(--primary)]" },
 };
 
 export function StatusChip({

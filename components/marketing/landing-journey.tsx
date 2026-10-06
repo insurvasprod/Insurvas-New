@@ -206,7 +206,7 @@ export function LandingJourney() {
               return (
                 <li key={step.key}>
                   <div ref={(node) => { stepRefs.current[index] = node; }} data-index={index} className="relative flex gap-5 pb-16 lg:min-h-[62vh] lg:pb-0">
-                    <span className={`relative z-10 inline-flex size-10 shrink-0 items-center justify-center rounded-full border-2 transition-all duration-500 ${on ? "scale-110 border-[var(--primary)] bg-[var(--primary)] text-[var(--on-primary)] shadow-[0_0_0_6px_color-mix(in_srgb,var(--primary)_18%,transparent)]" : index < active ? "border-[var(--primary)] bg-card text-[var(--primary)]" : "border-[var(--border-strong)] bg-card text-muted-foreground"}`}>
+                    <span className={`relative z-10 inline-flex size-10 shrink-0 items-center justify-center rounded-full border-2 transition-all duration-500 ${on ? "scale-110 border-[var(--primary)] bg-[var(--primary)] text-[var(--on-primary)] shadow-[0_0_0_6px_color-mix(in_srgb,var(--primary)_18%,transparent)]" : index < active ? "border-[var(--primary)] bg-card text-[var(--accent-ink)]" : "border-[var(--border-strong)] bg-card text-muted-foreground"}`}>
                       <Icon className="size-4" aria-hidden="true" />
                     </span>
                     <div className={`min-w-0 pt-1 transition-opacity duration-500 ${on ? "lg:opacity-100" : "lg:opacity-40"}`}>
@@ -215,7 +215,7 @@ export function LandingJourney() {
                       <p className="mt-3 max-w-[52ch] text-base leading-[1.6] text-muted-foreground">{step.body}</p>
                       <ul className="mt-4 space-y-2 p-0">
                         {step.points.map((point) => (
-                          <li key={point} className="flex list-none items-start gap-2 text-sm text-foreground"><Check className="mt-0.5 size-4 shrink-0 text-[var(--primary)]" aria-hidden="true" />{point}</li>
+                          <li key={point} className="flex list-none items-start gap-2 text-sm text-foreground"><Check className="mt-0.5 size-4 shrink-0 text-[var(--accent-ink)]" aria-hidden="true" />{point}</li>
                         ))}
                       </ul>
                       <div className="mt-6 lg:hidden">{step.screen}</div>

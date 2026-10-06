@@ -4,6 +4,7 @@ import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { getQueueSlaSettings } from "@/lib/queueSla/service";
 import { listDueCallbacks } from "@/lib/callbacks/service";
 import { owedToYou } from "@/lib/discrepancies/service";
+import { statementMoney } from "@/lib/ledger/statementConstants";
 
 import { activitySentence, appointmentsSentence, callbacksSentence, carriersSentence, dialerSentence, inboundSentence, leadsSentence, policiesSentence, poolSentence, waitLabel } from "./summaryText";
 import { NOT_A_CONTACT } from "./todayMath";
@@ -129,19 +130,32 @@ async function ledger(tenantId: string): Promise<TileMetric> {
 
 /**
  * LA-4.6 · "Owed to you": the open and disputed discrepancies, summed from their stored rows — one
- * read, no ledger recompute. Before any statement is imported there is nothing to compare, so the
- * cell says what to do next rather than claiming $0.
+ * read, no ledger recompute. The figure is the Discrepancies page's own (statementMoney, to the
+ * cent), so the two never disagree.
+ *
+ * It never claims $0 without something behind it:
+ *   · no statement stands yet          → "—", import one;
+ *   · statements, none reviewed yet,
+ *     and nothing found                → "—", review them (an unreviewed statement's lines are still
+ *                                        proposals, so "everything agrees" would be unchecked);
+ *   · reviewed, nothing found          → $0.00, every reviewed statement agrees.
  */
 async function owed(tenantId: string): Promise<TileMetric> {
   const [statements, totals] = await Promise.all([
-    db().from("tenant_commission_statements").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId).not("status", "eq", "voided"),
+    db().from("tenant_commission_statements").select("status").eq("tenant_id", tenantId).not("status", "eq", "voided").limit(5000),
     owedToYou(tenantId),
   ]);
   if (statements.error) throw new Error("owed summary unavailable");
-  if (!totals.available || (statements.count ?? 0) === 0) {
+  const standing = (statements.data ?? []) as Array<{ status: string }>;
+  if (!totals.available || standing.length === 0) {
     return { value: 0, display: "—", caption: "import a statement", detail: "Import a carrier statement to see what the carrier paid against what your contract says it owes." };
   }
-  const dollars = `$${Math.round(totals.totalCents / 100).toLocaleString("en-US")}`;
+  const reviewed = standing.filter((row) => row.status === "reviewed").length;
+  if (!totals.count && reviewed === 0) {
+    const waiting = standing.length;
+    return { value: 0, display: "—", caption: "review your statement", detail: `Review the lines on your ${waiting === 1 ? "statement" : `${n(waiting)} statements`} to see what the carrier paid against what your contract says it owes.` };
+  }
+  const dollars = statementMoney(totals.totalCents);
   const parts = [
     totals.byKind.never_paid.count ? `${n(totals.byKind.never_paid.count)} never paid` : null,
     totals.byKind.short_paid.count + totals.byKind.mis_rated.count ? `${n(totals.byKind.short_paid.count + totals.byKind.mis_rated.count)} paid short` : null,
@@ -151,7 +165,7 @@ async function owed(tenantId: string): Promise<TileMetric> {
     value: totals.totalCents,
     display: dollars,
     caption: totals.count ? plural(totals.count, "item") : "nothing found",
-    detail: totals.count ? `You appear to be owed ${dollars}: ${parts.join(", ")}.` : "Every accepted statement line agrees with your contract.",
+    detail: totals.count ? `You appear to be owed ${dollars}: ${parts.join(", ")}.` : `Every statement you reviewed agrees with your contract${reviewed < standing.length ? `; ${n(standing.length - reviewed)} still to review` : ""}.`,
     tone: totals.count ? "warning" : "good",
   };
 }

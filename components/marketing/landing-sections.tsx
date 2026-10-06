@@ -37,7 +37,7 @@ export function LandingTruths() {
           const Icon = truth.icon;
           return (
             <span key={index} aria-hidden={index >= TRUTHS.length} className="mx-6 inline-flex items-center gap-2.5 whitespace-nowrap text-sm font-semibold text-foreground">
-              <Icon className="size-4 text-[var(--primary)]" aria-hidden="true" />
+              <Icon className="size-4 text-[var(--accent-ink)]" aria-hidden="true" />
               {truth.text}
             </span>
           );
@@ -109,7 +109,7 @@ export function LandingJobs() {
                     <p className="relative mt-2 text-sm leading-[1.6] text-muted-foreground">{job.lead}</p>
                     <ul className="relative mt-5 space-y-2.5 border-t border-border p-0 pt-5">
                       {job.points.map((point) => (
-                        <li key={point} className="flex list-none items-start gap-2 text-sm leading-normal text-foreground"><Check className="mt-0.5 size-4 shrink-0 text-[var(--primary)]" aria-hidden="true" />{point}</li>
+                        <li key={point} className="flex list-none items-start gap-2 text-sm leading-normal text-foreground"><Check className="mt-0.5 size-4 shrink-0 text-[var(--accent-ink)]" aria-hidden="true" />{point}</li>
                       ))}
                     </ul>
                   </article>

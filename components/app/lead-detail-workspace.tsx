@@ -173,7 +173,7 @@ function Chip({ tone, dot, children }: { tone: "warning" | "danger" | "good" | "
     warning: ["bg-[var(--warning-surface)] text-[var(--warning-ink)]", "bg-[var(--warning)]"],
     danger: ["bg-[var(--error-surface)] text-[var(--error-ink)]", "bg-[var(--error)]"],
     good: ["bg-[var(--success-surface)] text-[var(--success-ink)]", "bg-[var(--success)]"],
-    accent: ["bg-[var(--soft-orange-surface)] text-[var(--accent-ink)]", "bg-[var(--primary)]"],
+    accent: ["bg-[var(--primary-soft)] text-[var(--accent-ink)]", "bg-[var(--primary)]"],
     neutral: ["bg-[var(--surface-alt)] text-[var(--body)]", "bg-[var(--muted-foreground)]"],
   }[tone];
   return (

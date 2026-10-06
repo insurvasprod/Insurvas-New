@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { notify } from "@/lib/notify";
 import type { RealtimeChannel } from "@supabase/supabase-js";
-import { FileText, MessageCircle, Paperclip, Plus, Search, X } from "lucide-react";
+import { CheckCircle2, FileText, Info, Loader2, MessageCircle, Paperclip, PhoneOff, Plus, Search, SendHorizontal, Users, X, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toolbarControl } from "@/components/ui/data-toolbar";
 import { PageHeader } from "@/components/ui/page-header";
@@ -16,8 +16,8 @@ import { MONTHS } from "@/lib/format/dates";
 /**
  * Partner chat: a full-height, three-pane chat under the top bar. Conversations on the left, the
  * thread in the middle (automatic updates set apart from typed messages, the composer pinned to the
- * bottom), and the conversation's details on the right. Each pane scrolls on its own; below lg the
- * details pane folds away and the page is the list and the thread.
+ * bottom), and the conversation's details on the right, opened from the info button in the thread header.
+ * Each pane scrolls on its own, and the list loads more conversations as it is scrolled.
  *
  * Everything the page did before still works — search, unread counts, new direct and team
  * conversations, attachments, realtime refresh and read receipts — plus Archive / Restore for
@@ -27,7 +27,7 @@ import { MONTHS } from "@/lib/format/dates";
 
 type Channel = { id: string; name: string; channel_type: "partner" | "direct" | "group"; partner_id: string | null; status: string; unreadCount: number; messages: PartnerMessage[]; realtimeTopic: string };
 type DirectoryUser = { id: string; name: string; email: string; label: string; scope: "agent" | "partner"; partnerId?: string; partnerName?: string; role?: string };
-type ChatResponse = { channels: Array<{ channel: Channel; messages: PartnerMessage[]; unreadCount: number; realtimeTopic: string }>; directory: { tenantUsers: Array<{ user_id: string; role?: string; users: { id: string; name: string; email: string; status: string } }>; partnerUsers: Array<{ user_id: string; partner_id: string; role?: string; users: { id: string; name: string; email: string; status: string }; partners: { name: string } }> }; partnerFacts?: PartnerFacts[] };
+type ChatResponse = { channels: Array<{ channel: Channel; messages: PartnerMessage[]; unreadCount: number; realtimeTopic: string }>; directory: { tenantUsers: Array<{ user_id: string; role?: string; users: { id: string; name: string; email: string; status: string } }>; partnerUsers: Array<{ user_id: string; partner_id: string; role?: string; users: { id: string; name: string; email: string; status: string }; partners: { name: string } }> }; partnerFacts?: PartnerFacts[]; viewerId?: string };
 type PartnerFacts = { partnerId: string; status: string; transfersToday: number; completedToday: number; droppedToday: number; payout: string | null };
 
 function normalize(data: ChatResponse): { channels: Channel[]; directory: DirectoryUser[]; facts: Record<string, PartnerFacts> } {
@@ -38,7 +38,7 @@ function normalize(data: ChatResponse): { channels: Channel[]; directory: Direct
   return { channels, facts, directory: [...tenantUsers, ...partnerUsers].filter((item, index, all) => all.findIndex((candidate) => candidate.id === item.id) === index) };
 }
 
-function initials(name: string) { return name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase() ?? "?").join(""); }
+function initials(name: string) { return name.split(/\s+/).filter((part) => /^[\p{L}\p{N}]/u.test(part)).slice(0, 2).map((part) => part[0]?.toUpperCase() ?? "?").join(""); }
 function channelType(channel: Channel) { return channel.channel_type === "partner" ? "Partner" : channel.channel_type === "direct" ? "Direct message" : "Team channel"; }
 /** The line under a partner channel: today's transfers and how they ended, or that the partner is paused. */
 function factsLine(facts: PartnerFacts | undefined) {
@@ -60,56 +60,106 @@ function listTime(value: string) {
 const clock = (value: string) => new Date(value).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
 const kb = (bytes: number) => `${Math.max(1, Math.round(bytes / 1024))} KB`;
 
-function Fact({ label, children }: { label: string; children: React.ReactNode }) {
+/** "Today", "Yesterday", else "Wed 23 Sep" — the divider between days in a thread. */
+function dayLabel(value: string) {
+  const at = new Date(value);
+  const today = new Date();
+  const yesterday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
+  if (at.toDateString() === today.toDateString()) return "Today";
+  if (at.toDateString() === yesterday.toDateString()) return "Yesterday";
+  return `${at.toLocaleDateString([], { weekday: "short" })} ${at.getDate()} ${MONTHS[at.getMonth()]}`;
+}
+
+/** A round face: initials, or an icon for a team channel. Partners get the brand tint. */
+function Face({ name, kind = "person", scale = "md" }: { name: string; kind?: "person" | "partner" | "group"; scale?: "sm" | "md" | "lg" }) {
   return (
-    <div className="min-w-0">
-      <div className="text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] text-muted-foreground">{label}</div>
-      <div className="mt-1 break-words text-sm font-semibold leading-normal tracking-[-0.02em] tabular-nums text-foreground">{children}</div>
+    <span aria-hidden="true" className={cn(
+      "inline-flex shrink-0 items-center justify-center rounded-full font-semibold",
+      scale === "sm" ? "size-7 text-xs" : scale === "lg" ? "size-12 text-base" : "size-8 text-xs",
+      kind === "partner" ? "bg-[var(--primary-soft)] text-[var(--accent-ink)]" : "bg-[var(--surface-alt)] text-[var(--body)]",
+    )}>
+      {kind === "group" ? <Users className={scale === "lg" ? "size-5" : "size-4"} /> : initials(name) || "?"}
+    </span>
+  );
+}
+const faceKind = (channel: Channel) => (channel.channel_type === "partner" ? "partner" : channel.channel_type === "group" ? "group" : "person");
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return <div className="text-xs font-semibold uppercase tracking-[0.02em] text-muted-foreground">{children}</div>;
+}
+
+function Tile({ label, value, tone }: { label: string; value: React.ReactNode; tone?: "success" | "error" }) {
+  return (
+    <div className="min-w-0 rounded-md bg-[var(--surface-alt)] px-2 py-1.5">
+      <div className={cn("text-sm font-semibold tabular-nums", tone === "success" ? "text-[var(--success-ink)]" : tone === "error" ? "text-[var(--error-ink)]" : "text-foreground")}>{value}</div>
+      <div className="truncate text-xs text-muted-foreground">{label}</div>
     </div>
   );
 }
 
-function BarHeader({ title, children }: { title: string; children?: React.ReactNode }) {
-  return (
-    <div className="flex min-h-14 shrink-0 items-center justify-between gap-4 border-b border-border bg-[var(--surface-alt)] px-4 py-2.5">
-      <h2 className="truncate text-sm font-semibold leading-normal tracking-[-0.02em]">{title}</h2>
-      {children && <span className="flex shrink-0 items-center gap-2.5">{children}</span>}
-    </div>
-  );
-}
-
-/** An automatic update: tinted, labelled and not editable — a record, not a message. */
-function SystemCard({ message }: { message: PartnerMessage }) {
+/**
+ * An automatic update: one quiet line in the thread — what happened, to whom, and when. It is a
+ * record, not a message, so it has no bubble and cannot be edited.
+ */
+function UpdateRow({ message }: { message: PartnerMessage }) {
   const payload = message.cardPayload;
   // Read-time facts from the server (enrichCards in lib/partnerChat/service.ts); absent on some cards.
   const counts = typeof payload.counts_as_work_completed === "boolean" ? payload.counts_as_work_completed : null;
   const dropped = payload.closes_as === "dropped";
   const minutes = typeof payload.minutes_after_submission === "number" ? payload.minutes_after_submission : null;
-  const fields = ([["Client", payload.customer], ["Product", payload.product], ["Outcome", payload.disposition], ["By", payload.agent]] as Array<[string, unknown]>)
-    .filter((entry): entry is [string, string] => typeof entry[1] === "string" && entry[1].length > 0);
+  const text = (value: unknown) => (typeof value === "string" && value.length > 0 ? value : null);
+  const client = text(payload.customer);
+  const details = [text(payload.product), text(payload.disposition), text(payload.agent) && `by ${text(payload.agent)}`].filter(Boolean).join(" · ");
+  const timing = minutes != null ? `${minutes === 0 ? "Under a minute" : `${minutes} ${minutes === 1 ? "minute" : "minutes"}`} after submission` : counts != null ? (counts ? "Counts as work completed" : "Does not count as work completed") : null;
+  const Icon = dropped ? PhoneOff : counts ? CheckCircle2 : Zap;
+  const [open, setOpen] = useState(false);
+  const extra = [details, timing].filter(Boolean).join(" · ");
+  // One line; a click opens the rest (who, product, timing and the note) under it.
   return (
-    <article className="rounded-lg border border-[var(--info)] bg-[var(--info-surface)] px-3.5 py-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--info-surface)] px-2.5 py-[3px] text-xs font-semibold text-[var(--info-ink)]"><span className="size-1.5 rounded-full bg-[var(--info)]" aria-hidden="true" />Automatic update</span>
-        <span className="text-xs text-muted-foreground">{clock(message.createdAt)} · cannot be edited</span>
-      </div>
-      <div className="mt-2.5 grid grid-cols-2 gap-x-6 gap-y-4">
-        <Fact label="Event">{dropped && message.cardType === "call_outcome" ? "Call dropped" : cardTitle(message)}</Fact>
-        {fields.map(([label, value]) => <Fact key={label} label={label}>{value}</Fact>)}
-      </div>
-      {message.message && <p className="mt-2.5 text-sm text-[var(--body)]">{message.message}</p>}
-      {(counts != null || minutes != null) && (
-        <p className="mt-1.5 text-xs text-muted-foreground">
-          {minutes != null ? `${minutes === 0 ? "Under a minute" : `${minutes} ${minutes === 1 ? "minute" : "minutes"}`} after submission` : counts ? "Counts as work completed" : "Does not count as work completed"}
-        </p>
+    <article aria-label="Automatic update">
+      <button type="button" onClick={() => setOpen((value) => !value)} aria-expanded={open} title={open ? "Hide details" : "Show details"} className="flex h-7 w-full items-center gap-2 rounded-md px-1 text-left text-sm hover:bg-[var(--surface-alt)]">
+        <span aria-hidden="true" className={cn(
+          "inline-flex size-5 shrink-0 items-center justify-center rounded-full",
+          dropped ? "bg-[var(--error-surface)] text-[var(--error-ink)]" : counts ? "bg-[var(--success-surface)] text-[var(--success-ink)]" : "bg-[var(--info-surface)] text-[var(--info-ink)]",
+        )}><Icon className="size-3" /></span>
+        <span className="shrink-0 font-semibold text-foreground">{dropped && message.cardType === "call_outcome" ? "Call dropped" : cardTitle(message)}</span>
+        {client && <span className="shrink-0 text-[var(--body)]">{client}</span>}
+        <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">{open ? "" : extra}</span>
+        <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{clock(message.createdAt)}</span>
+      </button>
+      {open && (
+        <div className="mb-1 ml-8 border-l-2 border-border pl-3 text-xs text-muted-foreground">
+          {extra && <p className="m-0">{extra}</p>}
+          {message.message && <p className="m-0 text-sm text-[var(--body)]">{message.message}</p>}
+          <p className="m-0">Automatic update · cannot be edited</p>
+        </div>
       )}
     </article>
   );
 }
 
+/** Conversation filters above the list. */
+type ListFilter = "all" | "partner" | "direct" | "group" | "unread";
+const LIST_FILTERS: Array<[ListFilter, string]> = [["all", "All"], ["unread", "Unread"], ["partner", "Partners"], ["direct", "Direct"], ["group", "Team"]];
+const matchesFilter = (channel: Channel, filter: ListFilter) => filter === "all" || (filter === "unread" ? channel.unreadCount > 0 : channel.channel_type === filter);
+
+/** Messages from one person within this many minutes share a single name line. */
+const GROUP_MINUTES = 5;
+
+/** The list shows this many conversations, and this many more each time it is scrolled to the end. */
+const CONVERSATION_STEP = 20;
+
+/** Active conversations first, newest message first; a conversation with no messages sorts after any with one. */
+function byActivity(channels: Channel[]) {
+  const lastAt = (channel: Channel) => { const last = channel.messages.at(-1); return last ? new Date(last.createdAt).getTime() : 0; };
+  return [...channels].sort((a, b) => Number(a.status !== "active") - Number(b.status !== "active") || lastAt(b) - lastAt(a) || a.name.localeCompare(b.name));
+}
+
 export function AgentPartnerChatWorkspace() {
   const [data, setData] = useState<{ channels: Channel[]; directory: DirectoryUser[]; facts: Record<string, PartnerFacts> }>({ channels: [], directory: [], facts: {} });
   const [loaded, setLoaded] = useState(false);
+  // The signed-in person, from the server: their own messages sit on the right of the thread.
+  const [viewerId, setViewerId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [files, setFiles] = useState<File[]>([]);
@@ -118,6 +168,8 @@ export function AgentPartnerChatWorkspace() {
   const [channelName, setChannelName] = useState("");
   const [conversationSearch, setConversationSearch] = useState("");
   const [newConversationOpen, setNewConversationOpen] = useState(false);
+  // The thread can show everything, only typed messages, or only the automatic updates.
+  const [threadView, setThreadView] = useState<"all" | "messages" | "updates">("all");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const threadRef = useRef<HTMLDivElement | null>(null);
@@ -126,7 +178,11 @@ export function AgentPartnerChatWorkspace() {
     const response = await fetch("/api/app/partner-chat", { cache: "no-store" });
     const body = await response.json().catch(() => null) as ChatResponse | { error?: string } | null;
     if (!response.ok) throw new Error(body && "error" in body ? body.error : "Could not load partner chat");
-    const next = normalize(body as ChatResponse); setData(next); setLoaded(true); setSelectedId((current) => current && next.channels.some((channel) => channel.id === current) ? current : next.channels[0]?.id ?? null); return next;
+    const next = normalize(body as ChatResponse); setData(next); setViewerId((body as ChatResponse).viewerId ?? null); setLoaded(true);
+    // Open on the conversation with the latest activity, not whichever happens to sort first: an empty
+    // channel on top made the whole screen look blank.
+    setSelectedId((current) => current && next.channels.some((channel) => channel.id === current) ? current : byActivity(next.channels)[0]?.id ?? null);
+    return next;
   }, []);
   useEffect(() => { const timer = window.setTimeout(() => { void load().catch((reason: unknown) => { setLoaded(true); setError(reason instanceof Error ? reason.message : "Could not load partner chat"); }); }, 0); return () => window.clearTimeout(timer); }, [load]);
   // Give attachment-only messages a valid, editable message body so the shared API can persist them.
@@ -138,13 +194,38 @@ export function AgentPartnerChatWorkspace() {
   const selected = data.channels.find((channel) => channel.id === selectedId) ?? null;
   const messageCount = selected?.messages.length ?? 0;
   // A thread opens at its newest message, and follows new ones as they arrive.
-  useEffect(() => { const node = threadRef.current; if (node) node.scrollTop = node.scrollHeight; }, [selectedId, messageCount, newConversationOpen]);
-  const filteredChannels = useMemo(() => { const query = conversationSearch.trim().toLowerCase(); return query ? data.channels.filter((channel) => `${channel.name} ${channelPreview(channel)}`.toLowerCase().includes(query)) : data.channels; }, [conversationSearch, data.channels]);
+  useEffect(() => { const node = threadRef.current; if (node) node.scrollTop = node.scrollHeight; }, [selectedId, messageCount, newConversationOpen, threadView]);
+  const [listFilter, setListFilter] = useState<ListFilter>("all");
+  const filteredChannels = useMemo(() => { const query = conversationSearch.trim().toLowerCase(); return byActivity(data.channels).filter((channel) => matchesFilter(channel, listFilter) && (!query || `${channel.name} ${channelPreview(channel)}`.toLowerCase().includes(query))); }, [conversationSearch, data.channels, listFilter]);
+  const [visibleCount, setVisibleCount] = useState(CONVERSATION_STEP);
+  const visibleChannels = filteredChannels.slice(0, visibleCount);
+  const moreToShow = filteredChannels.length > visibleCount;
+  // Scrolling near the end of the list loads the next conversations; a list too short to scroll
+  // keeps filling until it does. The short pause lets the loading row be seen.
+  const [listNode, setListNode] = useState<HTMLDivElement | null>(null);
+  const loadTimer = useRef(0);
+  const loadMoreNearEnd = useCallback((node: HTMLDivElement) => {
+    if (!moreToShow || loadTimer.current || node.scrollHeight - node.scrollTop - node.clientHeight > 120) return;
+    loadTimer.current = window.setTimeout(() => { loadTimer.current = 0; setVisibleCount((count) => count + CONVERSATION_STEP); }, 250);
+  }, [moreToShow]);
+  useEffect(() => { if (listNode) loadMoreNearEnd(listNode); }, [listNode, loadMoreNearEnd, visibleCount]);
+  useEffect(() => () => window.clearTimeout(loadTimer.current), []);
+  const resetList = () => { setVisibleCount(CONVERSATION_STEP); listNode?.scrollTo({ top: 0 }); };
+  const updateCount = selected?.messages.filter((item) => item.messageKind === "system_card").length ?? 0;
+  const shownMessages = (selected?.messages ?? []).filter((item) => threadView === "all" || (threadView === "updates") === (item.messageKind === "system_card"));
+  // The details pane is closed until asked for: the thread gets the room.
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  useEffect(() => {
+    if (!detailsOpen) return;
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setDetailsOpen(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [detailsOpen]);
   const selectedUsers = useMemo(() => data.directory.filter((user) => recipientIds.includes(user.id)), [data.directory, recipientIds]);
   // Mirrors the server rule: one agency channel may hold people from one partner at most.
   const mixedPartners = new Set(selectedUsers.filter((user) => user.scope === "partner").map((user) => user.partnerId)).size > 1;
   const selectedFacts = selected?.channel_type === "partner" && selected.partner_id ? data.facts[selected.partner_id] : undefined;
-  const partnerMembers = useMemo(() => data.directory.filter((user) => selected?.partner_id && user.partnerId === selected.partner_id), [data.directory, selected]);
+  const partnerMembers = selected?.partner_id ? data.directory.filter((user) => user.partnerId === selected.partner_id) : [];
   const sharedAttachments = selected?.messages.flatMap((item) => item.attachments) ?? [];
   const linkedLeads = new Set(selected?.messages.map((item) => item.workItemId).filter(Boolean)).size;
   const archived = selected?.status !== "active";
@@ -164,6 +245,7 @@ export function AgentPartnerChatWorkspace() {
   }
 
   const field = cn(toolbarControl, "w-full");
+  const filterCount = (filter: ListFilter) => data.channels.filter((channel) => matchesFilter(channel, filter)).length;
 
   return (
     /* The chat fills the viewport under the top bar and the page itself never scrolls: each pane
@@ -177,36 +259,57 @@ export function AgentPartnerChatWorkspace() {
       />
       {error && <p role="alert" className="m-0 rounded-md border border-[var(--error)]/40 bg-[var(--error-surface)] px-3 py-2 text-sm text-[var(--error-ink)]">{error}</p>}
 
-      <div className="grid min-h-0 flex-1 overflow-hidden rounded-lg border border-border bg-card shadow-[0_1px_2px_rgba(16,20,26,.05)] md:grid-cols-[260px_minmax(0,1fr)] lg:grid-cols-[280px_minmax(0,1fr)_300px]">
+      <div className={cn("relative grid min-h-0 flex-1 overflow-hidden rounded-lg border border-border bg-card shadow-[0_1px_2px_rgba(16,20,26,.05)] md:grid-cols-[272px_minmax(0,1fr)]", detailsOpen && selected && "xl:grid-cols-[300px_minmax(0,1fr)_300px]")}>
         {/* Conversations */}
-        <section className="flex max-h-72 min-h-0 min-w-0 flex-col border-b border-border md:max-h-none md:border-r md:border-b-0" aria-label="Conversations">
-          <div className="flex shrink-0 items-center gap-2 border-b border-border bg-[var(--surface-alt)] px-3 py-2.5">
-            <label className="relative block min-w-0 flex-1">
+        <section className="flex max-h-80 min-h-0 min-w-0 flex-col border-b border-border md:max-h-none md:border-r md:border-b-0" aria-label="Conversations">
+          <div className="flex shrink-0 flex-col gap-2.5 border-b border-border px-3 pt-3 pb-2.5">
+            <label className="relative block">
               <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
               <span className="sr-only">Search conversations</span>
-              <input type="search" value={conversationSearch} onChange={(event) => setConversationSearch(event.target.value)} placeholder="Search conversations" className={cn(toolbarControl, "w-full pl-9")} />
+              <input type="search" value={conversationSearch} onChange={(event) => { setConversationSearch(event.target.value); resetList(); }} placeholder="Search conversations" className={cn(toolbarControl, "w-full pl-9")} />
             </label>
-            <span className="shrink-0 text-xs tabular-nums text-muted-foreground" aria-label={`${data.channels.length} conversations`}>{data.channels.length}</span>
+            <div className="flex gap-0.5 rounded-md bg-[var(--surface-alt)] p-0.5" role="group" aria-label="Show conversations">
+              {LIST_FILTERS.map(([value, label]) => {
+                const count = filterCount(value);
+                if (value !== "all" && count === 0) return null;
+                const on = listFilter === value;
+                return (
+                  <button key={value} type="button" aria-pressed={on} aria-label={`${label}: ${count}`} title={`${label} · ${count} ${count === 1 ? "conversation" : "conversations"}`} onClick={() => { setListFilter(value); resetList(); }} className={cn("inline-flex h-7 min-w-0 flex-1 items-center justify-center rounded px-1 text-xs font-semibold transition-colors", on ? "bg-card text-foreground shadow-[0_1px_2px_rgba(16,20,26,.08)]" : "text-muted-foreground hover:text-foreground")}>
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto">
-            {!loaded ? <SectionLoading rows={6} columns={2} label="Loading conversations" /> : filteredChannels.length === 0 ? <p className="px-4 py-6 text-center text-sm text-muted-foreground">{data.channels.length ? "No conversation matches that." : "No conversations yet."}</p> : filteredChannels.map((channel) => {
+          <div ref={setListNode} onScroll={(event) => loadMoreNearEnd(event.currentTarget)} className="min-h-0 flex-1 overflow-y-auto p-1">
+            {!loaded ? <SectionLoading rows={6} columns={2} label="Loading conversations" /> : filteredChannels.length === 0 ? <p className="px-4 py-6 text-center text-sm text-muted-foreground">{data.channels.length ? "No conversation matches that." : "No conversations yet."}</p> : visibleChannels.map((channel) => {
               const active = channel.id === selectedId;
               const last = channel.messages.at(-1);
-              const facts = channel.channel_type === "partner" && channel.partner_id ? factsLine(data.facts[channel.partner_id]) : null;
+              const unread = channel.unreadCount > 0;
               return (
-                <button type="button" key={channel.id} onClick={() => { setSelectedId(channel.id); setNewConversationOpen(false); }} aria-current={active ? "true" : undefined} className={cn("block w-full border-t border-border px-3 py-2.5 text-left first:border-t-0", active ? "bg-[var(--soft-orange-surface)] shadow-[inset_2px_0_0_var(--primary)]" : "hover:bg-[var(--surface-alt)]")}>
-                  <span className="flex items-center justify-between gap-2">
-                    <span className="truncate text-sm font-semibold text-foreground">{channel.name}</span>
-                    <span className="flex shrink-0 items-center gap-1.5">
-                      {channel.unreadCount > 0 && <span className="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[var(--primary)] px-1 text-[11px] font-semibold text-[var(--primary-foreground)]" aria-label={`${channel.unreadCount} unread`}>{channel.unreadCount}</span>}
-                      <span className="text-xs text-muted-foreground">{last ? listTime(last.createdAt) : "—"}</span>
+                <button type="button" key={channel.id} onClick={() => { setSelectedId(channel.id); setNewConversationOpen(false); }} aria-current={active ? "true" : undefined} className={cn("flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left transition-colors", active ? "bg-[var(--primary-soft)]" : "hover:bg-[var(--surface-alt)]", channel.status !== "active" && "opacity-70")}>
+                  <Face name={channel.name} kind={faceKind(channel)} />
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-baseline justify-between gap-2">
+                      <span className={cn("truncate text-sm text-foreground", unread ? "font-semibold" : "font-medium")}>{channel.name}</span>
+                      <span className={cn("shrink-0 text-xs tabular-nums", unread ? "font-semibold text-[var(--accent-ink)]" : "text-muted-foreground")}>{last ? listTime(last.createdAt) : ""}</span>
+                    </span>
+                    <span className="flex items-center justify-between gap-2">
+                      <span className={cn("truncate text-xs", unread ? "text-[var(--body)]" : "text-muted-foreground")}>{channel.status === "active" ? "" : "Archived · "}{channelPreview(channel)}</span>
+                      {unread && <span className="inline-flex h-[18px] min-w-[18px] shrink-0 items-center justify-center rounded-full bg-[var(--primary)] px-1 text-xs font-semibold leading-none text-[var(--primary-foreground)]" aria-label={`${channel.unreadCount} unread`}>{channel.unreadCount}</span>}
                     </span>
                   </span>
-                  <span className="mt-0.5 block truncate text-xs text-muted-foreground">{channel.status === "active" ? "" : "Archived · "}{channelPreview(channel)}</span>
-                  {facts && <span className="block truncate text-xs tabular-nums text-[var(--body)]">{facts}</span>}
                 </button>
               );
             })}
+            {loaded && moreToShow && (
+              <div role="status" className="flex items-center justify-center gap-2 py-3 text-xs text-muted-foreground">
+                <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />Loading more conversations…
+              </div>
+            )}
+            {loaded && !moreToShow && filteredChannels.length > CONVERSATION_STEP && (
+              <p className="m-0 py-3 text-center text-xs text-muted-foreground">All {filteredChannels.length} conversations shown</p>
+            )}
           </div>
         </section>
 
@@ -214,7 +317,10 @@ export function AgentPartnerChatWorkspace() {
         <section className="flex h-[70dvh] min-h-0 min-w-0 flex-col md:h-auto" aria-label="Selected conversation">
           {newConversationOpen ? (
             <>
-              <BarHeader title="New conversation"><button type="button" onClick={() => setNewConversationOpen(false)} aria-label="Close new conversation" className="rounded p-1 text-muted-foreground hover:text-foreground"><X className="size-4" /></button></BarHeader>
+              <div className="flex min-h-16 shrink-0 items-center justify-between gap-4 border-b border-border px-5 py-3">
+                <h2 className="text-sm font-semibold">New conversation</h2>
+                <button type="button" onClick={() => setNewConversationOpen(false)} aria-label="Close new conversation" className="rounded p-1 text-muted-foreground hover:text-foreground"><X className="size-4" /></button>
+              </div>
               <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-5">
                 <div className="grid gap-4 sm:grid-cols-2">
                   <label className="text-sm font-semibold">Conversation type<select value={newType} onChange={(event) => setNewType(event.target.value as "direct" | "group")} className={cn(field, "mt-1.5 font-normal")}><option value="direct">Direct message</option><option value="group">Team channel</option></select></label>
@@ -235,57 +341,108 @@ export function AgentPartnerChatWorkspace() {
             </>
           ) : selected ? (
             <>
-              <BarHeader title={selected.name}>
-                <span className={cn("inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-[3px] text-xs font-semibold", archived ? "bg-[var(--surface-alt)] text-[var(--body)]" : "bg-[var(--success-surface)] text-[var(--success-ink)]")}>
-                  <span className={cn("size-1.5 rounded-full", archived ? "bg-[var(--muted-foreground)]" : "bg-[var(--success)]")} aria-hidden="true" />{archived ? "Archived" : "Active"}
-                </span>
-                {selectedFacts?.payout && <span className="hidden whitespace-nowrap text-xs text-muted-foreground sm:inline">{selectedFacts.payout}</span>}
-                {selectedFacts?.status === "paused" && <span className="inline-flex whitespace-nowrap rounded-full bg-[var(--warning-surface)] px-2.5 py-[3px] text-xs font-semibold text-[var(--warning-ink)]">Partner paused</span>}
+              <div className="flex min-h-12 shrink-0 items-center gap-2.5 border-b border-border px-4 py-1.5">
+                <Face name={selected.name} kind={faceKind(selected)} scale="sm" />
+                <div className="min-w-0 flex-1">
+                  <h2 className="truncate text-sm font-semibold leading-tight">{selected.name}</h2>
+                  <p className="m-0 mt-0.5 flex items-center gap-1.5 truncate text-xs text-muted-foreground">
+                    <span className={cn("size-1.5 shrink-0 rounded-full", archived ? "bg-[var(--muted-foreground)]" : selectedFacts?.status === "paused" ? "bg-[var(--warning)]" : "bg-[var(--success)]")} aria-hidden="true" />
+                    {[archived ? "Archived" : selectedFacts?.status === "paused" ? "Partner paused" : "Active", channelType(selected), selectedFacts?.payout].filter(Boolean).join(" · ")}
+                  </p>
+                </div>
+                <div className="flex shrink-0 items-center gap-0.5 rounded-md bg-[var(--surface-alt)] p-0.5" role="group" aria-label="Show in this conversation">
+                  {([["all", "All", selected.messages.length], ["messages", "Messages", selected.messages.length - updateCount], ["updates", "Updates", updateCount]] as const).map(([value, label, count]) => (
+                    <button key={value} type="button" aria-pressed={threadView === value} onClick={() => setThreadView(value)} title={value === "updates" ? "Automatic lead and call updates" : value === "messages" ? "Messages people wrote" : "Everything"} className={cn("inline-flex h-7 items-center gap-1 rounded px-2 text-xs font-semibold transition-colors", threadView === value ? "bg-card text-foreground shadow-[0_1px_2px_rgba(16,20,26,.08)]" : "text-muted-foreground hover:text-foreground")}>
+                      {label}<span className="tabular-nums opacity-60">{count}</span>
+                    </button>
+                  ))}
+                </div>
                 {/* A partner channel is never archived here: the automatic lead updates land in it. */}
                 {selected.channel_type !== "partner" && (
                   <Button type="button" variant="outline" disabled={busy} onClick={() => void setArchived(!archived)}>{archived ? "Restore" : "Archive"}</Button>
                 )}
-              </BarHeader>
-              <div ref={threadRef} className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-5" aria-live="polite">
-                {selected.messages.length === 0 ? (
-                  <div className="m-auto text-center text-sm text-muted-foreground"><MessageCircle className="mx-auto mb-2 size-6" aria-hidden="true" />No messages yet. Send the first one.</div>
-                ) : selected.messages.map((item) => {
-                  if (item.messageKind === "system_card") return <SystemCard key={item.id} message={item} />;
+                <Button type="button" variant={detailsOpen ? "secondary" : "ghost"} size="icon" aria-pressed={detailsOpen} aria-controls="partner-chat-details" aria-label={detailsOpen ? "Hide conversation details" : "Show conversation details"} title="Conversation details" onClick={() => setDetailsOpen((open) => !open)}>
+                  <Info aria-hidden="true" />
+                </Button>
+              </div>
+              <div ref={threadRef} className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pb-3" aria-live="polite">
+                {shownMessages.length === 0 ? (
+                  <div className="m-auto text-center text-sm text-muted-foreground"><MessageCircle className="mx-auto mb-2 size-6" aria-hidden="true" />{selected.messages.length === 0 ? "No messages yet. Send the first one." : threadView === "updates" ? "No automatic updates in this conversation." : "Nobody has written here yet — only automatic updates so far."}</div>
+                ) : shownMessages.map((item, index) => {
+                  const previous = shownMessages[index - 1];
+                  const newDay = !previous || new Date(previous.createdAt).toDateString() !== new Date(item.createdAt).toDateString();
+                  const divider = newDay && (
+                    <div className="sticky top-0 z-10 flex justify-center pt-2 pb-1" role="separator" aria-label={dayLabel(item.createdAt)}>
+                      <span className="rounded-full border border-border bg-card px-2.5 text-xs font-semibold leading-5 text-muted-foreground">{dayLabel(item.createdAt)}</span>
+                    </div>
+                  );
+                  if (item.messageKind === "system_card") return <div key={item.id}>{divider}<UpdateRow message={item} /></div>;
+                  // Consecutive messages from one person a few minutes apart share one name line.
+                  const continued = !newDay && previous?.messageKind !== "system_card" && previous?.createdBy === item.createdBy
+                    && new Date(item.createdAt).getTime() - new Date(previous.createdAt).getTime() < GROUP_MINUTES * 60_000;
                   const person = author(item.createdBy);
                   const name = person?.name ?? "Team member";
+                  const attachments = item.attachments.length > 0 && (
+                    <div className={cn("mt-1.5 flex flex-wrap gap-2", item.createdBy === viewerId && "justify-end")}>
+                      {item.attachments.map((attachment) => attachment.downloadUrl
+                        ? <a key={attachment.id} href={attachment.downloadUrl} target="_blank" rel="noreferrer" className="inline-flex max-w-full items-center gap-2 rounded-md border border-border bg-card px-3 py-2 text-xs hover:bg-[var(--surface-alt)]"><FileText className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" /><span className="truncate font-semibold text-foreground">{attachment.fileName}</span><span className="shrink-0 text-muted-foreground">{kb(attachment.sizeBytes)}</span></a>
+                        : <span key={attachment.id} className="inline-flex items-center gap-2 rounded-md border border-dashed border-border px-3 py-2 text-xs text-muted-foreground"><FileText className="size-4" aria-hidden="true" />{attachment.fileName} unavailable</span>)}
+                    </div>
+                  );
+                  // The viewer's own messages: on the right, tinted, no face — the thread reads as a conversation.
+                  if (viewerId && item.createdBy === viewerId) return (
+                    <div key={item.id}>
+                      {divider}
+                      <div className={cn("group flex flex-col items-end pl-12", continued ? "mt-0.5" : "mt-2")}>
+                        {!continued && <span className="mb-0.5 text-xs tabular-nums text-muted-foreground">You · {clock(item.createdAt)}</span>}
+                        <div className="flex max-w-full items-end gap-2">
+                          {continued && <span className="shrink-0 pb-1 text-xs tabular-nums text-muted-foreground opacity-0 group-hover:opacity-100">{clock(item.createdAt)}</span>}
+                          <p className="m-0 max-w-[560px] whitespace-pre-wrap break-words rounded-lg rounded-br-sm bg-[var(--primary-soft)] px-3 py-1.5 text-sm leading-normal text-foreground">{item.message}</p>
+                        </div>
+                        {attachments}
+                      </div>
+                    </div>
+                  );
                   return (
-                    <div key={item.id} className="flex gap-2.5">
-                      <span className="inline-flex size-[30px] shrink-0 items-center justify-center rounded-full bg-[var(--surface-alt)] text-xs font-semibold">{initials(name)}</span>
-                      <span className="min-w-0">
-                        <span className="block text-xs text-muted-foreground">{[name, person?.partnerName ?? (person ? "your team" : null), clock(item.createdAt)].filter(Boolean).join(" · ")}</span>
-                        <span className="mt-1.5 block max-w-[520px] whitespace-pre-wrap break-words rounded-lg bg-[var(--surface-alt)] px-3.5 py-2.5 text-sm text-[var(--body)]">{item.message}</span>
-                        {item.attachments.length > 0 && (
-                          <span className="mt-1.5 flex flex-wrap gap-2">
-                            {item.attachments.map((attachment) => attachment.downloadUrl
-                              ? <a key={attachment.id} href={attachment.downloadUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1 text-xs font-semibold hover:bg-[var(--surface-alt)]"><FileText className="size-3.5" aria-hidden="true" />{attachment.fileName} · {kb(attachment.sizeBytes)}</a>
-                              : <span key={attachment.id} className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-border px-2.5 py-1 text-xs text-muted-foreground"><FileText className="size-3.5" aria-hidden="true" />{attachment.fileName} unavailable</span>)}
-                          </span>
-                        )}
-                      </span>
+                    <div key={item.id}>
+                      {divider}
+                      <div className={cn("group flex gap-2.5", continued ? "mt-0.5" : "mt-2")}>
+                        {continued
+                          ? <span className="w-7 shrink-0 pt-0.5 text-right text-xs tabular-nums text-muted-foreground opacity-0 group-hover:opacity-100">{clock(item.createdAt)}</span>
+                          : <Face name={name} kind={person?.scope === "partner" ? "partner" : "person"} scale="sm" />}
+                        <div className="min-w-0 flex-1">
+                          {!continued && (
+                            <div className="flex items-baseline gap-2">
+                              <span className="text-sm font-semibold text-foreground">{name}</span>
+                              <span className="text-xs text-muted-foreground">{person?.partnerName ?? (person ? "Your team" : "")}</span>
+                              <span className="text-xs tabular-nums text-muted-foreground">{clock(item.createdAt)}</span>
+                            </div>
+                          )}
+                          <p className="m-0 max-w-[640px] whitespace-pre-wrap break-words text-sm leading-normal text-[var(--body)]">{item.message}</p>
+                          {attachments}
+                        </div>
+                      </div>
                     </div>
                   );
                 })}
               </div>
-              <form className="flex shrink-0 flex-col gap-2 border-t border-border bg-[var(--canvas)] px-4 py-3" onSubmit={(event) => { event.preventDefault(); void send(); }}>
-                <div className="flex gap-2">
-                  <input aria-label="Write a message" maxLength={2000} placeholder={archived ? "This channel is archived — restore it to write" : "Write a message"} value={draft} disabled={archived} onChange={(event) => setDraft(event.target.value)} className={cn(toolbarControl, "min-w-0 flex-grow")} />
-                  <label className={cn("inline-flex h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-md border border-input bg-background px-3 text-sm font-semibold hover:bg-accent", archived && "pointer-events-none opacity-60")} title="Attach up to three files">
-                    <Paperclip className="size-4" aria-hidden="true" /><span className="sr-only">Attach files</span>
-                    <input className="sr-only" type="file" multiple disabled={archived} accept="image/jpeg,image/png,image/gif,application/pdf,text/plain,.docx,.xlsx" onChange={(event) => setFiles(Array.from(event.target.files ?? []).slice(0, 3))} />
-                  </label>
-                  <Button type="submit" disabled={busy || archived || !draft.trim()}>{busy ? "Sending…" : "Send"}</Button>
-                </div>
-                {(files.length > 0 || draft.length > 1800) && (
-                  <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                    {files.map((file) => <span key={`${file.name}-${file.size}`} className="inline-flex items-center gap-1 rounded-full bg-card px-2 py-0.5"><FileText className="size-3" aria-hidden="true" />{file.name}<button type="button" onClick={() => setFiles((current) => current.filter((item) => item !== file))} aria-label={`Remove ${file.name}`}><X className="size-3" /></button></span>)}
-                    {draft.length > 1800 && <span className="ml-auto tabular-nums">{draft.length}/2,000</span>}
+              <form className="shrink-0 px-3 pt-1 pb-3" onSubmit={(event) => { event.preventDefault(); void send(); }}>
+                <div className={cn("rounded-lg border border-input bg-background transition-shadow focus-within:border-[var(--primary)] focus-within:shadow-[0_0_0_3px_var(--primary-soft)]", archived && "bg-[var(--surface-alt)]")}>
+                  {files.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 border-b border-border px-3 py-2">
+                      {files.map((file) => <span key={`${file.name}-${file.size}`} className="inline-flex max-w-full items-center gap-1.5 rounded-md bg-[var(--surface-alt)] px-2 py-1 text-xs"><FileText className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" /><span className="truncate">{file.name}</span><span className="text-muted-foreground">{kb(file.size)}</span><button type="button" onClick={() => setFiles((current) => current.filter((item) => item !== file))} aria-label={`Remove ${file.name}`} className="text-muted-foreground hover:text-foreground"><X className="size-3" /></button></span>)}
+                    </div>
+                  )}
+                  <div className="flex items-center gap-1 p-1">
+                    <label className={cn("inline-flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-[var(--surface-alt)] hover:text-foreground", archived && "pointer-events-none opacity-50")} title="Attach up to three files">
+                      <Paperclip className="size-4" aria-hidden="true" /><span className="sr-only">Attach files</span>
+                      <input className="sr-only" type="file" multiple disabled={archived} accept="image/jpeg,image/png,image/gif,application/pdf,text/plain,.docx,.xlsx" onChange={(event) => setFiles(Array.from(event.target.files ?? []).slice(0, 3))} />
+                    </label>
+                    <input aria-label="Write a message" maxLength={2000} placeholder={archived ? "This channel is archived — restore it to write" : `Message ${selected.name}`} value={draft} disabled={archived} onChange={(event) => setDraft(event.target.value)} className="h-9 min-w-0 flex-1 bg-transparent px-1 text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed" />
+                    {draft.length > 1800 && <span className="shrink-0 px-1 text-xs tabular-nums text-muted-foreground">{draft.length}/2,000</span>}
+                    <Button type="submit" size="icon" disabled={busy || archived || !draft.trim()} aria-label={busy ? "Sending" : "Send message"} title="Send"><SendHorizontal aria-hidden="true" /></Button>
                   </div>
-                )}
+                </div>
               </form>
             </>
           ) : loaded ? (
@@ -296,32 +453,80 @@ export function AgentPartnerChatWorkspace() {
         </section>
 
         {/* Conversation details */}
-        <aside className="hidden min-h-0 min-w-0 flex-col border-l border-border lg:flex" aria-label="Conversation details">
-          <BarHeader title="Details" />
-          <div className="min-h-0 flex-1 overflow-y-auto p-4">
-            {selected ? (
-              <>
-                <div className="grid grid-cols-2 gap-x-6 gap-y-4">
-                  <Fact label={selected.channel_type === "partner" ? "Partner" : "Channel"}>{selected.name}</Fact>
-                  <Fact label="Type">{channelType(selected)}</Fact>
-                  <Fact label="Linked leads">{linkedLeads}</Fact>
-                  <Fact label="Messages">{selected.messages.length}</Fact>
+        {/* Opened from the info button in the thread header. From xl it is a third column; narrower, it
+            slides over the thread from the right. */}
+        <aside id="partner-chat-details" className={cn("absolute inset-y-0 right-0 z-20 min-h-0 w-[300px] min-w-0 flex-col overflow-y-auto border-l border-border bg-card shadow-[-8px_0_24px_rgba(16,20,26,.12)] xl:static xl:w-auto xl:shadow-none", detailsOpen && selected ? "flex" : "hidden")} aria-label="Conversation details">
+          {selected ? (
+            <>
+              <div className="flex min-h-12 shrink-0 items-center gap-2 border-b border-border py-1.5 pr-1.5 pl-4">
+                <h2 className="m-0 flex-1 text-sm font-semibold">Details</h2>
+                <Button type="button" variant="ghost" size="icon" aria-label="Close conversation details" title="Close (Esc)" onClick={() => setDetailsOpen(false)}><X aria-hidden="true" /></Button>
+              </div>
+              <div className="flex items-start gap-2.5 border-b border-border px-4 py-3">
+                <Face name={selected.name} kind={faceKind(selected)} />
+                <div className="flex min-w-0 flex-1 flex-col gap-1">
+                  <p className="m-0 break-words text-sm font-semibold leading-snug">{selected.name}</p>
+                  <div className="flex flex-wrap items-center gap-1">
+                    <span className="rounded-full bg-[var(--surface-alt)] px-2 text-xs font-semibold leading-5 text-[var(--body)]">{channelType(selected)}</span>
+                    {archived && <span className="rounded-full bg-[var(--surface-alt)] px-2 text-xs font-semibold leading-5 text-muted-foreground">Archived</span>}
+                    {selectedFacts && selectedFacts.status !== "active" && <span className="rounded-full bg-[var(--warning-surface)] px-2 text-xs font-semibold leading-5 text-[var(--warning-ink)]">{factsLine(selectedFacts)}</span>}
+                    {selectedFacts?.payout && <span className="text-xs text-muted-foreground">{selectedFacts.payout}</span>}
+                  </div>
+                </div>
+              </div>
+              <div className="flex flex-col gap-4 p-4">
+                {selectedFacts && (
+                  <div className="flex flex-col gap-1.5">
+                    <SectionLabel>Today</SectionLabel>
+                    <div className="grid grid-cols-3 gap-1">
+                      <Tile label="Transfers" value={selectedFacts.transfersToday} />
+                      <Tile label="Completed" value={selectedFacts.completedToday} tone={selectedFacts.completedToday ? "success" : undefined} />
+                      <Tile label="Dropped" value={selectedFacts.droppedToday} tone={selectedFacts.droppedToday ? "error" : undefined} />
+                    </div>
+                  </div>
+                )}
+                <div className="flex flex-col gap-1.5">
+                  <SectionLabel>Conversation</SectionLabel>
+                  <div className="grid grid-cols-2 gap-1">
+                    <Tile label="Linked leads" value={linkedLeads} />
+                    <Tile label="Messages" value={selected.messages.length} />
+                  </div>
                 </div>
                 {partnerMembers.length > 0 && (
-                  <div className="mt-4 border-t border-border pt-3">
-                    <div className="text-xs font-semibold uppercase tracking-[0.02em] text-muted-foreground">Partner members ({partnerMembers.length})</div>
-                    <ul className="mt-2 space-y-1.5 text-sm">{partnerMembers.slice(0, 6).map((user) => <li key={user.id} className="flex justify-between gap-2"><span className="truncate">{user.name}</span><span className="shrink-0 text-xs text-muted-foreground">{user.role === "partner_admin" ? "Admin" : "User"}</span></li>)}</ul>
+                  <div className="flex flex-col gap-1.5">
+                    <SectionLabel>Partner members · {partnerMembers.length}</SectionLabel>
+                    <ul className="m-0 flex list-none flex-col gap-1 p-0">
+                      {partnerMembers.slice(0, 6).map((user) => (
+                        <li key={user.id} className="flex items-center gap-2.5">
+                          <Face name={user.name} kind="partner" scale="sm" />
+                          <span className="min-w-0 flex-1 truncate text-sm">{user.name}</span>
+                          <span className="shrink-0 text-xs text-muted-foreground">{user.role === "partner_admin" ? "Admin" : "User"}</span>
+                        </li>
+                      ))}
+                    </ul>
+                    {partnerMembers.length > 6 && <p className="m-0 text-xs text-muted-foreground">and {partnerMembers.length - 6} more</p>}
                   </div>
                 )}
                 {sharedAttachments.length > 0 && (
-                  <div className="mt-4 border-t border-border pt-3">
-                    <div className="text-xs font-semibold uppercase tracking-[0.02em] text-muted-foreground">Shared files ({sharedAttachments.length})</div>
-                    <ul className="mt-2 space-y-1.5 text-sm">{sharedAttachments.slice(0, 5).map((attachment) => <li key={attachment.id} className="flex justify-between gap-2"><span className="truncate">{attachment.fileName}</span><span className="shrink-0 text-xs text-muted-foreground">{kb(attachment.sizeBytes)}</span></li>)}</ul>
+                  <div className="flex flex-col gap-1.5">
+                    <SectionLabel>Shared files · {sharedAttachments.length}</SectionLabel>
+                    <ul className="m-0 flex list-none flex-col gap-1 p-0">
+                      {sharedAttachments.slice(0, 5).map((attachment) => {
+                        const body = <><FileText className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" /><span className="min-w-0 flex-1 truncate">{attachment.fileName}</span><span className="shrink-0 text-xs text-muted-foreground">{kb(attachment.sizeBytes)}</span></>;
+                        return (
+                          <li key={attachment.id}>
+                            {attachment.downloadUrl
+                              ? <a href={attachment.downloadUrl} target="_blank" rel="noreferrer" className="-mx-2 flex items-center gap-2 rounded-md px-2 py-1 text-sm hover:bg-[var(--surface-alt)]">{body}</a>
+                              : <span className="flex items-center gap-2 py-1 text-sm text-muted-foreground">{body}</span>}
+                          </li>
+                        );
+                      })}
+                    </ul>
                   </div>
                 )}
-              </>
-            ) : <p className="m-0 text-sm text-muted-foreground">Choose a conversation to see its details.</p>}
-          </div>
+              </div>
+            </>
+          ) : <p className="m-0 p-5 text-sm text-muted-foreground">Choose a conversation to see its details.</p>}
         </aside>
       </div>
     </div>

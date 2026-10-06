@@ -23,8 +23,9 @@ import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
  * `{ action: "add_manual_lines", lines }` (LA-4.2): the lines typed from a PDF statement, once,
  * read and matched by the same rules as a file's lines.
  *
- * `{ action: "rematch" }` (LA-4.3): propose matches again for this statement's unmatched lines
- * against the book as it is now. Proposals only.
+ * `{ action: "rematch", include_left_unmatched? }` (LA-4.3): propose matches again for this
+ * statement's unmatched lines against the book as it is now, and, when asked, the lines a person
+ * left unmatched. Proposals only.
  */
 const roles = ["owner", "bookkeeper"] as const;
 
@@ -61,12 +62,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (raw && typeof raw === "object" && (raw as { action?: unknown }).action === "rematch") {
       const body = rematchSchema.safeParse(raw);
       if (!body.success) return badRequest(body.error);
-      const result = await rematchStatementLines(tenantId, actorId, id);
+      const includeLeftUnmatched = body.data.include_left_unmatched === true;
+      const result = await rematchStatementLines(tenantId, actorId, { statementId: id, includeLeftUnmatched });
       if (result.proposed > 0) {
         await audit({
           actorType: "tenant", actorId, action: "tenant.statement_lines_rematched",
           targetType: "tenant_commission_statement", targetId: id,
-          metadata: { tenantId, proposedMatches: result.proposed, lines: result.lines.map((line) => ({ lineId: line.line_id, lineNumber: line.line_number, policyId: line.policy_id, method: line.method })) },
+          metadata: { tenantId, includeLeftUnmatched, proposedMatches: result.proposed, lines: result.lines.map((line) => ({ lineId: line.line_id, lineNumber: line.line_number, policyId: line.policy_id, method: line.method, was: line.was ?? "unmatched" })) },
           request,
         });
       }

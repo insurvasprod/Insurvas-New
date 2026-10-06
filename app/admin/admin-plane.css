@@ -3,12 +3,12 @@
  *
  * TOKEN OVERRIDES ONLY. Every admin screen already paints with the design system's tokens, so
  * re-pointing them here re-colours the whole console — buttons, focus rings, the rail, chips,
- * links — without touching one component. The agent and partner planes keep the orange: this file
+ * links — without touching one component. The agent and partner planes keep the brand green: this file
  * only applies while an admin page is on screen.
  *
  * Why `:root:has(.admin-plane)` and not `.admin-plane { … }`: the alias tokens in globals.css
- * (`--color-blue: var(--primary)`, and the Tailwind theme that reads them) are computed on :root.
- * Overriding --primary on a descendant would leave every alias still orange. Overriding on :root
+ * (`--color-brand: var(--primary)`, and the Tailwind theme that reads them) are computed on :root.
+ * Overriding --primary on a descendant would leave every alias still green. Overriding on :root
  * itself recomputes them, and it also reaches dialogs and menus, which portal to <body> — outside
  * any admin wrapper. `.admin-plane` is on the wrapper app/admin/layout.tsx renders.
  *
@@ -32,13 +32,13 @@
   --primary:        #0070cc;
   --accent-hover:   #005ba8;
   --accent-pressed: #004a8a;
-  /* Ink on orange was the right glyph; on this blue it measures 3.6:1. White is 5.0:1. */
+  /* Ink on the brand green is the right glyph there; on this blue it measures 3.6:1. White is 5.0:1. */
   --on-primary:     #ffffff;
   --accent-ink:     #005ba8;
   --ring-color:     #0070cc;
 
   /* The "soft" accent ground: the rail's active chip, action chips, selected rows. */
-  --soft-orange-surface: #e6f1fb;
+  --primary-soft: #e6f1fb;
 
   --brand-50:  #e6f1fb;
   --brand-100: #cce3f7;
@@ -53,14 +53,28 @@
   --border:        #ccd6e2;
   --border-strong: #78838f;
 
+  /* Since the 2026 rebrand the app's ink and dark ramp are the brand's deep olive. The console keeps
+     its own neutral ink, so staff screens never read as a customer's portal. */
+  --ink:       #10141a;
+  --brand-700: #15191e;
+  --brand-800: #0f1216;
+  --brand-900: #090b0e;
+  --footer-bg: #10141a;
+
   /* The rail. Same in both themes, as globals.css keeps its own rail. */
-  --nav-bg:    #00284f;
-  --nav-line:  #0b3a6b;
-  --nav-ink:   #e8eef6;
-  --nav-muted: #9db0c6;
+  --nav-bg:      #00284f;
+  --nav-line:    #0b3a6b;
+  --nav-ink:     #e8eef6;
+  --nav-muted:   #9db0c6;
+  --nav-success: #45c07d;
+  /* The console keeps its soft-accent active chip. */
+  --nav-active-bg:   var(--primary-soft);
+  --nav-active-ink:  var(--accent-ink);
+  --nav-active-icon: var(--accent-ink);
 }
 
-/* Dark: the accent only. The dark neutrals stay as globals.css defines them. */
+/* Dark: the accent, and the neutral dark surfaces. The app's dark theme carries a trace of the
+   brand olive; the console stays on plain charcoal. */
 :root.dark:has(.admin-plane) {
   --primary:        #4da3ff;
   --accent-hover:   #74b6ff;
@@ -69,7 +83,7 @@
   --accent-ink:     #7cbcff;
   --ring-color:     #4da3ff;
 
-  --soft-orange-surface: #102a47;
+  --primary-soft: #102a47;
 
   --brand-50:  #102a47;
   --brand-100: #13304d;
@@ -78,9 +92,30 @@
   --brand-400: #3a8fe6;
   --brand-500: #4da3ff;
   --brand-600: #74b6ff;
+  --brand-700: #181c21;
+  --brand-800: #101318;
+  --brand-900: #0a0c0f;
 
-  --nav-bg:    #00284f;
-  --nav-line:  #0b3a6b;
-  --nav-ink:   #e8eef6;
-  --nav-muted: #9db0c6;
+  --ink:            #f5f7f9;
+  --body:           #ccd2d9;
+  --muted:          #98a1ac;
+  --canvas:         #0a0d11;
+  --surface:        #161b21;
+  --surface-alt:    #1f252d;
+  --surface-sunken: #05070a;
+  --developer-bg:   #11151a;
+  --border:         #2a323c;
+  --border-strong:  #69737f;
+  --footer-bg:      #05070a;
+  --color-border-light: #1e2833;
+
+  --nav-bg:      #00284f;
+  --nav-line:    #0b3a6b;
+  --nav-ink:     #e8eef6;
+  --nav-muted:   #9db0c6;
+  --nav-success: #45c07d;
+  /* The console keeps its soft-accent active chip. */
+  --nav-active-bg:   var(--primary-soft);
+  --nav-active-ink:  var(--accent-ink);
+  --nav-active-icon: var(--accent-ink);
 }

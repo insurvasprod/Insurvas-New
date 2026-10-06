@@ -48,7 +48,7 @@ export function LandingConverge() {
           className="absolute left-1/2 top-1/2 flex items-center gap-3 rounded-2xl border border-[var(--nav-line)] bg-[var(--nav-bg)] px-6 py-4 text-[var(--nav-ink)] shadow-[0_24px_70px_-12px_var(--primary)]"
           style={{ transform: `translate(-50%, -50%) scale(${0.6 + ease * 0.4})`, opacity: 0.15 + ease * 0.85 }}
         >
-          <InsurvasLogo size="sidebar" />
+          <InsurvasLogo size="sidebar" tone="dark" />
           <span>
             <span className="block text-xs opacity-80">one queue · one claim · one record</span>
           </span>

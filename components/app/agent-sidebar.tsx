@@ -440,9 +440,11 @@ export function AgentSidebar({
   const [collapsed, setCollapsed] = useState(false);
 
   // One mark everywhere the product names itself — the phone bar and drawer used a building icon.
-  const brandMark = (
+  // The rail and drawer are always ink, so they take the on-dark mark; the white phone bar follows
+  // the theme.
+  const brandMark = (tone?: "dark") => (
     <div className="flex items-center gap-2.5">
-      <InsurvasLogo size="sidebar" />
+      <InsurvasLogo size="sidebar" tone={tone} />
     </div>
   );
 
@@ -461,7 +463,7 @@ export function AgentSidebar({
         >
           <Menu className="size-5" aria-hidden="true" />
         </button>
-        {brandMark}
+        {brandMark()}
       </header>
 
       {open && (
@@ -475,7 +477,7 @@ export function AgentSidebar({
           <div className="portal-agent-sidebar-mobile-drawer absolute inset-y-0 left-0 flex w-80 max-w-[88vw] flex-col overflow-y-auto p-4 text-foreground">
             <div className="min-h-0 flex-1">
               <div className="portal-agent-sidebar-brand">
-                {brandMark}
+                {brandMark("dark")}
                 <button
                   type="button"
                   onClick={() => setOpen(false)}
@@ -505,8 +507,8 @@ export function AgentSidebar({
         {/* The brand block sits OUTSIDE the scroll container: its hairline is the top edge of the
             rail, and an edge that scrolls away is not an edge. */}
         <div className="portal-agent-sidebar-brand">
-            <div className="insurvas-agent-brand-full">{brandMark}</div>
-            <InsurvasLogo size="compact" variant="symbol" className="insurvas-agent-brand-compact" />
+            <div className="insurvas-agent-brand-full">{brandMark("dark")}</div>
+            <InsurvasLogo size="compact" variant="symbol" tone="dark" className="insurvas-agent-brand-compact" />
             <button
               type="button"
               className="portal-agent-sidebar-collapse rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
