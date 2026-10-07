@@ -3,6 +3,7 @@ import "server-only";
 import type { ParsedFile, ReprocessFile, ReprocessStage } from "./reprocess";
 import { sweepOrphans } from "./carrierAccountsStore";
 import { recordFileEntries } from "./commissionLedgerStore";
+import { runDetection } from "./discrepancyStore";
 import { computeExpected } from "./expectedCommissionStore";
 import { rebuildFileSnapshots } from "./snapshotStore";
 
@@ -65,7 +66,20 @@ const orphanCommission: ReprocessStage = {
   },
 };
 
-export const REPROCESS_STAGES: ReprocessStage[] = [policySnapshots, expectedCommission, commissionEntries, orphanCommission];
+/**
+ * commission_discrepancy (LA-4.15): last, once everything a file changed is in place, the agency's
+ * discrepancies are found again. The same problems update the same rows; vanished ones resolve.
+ */
+const commissionDiscrepancies: ReprocessStage = {
+  name: "commission_discrepancy",
+  async rebuild(tenantId: string, _file: ReprocessFile, _rows, parsed: ParsedFile | null) {
+    if (!parsed?.typedRows) return { changed: 0 };
+    const outcome = await runDetection(tenantId);
+    return { changed: outcome.available ? outcome.opened + outcome.reopened + outcome.cleared : 0 };
+  },
+};
+
+export const REPROCESS_STAGES: ReprocessStage[] = [policySnapshots, expectedCommission, commissionEntries, orphanCommission, commissionDiscrepancies];
 
 /** After a door's parse: the same stages a reprocess runs, for one file's passed rows. */
 export async function runStages(tenantId: string, file: ReprocessFile, parsed: ParsedFile): Promise<void> {

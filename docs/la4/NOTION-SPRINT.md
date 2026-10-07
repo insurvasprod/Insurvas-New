@@ -31,7 +31,7 @@ The repo's [TASKS.md](TASKS.md) (11 tasks, 2026-10-02) is the earlier, smaller s
 | 4.12 Commission ledger | **Done 2026-10-07.** Migration `20261008220000` live and verified against the live function (below). No commission layout exists yet, so the ledger is empty until one is written from a real carrier file. |
 | 4.13 Expected commission | **Done 2026-10-08.** Migration `20261008230000` live and verified against the live function (below). No agency has rates or product families yet, so no figure exists until they are entered. |
 | 4.14 Orphan queue and carrier accounts | **Done 2026-10-08.** Migration `20261008240000` live and verified against the live objects (below). |
-| 4.15 Discrepancies, letters | Partial: 5 of 9 types, letter and PDF; to be rebuilt on 4.12–4.14 |
+| 4.15 Discrepancies, letters | **Done 2026-10-08.** Migration `20261008250000` live and verified against the live functions (below). Rebuilt on 4.12–4.14; the earlier module stays as "From imported statements". |
 | 4.16 Retention board | Not started |
 | 4.17 Carrier rules | **Done 2026-10-07.** Migration `20261008150000` live and verified (below). Rules, settings, coverage screen (below). The old statements engine still hard-codes 45 days; it retires with that code. |
 | 4.18 Scorecards, persistency, AI summary | Partial: count-based persistency only |
@@ -917,3 +917,62 @@ It follows LA-3.13's carrier field maps on purpose: the same statuses, the same 
   - The Carrier accounts tab renders its empty state.
   - The API refused a fractional amount, a policy file offered as a statement ("Choose one of this agency's commission files."), a negative held amount and a bad carrier, each with a plain message (the negative-amount message was a raw zod string and is now worded).
   - Nothing was written.
+## LA-4.15 · Discrepancy engine and dispute letters
+
+**The engine** (`lib/ingestion/discrepancyEngine.ts`, a pure function with one positive and one negative test per type):
+- **Missing** (no rate card needed): the pay trigger fired and the usual lag has passed (from 4.13's `expected_commission`), and there is no advance, earned or held line. With no rate, it still reports missing, with no invented amount and the reason.
+- **Short-paid and over-paid** (need a rate):
+  - the advance received against the expected advance;
+  - or, with no advance and 12 or more months paid, earned against the year's expected commission;
+  - only beyond the carrier's tolerance (LA-4.17 `tolerance_cents`, default $1.00), which is shown on the row.
+- **Mis-rated** (needs a rate): a line paid at a rate other than the rate card's, or on a commissionable premium that differs beyond the tolerance. The wording names the honest explanations (contract level, age band, policy fee).
+- **Duplicate chargeback:** two standing chargebacks of the same size within 90 days. A chargeback that a reprocess reversed and re-recorded counts once.
+- **Unexpected chargeback:** a chargeback on a policy the latest file shows active. It lists all three causes (stale policy file, carrier error, wrong match) and asserts none.
+- **Missing chargeback:** lapsed or not taken inside the clawback window, with an advance standing and no chargeback yet. It is a warning, not a claim: the amount still unearned, and "don't count on that money".
+- **Held building up:** held money rising across the last two statements and below the minimum payout. Worded as "withheld, not missing… Nothing to chase."
+- **Debit balance growing:** a negative balance that worsened on the latest statement (4.14).
+- **Ledger lines from a statement that doesn't add up** stay held out (4.14).
+
+**Stable rows:** `commission_discrepancy` holds one row per (agency, carrier, type, policy or `*` for the account, policy year).
+- Rows are written only by `record_discrepancy_run` and `set_discrepancy_status`; the app can't insert, update or delete directly.
+- Each run updates the figures and evidence on the same row.
+- A problem not found again resolves itself, with a note such as "Resolved itself: the commission arrived."
+- A dismissed row stays dismissed; a resolved row whose problem returns opens again.
+- **Every row carries its evidence:** the expected figure with its rate row and version, the reported figure with the ledger entry ids (and so their file and row), the difference, the tolerance, and an explanation.
+
+**Letters:** `commission_dispute`.
+- The letter is a filled template (`lib/ingestion/disputeLetter.ts`), never AI prose: policy, problem, expected, paid and difference for each line, with the basis (rate, premium, schedule date, tolerance) under it, and the total.
+- It covers only the disputable types for one carrier. Held money, debit balances, overpayments and chargebacks still to come are never argued.
+- The body is frozen when drafted, and once sent the database refuses any change to it or its items. Insurvas never sends it: the agent downloads the PDF (Courier, so the figures line up), sends it, and records how (email, portal or post), any acknowledgement, and the outcome (accepted, rejected, or partial with the amount credited).
+- Credited → its items are settled; rejected → they open again.
+- **The dispute record per carrier:** settled letters won out of all settled, and amount credited out of amount claimed.
+
+**When it runs:** as the `commission_discrepancy` stage after every carrier file (last), and from "Check now". Opening the page writes nothing.
+
+**Screen: Discrepancies.**
+- **From carrier files** (new, default):
+  - **Totals:** you appear to be owed, coming back, held by carriers, open.
+  - **Filters:** status, type and carrier.
+  - **Each row:** expected, paid, difference with its tolerance, and status. "Why" opens the explanation, the causes, the dates and Dismiss (with a reason) or Open again.
+  - **Letters:** tick open items of one carrier, then "Draft letter" for a preview, with the commissions address pre-filled from 4.4's saved contact; "Save letter" keeps it.
+- **Letters:** each letter, read or download it as a PDF, mark it sent, acknowledged, or record the outcome.
+- **From imported statements:** the earlier module, unchanged.
+**Live verification (2026-10-08, after the apply):**
+- **The verifier** reports `20261008250000` as applied.
+- **Catalog:**
+  - On `commission_discrepancy`, `service_role` can select but not insert, update or delete.
+  - `commission_dispute` is updatable by the service, not truncatable, and not readable by `anon`.
+  - The three functions are executable by `service_role` only (not `anon`).
+  - The guard trigger, 2 read policies and the discrepancy → dispute foreign key are present.
+  - The live writer counts reopened rows from their earlier status.
+- **A rolled-back block against the live functions:**
+  - Run 1 opened 2; run 2, with a moved figure, updated 2 (still 2 rows).
+  - With both gone: missing resolved itself, and the dismissed debit item stayed dismissed.
+  - With both back: missing reopened ("Found again after it had resolved."), and the dismissed one stayed dismissed.
+  - A sent letter refused both an edit and a delete.
+  - After a partial credit, a problem still in the files opens again.
+- **The app, on the demo agency:**
+  - "Check now" returned 200 with 0 findings and wrote nothing (no commission lines yet).
+  - Refused: a letter from another agency's items (400), marking someone else's letter sent (404), dismissing someone else's item (409), and a fractional amount (400).
+  - The Letters tab shows its empty state.
+  - The totals strip is hidden until there's a finding, because nothing found yet is not "$0 owed"; that is fixed.

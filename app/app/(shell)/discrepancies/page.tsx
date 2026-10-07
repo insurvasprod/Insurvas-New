@@ -3,7 +3,10 @@ import Link from "next/link";
 import { guardPage } from "@/lib/entitlements/guardPage";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
+import { ViewTabs } from "@/components/app/book-of-business-views";
+import { CarrierDiscrepancies, DisputeLetters } from "@/components/app/carrier-discrepancies";
 import { DiscrepanciesWorkspace, type DiscrepancyRow } from "@/components/app/discrepancies-workspace";
+import { DISCREPANCIES_PENDING_MESSAGE, loadDiscrepancies } from "@/lib/ingestion/discrepancyStore";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatStrip, StatTile } from "@/components/ui/stat";
@@ -24,7 +27,7 @@ import { hasTenantPermission } from "@/lib/tenantAuth/permissions";
  * Owner and bookkeeper (`statements.view`), as the menu item. A read-only account reads it and can
  * print a letter, but cannot record decisions.
  */
-export default async function DiscrepanciesPage() {
+export default async function DiscrepanciesPage({ searchParams }: { searchParams: Promise<{ view?: string }> }) {
   const guard = await guardPage("discrepancy_report");
   if (!guard.entitled) {
     return <FeatureGateNotice guard={guard} featureLabel="Discrepancies" description="What each carrier paid against what your contract says it owes, with a dispute letter for each one." />;
@@ -34,6 +37,41 @@ export default async function DiscrepanciesPage() {
   }
 
   const tenantId = guard.context.tenantId;
+  const { view } = await searchParams;
+  const readOnlyAccount = guard.entitlement.access === "read_only";
+  // One header for every view; only its sentence and actions differ.
+  const header = (description: string, actions?: React.ReactNode) => <PageHeader title="Discrepancies" description={description} actions={actions} />;
+  const tabs = (count?: number) => (
+    <ViewTabs
+      label="Discrepancy sources"
+      active={view === "statements" ? "statements" : view === "letters" ? "letters" : "carrier"}
+      tabs={[
+        { key: "carrier", label: "From carrier files", count, href: "/app/discrepancies" },
+        { key: "letters", label: "Letters", href: "/app/discrepancies?view=letters" },
+        { key: "statements", label: "From imported statements", href: "/app/discrepancies?view=statements" },
+      ]}
+    />
+  );
+
+  // LA-4.15: the engine on the carrier-file ledger. Opening the page writes nothing; detection runs
+  // after every carrier file, and on "Check now".
+  if (view !== "statements") {
+    const found = await loadDiscrepancies(tenantId);
+    return (
+      <div className="m-stagger flex flex-col gap-6">
+        {header(view === "letters" ? "Letters drafted from the findings: you send them, and record how each one ended." : "What you are owed, what will be taken back, and what is held, from your carriers' own files, with the figures behind each.")}
+        {tabs(found.available ? found.items.filter((i) => i.status === "open" || i.status === "disputed").length : undefined)}
+        {!found.available ? (
+          <div role="status" className="rounded-lg border border-border border-l-[3px] border-l-[var(--warning)] bg-[var(--warning-surface)] px-4 py-3 text-sm text-[var(--warning-ink)]">{DISCREPANCIES_PENDING_MESSAGE}</div>
+        ) : view === "letters" ? (
+          <DisputeLetters disputes={found.disputes} readOnly={readOnlyAccount} />
+        ) : (
+          <CarrierDiscrepancies items={found.items} readOnly={readOnlyAccount} />
+        )}
+      </div>
+    );
+  }
+
   // Reading only (LA-4.5, option a): the findings are recomputed after every change to their facts
   // (statements, policies, contracts, schedules), never because someone opened this page.
   const [list, owed] = await Promise.all([listDiscrepancies(tenantId), owedToYou(tenantId)]);
@@ -52,11 +90,8 @@ export default async function DiscrepanciesPage() {
 
   return (
     <div className="m-stagger flex flex-col gap-6">
-      <PageHeader
-        title="Discrepancies"
-        description="What each carrier paid against what your contract says it owes."
-        actions={<Button asChild type="button" variant="outline"><Link href="/app/statements">Statements</Link></Button>}
-      />
+      {header("What each carrier paid against what your contract says it owes.", <Button asChild type="button" variant="outline"><Link href="/app/statements">Statements</Link></Button>)}
+      {tabs()}
 
       {!list.available && (
         <div role="status" className="rounded-lg border border-border border-l-[3px] border-l-[var(--warning)] bg-[var(--warning-surface)] px-4 py-3 text-sm text-[var(--warning-ink)]">{DISCREPANCY_SCHEMA_PENDING_MESSAGE}</div>

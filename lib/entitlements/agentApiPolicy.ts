@@ -142,6 +142,8 @@ export const AGENT_API_POLICIES: AgentApiPolicy[] = [
   { sourceFile: "app/api/app/policy-book/route.ts", featureKey: "book_of_business", allowedRoles: ["owner", "producer", "bookkeeper"] },
   { sourceFile: "app/api/app/rate-card/route.ts", featureKey: "statement_ingestion", allowedRoles: ["owner", "bookkeeper"] },
   { sourceFile: "app/api/app/carrier-accounts/route.ts", featureKey: "statement_ingestion", allowedRoles: ["owner", "bookkeeper"] },
+  { sourceFile: "app/api/app/commission-discrepancies/route.ts", featureKey: "discrepancy_report", allowedRoles: ["owner", "bookkeeper"] },
+  { sourceFile: "app/api/app/commission-discrepancies/disputes/[id]/pdf/route.ts", featureKey: "discrepancy_report", allowedRoles: ["owner", "bookkeeper"] },
   // LA-4.8 · persistency by carrier and lead source; a producer reads their own book's.
   { sourceFile: "app/api/app/persistency/route.ts", featureKey: "cohort_persistency", allowedRoles: ["owner", "producer", "bookkeeper"] },
   { sourceFile: "app/api/app/inbound/transfer/route.ts", featureKey: "inbound_transfers", allowedRoles: ["owner", "producer"] },
