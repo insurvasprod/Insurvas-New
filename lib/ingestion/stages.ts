@@ -8,7 +8,8 @@ import { rebuildFileSnapshots } from "./snapshotStore";
  * runs them after a file is parsed; a reprocess runs them after re-parsing it from its raw rows.
  *
  *   policy_snapshot (LA-4.6) — Layer 2: snapshots, then the change log of the policies touched.
- *   policy_current  (LA-4.7) — Layer 3, next.
+ *   policy_current  (LA-4.7) — Layer 3, refreshed inside the snapshot stage for the same policies,
+ *                              right after their history (snapshotStore → refreshPolicyCurrent).
  *
  * Each stage is idempotent: the same file gives the same rows, and `changed` counts what moved.
  */

@@ -23,7 +23,7 @@ The repo's [TASKS.md](TASKS.md) (11 tasks, 2026-10-02) is the earlier, smaller s
 | 4.4 PDF extraction (OCR, AI, balance gate) | Not started (needs an AI provider) |
 | 4.5 Status map, unknown-status gate | **Framework done 2026-10-07.** Migration `20261008130000` live and verified (below). No real status seeded until the sample files arrive. |
 | 4.6 Snapshots, change detection | **Done 2026-10-07.** Migration `20261008140000` live and verified (below). |
-| 4.7 Current-state table | Not started |
+| 4.7 Current-state table | **Done 2026-10-07.** Migration `20261008160000` live and verified (below). Money fields wait for 4.12; contact links for 4.8. |
 | 4.8 Policy ↔ CRM matching with AI | Not started (needs an AI provider) |
 | 4.9 Exception queues | Not started |
 | 4.10 Existing-book import | Not started |
@@ -441,3 +441,59 @@ It follows LA-3.13's carrier field maps on purpose: the same statuses, the same 
   - Settings save and save again into one row, as the agency's.
   - All five writes are in the audit log with the fixture's tenant.
   - Left behind, permanently and on the fixture only: two rule rows and one settings row for LA14 Market.
+
+## LA-4.7: how it is built
+
+**The data (`supabase/migrations/20261008160000_la_4_7_policy_current.sql`):**
+- **`policy_current`:** one row per agency, carrier and policy (the spec's key plus the agency, as in 4.6). It holds the latest live snapshot's values (and `snapshot_id`), our links, and the computed fields. `status_reported` keeps the snapshot's own status; boards read `status_normalized`.
+- **Derived and disposable.** One function writes it, `refresh_policy_current(tenant, carrier, policies, as_of)`. It deletes the rows in scope and re-inserts them, and the app roles can't write the table. No clock is stored in a row (only `as_of`), so a rebuild is identical.
+- **Three ways in, one computation:**
+  - incremental, after each parsed file, for the policies it touched (inside the snapshot stage, right after their history);
+  - after a carrier rule changes (that carrier, for one agency or every agency);
+  - daily, for every policy (pg_cron `la4-policy-current-daily`, 06:15 UTC). The migration runs that job once and checks one row per live policy.
+- **"Today"** is the agency's day: `agency_profiles.timezone`, else UTC.
+
+**The computed fields:**
+
+| Field | How |
+|---|---|
+| `annualised_premium_cents` | premium × 12 / 4 / 2 / 1 by mode; null without a mode |
+| `days_past_due` | `as_of − paid_to_date`, floored at 0; never from the file's date |
+| `days_until_carrier_closes` | the 4.17 rule's window − days past due; **null with no rule**. First payment rule until a payment is on record, then ongoing. The rule used is in `retention_rule_id` |
+| `status_normalized` | the snapshot's, except `active` past the rule's grace becomes `at_risk`, the same value the 4.5 map gives |
+| `months_paid` | whole months from effective date to paid-to date (Postgres `age`) |
+| `in_clawback_window` | months paid < the LA-0.4 advance rule's clawback months (matched on carrier and product); null with no rule |
+| `risk_band` | from observed facts only, no threshold of its own: **critical** = at risk and (inside clawback or past the carrier's window); **at_risk**; **watch** = active with days past due; **none**. Unknown is never critical |
+| `lapsed_on`, `issued_on` | from `policy_change`: the file that first showed the lapse / first showed it active after submitted or approved-unpaid |
+| `application_id`, `case_id`, `campaign_id`, `vendor_id` | an LA-3 submission to the same carrier with the same policy number, its case, and the case's LA-2 attribution |
+
+**Null until their task ships (never guessed):**
+- `total_advanced_cents`, `total_earned_cents`, `total_charged_back_cents`, `unearned_advance_cents`: LA-4.12's ledger.
+- `contact_id`, `household_id`: LA-4.8.
+- `agent_user_id`: needs a map from a carrier's agent code to a user, which doesn't exist yet.
+- `lead_cost_cents`: LA-2 derives a cost per lead and stores none per policy.
+
+**The code:** `lib/ingestion/policyCurrent.ts` is the same arithmetic as plain functions, unit-tested (`policyCurrent.test.mjs`); the rehearsal checks SQL and TypeScript agree. `policyCurrentStore.ts` calls the refresh, and a missing function reads as a schema gap, so parsing keeps working before the migration. There is no new screen: the boards and lists that read this are 4.11 onwards.
+
+**Acceptance (Notion):**
+
+| Criterion | Status |
+|---|---|
+| Rebuildable from Layer 2 with identical results (drop-and-rebuild test) | **Met:** rehearsal, identical md5 over every row after drop + rebuild + rebuild. |
+| `annualised_premium_cents` correct for all four modes | **Met:** unit test; SQL matches on 288 policies. |
+| `days_past_due` from `paid_to_date`, advancing daily with no new file | **Met:** unit test and rehearsal (6 → 7 → 8 by moving `as_of`). |
+| `days_until_carrier_closes` null, not zero or a default, with no rule | **Met:** unit test; no carrier without a rule gets a countdown; the migration's check refuses one. |
+| `unearned_advance_cents` reconciles to the ledger | **Waiting on LA-4.12:** null until the ledger exists. |
+| `risk_band` changes only with observed fields; nothing predictive readable | **Met:** derived from status, days past due, the window and clawback; a static test refuses any predictive column. |
+| `lapsed_on` from the change log, matching the snapshot pair | **Met:** rehearsal (Sep 5 → Oct 5 pair gives Oct 5). |
+| Derived and mapped `at_risk` indistinguishable downstream | **Met:** identical computed rows (unit test). |
+| A dashboard query over 50,000 policies under 500 ms | **Met in rehearsal:** 303 ms for two queries with round trips; the 50,000 build takes 2 s. |
+
+**Before the migration (2026-10-07):** 26 checks on rolled-back temp copies, including SQL = TypeScript across 288 policies, rule resolution, the clock, rebuild identity, incremental scope, the change-log dates, the LA-3 link, the agency's timezone and 50,000 policies. The first run found the timezone lookup re-evaluated per policy (29 s for 50,000); it is now computed once per agency.
+
+**4.7 verified live, 2026-10-07** (the owner applied the migration):
+- **The catalog:** the verifier reports applied. No app role can insert, update or delete `policy_current` (`service_role` and `tenant_app` read; `anon` and `authenticated` see nothing). Both functions are security definer and run as `service_role` only; the live function has the materialized timezone step. RLS is on with one read policy, and the six indexes exist. The daily job `la4-policy-current-daily` is scheduled (`15 6 * * *`) and active.
+- **The rows:** 9 rows for the 9 live policies across every agency, each pointing at its policy's latest snapshot. Every row equals the TypeScript computed with the live carrier and advance rules. No countdown exists without a rule, and the money and contact fields are null.
+- **The fixture:** the lapsed policy's `lapsed_on` (2026-10-05) is the change-log transition. A rebuild gives identical rows. Refreshed as of tomorrow with no new file, every days-past-due moves by one (36 → 37), and refreshing again restores today's rows exactly.
+- **Access:** as `tenant_app` (rolled back), the fixture sees only its own 9 rows, and can neither delete nor call the refresh.
+- 17 of 17 checks pass.

@@ -4,6 +4,7 @@ import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isSchemaGap } from "@/lib/supabase/schemaGap";
 
 import { coverageGaps, resolveRule, resolveSettings, RULE_TYPES, type Gap, type ResolvedRule, type RuleRow, type RuleSource, type RuleType, type SettingField, type SettingsRow } from "./carrierRules";
+import { refreshPolicyCurrent } from "./policyCurrentStore";
 
 /**
  * LA-4.17 (Notion sprint) · carrier rules and settings, server side, for two planes: an agency (its
@@ -115,6 +116,19 @@ async function knownCarrier(carrierId: string) {
   if (!data) throw new CarrierRulesError("Choose a carrier from the library.", 400);
 }
 
+/**
+ * A rule change moves the countdowns of that carrier's policies (LA-4.7) — for one agency, or for
+ * every agency when it is the platform's. The rule is saved either way; if the recount fails, the
+ * daily refresh catches up.
+ */
+async function recount(tenantId: string | null, carrierId: string) {
+  try {
+    await refreshPolicyCurrent({ tenantId, carrierId });
+  } catch (error) {
+    console.error("[carrier-rules] recount", error);
+  }
+}
+
 /** A new rule from a date — the only way a rule changes. */
 export async function addRule(scope: RulesScope, input: RuleInput): Promise<string> {
   await knownCarrier(input.carrierId);
@@ -134,6 +148,7 @@ export async function addRule(scope: RulesScope, input: RuleInput): Promise<stri
     created_by_admin: scope.plane === "platform" ? scope.adminId : null,
   }).select("id").single();
   if (error) fail(error, "Could not save the rule");
+  await recount(scope.plane === "agency" ? scope.tenantId : null, input.carrierId);
   return data.id;
 }
 
@@ -141,6 +156,7 @@ export async function addRule(scope: RulesScope, input: RuleInput): Promise<stri
 export async function clearOverride(scope: Extract<RulesScope, { plane: "agency" }>, carrierId: string, ruleType: RuleType): Promise<string> {
   const { data, error } = await db().from("carrier_retention_rule").insert({ tenant_id: scope.tenantId, carrier_id: carrierId, rule_type: ruleType, cleared: true, effective_from: today(), created_by: scope.userId }).select("id").single();
   if (error) fail(error, "Could not clear the override");
+  await recount(scope.tenantId, carrierId);
   return data.id;
 }
 
