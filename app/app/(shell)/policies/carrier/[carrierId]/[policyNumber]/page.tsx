@@ -189,6 +189,25 @@ export default async function PolicyPage({ params }: { params: Promise<{ carrier
                 {policy.inClawbackWindow && <p className="m-0 mt-1 text-xs text-[var(--warning-ink)]">Inside the chargeback window: a lapse now means part of the advance comes back.</p>}
               </div>
             )}
+            {/* LA-4.13: what the carrier should pay, once its trigger has occurred. */}
+            {view.expected.available && (
+              <div className="border-t border-border px-4 py-3 text-sm">
+                <span className="block text-xs text-muted-foreground">Expected first-year commission</span>
+                {view.expected.rows.length === 0 ? (
+                  <span className="text-muted-foreground">Nothing expected yet: the carrier hasn&apos;t reached its pay trigger, or its trigger isn&apos;t set in Carrier rules.</span>
+                ) : view.expected.rows[0].confidence === "no_rate_card" ? (
+                  <span className="text-[var(--warning-ink)]">Unknown: {view.expected.rows[0].reason}. {["owner", "bookkeeper"].includes(guard.role) && <Link href="/app/rate-card" className="font-semibold underline">Add the rate</Link>}</span>
+                ) : (
+                  <>
+                    <span className="font-semibold tabular-nums text-foreground">{dollars(Number(view.expected.rows[0].expected_amount_cents))}</span>
+                    {view.expected.rows[0].expected_advance_cents !== null && <span className="text-muted-foreground"> · {dollars(Number(view.expected.rows[0].expected_advance_cents))} as an advance</span>}
+                    <span className="block text-xs text-muted-foreground">
+                      {view.expected.rows[0].rate_bp_applied / 100}% of {dollars(Number(view.expected.rows[0].commissionable_premium_cents))} a year{view.expected.rows[0].confidence === "assumed_level" ? ", contract level assumed" : ""} · {view.expected.rows[0].commission_trigger === "on_issue" ? "issued" : "first draft"} {fileDay(view.expected.rows[0].trigger_occurred_on)}{view.expected.rows[0].overdue_from ? ` · due by ${fileDay(view.expected.rows[0].overdue_from)}` : ""}
+                    </span>
+                  </>
+                )}
+              </div>
+            )}
             <div className="border-t border-border px-4 py-3 text-sm">
               <span className="block text-xs text-muted-foreground">Lead source</span>
               <span className="font-medium text-foreground">{lead.name ?? "Not known"}</span>

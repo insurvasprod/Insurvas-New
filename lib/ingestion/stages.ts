@@ -2,6 +2,7 @@ import "server-only";
 
 import type { ParsedFile, ReprocessFile, ReprocessStage } from "./reprocess";
 import { recordFileEntries } from "./commissionLedgerStore";
+import { computeExpected } from "./expectedCommissionStore";
 import { rebuildFileSnapshots } from "./snapshotStore";
 
 /**
@@ -36,7 +37,20 @@ const commissionEntries: ReprocessStage = {
   },
 };
 
-export const REPROCESS_STAGES: ReprocessStage[] = [policySnapshots, commissionEntries];
+/**
+ * expected_commission (LA-4.13): after a policy file, the carrier's policies whose pay trigger has
+ * now occurred get their expected figure (or a reason there is none). Figures are never rewritten.
+ */
+const expectedCommission: ReprocessStage = {
+  name: "expected_commission",
+  async rebuild(tenantId: string, file: ReprocessFile, _rows, parsed: ParsedFile | null) {
+    if (file.fileType !== "policies" || !parsed?.typedRows || !file.carrierId) return { changed: 0 };
+    const outcome = await computeExpected(tenantId, file.carrierId);
+    return { changed: outcome.inserted + outcome.filled };
+  },
+};
+
+export const REPROCESS_STAGES: ReprocessStage[] = [policySnapshots, expectedCommission, commissionEntries];
 
 /** After a door's parse: the same stages a reprocess runs, for one file's passed rows. */
 export async function runStages(tenantId: string, file: ReprocessFile, parsed: ParsedFile): Promise<void> {

@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { ViewTabs } from "@/components/app/book-of-business-views";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { PoliciesWorkspace } from "@/components/app/policies-workspace";
@@ -43,6 +45,13 @@ export default async function PoliciesPage({ searchParams }: { searchParams: Pro
     <div className="m-stagger flex flex-col gap-6">
       <PageHeader title="Policies" description="Every policy in your carriers' files, as of their latest file. Open one for its money, history and source." />
       {tabs(book.available ? book.rows.length : undefined)}
+      {/* LA-4.13: the share of the book no rate can check, and the one place to fix it. */}
+      {book.available && book.unpriced && (
+        <p role="status" className="m-0 rounded-lg border border-border border-l-[3px] border-l-[var(--warning)] bg-[var(--warning-surface)] px-4 py-2.5 text-sm text-[var(--warning-ink)]">
+          {book.unpriced.top.policies.toLocaleString("en-US")} {book.unpriced.top.carrierName} {book.unpriced.top.policies === 1 ? "policy" : "policies"}, ${Math.round(book.unpriced.top.monthlyCents / 100).toLocaleString("en-US")}/mo, have no rate, so their commission can&apos;t be checked{book.unpriced.carriers > 1 ? ` (${book.unpriced.policies.toLocaleString("en-US")} policies across ${book.unpriced.carriers} carriers in all)` : ""}.{" "}
+          {guard.role !== "producer" && <Link href="/app/rate-card" className="font-semibold underline">Add rates</Link>}
+        </p>
+      )}
       {book.available ? (
         <PolicyBook rows={book.rows} initialQuery={query} saved={book.savedFilters} savedAvailable={book.savedFiltersAvailable} scoped={book.scoped} readOnly={readOnly} />
       ) : (

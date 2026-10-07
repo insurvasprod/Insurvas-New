@@ -5,6 +5,7 @@ import { isSchemaGap } from "@/lib/supabase/schemaGap";
 
 import { ENTRY_LABELS, type EntryType } from "./commissionLedger";
 import { loadPolicyMoney } from "./commissionLedgerStore";
+import { loadPolicyExpected } from "./expectedCommissionStore";
 import { changeLabel, changeValue, fieldWord, mergeTimeline, readableDay, statusLabel, type BookRow, type RiskBand, type TimelineItem } from "./policyBook";
 
 /**
@@ -113,7 +114,11 @@ export async function loadBook(viewer: Viewer) {
     if (isSchemaGap(read.error)) return { available: false as const };
     throw new Error(`Could not load the policies: ${read.error.message}`);
   }
-  const [names, notes, filters] = await Promise.all([namesFor(viewer.tenantId, read.rows), annotations(viewer.tenantId), savedFilters(viewer)]);
+  const [names, notes, filters, unpricedRead] = await Promise.all([
+    namesFor(viewer.tenantId, read.rows), annotations(viewer.tenantId), savedFilters(viewer),
+    // LA-4.13: policies whose pay trigger has occurred but which no rate can price.
+    everyRow(() => db().from("expected_commission").select("carrier_id, policy_number").eq("tenant_id", viewer.tenantId).eq("confidence", "no_rate_card").order("carrier_id").order("policy_number")),
+  ]);
   const rows: BookRow[] = read.rows.map((row: Loose): BookRow => {
     const contact = row.contact_id ? names.contact.get(row.contact_id) : null;
     const note = notes.byKey.get(`${row.carrier_id}|${row.policy_number}`);
@@ -141,7 +146,18 @@ export async function loadBook(viewer: Viewer) {
       leadSource: note && (note.lead_vendor_id || note.lead_campaign_id) ? leadSourceName(names, note.lead_vendor_id, note.lead_campaign_id) : leadSourceName(names, row.vendor_id, row.campaign_id),
     };
   });
-  return { available: true as const, rows, scoped, savedFilters: filters.list, savedFiltersAvailable: filters.available };
+  // The "add your rate" line: the carrier with the most unpriced monthly premium.
+  const unpricedKeys = new Set(unpricedRead.error ? [] : unpricedRead.rows.map((r: Loose) => `${r.carrier_id}|${r.policy_number}`));
+  const byCarrier = new Map<string, { carrierName: string; policies: number; monthlyCents: number }>();
+  for (const row of rows) {
+    if (!unpricedKeys.has(`${row.carrierId}|${row.policyNumber}`)) continue;
+    const entry = byCarrier.get(row.carrierId) ?? { carrierName: row.carrierName, policies: 0, monthlyCents: 0 };
+    entry.policies++;
+    entry.monthlyCents += Math.floor((row.annualCents ?? 0) / 12);
+    byCarrier.set(row.carrierId, entry);
+  }
+  const unpriced = [...byCarrier.values()].sort((a, b) => b.monthlyCents - a.monthlyCents);
+  return { available: true as const, rows, scoped, savedFilters: filters.list, savedFiltersAvailable: filters.available, unpriced: unpriced.length ? { top: unpriced[0], carriers: unpriced.length, policies: unpriced.reduce((sum, u) => sum + u.policies, 0) } : null };
 }
 
 // ─── saved filters (each person's own) ─────────────────────────────────────────────────────────
@@ -192,7 +208,7 @@ export async function loadPolicy(viewer: Viewer, carrierId: string, policyNumber
   const row = await currentRow(viewer, carrierId, policyNumber);
   if (!row) return null;
   const t = viewer.tenantId;
-  const [names, snapshot, changes, events, note, application, contactPolicies, householdPolicies, ledger] = await Promise.all([
+  const [names, snapshot, changes, events, note, application, contactPolicies, householdPolicies, ledger, expected] = await Promise.all([
     namesFor(t, [row]),
     db().from("policy_snapshot").select("id, file_id, raw_row_id, snapshot_date").eq("tenant_id", t).eq("id", row.snapshot_id).maybeSingle(),
     db().from("policy_change").select("field_name, old_value, new_value, to_snapshot_date, to_file_id, detected_at").eq("tenant_id", t).eq("carrier_id", carrierId).eq("policy_number", policyNumber).order("to_snapshot_date").order("detected_at").limit(500),
@@ -203,6 +219,7 @@ export async function loadPolicy(viewer: Viewer, carrierId: string, policyNumber
     row.household_id ? db().from("policy_current").select("carrier_id, policy_number, contact_id, status_normalized, annualised_premium_cents").eq("tenant_id", t).eq("household_id", row.household_id).limit(100) : { data: [] },
     // LA-4.12: every money line the carriers reported for this policy, and the unearned advance.
     loadPolicyMoney(t, carrierId, policyNumber, { monthsPaid: row.months_paid, productCode: row.product_code, asOf: row.as_of }),
+    loadPolicyExpected(t, carrierId, policyNumber),
   ]);
 
   // The files behind the snapshot, the changes and the first sighting, for names and dates.
@@ -316,6 +333,7 @@ export async function loadPolicy(viewer: Viewer, carrierId: string, policyNumber
     household: householdContactIds.length > 1 ? { monthlyCents: Math.round(householdMonthly), people: householdContactIds.map((id) => fullName(householdPeople.get(id)) ?? "A client"), policies: householdInForce.length } : null,
     changedFields: [...lastChange.keys()].map(fieldWord),
     ledger,
+    expected,
   };
 }
 

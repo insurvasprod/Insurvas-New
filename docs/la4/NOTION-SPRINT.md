@@ -29,7 +29,7 @@ The repo's [TASKS.md](TASKS.md) (11 tasks, 2026-10-02) is the earlier, smaller s
 | 4.10 Existing-book import | **Done 2026-10-07.** Migration `20261008190000` live and verified (below). Portal guidance ships empty, for staff to write. |
 | 4.11 Policy list and detail | **Done 2026-10-07.** Migration `20261008210000` live and verified (below). Money figures and their ledger links wait for 4.12. |
 | 4.12 Commission ledger | **Done 2026-10-07.** Migration `20261008220000` live and verified against the live function (below). No commission layout exists yet, so the ledger is empty until one is written from a real carrier file. |
-| 4.13 Expected commission | Partial: schedules exist; trigger and lag not built |
+| 4.13 Expected commission | **Done 2026-10-08.** Migration `20261008230000` live and verified against the live function (below). No agency has rates or product families yet, so no figure exists until they are entered. |
 | 4.14 Orphans, carrier balances | Partial: unmatched lines kept; balances not built |
 | 4.15 Discrepancies, letters | Partial: 5 of 9 types, letter and PDF; to be rebuilt on 4.12–4.14 |
 | 4.16 Retention board | Not started |
@@ -816,3 +816,57 @@ It follows LA-3.13's carrier field maps on purpose: the same statuses, the same 
   - The file called under another agency's id is refused (P0002).
   - A corrected file reverses all 5 live lines and inserts 1 (advanced back to $552.95), and the replaced file read again adds nothing.
 - **Screens:** the ledger tab renders its empty state; the totals strip is hidden until there is a line, because no lines means unknown, not $0. The policy page's Money block reads Unknown with the reason. No console errors.
+## LA-4.13 · Expected commission: rate card, trigger and lag
+
+**The rate card is LA-0.4's `commission_schedules`**: carrier, product family, contract level, policy year and effective date. Migration `20261008230000` adds:
+- **`commission_schedule_band`**: an age band (age_min..age_max, rate) on a schedule row. Bands on one row can't overlap (a trigger refuses it). This is a child table, not the spec's columns, so the existing unique key and both `save_commission_schedule` overloads keep working untouched.
+- **`carrier_product_family`**: a carrier's own product code ("FE Level", "CCI") mapped to our product family (`products.code`), which rates are keyed by. Platform rows exist, and an agency's own row wins. Without it almost nothing could be priced, because carrier files carry carrier codes.
+- **`expected_commission`**: one row per policy and policy year, written by `record_expected_commission` only.
+  - Confidence is `exact`, `assumed_level` (no contract level set, but only one level has rates) or `no_rate_card` (no figure, with a reason; a check forbids a figure).
+  - Each row records the schedule id, the schedule version (its effective date), the band, the rate, the commissionable premium, the expected amount, and the advance (months, %, cents) from the advance rule.
+  - **Forward-only:** a row with a figure is never rewritten or deleted (a trigger refuses). A `no_rate_card` row is filled in once a rate exists.
+- **Platform pay triggers**, seeded for the Module 4 list's carriers that are in the library: Americo and Mutual of Omaha on issue; Aetna and Transamerica on first draft.
+  - Lags are seeded only where measured: Aetna 10 days and Americo 35, from the carrier knowledge doc. The rest are left empty, so nothing is called overdue on a guess.
+  - AMAM, RNA, Corebridge, Aflac, AHL and SSL aren't in the library; they wait for the carrier-library decision.
+
+**When the trigger occurs** (`lib/ingestion/expectedCommission.ts`, pure and tested):
+- **On issue:** the issue date, or for carriers that send none, LA-4.7's `issued_on`.
+- **On first draft:** the first file where `policy_change` shows the paid-to date moving past the effective date. A policy first seen already paid past its effective date had drafted by its first file.
+- **Overdue from:** the trigger date plus the lag. With no lag set, nothing is called overdue.
+- **Nothing is owed on an application:** submitted, declined and withdrawn policies get no row.
+
+**Which rate applies:**
+- The rate is the one in force on the trigger date (a later raise never reaches back), for the policy's product family, at the agency's contract level, for policy year 1.
+- The age band is picked from the client's age at the effective date. With an unknown age, the base rate is used and the row says so.
+- Money is computed by exact integer division (half up). Rates are typed as percentages and parsed from their digits (`percentToBp`).
+
+**When it runs:**
+- As the `expected_commission` stage after each policy file, for that carrier.
+- After every rate-card change, for that carrier.
+- Opening a page never writes.
+
+**Screens:**
+- **Book of Business › Rate card** (new menu item; owner and bookkeeper):
+  - **Coverage:** carriers covered, the share of monthly premium covered, expected so far, and how many policies are past the usual lag.
+  - **Per carrier:** policies, monthly premium, when it pays and the usual lag, your contract level, rates, and how many policies can be checked.
+  - **Set up:** contract level (with writing number), product families for every product code in the book, rates with age bands, and a link to Carrier rules for the trigger and lag.
+- **Policies list:** a one-line status, for example "N Americo policies, $X/mo, have no rate, so their commission can't be checked. Add rates".
+- **Policy page:** the expected first-year commission and advance, the rate and premium it used, the trigger date and when it's due. Or "Unknown:" with the reason and a link to add the rate.
+**Live verification (2026-10-08, after the apply):**
+- **The verifier** reports `20261008230000` as applied.
+- **Catalog:**
+  - On `expected_commission`, `service_role` can select but not insert, update or delete; the function is executable by `service_role` only (not `anon`); `anon` can't read.
+  - Product families and age bands are writable by the service.
+  - Both guard triggers are present, along with 3 read policies.
+  - Platform triggers are seeded: Americo on issue / 35 days, Mutual of Omaha on issue / no lag, Aetna on first draft / 10 days, Transamerica on first draft / no lag.
+- **A rolled-back block against the live function:**
+  - no_rate_card is inserted once, and repeating it changes nothing;
+  - entering the rate fills it in ($1,061.40 at 145% of $732);
+  - a later raise does not rewrite it (the version stays 2026-01-01);
+  - another agency can't write a row for a policy it doesn't hold;
+  - UPDATE, DELETE, a $0 for unknown, and an overlapping age band are each refused.
+- **The Rate card page:**
+  - 0 of 1 carriers covered, 0% of $377/mo.
+  - "Expected so far" reads "—" until something is priced; it showed "$0" before, and that is fixed.
+  - The setup dialog explains the demo's gap: "the carrier's file gives no product (8)".
+  - No console errors. Nothing was saved: rates and contract levels are the agency's own data.
