@@ -123,6 +123,7 @@ export function CarrierFilesTable({ files, emptyTitle, emptyHint }: { files: Car
               <th className="w-[170px]">Arrived</th>
               <th className="w-[120px]">Received</th>
               <th className="w-[80px] text-right">Size</th>
+              <th className="w-[80px] text-right">Rows</th>
               <th className="w-[120px]">Status</th>
               <th className="w-[110px] text-right"><span className="sr-only">Actions</span></th>
             </tr>
@@ -138,6 +139,7 @@ export function CarrierFilesTable({ files, emptyTitle, emptyHint }: { files: Car
                   <td className="max-w-[300px]">
                     <span className="block truncate text-foreground" title={file.originalFilename}>{file.originalFilename}</span>
                     {file.status === "failed" && file.errorDetail && <span className="block truncate text-xs text-[var(--error-ink)]" title={file.errorDetail}>{file.errorDetail}</span>}
+                    {file.status !== "failed" && file.rawError && <span className="block truncate text-xs text-[var(--error-ink)]" title={file.rawError}>{file.rawError}</span>}
                   </td>
                   <td className="max-w-[170px] truncate" title={`${FILE_SOURCE_LABELS[file.source]} · ${from}`}>
                     <span className="block truncate">{FILE_SOURCE_LABELS[file.source]}</span>
@@ -145,6 +147,12 @@ export function CarrierFilesTable({ files, emptyTitle, emptyHint }: { files: Car
                   </td>
                   <td className="tabular-nums">{fileDay(file.receivedAt)}</td>
                   <td className="text-right tabular-nums text-muted-foreground">{fileSize(file.fileBytes)}</td>
+                  <td
+                    className="text-right tabular-nums"
+                    title={file.rowCount !== null ? "Rows kept exactly as they arrived" : file.fileKind === "pdf" ? "A PDF's lines are read by PDF extraction" : file.rawError ?? (file.status === "failed" ? undefined : "Waiting to be read")}
+                  >
+                    {file.rowCount !== null ? file.rowCount.toLocaleString("en-US") : <span className="text-muted-foreground">—</span>}
+                  </td>
                   <td><StatusChip tone={STATUS_TONE[file.status]}>{FILE_STATUS_LABELS[file.status]}</StatusChip></td>
                   <td className="text-right">
                     <Button type="button" variant="outline" size="sm" disabled={opening === file.id} onClick={() => void download(file.id)}>

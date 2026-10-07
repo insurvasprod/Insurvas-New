@@ -18,7 +18,7 @@ The repo's [TASKS.md](TASKS.md) (11 tasks, 2026-10-02) is the earlier, smaller s
 | Task | State |
 |---|---|
 | 4.1 Storage adapter, file registry, three doors | **Done 2026-10-07.** Migration `20261008100000` live, and all three doors verified live (below). Production still needs the Postmark and Vault setup. |
-| 4.2 Raw layer, reprocessing | Not started |
+| 4.2 Raw layer, reprocessing | **Done 2026-10-07.** Migration `20261008110000` live and verified (below). Reprocessing rebuilds nothing until 4.6/4.7 register their stages. |
 | 4.3 Parser framework, layout maps | Not started (needs sample files) |
 | 4.4 PDF extraction (OCR, AI, balance gate) | Not started (needs an AI provider) |
 | 4.5 Status map, unknown-status gate | Not started (needs sample files) |
@@ -137,3 +137,70 @@ The repo's [TASKS.md](TASKS.md) (11 tasks, 2026-10-02) is the earlier, smaller s
    - `carrier_files_poll_secret`: the same value as `CARRIER_FILES_POLL_SECRET`.
 
    The migration enables `pg_net` and schedules `la4-carrier-file-poll`. Without the vault secrets the job does nothing, and any other scheduler can call the poll route instead.
+
+## LA-4.2: how it is built
+
+**The data (`supabase/migrations/20261008110000_la_4_2_raw_rows.sql`):**
+- **`raw_rows`:** one row per data line of a spreadsheet. `payload` is keyed by the file's own headers, verbatim (spelling, spacing, case).
+  - Blank cells are kept as `""`, and blank lines are rows; nothing is filtered.
+  - `row_number` is the physical line in the source file.
+  - The primary key is `(file_id, row_number)`, and `(file_id, id)` is unique for later layers to point at.
+  - It is partitioned 16 ways by hash of `file_id`.
+- **Immutability:** UPDATE, DELETE and TRUNCATE are revoked from `service_role` and `tenant_app`. A trigger refuses them for everyone else, the table owner included. A corrected file is a new file (the 4.1 supersede path).
+- **New columns on `file_registry`:** `sheet_name`, `raw_header_row`, `raw_columns` (column letter, header, key), `raw_preamble` (every line above the header), `raw_extracted_at`, `raw_error`.
+  - Together with the rows, they rebuild the whole grid.
+  - Once a file's rows are sealed, none of these can change.
+- **Writing a file's rows:**
+  - `insert_raw_rows` writes in chunks and skips a row that is already there, so a retry is safe.
+  - `finalize_raw_extraction` seals the file, writing `row_count` only when the stored rows number exactly that.
+- **`reprocess_runs`:** every reprocess, with its trigger, scope, parser version, files, rows read and changed, per-stage counts and result. No delete.
+
+**The code:**
+- **`lib/ingestion/grid.ts` (pure):** a CSV reader that keeps every line, a header-row guess (the first line as wide as the widest; 4.3's layout maps will replace it), the raw rows, and the round trip back to the grid.
+- **`lib/ingestion/rawLayer.ts`:** extraction from the stored original.
+  - CSV is decoded as UTF-8 when valid, otherwise as Windows-1252; never lossily.
+  - Excel uses its first visible sheet.
+  - It also holds the sweep, paged reads, and the reprocess wiring with `REPROCESS_STAGES`, which is empty until 4.6/4.7.
+- **`lib/ingestion/reprocess.ts`:** the orchestrator. It reads each file's raw rows, checks their count against the registry, hands them to every stage in order, and records the run.
+- **When rows are extracted:**
+  - Upload and email extract after the response (`after()`).
+  - The 5-minute poll registers bucket drops, then sweeps every spreadsheet still waiting.
+  - A file whose rows can't be read gets `raw_error` and is not retried. A file still `received` also becomes `failed`.
+- **`POST/GET /api/app/carrier-files/reprocess`:** start a run for one file or for a carrier and date range, or list recent runs. Owner and bookkeeper; starting a run is a write and is audited.
+- **On screen:** Carrier files shows each file's **Rows**.
+
+**Acceptance (Notion):**
+
+| Criterion | Status |
+|---|---|
+| Every parsed file has exactly `row_count` raw rows | **Met.** `finalize_raw_extraction` refuses to seal otherwise, and a reprocess re-checks it. Verified on temp copies. |
+| The payload round-trips every column, ignored and blank ones included | **Met.** `rawLayer.test.mjs` rebuilds the grid. |
+| UPDATE/DELETE fail for the application role | **Met:** revoked, checked in the self-check, refused by trigger (verified). |
+| Reprocessing rebuilds Layers 2 and 3, idempotent across two runs | **Framework met:** the orchestrator is tested idempotent with two stages. No real stage exists until 4.6/4.7. |
+| A newer parser version picks up an ignored column with no new upload | **Data half met:** every column is in the payload. The parser half waits for 4.3. |
+| A run is recorded with trigger, scope, parser version and rows affected | **Met.** |
+
+**Verified live, 2026-10-07:**
+- **The catalog:**
+  - 16 partitions, `raw_rows_p00` to `p15`;
+  - no UPDATE or DELETE for `service_role` or `tenant_app`, and no direct insert into a partition;
+  - both triggers, both security-definer functions, all six new `file_registry` columns.
+  - The catalog verifier reports "table raw_rows_p missing". That is a false alarm: it reads the `raw_rows_p%s` name template as a table name.
+- **31 checks on the fixture tenant "Isolation Test A".** Its rows stay (raw rows never delete); a temporary entitlement row was removed afterwards.
+  - **The sweep:** the poll extracted the 4 waiting 4.1 spreadsheets (the replaced one included), and a second sweep found nothing.
+  - **Each extracted file:** `row_count` equals its raw rows, and the stored layer rebuilds the original bytes' grid exactly. The 3 failed files have no rows, and each says why.
+  - **Locked:** UPDATE and DELETE through the app's role get "permission denied". A sealed file's row count can't change, and a sealed file takes no more rows.
+  - **Reprocess:** one file, then one carrier's month twice. The same 3 files and rows both times, with nothing changed. Every run is recorded with trigger, scope, who, files and rows. A backwards date range gets a 400.
+  - **Harder files, through the upload door:**
+    - a 1,200-row CSV with a title line and a blank line in the middle: 1,200 rows sealed across chunks, the header at line 2, the title kept as preamble, the blank line kept as a row, a header with spaces kept verbatim, a quoted comma kept;
+    - a real Excel workbook with a hidden first sheet: the visible sheet was read and its name kept, with blank cells kept;
+    - a Windows-1252 CSV: "José" kept exactly, not replaced.
+
+**Storage growth (the spec asks for this to be written down):**
+- A raw row costs about the size of its cell text, plus its header keys, plus about 60 bytes of overhead.
+- A 46-column policy file of 400 rows is about 400 × 2.5 KB, or roughly 1 MB.
+- A solo agent with 6 carriers sending monthly files adds about 6–10 MB a year.
+- An agency on daily feeds (8 carriers, about 1,000 policies) adds about 8 × 2.5 MB × 250 working days, or roughly 5 GB a year. That is the case the hash partitions are for.
+- Raw rows are never pruned. They belong in a full tenant export (SA-6.3, not yet built) and not in routine exports.
+
+**Header-row note:** until 4.3 the header row is a guess. If a carrier's file puts the header somewhere unusual, its rows are keyed by the wrong line. Nothing is lost (the preamble and column letters keep the whole grid), but the keys would be wrong. 4.3's layout maps fix this for files read after them.

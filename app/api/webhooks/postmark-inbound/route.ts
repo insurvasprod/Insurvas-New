@@ -1,8 +1,9 @@
-import { NextResponse, type NextRequest } from "next/server";
+import { NextResponse, after, type NextRequest } from "next/server";
 
 import { audit } from "@/lib/audit/log";
 import { checkPostmarkBasicAuth } from "@/lib/ingestion/doorAuth";
 import type { PostmarkInbound } from "@/lib/ingestion/inboundEmail";
+import { extractRawRowsQuietly } from "@/lib/ingestion/rawLayer";
 import { receiveInboundEmail } from "@/lib/ingestion/registry";
 
 export const dynamic = "force-dynamic";
@@ -38,6 +39,11 @@ export async function POST(request: NextRequest) {
       if (outcome.reason === "schema_pending") return NextResponse.json({ error: "Not ready" }, { status: 500 });
       console.warn(`[postmark-inbound] not handled: ${outcome.reason}`);
       return NextResponse.json({ ok: true, ignored: outcome.reason });
+    }
+    const received = outcome.results.filter((result) => result.outcome === "registered" && result.status === "received").map((result) => result.fileId);
+    if (received.length) {
+      const tenantId = outcome.tenantId;
+      after(async () => { for (const fileId of received) await extractRawRowsQuietly(tenantId, fileId); });
     }
     for (const result of outcome.results) {
       await audit({

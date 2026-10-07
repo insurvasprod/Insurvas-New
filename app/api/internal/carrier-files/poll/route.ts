@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { checkPollBearer } from "@/lib/ingestion/doorAuth";
+import { extractPendingRawRows } from "@/lib/ingestion/rawLayer";
 import { pollBucketDrops } from "@/lib/ingestion/registry";
 
 export const dynamic = "force-dynamic";
@@ -21,7 +22,10 @@ export async function POST(request: NextRequest) {
   try {
     const outcome = await pollBucketDrops(100);
     if (outcome.errors.length) console.error(`[carrier-files/poll] ${outcome.errors.length} drop(s) failed:`, outcome.errors.slice(0, 5));
-    return NextResponse.json({ ok: true, ...outcome, errors: outcome.errors.length });
+    // LA-4.2: then every spreadsheet still waiting for its raw rows, from any door.
+    const raw = await extractPendingRawRows(20);
+    if (raw.errors.length) console.error(`[carrier-files/poll] ${raw.errors.length} raw extraction(s) failed:`, raw.errors.slice(0, 5));
+    return NextResponse.json({ ok: true, ...outcome, errors: outcome.errors.length, raw: { ...raw, errors: raw.errors.length } });
   } catch (error) {
     console.error("[carrier-files/poll] failed:", error);
     return NextResponse.json({ error: "The poll failed" }, { status: 500 });

@@ -359,6 +359,8 @@ export const AUDIT_ACTIONS = [
   "tenant.carrier_inbound_address_created",
   "tenant.carrier_inbound_sender_added",
   "tenant.carrier_inbound_sender_removed",
+  // LA-4.2 (Notion sprint) · a reprocess from the raw rows (20261008110000).
+  "tenant.carrier_files_reprocessed",
   "state_disclosure.published",
   "state_disclosure.updated",
   "state_disclosure.withdrawn",
@@ -702,6 +704,7 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   "tenant.carrier_inbound_address_created": "Inbound email address created for carrier files",
   "tenant.carrier_inbound_sender_added": "Known carrier sender added",
   "tenant.carrier_inbound_sender_removed": "Known carrier sender removed",
+  "tenant.carrier_files_reprocessed": "Carrier files reprocessed from their raw rows",
   "state_disclosure.published": "Required call disclosure published for one or more states",
   "state_disclosure.updated": "Required call disclosure wording or effective date changed",
   "state_disclosure.withdrawn": "Required call disclosure withdrawn",
