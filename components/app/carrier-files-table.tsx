@@ -124,7 +124,7 @@ export function CarrierFilesTable({ files, emptyTitle, emptyHint }: { files: Car
               <th className="w-[120px]">Received</th>
               <th className="w-[80px] text-right">Size</th>
               <th className="w-[80px] text-right">Rows</th>
-              <th className="w-[120px]">Status</th>
+              <th className="w-[170px]">Status</th>
               <th className="w-[110px] text-right"><span className="sr-only">Actions</span></th>
             </tr>
           </thead>
@@ -138,7 +138,7 @@ export function CarrierFilesTable({ files, emptyTitle, emptyHint }: { files: Car
                   <td>{file.fileType ? FILE_TYPE_LABELS[file.fileType] : <span className="text-muted-foreground">Not known</span>}</td>
                   <td className="max-w-[300px]">
                     <span className="block truncate text-foreground" title={file.originalFilename}>{file.originalFilename}</span>
-                    {file.status === "failed" && file.errorDetail && <span className="block truncate text-xs text-[var(--error-ink)]" title={file.errorDetail}>{file.errorDetail}</span>}
+                    {file.status === "failed" && file.errorDetail && <span className={`block truncate text-xs ${file.waitingForLayout ? "text-muted-foreground" : "text-[var(--error-ink)]"}`} title={file.errorDetail}>{file.errorDetail}</span>}
                     {file.status !== "failed" && file.rawError && <span className="block truncate text-xs text-[var(--error-ink)]" title={file.rawError}>{file.rawError}</span>}
                   </td>
                   <td className="max-w-[170px] truncate" title={`${FILE_SOURCE_LABELS[file.source]} · ${from}`}>
@@ -153,7 +153,13 @@ export function CarrierFilesTable({ files, emptyTitle, emptyHint }: { files: Car
                   >
                     {file.rowCount !== null ? file.rowCount.toLocaleString("en-US") : <span className="text-muted-foreground">—</span>}
                   </td>
-                  <td><StatusChip tone={STATUS_TONE[file.status]}>{FILE_STATUS_LABELS[file.status]}</StatusChip></td>
+                  <td>
+                    {file.waitingForLayout ? (
+                      <StatusChip tone="info">Waiting for a layout</StatusChip>
+                    ) : (
+                      <StatusChip tone={STATUS_TONE[file.status]}>{file.status === "parsed" && file.parserVersion ? `${FILE_STATUS_LABELS.parsed} · v${file.parserVersion}` : FILE_STATUS_LABELS[file.status]}</StatusChip>
+                    )}
+                  </td>
                   <td className="text-right">
                     <Button type="button" variant="outline" size="sm" disabled={opening === file.id} onClick={() => void download(file.id)}>
                       {opening === file.id ? "Opening…" : "Download"}

@@ -4,7 +4,8 @@ import { z } from "zod";
 import { audit } from "@/lib/audit/log";
 import { FILE_TYPES, MAX_UPLOAD_BYTES, carrierFileBytesMatch, carrierFileKind } from "@/lib/ingestion/constants";
 import { isRecordUuid, isoDate } from "@/lib/ingestion/path";
-import { extractRawRowsQuietly } from "@/lib/ingestion/rawLayer";
+import { processFileQuietly } from "@/lib/ingestion/parser";
+import { extractRawRows } from "@/lib/ingestion/rawLayer";
 import { CARRIER_FILES_PENDING_MESSAGE, CarrierFileError, listCarrierFiles, uploadCarrierFile } from "@/lib/ingestion/registry";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 
@@ -91,10 +92,10 @@ export async function POST(request: NextRequest) {
       metadata: { tenantId: auth.context.tenantId, source: "upload", fileType: fields.data.file_type, fileDate: fields.data.file_date, carrierId: fields.data.carrier_id, status: result.outcome === "registered" ? result.status : "skipped", supersededFileId: result.outcome === "registered" ? result.supersededFileId : null },
       request,
     });
-    // LA-4.2: its rows go into the raw layer after the response; the poll's sweep finishes it otherwise.
+    // LA-4.2/4.3: its rows go into the raw layer and are parsed after the response; the poll sweeps the rest.
     if (result.outcome === "registered" && result.status === "received") {
       const { tenantId } = auth.context;
-      after(() => extractRawRowsQuietly(tenantId, result.fileId));
+      after(() => processFileQuietly(tenantId, result.fileId, extractRawRows));
     }
     return NextResponse.json({ ok: true, ...result }, { status: result.outcome === "registered" ? 201 : 200 });
   } catch (error) {

@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { checkPollBearer } from "@/lib/ingestion/doorAuth";
+import { parsePendingFiles } from "@/lib/ingestion/parser";
 import { extractPendingRawRows } from "@/lib/ingestion/rawLayer";
 import { pollBucketDrops } from "@/lib/ingestion/registry";
 
@@ -25,7 +26,10 @@ export async function POST(request: NextRequest) {
     // LA-4.2: then every spreadsheet still waiting for its raw rows, from any door.
     const raw = await extractPendingRawRows(20);
     if (raw.errors.length) console.error(`[carrier-files/poll] ${raw.errors.length} raw extraction(s) failed:`, raw.errors.slice(0, 5));
-    return NextResponse.json({ ok: true, ...outcome, errors: outcome.errors.length, raw: { ...raw, errors: raw.errors.length } });
+    // LA-4.3: then parse every sealed file not yet read, and retry those waiting for a layout map.
+    const parsed = await parsePendingFiles(20);
+    if (parsed.errors.length) console.error(`[carrier-files/poll] ${parsed.errors.length} parse(s) failed:`, parsed.errors.slice(0, 5));
+    return NextResponse.json({ ok: true, ...outcome, errors: outcome.errors.length, raw: { ...raw, errors: raw.errors.length }, parsed: { ...parsed, errors: parsed.errors.length } });
   } catch (error) {
     console.error("[carrier-files/poll] failed:", error);
     return NextResponse.json({ error: "The poll failed" }, { status: 500 });

@@ -25,11 +25,14 @@ export type ReprocessFile = { id: string; carrierId: string | null; fileType: st
 
 export type ReprocessRow = { rowNumber: number; payload: Record<string, string> };
 
+/** What the file's layout map read from its raw rows (LA-4.3), handed to every stage. */
+export type ParsedFile = { parserVersion: number | null; typedRows: Array<{ rowNumber: number; values: Record<string, string | number | null> }> | null; fatal: string | null };
+
 export type ReprocessStage = {
   /** e.g. "policy_snapshot" (LA-4.6), "policy_current" (LA-4.7). */
   name: string;
-  /** Rewrites what this stage derives from one file's raw rows; returns how many of its rows changed. */
-  rebuild(tenantId: string, file: ReprocessFile, rows: ReprocessRow[]): Promise<{ changed: number }>;
+  /** Rewrites what this stage derives from one file; returns how many of its rows changed. */
+  rebuild(tenantId: string, file: ReprocessFile, rows: ReprocessRow[], parsed: ParsedFile | null): Promise<{ changed: number }>;
 };
 
 export type StageSummary = { name: string; files: number; changed: number };
@@ -49,8 +52,10 @@ export type ReprocessDeps = {
   /** The files in scope whose raw rows exist, oldest file date first (so a later file wins). */
   resolveFiles(tenantId: string, scope: ReprocessScope): Promise<ReprocessFile[]>;
   readRows(tenantId: string, file: ReprocessFile): Promise<ReprocessRow[]>;
+  /** LA-4.3: re-read the raw rows with the file's current layout map, before any stage sees them. */
+  parse?(tenantId: string, file: ReprocessFile, rows: ReprocessRow[]): Promise<ParsedFile>;
   startRun(input: { tenantId: string; trigger: ReprocessTrigger; triggeredBy: string | null; scope: ReprocessScope; parserVersion: string | null }): Promise<string>;
-  finishRun(runId: string, result: Omit<ReprocessResult, "runId">): Promise<void>;
+  finishRun(runId: string, result: Omit<ReprocessResult, "runId"> & { parserVersion: string | null }): Promise<void>;
 };
 
 /** The parser version a run records: the newest any of its files was read with, or none yet (LA-4.3). */
@@ -67,23 +72,27 @@ export async function reprocess(
   const runId = await deps.startRun({ tenantId: input.tenantId, trigger: input.trigger, triggeredBy: input.triggeredBy, scope: input.scope, parserVersion: runParserVersion(files) });
   const stages: StageSummary[] = deps.stages.map((stage) => ({ name: stage.name, files: 0, changed: 0 }));
   let rowsRead = 0;
+  const versions: Array<number | null> = files.map((file) => file.parserVersion);
+  const version = () => runParserVersion(versions.map((parserVersion) => ({ parserVersion })) as ReprocessFile[]);
   try {
-    for (const file of files) {
+    for (const [position, file] of files.entries()) {
       const rows = await deps.readRows(input.tenantId, file);
       if (rows.length !== file.rowCount) throw new Error(`File ${file.id} has ${rows.length} raw rows, but its registry row says ${file.rowCount}.`);
       rowsRead += rows.length;
+      const parsed = deps.parse ? await deps.parse(input.tenantId, file, rows) : null;
+      if (parsed) versions[position] = parsed.parserVersion;
       for (const [index, stage] of deps.stages.entries()) {
-        const { changed } = await stage.rebuild(input.tenantId, file, rows);
+        const { changed } = await stage.rebuild(input.tenantId, file, rows, parsed);
         stages[index].files += 1;
         stages[index].changed += changed;
       }
     }
     const result = { status: "succeeded" as const, fileIds: files.map((file) => file.id), rowsRead, rowsChanged: stages.reduce((sum, stage) => sum + stage.changed, 0), stages, errorDetail: null };
-    await deps.finishRun(runId, result);
+    await deps.finishRun(runId, { ...result, parserVersion: version() });
     return { runId, ...result };
   } catch (error) {
     const result = { status: "failed" as const, fileIds: files.map((file) => file.id), rowsRead, rowsChanged: stages.reduce((sum, stage) => sum + stage.changed, 0), stages, errorDetail: (error instanceof Error ? error.message : String(error)).slice(0, 2000) };
-    await deps.finishRun(runId, result);
+    await deps.finishRun(runId, { ...result, parserVersion: version() });
     return { runId, ...result };
   }
 }

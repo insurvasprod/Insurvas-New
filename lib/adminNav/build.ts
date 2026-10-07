@@ -98,6 +98,8 @@ export function buildAdminNav(role: AdminRole): SidebarNode[] {
       // LA-3.13 · the platform's carrier field maps. Same permission as the carrier library it
       // belongs to: whoever may change a carrier may review where its application fields go.
       section("carriers", "/admin/field-maps", "Field maps", "carriers"),
+      // LA-4.3 · how each carrier's spreadsheets are read. Same rule: it belongs to the carrier library.
+      section("carriers", "/admin/layout-maps", "Layout maps", "carriers"),
       section("templates", "/admin/templates", "Templates", "templates"),
     ]),
 

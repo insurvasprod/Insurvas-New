@@ -19,7 +19,7 @@ The repo's [TASKS.md](TASKS.md) (11 tasks, 2026-10-02) is the earlier, smaller s
 |---|---|
 | 4.1 Storage adapter, file registry, three doors | **Done 2026-10-07.** Migration `20261008100000` live, and all three doors verified live (below). Production still needs the Postmark and Vault setup. |
 | 4.2 Raw layer, reprocessing | **Done 2026-10-07.** Migration `20261008110000` live and verified (below). Reprocessing rebuilds nothing until 4.6/4.7 register their stages. |
-| 4.3 Parser framework, layout maps | Not started (needs sample files) |
+| 4.3 Parser framework, layout maps | **Framework done 2026-10-07.** Migration `20261008120000` live and verified (below). No carrier map is seeded until the sample files arrive. |
 | 4.4 PDF extraction (OCR, AI, balance gate) | Not started (needs an AI provider) |
 | 4.5 Status map, unknown-status gate | Not started (needs sample files) |
 | 4.6 Snapshots, change detection | Not started |
@@ -204,3 +204,69 @@ The repo's [TASKS.md](TASKS.md) (11 tasks, 2026-10-02) is the earlier, smaller s
 - Raw rows are never pruned. They belong in a full tenant export (SA-6.3, not yet built) and not in routine exports.
 
 **Header-row note:** until 4.3 the header row is a guess. If a carrier's file puts the header somewhere unusual, its rows are keyed by the wrong line. Nothing is lost (the preamble and column letters keep the whole grid), but the keys would be wrong. 4.3's layout maps fix this for files read after them.
+
+## LA-4.3: how it is built
+
+It follows LA-3.13's carrier field maps on purpose: the same statuses, the same frozen-once-published guard, staff approvers, and `proposal_source` as the place AI will plug in.
+
+**The data (`supabase/migrations/20261008120000_la_4_3_layout_maps.sql`):**
+- **`carrier_layout_map`:** one layout (`layout_key`) is a series of numbered versions: draft, in review, published, retired.
+  - It holds the header row, the sheet, the row-count swing threshold, and, for commission files, the total row.
+  - `tenant_id` null means a platform map; a set `tenant_id` is an agency's override.
+  - A published version can't be edited, have columns added, or be deleted. A change means starting version N+1.
+  - Only one version per layout is live at a time.
+  - `publish_layout_map` publishes the draft and retires the version before it, in one step.
+- **`carrier_layout_map_entry`:** the source column (its header, verbatim), the field it becomes, its type, one named transform, whether it is required, and (for enums) the carrier's word for each value. No code.
+  - **Types:** `text`, `int_cents`, `date`, `basis_points`, `enum`, plus `integer`. `integer` is added for `months_advanced`; the spec's list had nothing to hold a whole number.
+  - **Transforms:** `none`, `strip_currency`, `mmddyyyy`, `yyyymmdd`, `digits_only`, `negate`, `pct_to_bp`.
+- **`carrier_layout_assignment`:** which layout a carrier's files of one type use, platform-wide or for one agency. This is how one layout serves Aetna, Aflac and AHL.
+- **`agent_findings`:** the table spec'd in 4.19, created now for the deterministic parser guardian. It records the file, the map version, the kind, the severity, the reasoning and the payload, once per file, map version and kind. No delete.
+- **`file_registry`:** `parser_id` now points at the map that read the file. New `parse_block` (`no_layout_map`) and `parsed_row_count` columns.
+
+**The code:**
+- **`lib/ingestion/layout.ts` (pure, no model, no network):** the target fields per file type, `convertCell` (integer cents and basis points, real dates, enums that must match exactly), `mapProblems` (checked before publishing), `chooseLayoutMap` (the resolution order) and `parseWithMap`.
+  - A required column missing: the file fails.
+  - Stated totals that don't balance: the file fails, with the arithmetic.
+  - An unknown column: a finding.
+  - A row-count swing past the threshold: a finding.
+  - An unreadable value: that row is held back, with a finding.
+  - The map's header row re-reads the kept grid, so a wrong guess in 4.2 is corrected without touching the raw rows.
+- **`lib/ingestion/parser.ts`:** resolution, then the parse, the findings, and the parser record on the file.
+  - A file with no layout map waits ("Waiting for a layout") and is parsed once a map is published or assigned.
+  - The poll sweeps every sealed file. The doors extract and then parse after their response.
+- **`lib/ingestion/reprocessRuns.ts`:** a reprocess now parses each file with its CURRENT map before the stages run, and records that map version. This is the parser half of 4.2's "a newer version picks up an ignored column".
+- **Admin plane:** Catalog › **Layout maps** (`/admin/layout-maps`), for super_admin and platform_config.
+  - Create a layout, edit its draft, publish, start N+1, retire, and assign carriers.
+  - Routes are under `/api/admin/layout-maps`. Every write is audited (`layout_map.*`, `layout_assignment.*`).
+
+**Acceptance (Notion):**
+
+| Criterion | Status |
+|---|---|
+| A map has no code; a known layout for a new carrier is one row set and zero code changes, shown with a test carrier | **Met:** `layout.test.mjs` assigns a test carrier to an existing layout. |
+| The Aetna/Aflac/AHL layout exists once, referenced by three carriers | **Structure met and tested.** The real map is written from the sample files. |
+| A published map can't be edited in place; editing makes N+1 | **Met:** trigger, verified on temp copies. |
+| Every file records the map id and version that parsed it | **Met:** `parser_id` (foreign key) and `parser_version`. |
+| An unknown extra column parses and raises a finding | **Met.** |
+| A missing required column fails and writes nothing to Layer 2 | **Met.** |
+| A row-count swing past the threshold raises a finding without blocking | **Met.** |
+| No AI provider call during a parse, shown by test | **Met:** `layout.ts` has only relative imports and no network or provider. |
+| Agency override maps resolve ahead of platform defaults | **Met:** `chooseLayoutMap` tests. |
+
+**Verified live, 2026-10-07:**
+- **The catalog:** both guards; the one-published, version and assignment indexes; `publish_layout_map` runs as its owner and can't be called by `authenticated`; findings can't be deleted; `parser_id` points at the maps; both new columns exist; nothing seeded.
+- **15 checks on "Isolation Test A", with maps scoped to that tenant** (keys `qa_isolation_a_*`, so the platform library is untouched). Those published maps and findings stay, by design.
+  - **No map yet:** its 6 sealed spreadsheets wait ("Waiting for a layout") and don't fail.
+  - **Publishing and assigning a map** parses the 1,200-row Mutual of Omaha file: 1,199 typed rows (the blank line skipped), `parser_id` and v1 recorded, and an unknown-column finding for "Insured Name" and " Notes ".
+  - **v1 is frozen:** its settings and columns refuse changes. Publishing v2 retired v1.
+  - **Reprocessing the same raw rows with v2:** the file and the run record v2, and "Insured Name" is no longer unknown. Nothing was uploaded.
+  - **A missing required column** fails the file, naming the columns, with a blocking finding.
+  - **Commission totals:** a balanced file parses (2 lines). A $10 mismatch fails with "the lines sum to $120.00, the file states $130.00".
+  - **A 2-row file after a 1,199-row one** parses, with a row-count swing finding.
+- **The admin screen:** loads its real tables with no platform layouts and the 8 active carriers (the deactivated test carrier hidden). Nothing was created there.
+
+**Not done here, by decision:**
+- **The guardian's AI half:** proposing a draft entry for an unknown column. It waits for a provider; the `proposal_source='ai'` hook is ready.
+- **The seeded maps** (AMAM, the shared Aetna/Aflac/AHL layout, Mutual of Omaha, Americo, Corebridge, SSL): they wait for the sample files.
+- **An agency screen for writing its own overrides:** resolution supports them; only staff can write maps today.
+- **The unmappable-status rule:** belongs to 4.5. `carrier_status_raw` is carried verbatim.

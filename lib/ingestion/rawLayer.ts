@@ -5,7 +5,7 @@ import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isSchemaGap } from "@/lib/supabase/schemaGap";
 
 import { detectHeaderRow, parseCsvGrid, rawRowsFromGrid } from "./grid";
-import { reprocess, type ReprocessDeps, type ReprocessFile, type ReprocessResult, type ReprocessRow, type ReprocessScope, type ReprocessStage, type ReprocessTrigger } from "./reprocess";
+import type { ReprocessRow } from "./reprocess";
 import { carrierFileStorage } from "./supabaseStorage";
 
 /**
@@ -20,9 +20,6 @@ import { carrierFileStorage } from "./supabaseStorage";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Loose = any;
 const db = (): Loose => getSupabaseServiceClient();
-
-/** The stages a reprocess rebuilds, in order. LA-4.6 (snapshots, change log) and LA-4.7 (current state) add theirs. */
-export const REPROCESS_STAGES: ReprocessStage[] = [];
 
 const CHUNK = 500;
 
@@ -164,67 +161,4 @@ export async function readRawRows(tenantId: string, fileId: string): Promise<Rep
     if ((data ?? []).length < 1000) break;
   }
   return rows;
-}
-
-function reprocessDeps(): ReprocessDeps {
-  return {
-    stages: REPROCESS_STAGES,
-    async resolveFiles(tenantId: string, scope: ReprocessScope): Promise<ReprocessFile[]> {
-      let query = db().from("file_registry").select("id, carrier_id, file_type, file_date, parser_version, row_count").eq("tenant_id", tenantId).not("raw_extracted_at", "is", null);
-      query = scope.kind === "file"
-        ? query.eq("id", scope.fileId)
-        : query.eq("carrier_id", scope.carrierId).gte("file_date", scope.from).lte("file_date", scope.to).is("superseded_by_file_id", null);
-      const { data, error } = await query.order("file_date").order("received_at");
-      if (error) throw new Error(`Could not find the files to reprocess: ${error.message}`);
-      return (data ?? []).map((row: Loose) => ({ id: row.id, carrierId: row.carrier_id, fileType: row.file_type, fileDate: row.file_date, parserVersion: row.parser_version, rowCount: row.row_count }));
-    },
-    readRows: (tenantId, file) => readRawRows(tenantId, file.id),
-    async startRun({ tenantId, trigger, triggeredBy, scope, parserVersion }) {
-      const { data, error } = await db().from("reprocess_runs").insert({ tenant_id: tenantId, trigger, triggered_by: triggeredBy, scope, parser_version: parserVersion }).select("id").single();
-      if (error) throw new Error(`The reprocess could not be recorded: ${error.message}`);
-      return data.id as string;
-    },
-    async finishRun(runId, result) {
-      const { error } = await db().from("reprocess_runs").update({
-        status: result.status,
-        file_ids: result.fileIds,
-        rows_read: result.rowsRead,
-        rows_changed: result.rowsChanged,
-        stages: result.stages,
-        error_detail: result.errorDetail,
-        finished_at: new Date().toISOString(),
-      }).eq("id", runId);
-      if (error) throw new Error(`The reprocess result could not be recorded: ${error.message}`);
-    },
-  };
-}
-
-export type ReprocessRunRow = {
-  id: string;
-  trigger: ReprocessTrigger;
-  scope: ReprocessScope;
-  parserVersion: string | null;
-  fileCount: number;
-  rowsRead: number;
-  rowsChanged: number;
-  status: "running" | "succeeded" | "failed";
-  errorDetail: string | null;
-  startedAt: string;
-  finishedAt: string | null;
-};
-
-export async function listReprocessRuns(tenantId: string, limit = 50): Promise<{ available: boolean; runs: ReprocessRunRow[] }> {
-  const { data, error } = await db().from("reprocess_runs").select("id, trigger, scope, parser_version, file_ids, rows_read, rows_changed, status, error_detail, started_at, finished_at").eq("tenant_id", tenantId).order("started_at", { ascending: false }).limit(limit);
-  if (error) {
-    if (isSchemaGap(error)) return { available: false, runs: [] };
-    throw new Error(`Could not load reprocess runs: ${error.message}`);
-  }
-  return {
-    available: true,
-    runs: (data ?? []).map((row: Loose) => ({ id: row.id, trigger: row.trigger, scope: row.scope, parserVersion: row.parser_version, fileCount: (row.file_ids ?? []).length, rowsRead: row.rows_read, rowsChanged: row.rows_changed, status: row.status, errorDetail: row.error_detail, startedAt: row.started_at, finishedAt: row.finished_at })),
-  };
-}
-
-export async function reprocessCarrierFiles(tenantId: string, triggeredBy: string | null, scope: ReprocessScope, trigger: ReprocessTrigger = "manual"): Promise<ReprocessResult> {
-  return reprocess(reprocessDeps(), { tenantId, scope, trigger, triggeredBy });
 }
