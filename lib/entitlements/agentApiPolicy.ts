@@ -136,6 +136,7 @@ export const AGENT_API_POLICIES: AgentApiPolicy[] = [
   { sourceFile: "app/api/app/carrier-files/reprocess/route.ts", featureKey: "statement_ingestion", allowedRoles: ["owner", "bookkeeper"] },
   // LA-4.17 · carrier rules and settings (windows, triggers, payout and tolerance).
   { sourceFile: "app/api/app/carrier-rules/route.ts", featureKey: "statement_ingestion", allowedRoles: ["owner", "bookkeeper"] },
+  { sourceFile: "app/api/app/policy-matching/route.ts", featureKey: "statement_ingestion", allowedRoles: ["owner", "bookkeeper"] },
   // LA-4.8 · persistency by carrier and lead source; a producer reads their own book's.
   { sourceFile: "app/api/app/persistency/route.ts", featureKey: "cohort_persistency", allowedRoles: ["owner", "producer", "bookkeeper"] },
   { sourceFile: "app/api/app/inbound/transfer/route.ts", featureKey: "inbound_transfers", allowedRoles: ["owner", "producer"] },

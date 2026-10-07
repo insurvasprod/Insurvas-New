@@ -7,6 +7,7 @@ import { isSchemaGap } from "@/lib/supabase/schemaGap";
 
 import type { RawColumn } from "./grid";
 import { refreshPolicyCurrent } from "./policyCurrentStore";
+import { matchFilePolicies } from "./policyMatchingStore";
 import { historyOf, snapshotContent, snapshotsForFile, TRACKED_FIELDS, type StoredSnapshot, type TrackedField } from "./snapshots";
 
 /**
@@ -105,7 +106,14 @@ export async function rebuildFileSnapshots(tenantId: string, fileId: string, typ
     const history = historyOf(await policyHistoryInputs(tenantId, result.carrier_id, chunk));
     const { error: historyError } = await db().rpc("replace_policy_changes", { p_tenant_id: tenantId, p_carrier_id: result.carrier_id, p_policies: chunk, p_changes: history.changes, p_events: history.events });
     if (historyError) throw new Error(`The policies' history could not be written: ${historyError.message}`);
-    // Layer 3 last: lapsed_on and issued_on read the history just written.
+    // LA-4.8: link the policies to our clients. A failure here leaves them unlinked (and logged);
+    // it never loses the snapshots, and the current rows below are still right without the links.
+    try {
+      await matchFilePolicies(tenantId, result.carrier_id, fileId, chunk);
+    } catch (matchError) {
+      console.error("[policy-matching]", fileId, matchError);
+    }
+    // Layer 3 last: lapsed_on and issued_on read the history just written, the links the ladder made.
     await refreshPolicyCurrent({ tenantId, carrierId: result.carrier_id, policies: chunk });
   }
   await db().from("file_registry").update({ derived_at: new Date().toISOString() }).eq("tenant_id", tenantId).eq("id", fileId);

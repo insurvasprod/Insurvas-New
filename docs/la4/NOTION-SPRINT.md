@@ -24,7 +24,7 @@ The repo's [TASKS.md](TASKS.md) (11 tasks, 2026-10-02) is the earlier, smaller s
 | 4.5 Status map, unknown-status gate | **Framework done 2026-10-07.** Migration `20261008130000` live and verified (below). No real status seeded until the sample files arrive. |
 | 4.6 Snapshots, change detection | **Done 2026-10-07.** Migration `20261008140000` live and verified (below). |
 | 4.7 Current-state table | **Done 2026-10-07.** Migration `20261008160000` live and verified (below). Money fields wait for 4.12; contact links for 4.8. |
-| 4.8 Policy ↔ CRM matching with AI | Not started (needs an AI provider) |
+| 4.8 Policy ↔ CRM matching with AI | **Non-AI parts done 2026-10-07.** Migration `20261008170000` live and verified (below). The AI reviewer waits for a provider; a person decides step 3 meanwhile. |
 | 4.9 Exception queues | Not started |
 | 4.10 Existing-book import | Not started |
 | 4.11 Policy list and detail | Partial: earlier screens exist; to be rebuilt on 4.7 |
@@ -497,3 +497,78 @@ It follows LA-3.13's carrier field maps on purpose: the same statuses, the same 
 - **The fixture:** the lapsed policy's `lapsed_on` (2026-10-05) is the change-log transition. A rebuild gives identical rows. Refreshed as of tomorrow with no new file, every days-past-due moves by one (36 → 37), and refreshing again restores today's rows exactly.
 - **Access:** as `tenant_app` (rolled back), the fixture sees only its own 9 rows, and can neither delete nor call the refresh.
 - 17 of 17 checks pass.
+## LA-4.8: how it is built (non-AI parts)
+
+**The data (`supabase/migrations/20261008170000_la_4_8_policy_matching.sql`):**
+- **`policy_match`,** the link record, with the Notion columns plus `ladder_step`.
+  - **Append-only:** a trigger refuses edits and deletes. The two allowed stamps are superseded (once) and confirmed (once). The app roles can't insert or update it directly.
+  - **One way in:** `record_policy_match` supersedes the policy's current link and inserts the new one in one transaction (the self-reference is deferred). It also closes the open review it answers and takes the household from the contact. It refuses a client from another agency.
+  - **Every link says how:** an `ai_review` link must carry model, prompt version, confidence and reasoning (a CHECK), and a non-AI link may carry none of them. Exact links carry no confidence. `provisional` ("no client found") points at nothing. One current link per policy.
+  - `confirm_policy_match` stamps a person's confirmation, once.
+- **`policy_match_review`:** the queue for step 3. One open review per policy, holding the carrier side (`carrier_row`) and the scored shortlist.
+- **`carrier_agent_map`:** the carrier's agent string → our user, unique on the **exact** string, mapped once by a person. No fuzzy matching anywhere (a static test refuses levenshtein, similarity, trigram or ilike).
+- **`policy_match_ladder`:** per file, how many policies each step resolved.
+- **`refresh_policy_current` is re-created** to fill `contact_id` and `household_id` (from the current link) and `agent_user_id` (from the map). A test proves it is 4.7's function plus exactly those three edits.
+
+**The ladder** (`lib/ingestion/policyMatchingStore.ts`), run in the snapshot stage before `policy_current` is refreshed:
+1. **Already linked:** nothing to do.
+2. **We hold the number:** an LA-3.15 submission (`submission_record`), or our own LA-2.17 issued policy (`policy_number_exact`, carrier compared by exact name or code). Linked with certainty, no AI.
+3. **Otherwise, a shortlist:**
+   - candidates are deal-flow entries and applications for the same carrier, dated up to 14 days before the file, and the mapped agent's own when the agent string resolves;
+   - each is scored on surname 25, given name 15, DOB 25, phone 20, premium 10 and face 5;
+   - "likely" needs 60 points **and** three agreeing fields, so **no single field decides** (a full name alone isn't enough either);
+   - the best five go to the queue.
+
+   **The AI reviewer isn't configured,** so a person picks a candidate or "none of these". That link is `human`, confirmed by them.
+- A matching failure is logged and leaves the policies unlinked. It never loses the snapshots.
+
+**The privacy payload** (`reviewPayload`, for when the AI arrives) is built field by field: name, DOB and phone, plus premium and face, for the carrier row and the shortlisted candidates only. A test slips an SSN, bank numbers, email, address and notes into a candidate and proves none of them comes out.
+
+**On screen:** Book of Business › **Policy matching** (owner, bookkeeper).
+- **Tiles:** waiting for a person; share linked by number; share needing review ("high means numbers aren't captured at submission"); AI accuracy over 7 days ("AI review isn't configured" until then); agent codes unmapped.
+- **Tabs:**
+  - **To review:** a field-by-field comparison with each candidate's score.
+  - **Links:** how each was made, with "Reopen" to correct one.
+  - **Agent codes:** map an exact string to a person, or unmap it.
+- Every change is audited.
+
+**Acceptance (Notion):**
+
+| Criterion | Status |
+|---|---|
+| A policy-number match on an LA-3.15 submission links as `submission_record`, no AI | **Met:** ladder step 2; rehearsal. |
+| No policy-number match → shortlist, scores, AI decision, confidence, reasoning | **Partly:** shortlist and scores are built and queued; **the AI decision waits for a provider** (a person decides meanwhile). The table already refuses an AI link without confidence and reasoning. |
+| No single field can produce a match (surname-only test) | **Met:** tested for every field alone, and for a full name alone. |
+| Every link carries its method; AI links carry model and prompt version | **Met:** NOT NULL and CHECK constraints, verified on temp copies. |
+| Correcting a match supersedes and leaves the old one readable | **Met:** rehearsal. |
+| Agent resolution is exact-only; unresolved goes to a queue | **Met:** a different-case string doesn't resolve; the Agent codes tab is the queue. |
+| The payload has name, DOB and phone for shortlisted candidates only | **Met:** test. |
+| Accuracy measured against human confirmations, weekly | **Built:** shown for the last 7 days; nothing to measure until AI links exist. |
+| The share resolving at each ladder step is visible | **Met:** tiles from `policy_match_ladder`. |
+
+**Not done here:** pre-filling the agent map from LA-0.4 writing numbers. Those are held per agency, not per agent, so they can't say which person a code belongs to.
+
+**Before the migration (2026-10-07):** 23 checks on rolled-back temp copies pass. The page shows only "Policy matching needs a database update (20261008170000)"; the API answers `available: false`, and writes return 503. A parse before the migration skips matching (it reads as a schema gap).
+**4.8 verified live, 2026-10-07** (the owner applied the migration):
+- **The first two applies failed on the migration's own check, and rolled back whole.** Supabase grants `service_role` every privilege on a new table by default, and the first version revoked only delete and truncate on `policy_match`. The second apply was run from the earlier paste. The fix revokes insert, update, delete and truncate explicitly (as 4.7 does), a test pins it, and the error now names which privileges remain. The rehearsal couldn't catch this, because it strips grants.
+- **The catalog (13/13):**
+  - `service_role` can only read `policy_match`; `tenant_app` reads all four tables; `anon` and `authenticated` see nothing.
+  - The queue and the map are writable by the server and never truncatable.
+  - `record_policy_match`, `confirm_policy_match` and `refresh_policy_current` are security definer and run as `service_role` only.
+  - The guard is on; the self-reference is deferred; the link checks, the one-current-link and one-open-review keys, the exact agent-code key and the issued-number index all exist; RLS is on all four tables.
+  - The live refresh joins the current link and the exact agent string.
+- **Through the app, on the fixture** (temporary entitlement; review and ladder rows deleted afterwards):
+  - Reprocessing a 5-policy file runs the ladder: 5 open reviews, each with the carrier side dated by the file and an empty shortlist (the fixture has no deals or applications, so nothing is invented). The ladder row reads 0 / 0 / 5. No link is written.
+  - Running it again keeps one open review per policy.
+  - The page data shows 100% needing review, with AI not configured.
+  - Picking a candidate that isn't on the shortlist is refused (400), and so is mapping a code to someone outside the agency.
+  - The fixture files carry no agent codes, so map/unmap was proven only on the temp copies.
+  - `policy_current` keeps every computed value. Only `snapshot_id` follows the fresh snapshot rows a reprocess writes, and the 4.7 parity check (17/17) still passes.
+- **The link writer on the live tables,** in a block that ends by raising (so everything rolled back):
+  - a link fills `policy_current`'s contact and household;
+  - a correction supersedes, leaving one current link;
+  - edit and delete are refused (P0001), and so are an unexplained AI link (23514) and a client from another agency (22023);
+  - "none of these" clears the client.
+
+  Afterwards: 0 links, 0 rehearsal contacts, 0 reviews.
+- **The page** (demo agency) renders the five tiles and three tabs with nothing to review.
