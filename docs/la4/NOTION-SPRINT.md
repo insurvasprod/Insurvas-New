@@ -21,7 +21,7 @@ The repo's [TASKS.md](TASKS.md) (11 tasks, 2026-10-02) is the earlier, smaller s
 | 4.2 Raw layer, reprocessing | **Done 2026-10-07.** Migration `20261008110000` live and verified (below). Reprocessing rebuilds nothing until 4.6/4.7 register their stages. |
 | 4.3 Parser framework, layout maps | **Framework done 2026-10-07.** Migration `20261008120000` live and verified (below). No carrier map is seeded until the sample files arrive. |
 | 4.4 PDF extraction (OCR, AI, balance gate) | Not started (needs an AI provider) |
-| 4.5 Status map, unknown-status gate | Not started (needs sample files) |
+| 4.5 Status map, unknown-status gate | **Framework done 2026-10-07.** Migration `20261008130000` live and verified (below). No real status seeded until the sample files arrive. |
 | 4.6 Snapshots, change detection | Not started |
 | 4.7 Current-state table | Not started |
 | 4.8 Policy ↔ CRM matching with AI | Not started (needs an AI provider) |
@@ -270,3 +270,74 @@ It follows LA-3.13's carrier field maps on purpose: the same statuses, the same 
 - **The seeded maps** (AMAM, the shared Aetna/Aflac/AHL layout, Mutual of Omaha, Americo, Corebridge, SSL): they wait for the sample files.
 - **An agency screen for writing its own overrides:** resolution supports them; only staff can write maps today.
 - **The unmappable-status rule:** belongs to 4.5. `carrier_status_raw` is carried verbatim.
+
+## LA-4.5: how it is built
+
+**The vocabulary:** nine statuses, each with its money meaning (`lib/ingestion/statuses.ts`): submitted, declined, withdrawn, approved_unpaid, not_taken, active, at_risk, lapsed, paid_up. The carrier's own word is always kept beside ours.
+
+**The data (`supabase/migrations/20261008130000_la_4_5_status_map.sql`):**
+- **`carrier_status_map`:** platform data, because a carrier's word means the same for every agency. One row per carrier, file type and word: `UNIQUE (carrier_id, file_type, carrier_status_raw)`.
+  - A mapping takes effect only once approved.
+  - An approved mapping is never changed or removed, because files were read with it. A proposal keeps its carrier word.
+  - `proposal_source` is the place AI will plug in.
+- **`unmapped_status_queue`:** one row per agency, carrier, type and word, with `first_seen_file_id`, the proposal fields (for AI later), `notified_at` and the resolution.
+  - `unmapped_status_occurrences` keeps each file's count, so a re-parse replaces its own count instead of adding to it. The queue's count is their sum.
+- **`record_unmapped_statuses`:** records what one parse found and returns which words are new.
+- **`approve_status_mapping`:** makes a mapping take effect, resolves every agency's queue entry for that word, and returns the files to reprocess.
+- **`file_registry.held_row_count`:** how many of a file's rows are held.
+
+**The gate (`lib/ingestion/parser.ts`):**
+- After a policy file parses, a row passes only if its `carrier_status_raw` is character for character a word with an approved mapping. It then carries both the carrier's word and `status_normalized`.
+- Unmapped rows go nowhere downstream; reprocess hands stages the passed rows only. Each such word is:
+  - queued, with its row count;
+  - recorded as a blocking `unmapped_status` finding by the parser guardian;
+  - emailed, once per new word, to the agency's owners and bookkeepers (template `carrier_files.unmapped_status`).
+- Carrier files shows a notice listing the waiting words, and each file's held count.
+- **Exact matching:** 4.3's reader now keeps `carrier_status_raw` verbatim. It is the one field that isn't trimmed. So "ACTIVE " stays "ACTIVE " and is queued as its own word.
+
+**Mapping a word (admin plane):** Catalog › **Status maps** (`/admin/status-maps`), with carrier-library access.
+- The queue gathers each word across agencies, shown with its spaces visible ("ACTIVE·").
+- Staff choose one of the nine statuses and map it, which approves it.
+- Approval reprocesses every held file from its raw rows; nothing is uploaded again.
+- Proposals can be approved or discarded. Every write is audited (`status_map.*`).
+
+**The second path to `at_risk`:** `effectiveStatus` is the helper 4.7 will use. It turns an active policy whose paid-to date is past the carrier's grace into `at_risk`, the same value a carrier word mapped to `at_risk` gives. With no grace configured (null, per 4.17), nothing is derived.
+
+**Acceptance (Notion):**
+
+| Criterion | Status |
+|---|---|
+| A mapped status reaches Layer 2 with both the raw and normalized values | **Met** for what goes downstream (passed rows carry both). Layer 2 itself is 4.6. |
+| An unmapped status writes nothing further; one queue row per distinct word with the right count; notifications sent | **Met:** gate, queue and counts verified on temp copies; finding plus email. |
+| Approving a mapping reprocesses held rows without a re-upload | **Met:** approval returns the held files, which are reprocessed from raw rows. |
+| Matching is exact; a trailing space makes its own queue entry | **Met:** tests, and the verbatim reader. |
+| A mapping can't take effect without `approved_by` | **Met:** constraint, and the gate reads approved mappings only. |
+| Explicit and derived `at_risk` give the same value, shown by test | **Met:** `statuses.test.mjs`. |
+| Seeds cover every status in the sample files, and no others | **Waiting** for the sample files. |
+
+**Verified live, 2026-10-07** (the owner applied the migration):
+- **The catalog:**
+  - the guard is in place;
+  - both functions run as their owner and can't be called by `authenticated`;
+  - queue rows can't be deleted;
+  - `held_row_count` exists.
+- **The setup:** "Isolation Test A", with the deactivated test carrier "LA14 Market" and a tenant-scoped layout map. A 7-row policy file used the words `Active` ×2, `Active ` (trailing space), `ACTIVE` and `Pending UW` ×3.
+- **The gate, before any approval:**
+  - parsed 7, held 7;
+  - 4 queue rows, one per word with the right counts: the trailing-space word is its own entry, and `ACTIVE` is separate from `Active`;
+  - each entry records the first file it appeared in;
+  - a blocking guardian finding;
+  - exactly one email to the owner (logged as skipped, because delivery is off on the development machine), and every entry marked notified.
+  - A reprocess replaced the counts rather than doubling them, and emailed no one again.
+  - The agency's list shows "7 held". The page notice names the 4 words with their counts. The staff queue lists all 4.
+- **Approval (owner-approved, on the test carrier only):** `Pending UW` → submitted, through `/api/admin/status-maps`.
+  - It is approved by the QA staff account, with the word kept exactly.
+  - The automatic reprocess (trigger `status_map_approval`) re-read the 7 raw rows: held went from 7 to 4.
+  - The entry is resolved by that mapping; the other 3 words stay open.
+  - Changing the mapping is refused, and mapping the word again gets a 409. The approval is audited, and the queue no longer lists it.
+  - This leaves one permanent mapping, on the test carrier, which no agency uses.
+- **The catalog verifier** reports 20261008130000 as applied.
+
+**Not done here:**
+- **The guardian's AI proposal:** waits for a provider. The `proposed_*` columns are ready.
+- **Notification channel:** by email and a page notice, not the live alert feed. That feed drops a row with no lead link after about 10 minutes and plays sounds, which doesn't suit a status that waits for staff.

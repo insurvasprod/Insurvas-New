@@ -3,9 +3,12 @@ import "server-only";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isSchemaGap } from "@/lib/supabase/schemaGap";
 
-import { chooseLayoutMap, parseWithMap, type Finding, type LayoutEntry, type LayoutMap, type ParseResult, type PublishedMapRow } from "./layout";
+import { sendEmail } from "@/lib/email/transport";
+
+import { chooseLayoutMap, parseWithMap, type Finding, type LayoutEntry, type LayoutMap, type ParseResult, type PublishedMapRow, type TypedRow } from "./layout";
 import type { RawColumn, RawRow } from "./grid";
 import { readRawRows } from "./rawLayer";
+import { gateStatuses, shownWord, type NormalizedStatus } from "./statuses";
 
 /**
  * LA-4.3 (Notion sprint) · parsing registered files with their carrier's layout map, server side.
@@ -80,7 +83,8 @@ async function previousParsedCount(tenantId: string, file: Loose): Promise<numbe
 }
 
 export type ParseOutcome =
-  | { outcome: "parsed"; mapId: string; version: number; rows: number; findings: number; result: ParseResult }
+  /** `passed` are the rows that go downstream: for a policy file, those whose status is mapped (LA-4.5). */
+  | { outcome: "parsed"; mapId: string; version: number; rows: number; findings: number; result: ParseResult; passed: TypedRow[]; heldRows: number }
   | { outcome: "failed"; mapId: string; version: number; reason: string; result: ParseResult }
   | { outcome: "no_layout_map" }
   | { outcome: "not_applicable"; reason: string }
@@ -128,8 +132,58 @@ export async function parseCarrierFile(tenantId: string, fileId: string, rows?: 
     await db().from("file_registry").update(movesStatus ? { ...parser, status: "failed", error_detail: result.fatal.slice(0, 2000), parsed_row_count: null } : { ...parser, parsed_row_count: null }).eq("tenant_id", tenantId).eq("id", fileId);
     return { outcome: "failed", mapId: resolved.map.id, version: resolved.map.version, reason: result.fatal, result };
   }
-  await db().from("file_registry").update(movesStatus ? { ...parser, status: "parsed", parsed_at: new Date().toISOString(), parsed_row_count: result.rows.length } : { ...parser, parsed_at: new Date().toISOString(), parsed_row_count: result.rows.length }).eq("tenant_id", tenantId).eq("id", fileId);
-  return { outcome: "parsed", mapId: resolved.map.id, version: resolved.map.version, rows: result.rows.length, findings: result.findings.length, result };
+  // LA-4.5: the unknown-status gate. Only rows whose carrier word has an approved mapping go further.
+  const gate = file.file_type === "policies" ? await applyStatusGate(tenantId, fileId, file.carrier_id, resolved.map, result.rows) : null;
+  const parsedAt = new Date().toISOString();
+  const recorded = { ...parser, parsed_at: parsedAt, parsed_row_count: result.rows.length, ...(gate?.available ? { held_row_count: gate.heldRows } : {}) };
+  await db().from("file_registry").update(movesStatus ? { ...recorded, status: "parsed" } : recorded).eq("tenant_id", tenantId).eq("id", fileId);
+  return { outcome: "parsed", mapId: resolved.map.id, version: resolved.map.version, rows: result.rows.length, findings: result.findings.length + (gate?.heldRows ? 1 : 0), result, passed: gate?.available ? gate.passed : result.rows, heldRows: gate?.heldRows ?? 0 };
+}
+
+type Gate = { available: boolean; passed: TypedRow[]; heldRows: number };
+
+/**
+ * Holds back every row whose carrier word is not (yet) mapped, queues each such word once per agency
+ * with its row count, records it for the parser guardian, and tells the agency about new words.
+ * Before 20261008130000 there is no gate and every row passes, as in LA-4.3.
+ */
+async function applyStatusGate(tenantId: string, fileId: string, carrierId: string, map: LayoutMap, rows: TypedRow[]): Promise<Gate> {
+  const { data: mappings, error } = await db().from("carrier_status_map").select("carrier_status_raw, status_normalized").eq("carrier_id", carrierId).eq("file_type", "policies").not("approved_at", "is", null);
+  if (error) {
+    if (isSchemaGap(error)) return { available: false, passed: rows, heldRows: 0 };
+    throw new Error(`Could not read the status map: ${error.message}`);
+  }
+  const statusMap = new Map<string, NormalizedStatus>((mappings ?? []).map((row: Loose) => [row.carrier_status_raw as string, row.status_normalized as NormalizedStatus]));
+  const gate = gateStatuses(rows, statusMap);
+  const { data: queued, error: queueError } = await db().rpc("record_unmapped_statuses", { p_tenant_id: tenantId, p_file_id: fileId, p_carrier_id: carrierId, p_file_type: "policies", p_counts: gate.held });
+  if (queueError) throw new Error(`The unmapped statuses could not be queued: ${queueError.message}`);
+  if (gate.held.length) {
+    await writeFindings(tenantId, fileId, map, [{
+      findingType: "unmapped_status",
+      severity: "blocking",
+      reasoning: `${gate.heldRows} ${gate.heldRows === 1 ? "row is" : "rows are"} held: ${gate.held.length === 1 ? "this carrier status is" : "these carrier statuses are"} not mapped yet — ${gate.held.slice(0, 8).map((item) => `${shownWord(item.raw)} (${item.rows})`).join(", ")}.`,
+      payload: { held: gate.held },
+    }]);
+    const fresh = ((queued ?? []) as Array<{ id: string; raw: string; new: boolean }>).filter((entry) => entry.new);
+    if (fresh.length) await notifyUnmappedStatuses(tenantId, carrierId, fresh).catch((failure) => console.error("[status-gate] the agency could not be told:", failure));
+  }
+  return { available: true, passed: gate.passed, heldRows: gate.heldRows };
+}
+
+/** Tells the agency's owners and bookkeepers, once per new word, by email; the Carrier files page shows it too. */
+async function notifyUnmappedStatuses(tenantId: string, carrierId: string, entries: Array<{ id: string; raw: string }>) {
+  const [{ data: carrier }, { data: people }] = await Promise.all([
+    db().from("carriers").select("name").eq("id", carrierId).maybeSingle(),
+    db().from("tenant_users").select("user_id, role, users!inner(email, status)").eq("tenant_id", tenantId).in("role", ["owner", "bookkeeper"]).eq("users.status", "active"),
+  ]);
+  const name = carrier?.name ?? "A carrier";
+  const words = entries.map((entry) => shownWord(entry.raw)).join(", ");
+  const text = `${name} sent ${entries.length === 1 ? "a policy status" : "policy statuses"} Insurvas has not seen before: ${words}.\n\nThe policies with ${entries.length === 1 ? "this status are" : "these statuses are"} kept and held back until the status is mapped, so nothing is guessed. They are read automatically once it is.\n\nCarrier files: /app/carrier-files`;
+  const html = `<p>${name} sent ${entries.length === 1 ? "a policy status" : "policy statuses"} Insurvas has not seen before: <strong>${words.replace(/</g, "&lt;")}</strong>.</p><p>The policies with ${entries.length === 1 ? "this status are" : "these statuses are"} kept and held back until the status is mapped, so nothing is guessed. They are read automatically once it is.</p>`;
+  for (const person of (people ?? []) as Array<{ user_id: string; users: { email: string } }>) {
+    await sendEmail({ to: person.users.email, subject: `${name}: a policy status needs mapping`, text, html, templateKey: "carrier_files.unmapped_status", userId: person.user_id, tenantId, dedupeKey: `unmapped_status:${entries.map((entry) => entry.id).join(",")}:${person.user_id}` });
+  }
+  await db().from("unmapped_status_queue").update({ notified_at: new Date().toISOString() }).eq("tenant_id", tenantId).in("id", entries.map((entry) => entry.id));
 }
 
 export type ParseSweep = { available: boolean; parsed: number; failed: number; waiting: number; errors: string[] };

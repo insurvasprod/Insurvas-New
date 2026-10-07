@@ -100,6 +100,8 @@ export function buildAdminNav(role: AdminRole): SidebarNode[] {
       section("carriers", "/admin/field-maps", "Field maps", "carriers"),
       // LA-4.3 · how each carrier's spreadsheets are read. Same rule: it belongs to the carrier library.
       section("carriers", "/admin/layout-maps", "Layout maps", "carriers"),
+      // LA-4.5 · carrier status words waiting to be mapped, and the status map.
+      section("carriers", "/admin/status-maps", "Status maps", "carriers"),
       section("templates", "/admin/templates", "Templates", "templates"),
     ]),
 

@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { CARRIER_FILES_PENDING_MESSAGE, getInboundAddress, libraryCarriers, listCarrierFiles, listSenders } from "@/lib/ingestion/registry";
+import { listOpenUnmappedStatuses } from "@/lib/ingestion/statusAdmin";
+import { shownWord } from "@/lib/ingestion/statuses";
 import { hasTenantPermission } from "@/lib/tenantAuth/permissions";
 
 /**
@@ -32,7 +34,7 @@ export default async function CarrierFilesPage({ searchParams }: { searchParams:
   const readOnly = guard.entitlement.access === "read_only";
   const { view, upload } = await searchParams;
   const showDoors = view === "doors";
-  const [list, carriers] = await Promise.all([listCarrierFiles(tenantId), libraryCarriers()]);
+  const [list, carriers, unmapped] = await Promise.all([listCarrierFiles(tenantId), libraryCarriers(), listOpenUnmappedStatuses(tenantId)]);
   const [address, senders] = showDoors && list.available ? await Promise.all([getInboundAddress(tenantId), listSenders(tenantId)]) : [null, null];
 
   const blocked = !list.available ? CARRIER_FILES_PENDING_MESSAGE : readOnly ? "Receiving files is paused while the account is read-only." : null;
@@ -47,6 +49,13 @@ export default async function CarrierFilesPage({ searchParams }: { searchParams:
         description="Policy and commission files from your carriers, uploaded, emailed in or dropped by a script."
         actions={blocked ? <Button type="button" disabled title={blocked}>Upload a file</Button> : <CarrierFileUploadButton carriers={carriers} autoOpen={upload === "1"} />}
       />
+
+      {/* LA-4.5: a status word nobody has mapped holds its rows back until Insurvas maps it. */}
+      {unmapped.entries.length > 0 && (
+        <div role="status" className="rounded-lg border border-border border-l-[3px] border-l-[var(--warning)] bg-[var(--warning-surface)] px-4 py-3 text-sm text-[var(--warning-ink)]">
+          {unmapped.entries.reduce((sum, entry) => sum + entry.rows, 0).toLocaleString("en-US")} policies are held until Insurvas maps {unmapped.entries.length === 1 ? "a status word" : `${unmapped.entries.length} status words`} your carriers sent: {unmapped.entries.slice(0, 6).map((entry) => `${shownWord(entry.raw)} from ${entry.carrierName} (${entry.rows.toLocaleString("en-US")})`).join(", ")}{unmapped.entries.length > 6 ? ", …" : ""}. They are read automatically once mapped.
+        </div>
+      )}
 
       {blocked && (
         <div role="status" className="rounded-lg border border-border border-l-[3px] border-l-[var(--warning)] bg-[var(--warning-surface)] px-4 py-3 text-sm text-[var(--warning-ink)]">{blocked}</div>

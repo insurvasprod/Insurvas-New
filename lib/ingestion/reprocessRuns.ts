@@ -35,7 +35,7 @@ function reprocessDeps(): ReprocessDeps {
     readRows: (tenantId, file) => readRawRows(tenantId, file.id),
     async parse(tenantId, file, rows) {
       const outcome = await parseCarrierFile(tenantId, file.id, rows);
-      if (outcome.outcome === "parsed") return { parserVersion: outcome.version, typedRows: outcome.result.rows, fatal: null };
+      if (outcome.outcome === "parsed") return { parserVersion: outcome.version, typedRows: outcome.passed, fatal: null };
       if (outcome.outcome === "failed") return { parserVersion: outcome.version, typedRows: null, fatal: outcome.reason };
       return { parserVersion: null, typedRows: null, fatal: outcome.outcome === "no_layout_map" ? "No layout map for this carrier and file type." : outcome.outcome };
     },

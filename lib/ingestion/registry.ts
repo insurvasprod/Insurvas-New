@@ -305,6 +305,8 @@ export type CarrierFileRow = {
   waitingForLayout: boolean;
   /** LA-4.3: the layout map version that read it, once parsed. */
   parserVersion: number | null;
+  /** LA-4.5: rows held back because their carrier status is not mapped yet. */
+  heldRows: number;
 };
 
 export type CarrierFileSkip = { id: string; originalFileId: string; originalFilename: string; source: CarrierFileSource; skippedAt: string };
@@ -315,17 +317,18 @@ const FILE_COLUMNS =
   "id, carrier_id, file_type, file_date, path_agency, original_filename, file_bytes, file_kind, status, error_detail, source, email_from, received_at, superseded_by_file_id, content_hash, row_count, carriers(name), users:uploaded_by(name, email)";
 const RAW_COLUMNS = ", raw_extracted_at, raw_error";
 const PARSE_COLUMNS = ", parse_block, parser_version";
+const STATUS_COLUMNS = ", held_row_count";
 
 /** The agency's files, newest first (at most `limit`), and the most recent skipped duplicates. */
 export async function listCarrierFiles(tenantId: string, limit = 500): Promise<CarrierFileList> {
   const read = (columns: string) => db().from("file_registry").select(columns).eq("tenant_id", tenantId).order("received_at", { ascending: false }).limit(limit);
   const [first, skips] = await Promise.all([
-    read(FILE_COLUMNS + RAW_COLUMNS + PARSE_COLUMNS),
+    read(FILE_COLUMNS + RAW_COLUMNS + PARSE_COLUMNS + STATUS_COLUMNS),
     db().from("file_registry_skips").select("id, original_file_id, original_filename, source, skipped_at").eq("tenant_id", tenantId).order("skipped_at", { ascending: false }).limit(50),
   ]);
   let files = first;
-  // Before 20261008110000 the raw-layer columns do not exist; the list still shows every file.
-  // Each later migration adds columns; before it is applied the list still shows every file.
+  // Each later migration (4.2, 4.3, 4.5) adds columns; before it is applied the list still shows every file.
+  if (files.error && files.error.code === "42703") files = await read(FILE_COLUMNS + RAW_COLUMNS + PARSE_COLUMNS);
   if (files.error && files.error.code === "42703") files = await read(FILE_COLUMNS + RAW_COLUMNS);
   if (files.error && files.error.code === "42703") files = await read(FILE_COLUMNS);
   if (files.error) {
@@ -357,6 +360,7 @@ export async function listCarrierFiles(tenantId: string, limit = 500): Promise<C
       rawError: row.raw_error ?? null,
       waitingForLayout: row.parse_block === "no_layout_map",
       parserVersion: row.parser_version ?? null,
+      heldRows: row.held_row_count ?? 0,
     })),
     skips: (skips.data ?? []).map((row: Loose) => ({ id: row.id, originalFileId: row.original_file_id, originalFilename: row.original_filename, source: row.source, skippedAt: row.skipped_at })),
   };

@@ -152,6 +152,7 @@ export function CarrierFilesTable({ files, emptyTitle, emptyHint }: { files: Car
                     title={file.rowCount !== null ? "Rows kept exactly as they arrived" : file.fileKind === "pdf" ? "A PDF's lines are read by PDF extraction" : file.rawError ?? (file.status === "failed" ? undefined : "Waiting to be read")}
                   >
                     {file.rowCount !== null ? file.rowCount.toLocaleString("en-US") : <span className="text-muted-foreground">—</span>}
+                    {file.heldRows > 0 && <span className="block text-xs text-[var(--warning-ink)]" title="Held until Insurvas maps the carrier's status word">{file.heldRows.toLocaleString("en-US")} held</span>}
                   </td>
                   <td>
                     {file.waitingForLayout ? (

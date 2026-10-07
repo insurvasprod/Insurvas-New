@@ -34,11 +34,15 @@ export const TRANSFORMS_FOR: Record<DataType, readonly Transform[]> = {
   integer: ["none", "negate"],
 };
 
-export type TargetField = { key: string; label: string; dataType: DataType; enumValues?: readonly string[] };
+/**
+ * `verbatim`: kept exactly as the cell has it — not even trimmed. The carrier's status word is
+ * matched exactly by LA-4.5's status map, so "ACTIVE " must stay "ACTIVE ", not become "ACTIVE".
+ */
+export type TargetField = { key: string; label: string; dataType: DataType; enumValues?: readonly string[]; verbatim?: true };
 
 const POLICY_FIELDS: TargetField[] = [
   { key: "policy_number", label: "Policy number", dataType: "text" },
-  { key: "carrier_status_raw", label: "Status (the carrier's words)", dataType: "text" },
+  { key: "carrier_status_raw", label: "Status (the carrier's words)", dataType: "text", verbatim: true },
   { key: "paid_to_date", label: "Paid-to date", dataType: "date" },
   { key: "effective_date", label: "Effective date", dataType: "date" },
   { key: "issue_date", label: "Issue date", dataType: "date" },
@@ -176,12 +180,13 @@ function basisPoints(text: string, fromPercent: boolean): number | null {
   return match[1] ? -bp : bp;
 }
 
-/** One cell through one map entry. An empty cell is null (and an error only if required). */
-export function convertCell(raw: string, entry: Pick<LayoutEntry, "dataType" | "transform" | "enumValues" | "required">): Converted {
+/** One cell through one map entry. An empty (or all-space) cell is null, and an error only if required. */
+export function convertCell(raw: string, entry: Pick<LayoutEntry, "dataType" | "transform" | "enumValues" | "required">, options: { verbatim?: boolean } = {}): Converted {
   if (raw.trim() === "") return entry.required ? { ok: false, reason: "is empty" } : { ok: true, value: null };
   const negate = entry.transform === "negate";
   switch (entry.dataType) {
     case "text": {
+      if (options.verbatim && entry.transform === "none") return { ok: true, value: raw };
       const value = entry.transform === "digits_only" ? raw.replace(/\D/g, "") : raw.trim();
       return value === "" && entry.required ? { ok: false, reason: "has no digits" } : { ok: true, value: value || null };
     }
@@ -226,7 +231,7 @@ export type TypedRow = { rowNumber: number; values: Record<string, CellValue> };
 export type RowProblem = { rowNumber: number; field: string; reason: string };
 
 export type Finding = {
-  findingType: "unknown_column" | "row_count_swing" | "unreadable_values" | "required_column_missing" | "totals_mismatch" | "header_row_moved" | "total_row_not_found";
+  findingType: "unknown_column" | "row_count_swing" | "unreadable_values" | "required_column_missing" | "totals_mismatch" | "header_row_moved" | "total_row_not_found" | "unmapped_status";
   severity: "info" | "warning" | "blocking";
   reasoning: string;
   payload: Record<string, unknown>;
@@ -260,6 +265,7 @@ function money(cents: number): string {
 /** Reads one file's raw rows with one map. Pure; the same input always gives the same output. */
 export function parseWithMap(input: ParseInput): ParseResult {
   const { map, entries } = input;
+  const verbatimFields = new Set(TARGET_FIELDS[map.fileType].filter((field) => field.verbatim).map((field) => field.key));
   const findings: Finding[] = [];
   const result = (fatal: string | null, rows: TypedRow[] = [], heldBack: RowProblem[] = [], stated: number | null = null, lines: number | null = null): ParseResult =>
     ({ fatal, rows, heldBack, findings, statedTotalCents: stated, linesTotalCents: lines });
@@ -311,7 +317,7 @@ export function parseWithMap(input: ParseInput): ParseResult {
     for (const entry of entries) {
       const key = keyFor.get(entry.sourceColumn);
       if (!key) { values[entry.targetField] = null; continue; }
-      const converted = convertCell(row.payload[key] ?? "", entry);
+      const converted = convertCell(row.payload[key] ?? "", entry, { verbatim: verbatimFields.has(entry.targetField) });
       if (converted.ok) values[entry.targetField] = converted.value;
       else { rowOk = false; heldBack.push({ rowNumber: row.rowNumber, field: entry.targetField, reason: converted.reason }); }
     }
