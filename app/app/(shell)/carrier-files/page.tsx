@@ -5,10 +5,12 @@ import { ViewTabs } from "@/components/app/book-of-business-views";
 import { CarrierFileDoors } from "@/components/app/carrier-file-doors";
 import { CarrierFileUploadButton } from "@/components/app/carrier-file-upload";
 import { CarrierFilesTable } from "@/components/app/carrier-files-table";
+import { PolicyChangesTable } from "@/components/app/policy-changes-table";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { CARRIER_FILES_PENDING_MESSAGE, getInboundAddress, libraryCarriers, listCarrierFiles, listSenders } from "@/lib/ingestion/registry";
+import { listPolicyChanges } from "@/lib/ingestion/snapshotStore";
 import { listOpenUnmappedStatuses } from "@/lib/ingestion/statusAdmin";
 import { shownWord } from "@/lib/ingestion/statuses";
 import { hasTenantPermission } from "@/lib/tenantAuth/permissions";
@@ -34,8 +36,11 @@ export default async function CarrierFilesPage({ searchParams }: { searchParams:
   const readOnly = guard.entitlement.access === "read_only";
   const { view, upload } = await searchParams;
   const showDoors = view === "doors";
+  const showChanges = view === "changes";
   const [list, carriers, unmapped] = await Promise.all([listCarrierFiles(tenantId), libraryCarriers(), listOpenUnmappedStatuses(tenantId)]);
   const [address, senders] = showDoors && list.available ? await Promise.all([getInboundAddress(tenantId), listSenders(tenantId)]) : [null, null];
+  // LA-4.6: what moved between the carriers' policy files.
+  const changes = showChanges && list.available ? await listPolicyChanges(tenantId) : null;
 
   const blocked = !list.available ? CARRIER_FILES_PENDING_MESSAGE : readOnly ? "Receiving files is paused while the account is read-only." : null;
   const current = list.files.filter((file) => file.status !== "superseded");
@@ -73,15 +78,22 @@ export default async function CarrierFilesPage({ searchParams }: { searchParams:
       {list.available && (
         <ViewTabs
           label="Carrier file views"
-          active={showDoors ? "doors" : "files"}
+          active={showDoors ? "doors" : showChanges ? "changes" : "files"}
           tabs={[
             { key: "files", label: "Files", count: list.files.length, href: "/app/carrier-files" },
+            { key: "changes", label: "Policy changes", href: "/app/carrier-files?view=changes" },
             { key: "doors", label: "Email and bucket", href: "/app/carrier-files?view=doors" },
           ]}
         />
       )}
 
-      {showDoors && address && senders ? (
+      {showChanges && changes ? (
+        <PolicyChangesTable
+          changes={changes.changes}
+          emptyTitle={changes.available ? "No policy has changed yet" : "Policy changes are not available yet"}
+          emptyHint={changes.available ? "Changes appear when a carrier's next policy file differs from the one before it." : "They appear once the database update (20261008140000) is applied."}
+        />
+      ) : showDoors && address && senders ? (
         <CarrierFileDoors
           tenantId={tenantId}
           address={address.address}

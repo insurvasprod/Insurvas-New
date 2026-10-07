@@ -8,6 +8,7 @@ import { sendEmail } from "@/lib/email/transport";
 import { chooseLayoutMap, parseWithMap, type Finding, type LayoutEntry, type LayoutMap, type ParseResult, type PublishedMapRow, type TypedRow } from "./layout";
 import type { RawColumn, RawRow } from "./grid";
 import { readRawRows } from "./rawLayer";
+import { runStages } from "./stages";
 import { gateStatuses, shownWord, type NormalizedStatus } from "./statuses";
 
 /**
@@ -201,10 +202,14 @@ export async function parsePendingFiles(limit = 20): Promise<ParseSweep> {
       throw new Error(`Could not list files to parse: ${read.error.message}`);
     }
   }
-  for (const file of [...(fresh.data ?? []), ...(blocked.data ?? [])] as Array<{ id: string; tenant_id: string }>) {
+  // LA-4.6: a policy file parsed but never derived (a stage failed half way) is read again. Before
+  // 20261008140000 there is no derived_at column, and nothing to derive.
+  const underived = await db().from("file_registry").select("id, tenant_id").eq("status", "parsed").eq("file_type", "policies").is("derived_at", null).order("received_at").limit(limit);
+  const retry = underived.error ? [] : (underived.data ?? []);
+  for (const file of [...(fresh.data ?? []), ...(blocked.data ?? []), ...retry] as Array<{ id: string; tenant_id: string }>) {
     try {
       const result = await parseCarrierFile(file.tenant_id, file.id);
-      if (result.outcome === "parsed") outcome.parsed++;
+      if (result.outcome === "parsed") { outcome.parsed++; await deriveFile(file.tenant_id, file.id, result); }
       else if (result.outcome === "failed") outcome.failed++;
       else if (result.outcome === "no_layout_map") outcome.waiting++;
       else if (result.outcome === "pending_schema") return { ...outcome, available: false };
@@ -215,11 +220,22 @@ export async function parsePendingFiles(limit = 20): Promise<ParseSweep> {
   return outcome;
 }
 
+/**
+ * LA-4.6: after a parse, the stages a reprocess would run (snapshots, then the change log), for the
+ * rows that passed the status gate. A failure leaves derived_at empty for the sweep to retry.
+ */
+export async function deriveFile(tenantId: string, fileId: string, outcome: Extract<ParseOutcome, { outcome: "parsed" }>): Promise<void> {
+  const { data: file, error } = await db().from("file_registry").select("id, carrier_id, file_type, file_date, parser_version, row_count").eq("tenant_id", tenantId).eq("id", fileId).maybeSingle();
+  if (error || !file) throw new Error(`Could not load the file to derive: ${error?.message ?? "not found"}`);
+  await runStages(tenantId, { id: file.id, carrierId: file.carrier_id, fileType: file.file_type, fileDate: file.file_date, parserVersion: file.parser_version, rowCount: file.row_count }, { parserVersion: outcome.version, typedRows: outcome.passed, fatal: null });
+}
+
 /** For after() in a door: read the rows, then parse them; never fails the request. */
 export async function processFileQuietly(tenantId: string, fileId: string, extract: (tenantId: string, fileId: string) => Promise<unknown>): Promise<void> {
   try {
     await extract(tenantId, fileId);
-    await parseCarrierFile(tenantId, fileId);
+    const outcome = await parseCarrierFile(tenantId, fileId);
+    if (outcome.outcome === "parsed") await deriveFile(tenantId, fileId, outcome);
   } catch (error) {
     console.error(`[parser] ${fileId} failed; the next sweep retries:`, error);
   }

@@ -22,7 +22,7 @@ The repo's [TASKS.md](TASKS.md) (11 tasks, 2026-10-02) is the earlier, smaller s
 | 4.3 Parser framework, layout maps | **Framework done 2026-10-07.** Migration `20261008120000` live and verified (below). No carrier map is seeded until the sample files arrive. |
 | 4.4 PDF extraction (OCR, AI, balance gate) | Not started (needs an AI provider) |
 | 4.5 Status map, unknown-status gate | **Framework done 2026-10-07.** Migration `20261008130000` live and verified (below). No real status seeded until the sample files arrive. |
-| 4.6 Snapshots, change detection | Not started |
+| 4.6 Snapshots, change detection | **Done 2026-10-07.** Migration `20261008140000` live and verified (below). |
 | 4.7 Current-state table | Not started |
 | 4.8 Policy ↔ CRM matching with AI | Not started (needs an AI provider) |
 | 4.9 Exception queues | Not started |
@@ -341,3 +341,58 @@ It follows LA-3.13's carrier field maps on purpose: the same statuses, the same 
 **Not done here:**
 - **The guardian's AI proposal:** waits for a provider. The `proposed_*` columns are ready.
 - **Notification channel:** by email and a page notice, not the live alert feed. That feed drops a row with no lead link after about 10 minutes and plays sounds, which doesn't suit a status that waits for staff.
+
+## LA-4.6: how it is built
+
+**The data (`supabase/migrations/20261008140000_la_4_6_policy_snapshots.sql`):**
+- **`policy_snapshot`:** one row per policy per policy file, with the Notion columns.
+  - `snapshot_date` is the file's date, and every row carries `file_id` and `raw_row_id`. The pair is a foreign key to `raw_rows (file_id, id)`.
+  - `extra` keeps the fields the map read that have no column, and the columns the map didn't read, so nothing is dropped.
+  - One current snapshot per agency, carrier, policy and file date: a unique index where not superseded. The spec's key adds the agency, because two agencies can each receive a file listing the same policy.
+  - **Immutable:** a trigger refuses every edit. The one move allowed is being marked superseded by a reissue.
+- **`policy_change`:** derived and disposable, for the 11 tracked fields.
+  - Both dates are file dates, with no default.
+  - `from_file_id` and `to_file_id` are kept.
+  - A change must move a value and go forward in date.
+- **`policy_event`:** `first_seen`, once per policy.
+- **Writing Layer 2:** only through two security-definer functions. Insert, update and delete are revoked from the app roles.
+  - `replace_file_snapshots` swaps in one file's snapshots, marks a replaced file's ones superseded, and returns what changed by content and every policy touched.
+  - `replace_policy_changes` swaps in the history of exactly those policies.
+- **`file_registry.derived_at`:** when a file's derived layers were last written. A policy file that parsed but wasn't derived is retried by the sweep.
+
+**The code:**
+- **`lib/ingestion/snapshots.ts` (pure):** typed row → snapshot; one per policy per file, keeping the first row of a repeated policy (and recording a finding); the content text used to tell what changed; `historyOf`, which orders each policy's snapshots by file date then arrival and diffs each consecutive pair whatever the gap; and the "between the files of X and Y" wording.
+- **`lib/ingestion/snapshotStore.ts`:** build the snapshots, replace them, recompute only the touched policies' history, and set `derived_at`. Also the change list for the screen.
+- **`lib/ingestion/stages.ts`:** `REPROCESS_STAGES = [policy_snapshot]`, the first real stage. A door and the sweep run it after a parse (`deriveFile`), with the rows that passed 4.5's gate; a reprocess runs it after re-parsing.
+- **On screen:** Carrier files › **Policy changes**. Each change says when it happened as precisely as the files allow: "between the files of Sep 5 and Oct 5", or "corrected in a reissued file of Oct 5". That is the plain statement the spec asks for about monthly accuracy.
+
+**Acceptance (Notion):**
+
+| Criterion | Status |
+|---|---|
+| One snapshot per policy per file date; the unique constraint prevents duplicates | **Met:** unique index, verified on temp copies. |
+| active → lapsed makes exactly one change row with the right from/to dates | **Met:** `snapshots.test.mjs`. |
+| The diff works across 1-day and 31-day gaps, with no "yesterday" | **Met:** test, plus a check that the engine has no clock. |
+| A first-time policy is a first-seen event with no change rows | **Met.** |
+| A back-dated file recomputes the changes around it, for that policy only | **Met:** the test moves the lapse to the window the late file reveals; only the touched policies are recomputed. |
+| from/to are always file dates | **Met.** |
+| Change rows can be deleted and rebuilt from snapshots | **Met:** a rebuild in any order gives identical rows; the replace is verified on temp copies. |
+| Every snapshot carries `file_id` and `raw_row_id` | **Met:** foreign key, verified. |
+
+**4.6 verified live, 2026-10-07** (the owner applied the migration):
+- **The catalog:** the one-per-day index, the raw-row foreign key and the guard; both functions are security definer and can't be called by `authenticated`; `service_role` can't insert or update snapshots, or delete changes; `derived_at` exists. The verifier reports applied.
+- **The setup:** "Isolation Test A", with the deactivated test carrier "LA14 Market" and a tenant-scoped map (policy, status, paid-to date, premium).
+- **16 checks with no new mapping:**
+  - one snapshot per policy, dated by the file and pointing at its raw row;
+  - a row held by the status gate gets no snapshot;
+  - first-seen events with no changes;
+  - two months apart, the paid-to date and a premium change are each dated by the two files;
+  - a policy first seen in November is first seen in November;
+  - **a late October file** recomputes the history around it (paid-to Sep → Oct → Nov; the premium change moves to Oct → Nov) and leaves a policy it doesn't list untouched;
+  - **a corrected November file** takes the day, keeps the replaced snapshot superseded, and records the correction as a change on that day;
+  - reprocessing rebuilds with 0 changed and the same history;
+  - the app's role can't edit snapshots or delete changes;
+  - `derived_at` is set.
+- **The page:** the "Policy changes" tab's data carries every change with its file dates. The fixture's owner hasn't accepted the terms, so the rendered table couldn't be seen; its wording is unit-tested.
+- **The lapse (owner-approved):** "Active" → active and "Lapsed" → lapsed were mapped on the test carrier only, which leaves two more permanent mappings that no agency uses. Two files a month apart give exactly one `status_normalized` change, active → lapsed, from 2026-09-05 to 2026-10-05 with both file ids, plus the carrier's own word changing, and nothing else.
+  - Approving "Active" also released the 2 fixture files that held "Active" rows, and reprocessed them automatically.

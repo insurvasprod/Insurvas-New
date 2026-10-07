@@ -5,7 +5,10 @@ import { isSchemaGap } from "@/lib/supabase/schemaGap";
 
 import { parseCarrierFile } from "./parser";
 import { readRawRows } from "./rawLayer";
-import { reprocess, type ReprocessDeps, type ReprocessFile, type ReprocessResult, type ReprocessScope, type ReprocessStage, type ReprocessTrigger } from "./reprocess";
+import { reprocess, type ReprocessDeps, type ReprocessFile, type ReprocessResult, type ReprocessScope, type ReprocessTrigger } from "./reprocess";
+import { REPROCESS_STAGES } from "./stages";
+
+export { REPROCESS_STAGES };
 
 /**
  * LA-4.2 / 4.3 (Notion sprint) · reprocess runs, server side: the files in scope, their raw rows,
@@ -16,9 +19,6 @@ import { reprocess, type ReprocessDeps, type ReprocessFile, type ReprocessResult
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Loose = any;
 const db = (): Loose => getSupabaseServiceClient();
-
-/** The stages a reprocess rebuilds, in order. LA-4.6 (snapshots, change log) and LA-4.7 (current state) add theirs. */
-export const REPROCESS_STAGES: ReprocessStage[] = [];
 
 function reprocessDeps(): ReprocessDeps {
   return {
