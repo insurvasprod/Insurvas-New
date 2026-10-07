@@ -17,6 +17,7 @@ const resolve = z.discriminatedUnion("resolution", [
   z.object({ action: z.literal("resolve"), item_id: uuid, resolution: z.literal("not_mine") }).strict(),
   z.object({ action: z.literal("resolve"), item_id: uuid, resolution: z.literal("same_person") }).strict(),
   z.object({ action: z.literal("resolve"), item_id: uuid, resolution: z.literal("different_people") }).strict(),
+  z.object({ action: z.literal("resolve"), item_id: uuid, resolution: z.literal("reviewed") }).strict(),
   z.object({ action: z.literal("resolve"), item_id: uuid, resolution: z.literal("link_existing_client"), contact_id: uuid }).strict(),
   z.object({ action: z.literal("resolve"), item_id: uuid, resolution: z.literal("found_the_sale"), deal_id: uuid }).strict(),
   z.object({ action: z.literal("resolve"), item_id: uuid, resolution: z.literal("found_the_policy"), carrier_id: uuid, policy_number: z.string().trim().min(1).max(120) }).strict(),

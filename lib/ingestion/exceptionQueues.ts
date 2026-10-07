@@ -5,6 +5,7 @@
  *   no_deal_flow  a carrier policy we hold no record of → a provisional client, to the writing agent;
  *   no_policy     a logged sale no carrier file has heard of → to the writing agent, the valuable one;
  *   multi_policy  "are these one person?" → operations, and only when not certain.
+ *   initial_import  one summary per imported file (LA-4.10) → the owner; never 400 separate items.
  *
  * The SQL (20261008180000) holds the same defaults in queue_owner and sweep_exception_queues; this
  * file is what the screen and the store use, pinned to the SQL by exceptionQueues.test.mjs.
@@ -12,7 +13,7 @@
  * Pure; relative imports only.
  */
 
-export const QUEUE_TYPES = ["no_deal_flow", "no_policy", "multi_policy"] as const;
+export const QUEUE_TYPES = ["no_deal_flow", "no_policy", "multi_policy", "initial_import"] as const;
 export type QueueType = (typeof QUEUE_TYPES)[number];
 export const OWNER_ROLES = ["writing_agent", "operations", "retention", "admin"] as const;
 export type OwnerRole = (typeof OWNER_ROLES)[number];
@@ -21,6 +22,7 @@ export const QUEUE_LABELS: Record<QueueType, { title: string; why: string }> = {
   no_deal_flow: { title: "Policies with no sale on record", why: "A carrier sent a policy we have no deal or application for. Usually it was sold and not logged." },
   no_policy: { title: "Sales no carrier has heard of", why: "A sale was logged and the carrier's newer files don't have it. It may never have been submitted." },
   multi_policy: { title: "Is this the same client?", why: "Two clients look alike. A client with several policies is good news; this only checks they are one person." },
+  initial_import: { title: "Imported books to look over", why: "A carrier file was imported during onboarding. Its clients were created as provisional; look them over when you have time." },
 };
 
 export const OWNER_ROLE_LABELS: Record<OwnerRole, string> = { writing_agent: "The writing agent", operations: "Operations (a bookkeeper)", retention: "Retention (a producer)", admin: "The owner" };
@@ -35,6 +37,7 @@ export const DEFAULT_RULES: Record<QueueType, QueueRule> = {
   no_deal_flow: { queueType: "no_deal_flow", ownerRole: "writing_agent", openAfterDays: null, escalateAfterDays: null, escalateToRole: null },
   no_policy: { queueType: "no_policy", ownerRole: "writing_agent", openAfterDays: 5, escalateAfterDays: 10, escalateToRole: null },
   multi_policy: { queueType: "multi_policy", ownerRole: "operations", openAfterDays: null, escalateAfterDays: null, escalateToRole: null },
+  initial_import: { queueType: "initial_import", ownerRole: "admin", openAfterDays: null, escalateAfterDays: null, escalateToRole: null },
 };
 
 /** The agency's rule for each queue: its own row over the default, field by field. */
@@ -87,6 +90,7 @@ export const RESOLUTIONS = {
   no_deal_flow: ["confirm_client", "link_existing_client", "found_the_sale", "not_mine"],
   no_policy: ["found_the_policy", "never_submitted", "resubmitted_elsewhere", "not_mine"],
   multi_policy: ["same_person", "different_people"],
+  initial_import: ["reviewed"],
 } as const;
 export type Resolution = (typeof RESOLUTIONS)[QueueType][number];
 
@@ -100,4 +104,5 @@ export const RESOLUTION_LABELS: Record<Resolution, string> = {
   resubmitted_elsewhere: "Resubmitted elsewhere",
   same_person: "Same person",
   different_people: "Different people",
+  reviewed: "Looked over",
 };

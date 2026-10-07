@@ -101,3 +101,24 @@ export function computeCurrent(input: CurrentInput) {
     riskBand: riskBand({ status, dpd, untilCloses, inClawback }),
   };
 }
+
+/**
+ * LA-4.10 · persistency needs history. One imported file is one snapshot, so until there are files
+ * from enough different months the figure is "building", never a number computed from too little.
+ */
+export const PERSISTENCY_MONTHS_NEEDED = 3;
+export function persistencyStatus(monthsWithFiles: number): { ready: boolean; label: string } {
+  const months = Math.max(0, Math.floor(monthsWithFiles));
+  if (months >= PERSISTENCY_MONTHS_NEEDED) return { ready: true, label: "ready" };
+  return { ready: false, label: `building — needs ${PERSISTENCY_MONTHS_NEEDED} months of files (${months} so far)` };
+}
+
+/**
+ * LA-4.10 · money we do not know reads as unknown. An imported policy's unearned advance needs the
+ * commission statements; until they arrive it is null, and null must never print as $0.00 — zero
+ * would say "nothing at risk", the opposite of the truth.
+ */
+export function moneyOrUnknown(cents: number | null | undefined): string {
+  if (cents === null || cents === undefined) return "Unknown";
+  return `$${(cents / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}

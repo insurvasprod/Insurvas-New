@@ -78,7 +78,7 @@ function carrierPerson(side: PolicySide) {
  * A policy nobody could match: give it a client (an exact-identity existing one, or a provisional
  * one), link it, and queue it for the writing agent. Returns the client and the queue-1 item.
  */
-export async function noRecordPolicy(tenantId: string, side: PolicySide, writingAgent: string | null): Promise<{ contactId: string | null; provisional: boolean; itemId: string } | null> {
+export async function noRecordPolicy(tenantId: string, side: PolicySide, writingAgent: string | null, options: { bulk?: boolean } = {}): Promise<{ contactId: string | null; provisional: boolean; itemId: string | null } | null> {
   // Before 20261008180000 there is no provisional flag: create nothing (the caller keeps a review).
   const probe = await db().from("queue_item").select("id").limit(1);
   if (probe.error) {
@@ -147,7 +147,8 @@ export async function noRecordPolicy(tenantId: string, side: PolicySide, writing
       .map((c: Loose) => ({ c, scored: scoreCandidate(row, asCandidate(c)) }))
       .filter(({ scored }: { scored: ReturnType<typeof scoreCandidate> }) => scored.fields.surname !== "mismatch" && scored.fields.surname !== "missing" && (scored.fields.dob === "match" || scored.fields.phone === "match" || scored.fields.givenName === "match"))
       .sort((a: Loose, b: Loose) => b.scored.score - a.scored.score)[0];
-    if (likely) {
+    // LA-4.10: an imported book asks nothing per client — the file gets one summary item instead.
+    if (likely && !options.bulk) {
       const [a, b] = [contactId, likely.c.id].sort();
       await openItem(tenantId, {
         queueType: "multi_policy", subjectKey: `contacts:${a}:${b}`, subjectType: "contact", subjectId: contactId, contactId, relatedContactId: likely.c.id, carrierId: side.carrierId, policyNumber: side.policyNumber,
@@ -156,6 +157,7 @@ export async function noRecordPolicy(tenantId: string, side: PolicySide, writing
     }
   }
 
+  if (options.bulk) return { contactId, provisional, itemId: null };
   const itemId = await openItem(tenantId, {
     queueType: "no_deal_flow", subjectKey: `policy:${side.carrierId}:${side.policyNumber}`, subjectType: "policy", carrierId: side.carrierId, policyNumber: side.policyNumber, contactId,
     payload: { carrier_name: side.carrierName, file_date: side.fileDate, insured: { first_name: person.firstName, last_name: person.lastName, dob: person.dob }, premium_cents: side.premiumCents, face_cents: side.faceCents, provisional, client_blocked: blocked },
@@ -163,6 +165,18 @@ export async function noRecordPolicy(tenantId: string, side: PolicySide, writing
   });
   await refreshPolicyCurrent({ tenantId, carrierId: side.carrierId, policies: [side.policyNumber] });
   return { contactId, provisional, itemId };
+}
+
+/**
+ * LA-4.10: the one item an imported file gets — how many policies came in and how many clients were
+ * created as provisional — instead of one item per client.
+ */
+export async function openImportSummary(tenantId: string, file: { id: string; carrierId: string; carrierName: string; fileDate: string }, counts: { policies: number; provisional: number; existing: number; linkedByNumber: number; blocked: number }): Promise<string> {
+  return openItem(tenantId, {
+    queueType: "initial_import", subjectKey: `import:${file.id}`, subjectType: "file", subjectId: file.id, carrierId: file.carrierId,
+    payload: { carrier_name: file.carrierName, file_date: file.fileDate, ...counts },
+    ageFrom: new Date().toISOString().slice(0, 10),
+  });
 }
 
 export type QueueScope = { tenantId: string; userId: string; seesAll: boolean };
@@ -200,7 +214,7 @@ async function retireProvisional(tenantId: string, provisionalId: string | null,
 }
 
 export type ResolveInput =
-  | { resolution: "confirm_client" | "not_mine" | "same_person" | "different_people" }
+  | { resolution: "confirm_client" | "not_mine" | "same_person" | "different_people" | "reviewed" }
   | { resolution: "link_existing_client"; contactId: string }
   | { resolution: "found_the_sale"; dealId: string }
   | { resolution: "found_the_policy"; carrierId: string; policyNumber: string }
@@ -211,7 +225,7 @@ export type ResolveInput =
 export async function resolveItem(scope: QueueScope, itemId: string, input: ResolveInput): Promise<{ queueType: QueueType; resolution: Resolution; ref: Record<string, unknown> | null }> {
   const item = await loadOpen(scope, itemId);
   const human = { method: "human", ladder_step: 3, confirmed_by: scope.userId, created_by: scope.userId };
-  const allowed: Record<QueueType, Resolution[]> = { no_deal_flow: ["confirm_client", "link_existing_client", "found_the_sale", "not_mine"], no_policy: ["found_the_policy", "never_submitted", "resubmitted_elsewhere", "not_mine"], multi_policy: ["same_person", "different_people"] };
+  const allowed: Record<QueueType, Resolution[]> = { no_deal_flow: ["confirm_client", "link_existing_client", "found_the_sale", "not_mine"], no_policy: ["found_the_policy", "never_submitted", "resubmitted_elsewhere", "not_mine"], multi_policy: ["same_person", "different_people"], initial_import: ["reviewed"] };
   if (!allowed[item.queue_type as QueueType]?.includes(input.resolution)) throw new QueueError("That is not how this kind of item is resolved.", 400);
 
   if (input.resolution === "not_mine") {
@@ -271,6 +285,8 @@ export async function resolveItem(scope: QueueScope, itemId: string, input: Reso
       if (!app || app.lead_id !== deal.leadId) throw new QueueError("Choose an application attempt for this client.", 400);
       ref = { application_id: app.id, carrier_id: app.carrier_id, attempt_no: app.attempt_no };
     }
+  } else if (item.queue_type === "initial_import") {
+    ref = { file_id: item.subject_id };
   } else {
     if (input.resolution === "same_person") {
       const { data: links } = await db().from("policy_match").select("carrier_id, policy_number").eq("tenant_id", scope.tenantId).eq("contact_id", item.contact_id).is("superseded_by_id", null);

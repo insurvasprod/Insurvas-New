@@ -28,6 +28,10 @@ function Client({ person }: { person: { name: string; provisional: boolean } | n
 /** What the item is about, in one line. */
 function subject(item: QueueItemRow) {
   if (item.queueType === "no_policy") return <span>{item.deal?.insuredName ?? "—"} · {item.carrierName ?? item.deal?.carrier ?? "—"} · {dollars(item.deal?.premiumCents)} a month</span>;
+  if (item.queueType === "initial_import") {
+    const p = item.payload ?? {};
+    return <span>{item.carrierName ?? p.carrier_name} · {Number(p.policies ?? 0).toLocaleString("en-US")} policies imported, {Number(p.provisional ?? 0).toLocaleString("en-US")} provisional clients created{Number(p.existing ?? 0) ? `, ${Number(p.existing).toLocaleString("en-US")} matched to clients on file` : ""}{Number(p.blocked ?? 0) ? `, ${Number(p.blocked).toLocaleString("en-US")} without a client` : ""} — review when you have time</span>;
+  }
   if (item.queueType === "multi_policy") return <span className="inline-flex flex-wrap items-center gap-1"><Client person={item.contact} /> and <Client person={item.related} /></span>;
   return <span className="inline-flex flex-wrap items-center gap-1.5"><span className="font-mono text-xs">{item.policyNumber}</span> · {item.carrierName} · <Client person={item.contact} /></span>;
 }

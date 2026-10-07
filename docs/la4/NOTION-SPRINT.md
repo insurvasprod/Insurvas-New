@@ -26,7 +26,7 @@ The repo's [TASKS.md](TASKS.md) (11 tasks, 2026-10-02) is the earlier, smaller s
 | 4.7 Current-state table | **Done 2026-10-07.** Migration `20261008160000` live and verified (below). Money fields wait for 4.12; contact links for 4.8. |
 | 4.8 Policy ↔ CRM matching with AI | **Non-AI parts done 2026-10-07.** Migration `20261008170000` live and verified (below). The AI reviewer waits for a provider; a person decides step 3 meanwhile. |
 | 4.9 Exception queues | **Done 2026-10-07.** Migrations `20261008180000` and follow-up `20261008180100` live and verified (below). |
-| 4.10 Existing-book import | Not started |
+| 4.10 Existing-book import | **Done 2026-10-07.** Migration `20261008190000` live and verified (below). Portal guidance ships empty, for staff to write. |
 | 4.11 Policy list and detail | Partial: earlier screens exist; to be rebuilt on 4.7 |
 | 4.12 Commission ledger | Partial: computed ledger exists; `commission_entry` not built |
 | 4.13 Expected commission | Partial: schedules exist; trigger and lag not built |
@@ -654,3 +654,57 @@ It follows LA-3.13's carrier field maps on purpose: the same statuses, the same 
   - **A provisional contact could have no source.** The CHECK let `jsonb_typeof(null)` through. Fixed in `20261008180100`, applied and verified live: no source or a non-object source is refused (23514); a proper source and non-provisional contacts are accepted.
   - **`save_contact` fails for 556 of 565 agencies**, including the fixture: they have no legacy `organizations` row, and both `contacts` and `households` require one. This existing LA-0 bridge bug affects "Add contact" too, and is filed as a separate task. For 4.9, such an agency's no-match policy still gets its queue-1 item, with no client and the reason, so it is never silently lost (test pinned).
 - **The page** (demo owner) shows the four tiles, the three tabs, and the ownership table with the defaults (writing agent; writing agent at 5/10 days; operations).
+## LA-4.10: how it is built
+
+**The data (`supabase/migrations/20261008190000_la_4_10_existing_book_import.sql`):**
+- **`file_registry.is_initial_import`:** set by the import screen's upload. The file is otherwise ordinary: raw rows, parse, status gate, snapshots, current rows.
+- **`carrier_portal_guidance`:** per carrier, where in the portal, what the report is called, which format, notes. It's platform content, edited by staff at Catalog › **Portal guidance** without a deploy. **It ships empty;** no portal instructions are invented. Until a carrier has some, the import shows a generic line ("Download the carrier's latest policy (in-force) report from its agent portal").
+- **`book_import_carrier`:** per agency and carrier, imported or skipped. Skipping is reversible.
+- **A fourth queue type, `initial_import`:** one summary item per imported file, owned by the agency's owner by default. `queue_owner` is re-created for this, otherwise unchanged from 4.9.
+
+**What makes an import an import:**
+1. The upload is the LA-4.1 upload door (`uploadCarrierFile`), then the file is marked `is_initial_import` before its processing starts, then it is parsed straight away.
+2. **No phantom changes:** a policy's first snapshot already makes one first-seen event and no change row (LA-4.6). A test runs 400 policies through `historyOf`: 400 first-seen events, 0 changes.
+3. **Bulk matching (`importedBook` in `policyMatchingStore.ts`):** policies linked by number still link (step 2). Every other policy gets its client (an exact-identity existing one, or a provisional one) through `noRecordPolicy(..., { bulk: true })`, with **no queue-1 or queue-3 item per client**. The file gets **one** summary item: "400 policies imported, 400 provisional clients created — review when you have time". The summary's numbers are counted from the file's live snapshots and their current links, so a file arriving in chunks, or reprocessed, gives the same summary, never a doubled one.
+
+**On screen:** Book of Business › **Import your book** (owner, bookkeeper; a money route).
+- **Tiles:** carriers done, policies, premium a month and at risk, **Persistency: "Building — needs 3 months of files"**, and **Advances at risk: "Unknown — until commission statements arrive"**. Never $0.00.
+- **One row per carrier:**
+  - Which carriers: the ones the agency writes (LA-0.4), plus any it adds.
+  - Each row has the portal guidance, the file date, Upload (or drop the file on the row), "Skip for now" / "Undo skip", and the **result as soon as the file is read**: "112 policies, $8,420/mo. 3 at risk." The page looks again every 3 seconds while a file is being read.
+  - Rows held by an unmapped status word say so.
+- **"Look over imported clients"** goes to Exceptions, where the summary items are.
+- The same screen is the "import later" path: a skipped carrier imported later goes through the same code, with the same outcome.
+
+**Helpers:** `persistencyStatus` (building until 3 months of files) and `moneyOrUnknown` (null → "Unknown"; a real 0 is still $0.00), for 4.11 and 4.18 to use.
+
+**Acceptance (Notion):**
+
+| Criterion | Status |
+|---|---|
+| A dropped file gives policies, snapshots and current rows through the normal pipeline, with `is_initial_import` | **Met:** the same door and processing; live check after the migration. |
+| First snapshots produce zero `policy_change` rows | **Met:** a 400-policy test. |
+| 400 policies → one summary item, not 400 | **Met:** bulk mode plus one item per file. |
+| Each carrier's result is shown inline before the next upload | **Met:** parsed straight after the upload; the row updates itself. |
+| A skipped carrier imported later has the same outcome | **Met:** same screen, same path. |
+| Persistency shows "building" until enough snapshots exist | **Met:** helper plus tile; the 4.18 persistency screens will use it. |
+| `unearned_advance_cents` reads as unknown, never zero | **Met:** helper plus tile; 4.11 will use it on policies. |
+| Portal guidance exists for every seeded carrier, editable without a deploy | **Partly:** the editor exists and saves live; **the content has to be written** by someone who knows each portal (it would otherwise be guessed). |
+| A 400-policy, 6-carrier import completes in under 10 minutes | **Not measured yet:** needs the real carrier files. Bulk matching does a few round trips per policy (about 400 contact creations per 400-policy file). |
+
+**Before the migration (2026-10-07):**
+- 12 checks on rolled-back temp copies pass. The file parses and its DO block compiles. 2,145 tests pass.
+- The import page and the staff guidance page show only "Importing a book needs a database update (20261008190000)". Skip and upload answer 503, and nothing is stored (the upload checks first).
+**4.10 verified live, 2026-10-07** (the owner applied the migration):
+- **The catalog:**
+  - The verifier reports applied, and `file_registry.is_initial_import` is NOT NULL, default false.
+  - Both queue constraints accept `initial_import`. The live `queue_owner` gives it to the owner and keeps 4.9's writing-agent rule. On the demo agency the summary resolves to `admin`.
+  - The two new tables: `tenant_app` reads and can't write, `anon` and `authenticated` see nothing, the server writes but never truncates, and RLS is on with one read policy each. Both checks exist. No rows ship.
+- **Through the app (demo agency and staff):**
+  - **The import screen:** it lists the 8 carriers the agency writes, each "Not imported yet" with the generic guidance line. The tiles read 0 of 8, 0 policies, $0 a month, **Persistency Building (0 of 3 months)** and **Advances at risk Unknown**.
+  - **Skip and undo:** skip → "skipped"; undo → "pending" again.
+  - **Refused uploads:** a PDF is refused (a policy file must be CSV or Excel).
+  - **Guidance:** a staff save is **seen by the agency on its next load**, and clearing removes it.
+  - All six changes are audited, and none left a row behind.
+- **The summary item on the live tables** (rolled back): opening it twice for one file gives one item, updated in place, owned by the agency's owner. "Looked over" closes it with who. An import status other than imported/skipped is refused, and so is empty guidance (both 23514).
+- **Not run live:** a real carrier file through the import. It leaves permanent rows, and needs the raw carrier files. The pipeline it uses is the one verified in 4.1–4.9.

@@ -6,7 +6,7 @@ import { isSchemaGap } from "@/lib/supabase/schemaGap";
 import { annualisedPremiumCents } from "./policyCurrent";
 import { accuracy, isStrong, ladderShare, shortlist, SHORTLIST_LOOKBACK_DAYS, splitName, type Candidate, type CarrierSide, type LadderCounts, type Scored } from "./policyMatching";
 import { refreshPolicyCurrent } from "./policyCurrentStore";
-import { noRecordPolicy } from "./exceptionQueuesStore";
+import { noRecordPolicy, openImportSummary } from "./exceptionQueuesStore";
 
 /**
  * LA-4.8 (Notion sprint) · the matching ladder, server side.
@@ -218,6 +218,48 @@ function policySide(snapshot: Snapshot, carrier: { id: string; name: string }) {
   return { carrierId: carrier.id, carrierName: carrier.name, policyNumber: snapshot.policy_number, fileDate: snapshot.snapshot_date, fields: (snapshot.extra?.fields ?? {}) as Record<string, unknown>, premiumCents: annual === null ? null : Math.round(annual / 12), faceCents: snapshot.face_amount_cents, effectiveDate: snapshot.effective_date };
 }
 
+/**
+ * LA-4.10: a book imported during onboarding predates us — none of its policies has a sale or a
+ * submission here. Each one not linked by number gets its client (an exact-identity existing one, or
+ * a provisional one) without a review or a queue item, and the file gets ONE summary item. Returns
+ * how many it handled, or null when the file is not an initial import (the normal ladder runs).
+ */
+async function importedBook(tenantId: string, carrier: { id: string; name: string; code: string | null }, fileId: string | null, policies: string[]): Promise<number | null> {
+  if (!fileId) return null;
+  const { data: file } = await db().from("file_registry").select("id, is_initial_import, file_date").eq("tenant_id", tenantId).eq("id", fileId).maybeSingle();
+  if (!file?.is_initial_import) return null;
+  const snapshots = await latestSnapshots(tenantId, carrier.id, policies);
+  const identifiers = [...new Set([...snapshots.values()].map((s) => s.agent_identifier).filter(Boolean))] as string[];
+  const { data: maps } = identifiers.length ? await db().from("carrier_agent_map").select("agent_identifier, user_id").eq("tenant_id", tenantId).eq("carrier_id", carrier.id).in("agent_identifier", identifiers) : { data: [] };
+  const agentOf = new Map<string, string>((maps ?? []).map((row: Loose) => [row.agent_identifier, row.user_id]));
+  let handled = 0;
+  for (const policy of policies) {
+    const snapshot = snapshots.get(policy);
+    if (!snapshot) continue;
+    const done = await noRecordPolicy(tenantId, policySide(snapshot, carrier), snapshot.agent_identifier ? agentOf.get(snapshot.agent_identifier) ?? null : null, { bulk: true });
+    if (!done) return null; // before 20261008180000: the normal ladder
+    handled++;
+  }
+  // One summary per file, counted from what is now true of the file's policies — so a file that
+  // arrives in chunks, or is reprocessed, gives the same summary, never a doubled one.
+  const { data: rows } = await db().from("policy_snapshot").select("policy_number").eq("tenant_id", tenantId).eq("file_id", fileId).eq("superseded", false);
+  const numbers: string[] = [...new Set<string>((rows ?? []).map((row: Loose) => String(row.policy_number)))];
+  const method = new Map<string, string>();
+  for (let start = 0; start < numbers.length; start += 500) {
+    const { data: links } = await db().from("policy_match").select("policy_number, method").eq("tenant_id", tenantId).eq("carrier_id", carrier.id).is("superseded_by_id", null).in("policy_number", numbers.slice(start, start + 500));
+    for (const link of links ?? []) method.set(link.policy_number, link.method);
+  }
+  const summary = { policies: numbers.length, provisional: 0, existing: 0, linkedByNumber: 0, blocked: 0 };
+  for (const number of numbers) {
+    const how = method.get(number);
+    if (how === "no_match") summary.provisional++;
+    else if (how === "identity_exact" || how === "human" || how === "ai_review" || how === "import") summary.existing++;
+    else if (how === "submission_record" || how === "policy_number_exact") summary.linkedByNumber++;
+    else summary.blocked++;
+  }
+  await openImportSummary(tenantId, { id: fileId, carrierId: carrier.id, carrierName: carrier.name, fileDate: file.file_date }, summary);  return handled;
+}
+
 async function carrierOf(carrierId: string) {
   const { data, error } = await db().from("carriers").select("id, name, code").eq("id", carrierId).maybeSingle();
   if (error || !data) throw new Error(`Could not load the carrier: ${error?.message ?? "not found"}`);
@@ -239,7 +281,8 @@ export async function matchFilePolicies(tenantId: string, carrierId: string, fil
   const carrier = await carrierOf(carrierId);
   const unlinked = policies.filter((policy) => !linked.has(policy));
   const exact = await linkExact(tenantId, carrier, unlinked);
-  const toReview = await queueReviews(tenantId, carrier, unlinked.filter((policy) => !exact.has(policy)), fileId);
+  const rest = unlinked.filter((policy) => !exact.has(policy));
+  const toReview = (await importedBook(tenantId, carrier, fileId, rest)) ?? (await queueReviews(tenantId, carrier, rest, fileId));
   const counts = { alreadyLinked: linked.size, exactLinked: exact.size, toReview };
   await db().from("policy_match_ladder").insert({ tenant_id: tenantId, carrier_id: carrierId, file_id: fileId, already_linked: counts.alreadyLinked, exact_linked: counts.exactLinked, to_review: counts.toReview });
   return counts;

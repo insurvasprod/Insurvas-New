@@ -104,6 +104,8 @@ export function buildAdminNav(role: AdminRole): SidebarNode[] {
       section("carriers", "/admin/status-maps", "Status maps", "carriers"),
       // LA-4.17 · the platform's default carrier rules and settings.
       section("carriers", "/admin/carrier-rules", "Carrier rules", "carriers"),
+      // LA-4.10 · where each carrier's policy file lives in its portal, for the book import.
+      section("carriers", "/admin/carrier-guidance", "Portal guidance", "carriers"),
       section("templates", "/admin/templates", "Templates", "templates"),
     ]),
 
