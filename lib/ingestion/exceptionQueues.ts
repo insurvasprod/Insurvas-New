@@ -22,7 +22,7 @@ export const QUEUE_LABELS: Record<QueueType, { title: string; why: string }> = {
   no_deal_flow: { title: "Policies with no sale on record", why: "A carrier sent a policy we have no deal or application for. Usually it was sold and not logged." },
   no_policy: { title: "Sales no carrier has heard of", why: "A sale was logged and the carrier's newer files don't have it. It may never have been submitted." },
   multi_policy: { title: "Is this the same client?", why: "Two clients look alike. A client with several policies is good news; this only checks they are one person." },
-  initial_import: { title: "Imported books to look over", why: "A carrier file was imported during onboarding. Its clients were created as provisional; look them over when you have time." },
+  initial_import: { title: "Imported books to look over", why: "New clients were created from an imported carrier file and marked provisional. Check them in Contacts when you have time, then mark this done." },
 };
 
 export const OWNER_ROLE_LABELS: Record<OwnerRole, string> = { writing_agent: "The writing agent", operations: "Operations (a bookkeeper)", retention: "Retention (a producer)", admin: "The owner" };

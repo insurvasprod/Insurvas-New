@@ -9,12 +9,13 @@ import { ClearFiltersButton, DataToolbar, RefreshButton, ToolbarSearch, toolbarC
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { TableCard } from "@/components/ui/table-card";
+import { fileDay } from "@/lib/ingestion/constants";
 import { MATCH_FIELD_LABELS, MATCH_FIELDS, type FieldOutcome } from "@/lib/ingestion/policyMatching";
 import type { LinkRow, MappedAgent, ReviewRow, UnmappedAgent } from "@/lib/ingestion/policyMatchingStore";
 import { notify } from "@/lib/notify";
 
 type Tab = "review" | "links" | "agents";
-const METHOD_LABEL: Record<string, string> = { submission_record: "Submission record", policy_number_exact: "Issued policy number", human: "A person", ai_review: "AI review", import: "Import", no_match: "No match — provisional client", identity_exact: "Same name and date of birth" };
+const METHOD_LABEL: Record<string, string> = { submission_record: "Submission record", policy_number_exact: "Issued policy number", human: "A person", ai_review: "AI review", import: "Import", no_match: "New client from the file", identity_exact: "Same name and date of birth" };
 const TYPE_LABEL: Record<string, string> = { deal_flow: "Deal", application: "Application", contact: "Client", provisional: "No client found" };
 const OUTCOME_CLASS: Record<FieldOutcome, string> = { match: "text-[var(--success-ink)]", partial: "text-[var(--warning-ink)]", mismatch: "text-[var(--error-ink)]", missing: "text-muted-foreground" };
 const OUTCOME_WORD: Record<FieldOutcome, string> = { match: "same", partial: "partly", mismatch: "different", missing: "—" };
@@ -93,7 +94,7 @@ export function PolicyMatchingWorkspace({ reviews, links, unmapped, mapped, memb
                         <td className="font-mono text-xs text-foreground">{review.policyNumber}</td>
                         <td>{review.carrierName}</td>
                         <td>{nameOf(review.carrierRow ?? {})}</td>
-                        <td className="tabular-nums">{review.carrierRow?.fileDate ?? "—"}</td>
+                        <td className="tabular-nums">{review.carrierRow?.fileDate ? fileDay(review.carrierRow.fileDate) : "—"}</td>
                         <td>{best ? nameOf(best) : <span className="text-muted-foreground">No candidate</span>}</td>
                         <td className={`text-right tabular-nums ${best?.likely ? "font-semibold text-foreground" : "text-muted-foreground"}`}>{best ? best.score : "—"}</td>
                         <td className="text-right"><Button type="button" variant="outline" size="sm" onClick={() => setOpenId(review.id)}>{readOnly ? "Open" : "Review"}</Button></td>
@@ -112,16 +113,15 @@ export function PolicyMatchingWorkspace({ reviews, links, unmapped, mapped, memb
             : visibleLinks.length === 0 ? <NoMatches noun="links" onClear={() => setQuery("")} />
             : (
               <table className="portal-lead-table w-full min-w-[900px] text-left text-sm">
-                <thead><tr><th>Policy</th><th>Carrier</th><th>Client</th><th>Linked to</th><th>How</th><th className="w-[110px]">When</th><th className="w-[100px] text-right"><span className="sr-only">Actions</span></th></tr></thead>
+                <thead><tr><th>Policy</th><th>Carrier</th><th>Linked to</th><th>How</th><th className="w-[120px]">When</th><th className="w-[100px] text-right"><span className="sr-only">Actions</span></th></tr></thead>
                 <tbody>
                   {visibleLinks.map((link) => (
                     <tr key={link.id}>
                       <td className="font-mono text-xs text-foreground">{link.policyNumber}</td>
                       <td>{link.carrierName}</td>
-                      <td>{link.clientName ?? <span className="text-muted-foreground">—</span>}</td>
-                      <td>{link.type === "provisional" && link.clientName ? "A provisional client" : TYPE_LABEL[link.type] ?? link.type}</td>
+                      <td>{link.clientName ?? TYPE_LABEL[link.type] ?? link.type}</td>
                       <td>{METHOD_LABEL[link.method] ?? link.method}{link.confidence !== null ? ` · ${link.confidence}%` : ""}</td>
-                      <td className="tabular-nums">{link.createdAt.slice(0, 10)}</td>
+                      <td className="tabular-nums">{fileDay(link.createdAt.slice(0, 10))}</td>
                       <td className="text-right">{!readOnly && <Button type="button" variant="outline" size="sm" disabled={busy !== null} onClick={() => void post(`reopen-${link.id}`, { action: "reopen", match_id: link.id }, "Back in the review queue.")}>Reopen</Button>}</td>
                     </tr>
                   ))}
@@ -136,7 +136,7 @@ export function PolicyMatchingWorkspace({ reviews, links, unmapped, mapped, memb
           {unmapped.length === 0 && mapped.length === 0 ? <EmptyState title="No agent codes yet" hint="Each carrier's writing-agent code appears here the first time a file carries it." />
             : (
               <table className="portal-lead-table w-full min-w-[820px] text-left text-sm">
-                <thead><tr><th>Agent code (exactly as the carrier writes it)</th><th>Carrier</th><th className="w-[90px] text-right">Policies</th><th className="w-[260px]">Agent</th><th className="w-[100px] text-right"><span className="sr-only">Actions</span></th></tr></thead>
+                <thead><tr><th>Carrier&apos;s agent code</th><th>Carrier</th><th className="w-[90px] text-right">Policies</th><th className="w-[260px]">Agent</th><th className="w-[100px] text-right"><span className="sr-only">Actions</span></th></tr></thead>
                 <tbody>
                   {visibleAgents.map((agent) => {
                     const key = `${agent.carrierId}|${agent.agentIdentifier}`;
@@ -159,8 +159,8 @@ export function PolicyMatchingWorkspace({ reviews, links, unmapped, mapped, memb
                     <tr key={m.id}>
                       <td className="font-mono text-xs text-foreground">{m.agentIdentifier}</td>
                       <td>{m.carrierName}</td>
-                      <td className="text-right text-muted-foreground">mapped</td>
-                      <td>{m.userName}</td>
+                      <td className="text-right text-muted-foreground">—</td>
+                      <td>{m.userName}<span className="block text-xs text-muted-foreground">Mapped</span></td>
                       <td className="text-right">{!readOnly && <Button type="button" variant="outline" size="sm" disabled={busy !== null} onClick={() => void post(`unmap-${m.id}`, { action: "unmap_agent", map_id: m.id }, "Mapping removed.")}>Unmap</Button>}</td>
                     </tr>
                   ))}

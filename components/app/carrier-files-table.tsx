@@ -41,7 +41,7 @@ export function CarrierFilesTable({ files, emptyTitle, emptyHint }: { files: Car
   const [query, setQuery] = useState("");
   const [carrier, setCarrier] = useState("");
   const [type, setType] = useState<"all" | CarrierFileType>("all");
-  const [status, setStatus] = useState<"all" | CarrierFileStatus>("all");
+  const [status, setStatus] = useState<"all" | "waiting" | CarrierFileStatus>("all");
   const [source, setSource] = useState<"all" | CarrierFileSource>("all");
   const [page, setPage] = useState(1);
   const [opening, setOpening] = useState<string | null>(null);
@@ -55,7 +55,7 @@ export function CarrierFilesTable({ files, emptyTitle, emptyHint }: { files: Car
       (!needle || `${file.originalFilename} ${file.carrierName ?? ""} ${file.agency ?? ""} ${file.emailFrom ?? ""} ${file.uploadedByName ?? ""}`.toLowerCase().includes(needle)) &&
       (!carrier || file.carrierName === carrier) &&
       (type === "all" || file.fileType === type) &&
-      (status === "all" || file.status === status) &&
+      (status === "all" || (status === "waiting" ? file.waitingForLayout : file.status === status && !(status === "failed" && file.waitingForLayout))) &&
       (source === "all" || file.source === source),
     );
   }, [files, query, carrier, type, status, source]);
@@ -98,6 +98,7 @@ export function CarrierFilesTable({ files, emptyTitle, emptyHint }: { files: Car
           <select aria-label="Filter files by status" className={toolbarControl} value={status} onChange={(event) => { setStatus(event.target.value as typeof status); setPage(1); }}>
             <option value="all">All statuses</option>
             {(Object.keys(FILE_STATUS_LABELS) as CarrierFileStatus[]).map((key) => <option key={key} value={key}>{FILE_STATUS_LABELS[key]}</option>)}
+            <option value="waiting">Waiting for a layout</option>
           </select>
           <select aria-label="Filter files by how they arrived" className={toolbarControl} value={source} onChange={(event) => { setSource(event.target.value as typeof source); setPage(1); }}>
             <option value="all">Every door</option>
@@ -113,18 +114,16 @@ export function CarrierFilesTable({ files, emptyTitle, emptyHint }: { files: Car
       ) : visible.length === 0 ? (
         <NoMatches noun="files" onClear={clear} />
       ) : (
-        <table className="portal-lead-table w-full min-w-[1180px] text-left text-sm">
+        <table className="portal-lead-table w-full min-w-[960px] text-left text-sm">
           <thead>
             <tr>
               <th className="w-[120px]">File date</th>
               <th>Carrier</th>
               <th className="w-[120px]">Type</th>
               <th>File</th>
-              <th className="w-[170px]">Arrived</th>
-              <th className="w-[120px]">Received</th>
-              <th className="w-[80px] text-right">Size</th>
+              <th className="w-[150px]">Arrived</th>
               <th className="w-[80px] text-right">Rows</th>
-              <th className="w-[170px]">Status</th>
+              <th className="w-[160px]">Status</th>
               <th className="w-[110px] text-right"><span className="sr-only">Actions</span></th>
             </tr>
           </thead>
@@ -134,19 +133,17 @@ export function CarrierFilesTable({ files, emptyTitle, emptyHint }: { files: Car
               return (
                 <tr key={file.id} className="m-row">
                   <td className="tabular-nums">{fileDay(file.fileDate)}</td>
-                  <td className="max-w-[200px] truncate font-semibold text-foreground" title={file.carrierName ?? "Carrier not known"}>{file.carrierName ?? <span className="font-normal text-muted-foreground">Not known</span>}</td>
+                  <td className="max-w-[160px] truncate font-semibold text-foreground" title={file.carrierName ?? "Carrier not known"}>{file.carrierName ?? <span className="font-normal text-muted-foreground">Not known</span>}</td>
                   <td>{file.fileType ? FILE_TYPE_LABELS[file.fileType] : <span className="text-muted-foreground">Not known</span>}</td>
-                  <td className="max-w-[300px]">
-                    <span className="block truncate text-foreground" title={file.originalFilename}>{file.originalFilename}</span>
+                  <td className="max-w-[230px]">
+                    <span className="block truncate text-foreground" title={`${file.originalFilename} · ${fileSize(file.fileBytes)}`}>{file.originalFilename}</span>
                     {file.status === "failed" && file.errorDetail && <span className={`block truncate text-xs ${file.waitingForLayout ? "text-muted-foreground" : "text-[var(--error-ink)]"}`} title={file.errorDetail}>{file.errorDetail}</span>}
                     {file.status !== "failed" && file.rawError && <span className="block truncate text-xs text-[var(--error-ink)]" title={file.rawError}>{file.rawError}</span>}
                   </td>
-                  <td className="max-w-[170px] truncate" title={`${FILE_SOURCE_LABELS[file.source]} · ${from}`}>
-                    <span className="block truncate">{FILE_SOURCE_LABELS[file.source]}</span>
-                    <span className="block truncate text-xs text-muted-foreground">{from}</span>
+                  <td className="max-w-[150px] truncate" title={`${FILE_SOURCE_LABELS[file.source]} · ${from} · ${fileDay(file.receivedAt)}`}>
+                    <span className="block truncate tabular-nums">{fileDay(file.receivedAt)}</span>
+                    <span className="block truncate text-xs text-muted-foreground">{FILE_SOURCE_LABELS[file.source]} · {from}</span>
                   </td>
-                  <td className="tabular-nums">{fileDay(file.receivedAt)}</td>
-                  <td className="text-right tabular-nums text-muted-foreground">{fileSize(file.fileBytes)}</td>
                   <td
                     className="text-right tabular-nums"
                     title={file.rowCount !== null ? "Rows kept exactly as they arrived" : file.fileKind === "pdf" ? "A PDF's lines are read by PDF extraction" : file.rawError ?? (file.status === "failed" ? undefined : "Waiting to be read")}

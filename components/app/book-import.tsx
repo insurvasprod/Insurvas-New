@@ -100,8 +100,8 @@ export function BookImport({ carriers, others, processing, readOnly }: { carrier
       {rows.length === 0 ? (
         <EmptyState title="No carriers yet" hint="Add the carriers you write, then upload each one's latest policy file." />
       ) : (
-        <table className="portal-lead-table w-full min-w-[980px] text-left text-sm">
-          <thead><tr><th className="w-[200px]">Carrier</th><th>Where to find the file</th><th className="w-[300px]">Result</th><th className="w-[150px]">File date</th><th className="w-[200px] text-right"><span className="sr-only">Actions</span></th></tr></thead>
+        <table className="portal-lead-table w-full min-w-[880px] text-left text-sm">
+          <thead><tr><th className="w-[180px]">Carrier</th><th>Where to find the file</th><th className="w-[250px]">Result</th><th className="w-[150px]">Date on the file</th><th className="w-[190px] text-right"><span className="sr-only">Actions</span></th></tr></thead>
           <tbody>
             {rows.map((c) => {
               const line = resultLine(c);
@@ -123,7 +123,7 @@ export function BookImport({ carriers, others, processing, readOnly }: { carrier
                         {g.formatHint && <span className="block text-xs text-muted-foreground">Choose: {g.formatHint}</span>}
                         {g.notes && <span className="block text-xs text-muted-foreground">{g.notes}</span>}
                       </span>
-                    ) : <span className="text-muted-foreground">Download the carrier&apos;s latest policy (in-force) report from its agent portal.</span>}
+                    ) : <span className="text-muted-foreground">The in-force report in its agent portal</span>}
                   </td>
                   <td className={TONE[line.tone]} role="status">{line.text}</td>
                   <td><input type="date" aria-label={`File date for ${c.carrierName}`} className={`${toolbarControl} w-full`} value={dates[c.carrierId] ?? today} max={today} disabled={readOnly} onChange={(e) => setDates((all) => ({ ...all, [c.carrierId]: e.target.value }))} /></td>

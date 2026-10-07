@@ -44,7 +44,8 @@ export default async function CarrierFilesPage({ searchParams }: { searchParams:
 
   const blocked = !list.available ? CARRIER_FILES_PENDING_MESSAGE : readOnly ? "Receiving files is paused while the account is read-only." : null;
   const current = list.files.filter((file) => file.status !== "superseded");
-  const failed = current.filter((file) => file.status === "failed").length;
+  const waiting = current.filter((file) => file.waitingForLayout).length;
+  const failed = current.filter((file) => file.status === "failed" && !file.waitingForLayout).length;
   const replaced = list.files.length - current.length;
 
   return (
@@ -68,9 +69,9 @@ export default async function CarrierFilesPage({ searchParams }: { searchParams:
 
       {list.files.length > 0 && (
         <StatStrip label="Carrier file totals">
-          <StatTile label="Files" value={current.length.toLocaleString("en-US")} footnote={`${current.filter((file) => file.fileType === "policies").length.toLocaleString("en-US")} policy · ${current.filter((file) => file.fileType === "commissions").length.toLocaleString("en-US")} commission`} />
-          <StatTile label="Failed" value={failed.toLocaleString("en-US")} valueTone={failed ? "warning" : undefined} footnote="cannot be read" />
-          <StatTile label="Replaced" value={replaced.toLocaleString("en-US")} footnote="by a corrected file" />
+          <StatTile label="Files in use" value={current.length.toLocaleString("en-US")} footnote={replaced ? `${replaced.toLocaleString("en-US")} more replaced by a corrected file` : `${current.filter((file) => file.fileType === "policies").length.toLocaleString("en-US")} policy · ${current.filter((file) => file.fileType === "commissions").length.toLocaleString("en-US")} commission`} />
+          <StatTile label="Waiting for a layout" value={waiting.toLocaleString("en-US")} footnote="read once Insurvas sets up the layout" />
+          <StatTile label="Failed" value={failed.toLocaleString("en-US")} valueTone={failed ? "warning" : undefined} footnote="cannot be read, see the reason" />
           <StatTile label="Duplicates skipped" value={list.skips.length.toLocaleString("en-US")} footnote="already received" />
         </StatStrip>
       )}

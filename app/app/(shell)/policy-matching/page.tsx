@@ -28,11 +28,11 @@ export default async function PolicyMatchingPage() {
       ) : (
         <>
           <StatStrip label="Policy matching totals">
-            <StatTile label="Waiting for a person" value={view.reviews.length.toLocaleString("en-US")} valueTone={view.reviews.length ? "warning" : undefined} footnote="no policy number we hold" />
-            <StatTile label="Linked by number" value={pct(view.ladder.exactLinkedPct)} footnote={`of ${view.ladder.all.toLocaleString("en-US")} policies, last 30 days`} />
-            <StatTile label="Needed review" value={pct(view.ladder.toReviewPct)} footnote="high means numbers aren't captured at submission" />
-            <StatTile label="AI accuracy, 7 days" value={pct(view.aiAccuracy.pct)} footnote={view.aiAccuracy.reviewed ? `${view.aiAccuracy.correct} of ${view.aiAccuracy.reviewed} confirmed` : "AI review isn't configured"} />
-            <StatTile label="Agent codes unmapped" value={view.unmapped.length.toLocaleString("en-US")} valueTone={view.unmapped.length ? "warning" : undefined} footnote="mapped exactly, never guessed" />
+            <StatTile label="Waiting for you" value={view.reviews.length.toLocaleString("en-US")} valueTone={view.reviews.length ? "warning" : undefined} footnote="pick the right client" />
+            <StatTile label="Linked automatically" value={view.ladder.all ? pct(Math.round((100 - (view.ladder.toReviewPct ?? 0)) * 10) / 10) : "—"} footnote={`of ${view.ladder.all.toLocaleString("en-US")} policy rows read, 30 days`} />
+            <StatTile label="Sent to review" value={pct(view.ladder.toReviewPct)} footnote="lower when numbers are saved at the sale" />
+            {view.aiAccuracy.reviewed > 0 && <StatTile label="AI accuracy, 7 days" value={pct(view.aiAccuracy.pct)} footnote={`${view.aiAccuracy.correct} of ${view.aiAccuracy.reviewed} confirmed`} />}
+            <StatTile label="Agent codes to map" value={view.unmapped.length.toLocaleString("en-US")} valueTone={view.unmapped.length ? "warning" : undefined} footnote="so each policy credits the right agent" />
           </StatStrip>
           <PolicyMatchingWorkspace reviews={view.reviews} links={view.links} unmapped={view.unmapped} mapped={view.mapped} members={view.members} readOnly={guard.entitlement.access === "read_only"} aiNote={AI_REVIEW_PENDING} />
         </>

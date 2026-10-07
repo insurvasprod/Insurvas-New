@@ -8,7 +8,7 @@ import { toolbarControl } from "@/components/ui/data-toolbar";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { CARRIER_FILE_ACCEPT, FILE_TYPE_LABELS, MAX_UPLOAD_BYTES, carrierFileKind, type CarrierFileType } from "@/lib/ingestion/constants";
+import { CARRIER_FILE_ACCEPT, FILE_TYPE_LABELS, MAX_UPLOAD_BYTES, carrierFileKind, fileDay, type CarrierFileType } from "@/lib/ingestion/constants";
 import { prefillFromFilename, type CarrierChoice } from "@/lib/ingestion/path";
 
 const selectClass = `${toolbarControl} w-full`;
@@ -96,7 +96,7 @@ export function CarrierFileUploadButton({ carriers, autoOpen = false }: { carrie
               ) : done.status === "failed" ? (
                 <p className="text-[var(--error-ink)]">Received, but it cannot be read: {done.errorDetail}</p>
               ) : (
-                <p className="text-[var(--body)]">Received {FILE_TYPE_LABELS[fileType as CarrierFileType].toLowerCase()} file from {carrierName} for {fileDate}.{done.supersededFileId ? " It replaces the earlier file for that day, which is kept." : ""}</p>
+                <p className="text-[var(--body)]">Received {FILE_TYPE_LABELS[fileType as CarrierFileType].toLowerCase()} file from {carrierName}, dated {fileDay(fileDate)}. It is read in the next few seconds and shows in the list.{done.supersededFileId ? " It replaces the earlier file for that day, which is kept." : ""}</p>
               )}
             </div>
           ) : (
@@ -123,11 +123,13 @@ export function CarrierFileUploadButton({ carriers, autoOpen = false }: { carrie
                 <div className="grid gap-1.5">
                   <Label htmlFor="carrier-file-date">File date</Label>
                   <Input id="carrier-file-date" type="date" className="h-9" value={fileDate} onChange={(event) => setFileDate(event.target.value)} />
+                  <p className="text-xs text-muted-foreground">The day the carrier ran the report.</p>
                 </div>
               </div>
               <div className="grid gap-1.5">
                 <Label htmlFor="carrier-file-agency">Agency (optional)</Label>
                 <Input id="carrier-file-agency" className="h-9" maxLength={120} value={agency} onChange={(event) => setAgency(event.target.value)} />
+                <p className="text-xs text-muted-foreground">Only if the carrier sends a separate file for each agency or downline.</p>
               </div>
               {problem && <p role="alert" className="text-sm font-medium text-[var(--error-ink)]">{problem}</p>}
             </div>

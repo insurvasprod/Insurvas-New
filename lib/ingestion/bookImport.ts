@@ -90,7 +90,8 @@ export async function loadBookImport(tenantId: string) {
       carrierId: id,
       carrierName: name.get(id)!,
       writes: writing.has(id),
-      status: (row?.status === "skipped" && !file ? "skipped" : row?.status === "imported" || file ? "imported" : "pending") as CarrierImport["status"],
+      // Imported means a file is on the row: a progress row alone (a duplicate upload, before 2026-10-07) shows nothing.
+      status: (row?.status === "skipped" && !file ? "skipped" : file ? "imported" : "pending") as CarrierImport["status"],
       guidance: guide.get(id) ?? null,
       // "parsed" comes before the snapshots and matching are written; until derived_at, it is still being read.
       file: file ? { id: file.id, name: file.original_filename, status: file.status === "parsed" && !file.derived_at && !file.parse_block && Number(file.row_count ?? 0) > Number(file.held_row_count ?? 0) ? "parsing" : file.status, fileDate: file.file_date, rows: file.row_count, held: file.held_row_count, error: file.error_detail, block: file.parse_block } : null,
@@ -123,7 +124,16 @@ export async function uploadForImport(tenantId: string, userId: string, input: O
     throw new Error(probe.error.message);
   }
   const result = await uploadCarrierFile(tenantId, userId, { ...input, fileType: "policies" });
-  if (result.outcome === "registered") {
+  if (result.outcome === "skipped") {
+    // The same bytes were received before. They count for this carrier only if that is whose policy
+    // file they were; otherwise the row would show another carrier's file as this one's import.
+    const { data: held } = await db().from("file_registry").select("carrier_id, file_type").eq("tenant_id", tenantId).eq("id", result.fileId).maybeSingle();
+    if (!held || held.carrier_id !== input.carrierId || held.file_type !== "policies") {
+      const { data: owner } = held?.carrier_id ? await db().from("carriers").select("name").eq("id", held.carrier_id).maybeSingle() : { data: null };
+      throw new BookImportError(`This exact file was already received${owner?.name ? ` as ${owner.name}'s` : " as another carrier's"} ${held?.file_type === "commissions" ? "commission" : "policy"} file. Choose this carrier's own file.`, 409);
+    }
+  }
+  if (result.outcome === "registered" || result.outcome === "skipped") {
     const { error } = await db().from("file_registry").update({ is_initial_import: true }).eq("tenant_id", tenantId).eq("id", result.fileId);
     if (error) throw new Error(`The file could not be marked as an import: ${error.message}`);
   }

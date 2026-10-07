@@ -26,7 +26,7 @@ export default async function BookImportPage() {
     <div className="m-stagger flex flex-col gap-6">
       <PageHeader
         title="Import your book"
-        description="Your most recent policy file from each carrier portal. Each one is read as soon as it arrives."
+        description="Upload each carrier's latest policy file, or drop it on the carrier's row. Each one is read as soon as it arrives."
         actions={view.available && view.totals.policies > 0 ? <Link href="/app/exceptions" className={buttonVariants({ variant: "outline" })}>Look over imported clients</Link> : undefined}
       />
       {!view.available ? (
@@ -34,7 +34,7 @@ export default async function BookImportPage() {
       ) : (
         <>
           <StatStrip label="Your book so far">
-            <StatTile label="Carriers" value={`${view.done} of ${view.carriers.length}`} footnote="imported or skipped" />
+            <StatTile label="Carriers done" value={`${view.done} of ${view.carriers.length}`} footnote="imported or skipped for now" />
             <StatTile label="Policies" value={view.totals.policies.toLocaleString("en-US")} footnote="in your book now" />
             <StatTile label="Premium a month" value={`$${Math.round(view.totals.monthlyPremiumCents / 100).toLocaleString("en-US")}`} footnote={`${view.totals.atRisk.toLocaleString("en-US")} policies at risk`} valueTone={view.totals.atRisk ? "warning" : undefined} />
             <StatTile label="Persistency" value={view.persistency.ready ? "Ready" : "Building"} footnote={view.persistency.ready ? "enough months of files" : view.persistency.label.replace(/^building — /, "")} />

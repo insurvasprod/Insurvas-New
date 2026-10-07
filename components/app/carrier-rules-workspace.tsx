@@ -21,7 +21,7 @@ const FORMAT_LABEL = { spreadsheet: "Spreadsheet", pdf: "PDF" } as const;
 
 function ruleCell(rule: ResolvedRule | null) {
   if (!rule || rule.windowDays === null) {
-    return <span className="text-[var(--warning-ink)]">{rule?.graceDays !== null && rule?.graceDays !== undefined ? `Grace ${rule.graceDays} d, no window` : "Not set"}</span>;
+    return <span className="text-muted-foreground">{rule?.graceDays !== null && rule?.graceDays !== undefined ? `Grace ${rule.graceDays} d, no window` : "Not set"}</span>;
   }
   return (
     <span title={`${rule.scope === "agency" ? "This agency's own rule" : "The platform's rule"} · ${rule.source ? RULE_SOURCE_LABELS[rule.source] : ""} · from ${rule.effectiveFrom}${rule.notes ? ` · ${rule.notes}` : ""}`}>
@@ -89,14 +89,14 @@ export function CarrierRulesWorkspace({ carriers, plane, endpoint, readOnly, asO
         ) : visible.length === 0 ? (
           <NoMatches noun="carriers" onClear={() => { setQuery(""); setGapsOnly(false); }} />
         ) : (
-          <table className="portal-lead-table w-full min-w-[1180px] text-left text-sm">
+          <table className="portal-lead-table w-full min-w-[980px] text-left text-sm">
             <thead>
               <tr>
                 <th>Carrier</th>
-                {RULE_TYPES.map((type) => <th key={type} className="w-[130px]">{RULE_TYPE_LABELS[type].label}</th>)}
-                {plane === "agency" && <th className="w-[90px] text-right">In force</th>}
-                <th className="w-[90px] text-right">Missing</th>
-                <th className="w-[90px] text-right"><span className="sr-only">Actions</span></th>
+                {RULE_TYPES.map((type) => <th key={type} className="w-[118px]" style={{ whiteSpace: "normal" }} title={`Days the carrier gives: its ${RULE_TYPE_LABELS[type].window}`}>{RULE_TYPE_LABELS[type].label}</th>)}
+                {plane === "agency" && <th className="w-[80px] text-right" title="Policies in force with this carrier">In force</th>}
+                <th className="w-[80px] text-right" title="Rules not set yet; hover a number to see which">Missing</th>
+                <th className="w-[76px] text-right"><span className="sr-only">Actions</span></th>
               </tr>
             </thead>
             <tbody>

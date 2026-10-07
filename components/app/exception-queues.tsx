@@ -14,6 +14,7 @@ import { EmptyState } from "@/components/ui/page-states";
 import { TableCard } from "@/components/ui/table-card";
 import { ageDays, ageLabel, ageTone, OWNER_ROLE_LABELS, OWNER_ROLES, QUEUE_LABELS, QUEUE_TYPES, RESOLUTION_LABELS, RESOLUTIONS, type OwnerRole, type QueueRule, type QueueType, type Resolution } from "@/lib/ingestion/exceptionQueues";
 import type { QueueItemRow } from "@/lib/ingestion/exceptionQueuesStore";
+import { fileDay } from "@/lib/ingestion/constants";
 import { notify } from "@/lib/notify";
 
 type Tab = "open" | "closed" | "owners";
@@ -30,7 +31,7 @@ function subject(item: QueueItemRow) {
   if (item.queueType === "no_policy") return <span>{item.deal?.insuredName ?? "—"} · {item.carrierName ?? item.deal?.carrier ?? "—"} · {dollars(item.deal?.premiumCents)} a month</span>;
   if (item.queueType === "initial_import") {
     const p = item.payload ?? {};
-    return <span>{item.carrierName ?? p.carrier_name} · {Number(p.policies ?? 0).toLocaleString("en-US")} policies imported, {Number(p.provisional ?? 0).toLocaleString("en-US")} provisional clients created{Number(p.existing ?? 0) ? `, ${Number(p.existing).toLocaleString("en-US")} matched to clients on file` : ""}{Number(p.blocked ?? 0) ? `, ${Number(p.blocked).toLocaleString("en-US")} without a client` : ""} — review when you have time</span>;
+    return <span>{item.carrierName ?? p.carrier_name} · {Number(p.policies ?? 0).toLocaleString("en-US")} policies imported, {Number(p.provisional ?? 0).toLocaleString("en-US")} provisional clients created{Number(p.existing ?? 0) ? `, ${Number(p.existing).toLocaleString("en-US")} matched to clients on file` : ""}{Number(p.blocked ?? 0) ? `, ${Number(p.blocked).toLocaleString("en-US")} without a client` : ""}</span>;
   }
   if (item.queueType === "multi_policy") return <span className="inline-flex flex-wrap items-center gap-1"><Client person={item.contact} /> and <Client person={item.related} /></span>;
   return <span className="inline-flex flex-wrap items-center gap-1.5"><span className="font-mono text-xs">{item.policyNumber}</span> · {item.carrierName} · <Client person={item.contact} /></span>;
@@ -78,7 +79,7 @@ export function ExceptionQueues({ open, closed, rules, isOwner, today, readOnly,
   }
 
   const needs = (r: Resolution | null) => r === "link_existing_client" ? !fields.contact : r === "found_the_sale" ? !fields.deal : r === "found_the_policy" ? !fields.policy : r === "never_submitted" ? !(fields.reason ?? "").trim() : r === "resubmitted_elsewhere" ? !fields.application : false;
-  const toolbar = <DataToolbar actions={<RefreshButton onClick={() => startRefresh(() => router.refresh())} refreshing={refreshing} />}><span className="text-sm text-muted-foreground">Oldest first. Age is counted from {"the sale's date for unsubmitted sales, otherwise from when the item appeared"}.</span></DataToolbar>;
+  const toolbar = <DataToolbar actions={<RefreshButton onClick={() => startRefresh(() => router.refresh())} refreshing={refreshing} />}><span className="text-sm text-muted-foreground">Oldest first</span></DataToolbar>;
 
   return (
     <>
@@ -86,17 +87,17 @@ export function ExceptionQueues({ open, closed, rules, isOwner, today, readOnly,
 
       {tab === "open" && (open.length === 0 ? (
         <TableCard toolbar={toolbar}><EmptyState title="Nothing open" hint="Policies with no sale, sales no carrier has heard of, and possible duplicate clients appear here." /></TableCard>
-      ) : QUEUE_TYPES.map((type) => {
+      ) : QUEUE_TYPES.filter((type) => open.some((item) => item.queueType === type)).map((type, index) => {
         const items = open.filter((item) => item.queueType === type).sort((a, b) => a.ageFrom.localeCompare(b.ageFrom));
         if (!items.length) return null;
         return (
-          <TableCard key={type} toolbar={toolbar}>
+          <TableCard key={type} toolbar={index === 0 ? toolbar : undefined}>
             <div className="border-b border-border px-4 py-3">
               <h2 className="m-0 text-sm font-semibold text-foreground">{QUEUE_LABELS[type].title} <span className="text-muted-foreground">· {items.length}</span></h2>
               <p className="m-0 mt-0.5 text-xs text-muted-foreground">{QUEUE_LABELS[type].why}</p>
             </div>
             <table className="portal-lead-table w-full min-w-[900px] text-left text-sm">
-              <thead><tr><th className="w-[110px]">Age</th><th>What</th><th className="w-[200px]">Owner</th><th className="w-[110px] text-right"><span className="sr-only">Actions</span></th></tr></thead>
+              <thead><tr><th className="w-[110px]" title="From the sale's date for unsubmitted sales, otherwise from when the item appeared">Age</th><th>What</th><th className="w-[200px]">Owner</th><th className="w-[110px] text-right"><span className="sr-only">Actions</span></th></tr></thead>
               <tbody>
                 {items.map((item) => {
                   const age = ageDays(item.ageFrom, today);
@@ -128,7 +129,7 @@ export function ExceptionQueues({ open, closed, rules, isOwner, today, readOnly,
                     <td>{subject(item)}</td>
                     <td>{item.resolution && item.resolution in RESOLUTION_LABELS ? RESOLUTION_LABELS[item.resolution as Resolution] : item.resolution === "auto_linked" ? "Answered by a policy link" : item.resolution}{item.resolutionNote ? <span className="block text-xs text-muted-foreground">{item.resolutionNote}</span> : null}</td>
                     <td>{item.resolvedByName ?? "—"}</td>
-                    <td className="tabular-nums">{item.resolvedAt?.slice(0, 10)}</td>
+                    <td className="tabular-nums">{fileDay(item.resolvedAt?.slice(0, 10) ?? null)}</td>
                   </tr>
                 ))}
               </tbody>
