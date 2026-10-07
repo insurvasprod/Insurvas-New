@@ -34,7 +34,7 @@ The repo's [TASKS.md](TASKS.md) (11 tasks, 2026-10-02) is the earlier, smaller s
 | 4.15 Discrepancies, letters | **Done 2026-10-08.** Migration `20261008250000` live and verified against the live functions (below). Rebuilt on 4.12–4.14; the earlier module stays as "From imported statements". |
 | 4.16 Retention board | **Done 2026-10-08.** Migration `20261008260000` live and verified against the live functions (below). The call list is the new default tab on Lapse risk; the earlier board stays as "Recorded signals". |
 | 4.17 Carrier rules | **Done 2026-10-07.** Migration `20261008150000` live and verified (below). Rules, settings, coverage screen (below). The old statements engine still hard-codes 45 days; it retires with that code. |
-| 4.18 Scorecards, persistency, AI summary | Partial: count-based persistency only |
+| 4.18 Scorecards, persistency, AI summary | **Done 2026-10-08.** Migration `20261008270000` live and verified (below). New page Insight › Book scorecards. The summary is written from templates; AI prose waits for a provider, behind a figure-and-prediction gate. |
 | 4.19 Daily run, AI agents | Not started |
 | 4.20 Traceability | Partial: original download (now logged), arithmetic on findings |
 
@@ -1032,3 +1032,79 @@ It follows LA-3.13's carrier field maps on purpose: the same statuses, the same 
 - **A rolled-back block against the live functions:** saved, lost, still at risk and waiting came out exactly as in the rehearsal. A second run moved nothing. An edit, a delete and an unknown reason were all refused.
 - **The app's read path:** `loadBoard` returns the same 3 rows. Save rates now report available with 0 calls.
 - **Not exercised:** no call was logged for real, because a logged call is permanent.
+
+## LA-4.18 · Scorecards, persistency and the daily summary
+
+**Where:** Insight › **Book scorecards** (`/app/book-scorecards`, `cohort_persistency`; owner, producer for their own book, bookkeeper). The earlier Persistency page (the hand-entered book) is unchanged. Everything is read from 4.7's `policy_current` and 4.12's ledger; nothing is snapshotted, and opening the page writes nothing.
+
+**Persistency** (`lib/ingestion/scorecards.ts`, pure):
+- **Buckets:** 3, 6, 9 and 13 months after issue, the carrier's issue date or else the effective date.
+- **Two measures:** by policy count and by annualised premium. Premium shares leave out policies with no premium and say how many.
+- **Survivorship rule:** only policies issued since the agency's first carrier file are judged. Older policies were only seen if they survived to that file.
+  - A bucket the history can't fill yet reads **Building**, with the date it becomes possible.
+  - It is never computed from the policies that happen to be old enough.
+- **Small samples:** below the agency's sample size (`book_insight_settings.min_sample`, default 10, owner-editable) a share prints as a count, "3 of 5".
+- **Never in force:** submitted, declined, withdrawn, approved-unpaid and not-taken policies are placement's subject, not persistency's.
+- **Lapse date:** the file that showed the lapse; a lapse on the mark day is not alive.
+
+**Overview:**
+- **Annualised premium:** with the in-force count.
+- **Month-9 persistency:** against the 65% carriers look for.
+- **Placement:** the 4.18 placed rule (issued and paid at least once). Submitted counts come from LA-3 and issued from submitted. "Issued, never paid" is the gap.
+- **Chargeback ratio:** chargebacks over advances, by carrier, product, agent and lead source.
+- **Today:** the daily summary.
+- **Book of business:** by carrier, product, status, agent and agency.
+- **Net commission by week:** advances, earned and overrides, less chargebacks, fees and advance interest, over the last 13 weeks. Held money is shown apart. It is summed in the database by `commission_week_totals`, with flagged statements held out (4.14).
+
+**Scorecards:** by lead source, carrier, product, agent and agency.
+- **Every scorecard:** policies, in force, premium, placement, month-9 persistency, chargeback ratio and net commission. Net commission is "—" when no ledger line exists, never $0.
+- **Lead source also:** spend (the LA-2 report, net of credits, for the period), sales, cost per sale, and the **true cost per sale**, spend ÷ (sales × month-9 persistency), from the counts.
+  - The Apex/Vertex example is a test: $564 becomes $696, and $482 becomes $817.
+  - Spend isn't shown on a producer's own scorecard.
+
+**Drill-through and CSV:**
+- Every figure is a link (`?drill=`) to the rows behind it. They are computed by the same function that made the figure, so the count always reconciles. A test checks each policy figure (book, persistency, placement, chargeback, sales); the week drill was checked in the rehearsal.
+- Policy rows link to the 4.11 policy page. A week's net opens its ledger lines (`commission_week_entries`).
+- Every table, and every drill list, exports exactly what is shown as CSV, with formula escaping.
+
+**The daily summary** (`lib/ingestion/dailySummary.ts`):
+- **Input:** a structured object built from the newest files (lapsed, newly issued, moved to at risk), chargebacks recorded since yesterday, policies with 3 days or fewer before the carrier closes them, and month-9 persistency under the line on a full sample.
+- **Lines:** each is a template over that object's figures and links through. A quiet day says "Nothing notable today."
+- **AI prose waits for the provider** (LA-4.19's insights agent). `checkProse` is the gate it will have to pass: any figure not in the input, or any predictive word, refuses the prose. Tests assert the templates pass and an invented figure or a forecast fails.
+
+**Speed (no batch job):**
+- **Loader:** about 0.4–0.9 s for the overview on the demo agency. About 1.2 s for the scorecards view, which alone reads the LA-2 spend report (about 1 s; the report once took 5 s).
+- **Computation:** 20,000 synthetic policies across every view take about 220 ms, after replacing a quadratic grouping and caching month marks.
+- **Not yet proven at real volume:** reads page 1,000 policies at a time, so a book of tens of thousands would need the rollup the spec allows.
+- **Indexes:** two new ones on `policy_current` (vendor, campaign) for the lead-source chain.
+
+**Before the apply (2026-10-08):**
+- **A rolled-back rehearsal on production:**
+  - The weeks summed advance, chargeback and fee correctly. A fee with no statement date fell back to its transaction date.
+  - The week's drill returned its 2 lines.
+  - The sample setting upserted, refused 1, and can't be deleted.
+- **The page on the demo agency** (8 policies, first file 2026-09-05):
+  - Premium is $4,519.80 (7 of 8 in force), and placed is "8 of 8" (a count, under the sample).
+  - All four buckets are Building (month 9 from Jun 5, 2027).
+  - The 10 LA-3 submissions show, 0 of them issued.
+  - Chargebacks show "—" with no advance on file. The weekly table names the pending migration.
+  - The sales drill opened exactly 8 policies.
+- 2203 tests pass; `tsc` clean.
+
+**Live verification (2026-10-08, after the apply):**
+- **The verifier** reports `20261008270000` as applied.
+- **Catalog:**
+  - On `book_insight_settings`, `service_role` can select, insert and update, but not delete or truncate.
+  - `tenant_app` only reads, through 1 read policy; `anon` has no access.
+  - Both ledger functions are security definer and run as `service_role` only.
+  - The three indexes are present. No settings row exists yet.
+- **A rolled-back block against the live functions:**
+  - The weeks summed advance $400.00, chargeback −$250.00 and fee −$5.00 into the right weeks.
+  - The week of 10-05 drilled to its 2 lines; one agent's weeks held only that agent's 2 lines.
+  - The setting saved twice into one row (15), and a sample of 1 was refused.
+- **The app, on the demo agency:**
+  - Net commission by week now shows "No commission lines in the last 13 weeks".
+  - The owner's sample-size control is live.
+  - The API refused a sample of 1, a fractional sample, an unknown field and an unknown action (400, nothing stored).
+  - Through the loader, the owner sees 8 policies and 14 vendors' spend. The credited producer sees only their 4 (DEMO-1001, -1002, -1005, -1007) and no spend.
+  - No setting was saved for real: a settings row can't be removed.
