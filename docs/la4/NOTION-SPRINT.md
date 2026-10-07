@@ -27,7 +27,7 @@ The repo's [TASKS.md](TASKS.md) (11 tasks, 2026-10-02) is the earlier, smaller s
 | 4.8 Policy ↔ CRM matching with AI | **Non-AI parts done 2026-10-07.** Migration `20261008170000` live and verified (below). The AI reviewer waits for a provider; a person decides step 3 meanwhile. |
 | 4.9 Exception queues | **Done 2026-10-07.** Migrations `20261008180000` and follow-up `20261008180100` live and verified (below). |
 | 4.10 Existing-book import | **Done 2026-10-07.** Migration `20261008190000` live and verified (below). Portal guidance ships empty, for staff to write. |
-| 4.11 Policy list and detail | Partial: earlier screens exist; to be rebuilt on 4.7 |
+| 4.11 Policy list and detail | **Done 2026-10-07.** Migration `20261008210000` live and verified (below). Money figures and their ledger links wait for 4.12. |
 | 4.12 Commission ledger | Partial: computed ledger exists; `commission_entry` not built |
 | 4.13 Expected commission | Partial: schedules exist; trigger and lag not built |
 | 4.14 Orphans, carrier balances | Partial: unmatched lines kept; balances not built |
@@ -708,3 +708,54 @@ It follows LA-3.13's carrier field maps on purpose: the same statuses, the same 
   - All six changes are audited, and none left a row behind.
 - **The summary item on the live tables** (rolled back): opening it twice for one file gives one item, updated in place, owned by the agency's owner. "Looked over" closes it with who. An import status other than imported/skipped is refused, and so is empty guidance (both 23514).
 - **Not run live:** a real carrier file through the import. It leaves permanent rows, and needs the raw carrier files. The pipeline it uses is the one verified in 4.1–4.9.
+## LA-4.11 · Policy list and policy detail page
+
+**Where:** Book of Business › Policies. One menu item, two views: **From carrier files** (new, the default; `policy_current`) and **Entered by hand** (the LA-0.7 list, unchanged, because the dashboard, ledger, lapse radar and search still read `tenant_policies`). Detail: `/app/policies/carrier/<carrierId>/<policyNumber>`.
+
+**List** (`components/app/policy-book.tsx`, logic in `lib/ingestion/policyBook.ts`):
+- Filters for carrier, status and risk in the toolbar. "More filters" holds product, agent (including "no agent mapped"), lead source (including "none"), agency (shown only when there is more than one) and an issue-date range.
+- Every column sorts. A missing value sorts last in both directions. Within a risk band, the policy closest to closing comes first.
+- The totals (policies, annual and monthly premium, at risk) are computed from exactly the filtered set. A policy without a premium is counted and named in a footnote, never added as $0.
+- The filter lives in the address (`?carrier=…&risk=…&sort=…`), so a filtered list can be bookmarked or sent. A saved filter stores that same query string.
+- **Export CSV** exports the filtered rows in the on-screen order. Cells that begin with `= + - @` are prefixed with `'`, because carrier files are outside input.
+- The status column shows ours, with the carrier's own word on hover. Risk shows only for policies in force (active, at risk, approved unpaid); a lapsed policy shows "—", never "Low".
+- A producer sees the policies credited to them (`agent_user_id`). An owner and a bookkeeper see the whole book.
+
+**Detail** (`app/app/(shell)/policies/carrier/[carrierId]/[policyNumber]/page.tsx`, reads in `lib/ingestion/policyBookStore.ts`):
+- **Header strip:** premium and mode, face amount, status (with the carrier's word), risk with the days until the carrier closes it, and the paid-to date with the date of the file it came from.
+- **Policy facts:** issued, effective, payment method, draft day (from the LA-3 application), months paid, and the agent (or the unmapped code).
+- **Timeline**, oldest first:
+  - from LA-3: the application started, submitted or resubmitted, and its outcome;
+  - from the carrier: issued, effective, first seen in a file;
+  - every `policy_change`, with a forward paid-to move read as "Payment credited".
+  - Commission entries join it with 4.12.
+- **Source** (collapsed): each current value, when it last changed and from which file, plus the raw row exactly as the carrier sent it.
+- **Money:** advanced, earned, charged back and exposure read "Unknown" until 4.12. The lead source comes from the LA-3 case, or from the agency's override, with the campaign's average cost per lead.
+- **Other policies and household:** the client's other policies, linked. The household total is a monthly figure across policies in force or at risk, shown when the household holds more than one person.
+- **Your notes:** notes and a lead-source override. Carrier fields are not editable anywhere. The contact link stays with Policy matching (4.8), and the page links there when no client is linked.
+
+**Migration `20261008210000`:** `policy_saved_filter` (per user) and `policy_annotation` (keyed like `policy_current`, so it survives every refresh). RLS read-only for `tenant_app`, writes through the service, and truncate revoked. Rehearsed in a rolled-back transaction on 2026-10-07.
+
+| Acceptance criterion | State |
+|---|---|
+| Header totals respond to the filter and match a hand count | **Met.** Demo agency: 8 policies, $377/mo, 2 at risk. Filtered to at-risk: $29.50 + $61.00 a month = $1,086 a year, as shown. |
+| CSV matches the filtered, sorted set | **Met.** Unit test; the export is built from the same array as the table. |
+| Normalized status with the raw word on hover | **Met.** |
+| Every money figure links to its ledger entries | **Waiting on 4.12.** Figures read "Unknown" until the ledger exists. |
+| Timeline merges changes, commission entries and LA-3 events in order | **Met for changes and LA-3 events.** Commission entries arrive with 4.12. |
+| Source block names the file and row for every value | **Met.** For example: DEMO-1003, row 4 of the corrected Oct 5 file; the status last changed in the original Oct 5 file. |
+| A contact with three policies shows the other two | **Built.** It reads `policy_current.contact_id`; no demo contact holds two policies. |
+| A household with two insureds shows the combined monthly premium | **Built.** `household_id` is shown when the household holds more than one person; no demo household has two. |
+| No carrier field is editable; our own fields are | **Met.** Only notes and lead source are written; a test checks the store never writes `policy_*`. |
+| 5,000 policies with filters in under 1 s | **Client side met:** filter, sort, totals and CSV for 5,000 rows take about 200 ms (unit test). Server load at 5,000 has not been measured: there is no tenant that size, and making one would mean writing rows. |
+**Live verification (2026-10-07, after the apply):**
+- **The verifier** reports `20261008210000` as applied.
+- **Grants, checked in the catalog on both tables:** RLS is on, there is one read policy scoped to `app.tenant_id`, `tenant_app` can select but not insert, `anon` can't read, and nobody can truncate.
+- **A rolled-back block** confirmed:
+  - an upsert keeps exactly one row per policy;
+  - a duplicate filter name, a blank name, a note over 4,000 characters and an unknown vendor are each refused.
+- **The app path, as producer Devin Okafor on the demo agency:**
+  - A note was saved on DEMO-1005, survived a reload, and was then cleared with the Save button. The row is left with notes null, `updated_by` Devin, and two `policy.annotated` audit entries.
+  - Writing to DEMO-1003 (not his) returns 404.
+  - A foreign vendor, a blank filter name and someone else's filter are each refused.
+  - A filter on `risk=at_risk` was saved as "QA at risk", recognised as the current filter, re-applied after clearing (the address and the risk dropdown both updated, showing his one at-risk policy), then removed. No saved filter is left.

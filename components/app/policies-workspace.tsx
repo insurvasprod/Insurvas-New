@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { AlertTriangle, Check, Download, Plus, Upload } from "lucide-react";
 import { notify } from "@/lib/notify";
 
@@ -50,7 +50,7 @@ const label = "text-sm font-semibold text-[var(--body)]";
  * Every policy row keeps its "Record a lapse signal" action (record-lapse-signal.tsx), which is how
  * a policy reaches /app/lapse-risk. There is no delete: a policy is a record.
  */
-export function PoliciesWorkspace({ readOnly }: { readOnly: boolean }) {
+export function PoliciesWorkspace({ readOnly, tabs }: { readOnly: boolean; tabs?: ReactNode }) {
   const [policies, setPolicies] = useState<Policy[]>([]);
   const [metrics, setMetrics] = useState<Metrics>({ active: 0, annualPremiumCents: 0, carriers: 0, renewalsDue: 0 });
   const [loading, setLoading] = useState(true);
@@ -139,6 +139,7 @@ export function PoliciesWorkspace({ readOnly }: { readOnly: boolean }) {
         <Button type="button" disabled={readOnly} onClick={openImport}><Upload aria-hidden="true" />Import policies</Button>
       </>}
     />
+    {tabs}
 
     {readOnly && <div role="status" className="rounded-lg border border-[var(--color-warning)]/30 bg-[var(--color-warning)]/10 px-4 py-3 text-sm text-foreground">Your account is read-only. Adding and importing policies is unavailable until billing is restored.</div>}
 
