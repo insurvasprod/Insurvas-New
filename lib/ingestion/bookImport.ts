@@ -42,7 +42,7 @@ export type CarrierImport = {
   summary: { provisional: number; existing: number; linkedByNumber: number; blocked: number } | null;
 };
 
-const FILE_COLUMNS = "id, carrier_id, original_filename, status, file_date, row_count, held_row_count, error_detail, parse_block, received_at, is_initial_import";
+const FILE_COLUMNS = "id, carrier_id, original_filename, status, file_date, row_count, held_row_count, error_detail, parse_block, received_at, is_initial_import, derived_at";
 
 export async function loadBookImport(tenantId: string) {
   const [writes, rows, guidance, files, current, summaries, library, monthsRead] = await Promise.all([
@@ -92,7 +92,8 @@ export async function loadBookImport(tenantId: string) {
       writes: writing.has(id),
       status: (row?.status === "skipped" && !file ? "skipped" : row?.status === "imported" || file ? "imported" : "pending") as CarrierImport["status"],
       guidance: guide.get(id) ?? null,
-      file: file ? { id: file.id, name: file.original_filename, status: file.status, fileDate: file.file_date, rows: file.row_count, held: file.held_row_count, error: file.error_detail, block: file.parse_block } : null,
+      // "parsed" comes before the snapshots and matching are written; until derived_at, it is still being read.
+      file: file ? { id: file.id, name: file.original_filename, status: file.status === "parsed" && !file.derived_at && !file.parse_block && Number(file.row_count ?? 0) > Number(file.held_row_count ?? 0) ? "parsing" : file.status, fileDate: file.file_date, rows: file.row_count, held: file.held_row_count, error: file.error_detail, block: file.parse_block } : null,
       result: totals ? { policies: totals.policies, monthlyPremiumCents: Math.round(totals.annual / 12), atRisk: totals.atRisk } : null,
       summary: summary ? { provisional: Number(summary.provisional ?? 0), existing: Number(summary.existing ?? 0), linkedByNumber: Number(summary.linkedByNumber ?? 0), blocked: Number(summary.blocked ?? 0) } : null,
     };

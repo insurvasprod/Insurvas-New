@@ -119,7 +119,7 @@ export function PolicyMatchingWorkspace({ reviews, links, unmapped, mapped, memb
                       <td className="font-mono text-xs text-foreground">{link.policyNumber}</td>
                       <td>{link.carrierName}</td>
                       <td>{link.clientName ?? <span className="text-muted-foreground">—</span>}</td>
-                      <td>{TYPE_LABEL[link.type] ?? link.type}</td>
+                      <td>{link.type === "provisional" && link.clientName ? "A provisional client" : TYPE_LABEL[link.type] ?? link.type}</td>
                       <td>{METHOD_LABEL[link.method] ?? link.method}{link.confidence !== null ? ` · ${link.confidence}%` : ""}</td>
                       <td className="tabular-nums">{link.createdAt.slice(0, 10)}</td>
                       <td className="text-right">{!readOnly && <Button type="button" variant="outline" size="sm" disabled={busy !== null} onClick={() => void post(`reopen-${link.id}`, { action: "reopen", match_id: link.id }, "Back in the review queue.")}>Reopen</Button>}</td>
