@@ -28,7 +28,7 @@ The repo's [TASKS.md](TASKS.md) (11 tasks, 2026-10-02) is the earlier, smaller s
 | 4.9 Exception queues | **Done 2026-10-07.** Migrations `20261008180000` and follow-up `20261008180100` live and verified (below). |
 | 4.10 Existing-book import | **Done 2026-10-07.** Migration `20261008190000` live and verified (below). Portal guidance ships empty, for staff to write. |
 | 4.11 Policy list and detail | **Done 2026-10-07.** Migration `20261008210000` live and verified (below). Money figures and their ledger links wait for 4.12. |
-| 4.12 Commission ledger | Partial: computed ledger exists; `commission_entry` not built |
+| 4.12 Commission ledger | **Done 2026-10-07.** Migration `20261008220000` live and verified against the live function (below). No commission layout exists yet, so the ledger is empty until one is written from a real carrier file. |
 | 4.13 Expected commission | Partial: schedules exist; trigger and lag not built |
 | 4.14 Orphans, carrier balances | Partial: unmatched lines kept; balances not built |
 | 4.15 Discrepancies, letters | Partial: 5 of 9 types, letter and PDF; to be rebuilt on 4.12–4.14 |
@@ -759,3 +759,60 @@ It follows LA-3.13's carrier field maps on purpose: the same statuses, the same 
   - Writing to DEMO-1003 (not his) returns 404.
   - A foreign vendor, a blank filter name and someone else's filter are each refused.
   - A filter on `risk=at_risk` was saved as "QA at risk", recognised as the current filter, re-applied after clearing (the address and the risk dropdown both updated, showing his one at-risk policy), then removed. No saved filter is left.
+## LA-4.12 · Commission ledger
+
+**Table `commission_entry`** (migration `20261008220000`): one permanent row per line of a commission file.
+- **Eight entry types**, amounts as **signed integer cents**: advance, earned, override and held are ≥ 0; chargeback, fee and advance interest are ≤ 0; a reversal can be either.
+- **Traceable:** every row carries `file_id` and `raw_row_id`, with a foreign key to the exact raw row, plus the row number.
+- **What each line is:** the carrier's action codes become entry types through the layout map's enum values (`entry_type` is now a required column for commission layouts). A new layout field, `payee_level`, records whether the line pays the writing agent or the upline.
+
+**Never updated, never deleted.**
+- `service_role` and `tenant_app` have their insert, update, delete and truncate rights revoked, and a trigger refuses UPDATE and DELETE for everyone. The migration fails if any of those grants survive.
+- The only writer is `record_commission_entries(tenant, file, rows)`, which runs as a security-definer function under a per-file advisory lock.
+- **Reading a file again:**
+  - a line with the same row and fingerprint is kept;
+  - a line that changed or vanished gets a reversal ("the file was read again and this line changed");
+  - new lines are added;
+  - a corrected reissue reverses every live line of the file it replaces;
+  - a replaced file read again adds nothing.
+- A reversal records `corrects_type`, so totals per type survive a reprocess. The rehearsal checked this: an advance changed from $552.95 to $600 shows as $600 advanced, not $1,152.95.
+
+**Sign rules** (`lib/ingestion/commissionLedger.ts` → `normalizeLine`):
+- Chargeback, fee and interest lines are made negative, whatever sign the carrier used.
+- A negative advance, earned, override or held line is recorded as a reversal of that type.
+- A line with no entry type, no amount or a fraction of a cent is refused with its reason, never rounded.
+
+**Rollup:**
+- The view `commission_policy_totals` (security invoker) and the TS function `rollup` compute the same arithmetic: advanced, earned, charged back, override, fees, interest, other reversals, held, and net received (everything except held).
+- **Unearned advance** (`unearnedAdvance`):
+  - The months advanced come from the LA-0.4 advance rule; failing that, from the statement line's own months advanced.
+  - Prorated by months paid (from 4.7), or in full until the clawback months pass.
+  - **At risk** = unearned, less what has already been charged back.
+  - With no months or no months paid, the answer is null (Unknown), never 0.
+  - Every input is returned as a trace and shown on the policy page.
+
+**Stage:** `stages.ts` runs `commission_entry` after `policy_snapshot`. The underived-file sweep now retries commission files as well as policy files.
+
+**Screens:**
+- **Commission ledger › From carrier files** (the default tab; the earlier statement ledger is unchanged under "Statements you import"):
+  - totals for advanced, earned, charged back, net received and held;
+  - every line, with its type, amount, payee, file and row;
+  - filters, and a CSV export (cents formatted by integer arithmetic).
+  - A producer sees the lines credited to them.
+- **Policy page › Money:** each figure opens the lines behind it. "Still at risk" shows its trace. Every ledger line appears in the timeline.
+
+**Known gap: the advance rule's product key.** `advance_rules` is keyed by product family (`final_expense` and so on), while policies carry the carrier's own product code. So the rule rarely matches today, and the statement's months advanced is the usual source. This needs a mapping from carrier product to product family (the rate card, later).
+**Live verification (2026-10-07, after the apply):**
+- **The verifier** reports `20261008220000` as applied.
+- **Catalog:**
+  - `service_role` can select but not insert, update, delete or truncate; `tenant_app` can't update; `anon` can't read.
+  - The writer is a security-definer function that only `service_role` can execute (not `anon`).
+  - RLS is on, the guard trigger is present, and the view is `security_invoker=true`.
+  - The stored function body has CRLF line endings from the editor paste. That's harmless; it only matters for in-place patches later.
+- **A rolled-back block against the live function:**
+  - Five lines inserted, then the same five again: all kept, nothing inserted.
+  - The advance changed: one reversal and one insert. Advanced reads $600.00 and net $204.94, the hand-computed figure; held ($3.50) stays apart.
+  - UPDATE and DELETE are refused by the trigger, and a wrong-signed chargeback by the check constraint.
+  - The file called under another agency's id is refused (P0002).
+  - A corrected file reverses all 5 live lines and inserts 1 (advanced back to $552.95), and the replaced file read again adds nothing.
+- **Screens:** the ledger tab renders its empty state; the totals strip is hidden until there is a line, because no lines means unknown, not $0. The policy page's Money block reads Unknown with the reason. No console errors.

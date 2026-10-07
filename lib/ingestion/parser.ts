@@ -202,9 +202,9 @@ export async function parsePendingFiles(limit = 20): Promise<ParseSweep> {
       throw new Error(`Could not list files to parse: ${read.error.message}`);
     }
   }
-  // LA-4.6: a policy file parsed but never derived (a stage failed half way) is read again. Before
+  // LA-4.6 / LA-4.12: a policy or commission file parsed but never derived (a stage failed half way) is read again. Before
   // 20261008140000 there is no derived_at column, and nothing to derive.
-  const underived = await db().from("file_registry").select("id, tenant_id").eq("status", "parsed").eq("file_type", "policies").is("derived_at", null).order("received_at").limit(limit);
+  const underived = await db().from("file_registry").select("id, tenant_id").eq("status", "parsed").in("file_type", ["policies", "commissions"]).is("derived_at", null).order("received_at").limit(limit);
   const retry = underived.error ? [] : (underived.data ?? []);
   for (const file of [...(fresh.data ?? []), ...(blocked.data ?? []), ...retry] as Array<{ id: string; tenant_id: string }>) {
     try {

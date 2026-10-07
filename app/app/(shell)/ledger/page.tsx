@@ -3,6 +3,8 @@ import Link from "next/link";
 import { guardPage } from "@/lib/entitlements/guardPage";
 import { hasFeature, isDisabledForTenant } from "@/lib/entitlements/types";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
+import { ViewTabs } from "@/components/app/book-of-business-views";
+import { CarrierLedger } from "@/components/app/carrier-ledger";
 import { LedgerViews } from "@/components/app/ledger-statement-sections";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { StatementImportButton } from "@/components/app/statement-import";
@@ -11,6 +13,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/page-states";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { TableCard } from "@/components/ui/table-card";
+import { LEDGER_PENDING_MESSAGE, loadLedger } from "@/lib/ingestion/commissionLedgerStore";
 import { getCommissionLedger } from "@/lib/ledger/service";
 import { STATEMENT_SCHEMA_PENDING_MESSAGE, type StatementCarrierOption, type StatementMapping } from "@/lib/ledger/statementConstants";
 import { reconcileStatements, statementTotals } from "@/lib/ledger/statementMatch";
@@ -38,7 +41,7 @@ import { hasTenantPermission, roleCanViewCommission } from "@/lib/tenantAuth/per
 const wholeMoney = (cents: number) => `${cents < 0 ? "−" : ""}$${Math.round(Math.abs(cents) / 100).toLocaleString("en-US")}`;
 const plural = (count: number, one: string, many: string) => `${count.toLocaleString("en-US")} ${count === 1 ? one : many}`;
 
-export default async function LedgerPage({ searchParams }: { searchParams: Promise<{ import?: string }> }) {
+export default async function LedgerPage({ searchParams }: { searchParams: Promise<{ import?: string; view?: string }> }) {
   const guard = await guardPage("commission_ledger");
   if (!guard.entitled) {
     return (
@@ -53,13 +56,41 @@ export default async function LedgerPage({ searchParams }: { searchParams: Promi
     return <RoleGateNotice featureLabel="Commission ledger" detail="Your tenant role does not include commission visibility." />;
   }
   const readOnly = guard.entitlement.access === "read_only";
+  const params = await searchParams;
+  // One header for both sources; only its sentence and actions differ.
+  const header = (description?: string, actions?: React.ReactNode) => <PageHeader title="Commission ledger" description={description} actions={actions} />;
+  const sourceTabs = (count?: number) => (
+    <ViewTabs
+      label="Ledger sources"
+      active={params.view === "statements" ? "statements" : "carrier"}
+      tabs={[
+        { key: "carrier", label: "From carrier files", count, href: "/app/ledger" },
+        { key: "statements", label: "Statements you import", href: "/app/ledger?view=statements" },
+      ]}
+    />
+  );
+
+  // LA-4.12: the ledger the carriers' own commission files write, line by line, never edited.
+  if (params.view !== "statements") {
+    const book = await loadLedger({ tenantId: guard.context.tenantId, userId: guard.context.userId, role: guard.role });
+    return (
+      <div className="m-stagger flex flex-col gap-6">
+        {header("Every line of every carrier commission file: advances, earnings, chargebacks and what is held, with the file and row behind each.")}
+        {sourceTabs(book.available ? book.entries.length : undefined)}
+        {book.available
+          ? <CarrierLedger entries={book.entries} scoped={book.scoped} />
+          : <div role="status" className="rounded-lg border border-border border-l-[3px] border-l-[var(--warning)] bg-[var(--warning-surface)] px-4 py-3 text-sm text-[var(--warning-ink)]">{LEDGER_PENDING_MESSAGE}</div>}
+      </div>
+    );
+  }
+
   // Producers see their own policies only (LA-0.2 criterion 3); owners and bookkeepers see all. The
   // same rule scopes the statement lines: a line shows only when its matched policy does.
   const canView = (producerUserId: string | undefined) => roleCanViewCommission(guard.role, guard.context.userId, producerUserId);
-  const [ledger, statements, { import: importParam }] = await Promise.all([
+  const importParam = params.import;
+  const [ledger, statements] = await Promise.all([
     getCommissionLedger({ tenantId: guard.context.tenantId, canView }),
     getStatementLedger({ tenantId: guard.context.tenantId, canView }),
-    searchParams,
   ]);
   const { totals, entries, gaps } = ledger;
   const isOwner = guard.role === "owner";
@@ -147,7 +178,8 @@ export default async function LedgerPage({ searchParams }: { searchParams: Promi
   // header's actions move to the right of the tab row; with none, the empty state follows the strip.
   return (
     <div className="m-stagger flex flex-col gap-6">
-      <PageHeader title="Commission ledger" actions={isEmpty ? headerActions : undefined} />
+      {header(undefined, isEmpty ? headerActions : undefined)}
+      {sourceTabs()}
 
       {isEmpty ? (
         <>

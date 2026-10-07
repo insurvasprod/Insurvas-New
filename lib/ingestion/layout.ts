@@ -76,6 +76,8 @@ const COMMISSION_FIELDS: TargetField[] = [
   { key: "agent_identifier", label: "Writing agent (as the carrier spells it)", dataType: "text" },
   { key: "insured_name", label: "Insured name", dataType: "text" },
   { key: "statement_date", label: "Statement date", dataType: "date" },
+  // Whose commission the line is: the writing agent's, or an upline's override (LA-4.12).
+  { key: "payee_level", label: "Paid to (writing agent or upline)", dataType: "enum", enumValues: ["writing_agent", "upline"] },
 ];
 
 export const TARGET_FIELDS: Record<"policies" | "commissions", TargetField[]> = { policies: POLICY_FIELDS, commissions: COMMISSION_FIELDS };
@@ -117,6 +119,7 @@ const HEADER_HINTS: Record<"policies" | "commissions", Record<string, string[]>>
     agent_identifier: ["agent", "writingagent", "agentname", "agentnumber"],
     insured_name: ["insured", "insuredname", "name", "clientname"],
     statement_date: ["statementdate", "statement", "payperiod", "period"],
+    payee_level: ["payee", "level", "uplineorwriting", "paidto", "writingorupline"],
   },
 };
 
@@ -133,7 +136,8 @@ export function guessTargetField(fileType: "policies" | "commissions", header: s
 /** The fields a file of each type cannot be read without. */
 export const REQUIRED_TARGETS: Record<"policies" | "commissions", string[]> = {
   policies: ["policy_number", "carrier_status_raw"],
-  commissions: ["policy_number", "amount_cents"],
+  // LA-4.12: a line the ledger cannot classify is not a ledger line.
+  commissions: ["policy_number", "amount_cents", "entry_type"],
 };
 
 export type LayoutMap = {

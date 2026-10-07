@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { ParsedFile, ReprocessFile, ReprocessStage } from "./reprocess";
+import { recordFileEntries } from "./commissionLedgerStore";
 import { rebuildFileSnapshots } from "./snapshotStore";
 
 /**
@@ -22,7 +23,20 @@ const policySnapshots: ReprocessStage = {
   },
 };
 
-export const REPROCESS_STAGES: ReprocessStage[] = [policySnapshots];
+/**
+ * commission_entry (LA-4.12): a commission file's lines into the ledger. Reading a file again never
+ * changes an entry; it writes reversals for lines that changed and new rows for the new lines.
+ */
+const commissionEntries: ReprocessStage = {
+  name: "commission_entry",
+  async rebuild(tenantId: string, file: ReprocessFile, _rows, parsed: ParsedFile | null) {
+    if (file.fileType !== "commissions" || !parsed?.typedRows) return { changed: 0 };
+    const outcome = await recordFileEntries(tenantId, file.id, parsed.typedRows);
+    return { changed: outcome.inserted + outcome.reversed + outcome.replaced };
+  },
+};
+
+export const REPROCESS_STAGES: ReprocessStage[] = [policySnapshots, commissionEntries];
 
 /** After a door's parse: the same stages a reprocess runs, for one file's passed rows. */
 export async function runStages(tenantId: string, file: ReprocessFile, parsed: ParsedFile): Promise<void> {

@@ -3,6 +3,8 @@ import "server-only";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isSchemaGap } from "@/lib/supabase/schemaGap";
 
+import { ENTRY_LABELS, type EntryType } from "./commissionLedger";
+import { loadPolicyMoney } from "./commissionLedgerStore";
 import { changeLabel, changeValue, fieldWord, mergeTimeline, readableDay, statusLabel, type BookRow, type RiskBand, type TimelineItem } from "./policyBook";
 
 /**
@@ -190,7 +192,7 @@ export async function loadPolicy(viewer: Viewer, carrierId: string, policyNumber
   const row = await currentRow(viewer, carrierId, policyNumber);
   if (!row) return null;
   const t = viewer.tenantId;
-  const [names, snapshot, changes, events, note, application, contactPolicies, householdPolicies] = await Promise.all([
+  const [names, snapshot, changes, events, note, application, contactPolicies, householdPolicies, ledger] = await Promise.all([
     namesFor(t, [row]),
     db().from("policy_snapshot").select("id, file_id, raw_row_id, snapshot_date").eq("tenant_id", t).eq("id", row.snapshot_id).maybeSingle(),
     db().from("policy_change").select("field_name, old_value, new_value, to_snapshot_date, to_file_id, detected_at").eq("tenant_id", t).eq("carrier_id", carrierId).eq("policy_number", policyNumber).order("to_snapshot_date").order("detected_at").limit(500),
@@ -199,6 +201,8 @@ export async function loadPolicy(viewer: Viewer, carrierId: string, policyNumber
     row.application_id ? db().from("tenant_applications").select("id, created_at, submitted_at, outcome, outcome_recorded_at, draft_day, insured_role, case_id").eq("tenant_id", t).eq("id", row.application_id).maybeSingle() : { data: null },
     row.contact_id ? db().from("policy_current").select("carrier_id, policy_number, status_normalized, annualised_premium_cents, product_code").eq("tenant_id", t).eq("contact_id", row.contact_id).limit(50) : { data: [] },
     row.household_id ? db().from("policy_current").select("carrier_id, policy_number, contact_id, status_normalized, annualised_premium_cents").eq("tenant_id", t).eq("household_id", row.household_id).limit(100) : { data: [] },
+    // LA-4.12: every money line the carriers reported for this policy, and the unearned advance.
+    loadPolicyMoney(t, carrierId, policyNumber, { monthsPaid: row.months_paid, productCode: row.product_code, asOf: row.as_of }),
   ]);
 
   // The files behind the snapshot, the changes and the first sighting, for names and dates.
@@ -229,6 +233,11 @@ export async function loadPolicy(viewer: Viewer, carrierId: string, policyNumber
     items.push({ date: change.to_snapshot_date, kind: "change", label: changeLabel({ field: change.field_name, oldValue: change.old_value, newValue: change.new_value }), detail: `${changeValue(change.field_name, change.old_value)} → ${changeValue(change.field_name, change.new_value)}` });
   }
   // The lapse date, unless a status change on file already says it.
+  for (const entry of ledger.entries) {
+    const word = entry.type === "reversal" && entry.correctsType ? `Reversal of ${ENTRY_LABELS[entry.correctsType as EntryType]?.label.toLowerCase() ?? entry.correctsType}` : ENTRY_LABELS[entry.type as EntryType]?.label ?? entry.type;
+    const amount = `${entry.amountCents < 0 ? "−" : "+"}$${(Math.abs(entry.amountCents) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    items.push({ date: entry.transactionDate ?? entry.statementDate ?? entry.createdAt, kind: "money", label: `${word} ${amount}`, detail: [entry.payeeLevel === "upline" ? "to the upline" : null, entry.reversalReason, entry.fileName ? `${entry.fileName}, row ${entry.rowNumber}` : null].filter(Boolean).join(" · ") || null });
+  }
   if (row.lapsed_on && !(changes.data ?? []).some((c: Loose) => c.field_name === "status_normalized" && c.new_value === "lapsed")) items.push({ date: row.lapsed_on, kind: "carrier", label: "Lapsed" });
 
   // Source: each current value, and the file that last changed it (else the file it was first read from).
@@ -306,6 +315,7 @@ export async function loadPolicy(viewer: Viewer, carrierId: string, policyNumber
     others: ((contactPolicies.data ?? []) as Loose[]).filter((p: Loose) => !(p.carrier_id === carrierId && p.policy_number === policyNumber)).map((p: Loose): { carrierId: string; carrierName: string; policyNumber: string; status: string | null; annualCents: number | null } => ({ carrierId: p.carrier_id, carrierName: names.carrier.get(p.carrier_id) ?? "Carrier not known", policyNumber: p.policy_number, status: p.status_normalized, annualCents: p.annualised_premium_cents })),
     household: householdContactIds.length > 1 ? { monthlyCents: Math.round(householdMonthly), people: householdContactIds.map((id) => fullName(householdPeople.get(id)) ?? "A client"), policies: householdInForce.length } : null,
     changedFields: [...lastChange.keys()].map(fieldWord),
+    ledger,
   };
 }
 

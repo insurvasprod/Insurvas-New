@@ -21,6 +21,7 @@ const RISK_TONE: Record<RiskBand, StatusTone> = { none: "neutral", watch: "info"
 const MODE: Record<string, string> = { monthly: "a month", quarterly: "a quarter", semiannual: "every 6 months", annual: "a year" };
 const METHOD: Record<string, string> = { bank_draft: "Bank draft", direct_express: "Direct Express", card: "Card", direct_bill: "Direct bill (mailed)" };
 const KIND_DOT: Record<string, string> = { sale: "bg-[var(--info)]", carrier: "bg-[var(--primary)]", change: "bg-[var(--warning)]", money: "bg-[var(--success)]" };
+const signed = (cents: number) => `${cents < 0 ? "−" : ""}$${(Math.abs(cents) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const dollars = (cents: number | null | undefined) => (cents === null || cents === undefined ? "—" : `$${(cents / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
 const policyHref = (carrierId: string, policyNumber: string) => `/app/policies/carrier/${carrierId}/${encodeURIComponent(policyNumber)}`;
 
@@ -133,18 +134,61 @@ export default async function PolicyPage({ params }: { params: Promise<{ carrier
 
         <div className="flex min-w-0 flex-col gap-6">
           <TableCard title="Money">
-            <dl className="m-0 grid gap-2 px-4 py-4 text-sm">
-              {[
-                ["Advance received", policy.money.advancedCents],
-                ["Earned to date", policy.money.earnedCents],
-                ["Charged back", policy.money.chargedBackCents],
-                ["Chargeback exposure", policy.money.unearnedCents],
-              ].map(([term, cents]) => (
-                <div key={term as string} className="flex items-baseline justify-between gap-3"><dt className="text-muted-foreground">{term as string}</dt><dd className="m-0 font-semibold tabular-nums text-foreground">{moneyOrUnknown(cents as number | null)}</dd></div>
-              ))}
-              {policy.money.advancedCents === null && <p className="m-0 text-xs text-muted-foreground">Unknown until this carrier&apos;s commission statements are read.</p>}
-              {policy.inClawbackWindow && <p className="m-0 text-xs text-[var(--warning-ink)]">Inside the chargeback window: a lapse now means part of the advance comes back.</p>}
-            </dl>
+            {!view.ledger.available ? (
+              <p className="m-0 px-4 py-4 text-sm text-muted-foreground">The commission ledger needs a database update (20261008220000).</p>
+            ) : !view.ledger.totals ? (
+              <div className="grid gap-2 px-4 py-4 text-sm">
+                {["Advance received", "Earned to date", "Charged back", "Still at risk"].map((term) => (
+                  <div key={term} className="flex items-baseline justify-between gap-3"><span className="text-muted-foreground">{term}</span><span className="font-semibold tabular-nums text-foreground">Unknown</span></div>
+                ))}
+                <p className="m-0 text-xs text-muted-foreground">Unknown until this carrier&apos;s commission statements are read.</p>
+              </div>
+            ) : (
+              <div className="grid gap-1 px-4 py-3 text-sm">
+                {/* Each figure opens the ledger lines behind it. */}
+                {([
+                  ["Advance received", view.ledger.totals.advancedCents, "advance"],
+                  ["Earned to date", view.ledger.totals.earnedCents, "earned"],
+                  ["Charged back", view.ledger.totals.chargedBackCents, "chargeback"],
+                  ...(view.ledger.totals.overrideCents ? [["Overrides (upline)", view.ledger.totals.overrideCents, "override"]] : []),
+                  ...(view.ledger.totals.feeCents || view.ledger.totals.interestCents ? [["Fees and interest", view.ledger.totals.feeCents + view.ledger.totals.interestCents, "fee"]] : []),
+                  ["Net received", view.ledger.totals.netReceivedCents, "net"],
+                  ...(view.ledger.totals.heldCents ? [["Held, not paid yet", view.ledger.totals.heldCents, "held"]] : []),
+                ] as Array<[string, number, string]>).map(([term, cents, kind]) => {
+                  const lines = view.ledger.entries.filter((entry) => kind === "net" ? (entry.correctsType ?? entry.type) !== "held" : kind === "fee" ? ["fee", "advance_interest"].includes(entry.correctsType ?? entry.type) : (entry.correctsType ?? entry.type) === kind);
+                  return (
+                    <details key={term} className="group">
+                      <summary className={`flex cursor-pointer list-none items-baseline justify-between gap-3 rounded py-1 hover:bg-[var(--surface-hover,transparent)] ${kind === "net" ? "border-t border-border pt-2 font-semibold" : ""}`}>
+                        <span className="text-muted-foreground group-open:text-foreground">{term} <span className="text-xs">({lines.length})</span></span>
+                        <span className="font-semibold tabular-nums text-foreground">{signed(cents)}</span>
+                      </summary>
+                      <ul className="m-0 mb-2 list-none border-l-2 border-border pl-3 text-xs">
+                        {lines.map((entry) => (
+                          <li key={entry.id} className="flex justify-between gap-2 py-0.5">
+                            <span className="min-w-0 truncate text-muted-foreground" title={[entry.reversalReason, entry.fileName ? `${entry.fileName}, row ${entry.rowNumber}` : null].filter(Boolean).join(" · ")}>{fileDay(entry.transactionDate ?? entry.statementDate)} · {entry.type === "reversal" ? "reversal" : entry.type.replaceAll("_", " ")}{entry.fileName ? ` · row ${entry.rowNumber}` : ""}</span>
+                            <span className="shrink-0 tabular-nums">{signed(entry.amountCents)}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </details>
+                  );
+                })}
+                {view.ledger.unearned && (
+                  <details className="group mt-1 rounded-md border border-border px-3 py-2">
+                    <summary className="flex cursor-pointer list-none items-baseline justify-between gap-3">
+                      <span className="font-semibold text-foreground">Still at risk</span>
+                      <span className={`font-semibold tabular-nums ${view.ledger.unearned.atRiskCents ? "text-[var(--warning-ink)]" : "text-foreground"}`}>{view.ledger.unearned.atRiskCents === null ? "Unknown" : signed(view.ledger.unearned.atRiskCents)}</span>
+                    </summary>
+                    <p className="m-0 mt-2 text-xs text-muted-foreground">
+                      {view.ledger.unearned.reason
+                        ? `Unknown: ${view.ledger.unearned.reason}.`
+                        : `Advance ${signed(view.ledger.unearned.advancedCents)} over ${view.ledger.unearned.months} months (from the ${view.ledger.unearned.monthsSource}${view.ledger.rule ? `, ${view.ledger.rule.productCode} from ${fileDay(view.ledger.rule.effectiveFrom)}` : ""}), ${view.ledger.unearned.clawbackType === "full" ? "charged back in full until it is earned" : "earned month by month"}. Months paid: ${view.ledger.unearned.monthsPaid}. Unearned ${signed(view.ledger.unearned.unearnedCents ?? 0)}, less ${signed(-view.ledger.unearned.chargedBackCents)} already charged back.`}
+                    </p>
+                  </details>
+                )}
+                {policy.inClawbackWindow && <p className="m-0 mt-1 text-xs text-[var(--warning-ink)]">Inside the chargeback window: a lapse now means part of the advance comes back.</p>}
+              </div>
+            )}
             <div className="border-t border-border px-4 py-3 text-sm">
               <span className="block text-xs text-muted-foreground">Lead source</span>
               <span className="font-medium text-foreground">{lead.name ?? "Not known"}</span>
