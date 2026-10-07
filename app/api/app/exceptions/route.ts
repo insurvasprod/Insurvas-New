@@ -48,6 +48,7 @@ export async function POST(request: NextRequest) {
       : body.resolution === "found_the_policy" ? { resolution: body.resolution, carrierId: body.carrier_id, policyNumber: body.policy_number }
       : body.resolution === "never_submitted" ? { resolution: body.resolution, reason: body.reason }
       : body.resolution === "resubmitted_elsewhere" ? { resolution: body.resolution, applicationId: body.application_id }
+      : body.resolution === "another_writing_number" || body.resolution === "raised_with_carrier" ? { resolution: body.resolution, note: body.note ?? null }
       : { resolution: body.resolution };
     const done = await resolveItem(scope, body.item_id, input);
     await audit({ actorType: "tenant", actorId: auth.context.userId, action: done.resolution === "not_mine" ? "queue_item.handed_on" : "queue_item.resolved", targetType: "queue_item", targetId: body.item_id, metadata: { tenantId: scope.tenantId, queueType: done.queueType, resolution: done.resolution, ref: done.ref }, request });

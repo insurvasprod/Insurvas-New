@@ -30,7 +30,7 @@ The repo's [TASKS.md](TASKS.md) (11 tasks, 2026-10-02) is the earlier, smaller s
 | 4.11 Policy list and detail | **Done 2026-10-07.** Migration `20261008210000` live and verified (below). Money figures and their ledger links wait for 4.12. |
 | 4.12 Commission ledger | **Done 2026-10-07.** Migration `20261008220000` live and verified against the live function (below). No commission layout exists yet, so the ledger is empty until one is written from a real carrier file. |
 | 4.13 Expected commission | **Done 2026-10-08.** Migration `20261008230000` live and verified against the live function (below). No agency has rates or product families yet, so no figure exists until they are entered. |
-| 4.14 Orphans, carrier balances | Partial: unmatched lines kept; balances not built |
+| 4.14 Orphan queue and carrier accounts | **Done 2026-10-08.** Migration `20261008240000` live and verified against the live objects (below). |
 | 4.15 Discrepancies, letters | Partial: 5 of 9 types, letter and PDF; to be rebuilt on 4.12–4.14 |
 | 4.16 Retention board | Not started |
 | 4.17 Carrier rules | **Done 2026-10-07.** Migration `20261008150000` live and verified (below). Rules, settings, coverage screen (below). The old statements engine still hard-codes 45 days; it retires with that code. |
@@ -870,3 +870,50 @@ It follows LA-3.13's carrier field maps on purpose: the same statuses, the same 
   - "Expected so far" reads "—" until something is priced; it showed "$0" before, and that is fixed.
   - The setup dialog explains the demo's gap: "the carrier's file gives no product (8)".
   - No console errors. Nothing was saved: rates and contract levels are the agency's own data.
+## LA-4.14 · Orphan queue and carrier account balances
+
+**Orphans: nothing is written to claim them.** LA-4.12's entries are keyed by carrier and policy number and are never updated, so a line is an orphan exactly while no `policy_current` row has its carrier and number. It stops being one the moment the policy arrives, and every rollup is computed, so it follows by itself. The spec's `policy_id = null`, set later, would have meant updating a permanent ledger row; this gets the same outcome without that.
+- **`commission_orphan_summary` (view):** per carrier, the orphan policies, lines, amount (held apart), the oldest date, and how many are past the threshold.
+- **`sweep_orphan_commissions(tenant?, as_of?)`:**
+  - opens one `orphan_commission` queue item (LA-4.9) per policy number still orphaned past `queue_assignment_rule.open_after_days`, default 60 days;
+  - counts only new items (a second run refreshes, it doesn't recount);
+  - closes items whose policy has arrived ("auto_linked").
+- **When it runs:** daily by pg_cron at 06:45 (`la4-orphan-commissions-daily`), and as the `orphan_commission` stage after every policy or commission file.
+- **In Exceptions:** owned by operations (a bookkeeper), falling back to the owner. Resolutions:
+  - "Written under another writing number" (optional note);
+  - "Raised with the carrier" (note required);
+  - "Not mine".
+- **On the ledger:** a line whose policy hasn't arrived reads "Policy not seen yet".
+
+**Carrier accounts:**
+- **`carrier_account_statement`:** one per agency, carrier and statement date. It holds the opening balance, activity, closing balance, a computed `debit_balance_cents` (the closing balance if negative), the amount paid, held, and the minimum payout, plus the commission file it heads (one statement per file).
+- **The header is typed in from the statement.** Files carry it above the lines, where the layout map doesn't read.
+- **`carrier_account_checks` (view):**
+  - opening + activity = closing;
+  - the file's lines sum to the stated activity (held excluded, since held is reported apart);
+  - this opening = the previous closing (otherwise a statement is missing).
+- **Flagged statements hold their lines:** `commission_policy_totals` and the app's rollups leave out the lines of a flagged statement until it's corrected. Each held line says so.
+
+**Screen: Commission ledger › Carrier accounts** (new tab):
+- **Totals:** debit balances (and to how many carriers), statements that don't add up, missing statements, and unattributed commission.
+- **Per carrier, oldest first:** each statement's opening, activity, closing, change since the previous statement, paid/held, and checks with the reason in the statement's own numbers. "Debit growing" is flagged when the balance fell on the latest statement and is negative, with how many statements it has fallen for.
+- **Commission for policies not seen yet,** per carrier.
+- **"Add statement totals":** pick the carrier, optionally the commission file (its date becomes the statement date), then opening, activity, closing, paid, held and minimum payout. Amounts are parsed from their digits.
+**Live verification (2026-10-08, after the apply):**
+- **The verifier** reports `20261008240000` as applied.
+- **Catalog:**
+  - Statements can be inserted by `service_role` but not truncated; `anon` can't read them or the orphan summary.
+  - The sweep is executable by `service_role` only.
+  - The checks view and the totals view are `security_invoker`, and the totals view now refers to the checks (it holds flagged statements' lines).
+  - The `la4-orphan-commissions-daily` cron is active at 06:45.
+  - The live sweep is the version that counts only new items.
+- **A rolled-back block on the live objects:**
+  - **Orphan summary:** 2 policies, $319.00, oldest 2026-07-31, 1 past 60 days.
+  - **The sweep:** the first run opened 1 item, assigned to the agency's bookkeeper (operations); the second run opened 0. The 1-week-old orphan got none.
+  - **An item for an arrived policy** closed itself as `resolved/auto_linked`.
+  - **A July statement** that doesn't add up flagged, and DEMO-1005's net went from $552.95 to nothing (held out).
+  - **The August and October statements** each show the break before them, and August's −$228.05 is the debit.
+- **The app:**
+  - The Carrier accounts tab renders its empty state.
+  - The API refused a fractional amount, a policy file offered as a statement ("Choose one of this agency's commission files."), a negative held amount and a bad carrier, each with a plain message (the negative-amount message was a raw zod string and is now worded).
+  - Nothing was written.

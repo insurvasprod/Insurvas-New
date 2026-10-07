@@ -13,7 +13,7 @@
  * Pure; relative imports only.
  */
 
-export const QUEUE_TYPES = ["no_deal_flow", "no_policy", "multi_policy", "initial_import"] as const;
+export const QUEUE_TYPES = ["no_deal_flow", "no_policy", "multi_policy", "initial_import", "orphan_commission"] as const;
 export type QueueType = (typeof QUEUE_TYPES)[number];
 export const OWNER_ROLES = ["writing_agent", "operations", "retention", "admin"] as const;
 export type OwnerRole = (typeof OWNER_ROLES)[number];
@@ -22,6 +22,7 @@ export const QUEUE_LABELS: Record<QueueType, { title: string; why: string }> = {
   no_deal_flow: { title: "Policies with no sale on record", why: "A carrier sent a policy we have no deal or application for. Usually it was sold and not logged." },
   no_policy: { title: "Sales no carrier has heard of", why: "A sale was logged and the carrier's newer files don't have it. It may never have been submitted." },
   multi_policy: { title: "Is this the same client?", why: "Two clients look alike. A client with several policies is good news; this only checks they are one person." },
+  orphan_commission: { title: "Commission for a policy we can't find", why: "A carrier has paid on a policy number none of its policy files has shown, for longer than usual. Often it was written under another writing number; sometimes it's a carrier error." },
   initial_import: { title: "Imported books to look over", why: "New clients were created from an imported carrier file and marked provisional. Check them in Contacts when you have time, then mark this done." },
 };
 
@@ -38,6 +39,8 @@ export const DEFAULT_RULES: Record<QueueType, QueueRule> = {
   no_policy: { queueType: "no_policy", ownerRole: "writing_agent", openAfterDays: 5, escalateAfterDays: 10, escalateToRole: null },
   multi_policy: { queueType: "multi_policy", ownerRole: "operations", openAfterDays: null, escalateAfterDays: null, escalateToRole: null },
   initial_import: { queueType: "initial_import", ownerRole: "admin", openAfterDays: null, escalateAfterDays: null, escalateToRole: null },
+  // LA-4.14: only lines still unmatched after 60 days reach a person (sweep_orphan_commissions).
+  orphan_commission: { queueType: "orphan_commission", ownerRole: "operations", openAfterDays: 60, escalateAfterDays: null, escalateToRole: null },
 };
 
 /** The agency's rule for each queue: its own row over the default, field by field. */
@@ -91,6 +94,7 @@ export const RESOLUTIONS = {
   no_policy: ["found_the_policy", "never_submitted", "resubmitted_elsewhere", "not_mine"],
   multi_policy: ["same_person", "different_people"],
   initial_import: ["reviewed"],
+  orphan_commission: ["another_writing_number", "raised_with_carrier", "not_mine"],
 } as const;
 export type Resolution = (typeof RESOLUTIONS)[QueueType][number];
 
@@ -105,4 +109,6 @@ export const RESOLUTION_LABELS: Record<Resolution, string> = {
   same_person: "Same person",
   different_people: "Different people",
   reviewed: "Looked over",
+  another_writing_number: "Written under another writing number",
+  raised_with_carrier: "Raised with the carrier",
 };

@@ -23,6 +23,8 @@ const resolve = z.discriminatedUnion("resolution", [
   z.object({ action: z.literal("resolve"), item_id: uuid, resolution: z.literal("found_the_policy"), carrier_id: uuid, policy_number: z.string().trim().min(1).max(120) }).strict(),
   z.object({ action: z.literal("resolve"), item_id: uuid, resolution: z.literal("never_submitted"), reason: z.string().trim().min(1, "Say why it was never submitted.").max(2000) }).strict(),
   z.object({ action: z.literal("resolve"), item_id: uuid, resolution: z.literal("resubmitted_elsewhere"), application_id: uuid }).strict(),
+  z.object({ action: z.literal("resolve"), item_id: uuid, resolution: z.literal("another_writing_number"), note: z.string().trim().max(2000).optional() }).strict(),
+  z.object({ action: z.literal("resolve"), item_id: uuid, resolution: z.literal("raised_with_carrier"), note: z.string().trim().min(1, "Say what you asked the carrier.").max(2000) }).strict(),
 ]);
 
 const saveRule = z.object({

@@ -219,13 +219,14 @@ export type ResolveInput =
   | { resolution: "found_the_sale"; dealId: string }
   | { resolution: "found_the_policy"; carrierId: string; policyNumber: string }
   | { resolution: "never_submitted"; reason: string }
-  | { resolution: "resubmitted_elsewhere"; applicationId: string };
+  | { resolution: "resubmitted_elsewhere"; applicationId: string }
+  | { resolution: "another_writing_number" | "raised_with_carrier"; note: string | null };
 
 /** Every resolution, with who and what (the route audits it too). Returns what was done. */
 export async function resolveItem(scope: QueueScope, itemId: string, input: ResolveInput): Promise<{ queueType: QueueType; resolution: Resolution; ref: Record<string, unknown> | null }> {
   const item = await loadOpen(scope, itemId);
   const human = { method: "human", ladder_step: 3, confirmed_by: scope.userId, created_by: scope.userId };
-  const allowed: Record<QueueType, Resolution[]> = { no_deal_flow: ["confirm_client", "link_existing_client", "found_the_sale", "not_mine"], no_policy: ["found_the_policy", "never_submitted", "resubmitted_elsewhere", "not_mine"], multi_policy: ["same_person", "different_people"], initial_import: ["reviewed"] };
+  const allowed: Record<QueueType, Resolution[]> = { no_deal_flow: ["confirm_client", "link_existing_client", "found_the_sale", "not_mine"], no_policy: ["found_the_policy", "never_submitted", "resubmitted_elsewhere", "not_mine"], multi_policy: ["same_person", "different_people"], initial_import: ["reviewed"], orphan_commission: ["another_writing_number", "raised_with_carrier", "not_mine"] };
   if (!allowed[item.queue_type as QueueType]?.includes(input.resolution)) throw new QueueError("That is not how this kind of item is resolved.", 400);
 
   if (input.resolution === "not_mine") {
@@ -287,6 +288,11 @@ export async function resolveItem(scope: QueueScope, itemId: string, input: Reso
     }
   } else if (item.queue_type === "initial_import") {
     ref = { file_id: item.subject_id };
+  } else if (item.queue_type === "orphan_commission") {
+    // LA-4.14: the lines stay in the ledger as they are; this records what a person found out.
+    note = "note" in input ? input.note?.trim() || null : null;
+    if (input.resolution === "raised_with_carrier" && !note) throw new QueueError("Say what you asked the carrier.", 400);
+    ref = { carrier_id: item.carrier_id, policy_number: item.policy_number };
   } else {
     if (input.resolution === "same_person") {
       const { data: links } = await db().from("policy_match").select("carrier_id, policy_number").eq("tenant_id", scope.tenantId).eq("contact_id", item.contact_id).is("superseded_by_id", null);

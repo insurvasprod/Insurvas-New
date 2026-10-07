@@ -111,10 +111,11 @@ export function CarrierLedger({ entries, scoped }: { entries: LedgerRow[]; scope
                 <tr key={row.id}>
                   <td className="tabular-nums">{fileDay(row.statementDate ?? row.transactionDate)}</td>
                   <td className="max-w-[140px] truncate" title={row.carrierName}>{row.carrierName}</td>
-                  <td className="font-mono text-xs"><Link href={policyHref(row)} className="hover:underline">{row.policyNumber}</Link></td>
+                  <td className="font-mono text-xs"><Link href={policyHref(row)} className="hover:underline">{row.policyNumber}</Link>{row.orphan && <span className="block font-sans text-xs text-muted-foreground" title="No policy file has shown this policy yet. The line joins it the moment it arrives.">Policy not seen yet</span>}</td>
                   <td title={ENTRY_LABELS[kindOf(row) as EntryType]?.meaning}>
                     <span className="text-foreground">{typeWord(row)}</span>
                     {row.reversalReason && <span className="block text-xs text-muted-foreground">{row.reversalReason}</span>}
+                    {row.heldByStatement && <span className="block text-xs text-[var(--warning-ink)]">Held out of totals: its statement doesn&apos;t add up</span>}
                   </td>
                   <td className={`text-right font-semibold tabular-nums ${row.type === "held" ? "text-muted-foreground" : row.amountCents < 0 ? "text-[var(--error-ink)]" : "text-foreground"}`} title={row.type === "held" ? "Held: not part of net received" : undefined}>{signed(row.amountCents)}</td>
                   <td>{row.payeeLevel === "upline" ? "Upline" : row.payeeLevel === "writing_agent" ? "Writing agent" : <span className="text-muted-foreground">—</span>}</td>

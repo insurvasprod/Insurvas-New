@@ -3,6 +3,7 @@ import "server-only";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isSchemaGap } from "@/lib/supabase/schemaGap";
 
+import { flaggedFiles } from "./carrierAccountsStore";
 import { normalizeLine, rollup, unearnedAdvance, type AdvanceRule, type UnearnedTrace } from "./commissionLedger";
 
 /**
@@ -48,6 +49,8 @@ export type PolicyEntry = {
   fileName: string | null;
   rowNumber: number;
   createdAt: string;
+  /** LA-4.14: its statement doesn't add up, so it is held out of every total until corrected. */
+  heldByStatement: boolean;
 };
 
 export type PolicyMoney = {
@@ -72,6 +75,7 @@ export async function loadPolicyMoney(tenantId: string, carrierId: string, polic
   if (!rows.length) return { available: true, entries: [], totals: null, unearned: null, rule: null };
 
   const fileIds = [...new Set(rows.map((row) => row.file_id))];
+  const flagged = await flaggedFiles(tenantId);
   const [files, ruleRead] = await Promise.all([
     db().from("file_registry").select("id, original_filename").eq("tenant_id", tenantId).in("id", fileIds),
     // The LA-0.4 advance rule in force for this carrier and product on the as-of date.
@@ -83,9 +87,9 @@ export async function loadPolicyMoney(tenantId: string, carrierId: string, polic
   const entries: PolicyEntry[] = rows.map((row) => ({
     id: row.id, type: row.entry_type, correctsType: row.corrects_type, amountCents: Number(row.amount_cents), transactionDate: row.transaction_date, statementDate: row.statement_date,
     rateBp: row.rate_bp, monthsAdvanced: row.months_advanced, payeeLevel: row.payee_level, agentIdentifier: row.agent_identifier, reversalReason: row.reversal_reason,
-    fileName: fileName.get(row.file_id) ?? null, rowNumber: row.row_number, createdAt: row.created_at,
+    fileName: fileName.get(row.file_id) ?? null, rowNumber: row.row_number, createdAt: row.created_at, heldByStatement: flagged.has(row.file_id),
   }));
-  const totals = rollup(rows);
+  const totals = rollup(rows.filter((row) => !flagged.has(row.file_id)));
   const ruleRow = (ruleRead.data ?? [])[0] as Loose;
   const rule = ruleRow ? { advanceMonths: ruleRow.advance_months, clawbackMonths: ruleRow.clawback_months, clawbackType: ruleRow.clawback_type, productCode: ruleRow.product_code, effectiveFrom: ruleRow.effective_from } : null;
   // The statement's own months advanced, from the advance lines that are still standing.
@@ -94,7 +98,8 @@ export async function loadPolicyMoney(tenantId: string, carrierId: string, polic
   return { available: true, entries, totals, unearned, rule };
 }
 
-export type LedgerRow = PolicyEntry & { carrierId: string; carrierName: string; policyNumber: string; agentUserId: string | null };
+/** `orphan`: no policy file has shown this policy yet (LA-4.14) — normal, and claimed automatically when it arrives. */
+export type LedgerRow = PolicyEntry & { carrierId: string; carrierName: string; policyNumber: string; agentUserId: string | null; orphan: boolean };
 
 /** The ledger itself, newest statement first, for the Commission ledger page. A producer sees their own lines. */
 export async function loadLedger(viewer: { tenantId: string; userId: string; role: string }) {
@@ -113,6 +118,14 @@ export async function loadLedger(viewer: { tenantId: string; userId: string; rol
     if (!data || data.length < 1000) break;
   }
   const fileIds = [...new Set(rows.map((row) => row.file_id))];
+  const flagged = await flaggedFiles(viewer.tenantId);
+  const held: Loose[] = [];
+  for (let from = 0; from < 50_000; from += 1000) {
+    const { data } = await db().from("policy_current").select("carrier_id, policy_number").eq("tenant_id", viewer.tenantId).order("carrier_id").order("policy_number").range(from, from + 999);
+    held.push(...(data ?? []));
+    if (!data || data.length < 1000) break;
+  }
+  const known = new Set(held.map((p) => `${p.carrier_id}|${p.policy_number}`));
   const [carriers, files] = await Promise.all([
     db().from("carriers").select("id, name"),
     fileIds.length ? db().from("file_registry").select("id, original_filename").eq("tenant_id", viewer.tenantId).in("id", fileIds.slice(0, 500)) : { data: [] },
@@ -124,6 +137,7 @@ export async function loadLedger(viewer: { tenantId: string; userId: string; rol
     type: row.entry_type, correctsType: row.corrects_type, amountCents: Number(row.amount_cents), transactionDate: row.transaction_date, statementDate: row.statement_date,
     rateBp: row.rate_bp, monthsAdvanced: row.months_advanced, payeeLevel: row.payee_level, agentIdentifier: row.agent_identifier, reversalReason: row.reversal_reason,
     fileName: fileName.get(row.file_id) ?? null, rowNumber: row.row_number, createdAt: row.created_at,
+    heldByStatement: flagged.has(row.file_id), orphan: !known.has(`${row.carrier_id}|${row.policy_number}`),
   }));
-  return { available: true as const, entries, totals: rollup(rows), scoped: viewer.role === "producer" };
+  return { available: true as const, entries, totals: rollup(rows.filter((row) => !flagged.has(row.file_id))), scoped: viewer.role === "producer" };
 }

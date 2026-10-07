@@ -4,6 +4,7 @@ import { guardPage } from "@/lib/entitlements/guardPage";
 import { hasFeature, isDisabledForTenant } from "@/lib/entitlements/types";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { ViewTabs } from "@/components/app/book-of-business-views";
+import { CarrierAccounts } from "@/components/app/carrier-accounts";
 import { CarrierLedger } from "@/components/app/carrier-ledger";
 import { LedgerViews } from "@/components/app/ledger-statement-sections";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
@@ -13,6 +14,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/page-states";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { TableCard } from "@/components/ui/table-card";
+import { ACCOUNTS_PENDING_MESSAGE, loadAccounts } from "@/lib/ingestion/carrierAccountsStore";
 import { LEDGER_PENDING_MESSAGE, loadLedger } from "@/lib/ingestion/commissionLedgerStore";
 import { getCommissionLedger } from "@/lib/ledger/service";
 import { STATEMENT_SCHEMA_PENDING_MESSAGE, type StatementCarrierOption, type StatementMapping } from "@/lib/ledger/statementConstants";
@@ -62,13 +64,28 @@ export default async function LedgerPage({ searchParams }: { searchParams: Promi
   const sourceTabs = (count?: number) => (
     <ViewTabs
       label="Ledger sources"
-      active={params.view === "statements" ? "statements" : "carrier"}
+      active={params.view === "statements" ? "statements" : params.view === "accounts" ? "accounts" : "carrier"}
       tabs={[
         { key: "carrier", label: "From carrier files", count, href: "/app/ledger" },
+        { key: "accounts", label: "Carrier accounts", href: "/app/ledger?view=accounts" },
         { key: "statements", label: "Statements you import", href: "/app/ledger?view=statements" },
       ]}
     />
   );
+
+  // LA-4.14: each carrier's running account, statement by statement, and unattributed lines.
+  if (params.view === "accounts") {
+    const accounts = await loadAccounts(guard.context.tenantId);
+    return (
+      <div className="m-stagger flex flex-col gap-6">
+        {header("What each carrier says it holds for you: opening and closing balance per statement, whether it adds up, and whether one is missing.")}
+        {sourceTabs()}
+        {accounts.available
+          ? <CarrierAccounts statements={accounts.statements} orphans={accounts.orphans} files={accounts.files} carriers={accounts.carriers} readOnly={readOnly || (guard.role !== "owner" && guard.role !== "bookkeeper")} today={new Date().toISOString().slice(0, 10)} />
+          : <div role="status" className="rounded-lg border border-border border-l-[3px] border-l-[var(--warning)] bg-[var(--warning-surface)] px-4 py-3 text-sm text-[var(--warning-ink)]">{ACCOUNTS_PENDING_MESSAGE}</div>}
+      </div>
+    );
+  }
 
   // LA-4.12: the ledger the carriers' own commission files write, line by line, never edited.
   if (params.view !== "statements") {

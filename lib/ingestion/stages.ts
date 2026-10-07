@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { ParsedFile, ReprocessFile, ReprocessStage } from "./reprocess";
+import { sweepOrphans } from "./carrierAccountsStore";
 import { recordFileEntries } from "./commissionLedgerStore";
 import { computeExpected } from "./expectedCommissionStore";
 import { rebuildFileSnapshots } from "./snapshotStore";
@@ -50,7 +51,21 @@ const expectedCommission: ReprocessStage = {
   },
 };
 
-export const REPROCESS_STAGES: ReprocessStage[] = [policySnapshots, expectedCommission, commissionEntries];
+/**
+ * orphan_commission (LA-4.14): after either kind of file, commission lines whose policy has now
+ * arrived close their queue item, and lines unmatched past the threshold open one. Nothing is
+ * written to the ledger: a line belongs to its policy by carrier and number.
+ */
+const orphanCommission: ReprocessStage = {
+  name: "orphan_commission",
+  async rebuild(tenantId: string, _file: ReprocessFile, _rows, parsed: ParsedFile | null) {
+    if (!parsed?.typedRows) return { changed: 0 };
+    const outcome = await sweepOrphans(tenantId);
+    return { changed: outcome ? outcome.opened + outcome.closed : 0 };
+  },
+};
+
+export const REPROCESS_STAGES: ReprocessStage[] = [policySnapshots, expectedCommission, commissionEntries, orphanCommission];
 
 /** After a door's parse: the same stages a reprocess runs, for one file's passed rows. */
 export async function runStages(tenantId: string, file: ReprocessFile, parsed: ParsedFile): Promise<void> {

@@ -33,6 +33,11 @@ function subject(item: QueueItemRow) {
     const p = item.payload ?? {};
     return <span>{item.carrierName ?? p.carrier_name} · {Number(p.policies ?? 0).toLocaleString("en-US")} policies imported, {Number(p.provisional ?? 0).toLocaleString("en-US")} provisional clients created{Number(p.existing ?? 0) ? `, ${Number(p.existing).toLocaleString("en-US")} matched to clients on file` : ""}{Number(p.blocked ?? 0) ? `, ${Number(p.blocked).toLocaleString("en-US")} without a client` : ""}</span>;
   }
+  if (item.queueType === "orphan_commission") {
+    const p = item.payload ?? {};
+    const cents = Number(p.amount_cents ?? 0);
+    return <span><span className="font-mono text-xs">{item.policyNumber}</span> · {item.carrierName ?? "—"} · {Number(p.lines ?? 0).toLocaleString("en-US")} commission {Number(p.lines ?? 0) === 1 ? "line" : "lines"}, {cents < 0 ? "−" : ""}{dollars(Math.abs(cents))}, since {String(p.first_seen ?? "")}</span>;
+  }
   if (item.queueType === "multi_policy") return <span className="inline-flex flex-wrap items-center gap-1"><Client person={item.contact} /> and <Client person={item.related} /></span>;
   return <span className="inline-flex flex-wrap items-center gap-1.5"><span className="font-mono text-xs">{item.policyNumber}</span> · {item.carrierName} · <Client person={item.contact} /></span>;
 }
@@ -74,11 +79,12 @@ export function ExceptionQueues({ open, closed, rules, isOwner, today, readOnly,
     const base = { action: "resolve", item_id: current.id, resolution: choice };
     const extra = choice === "link_existing_client" ? { contact_id: fields.contact } : choice === "found_the_sale" ? { deal_id: fields.deal }
       : choice === "found_the_policy" ? { carrier_id: fields.carrier || current.carrierId, policy_number: fields.policy } : choice === "never_submitted" ? { reason: fields.reason ?? "" }
-      : choice === "resubmitted_elsewhere" ? { application_id: fields.application } : {};
+      : choice === "resubmitted_elsewhere" ? { application_id: fields.application }
+      : choice === "another_writing_number" ? (fields.note?.trim() ? { note: fields.note.trim() } : {}) : choice === "raised_with_carrier" ? { note: (fields.note ?? "").trim() } : {};
     void post({ ...base, ...extra }, choice === "not_mine" ? "Handed on." : "Closed.");
   }
 
-  const needs = (r: Resolution | null) => r === "link_existing_client" ? !fields.contact : r === "found_the_sale" ? !fields.deal : r === "found_the_policy" ? !fields.policy : r === "never_submitted" ? !(fields.reason ?? "").trim() : r === "resubmitted_elsewhere" ? !fields.application : false;
+  const needs = (r: Resolution | null) => r === "link_existing_client" ? !fields.contact : r === "found_the_sale" ? !fields.deal : r === "found_the_policy" ? !fields.policy : r === "never_submitted" ? !(fields.reason ?? "").trim() : r === "resubmitted_elsewhere" ? !fields.application : r === "raised_with_carrier" ? !(fields.note ?? "").trim() : false;
   const toolbar = <DataToolbar actions={<RefreshButton onClick={() => startRefresh(() => router.refresh())} refreshing={refreshing} />}><span className="text-sm text-muted-foreground">Oldest first</span></DataToolbar>;
 
   return (
@@ -190,6 +196,9 @@ export function ExceptionQueues({ open, closed, rules, isOwner, today, readOnly,
                     <div className="grid gap-1"><Label htmlFor="q-carrier">Carrier</Label><select id="q-carrier" className={`${toolbarControl} w-full`} value={fields.carrier ?? current.carrierId ?? ""} onChange={(e) => setFields({ ...fields, carrier: e.target.value })}>{carriers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
                     <div className="grid gap-1"><Label htmlFor="q-policy">Policy number</Label><Input id="q-policy" className="h-9" list="q-policies" value={fields.policy ?? ""} onChange={(e) => setFields({ ...fields, policy: e.target.value })} /><datalist id="q-policies">{(current.choices.policies ?? []).map((p) => <option key={p.policyNumber} value={p.policyNumber}>{p.label}</option>)}</datalist></div>
                   </div>
+                )}
+                {(choice === "another_writing_number" || choice === "raised_with_carrier") && (
+                  <div className="grid gap-1"><Label htmlFor="q-note">{choice === "raised_with_carrier" ? "What you asked the carrier" : "Note (optional)"}</Label><Input id="q-note" className="h-9" maxLength={2000} value={fields.note ?? ""} onChange={(e) => setFields({ ...fields, note: e.target.value })} /></div>
                 )}
                 {choice === "never_submitted" && (
                   <div className="grid gap-1"><Label htmlFor="q-reason">Why</Label><Input id="q-reason" className="h-9" maxLength={2000} value={fields.reason ?? ""} onChange={(e) => setFields({ ...fields, reason: e.target.value })} /><span className="text-xs text-muted-foreground">The sale&apos;s open application case is closed as abandoned, so the campaign funnel stops counting it as applied.</span></div>
