@@ -1,5 +1,6 @@
 "use client";
 
+import { ProvisionalBadge } from "@/components/app/provisional-badge";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 
 import { notify } from "@/lib/notify";
@@ -570,6 +571,7 @@ export function ContactWorkspace({ readOnly = false }: { readOnly?: boolean }) {
                       <tr key={row.id} className="m-row">
                         <td className="max-w-[260px]">
                           <button type="button" title={name} aria-expanded={open} aria-controls={`contact-detail-${row.id}`} className="block max-w-full cursor-pointer truncate text-left font-semibold text-foreground hover:underline" onClick={() => setExpanded(open ? null : row.id)}>{name}</button>
+                          {row.provisional && <ProvisionalBadge className="mt-1" />}
                         </td>
                         <td className="whitespace-nowrap tabular-nums">{formatPhone(row.primary_phone)}</td>
                         <td className="max-w-[220px] truncate" title={row.household_label ?? undefined}>{row.household_label ?? "—"}</td>

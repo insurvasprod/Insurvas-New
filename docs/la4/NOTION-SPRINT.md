@@ -25,7 +25,7 @@ The repo's [TASKS.md](TASKS.md) (11 tasks, 2026-10-02) is the earlier, smaller s
 | 4.6 Snapshots, change detection | **Done 2026-10-07.** Migration `20261008140000` live and verified (below). |
 | 4.7 Current-state table | **Done 2026-10-07.** Migration `20261008160000` live and verified (below). Money fields wait for 4.12; contact links for 4.8. |
 | 4.8 Policy ↔ CRM matching with AI | **Non-AI parts done 2026-10-07.** Migration `20261008170000` live and verified (below). The AI reviewer waits for a provider; a person decides step 3 meanwhile. |
-| 4.9 Exception queues | Not started |
+| 4.9 Exception queues | **Done 2026-10-07.** Migrations `20261008180000` and follow-up `20261008180100` live and verified (below). |
 | 4.10 Existing-book import | Not started |
 | 4.11 Policy list and detail | Partial: earlier screens exist; to be rebuilt on 4.7 |
 | 4.12 Commission ledger | Partial: computed ledger exists; `commission_entry` not built |
@@ -572,3 +572,85 @@ It follows LA-3.13's carrier field maps on purpose: the same statuses, the same 
 
   Afterwards: 0 links, 0 rehearsal contacts, 0 reviews.
 - **The page** (demo agency) renders the five tiles and three tabs with nothing to review.
+## LA-4.9: how it is built
+
+**The data (`supabase/migrations/20261008180000_la_4_9_exception_queues.sql`):**
+- **`contacts.provisional`,** plus `provisional_source` (which carrier file and policy it came from) and who confirmed it, and when.
+- **`queue_assignment_rule`:** per agency and queue, the owner role, "raise after" days (queue 2), "escalate after" days and an optional escalate-to role. With no rows, the built-in defaults apply, so a solo agent configures nothing.
+- **`queue_item`:** the Notion columns plus the subject (policy, sale or pair of clients), the item's age (`age_from`), and the resolution with who and what.
+  - `assigned_to_user_id` is **NOT NULL**. Items are written only by `open_queue_item`, `resolve_queue_item` and `reassign_queue_item`; `service_role` and `tenant_app` can't insert, update or delete them.
+  - One open item per subject per queue; the sweep never reopens a closed one.
+- **`queue_owner`:**
+  - **writing_agent** → the policy's mapped agent or the sale's agent, if they can open the screen (owner or producer);
+  - **operations** → a bookkeeper; **retention** → a producer; **admin** → an owner.
+  - A role with nobody in it → **the agency's owner**. An agency with no active owner is refused, never left unowned.
+  - The codebase has no operations or retention roles, hence this mapping.
+- **`sweep_exception_queues`** (pg_cron `la4-exception-queues-daily`, 06:30 UTC; the migration runs it once):
+  - **Queue 2:** a sale (`deal_flow`, `application_submitted`, completed) at least N days old (default 5), at a carrier whose *parsed policy file dated at least N days after the sale* we hold, with no link. Without that file "no carrier has heard of it" can't be known, so nothing is raised.
+  - **Escalation:** past the second threshold (default 10 days from the sale), plus a reassignment when the agency set an escalate-to role.
+  - **Self-closing:** an item whose sale or policy has since been linked closes itself ("auto_linked", resolved by nobody).
+- **`close_case_never_submitted`:** the sale's open application case becomes `abandoned` with reason `never_submitted`. The LA-2.17 funnel's "applied" step already excludes abandoned cases, so the number becomes honest.
+- **Two new `policy_match` methods,** both step 3 with no confidence and with a client: `no_match` (linked to the provisional client) and `identity_exact` (an existing client with the exact same first name, last name and date of birth).
+
+**The flow** (`lib/ingestion/exceptionQueuesStore.ts`, called from the 4.8 ladder):
+- **A policy whose shortlist is empty** (or whose review a person answers "none of these"):
+  - Exactly one existing client with the same first name, last name and date of birth → linked silently (`identity_exact`). This is the normal multi-policy case.
+  - Otherwise a **provisional client** is made from the carrier's own name, date of birth, phone and address, through `save_contact`, so a shared address joins the existing household. That's how spouses become two clients in one household. It is linked `no_match`.
+  - Either way, one **queue-1** item goes to the writing agent.
+  - A provisional client that looks like someone on file but isn't certain (same surname plus a matching date of birth, phone or given name) gets a **queue-3** item for operations.
+- **Before the migration,** nothing is created: the ladder keeps the 4.8 review.
+- **Resolutions:**
+  - **Queue 1:** confirm the client (clears provisional, with who and when), link an existing client, link the sale, or "not mine" (to operations, then the owner).
+  - **Queue 2:** found the policy (link it to the sale), never submitted (with the reason; the case is abandoned), resubmitted elsewhere (an LA-3.16 attempt of the same client), or not mine.
+  - **Queue 3:** same person (the provisional client's policies move to the existing client, and the provisional one is folded in), or different people.
+
+**On screen:**
+- **Book of Business › Exceptions** (owner, producer and bookkeeper, because items carry premiums; a money route).
+  - Producers see the items they own; the owner and bookkeepers see all.
+  - **Tiles:** sales no carrier has, policies with no sale, possibly one client, oldest open.
+  - **Tabs:**
+    - **Open:** one table per queue, oldest first, with the **age** as the first and largest thing on each row and "escalated" in red.
+    - **Closed, 30 days:** how each was closed, and by whom.
+    - **Who owns each queue:** owner only.
+- **"Provisional" is shown** in the contact directory and its detail, the Exceptions screen, the Policy matching links, and a `provisional` column in the contact CSV export.
+
+**Acceptance (Notion):**
+
+| Criterion | Status |
+|---|---|
+| A policy with no match creates a provisional contact and one queue-1 item | **Met:** store path and tests; live check after the migration. |
+| A provisional contact is marked everywhere it appears until confirmed | **Met** for every screen that lists contacts today (the surfaces above); lead screens show the lead's own name, not a contact's. |
+| A sale with no policy after the threshold → queue-2 item to the writing agent, escalating past the second threshold | **Met:** rehearsal (raised at 6 days, escalated at exactly 10, not at 9). |
+| "Never submitted" records the reason and shows in the LA-2.17 funnel | **Met:** the case is abandoned with the reason; the funnel excludes abandoned cases. |
+| High-confidence multi-policy links resolve without a queue item | **Met:** an exact name and date of birth links silently; anything less asks operations. |
+| A husband and wife at one address → two contacts, one household | **Met by construction:** different given names never match exactly, and `save_contact` joins the household by address. Live check after the migration. |
+| `assigned_to_user_id` is never null; an empty role falls back to the owner | **Met:** NOT NULL, rehearsed for every case (unknown, inactive and wrong-role agents; no bookkeeper; no owner refused). |
+| Rules are per-agency configurable; a solo agent needs none | **Met:** rehearsal and screen. |
+| Every item shows its age; every resolution records who and what | **Met.** |
+
+**Before the migration (2026-10-07):**
+- 29 checks on rolled-back temp copies pass; 2,137 tests pass.
+- The page shows only "The exception queues need a database update (20261008180000)", writes answer 503, and the contact directory still works (its provisional read tolerates the missing column).
+- The first browser POST found a real bug: zod refuses six request branches sharing one discriminator. The request is now a nested union, in its own module, with a test that parses every shape.
+**4.9 verified live, 2026-10-07** (the owner applied the migration):
+- **The first apply failed** with "syntax error at or near begin" at line 414 of a 386-line file. The editor tab held about 28 extra lines in front of the script. The file itself parses (checked in a rolled-back transaction) and every DO block compiles. A clean tab applied it.
+- **The catalog (16/16):**
+  - `contacts` has `provisional` (NOT NULL, default false), its source, and who confirmed it, and when.
+  - `service_role` only reads `queue_item`; `tenant_app` only reads both tables; `anon` and `authenticated` see nothing.
+  - The six functions are security definer and run as `service_role` only. `assigned_to_user_id` is NOT NULL.
+  - The one-open-item key and the provisional and identity indexes exist. `policy_match` accepts `no_match` and `identity_exact` only as step 3, with a client and no confidence.
+  - The live `queue_owner` limits a writing agent to owner or producer and falls back to the owner. RLS is on.
+  - The daily job `la4-exception-queues-daily` (`30 6 * * *`) is active.
+  - The migration's own sweep created nothing (0 items, 0 provisional contacts).
+- **Owners on real agencies:**
+  - Fixture: an unknown agent and operations (no bookkeeper) both → its owner.
+  - Demo: an unknown agent → an owner; operations → its bookkeeper.
+- **On the live tables,** in blocks that end by raising (so everything rolled back):
+  - Opening an item twice gives one item, owned; a null owner is refused (23502); a resolution records who and what, once.
+  - **Queue 2 on the demo agency:** no item while no carrier file exists. With a later parsed file: exactly one item, for the producer, aged from the sale and escalated (12 days); a second sweep adds nothing. "Never submitted" abandons the case with `never_submitted` and who closed it.
+  - **Provisional clients on the demo agency:** spouses saved at one address are **two contacts in one household**. The provisional flag carries its source, the link is `no_match` / step 3 / that client, and the queue-1 item is owned and for that client.
+  - Afterwards: 0 items, 0 provisional contacts, and no rehearsal contacts or deals left.
+- **Two findings:**
+  - **A provisional contact could have no source.** The CHECK let `jsonb_typeof(null)` through. Fixed in `20261008180100`, applied and verified live: no source or a non-object source is refused (23514); a proper source and non-provisional contacts are accepted.
+  - **`save_contact` fails for 556 of 565 agencies**, including the fixture: they have no legacy `organizations` row, and both `contacts` and `households` require one. This existing LA-0 bridge bug affects "Add contact" too, and is filed as a separate task. For 4.9, such an agency's no-match policy still gets its queue-1 item, with no client and the reason, so it is never silently lost (test pinned).
+- **The page** (demo owner) shows the four tiles, the three tabs, and the ownership table with the defaults (writing agent; writing agent at 5/10 days; operations).

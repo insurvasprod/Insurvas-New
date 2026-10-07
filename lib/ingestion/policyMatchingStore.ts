@@ -6,6 +6,7 @@ import { isSchemaGap } from "@/lib/supabase/schemaGap";
 import { annualisedPremiumCents } from "./policyCurrent";
 import { accuracy, isStrong, ladderShare, shortlist, SHORTLIST_LOOKBACK_DAYS, splitName, type Candidate, type CarrierSide, type LadderCounts, type Scored } from "./policyMatching";
 import { refreshPolicyCurrent } from "./policyCurrentStore";
+import { noRecordPolicy } from "./exceptionQueuesStore";
 
 /**
  * LA-4.8 (Notion sprint) · the matching ladder, server side.
@@ -168,7 +169,7 @@ async function candidatesFor(tenantId: string, carrier: { id: string; name: stri
 const storedEntry = (scored: Scored) => ({ ...scored.candidate, score: scored.score, fields: scored.fields, likely: isStrong(scored) });
 
 /** Step 3: a scored shortlist per policy, into the review queue (one open review per policy). */
-async function queueReviews(tenantId: string, carrier: { id: string; name: string; code: string | null }, policies: string[], fileId: string | null): Promise<number> {
+async function queueReviews(tenantId: string, carrier: { id: string; name: string; code: string | null }, policies: string[], fileId: string | null, options: { reviewEvenIfEmpty?: boolean } = {}): Promise<number> {
   if (!policies.length) return 0;
   const snapshots = await latestSnapshots(tenantId, carrier.id, policies);
   const dates = [...snapshots.values()].map((s) => s.snapshot_date).sort();
@@ -188,9 +189,16 @@ async function queueReviews(tenantId: string, carrier: { id: string; name: strin
     const agent = snapshot.agent_identifier ? agentOf.get(snapshot.agent_identifier) ?? null : null;
     const from = addDays(snapshot.snapshot_date, -SHORTLIST_LOOKBACK_DAYS);
     const candidates = pool.filter((c) => c.date >= from && c.date <= snapshot.snapshot_date && (!agent || c.agentUserId === agent));
+    const listed = shortlist(row, candidates);
+    // LA-4.9: nobody to choose from is not a review — it is a policy with no sale on record.
+    if (!listed.length && !options.reviewEvenIfEmpty && (await noRecordPolicy(tenantId, policySide(snapshot, carrier), agent))) {
+      if (openId.has(policy)) await db().from("policy_match_review").update({ updated_at: new Date().toISOString() }).eq("id", openId.get(policy));
+      queued++;
+      continue;
+    }
     const payload = {
       carrier_row: { ...row, agentIdentifier: snapshot.agent_identifier, fileDate: snapshot.snapshot_date },
-      shortlist: shortlist(row, candidates).map(storedEntry),
+      shortlist: listed.map(storedEntry),
       file_id: fileId ?? snapshot.file_id,
       updated_at: new Date().toISOString(),
     };
@@ -202,6 +210,12 @@ async function queueReviews(tenantId: string, carrier: { id: string; name: strin
     queued++;
   }
   return queued;
+}
+
+/** What LA-4.9 needs of a policy to build its provisional client. */
+function policySide(snapshot: Snapshot, carrier: { id: string; name: string }) {
+  const annual = annualisedPremiumCents(snapshot.premium_cents, snapshot.premium_mode);
+  return { carrierId: carrier.id, carrierName: carrier.name, policyNumber: snapshot.policy_number, fileDate: snapshot.snapshot_date, fields: (snapshot.extra?.fields ?? {}) as Record<string, unknown>, premiumCents: annual === null ? null : Math.round(annual / 12), faceCents: snapshot.face_amount_cents, effectiveDate: snapshot.effective_date };
 }
 
 async function carrierOf(carrierId: string) {
@@ -248,6 +262,13 @@ export async function resolveReview(scope: MatchingScope, reviewId: string, choi
     match = { matched_to_type: entry.type, matched_to_id: entry.id, contact_id: entry.contactId ?? null };
   }
   const matchId = await record(scope.tenantId, review.carrier_id, review.policy_number, { ...match, method: "human", ladder_step: 3, confirmed_by: scope.userId, created_by: scope.userId }, review.id);
+  if ("none" in choice) {
+    // LA-4.9: "none of these" is a policy with no sale on record — a provisional client and a queue item.
+    const carrier = await carrierOf(review.carrier_id);
+    const snapshot = (await latestSnapshots(scope.tenantId, review.carrier_id, [review.policy_number])).get(review.policy_number);
+    const { data: map } = snapshot?.agent_identifier ? await db().from("carrier_agent_map").select("user_id").eq("tenant_id", scope.tenantId).eq("carrier_id", review.carrier_id).eq("agent_identifier", snapshot.agent_identifier).maybeSingle() : { data: null };
+    if (snapshot) await noRecordPolicy(scope.tenantId, policySide(snapshot, carrier), map?.user_id ?? null);
+  }
   await refreshPolicyCurrent({ tenantId: scope.tenantId, carrierId: review.carrier_id, policies: [review.policy_number] });
   return { matchId, policyNumber: review.policy_number, carrierId: review.carrier_id };
 }
@@ -258,7 +279,7 @@ export async function reopenMatch(scope: MatchingScope, matchId: string): Promis
   if (error) fail(error, "Could not load the link");
   if (!match) throw new MatchingError("That link is not in this agency.", 404);
   if (match.superseded_by_id) throw new MatchingError("That link has already been corrected.", 409);
-  const queued = await queueReviews(scope.tenantId, await carrierOf(match.carrier_id), [match.policy_number], null);
+  const queued = await queueReviews(scope.tenantId, await carrierOf(match.carrier_id), [match.policy_number], null, { reviewEvenIfEmpty: true });
   if (!queued) throw new MatchingError("That policy has no snapshot to review.", 409);
   return { policyNumber: match.policy_number, carrierId: match.carrier_id };
 }
@@ -311,7 +332,10 @@ export async function loadMatching(tenantId: string) {
     contactIds.length ? db().from("contacts").select("id, first_name, last_name").eq("tenant_id", tenantId).in("id", contactIds) : { data: [] },
     userIds.length ? db().from("users").select("id, name, email").in("id", userIds) : { data: [] },
   ]);
-  const contactName = new Map<string, string>((contacts.data ?? []).map((row: Loose) => [row.id, `${row.first_name} ${row.last_name}`]));
+  // LA-4.9: a client built from a carrier's file is marked until confirmed (no flag before 20261008180000).
+  const flagged = contactIds.length ? await db().from("contacts").select("id").eq("tenant_id", tenantId).eq("provisional", true).in("id", contactIds) : { data: [], error: null };
+  const provisional = new Set<string>(flagged.error ? [] : (flagged.data ?? []).map((row: Loose) => row.id));
+  const contactName = new Map<string, string>((contacts.data ?? []).map((row: Loose) => [row.id, `${row.first_name} ${row.last_name}${provisional.has(row.id) ? " (provisional)" : ""}`]));
   const userName = new Map<string, string>((users.data ?? []).map((row: Loose) => [row.id, row.name || row.email || row.id]));
 
   const unmapped = new Map<string, UnmappedAgent>();

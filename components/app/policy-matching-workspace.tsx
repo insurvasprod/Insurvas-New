@@ -14,7 +14,7 @@ import type { LinkRow, MappedAgent, ReviewRow, UnmappedAgent } from "@/lib/inges
 import { notify } from "@/lib/notify";
 
 type Tab = "review" | "links" | "agents";
-const METHOD_LABEL: Record<string, string> = { submission_record: "Submission record", policy_number_exact: "Issued policy number", human: "A person", ai_review: "AI review", import: "Import" };
+const METHOD_LABEL: Record<string, string> = { submission_record: "Submission record", policy_number_exact: "Issued policy number", human: "A person", ai_review: "AI review", import: "Import", no_match: "No match — provisional client", identity_exact: "Same name and date of birth" };
 const TYPE_LABEL: Record<string, string> = { deal_flow: "Deal", application: "Application", contact: "Client", provisional: "No client found" };
 const OUTCOME_CLASS: Record<FieldOutcome, string> = { match: "text-[var(--success-ink)]", partial: "text-[var(--warning-ink)]", mismatch: "text-[var(--error-ink)]", missing: "text-muted-foreground" };
 const OUTCOME_WORD: Record<FieldOutcome, string> = { match: "same", partial: "partly", mismatch: "different", missing: "—" };

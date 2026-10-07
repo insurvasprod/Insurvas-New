@@ -39,14 +39,14 @@ export function csvContactFields(schema: FieldSchemaRow[]) {
 }
 
 export function csvHeaderLine(fields: FieldSchemaRow[]) {
-  const headers = ["first_name", "last_name", "dob", "primary_phone", "email", "phones", "emails", "state", "address_line1", "city", "postal_code", ...fields.map((field) => `custom_${field.field_key}`)];
+  const headers = ["first_name", "last_name", "dob", "primary_phone", "email", "phones", "emails", "state", "address_line1", "city", "postal_code", ...fields.map((field) => `custom_${field.field_key}`), "provisional"];
   return `${headers.map(csvCell).join(",")}\r\n`;
 }
 
 /** One contact's line, CRLF-terminated. The export streams these a batch at a time. */
 export function csvContactLine(fields: FieldSchemaRow[], contact: ContactRow) {
   const primaryEmail = contact.emails.find((item) => item.is_primary)?.email ?? contact.emails[0]?.email ?? "";
-  return `${[contact.first_name, contact.last_name, contact.dob, contact.primary_phone, primaryEmail, contact.phones.map((item) => item.phone), contact.emails.map((item) => item.email), contact.state, contact.address_line1, contact.city, contact.postal_code, ...fields.map((field) => contact.custom_fields[field.field_key])].map(csvCell).join(",")}\r\n`;
+  return `${[contact.first_name, contact.last_name, contact.dob, contact.primary_phone, primaryEmail, contact.phones.map((item) => item.phone), contact.emails.map((item) => item.email), contact.state, contact.address_line1, contact.city, contact.postal_code, ...fields.map((field) => contact.custom_fields[field.field_key]), contact.provisional ? "yes" : ""].map(csvCell).join(",")}\r\n`;
 }
 
 export function csvForContacts(schema: FieldSchemaRow[], contacts: ContactRow[]) {

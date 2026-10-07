@@ -35,6 +35,8 @@ export type DuplicateMatch = {
 
 export type ContactRow = {
   id: string;
+  /** LA-4.9: built from a carrier's file and not yet confirmed — shown as such wherever it appears. */
+  provisional?: boolean;
   tenant_id: string;
   household_id: string | null;
   first_name: string;

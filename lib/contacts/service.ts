@@ -111,6 +111,9 @@ async function hydrate(tenantId: string, contacts: ContactBase[]): Promise<Array
   const supabase = getSupabaseServiceClient();
   const ids = contacts.map((row) => row.id);
   const householdIds = [...new Set(contacts.map((row) => row.household_id).filter(Boolean))] as string[];
+  // LA-4.9: which of these were built from a carrier file and not yet confirmed (none before 20261008180000).
+  const provisionalRead = await (supabase as unknown as { from: (t: string) => any }).from("contacts").select("id").eq("tenant_id", tenantId).eq("provisional", true).in("id", ids); // eslint-disable-line @typescript-eslint/no-explicit-any
+  const provisional = new Set<string>(provisionalRead.error ? [] : ((provisionalRead.data ?? []) as Array<{ id: string }>).map((row) => row.id));
   const [households, phones, emails] = await Promise.all([
     householdIds.length ? supabase.from("households").select("id, address_line1, city, state, postal_code").eq("tenant_id", tenantId).in("id", householdIds) : Promise.resolve({ data: [], error: null }),
     supabase.from("contact_phones").select("contact_id, phone, type, is_primary").eq("tenant_id", tenantId).in("contact_id", ids).order("is_primary", { ascending: false }),
@@ -125,7 +128,7 @@ async function hydrate(tenantId: string, contacts: ContactBase[]): Promise<Array
   for (const row of emails.data ?? []) emailMap.set(row.contact_id, [...(emailMap.get(row.contact_id) ?? []), { email: row.email, is_primary: row.is_primary }]);
   return contacts.map((row) => {
     const household = householdMap.get(row.household_id ?? "");
-    return { ...row, custom_fields: asObject(row.custom_fields), phones: phoneMap.get(row.id) ?? [], emails: emailMap.get(row.id) ?? [], address_line1: household?.address_line1 || null, city: household?.city || null, postal_code: household?.postal_code || null, household_state: household?.state || null };
+    return { ...row, provisional: provisional.has(row.id), custom_fields: asObject(row.custom_fields), phones: phoneMap.get(row.id) ?? [], emails: emailMap.get(row.id) ?? [], address_line1: household?.address_line1 || null, city: household?.city || null, postal_code: household?.postal_code || null, household_state: household?.state || null };
   });
 }
 
