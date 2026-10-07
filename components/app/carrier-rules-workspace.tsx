@@ -12,6 +12,7 @@ import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { TableCard } from "@/components/ui/table-card";
 import { CADENCES, COMMISSION_TRIGGERS, RULE_SOURCE_LABELS, RULE_SOURCES, RULE_TYPE_LABELS, RULE_TYPES, STATEMENT_FORMATS, type ResolvedRule, type RuleSource, type RuleType } from "@/lib/ingestion/carrierRules";
 import type { CarrierRulesRow } from "@/lib/ingestion/carrierRulesStore";
+import { fileDay } from "@/lib/ingestion/constants";
 import { notify } from "@/lib/notify";
 
 const select = `${toolbarControl} w-full`;
@@ -49,6 +50,7 @@ export function CarrierRulesWorkspace({ carriers, plane, endpoint, readOnly, asO
   const [openId, setOpenId] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, Record<string, string>>>({});
+  const [editing, setEditing] = useState<string | null>(null);
 
   const visible = useMemo(() => carriers.filter((row) => (!query.trim() || row.carrierName.toLowerCase().includes(query.trim().toLowerCase())) && (!gapsOnly || row.gaps.length > 0)), [carriers, query, gapsOnly]);
   const open = carriers.find((row) => row.carrierId === openId) ?? null;
@@ -60,6 +62,7 @@ export function CarrierRulesWorkspace({ carriers, plane, endpoint, readOnly, asO
       const data = (await response.json().catch(() => ({}))) as { error?: string };
       if (!response.ok) throw new Error(data.error ?? "That did not save.");
       notify.done(done);
+      setEditing(null);
       router.refresh();
     } catch (error) {
       notify.block(error instanceof Error ? error.message : "That did not save.");
@@ -106,7 +109,7 @@ export function CarrierRulesWorkspace({ carriers, plane, endpoint, readOnly, asO
                   {RULE_TYPES.map((type) => <td key={type}>{ruleCell(row.rules[type])}</td>)}
                   {plane === "agency" && <td className="text-right tabular-nums">{(row.inForce ?? 0).toLocaleString("en-US")}</td>}
                   <td className={`text-right tabular-nums ${row.gaps.length ? "text-[var(--warning-ink)]" : "text-muted-foreground"}`} title={row.gaps.map((gap) => gap.sentence).join("\n")}>{row.gaps.length}</td>
-                  <td className="text-right"><Button type="button" variant="outline" size="sm" onClick={() => setOpenId(row.carrierId)}>{readOnly ? "Open" : "Edit"}</Button></td>
+                  <td className="text-right"><Button type="button" variant="outline" size="sm" onClick={() => { setEditing(null); setOpenId(row.carrierId); }}>{readOnly ? "Open" : "Edit"}</Button></td>
                 </tr>
               ))}
             </tbody>
@@ -123,13 +126,8 @@ export function CarrierRulesWorkspace({ carriers, plane, endpoint, readOnly, asO
                 <DialogDescription>{plane === "agency" ? "Your rules override the platform's. A change applies from its date; past countdowns keep the rule they used." : "The platform's defaults, for every agency without its own rule."}</DialogDescription>
               </DialogHeader>
 
-              {open.gaps.length > 0 && (
-                <ul role="status" className="list-disc space-y-1 rounded-lg border border-border border-l-[3px] border-l-[var(--warning)] bg-[var(--warning-surface)] py-3 pl-8 pr-4 text-sm text-[var(--warning-ink)]">
-                  {open.gaps.map((gap) => <li key={gap.ruleType}>{gap.sentence}</li>)}
-                </ul>
-              )}
 
-              <fieldset disabled={readOnly || busy !== null} className="grid gap-5 text-sm">
+              <fieldset disabled={readOnly || busy !== null} className="grid gap-4 text-sm">
                 {RULE_TYPES.map((type) => {
                   const rule = open.rules[type];
                   const key = `${open.carrierId}:${type}`;
@@ -137,11 +135,19 @@ export function CarrierRulesWorkspace({ carriers, plane, endpoint, readOnly, asO
                   return (
                     <section key={type} className="grid gap-2 border-t border-border pt-4">
                       <div className="flex flex-wrap items-center justify-between gap-2">
-                        <h3 className="m-0 text-sm font-semibold text-foreground">{RULE_TYPE_LABELS[type].label}</h3>
-                        <span className="text-xs text-muted-foreground">
-                          {rule ? `In force: ${rule.windowDays ?? "—"} day window${rule.graceDays !== null ? `, ${rule.graceDays} day grace` : ""} · ${rule.scope === "agency" ? "yours" : "platform"} · ${rule.source ? RULE_SOURCE_LABELS[rule.source].toLowerCase() : ""} · ${rule.verified ? "verified" : "unverified"} · from ${rule.effectiveFrom}` : "Not set"}
-                        </span>
+                        <div className="min-w-0">
+                          <h3 className="m-0 text-sm font-semibold text-foreground">{RULE_TYPE_LABELS[type].label}</h3>
+                          <span className={`text-xs ${rule ? "text-muted-foreground" : "text-[var(--warning-ink)]"}`}>
+                            {rule ? `${rule.windowDays ?? "—"} day window${rule.graceDays !== null ? `, ${rule.graceDays} day grace` : ""} · ${rule.scope === "agency" ? "yours" : "platform"} · ${rule.source ? RULE_SOURCE_LABELS[rule.source].toLowerCase() : ""} · ${rule.verified ? "verified" : "unverified"} · from ${fileDay(rule.effectiveFrom)}` : `Not set: no countdown for the ${RULE_TYPE_LABELS[type].window}`}
+                          </span>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {rule && !rule.verified && (rule.scope === plane) && <Button type="button" variant="outline" size="sm" onClick={() => void post(`${key}-v`, { action: "verify", rule_id: rule.id }, "Rule marked verified.")}>Mark verified</Button>}
+                          {plane === "agency" && rule?.scope === "agency" && <Button type="button" variant="outline" size="sm" onClick={() => void post(`${key}-c`, { action: "clear_override", carrier_id: open.carrierId, rule_type: type }, "Back to the platform's rule.")}>Use the platform&apos;s rule</Button>}
+                          {!readOnly && editing !== key && <Button type="button" variant="outline" size="sm" onClick={() => setEditing(key)}>{rule ? "Change" : "Set"}</Button>}
+                        </div>
                       </div>
+                      {editing === key && (<>
                       <div className="grid gap-3 sm:grid-cols-4">
                         <div className="grid gap-1"><Label htmlFor={`${key}-w`}>Window (days)</Label><Input id={`${key}-w`} className="h-9" inputMode="numeric" value={d.window ?? ""} onChange={(e) => setDraft(key, "window", e.target.value.replace(/\D/g, ""))} /></div>
                         <div className="grid gap-1"><Label htmlFor={`${key}-g`}>Grace (days)</Label><Input id={`${key}-g`} className="h-9" inputMode="numeric" value={d.grace ?? ""} onChange={(e) => setDraft(key, "grace", e.target.value.replace(/\D/g, ""))} /></div>
@@ -158,10 +164,10 @@ export function CarrierRulesWorkspace({ carriers, plane, endpoint, readOnly, asO
                         <div className="grid gap-1 sm:col-span-2"><Label htmlFor={`${key}-n`}>Notes</Label><Input id={`${key}-n`} className="h-9" maxLength={1000} value={d.notes ?? ""} onChange={(e) => setDraft(key, "notes", e.target.value)} /></div>
                       </div>
                       <div className="flex flex-wrap gap-2">
+                        <Button type="button" variant="outline" size="sm" onClick={() => setEditing(null)}>Cancel</Button>
                         <Button type="button" size="sm" disabled={!d.source || !(d.window || d.grace || d.redrafts)} onClick={() => void post(key, { action: "add_rule", carrier_id: open.carrierId, rule_type: type, window_days: toInt(d.window ?? ""), grace_days: toInt(d.grace ?? ""), redraft_attempts: toInt(d.redrafts ?? ""), redraft_interval_days: toInt(d.interval ?? ""), source: d.source as RuleSource, notes: d.notes?.trim() || null, effective_from: d.from ?? asOf }, `${RULE_TYPE_LABELS[type].label} rule saved.`)}>Save rule</Button>
-                        {rule && !rule.verified && (rule.scope === plane) && <Button type="button" variant="outline" size="sm" onClick={() => void post(`${key}-v`, { action: "verify", rule_id: rule.id }, "Rule marked verified.")}>Mark verified</Button>}
-                        {plane === "agency" && rule?.scope === "agency" && <Button type="button" variant="outline" size="sm" onClick={() => void post(`${key}-c`, { action: "clear_override", carrier_id: open.carrierId, rule_type: type }, "Back to the platform's rule.")}>Use the platform&apos;s rule</Button>}
                       </div>
+                      </>)}
                     </section>
                   );
                 })}

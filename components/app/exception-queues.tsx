@@ -169,9 +169,10 @@ export function ExceptionQueues({ open, closed, rules, isOwner, today, readOnly,
             <>
               <DialogHeader>
                 <DialogTitle className="text-base">{QUEUE_LABELS[current.queueType].title}</DialogTitle>
-                <DialogDescription>{QUEUE_LABELS[current.queueType].why} {ageLabel(ageDays(current.ageFrom, today))} old · {current.assigneeName}.</DialogDescription>
+                <DialogDescription>{QUEUE_LABELS[current.queueType].why} Open {ageDays(current.ageFrom, today) === 0 ? "since today" : `for ${ageLabel(ageDays(current.ageFrom, today))}`} · owner {current.assigneeName}.</DialogDescription>
               </DialogHeader>
               <div className="text-sm">{subject(current)}</div>
+              {current.queueType === "initial_import" && <a href="/app/duplicates" className="text-sm font-medium text-[var(--accent-ink)] underline-offset-2 hover:underline">Open the contact directory to check the provisional clients</a>}
               {current.queueType === "no_deal_flow" && current.contact?.provisional && <p className="m-0 text-xs text-muted-foreground">The client was built from the carrier&apos;s file (name, date of birth, address) and nobody has checked it.</p>}
               <fieldset disabled={readOnly || busy} className="grid gap-2">
                 {current.payload?.client_blocked && <p role="status" className="m-0 text-sm text-[var(--warning-ink)]">{String(current.payload.client_blocked)}</p>}

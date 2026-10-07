@@ -80,6 +80,56 @@ const COMMISSION_FIELDS: TargetField[] = [
 
 export const TARGET_FIELDS: Record<"policies" | "commissions", TargetField[]> = { policies: POLICY_FIELDS, commissions: COMMISSION_FIELDS };
 
+/** Header words → field, compared with case, spaces and punctuation removed. A suggestion staff confirm, never a mapping on its own. */
+const HEADER_HINTS: Record<"policies" | "commissions", Record<string, string[]>> = {
+  policies: {
+    policy_number: ["policy", "policynumber", "policyno", "policynum", "policyid", "contract", "contractnumber", "certificate"],
+    carrier_status_raw: ["status", "policystatus", "contractstatus"],
+    paid_to_date: ["paidto", "paidtodate", "paidthrough", "paidthru", "ptd"],
+    effective_date: ["effective", "effectivedate", "effdate", "policydate", "origeffdate"],
+    issue_date: ["issue", "issuedate", "issued"],
+    application_date: ["appdate", "applicationdate", "appreceived", "receiveddate", "apprecddate", "signeddate"],
+    termination_date: ["termdate", "terminationdate", "terminateddate", "lapsedate"],
+    premium_cents: ["premium", "modalpremium", "modeprem", "currentmodalpremium", "premiumamount"],
+    premium_mode: ["mode", "premiummode", "billingmode", "frequency", "freq"],
+    payment_method: ["paymentmethod", "billingmethod", "billmethod", "billtype"],
+    face_amount_cents: ["face", "faceamount", "coverage", "deathbenefit", "benefitamount"],
+    product_code: ["product", "productcode", "plan", "plancode"],
+    product_tier: ["tier", "producttier", "rateclass", "underwritingclass"],
+    agent_identifier: ["agent", "writingagent", "agentname", "agentnumber", "writingagentnumber", "producer"],
+    insured_name: ["insured", "insuredname", "name", "clientname", "ownername"],
+    insured_first_name: ["firstname", "first", "insuredfirstname", "fname"],
+    insured_last_name: ["lastname", "last", "insuredlastname", "lname", "surname"],
+    insured_dob: ["dob", "dateofbirth", "birthdate", "insureddob"],
+    insured_phone: ["phone", "phonenumber", "insuredphone", "homephone", "cellphone"],
+    insured_address: ["address", "address1", "street", "insuredaddress"],
+    insured_state: ["state", "st", "insuredstate"],
+    insured_zip: ["zip", "zipcode", "postalcode", "insuredzip"],
+  },
+  commissions: {
+    policy_number: ["policy", "policynumber", "policyno", "contract"],
+    entry_type: ["type", "commissiontype", "action", "activitytype", "commtype", "transactiontype"],
+    transaction_date: ["date", "transactiondate", "processdate", "paiddate"],
+    amount_cents: ["amount", "commission", "commissionamount", "paid", "netamount"],
+    rate_bp: ["rate", "commissionrate", "pct", "percent"],
+    commissionable_premium_cents: ["commissionablepremium", "targetpremium", "basepremium", "premium"],
+    months_advanced: ["months", "monthsadvanced", "advancemonths"],
+    agent_identifier: ["agent", "writingagent", "agentname", "agentnumber"],
+    insured_name: ["insured", "insuredname", "name", "clientname"],
+    statement_date: ["statementdate", "statement", "payperiod", "period"],
+  },
+};
+
+const headerKey = (header: string) => header.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+/** The field a file's column header most likely is, or null. Only exact (normalised) words count. */
+export function guessTargetField(fileType: "policies" | "commissions", header: string): string | null {
+  const key = headerKey(header);
+  if (!key) return null;
+  for (const [field, words] of Object.entries(HEADER_HINTS[fileType])) if (words.includes(key)) return field;
+  return null;
+}
+
 /** The fields a file of each type cannot be read without. */
 export const REQUIRED_TARGETS: Record<"policies" | "commissions", string[]> = {
   policies: ["policy_number", "carrier_status_raw"],

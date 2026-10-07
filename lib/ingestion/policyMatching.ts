@@ -25,6 +25,8 @@ export const STRONG_FIELDS = 3;
 /** Candidates are deal-flow entries and applications dated up to this many days before the file. */
 export const SHORTLIST_LOOKBACK_DAYS = 14;
 export const SHORTLIST_SIZE = 5;
+/** Who a carrier's agent code can belong to: the people who write business, never support staff. */
+export const WRITING_ROLES: readonly string[] = ["owner", "producer"];
 
 export type Person = { firstName: string | null; lastName: string | null; dob: string | null; phone: string | null; premiumCents: number | null; faceCents: number | null };
 export type CarrierSide = Person & { policyNumber: string; carrierName: string; effectiveDate: string | null };

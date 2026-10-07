@@ -215,3 +215,33 @@ export async function removeLayoutAssignment(id: string): Promise<void> {
   if (error) fail(error, "Could not remove the assignment");
   if (!data?.length) throw new LayoutMapError("That assignment does not exist.", 404);
 }
+
+export type WaitingFile = { id: string; label: string };
+
+/**
+ * Files held back for want of a layout, newest first, so staff can write one from a real file's
+ * headers instead of typing them. Staff see the carrier, file name and date; never the rows.
+ */
+export async function listFilesWaitingForLayout(fileType: "policies" | "commissions"): Promise<WaitingFile[]> {
+  const { data, error } = await db().from("file_registry").select("id, carrier_id, original_filename, file_date").eq("parse_block", "no_layout_map").eq("file_type", fileType).order("received_at", { ascending: false }).limit(25);
+  if (error) {
+    if (isSchemaGap(error)) return [];
+    throw new Error(`Could not list the waiting files: ${error.message}`);
+  }
+  const carrierIds = [...new Set((data ?? []).map((row: Loose) => row.carrier_id).filter(Boolean))];
+  const { data: carriers } = carrierIds.length ? await db().from("carriers").select("id, name").in("id", carrierIds) : { data: [] };
+  const name = new Map<string, string>((carriers ?? []).map((row: Loose) => [row.id, row.name]));
+  return (data ?? []).map((row: Loose) => ({ id: row.id, label: `${name.get(row.carrier_id) ?? "Carrier not known"} · ${row.original_filename}${row.file_date ? ` · ${row.file_date}` : ""}` }));
+}
+
+/** The column headers of one waiting file, read from its first kept row (alphabetical: the row keeps names, not order). */
+export async function waitingFileHeaders(fileId: string): Promise<string[]> {
+  const { data: file, error } = await db().from("file_registry").select("id, tenant_id").eq("id", fileId).eq("parse_block", "no_layout_map").maybeSingle();
+  if (error) throw new Error(`Could not open the file: ${error.message}`);
+  if (!file) throw new LayoutMapError("That file is no longer waiting for a layout.", 404);
+  const { data: rows, error: rowError } = await db().from("raw_rows").select("payload").eq("tenant_id", file.tenant_id).eq("file_id", file.id).order("row_number").limit(1);
+  if (rowError) throw new Error(`Could not read the file's columns: ${rowError.message}`);
+  const payload = rows?.[0]?.payload;
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) throw new LayoutMapError("No rows were kept from that file, so its columns aren't known.", 422);
+  return Object.keys(payload).sort((a, b) => a.localeCompare(b));
+}

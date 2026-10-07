@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Plus, X } from "lucide-react";
 
 import { AdminPageHeader } from "@/components/admin/page-header";
@@ -12,8 +12,8 @@ import { Label } from "@/components/ui/label";
 import { EmptyState } from "@/components/ui/page-states";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
-import { mapProblems, TARGET_FIELDS, TRANSFORMS_FOR, type LayoutEntry, type Transform } from "@/lib/ingestion/layout";
-import type { AssignmentView, CarrierOption, LayoutMapView, LayoutStatus } from "@/lib/ingestion/layoutAdmin";
+import { guessTargetField, mapProblems, TARGET_FIELDS, TRANSFORMS_FOR, type LayoutEntry, type Transform } from "@/lib/ingestion/layout";
+import type { AssignmentView, CarrierOption, LayoutMapView, LayoutStatus, WaitingFile } from "@/lib/ingestion/layoutAdmin";
 import { notify } from "@/lib/notify";
 
 const STATUS: Record<LayoutStatus, { label: string; tone: StatusTone }> = {
@@ -96,6 +96,8 @@ export function LayoutMapsReview({ initialMaps, initialAssignments, carriers, no
   const [creating, setCreating] = useState(false);
   const [newLayout, setNewLayout] = useState({ layoutKey: "", name: "", fileType: "policies" as "policies" | "commissions" });
   const [assign, setAssign] = useState({ carrierId: "", fileType: "policies" as "policies" | "commissions", layoutKey: "" });
+  const [waiting, setWaiting] = useState<WaitingFile[]>([]);
+  const [unmatched, setUnmatched] = useState<string[]>([]);
 
   const layouts = useMemo(() => {
     const byKey = new Map<string, LayoutMapView[]>();
@@ -107,6 +109,38 @@ export function LayoutMapsReview({ initialMaps, initialAssignments, carriers, no
   }, [maps]);
   const open = maps.find((map) => map.id === openId) ?? null;
   const editable = open?.status === "draft" || open?.status === "in_review";
+
+  // The files held back for want of a layout of this type: a real header row to start from.
+  useEffect(() => {
+    setUnmatched([]);
+    if (!open || !editable) { setWaiting([]); return; }
+    let live = true;
+    call<{ files: WaitingFile[] }>(`/api/admin/layout-maps/sample-headers?file_type=${open.fileType}`, { method: "GET" }).then((data) => { if (live) setWaiting(data.files); }).catch(() => { if (live) setWaiting([]); });
+    return () => { live = false; };
+  }, [open?.id, open?.fileType, editable]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const fillFrom = (fileId: string) => run("fill", async () => {
+    if (!open || !draft) return;
+    const { headers } = await call<{ headers: string[] }>(`/api/admin/layout-maps/sample-headers?file_id=${fileId}`, { method: "GET" });
+    const fields = TARGET_FIELDS[open.fileType];
+    // A row already chosen for a field but with no header yet takes the header; otherwise a new row.
+    const entries = draft.entries.map((entry) => ({ ...entry }));
+    const present = new Set(entries.map((entry) => entry.sourceColumn));
+    const missed: string[] = [];
+    let filled = 0;
+    for (const header of headers) {
+      if (present.has(header)) continue;
+      const field = fields.find((item) => item.key === guessTargetField(open.fileType, header));
+      const blank = field ? entries.find((entry) => entry.targetField === field.key && !entry.sourceColumn.trim()) : undefined;
+      if (field && blank) { blank.sourceColumn = header; filled++; continue; }
+      if (!field || entries.some((entry) => entry.targetField === field.key)) { missed.push(header); continue; }
+      entries.push({ sourceColumn: header, targetField: field.key, dataType: field.dataType, transform: "none", required: false, enumValues: null, enumText: "" });
+      filled++;
+    }
+    setDraft({ ...draft, entries });
+    setUnmatched(missed);
+    notify.done(filled ? `${filled} column${filled === 1 ? "" : "s"} filled in. Check each one before saving.` : "No new column could be matched by its header.");
+  });
 
   async function reload() {
     const data = await call<{ maps: LayoutMapView[]; assignments: AssignmentView[] }>("/api/admin/layout-maps", { method: "GET" });
@@ -287,10 +321,17 @@ export function LayoutMapsReview({ initialMaps, initialAssignments, carriers, no
               </table>
             </div>
             {editable && (
-              <div>
+              <div className="flex flex-wrap items-center gap-2">
+                {waiting.length > 0 && (
+                  <select aria-label="Fill the columns from a file waiting for a layout" className={`${toolbarControl} max-w-[420px]`} value="" disabled={busy !== null} onChange={(event) => { if (event.target.value) fillFrom(event.target.value); }}>
+                    <option value="">Fill from a waiting file…</option>
+                    {waiting.map((file) => <option key={file.id} value={file.id}>{file.label}</option>)}
+                  </select>
+                )}
                 <Button type="button" variant="outline" onClick={() => { const field = fields.find((item) => !draft.entries.some((entry) => entry.targetField === item.key)) ?? fields[0]; setDraft({ ...draft, entries: [...draft.entries, { sourceColumn: "", targetField: field.key, dataType: field.dataType, transform: "none", required: false, enumValues: null, enumText: "" }] }); }}><Plus className="size-4" /> Add column</Button>
               </div>
             )}
+            {editable && unmatched.length > 0 && <p className="m-0 text-sm text-muted-foreground">Not matched by name: {unmatched.join(", ")}. Add any that matter with Add column.</p>}
             {(problems.length > 0 || (editable && localProblems.length > 0)) && (
               <ul role="alert" className="list-disc space-y-1 pl-5 text-sm text-[var(--error-ink)]">
                 {(problems.length ? problems : localProblems).map((problem) => <li key={problem}>{problem}</li>)}

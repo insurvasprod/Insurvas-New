@@ -4,7 +4,7 @@ import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isSchemaGap } from "@/lib/supabase/schemaGap";
 
 import { annualisedPremiumCents } from "./policyCurrent";
-import { accuracy, isStrong, ladderShare, shortlist, SHORTLIST_LOOKBACK_DAYS, splitName, type Candidate, type CarrierSide, type LadderCounts, type Scored } from "./policyMatching";
+import { accuracy, isStrong, ladderShare, shortlist, SHORTLIST_LOOKBACK_DAYS, splitName, WRITING_ROLES, type Candidate, type CarrierSide, type LadderCounts, type Scored } from "./policyMatching";
 import { refreshPolicyCurrent } from "./policyCurrentStore";
 import { noRecordPolicy, openImportSummary } from "./exceptionQueuesStore";
 
@@ -329,8 +329,9 @@ export async function reopenMatch(scope: MatchingScope, matchId: string): Promis
 
 /** Maps a carrier's exact agent string to one of this agency's users. */
 export async function mapAgent(scope: MatchingScope, carrierId: string, agentIdentifier: string, userId: string): Promise<void> {
-  const { data: member } = await db().from("tenant_users").select("user_id").eq("tenant_id", scope.tenantId).eq("user_id", userId).maybeSingle();
-  if (!member) throw new MatchingError("Choose someone in this agency.", 400);
+  const { data: member } = await db().from("tenant_users").select("user_id, role, accepted_at").eq("tenant_id", scope.tenantId).eq("user_id", userId).maybeSingle();
+  if (!member || !member.accepted_at) throw new MatchingError("Choose someone in this agency.", 400);
+  if (!WRITING_ROLES.includes(member.role)) throw new MatchingError("An agent code can only belong to the owner or a producer.", 400);
   const { error } = await db().from("carrier_agent_map").upsert({ tenant_id: scope.tenantId, carrier_id: carrierId, agent_identifier: agentIdentifier, user_id: userId, mapped_by: scope.userId, mapped_at: new Date().toISOString() }, { onConflict: "tenant_id,carrier_id,agent_identifier" });
   if (error) fail(error, "Could not save the agent mapping");
   await refreshPolicyCurrent({ tenantId: scope.tenantId, carrierId });
@@ -400,7 +401,7 @@ export async function loadMatching(tenantId: string) {
     links: (links.data ?? []).map((row: Loose): LinkRow => ({ id: row.id, carrierName: carrierName.get(row.carrier_id) ?? "", policyNumber: row.policy_number, method: row.method, step: row.ladder_step, type: row.matched_to_type, clientName: row.contact_id ? contactName.get(row.contact_id) ?? null : null, confidence: row.confidence, confirmed: Boolean(row.confirmed_at), createdAt: row.created_at })),
     unmapped: [...unmapped.values()].sort((a, b) => b.policies - a.policies || a.agentIdentifier.localeCompare(b.agentIdentifier)),
     mapped: (maps.data ?? []).map((row: Loose): MappedAgent => ({ id: row.id, carrierId: row.carrier_id, carrierName: carrierName.get(row.carrier_id) ?? "", agentIdentifier: row.agent_identifier, userId: row.user_id, userName: userName.get(row.user_id) ?? row.user_id })),
-    members: (members.data ?? []).filter((row: Loose) => row.accepted_at).map((row: Loose) => ({ userId: row.user_id as string, name: userName.get(row.user_id) ?? row.user_id, role: row.role as string })),
+    members: (members.data ?? []).filter((row: Loose) => row.accepted_at && WRITING_ROLES.includes(row.role)).map((row: Loose) => ({ userId: row.user_id as string, name: userName.get(row.user_id) ?? row.user_id, role: row.role as string })),
     ladder: ladderShare((ladder.data ?? []).map((row: Loose) => ({ alreadyLinked: row.already_linked, exactLinked: row.exact_linked, toReview: row.to_review }))),
     aiAccuracy: accuracy(aiRows.map((row) => ({ confirmed: Boolean(row.confirmed_at), correctedByHuman: Boolean(row.superseded_by_id && humanCorrection.has(row.superseded_by_id)) }))),
   };
