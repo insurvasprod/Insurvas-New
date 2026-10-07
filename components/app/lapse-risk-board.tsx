@@ -179,10 +179,12 @@ export function LapseRiskBoard({
   policies,
   totals,
   readOnly,
+  tabs,
 }: {
   policies: AtRiskPolicy[];
   totals: AtRiskTotals;
   readOnly: boolean;
+  tabs?: React.ReactNode;
 }) {
   const router = useRouter();
   const [refreshing, startRefresh] = useTransition();
@@ -212,6 +214,7 @@ export function LapseRiskBoard({
         title="Lapse risk"
         actions={readOnly ? undefined : <RecordLapseSignal />}
       />
+      {tabs}
 
       {readOnly && <div role="status" className="rounded-lg border border-border border-l-[3px] border-l-[var(--warning)] bg-[var(--warning-surface)] px-4 py-3 text-sm text-[var(--warning-ink)]">Your account is read-only. Recording and resolving lapse signals is unavailable.</div>}
 

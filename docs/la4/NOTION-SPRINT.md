@@ -32,7 +32,7 @@ The repo's [TASKS.md](TASKS.md) (11 tasks, 2026-10-02) is the earlier, smaller s
 | 4.13 Expected commission | **Done 2026-10-08.** Migration `20261008230000` live and verified against the live function (below). No agency has rates or product families yet, so no figure exists until they are entered. |
 | 4.14 Orphan queue and carrier accounts | **Done 2026-10-08.** Migration `20261008240000` live and verified against the live objects (below). |
 | 4.15 Discrepancies, letters | **Done 2026-10-08.** Migration `20261008250000` live and verified against the live functions (below). Rebuilt on 4.12–4.14; the earlier module stays as "From imported statements". |
-| 4.16 Retention board | Not started |
+| 4.16 Retention board | **Done 2026-10-08.** Migration `20261008260000` live and verified against the live functions (below). The call list is the new default tab on Lapse risk; the earlier board stays as "Recorded signals". |
 | 4.17 Carrier rules | **Done 2026-10-07.** Migration `20261008150000` live and verified (below). Rules, settings, coverage screen (below). The old statements engine still hard-codes 45 days; it retires with that code. |
 | 4.18 Scorecards, persistency, AI summary | Partial: count-based persistency only |
 | 4.19 Daily run, AI agents | Not started |
@@ -976,3 +976,59 @@ It follows LA-3.13's carrier field maps on purpose: the same statuses, the same 
   - Refused: a letter from another agency's items (400), marking someone else's letter sent (404), dismissing someone else's item (409), and a fractional amount (400).
   - The Letters tab shows its empty state.
   - The totals strip is hidden until there's a finding, because nothing found yet is not "$0 owed"; that is fixed.
+
+## LA-4.16 · Retention board
+
+**Who is on it** (`lib/ingestion/retentionBoard.ts`, pure, with a positive and a negative test for each reason). One reason per policy, most urgent first:
+- **Asked to cancel:** the carrier's raw status says a cancellation, termination or surrender was requested (not on a policy already gone).
+- **Carrier conservation notice:** the carrier itself reports the policy at risk.
+- **Draft bounced:** the paid-to date moved backwards in the latest file, or the carrier's status names a returned or NSF item.
+- **First payment missed:** never paid, and later than the carrier's grace (LA-4.17).
+- **Payment missed:** paid before, now past due beyond the grace.
+- **Lapsed, can still be reinstated:** inside the carrier's reinstatement window. With no window configured, only a lapse in the latest file is listed, and nothing is guessed.
+- **Mailed bill: convert to bank draft:** active and paid by direct bill (prevention).
+
+**Order:** days left before the carrier closes it, soonest first, then the most advance at risk. Rows with no carrier window sit below in a labelled group linking to Carrier rules; prevention comes last. Days left: 3 or fewer are red, 7 or fewer amber. No value (window, grace, lag) is hard-coded; all come from the carrier's rules (the 4.17 test enforces it).
+
+**Each row:** the client, the phone as a tap-to-call link, the carrier and policy (linking to the policy page from 4.11), the reason, the amount due, the days left, the unearned advance from the ledger (4.12; "Unknown" when there is none, never $0), and the last contact with its result.
+
+**Logging a call:** one select per row: reached and promised to pay, refused, voicemail, wrong number, already paid, converting to bank draft.
+- `retention_action` stores the call with the board as the server saw it (reason, paid-to, the file's date). A logged call never changes; the database refuses edits and deletes.
+- **The next carrier file decides it** (`evaluate_retention_actions`, the `retentionResults` stage after every file, and a daily 07:00 run):
+  - **lost** if the policy is lapsed or not taken;
+  - **saved** if the paid-to date moved past where it stood;
+  - otherwise **still at risk**, judged again on the following file.
+- **Save rate** = saved ÷ (saved + lost), by reason, carrier and agent. Calls still at risk are shown as waiting.
+
+**Screen: Lapse risk.**
+- **Call list** (new, default): the stat strip (call today, advance at risk, save rate, carriers without a window), filters by reason and carrier, the list, and the save-rate card once calls exist.
+- **Recorded signals:** the earlier board, unchanged.
+- A producer sees only their own policies. Opening the page writes nothing.
+
+**Before the apply (2026-10-08):**
+- **A rolled-back rehearsal on production** created the table, guard and function, then logged four calls on the demo agency's test carrier:
+  - DEMO-1001 (paid-to moved from 10-01 to 11-01) → saved;
+  - DEMO-1003 (lapsed) → lost;
+  - DEMO-1005 (paid-to unchanged) → still at risk;
+  - DEMO-1007 (logged against the latest file) → waiting.
+  - A second run moved nothing.
+  - An edit and a delete were both refused.
+- **`loadBoard` on the demo agency:** 3 rows in about 1 s:
+  - DEMO-1005 and DEMO-1006, payment missed, 24 days left;
+  - DEMO-1003, lapsed, in the no-window group.
+  - Phones and clients are linked. The advance is "Unknown" (no commission layout yet).
+  - Save rates report unavailable until the table exists.
+- **The page itself is behind the platform switch** `chargeback_radar = off` (the demo seed's "being recalibrated" message), so it can't be opened in the browser until that switch is turned on.
+- 2194 tests pass; `tsc` clean.
+
+**Live verification (2026-10-08, after the apply):**
+- **The first apply did not reach production** (nothing landed; the same file ran clean in a rolled-back block), so it was applied again.
+- **The verifier** reports `20261008260000` as applied. The cron job `la4-retention-results-daily` (`0 7 * * *`) is active.
+- **Catalog:**
+  - On `retention_action`, `service_role` can select and insert, but not update, delete or truncate.
+  - `tenant_app` can only select; `anon` and `authenticated` have no access.
+  - RLS is on with 1 read policy; the guard trigger and 5 indexes are present.
+  - `evaluate_retention_actions` is a security definer function, executable by `service_role` only.
+- **A rolled-back block against the live functions:** saved, lost, still at risk and waiting came out exactly as in the rehearsal. A second run moved nothing. An edit, a delete and an unknown reason were all refused.
+- **The app's read path:** `loadBoard` returns the same 3 rows. Save rates now report available with 0 calls.
+- **Not exercised:** no call was logged for real, because a logged call is permanent.

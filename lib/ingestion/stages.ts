@@ -4,6 +4,7 @@ import type { ParsedFile, ReprocessFile, ReprocessStage } from "./reprocess";
 import { sweepOrphans } from "./carrierAccountsStore";
 import { recordFileEntries } from "./commissionLedgerStore";
 import { runDetection } from "./discrepancyStore";
+import { evaluateRetention } from "./retentionStore";
 import { computeExpected } from "./expectedCommissionStore";
 import { rebuildFileSnapshots } from "./snapshotStore";
 
@@ -79,7 +80,20 @@ const commissionDiscrepancies: ReprocessStage = {
   },
 };
 
-export const REPROCESS_STAGES: ReprocessStage[] = [policySnapshots, expectedCommission, commissionEntries, orphanCommission, commissionDiscrepancies];
+/**
+ * retention_result (LA-4.16): after a policy file, every logged retention call on its policies is
+ * marked from the data — saved (paid-to moved), lost (lapsed or not taken), or still at risk.
+ */
+const retentionResults: ReprocessStage = {
+  name: "retention_result",
+  async rebuild(tenantId: string, file: ReprocessFile, _rows, parsed: ParsedFile | null) {
+    if (file.fileType !== "policies" || !parsed?.typedRows) return { changed: 0 };
+    const outcome = await evaluateRetention(tenantId);
+    return { changed: outcome ? outcome.saved + outcome.lost + outcome.still_at_risk : 0 };
+  },
+};
+
+export const REPROCESS_STAGES: ReprocessStage[] = [policySnapshots, expectedCommission, retentionResults, commissionEntries, orphanCommission, commissionDiscrepancies];
 
 /** After a door's parse: the same stages a reprocess runs, for one file's passed rows. */
 export async function runStages(tenantId: string, file: ReprocessFile, parsed: ParsedFile): Promise<void> {
