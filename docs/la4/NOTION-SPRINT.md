@@ -33,7 +33,7 @@ The repo's [TASKS.md](TASKS.md) (11 tasks, 2026-10-02) is the earlier, smaller s
 | 4.14 Orphans, carrier balances | Partial: unmatched lines kept; balances not built |
 | 4.15 Discrepancies, letters | Partial: 5 of 9 types, letter and PDF; to be rebuilt on 4.12–4.14 |
 | 4.16 Retention board | Not started |
-| 4.17 Carrier rules | Partial (small): commissions address only. The 45-day grace is still hard-coded. |
+| 4.17 Carrier rules | **Done 2026-10-07.** Migration `20261008150000` live and verified (below). Rules, settings, coverage screen (below). The old statements engine still hard-codes 45 days; it retires with that code. |
 | 4.18 Scorecards, persistency, AI summary | Partial: count-based persistency only |
 | 4.19 Daily run, AI agents | Not started |
 | 4.20 Traceability | Partial: original download (now logged), arithmetic on findings |
@@ -396,3 +396,48 @@ It follows LA-3.13's carrier field maps on purpose: the same statuses, the same 
 - **The page:** the "Policy changes" tab's data carries every change with its file dates. The fixture's owner hasn't accepted the terms, so the rendered table couldn't be seen; its wording is unit-tested.
 - **The lapse (owner-approved):** "Active" → active and "Lapsed" → lapsed were mapped on the test carrier only, which leaves two more permanent mappings that no agency uses. Two files a month apart give exactly one `status_normalized` change, active → lapsed, from 2026-09-05 to 2026-10-05 with both file ids, plus the carrier's own word changing, and nothing else.
   - Approving "Active" also released the 2 fixture files that held "Active" rows, and reprocessed them automatically.
+
+## LA-4.17: how it is built
+
+**The data (`supabase/migrations/20261008150000_la_4_17_carrier_rules.sql`):**
+- **`carrier_retention_rule`:** how many days a carrier gives for each kind of save (first payment, ongoing payment, reinstatement, conservation, cancellation request), plus grace, redraft attempts and the days between them.
+  - `tenant_id` null is the platform's rule; an agency's own row overrides it.
+  - **Effective-dated and append-only:** a change is a new row from a date. A trigger refuses every edit and every delete; the one change allowed is verifying a rule, once. Delete and truncate are also revoked.
+  - Every rule says where it came from (carrier agreement, phone call, observed). Verification is recorded with who did it.
+  - An agency can **clear** its override, which is a row with no numbers, handing the rule back to the platform's.
+  - **No default anywhere:** no column default for a window or a grace, and nothing in the code falls back to one.
+- **`carrier_operating_settings`:** one platform row and one agency row per carrier: commission trigger (on issue / on first draft), payment lag, minimum payout, tolerance, file cadence, statement format. Each setting resolves agency → platform → null.
+- **`in_force_policy_counts(tenant)`:** each policy's latest live snapshot, active or at risk, counted per carrier. Security definer, service role only.
+- **Seeds (observed, unverified):** Aetna ongoing payment 45 days; Americo first payment 8 days. Both from the Module 4 BRD, dated 2026-10-05, guarded so a re-run adds nothing. Aflac and American Home Life share Aetna's window but aren't in the carrier library, so they ship absent.
+
+**The code:**
+- **`lib/ingestion/carrierRules.ts` (pure):** `resolveRule` (agency unless cleared, then platform, then null; the latest rule on or before the date, the newest row of that day), `daysUntilCarrierCloses` (null with no window, which LA-4.7 uses), `coverageGaps` (the coverage sentence), `resolveSettings`.
+- **`lib/ingestion/carrierRulesStore.ts` / `carrierRulesHttp.ts`:** load per carrier (rules, gaps, in-force count, settings, and the settings kept elsewhere: commissions address, layout map, portal, reference pattern); add a rule, clear an override, verify, save settings. Each write is audited (`carrier_rule.added`, `.override_cleared`, `.verified`, `carrier_settings.saved`).
+- **Routes:** `/api/app/carrier-rules` (owner, bookkeeper; `statement_ingestion`) and `/api/admin/carrier-rules` (the carriers configuration section).
+- **On screen:** Book of Business › **Carrier rules** for an agency, and **Carrier rules** in the admin Catalog for the platform. One row per carrier with each kind of save's window ("Not set" when absent), whose rule it is, and "unverified" where it is. An agency also sees in-force counts and three tiles: carriers missing a rule, policies with no save window, unverified rules. The editor adds a rule from a date, verifies, clears an override and saves settings.
+
+**Acceptance (Notion):**
+
+| Criterion | Status |
+|---|---|
+| Agency rule overrides the platform's; absent is null, never a default | **Met:** `carrierRules.test.mjs`; no default in the schema (static test and temp copies). |
+| Effective-dated; a past action keeps the rule it used | **Met:** append-only, verified on temp copies; resolution by date is tested. |
+| A null window gives a null countdown | **Met:** tested; LA-4.7 consumes it. |
+| Coverage screen: "X — window not set. N policies in force…" | **Met:** wording tested; counts from `in_force_policy_counts` (verified on temp copies). |
+| Every rule has a source; unverified is shown as unverified | **Met:** check constraint; the screen marks it. |
+| Nothing in LA-4 hard-codes a window, grace or lag | **Met for `lib/ingestion`** (grep test). The old statements engine's `NEVER_PAID_GRACE_DAYS` retires with that code. |
+
+**Before the migration (2026-10-07):** 24 checks on rolled-back temp copies, including the seeds, no edits or deletes, verify once, the constraints, one settings row per scope, and the in-force count (latest live snapshot only, this agency only). Both pages show only "Carrier rules need a database update (20261008150000)"; the APIs answer `available: false`.
+
+**4.17 verified live, 2026-10-07** (the owner applied the migration):
+- **The catalog:** the verifier reports applied. The append-only trigger is on; no role can delete or truncate rules; `tenant_app` only reads, through one read policy per table; `in_force_policy_counts` is security definer and runs as `service_role` only; no column defaults for window, grace or redrafts; one settings row per carrier per scope. 19 of 19 read-only checks pass.
+- **The seeds:** exactly two, as written: Aetna ongoing payment 45 days and Americo first payment 8 days, both observed, unverified, from 2026-10-05. No settings rows ship. `tenant_app` can't edit or delete a rule (checked in a rolled-back transaction).
+- **In-force counts:** the fixture's count (2, on LA14 Market) matches a count done by hand from its latest live snapshots.
+- **The pages:** the agency page (demo agency) lists the 8 active carriers, the two seeds as "platform · unverified" and every other window as "Not set", with tiles 8 / 0 / 2. An agency gets no "Mark verified" on a platform rule. The admin page shows the same grid without in-force counts. Refused writes (no source, out of range, an unknown field, verifying something that isn't the agency's, a platform "clear", no session) return 400/409/401 and store nothing.
+- **The write path (owner-approved):** on "Isolation Test A", with LA14 Market reactivated only for the test (and a temporary entitlement), both removed in a finally block.
+  - While deactivated, the carrier is refused.
+  - An owner adds a 10-day first-payment rule (3 d grace, 2 redrafts), shown as theirs and unverified; it stops being a gap. They verify it once; a second verify is refused. It is stored with who created and verified it.
+  - Clearing the override takes it back to null (no platform rule, no default); both rows are kept.
+  - Settings save and save again into one row, as the agency's.
+  - All five writes are in the audit log with the fixture's tenant.
+  - Left behind, permanently and on the fixture only: two rule rows and one settings row for LA14 Market.

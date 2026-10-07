@@ -224,6 +224,11 @@ export const AUDIT_ACTIONS = [
   // LA-4.5 (Notion sprint) · the carrier status map (20261008130000).
   "status_map.approved",
   "status_map.discarded",
+  // LA-4.17 (Notion sprint) · carrier rules and settings (20261008150000).
+  "carrier_rule.added",
+  "carrier_rule.override_cleared",
+  "carrier_rule.verified",
+  "carrier_settings.saved",
   "tenant.dispositioned",
   "tenant.agent_presence_updated",
   "tenant.agent_floor_nudged",
@@ -603,6 +608,10 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   "layout_assignment.removed": "Carrier layout assignment removed",
   "status_map.approved": "Carrier status mapped and approved",
   "status_map.discarded": "Proposed carrier status mapping discarded",
+  "carrier_rule.added": "Carrier retention rule added from a date",
+  "carrier_rule.override_cleared": "Agency carrier rule override cleared",
+  "carrier_rule.verified": "Carrier retention rule verified",
+  "carrier_settings.saved": "Carrier operating settings saved",
   "tenant.dispositioned": "Call dispositioned",
   "tenant.agent_presence_updated": "Agent availability updated",
   "tenant.agent_floor_nudged": "Agent Floor nudge sent",

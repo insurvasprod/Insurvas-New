@@ -102,6 +102,8 @@ export function buildAdminNav(role: AdminRole): SidebarNode[] {
       section("carriers", "/admin/layout-maps", "Layout maps", "carriers"),
       // LA-4.5 · carrier status words waiting to be mapped, and the status map.
       section("carriers", "/admin/status-maps", "Status maps", "carriers"),
+      // LA-4.17 · the platform's default carrier rules and settings.
+      section("carriers", "/admin/carrier-rules", "Carrier rules", "carriers"),
       section("templates", "/admin/templates", "Templates", "templates"),
     ]),
 
