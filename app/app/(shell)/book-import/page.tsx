@@ -8,6 +8,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { BOOK_IMPORT_PENDING_MESSAGE, loadBookImport } from "@/lib/ingestion/bookImport";
+import { bookAdvanceAtRisk } from "@/lib/ingestion/commissionLedgerStore";
 import { moneyOrUnknown } from "@/lib/ingestion/policyCurrent";
 import { hasTenantPermission } from "@/lib/tenantAuth/permissions";
 
@@ -20,7 +21,7 @@ export default async function BookImportPage() {
   const guard = await guardPage("statement_ingestion");
   if (!guard.entitled) return <FeatureGateNotice guard={guard} featureLabel="Import your book" description="Bring in your existing book from each carrier's latest policy file." />;
   if (!hasTenantPermission(guard.role, "statements.view")) return <RoleGateNotice featureLabel="Import your book" detail="The book is imported by the account owner or a bookkeeper." />;
-  const view = await loadBookImport(guard.context.tenantId);
+  const [view, advance] = await Promise.all([loadBookImport(guard.context.tenantId), bookAdvanceAtRisk(guard.context.tenantId).catch(() => ({ cents: null, policies: 0, unknown: 0 }))]);
 
   return (
     <div className="m-stagger flex flex-col gap-6">
@@ -38,7 +39,7 @@ export default async function BookImportPage() {
             <StatTile label="Policies" value={view.totals.policies.toLocaleString("en-US")} footnote="in your book now" />
             <StatTile label="Premium a month" value={`$${Math.round(view.totals.monthlyPremiumCents / 100).toLocaleString("en-US")}`} footnote={`${view.totals.atRisk.toLocaleString("en-US")} policies at risk`} valueTone={view.totals.atRisk ? "warning" : undefined} />
             <StatTile label="Persistency" value={view.persistency.ready ? "Ready" : "Building"} footnote={view.persistency.ready ? "enough months of files" : view.persistency.label.replace(/^building — /, "")} />
-            <StatTile label="Advances at risk" value={moneyOrUnknown(null)} footnote="until commission statements arrive" />
+            <StatTile label="Advances at risk" value={moneyOrUnknown(advance.cents)} footnote={advance.cents === null ? "until commission statements arrive" : `unearned, on ${advance.policies} ${advance.policies === 1 ? "policy" : "policies"} with an advance${advance.unknown ? ` · ${advance.unknown} more not known yet` : ""}`} />
           </StatStrip>
           <BookImport carriers={view.carriers} others={view.others} processing={view.processing} readOnly={guard.entitlement.access === "read_only"} />
         </>

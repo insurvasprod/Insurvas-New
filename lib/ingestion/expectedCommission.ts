@@ -44,10 +44,17 @@ export function triggerOccurredOn(trigger: Trigger, policy: TriggerInput, firstD
   return null;
 }
 
-/** From the paid-to changes of one policy (oldest first), the first file date the paid-to moved past the effective date. */
-export function firstDraftDate(changes: Array<{ newValue: string | null; toSnapshotDate: string }>, effectiveDate: string | null): string | null {
+/**
+ * From the paid-to changes of one policy (oldest first), the first file date the paid-to moved past
+ * the effective date. A change that starts already past it means the policy had drafted before any
+ * change was seen: null, so the trigger falls back to the first file that showed it (triggerOccurredOn).
+ */
+export function firstDraftDate(changes: Array<{ oldValue?: string | null; newValue: string | null; toSnapshotDate: string }>, effectiveDate: string | null): string | null {
   if (!effectiveDate) return null;
-  for (const change of changes) if (change.newValue && change.newValue > effectiveDate) return change.toSnapshotDate;
+  for (const change of changes) {
+    if (change.oldValue && change.oldValue > effectiveDate) return null;
+    if (change.newValue && change.newValue > effectiveDate) return change.toSnapshotDate;
+  }
   return null;
 }
 

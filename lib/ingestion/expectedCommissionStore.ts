@@ -84,9 +84,9 @@ async function perPolicy(tenantId: string, policies: Loose[]) {
   const contactIds = [...new Set(policies.map((p) => p.contact_id).filter(Boolean))] as string[];
   const contacts = contactIds.length ? (await Promise.all(chunks(contactIds, 200).map((ids) => db().from("contacts").select("id, dob").eq("tenant_id", tenantId).in("id", ids)))).flatMap((r: Loose) => r.data ?? []) : [];
   const dob = new Map<string, string | null>(contacts.map((c: Loose) => [c.id, c.dob]));
-  const changes = await everyRow(() => db().from("policy_change").select("carrier_id, policy_number, new_value, to_snapshot_date").eq("tenant_id", tenantId).eq("field_name", "paid_to_date").order("to_snapshot_date").order("detected_at"));
-  const byPolicy = new Map<string, Array<{ newValue: string | null; toSnapshotDate: string }>>();
-  for (const c of changes.rows) byPolicy.set(`${c.carrier_id}|${c.policy_number}`, [...(byPolicy.get(`${c.carrier_id}|${c.policy_number}`) ?? []), { newValue: c.new_value, toSnapshotDate: c.to_snapshot_date }]);
+  const changes = await everyRow(() => db().from("policy_change").select("carrier_id, policy_number, old_value, new_value, to_snapshot_date").eq("tenant_id", tenantId).eq("field_name", "paid_to_date").order("to_snapshot_date").order("detected_at"));
+  const byPolicy = new Map<string, Array<{ oldValue: string | null; newValue: string | null; toSnapshotDate: string }>>();
+  for (const c of changes.rows) byPolicy.set(`${c.carrier_id}|${c.policy_number}`, [...(byPolicy.get(`${c.carrier_id}|${c.policy_number}`) ?? []), { oldValue: c.old_value, newValue: c.new_value, toSnapshotDate: c.to_snapshot_date }]);
   return { dob, byPolicy };
 }
 

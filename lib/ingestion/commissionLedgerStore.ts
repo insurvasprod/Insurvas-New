@@ -143,3 +143,36 @@ export async function loadLedger(viewer: { tenantId: string; userId: string; rol
   }));
   return { available: true as const, entries, totals: rollup(rows.filter((row) => !flagged.has(row.file_id))), scoped: viewer.role === "producer" };
 }
+
+/**
+ * The unearned advance the carriers could still take back, across the book (the Import your book
+ * tile): per policy from its ledger lines, as the call list works it out, statements that don't add
+ * up held out. Null when no advance is on file at all — Unknown, never $0.
+ */
+export async function bookAdvanceAtRisk(tenantId: string): Promise<{ cents: number | null; policies: number; unknown: number }> {
+  const [policies, lines, flagged] = await Promise.all([
+    (async () => { const rows: Loose[] = []; for (let from = 0; from < 50_000; from += 1000) { const { data } = await db().from("policy_current").select("carrier_id, policy_number, months_paid").eq("tenant_id", tenantId).order("carrier_id").order("policy_number").range(from, from + 999); rows.push(...(data ?? [])); if (!data || data.length < 1000) break; } return rows; })(),
+    (async () => { const rows: Loose[] = []; for (let from = 0; from < 100_000; from += 1000) { const { data, error } = await db().from("commission_entry").select("carrier_id, policy_number, entry_type, corrects_type, amount_cents, months_advanced, file_id").eq("tenant_id", tenantId).order("id").range(from, from + 999); if (error) return null; rows.push(...(data ?? [])); if (!data || data.length < 1000) break; } return rows; })(),
+    flaggedFiles(tenantId),
+  ]);
+  if (!lines) return { cents: null, policies: 0, unknown: 0 };
+  const money = new Map<string, { advanced: number; chargedBack: number; months: number | null }>();
+  for (const e of lines) {
+    if (flagged.has(e.file_id)) continue;
+    const key = `${e.carrier_id}|${e.policy_number}`;
+    const m = money.get(key) ?? { advanced: 0, chargedBack: 0, months: null };
+    const kind = e.corrects_type ?? e.entry_type;
+    if (kind === "advance") { m.advanced += Number(e.amount_cents); if (e.months_advanced !== null) m.months = Math.max(m.months ?? 0, e.months_advanced); }
+    if (kind === "chargeback") m.chargedBack += Number(e.amount_cents);
+    money.set(key, m);
+  }
+  let cents = 0, counted = 0, unknown = 0;
+  for (const p of policies) {
+    const m = money.get(`${p.carrier_id}|${p.policy_number}`);
+    if (!m || m.advanced <= 0) continue;
+    const atRisk = unearnedAdvance({ advancedCents: m.advanced, chargedBackCents: m.chargedBack, monthsPaid: p.months_paid, rule: null, statementMonths: m.months }).atRiskCents;
+    if (atRisk === null) unknown++;
+    else { cents += atRisk; counted++; }
+  }
+  return { cents: counted ? cents : null, policies: counted, unknown };
+}

@@ -89,7 +89,7 @@ export function CarrierAccounts({ statements, orphans, files, carriers, readOnly
         <StatTile label="Debit balances" value={debit.length ? signed(debit.reduce((sum, c) => sum + (c.latest?.closingCents ?? 0), 0)) : "None"} valueTone={debit.length ? "danger" : undefined} footnote={debit.length ? `owed to ${debit.length} ${debit.length === 1 ? "carrier" : "carriers"}; paid nothing until cleared` : "no carrier is holding your commission"} />
         <StatTile label="Statements that don't add up" value={flagged.toLocaleString("en-US")} valueTone={flagged ? "warning" : undefined} footnote="their lines are held out of totals" />
         <StatTile label="Missing statements" value={gaps.toLocaleString("en-US")} valueTone={gaps ? "warning" : undefined} footnote="every balance after a gap is unverified" />
-        <StatTile label="Unattributed commission" value={orphans.length ? signed(orphanCents) : "None"} footnote={orphans.length ? `${orphans.reduce((s, o) => s + o.policies, 0)} policies no policy file has shown yet` : "every line has its policy"} />
+        <StatTile label="Unattributed commission" value={orphans.length ? signed(orphanCents) : "None"} footnote={orphans.length ? (() => { const n = orphans.reduce((s, o) => s + o.policies, 0); return `${n} ${n === 1 ? "policy" : "policies"} no policy file has shown yet`; })() : "every line has its policy"} />
       </StatStrip>
 
       <TableCard

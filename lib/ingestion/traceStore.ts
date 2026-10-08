@@ -144,9 +144,17 @@ export async function untraceableDiscrepancies(tenantId: string): Promise<Map<st
 export async function entrySources(tenantId: string, ids: string[]): Promise<Map<string, { fileId: string; rowNumber: number | null; fileName: string | null; type: string; amountCents: number }>> {
   const unique = [...new Set(ids)].slice(0, 2000);
   const out = new Map<string, { fileId: string; rowNumber: number | null; fileName: string | null; type: string; amountCents: number }>();
+  // commission_entry reaches its file through its raw row (no direct key to embed), so the names are read apart.
+  const rows: Loose[] = [];
   for (let at = 0; at < unique.length; at += 200) {
-    const { data } = await db().from("commission_entry").select("id, file_id, row_number, entry_type, amount_cents, file_registry(original_filename)").eq("tenant_id", tenantId).in("id", unique.slice(at, at + 200));
-    for (const e of (data ?? []) as Loose[]) out.set(e.id, { fileId: e.file_id, rowNumber: e.row_number, fileName: e.file_registry?.original_filename ?? null, type: e.entry_type, amountCents: Number(e.amount_cents) });
+    const { data, error } = await db().from("commission_entry").select("id, file_id, row_number, entry_type, amount_cents").eq("tenant_id", tenantId).in("id", unique.slice(at, at + 200));
+    if (error) throw new Error(`Could not read the ledger lines: ${error.message}`);
+    rows.push(...(data ?? []));
   }
+  const fileIds = [...new Set(rows.map((e) => e.file_id as string))];
+  const { data: files, error } = fileIds.length ? await db().from("file_registry").select("id, original_filename").eq("tenant_id", tenantId).in("id", fileIds) : { data: [], error: null };
+  if (error) throw new Error(`Could not read the files: ${error.message}`);
+  const name = new Map<string, string>(((files ?? []) as Loose[]).map((f) => [f.id, f.original_filename]));
+  for (const e of rows) out.set(e.id, { fileId: e.file_id, rowNumber: e.row_number, fileName: name.get(e.file_id) ?? null, type: e.entry_type, amountCents: Number(e.amount_cents) });
   return out;
 }
