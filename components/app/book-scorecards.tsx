@@ -18,6 +18,7 @@ import {
   CONTRACT_MONTH, CONTRACT_SHARE_PCT, DIMENSION_LABELS, centsText, chargebackText, costPerSale, drillParam, percentOf, persistencyText, shareText, trueCostPerSale, wholeDollars,
   type Bucket, type Dimension, type Drill, type Slicing, type WeekRow,
 } from "@/lib/ingestion/scorecards";
+import { fileHref, rowHref } from "@/lib/ingestion/trace";
 import { notify } from "@/lib/notify";
 
 /**
@@ -369,7 +370,7 @@ function Cards({ model, Fig, refresh }: Parts) {
 // ─── drill-through ────────────────────────────────────────────────────────────────────────────
 
 type DrillPolicy = { key: string; note: string; tone: "good" | "danger" | "plain"; clientName: string | null; carrierId: string; carrierName: string; policyNumber: string; status: string | null; issueDate: string | null; annualCents: number | null; agentName: string; sourceName: string };
-type DrillEntry = { id: string; carrierName: string; policyNumber: string; type: string; countedOn: string; cents: number };
+type DrillEntry = { id: string; carrierName: string; policyNumber: string; type: string; countedOn: string; cents: number; fileId: string; rowNumber: number | null };
 
 export function ScoreDrill({ back, title, figure, policies, entries }: { back: string; title: string; figure: string; policies?: DrillPolicy[]; entries?: DrillEntry[] }) {
   const policyHeader = ["Client", "Carrier", "Policy number", "Status", "Issued", "Annualised premium", "Agent", "Lead source", "Why it counts"];
@@ -403,7 +404,7 @@ export function ScoreDrill({ back, title, figure, policies, entries }: { back: s
         </table>
       ) : (
         <table className="portal-lead-table w-full min-w-[720px] text-left text-sm">
-          <thead><tr><th className="w-[140px]">Counted on</th><th>Carrier · policy</th><th>Type</th><th className="w-[140px] text-right">Amount</th></tr></thead>
+          <thead><tr><th className="w-[140px]">Counted on</th><th>Carrier · policy</th><th>Type</th><th className="w-[140px] text-right">Amount</th><th className="w-[110px]">Source</th></tr></thead>
           <tbody>
             {(entries ?? []).map((e) => (
               <tr key={e.id}>
@@ -411,6 +412,7 @@ export function ScoreDrill({ back, title, figure, policies, entries }: { back: s
                 <td>{e.carrierName} · {e.policyNumber}</td>
                 <td>{e.type.replaceAll("_", " ")}</td>
                 <td className="text-right tabular-nums">{centsText(e.cents)}</td>
+                <td className="text-xs">{e.rowNumber ? <Link href={rowHref(e.fileId, e.rowNumber)} className="text-[var(--accent-ink)] hover:underline">Row {e.rowNumber}</Link> : <Link href={fileHref(e.fileId)} className="text-[var(--accent-ink)] hover:underline">The file</Link>}</td>
               </tr>
             ))}
           </tbody>

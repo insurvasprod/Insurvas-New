@@ -47,6 +47,8 @@ export type PolicyEntry = {
   agentIdentifier: string | null;
   reversalReason: string | null;
   fileName: string | null;
+  /** LA-4.20: the file and row the line came from, for the raw-row view. */
+  fileId: string;
   rowNumber: number;
   createdAt: string;
   /** LA-4.14: its statement doesn't add up, so it is held out of every total until corrected. */
@@ -87,7 +89,7 @@ export async function loadPolicyMoney(tenantId: string, carrierId: string, polic
   const entries: PolicyEntry[] = rows.map((row) => ({
     id: row.id, type: row.entry_type, correctsType: row.corrects_type, amountCents: Number(row.amount_cents), transactionDate: row.transaction_date, statementDate: row.statement_date,
     rateBp: row.rate_bp, monthsAdvanced: row.months_advanced, payeeLevel: row.payee_level, agentIdentifier: row.agent_identifier, reversalReason: row.reversal_reason,
-    fileName: fileName.get(row.file_id) ?? null, rowNumber: row.row_number, createdAt: row.created_at, heldByStatement: flagged.has(row.file_id),
+    fileName: fileName.get(row.file_id) ?? null, fileId: row.file_id, rowNumber: row.row_number, createdAt: row.created_at, heldByStatement: flagged.has(row.file_id),
   }));
   const totals = rollup(rows.filter((row) => !flagged.has(row.file_id)));
   const ruleRow = (ruleRead.data ?? [])[0] as Loose;
@@ -136,7 +138,7 @@ export async function loadLedger(viewer: { tenantId: string; userId: string; rol
     id: row.id, carrierId: row.carrier_id, carrierName: carrierName.get(row.carrier_id) ?? "Carrier not known", policyNumber: row.policy_number, agentUserId: row.agent_user_id,
     type: row.entry_type, correctsType: row.corrects_type, amountCents: Number(row.amount_cents), transactionDate: row.transaction_date, statementDate: row.statement_date,
     rateBp: row.rate_bp, monthsAdvanced: row.months_advanced, payeeLevel: row.payee_level, agentIdentifier: row.agent_identifier, reversalReason: row.reversal_reason,
-    fileName: fileName.get(row.file_id) ?? null, rowNumber: row.row_number, createdAt: row.created_at,
+    fileName: fileName.get(row.file_id) ?? null, fileId: row.file_id, rowNumber: row.row_number, createdAt: row.created_at,
     heldByStatement: flagged.has(row.file_id), orphan: !known.has(`${row.carrier_id}|${row.policy_number}`),
   }));
   return { available: true as const, entries, totals: rollup(rows.filter((row) => !flagged.has(row.file_id))), scoped: viewer.role === "producer" };

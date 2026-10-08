@@ -19,6 +19,7 @@ import { fileDay } from "@/lib/ingestion/constants";
 import { DISCREPANCY_LABELS, DISCREPANCY_TYPES, moneySummary, type DiscrepancyType } from "@/lib/ingestion/discrepancyEngine";
 import { DISPUTABLE } from "@/lib/ingestion/disputeLetter";
 import type { DiscrepancyRow, DisputeRow } from "@/lib/ingestion/discrepancyStore";
+import { rowHref } from "@/lib/ingestion/trace";
 import { notify } from "@/lib/notify";
 
 const money = (cents: number | null) => {
@@ -185,6 +186,16 @@ export function CarrierDiscrepancies({ items, readOnly }: { items: DiscrepancyRo
                       <p className="m-0 max-w-[820px] text-sm text-foreground">{row.explanation}</p>
                       {Array.isArray(row.evidence.causes) && (
                         <ul className="m-0 mt-1 list-disc pl-5 text-sm text-muted-foreground">{(row.evidence.causes as string[]).map((c) => <li key={c}>{c}</li>)}</ul>
+                      )}
+                      {row.reportedLines.length > 0 && (
+                        <ul className="m-0 mt-2 grid list-none gap-0.5 p-0 text-xs">
+                          {row.reportedLines.map((line) => (
+                            <li key={line.id}>
+                              <span className="text-muted-foreground">{line.type.replaceAll("_", " ")} {money(line.amountCents)} · </span>
+                              {line.rowNumber ? <Link href={rowHref(line.fileId, line.rowNumber)} className="text-[var(--accent-ink)] hover:underline">{line.fileName ?? "the file"}, row {line.rowNumber}</Link> : <span>{line.fileName ?? "the file"}</span>}
+                            </li>
+                          ))}
+                        </ul>
                       )}
                       <p className="m-0 mt-1 text-xs text-muted-foreground">
                         First found {fileDay(row.detectedAt.slice(0, 10))} · last checked {fileDay(row.lastSeenAt.slice(0, 10))}

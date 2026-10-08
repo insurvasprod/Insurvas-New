@@ -36,7 +36,7 @@ The repo's [TASKS.md](TASKS.md) (11 tasks, 2026-10-02) is the earlier, smaller s
 | 4.17 Carrier rules | **Done 2026-10-07.** Migration `20261008150000` live and verified (below). Rules, settings, coverage screen (below). The old statements engine still hard-codes 45 days; it retires with that code. |
 | 4.18 Scorecards, persistency, AI summary | **Done 2026-10-08.** Migration `20261008270000` live and verified (below). New page Insight › Book scorecards. The summary is written from templates; AI prose waits for a provider, behind a figure-and-prediction gate. |
 | 4.19 Daily run, AI agents | **Done 2026-10-08 (deterministic parts).** Migration `20261008280000` live and verified (below). The orchestrated run, stage records and resume, the file monitor, the agent role and contract, prompt safety, batching, accuracy. The model-backed agents wait for an AI provider. |
-| 4.20 Traceability | Partial: original download (now logged), arithmetic on findings |
+| 4.20 Traceability | **Done 2026-10-08.** Migration `20261008290000` live and verified (below). Every figure to its file row in the product; discrepancies with a broken trace withheld; the daily trace health check; the build fails on an unregistered screen. The cropped PDF region waits for 4.4. |
 
 ## LA-4.1: how it is built
 
@@ -1204,3 +1204,66 @@ It follows LA-3.13's carrier field maps on purpose: the same statuses, the same 
   - On the demo agency nothing is waiting, so a run would have 0 files and only Analyse.
   - On the fixture, the first run would read its pending commission file into the ledger.
   - The production poll calls the deployed app, which doesn't have this code yet.
+
+## LA-4.20 · Traceability: every figure back to its source row
+
+**The chain, in the product:**
+1. **A figure:** each screen's drill-through (4.11–4.18) opens the policies or ledger lines behind it.
+2. **The policy:** the policy page's **Source** block gives every current field the snapshot, file and row it is read from, and the file and row that last changed it, both as links. Computed fields (months paid, days past due, days until the carrier closes it, annualised premium) say what they are computed from.
+3. **A commission line:** on the ledger, the policy page's money lines, a discrepancy's "Why" and the scorecards' weekly drill, each line opens its raw row.
+4. **The raw row** (`/app/carrier-files/file/[fileId]/row/[n]`, new):
+   - every original column in the file's order: letter, header, value as sent;
+   - the field the layout map turned it into, with type, transform and whether it is required;
+   - the value that was stored;
+   - the map's name and version, and any field the map expects that this file lacks;
+   - what the row became: the policy snapshot ("the policy's current values come from this row", or an earlier or replaced file), or the commission lines.
+   It answers "did we parse this right?" without a database client.
+5. **The file** (`/app/carrier-files/file/[fileId]`, new): carrier, date, type, how it arrived, format and size, status, the layout map and version, row counts, the SHA-256 hash, and every row (paged by 100) with what it became.
+6. **The original:** "Download the original" gives a sixty-second signed link, owner and bookkeeper only. Every download is audited (`tenant.carrier_file_downloaded`). File names on Carrier files open the file page.
+
+**The trace check** (`trace_problems`, SQL; one definition, used twice):
+- **What it checks:**
+  - **Policies:** the current row → its snapshot → the raw row → the file.
+  - **Ledger:** each commission line → its raw row → the file.
+  - **Rate card:** each expected figure → its rate-card row (and age band).
+  - **Discrepancies, both sides:**
+    - every reported line is in the ledger, and kinds that need lines have some;
+    - the rate-card row it was priced from still exists;
+    - its policy is in the book;
+    - for account items, the carrier statement is on file.
+- **Use 1, Discrepancies:** an item it lists is **not shown to the agent** and can't go on a letter. It is logged (server log) as a defect for us, and stays in the health check.
+- **Use 2, the health check:** `run_trace_health_check()` records figures checked, figures untraceable, counts per screen and the first fifty problems in `trace_health_check` (internal, append-only). It runs daily at 07:45 UTC.
+
+**The build:** `TRACE_SCREENS` registers every LA-4 screen with the tables its figures come from. `trace.test.mjs` fails:
+- when a page under `app/app/(shell)` reads one of the carrier-data stores without being registered;
+- when a registered source isn't covered by a check in `trace_problems`.
+Together these mean a new screen can't ship an untraced figure without someone saying where it comes from.
+
+**Not done:** the cropped page region for a PDF commission line. No PDF is extracted yet: 4.4 needs an AI provider. When it is built, the extraction must store the page and region with each line, and the raw-row page shows it.
+
+**Before the apply (2026-10-08):**
+- **A rolled-back rehearsal of `trace_problems` on production:** 17 policies, 0 ledger lines, 0 priced figures and 0 open discrepancies exist today. **0 untraceable**, in 188 ms.
+- **The pages on the demo agency:**
+  - File page: the corrected Oct 5 LA14 file, map v1, 8 rows each "Policy DEMO-…", with its hash.
+  - Raw row 5: 15 columns. "Premium 44.25 → premium_cents 4425" and "Face 9000.00 → 900000". The insured columns read "used to match the client, not kept on the policy". It says "The policy's current values come from this row".
+  - DEMO-1003's Source block: all 12 carrier fields link to the corrected file's row 4. Status links its last change to the Oct 5 file, row 4. Four computed fields say what they come from.
+- 2220 tests pass; `tsc` clean.
+
+**Live verification (2026-10-08, after the apply):**
+- **The verifier** reports `20261008290000` as applied. The cron job `la4-trace-health-daily` (`45 7 * * *`) is active.
+- **Catalog:**
+  - On `trace_health_check`, `service_role` can select and insert, but not update or delete.
+  - `tenant_app` and `anon` can't read it; RLS is on.
+  - Both functions run as `service_role` only.
+- **The first health check** ran in the migration: **17 figures checked, 0 untraceable**.
+- **Write-time guarantees found on the way:**
+  - A ledger line pointing at a raw row that doesn't exist is refused by the `commission_entry_source` foreign key.
+  - A snapshot can't be edited, so a policy can't lose its raw row afterwards ("A policy snapshot is never edited").
+  - The trace check stays as the second line of defence.
+- **A rolled-back block against the live functions:** six discrepancies on the demo agency.
+  - **Withheld, each with its reason:** a ghost ledger line ("a reported line is not in the ledger"), a mis-rate with no lines, held money with no statement on file, and a policy not in the book.
+  - **Not withheld:** the traced one, and the dismissed one (not checked).
+  - The health check then counted 23 figures, 4 untraceable, `{"discrepancies": 4}`.
+- **The app:**
+  - `untraceableDiscrepancies` returns an empty set on the demo and fixture agencies, and `loadDiscrepancies` runs through it.
+  - `loadRowTrace` reads the corrected file's row 4 as DEMO-1003, the current row, with 15 columns and map v1.

@@ -210,7 +210,7 @@ export async function loadScorecards(viewer: Viewer, period: { from: string; to:
   };
 }
 
-export type WeekEntry = { id: string; carrierName: string; policyNumber: string; type: string; countedOn: string; cents: number };
+export type WeekEntry = { id: string; carrierName: string; policyNumber: string; type: string; countedOn: string; cents: number; fileId: string; rowNumber: number | null };
 
 /** The ledger lines behind one week's figures. */
 export async function loadWeekEntries(viewer: Viewer, week: string): Promise<WeekEntry[] | null> {
@@ -223,7 +223,7 @@ export async function loadWeekEntries(viewer: Viewer, week: string): Promise<Wee
     throw new Error(`Could not load the week's ledger lines: ${error.message}`);
   }
   const name = new Map<string, string>((carriers.data ?? []).map((c: Loose) => [c.id, c.name]));
-  return (data ?? []).map((e: Loose) => ({ id: e.id, carrierName: name.get(e.carrier_id) ?? "Carrier", policyNumber: e.policy_number, type: e.entry_type === "reversal" && e.corrects_type ? `reversal of ${e.corrects_type}` : e.entry_type, countedOn: e.counted_on, cents: Number(e.amount_cents) }));
+  return (data ?? []).map((e: Loose) => ({ id: e.id, carrierName: name.get(e.carrier_id) ?? "Carrier", policyNumber: e.policy_number, type: e.entry_type === "reversal" && e.corrects_type ? `reversal of ${e.corrects_type}` : e.entry_type, countedOn: e.counted_on, cents: Number(e.amount_cents), fileId: e.file_id, rowNumber: e.row_number }));
 }
 
 /** The agency's sample size: below it a share is printed as a count. */

@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
 import { ClearFiltersButton, DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
@@ -20,6 +21,7 @@ import {
   type CarrierFileStatus,
   type CarrierFileType,
 } from "@/lib/ingestion/constants";
+import { fileHref } from "@/lib/ingestion/trace";
 import type { CarrierFileRow } from "@/lib/ingestion/registry";
 
 const STATUS_TONE: Record<CarrierFileStatus, StatusTone> = {
@@ -136,7 +138,7 @@ export function CarrierFilesTable({ files, emptyTitle, emptyHint }: { files: Car
                   <td className="max-w-[160px] truncate font-semibold text-foreground" title={file.carrierName ?? "Carrier not known"}>{file.carrierName ?? <span className="font-normal text-muted-foreground">Not known</span>}</td>
                   <td>{file.fileType ? FILE_TYPE_LABELS[file.fileType] : <span className="text-muted-foreground">Not known</span>}</td>
                   <td className="max-w-[230px]">
-                    <span className="block truncate text-foreground" title={`${file.originalFilename} · ${fileSize(file.fileBytes)}`}>{file.originalFilename}</span>
+                    <Link href={fileHref(file.id)} className="block truncate text-foreground hover:underline" title={`${file.originalFilename} · ${fileSize(file.fileBytes)} · open its rows`}>{file.originalFilename}</Link>
                     {file.status === "failed" && file.errorDetail && <span className={`block truncate text-xs ${file.waitingForLayout ? "text-muted-foreground" : "text-[var(--error-ink)]"}`} title={file.errorDetail}>{file.errorDetail}</span>}
                     {file.status !== "failed" && file.rawError && <span className="block truncate text-xs text-[var(--error-ink)]" title={file.rawError}>{file.rawError}</span>}
                   </td>

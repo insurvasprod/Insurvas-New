@@ -10,6 +10,7 @@ import { flaggedFiles } from "./carrierAccountsStore";
 import { DEFAULT_TOLERANCE_CENTS, detect, type DiscrepancyType, type EngineEntry } from "./discrepancyEngine";
 import { DISPUTABLE, letterText, type LetterItem } from "./disputeLetter";
 import type { StatementCheck } from "./carrierAccounts";
+import { entrySources, untraceableDiscrepancies } from "./traceStore";
 
 /**
  * LA-4.15 (Notion sprint) · the discrepancy engine and dispute letters, server side. Detection reads
@@ -92,27 +93,36 @@ export type DiscrepancyRow = {
   id: string; carrierId: string; carrierName: string; type: DiscrepancyType; policyNumber: string | null; severity: "info" | "warning" | "action"; status: string;
   expectedCents: number | null; expectedSource: Record<string, unknown> | null; reportedCents: number | null; reportedEntryIds: string[]; differenceCents: number | null; toleranceCents: number | null;
   explanation: string; evidence: Record<string, unknown>; detectedAt: string; lastSeenAt: string; resolution: string | null; resolutionNote: string | null; resolvedAt: string | null; disputeId: string | null;
+  /** LA-4.20: the ledger lines behind the reported figure, each with the file row it came from. */
+  reportedLines: Array<{ id: string; fileId: string; fileName: string | null; rowNumber: number | null; type: string; amountCents: number }>;
 };
 export type DisputeRow = { id: string; carrierId: string; carrierName: string; discrepancyIds: string[]; recipient: string | null; letterBody: string; totalCents: number; status: string; sentAt: string | null; sentVia: string | null; outcomeCents: number | null; resolvedAt: string | null; notes: string | null; createdAt: string };
 
 export async function loadDiscrepancies(tenantId: string) {
-  const [rows, disputes, carriers] = await Promise.all([
+  const [rows, disputes, carriers, withheld] = await Promise.all([
     db().from("commission_discrepancy").select("*").eq("tenant_id", tenantId).order("severity").order("last_seen_at", { ascending: false }).limit(5000),
     db().from("commission_dispute").select("*").eq("tenant_id", tenantId).order("created_at", { ascending: false }).limit(500),
     db().from("carriers").select("id, name"),
+    // LA-4.20: an item whose trace is broken on either side is not shown — an unverifiable claim is
+    // worse than silence. It stays in the trace health check, as a defect for us to fix.
+    untraceableDiscrepancies(tenantId).catch((error) => { console.error("[discrepancies] trace check failed:", error); return null; }),
   ]);
   if (rows.error) {
     if (isSchemaGap(rows.error)) return { available: false as const };
     throw new Error(`Could not load the discrepancies: ${rows.error.message}`);
   }
+  const shown = ((rows.data ?? []) as Loose[]).filter((d) => !withheld?.has(d.id));
+  if (withheld?.size) console.error(`[discrepancies] ${withheld.size} item(s) withheld for ${tenantId}: the trace is incomplete`, [...withheld.entries()].slice(0, 5));
+  const sources = await entrySources(tenantId, shown.flatMap((d) => (d.reported_entry_ids ?? []) as string[]));
   const name = new Map<string, string>((carriers.data ?? []).map((c: Loose) => [c.id, c.name]));
   const n = (v: unknown) => (v === null || v === undefined ? null : Number(v));
   return {
     available: true as const,
-    items: ((rows.data ?? []) as Loose[]).map((d): DiscrepancyRow => ({
+    items: shown.map((d): DiscrepancyRow => ({
       id: d.id, carrierId: d.carrier_id, carrierName: name.get(d.carrier_id) ?? "Carrier not known", type: d.discrepancy_type, policyNumber: d.policy_number, severity: d.severity, status: d.status,
       expectedCents: n(d.expected_amount_cents), expectedSource: d.expected_source, reportedCents: n(d.reported_amount_cents), reportedEntryIds: d.reported_entry_ids ?? [], differenceCents: n(d.difference_cents), toleranceCents: n(d.tolerance_applied_cents),
       explanation: d.explanation, evidence: d.evidence ?? {}, detectedAt: d.detected_at, lastSeenAt: d.last_seen_at, resolution: d.resolution, resolutionNote: d.resolution_note, resolvedAt: d.resolved_at, disputeId: d.dispute_id,
+      reportedLines: ((d.reported_entry_ids ?? []) as string[]).flatMap((id) => { const s = sources.get(id); return s ? [{ id, ...s }] : []; }),
     })),
     disputes: ((disputes.data ?? []) as Loose[]).map((x): DisputeRow => ({
       id: x.id, carrierId: x.carrier_id, carrierName: name.get(x.carrier_id) ?? "Carrier not known", discrepancyIds: x.discrepancy_ids, recipient: x.recipient, letterBody: x.letter_body, totalCents: Number(x.total_cents),
@@ -155,6 +165,8 @@ async function letterItems(tenantId: string, ids: string[]) {
   if (!rows.length) throw new DiscrepancyError("Choose items from this agency's list.", 400);
   if (new Set(rows.map((r) => r.carrier_id)).size > 1) throw new DiscrepancyError("A letter goes to one carrier; choose items of one carrier.", 400);
   if (rows.some((r) => r.status !== "open")) throw new DiscrepancyError("Only open items can go on a new letter.", 409);
+  const withheld = await untraceableDiscrepancies(tenantId);
+  if (rows.some((r) => withheld?.has(r.id))) throw new DiscrepancyError("One of these items can't be traced to its source rows right now, so it can't go on a letter.", 409);
   const items: LetterItem[] = rows.filter((r) => DISPUTABLE.has(r.discrepancy_type)).map((r) => ({
     id: r.id, type: r.discrepancy_type, policyNumber: r.policy_number, expectedCents: r.expected_amount_cents === null ? null : Number(r.expected_amount_cents),
     reportedCents: r.reported_amount_cents === null ? null : Number(r.reported_amount_cents), differenceCents: r.difference_cents === null ? null : Number(r.difference_cents),

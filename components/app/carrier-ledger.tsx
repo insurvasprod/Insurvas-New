@@ -14,6 +14,7 @@ import { TableCard } from "@/components/ui/table-card";
 import { centsText, ENTRY_LABELS, ENTRY_TYPES, rollup, type EntryType } from "@/lib/ingestion/commissionLedger";
 import { fileDay } from "@/lib/ingestion/constants";
 import { toCsv } from "@/lib/ingestion/policyBook";
+import { rowHref } from "@/lib/ingestion/trace";
 import type { LedgerRow } from "@/lib/ingestion/commissionLedgerStore";
 
 const signed = (cents: number) => `${cents < 0 ? "−" : ""}$${(Math.abs(cents) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -119,7 +120,7 @@ export function CarrierLedger({ entries, scoped }: { entries: LedgerRow[]; scope
                   </td>
                   <td className={`text-right font-semibold tabular-nums ${row.type === "held" ? "text-muted-foreground" : row.amountCents < 0 ? "text-[var(--error-ink)]" : "text-foreground"}`} title={row.type === "held" ? "Held: not part of net received" : undefined}>{signed(row.amountCents)}</td>
                   <td>{row.payeeLevel === "upline" ? "Upline" : row.payeeLevel === "writing_agent" ? "Writing agent" : <span className="text-muted-foreground">—</span>}</td>
-                  <td className="max-w-[200px] truncate text-xs text-muted-foreground" title={row.fileName ? `${row.fileName}, row ${row.rowNumber}` : undefined}>{row.fileName ?? "—"}, row {row.rowNumber}</td>
+                  <td className="max-w-[200px] truncate text-xs text-muted-foreground" title={row.fileName ? `${row.fileName}, row ${row.rowNumber}` : undefined}><Link href={rowHref(row.fileId, row.rowNumber)} className="hover:text-foreground hover:underline">{row.fileName ?? "—"}, row {row.rowNumber}</Link></td>
                 </tr>
               ))}
             </tbody>

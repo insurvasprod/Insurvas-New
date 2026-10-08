@@ -12,6 +12,7 @@ import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 import { guardPage } from "@/lib/entitlements/guardPage";
 import { fileDay } from "@/lib/ingestion/constants";
+import { fileHref, rowHref } from "@/lib/ingestion/trace";
 import { RISK_LABELS, statusLabel, type RiskBand } from "@/lib/ingestion/policyBook";
 import { loadPolicy } from "@/lib/ingestion/policyBookStore";
 import { moneyOrUnknown } from "@/lib/ingestion/policyCurrent";
@@ -106,14 +107,21 @@ export default async function PolicyPage({ params }: { params: Promise<{ carrier
             <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-foreground">Source{source.file ? ` · ${source.file.name}${source.file.rowNumber ? `, row ${source.file.rowNumber}` : ""}` : ""}</summary>
             <div className="border-t border-border">
               <table className="portal-lead-table w-full text-left text-sm">
-                <thead><tr><th>Field</th><th>Value now</th><th>Last changed</th><th>From file</th></tr></thead>
+                <thead><tr><th>Field</th><th>Value now</th><th>Read from</th><th>Last changed</th></tr></thead>
                 <tbody>
                   {source.fields.map((field) => (
                     <tr key={field.label}>
                       <td className="text-muted-foreground">{field.label}</td>
                       <td className="text-foreground">{field.value}</td>
-                      <td className="tabular-nums">{field.changedOn ? fileDay(field.changedOn) : <span className="text-muted-foreground">never</span>}</td>
-                      <td className="max-w-[260px] truncate" title={field.fromFile ?? undefined}>{field.fromFile ?? "—"}</td>
+                      <td className="max-w-[300px] text-xs">
+                        {field.computed ? <span className="text-muted-foreground">Computed from {field.computed}</span>
+                          : field.readFrom ? <Link href={field.readFrom.rowNumber ? rowHref(field.readFrom.fileId, field.readFrom.rowNumber) : fileHref(field.readFrom.fileId)} className="block truncate hover:underline" title={`Snapshot of ${fileDay(field.readFrom.snapshotDate)} · ${field.readFrom.fileName ?? "file"}${field.readFrom.rowNumber ? `, row ${field.readFrom.rowNumber}` : ""}`}>{field.readFrom.fileName ?? "The file"}{field.readFrom.rowNumber ? `, row ${field.readFrom.rowNumber}` : ""}</Link>
+                          : <span className="text-muted-foreground">—</span>}
+                      </td>
+                      <td className="max-w-[260px] text-xs tabular-nums">
+                        {field.changedIn ? <Link href={field.changedIn.rowNumber ? rowHref(field.changedIn.fileId, field.changedIn.rowNumber) : fileHref(field.changedIn.fileId)} className="block truncate hover:underline" title={field.changedIn.fileName ?? undefined}>{fileDay(field.changedOn)} · {field.changedIn.fileName ?? "file"}{field.changedIn.rowNumber ? `, row ${field.changedIn.rowNumber}` : ""}</Link>
+                          : <span className="text-muted-foreground">{field.computed ? "—" : "never"}</span>}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -165,7 +173,7 @@ export default async function PolicyPage({ params }: { params: Promise<{ carrier
                       <ul className="m-0 mb-2 list-none border-l-2 border-border pl-3 text-xs">
                         {lines.map((entry) => (
                           <li key={entry.id} className="flex justify-between gap-2 py-0.5">
-                            <span className="min-w-0 truncate text-muted-foreground" title={[entry.reversalReason, entry.fileName ? `${entry.fileName}, row ${entry.rowNumber}` : null].filter(Boolean).join(" · ")}>{fileDay(entry.transactionDate ?? entry.statementDate)} · {entry.type === "reversal" ? "reversal" : entry.type.replaceAll("_", " ")}{entry.fileName ? ` · row ${entry.rowNumber}` : ""}</span>
+                            <span className="min-w-0 truncate text-muted-foreground" title={[entry.reversalReason, entry.fileName ? `${entry.fileName}, row ${entry.rowNumber}` : null].filter(Boolean).join(" · ")}>{fileDay(entry.transactionDate ?? entry.statementDate)} · {entry.type === "reversal" ? "reversal" : entry.type.replaceAll("_", " ")}{entry.fileName ? <> · <Link href={rowHref(entry.fileId, entry.rowNumber)} className="hover:text-foreground hover:underline">row {entry.rowNumber}</Link></> : ""}</span>
                             <span className="shrink-0 tabular-nums">{signed(entry.amountCents)}</span>
                           </li>
                         ))}

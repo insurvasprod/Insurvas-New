@@ -202,7 +202,13 @@ async function currentRow(viewer: Viewer, carrierId: string, policyNumber: strin
   return data;
 }
 
-export type SourceField = { label: string; value: string; changedOn: string | null; fromFile: string | null };
+/**
+ * LA-4.20: where each current value comes from. Carrier fields are read from the policy's current
+ * snapshot (its file and row); `changed*` names the file whose row last moved it. A computed field
+ * says what it is computed from instead.
+ */
+export type SourceRef = { fileId: string; fileName: string | null; rowNumber: number | null; snapshotDate: string };
+export type SourceField = { label: string; value: string; changedOn: string | null; fromFile: string | null; readFrom: SourceRef | null; changedIn: SourceRef | null; computed: string | null };
 
 export async function loadPolicy(viewer: Viewer, carrierId: string, policyNumber: string) {
   const row = await currentRow(viewer, carrierId, policyNumber);
@@ -228,6 +234,14 @@ export async function loadPolicy(viewer: Viewer, carrierId: string, policyNumber
   const rawRow = snapshot.data?.raw_row_id
     ? (await db().from("raw_rows").select("row_number, payload").eq("tenant_id", t).eq("file_id", snapshot.data.file_id).eq("id", snapshot.data.raw_row_id).maybeSingle()).data
     : null;
+  // LA-4.20: this policy's snapshot in each file, with its raw row, so a change names the row that made it.
+  const ownSnapshots = ((await db().from("policy_snapshot").select("file_id, raw_row_id, snapshot_date").eq("tenant_id", t).eq("carrier_id", carrierId).eq("policy_number", policyNumber).order("snapshot_date").limit(500)).data ?? []) as Loose[];
+  const rowNumbers = new Map<string, number>(((await byIds("raw_rows", "id, row_number", ownSnapshots.map((s) => s.raw_row_id), t)) as Loose[]).map((r) => [r.id, r.row_number]));
+  const refIn = (fileId: string | null | undefined): SourceRef | null => {
+    if (!fileId) return null;
+    const s = ownSnapshots.find((x) => x.file_id === fileId);
+    return { fileId, fileName: files.get(fileId)?.original_filename ?? null, rowNumber: s?.raw_row_id ? rowNumbers.get(s.raw_row_id) ?? null : null, snapshotDate: s?.snapshot_date ?? "" };
+  };
   const submissions = row.application_id ? (await db().from("tenant_application_submissions").select("submitted_at, submitted_via, attempt_no").eq("tenant_id", t).eq("application_id", row.application_id).order("submitted_at")).data ?? [] : [];
 
   const householdContactIds = [...new Set((householdPolicies.data ?? []).map((p: Loose) => p.contact_id).filter(Boolean))] as string[];
@@ -261,10 +275,12 @@ export async function loadPolicy(viewer: Viewer, carrierId: string, policyNumber
   const lastChange = new Map<string, Loose>();
   for (const change of changes.data ?? []) lastChange.set(change.field_name, change);
   const snapshotFile = snapshot.data ? files.get(snapshot.data.file_id) : null;
+  const current: SourceRef | null = snapshot.data ? { fileId: snapshot.data.file_id, fileName: snapshotFile?.original_filename ?? null, rowNumber: rawRow?.row_number ?? null, snapshotDate: snapshot.data.snapshot_date } : null;
   const sourceOf = (field: string, label: string, value: string | null): SourceField => {
     const change = lastChange.get(field);
-    return { label, value: value ?? "—", changedOn: change?.to_snapshot_date ?? null, fromFile: change ? fileName(change.to_file_id) : snapshotFile?.original_filename ?? null };
+    return { label, value: value ?? "—", changedOn: change?.to_snapshot_date ?? null, fromFile: change ? fileName(change.to_file_id) : snapshotFile?.original_filename ?? null, readFrom: current, changedIn: change ? refIn(change.to_file_id) : null, computed: null };
   };
+  const computedField = (label: string, value: string | null, from: string): SourceField => ({ label, value: value ?? "—", changedOn: null, fromFile: null, readFrom: null, changedIn: null, computed: from });
   const money = (cents: number | null) => (cents === null || cents === undefined ? null : `$${(cents / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
   const day = (value: string | null) => (value ? readableDay(value) : null);
   const source: SourceField[] = [
@@ -278,8 +294,12 @@ export async function loadPolicy(viewer: Viewer, carrierId: string, policyNumber
     sourceOf("product_tier", "Product tier", row.product_tier),
     sourceOf("termination_date", "Termination date", day(row.termination_date)),
     sourceOf("agent_identifier", "Writing agent (carrier's code)", row.agent_identifier),
-    { label: "Effective date", value: day(row.effective_date) ?? "—", changedOn: null, fromFile: snapshotFile?.original_filename ?? null },
-    { label: "Issue date", value: day(row.issue_date) ?? "—", changedOn: null, fromFile: snapshotFile?.original_filename ?? null },
+    sourceOf("effective_date", "Effective date", day(row.effective_date)),
+    sourceOf("issue_date", "Issue date", day(row.issue_date)),
+    computedField("Months paid", row.months_paid === null ? null : String(row.months_paid), "the paid-to date and the effective date above"),
+    computedField("Days past due", row.days_past_due === null ? null : String(row.days_past_due), `the paid-to date above, as of ${day(row.as_of) ?? "today"}`),
+    computedField("Days until the carrier closes it", row.days_until_carrier_closes === null ? null : String(row.days_until_carrier_closes), row.retention_rule_id ? "the days past due and the carrier's window in Carrier rules" : "no carrier window is set in Carrier rules, so none"),
+    computedField("Annualised premium", money(row.annualised_premium_cents), "the premium and premium mode above"),
   ];
 
   const leadVendor = note.data?.lead_vendor_id ?? null;
