@@ -101,6 +101,27 @@ export function normalizeLine(row: { rowNumber: number; values: Record<string, s
   };
 }
 
+/**
+ * An account-level line: money the carrier moves on the agency's account that names no policy
+ * (advance interest, an account fee). Recorded apart, in commission_account_entry (20261009130000),
+ * because every per-policy reader would otherwise meet a line that belongs to no policy.
+ */
+export type AccountLine = Pick<LedgerLine, "row_number" | "entry_type" | "corrects_type" | "amount_cents" | "transaction_date" | "statement_date" | "agent_identifier"> & { description: string | null };
+
+export type AccountLineOutcome = { ok: true; line: AccountLine } | { ok: false; rowNumber: number; reason: string };
+
+/** True when the line names no policy: it is an account line, not a policy line. */
+export const isAccountLevel = (row: { values: Record<string, string | number | null> }) => !text(row.values.policy_number);
+
+/** A line with no policy number as an account line: the same type, sign and amount rules as a policy line. */
+export function normalizeAccountLine(row: { rowNumber: number; values: Record<string, string | number | null> }): AccountLineOutcome {
+  // normalizeLine's checks with a stand-in policy, which is dropped: only the money rules are wanted.
+  const outcome = normalizeLine({ rowNumber: row.rowNumber, values: { ...row.values, policy_number: "account" } });
+  if (!outcome.ok) return outcome;
+  const { row_number, entry_type, corrects_type, amount_cents, transaction_date, statement_date, agent_identifier } = outcome.line;
+  return { ok: true, line: { row_number, entry_type, corrects_type, amount_cents, transaction_date, statement_date, agent_identifier, description: text(row.values.description)?.slice(0, 500) ?? null } };
+}
+
 export type Entry = { entry_type: string; corrects_type: string | null; amount_cents: number | string };
 
 /** The same arithmetic as the commission_policy_totals view: a reversal counts toward the type it corrects; held is apart. */

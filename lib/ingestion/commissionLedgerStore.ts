@@ -6,7 +6,7 @@ import { isSchemaGap } from "@/lib/supabase/schemaGap";
 import type { StatementLedgerEntry } from "@/lib/ledger/statementConstants";
 
 import { flaggedFiles } from "./carrierAccountsStore";
-import { normalizeLine, rollup, unearnedAdvance, type AdvanceRule, type UnearnedTrace } from "./commissionLedger";
+import { isAccountLevel, normalizeAccountLine, normalizeLine, rollup, unearnedAdvance, type AdvanceRule, type UnearnedTrace } from "./commissionLedger";
 
 /**
  * LA-4.12 (Notion sprint) · the commission ledger, server side. A commission file's parsed lines go
@@ -22,19 +22,32 @@ export const LEDGER_PENDING_MESSAGE = "The commission ledger needs a database up
 
 export type RecordOutcome = { available: boolean; inserted: number; kept: number; reversed: number; replaced: number; skipped: Array<{ rowNumber: number; reason: string }> };
 
-/** One commission file's parsed lines into the ledger. Idempotent: the same lines change nothing. */
+/**
+ * One commission file's parsed lines into the ledger. Idempotent: the same lines change nothing.
+ * A line naming no policy is an account line (20261009130000): it goes to record_account_entries,
+ * which is called on every reading, with no lines too, so one that vanished is reversed.
+ */
 export async function recordFileEntries(tenantId: string, fileId: string, typedRows: Array<{ rowNumber: number; values: Record<string, string | number | null> }>): Promise<RecordOutcome> {
-  const lines = typedRows.map(normalizeLine);
-  const skipped = lines.flatMap((outcome) => (outcome.ok ? [] : [{ rowNumber: outcome.rowNumber, reason: outcome.reason }]));
+  const lines = typedRows.filter((row) => !isAccountLevel(row)).map(normalizeLine);
+  const accountLines = typedRows.filter(isAccountLevel).map(normalizeAccountLine);
+  const skipped = [...lines, ...accountLines].flatMap((outcome) => (outcome.ok ? [] : [{ rowNumber: outcome.rowNumber, reason: outcome.reason }]));
   const rows = lines.flatMap((outcome) => (outcome.ok ? [outcome.line] : []));
+  const accountRows = accountLines.flatMap((outcome) => (outcome.ok ? [outcome.line] : []));
   const { data, error } = await db().rpc("record_commission_entries", { p_tenant_id: tenantId, p_file_id: fileId, p_rows: rows });
   if (error) {
     if (isSchemaGap(error)) return { available: false, inserted: 0, kept: 0, reversed: 0, replaced: 0, skipped };
     throw new Error(`Could not record the commission lines: ${error.message}`);
   }
+  const account = await db().rpc("record_account_entries", { p_tenant_id: tenantId, p_file_id: fileId, p_rows: accountRows });
+  if (account.error && !isSchemaGap(account.error)) throw new Error(`Could not record the account lines: ${account.error.message}`);
+  // Before 20261009130000 an account line has nowhere to go: said, not dropped silently.
+  const accountSkipped = account.error ? accountRows.map((line) => ({ rowNumber: line.row_number, reason: ACCOUNT_PENDING_MESSAGE })) : [];
+  const counts = (key: string) => Number(data?.[key] ?? 0) + Number(account.data?.[key] ?? 0);
   await db().from("file_registry").update({ derived_at: new Date().toISOString() }).eq("tenant_id", tenantId).eq("id", fileId);
-  return { available: true, inserted: Number(data?.inserted ?? 0), kept: Number(data?.kept ?? 0), reversed: Number(data?.reversed ?? 0), replaced: Number(data?.replaced ?? 0), skipped };
+  return { available: true, inserted: counts("inserted"), kept: counts("kept"), reversed: counts("reversed"), replaced: counts("replaced"), skipped: [...skipped, ...accountSkipped] };
 }
+
+export const ACCOUNT_PENDING_MESSAGE = "Account-level lines need a database update (20261009130000).";
 
 export type PolicyEntry = {
   id: string;
@@ -121,7 +134,7 @@ export async function loadPolicyMoney(tenantId: string, carrierId: string, polic
  * matched to a hand-entered policy (lib/ledger/statementService.ts): `href` opens that statement,
  * `policyHref` the policy's own page. Every other line is from a carrier's commission file.
  */
-export type LedgerRow = PolicyEntry & { carrierId: string; carrierName: string; policyNumber: string; agentUserId: string | null; orphan: boolean; source?: "hand"; href?: string; policyHref?: string };
+export type LedgerRow = PolicyEntry & { carrierId: string; carrierName: string; policyNumber: string; agentUserId: string | null; orphan: boolean; source?: "hand"; href?: string; policyHref?: string; account?: true; description?: string | null };
 
 const HAND_KIND: Record<string, string> = { advance: "advance", commission: "earned", chargeback: "chargeback", adjustment: "adjustment" };
 
@@ -185,6 +198,24 @@ export async function loadLedger(viewer: { tenantId: string; userId: string; rol
     fileName: fileName.get(row.file_id) ?? null, fileId: row.file_id, rowNumber: row.row_number, createdAt: row.created_at,
     heldByStatement: flagged.has(row.file_id), orphan: !known.has(`${row.carrier_id}|${row.policy_number}`),
   }));
+  // Account-level lines name no policy, so no producer's: owners and bookkeepers see them.
+  const accountRows: Loose[] = [];
+  if (viewer.role !== "producer") {
+    const { data, error } = await db().from("commission_account_entry")
+      .select("id, carrier_id, entry_type, corrects_type, amount_cents, transaction_date, statement_date, description, agent_identifier, reversal_reason, file_id, row_number, created_at")
+      .eq("tenant_id", viewer.tenantId).order("statement_date", { ascending: false, nullsFirst: false }).order("created_at", { ascending: false }).limit(5000);
+    if (error && !isSchemaGap(error)) throw new Error(`Could not load the account lines: ${error.message}`);
+    accountRows.push(...(data ?? []));
+  }
+  const accountFiles = [...new Set(accountRows.map((row) => row.file_id).filter((id) => !fileName.has(id)))];
+  if (accountFiles.length) for (const row of ((await db().from("file_registry").select("id, original_filename").eq("tenant_id", viewer.tenantId).in("id", accountFiles.slice(0, 500))).data ?? []) as Loose[]) fileName.set(row.id, row.original_filename);
+  for (const row of accountRows) entries.push({
+    id: `account:${row.id}`, carrierId: row.carrier_id, carrierName: carrierName.get(row.carrier_id) ?? "Carrier not known", policyNumber: "", agentUserId: null,
+    type: row.entry_type, correctsType: row.corrects_type, amountCents: Number(row.amount_cents), transactionDate: row.transaction_date, statementDate: row.statement_date,
+    rateBp: null, monthsAdvanced: null, payeeLevel: null, agentIdentifier: row.agent_identifier, reversalReason: row.reversal_reason,
+    fileName: fileName.get(row.file_id) ?? null, fileId: row.file_id, rowNumber: row.row_number, createdAt: row.created_at,
+    heldByStatement: flagged.has(row.file_id), orphan: false, account: true, description: row.description,
+  });
   return { available: true as const, entries, totals: rollup(rows.filter((row) => !flagged.has(row.file_id))), scoped: viewer.role === "producer" };
 }
 

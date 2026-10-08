@@ -240,7 +240,7 @@ export const LAYOUTS = [
       rowStart: ["Adjustment Type", "^[A-Z]{1,4}$"],
     },
     entries: [
-      // Account-level adjustments (advance interest) name no policy: such a line is held, and said.
+      // Version 1: account-level adjustments (advance interest) name no policy, so the line is held. See LATER_VERSIONS.
       ["Policy #", "policy_number", "text", "none", true],
       ["Adjustment Type", "entry_type", "enum", "none", true, { AI: "advance_interest" }],
       ["(+/-) Adjustment Amount", "amount_cents", "int_cents", money, true],
@@ -248,6 +248,26 @@ export const LAYOUTS = [
   },
 ];
 
+/**
+ * Later versions of a seeded layout, each from its own migration (the seed above is version 1 and
+ * stays as it was applied). What the app reads today is the latest: latestOf(layout).
+ */
+export const LATER_VERSIONS = {
+  // 20261009130000: the owner decided account-level lines are recorded (2026-10-08), so the policy
+  // number is no longer required, and the line's description is read.
+  ssl_statement_pdf: {
+    version: 2,
+    migration: "20261009130000",
+    entries: [
+      ["Policy #", "policy_number", "text", "none", false],
+      ["Adjustment Type", "entry_type", "enum", "none", true, { AI: "advance_interest" }],
+      ["(+/-) Adjustment Amount", "amount_cents", "int_cents", money, true],
+      ["Adjustment Description", "description", "text", "none", false],
+    ],
+  },
+};
+
+export const latestOf = (layout) => (LATER_VERSIONS[layout.key] ? { ...layout, ...LATER_VERSIONS[layout.key] } : { ...layout, version: 1 });
 /** Which carrier (by code) reads which file type with which layout. */
 export const ASSIGNMENTS = [
   ["aetna", "policies", "policy_summary_46"], ["aflac", "policies", "policy_summary_46"], ["american_home_life", "policies", "policy_summary_46"],

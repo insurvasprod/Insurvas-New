@@ -42,7 +42,7 @@ export function CarrierLedger({ entries, scoped, initialSource = "" }: { entries
   const carriers = useMemo(() => [...new Map(entries.map((row) => [row.carrierId, row.carrierName])).entries()].sort((a, b) => a[1].localeCompare(b[1])), [entries]);
   const visible = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    return entries.filter((row) => (!needle || `${row.policyNumber} ${row.agentIdentifier ?? ""} ${row.fileName ?? ""}`.toLowerCase().includes(needle)) && (!carrier || row.carrierId === carrier) && (!type || kindOf(row) === type) && (!source || (source === "hand" ? row.source === "hand" : row.source !== "hand")));
+    return entries.filter((row) => (!needle || `${row.account ? "account-level" : row.policyNumber} ${row.description ?? ""} ${row.agentIdentifier ?? ""} ${row.fileName ?? ""}`.toLowerCase().includes(needle)) && (!carrier || row.carrierId === carrier) && (!type || kindOf(row) === type) && (!source || (source === "hand" ? row.source === "hand" : row.source !== "hand")));
   }, [entries, query, carrier, type, source]);
   const sum = useMemo(() => rollup(visible.map((row) => ({ entry_type: row.type, corrects_type: row.correctsType, amount_cents: row.amountCents }))), [visible]);
   const { current, rows } = paginate(visible, page, 25);
@@ -54,7 +54,7 @@ export function CarrierLedger({ entries, scoped, initialSource = "" }: { entries
   function exportCsv() {
     const csv = toCsv(
       ["Statement date", "Transaction date", "Carrier", "Policy number", "Entry", "Amount", "Payee", "Agent code", "Rate (bp)", "Months advanced", "File", "Row", "Reversal reason", "Source"],
-      visible.map((row) => [row.statementDate, row.transactionDate, row.carrierName, row.policyNumber, typeWord(row), centsText(row.amountCents), row.payeeLevel === "upline" ? "Upline" : row.payeeLevel === "writing_agent" ? "Writing agent" : null, row.agentIdentifier, row.rateBp, row.monthsAdvanced, row.fileName, row.rowNumber, row.reversalReason, row.source === "hand" ? "Statement imported by hand" : "Carrier file"]),
+      visible.map((row) => [row.statementDate, row.transactionDate, row.carrierName, row.account ? "Account-level" : row.policyNumber, typeWord(row), centsText(row.amountCents), row.payeeLevel === "upline" ? "Upline" : row.payeeLevel === "writing_agent" ? "Writing agent" : null, row.agentIdentifier, row.rateBp, row.monthsAdvanced, row.fileName, row.rowNumber, row.reversalReason, row.source === "hand" ? "Statement imported by hand" : "Carrier file"]),
     );
     const url = URL.createObjectURL(new Blob([`﻿${csv}`], { type: "text/csv;charset=utf-8" }));
     const link = document.createElement("a");
@@ -125,10 +125,10 @@ export function CarrierLedger({ entries, scoped, initialSource = "" }: { entries
                 <tr key={row.id}>
                   <td className="tabular-nums">{fileDay(row.statementDate ?? row.transactionDate)}</td>
                   <td><span className="block whitespace-normal break-words leading-snug">{row.carrierName}</span></td>
-                  <td className="tabular-nums"><Link href={policyHref(row)} className="hover:underline">{row.policyNumber}</Link>{row.orphan && <span className="block font-sans text-xs text-muted-foreground" title="No policy file has shown this policy yet. The line joins it the moment it arrives.">Policy not seen yet</span>}</td>
+                  <td className="tabular-nums">{row.account ? <span className="font-sans text-muted-foreground" title="Money the carrier moved on the agency's account, naming no policy">Account-level</span> : <Link href={policyHref(row)} className="hover:underline">{row.policyNumber}</Link>}{row.orphan && <span className="block font-sans text-xs text-muted-foreground" title="No policy file has shown this policy yet. The line joins it the moment it arrives.">Policy not seen yet</span>}</td>
                   <td title={ENTRY_LABELS[kindOf(row) as EntryType]?.meaning}>
                     <span className="text-foreground">{typeWord(row)}</span>
-                    {row.reversalReason && <span className="block text-xs text-muted-foreground">{row.reversalReason}</span>}
+                    {row.description && <span className="block whitespace-normal break-words text-xs leading-snug text-muted-foreground">{row.description}</span>}
                     {row.heldByStatement && <span className="block text-xs text-[var(--warning-ink)]">Held out of totals: its statement doesn&apos;t add up</span>}
                   </td>
                   <td className={`text-right font-semibold tabular-nums ${row.type === "held" ? "text-muted-foreground" : row.amountCents < 0 ? "text-[var(--error-ink)]" : "text-foreground"}`} title={row.type === "held" ? "Held: not part of net received" : undefined}>{signed(row.amountCents)}</td>

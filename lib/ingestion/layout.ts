@@ -77,6 +77,8 @@ const COMMISSION_FIELDS: TargetField[] = [
   { key: "agent_identifier", label: "Writing agent (as the carrier spells it)", dataType: "text" },
   { key: "insured_name", label: "Insured name", dataType: "text" },
   { key: "statement_date", label: "Statement date", dataType: "date" },
+  // What the carrier says the line is, kept for a line that names no policy (account-level, 2026-10-09).
+  { key: "description", label: "Line description", dataType: "text" },
   // Whose commission the line is: the writing agent's, or an upline's override (LA-4.12).
   { key: "payee_level", label: "Paid to (writing agent or upline)", dataType: "enum", enumValues: ["writing_agent", "upline"] },
 ];
