@@ -15,7 +15,7 @@ import { EmptyState } from "@/components/ui/page-states";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { TableCard } from "@/components/ui/table-card";
 import { ACCOUNTS_PENDING_MESSAGE, loadAccounts } from "@/lib/ingestion/carrierAccountsStore";
-import { LEDGER_PENDING_MESSAGE, loadLedger } from "@/lib/ingestion/commissionLedgerStore";
+import { LEDGER_PENDING_MESSAGE, loadLedger, statementLinesAsLedger } from "@/lib/ingestion/commissionLedgerStore";
 import { getCommissionLedger } from "@/lib/ledger/service";
 import { STATEMENT_SCHEMA_PENDING_MESSAGE, type StatementCarrierOption, type StatementMapping } from "@/lib/ledger/statementConstants";
 import { reconcileStatements, statementTotals } from "@/lib/ledger/statementMatch";
@@ -23,21 +23,20 @@ import { getSavedStatementMappings, getStatementLedger, listStatementCarriers } 
 import { hasTenantPermission, roleCanViewCommission } from "@/lib/tenantAuth/permissions";
 
 /**
- * The commission ledger, in two halves that are never mixed:
+ * The commission ledger (2026-10-08 overlap merge: one list of lines, not a tab per source):
  *
- *   REPORTED — lines from carrier statements that a person matched to a policy and accepted
- *   (lib/ledger/statementService.ts). These are the entries the four tiles count: the board's rule
- *   is "Nothing is recorded automatically without a source", and a statement line with an accepted
- *   match is the only thing here that has one.
+ *   LINES — every commission line: each line of every carrier commission file (LA-4.12, never
+ *   edited), and each line of a statement imported by hand that a person matched to a policy and
+ *   accepted (lib/ledger/statementService.ts). A source filter shows either. Importing a statement
+ *   by hand, for a carrier that sends no file, is the header's action.
  *
- *   EXPECTED — the book of business multiplied by the carrier library's schedules and advance
- *   rules (lib/ledger/compute.ts). Nothing is typed in; a policy the library cannot price is listed
- *   with its reason, not guessed at.
+ *   CARRIER ACCOUNTS — each carrier's running account, statement by statement (LA-4.14).
  *
- * Where a policy has both, the reconciliation table compares them for the statement periods.
+ *   EXPECTED (ENTERED BY HAND) — the hand-entered book multiplied by the carrier library's schedules
+ *   and advance rules (lib/ledger/compute.ts), and where a policy also has statement lines, the two
+ *   compared. Carrier-file policies have their expected figures on the Rate card and Discrepancies.
  *
- * The stat strip counts the reported half; with no expected entry and no statement the page shows
- * the empty state under it. Otherwise the tables follow, one at a time as tabs (2026-10-06).
+ * The old "Statements you import" address (?view=statements) lands on the lines, filtered to them.
  */
 
 const wholeMoney = (cents: number) => `${cents < 0 ? "−" : ""}$${Math.round(Math.abs(cents) / 100).toLocaleString("en-US")}`;
@@ -61,20 +60,21 @@ export default async function LedgerPage({ searchParams }: { searchParams: Promi
   const params = await searchParams;
   // One header for both sources; only its sentence and actions differ.
   const header = (description?: string, actions?: React.ReactNode) => <PageHeader title="Commission ledger" description={description} actions={actions} />;
-  const sourceTabs = (count?: number) => (
+  const view = params.view === "accounts" ? "accounts" : params.view === "expected" ? "expected" : "lines";
+  const sourceTabs = (count?: number, showExpected = true) => (
     <ViewTabs
-      label="Ledger sources"
-      active={params.view === "statements" ? "statements" : params.view === "accounts" ? "accounts" : "carrier"}
+      label="Ledger views"
+      active={view}
       tabs={[
-        { key: "carrier", label: "From carrier files", count, href: "/app/ledger" },
+        { key: "lines", label: "Lines", count, href: "/app/ledger" },
         { key: "accounts", label: "Carrier accounts", href: "/app/ledger?view=accounts" },
-        { key: "statements", label: "Statements you import", href: "/app/ledger?view=statements" },
+        ...(showExpected || view === "expected" ? [{ key: "expected", label: "Expected (entered by hand)", href: "/app/ledger?view=expected" }] : []),
       ]}
     />
   );
 
   // LA-4.14: each carrier's running account, statement by statement, and unattributed lines.
-  if (params.view === "accounts") {
+  if (view === "accounts") {
     const accounts = await loadAccounts(guard.context.tenantId);
     return (
       <div className="m-stagger flex flex-col gap-6">
@@ -87,27 +87,14 @@ export default async function LedgerPage({ searchParams }: { searchParams: Promi
     );
   }
 
-  // LA-4.12: the ledger the carriers' own commission files write, line by line, never edited.
-  if (params.view !== "statements") {
-    const book = await loadLedger({ tenantId: guard.context.tenantId, userId: guard.context.userId, role: guard.role });
-    return (
-      <div className="m-stagger flex flex-col gap-6">
-        {header("Every line of every carrier commission file: advances, earnings, chargebacks and what is held, with the file and row behind each.")}
-        {sourceTabs(book.available ? book.entries.length : undefined)}
-        {book.available
-          ? <CarrierLedger entries={book.entries} scoped={book.scoped} />
-          : <div role="status" className="rounded-lg border border-border border-l-[3px] border-l-[var(--warning)] bg-[var(--warning-surface)] px-4 py-3 text-sm text-[var(--warning-ink)]">{LEDGER_PENDING_MESSAGE}</div>}
-      </div>
-    );
-  }
-
   // Producers see their own policies only (LA-0.2 criterion 3); owners and bookkeepers see all. The
   // same rule scopes the statement lines: a line shows only when its matched policy does.
   const canView = (producerUserId: string | undefined) => roleCanViewCommission(guard.role, guard.context.userId, producerUserId);
   const importParam = params.import;
-  const [ledger, statements] = await Promise.all([
+  const [ledger, statements, book] = await Promise.all([
     getCommissionLedger({ tenantId: guard.context.tenantId, canView }),
     getStatementLedger({ tenantId: guard.context.tenantId, canView }),
+    view === "lines" ? loadLedger({ tenantId: guard.context.tenantId, userId: guard.context.userId, role: guard.role }) : null,
   ]);
   const { totals, entries, gaps } = ledger;
   const isOwner = guard.role === "owner";
@@ -143,8 +130,6 @@ export default async function LedgerPage({ searchParams }: { searchParams: Promi
   const noSource = !statements.available || (handlesStatements ? statements.statementsImported === 0 : reported.length === 0);
   const note = (withEntries: string) => (noSource ? "no source connected" : reportedTotals.entries === 0 ? "nothing accepted yet" : withEntries);
 
-  const isEmpty = entries.length === 0 && reported.length === 0 && (!handlesStatements || statements.statementsImported === 0);
-
   const alert = "rounded-lg border border-border border-l-[3px] px-4 py-3 text-sm";
 
   const reconciliation = reconcileStatements(entries, reported, new Set(entries.map((entry) => entry.policyId)));
@@ -166,7 +151,7 @@ export default async function LedgerPage({ searchParams }: { searchParams: Promi
   const notices = (
     <>
       {readOnly && <div role="status" className={`${alert} border-l-[var(--warning)] bg-[var(--warning-surface)] text-[var(--warning-ink)]`}>Your account is read-only. Reading remains available; new money records are disabled.</div>}
-      {importBlocked && !readOnly && <div role="status" className={`${alert} border-l-[var(--warning)] bg-[var(--warning-surface)] text-[var(--warning-ink)]`}>{importBlocked}</div>}
+      {importBlocked && handlesStatements && !readOnly && <div role="status" className={`${alert} border-l-[var(--warning)] bg-[var(--warning-surface)] text-[var(--warning-ink)]`}>{importBlocked}</div>}
       {/* Proposed and unmatched lines post nothing until a person decides them. */}
       {handlesStatements && statements.awaitingReview.lines > 0 && (
         <div role="status" className={`${alert} border-l-[var(--info)] bg-[var(--info-surface)] text-[var(--info-ink)]`}>
@@ -174,11 +159,33 @@ export default async function LedgerPage({ searchParams }: { searchParams: Promi
           {statementsOnPlan && <Link href="/app/statements" className="font-semibold underline">Review in Statements</Link>}
         </div>
       )}
+    </>
+  );
+
+  const showExpected = entries.length > 0 || reconciliation.length > 0;
+
+  if (view === "lines") {
+    const handLines = await statementLinesAsLedger(reported);
+    // Newest statement first, whichever source a line came from.
+    const lines = [...(book?.available ? book.entries : []), ...handLines].sort((a, b) => String(b.statementDate ?? b.transactionDate ?? "").localeCompare(String(a.statementDate ?? a.transactionDate ?? "")));
+    return (
+      <div className="m-stagger flex flex-col gap-6">
+        {header("Every commission line: each line of every carrier commission file, and each accepted line of a statement imported by hand, with the source behind it.", headerActions)}
+        {sourceTabs(lines.length, showExpected)}
+        {notices}
+        {book && !book.available && <div role="status" className={`${alert} border-l-[var(--warning)] bg-[var(--warning-surface)] text-[var(--warning-ink)]`}>{LEDGER_PENDING_MESSAGE}</div>}
+        <CarrierLedger entries={lines} scoped={guard.role === "producer"} initialSource={params.view === "statements" ? "hand" : ""} />
+      </div>
+    );
+  }
+
+  const expectedNotices = (
+    <>
       {/* A policy the library cannot price is the most common reason the ledger is short — say which. */}
       {gaps.length > 0 && (
         <div role="status" className={`${alert} border-l-[var(--info)] bg-[var(--info-surface)] text-[var(--info-ink)]`} title={gaps.map((gap) => `${gap.policyNumber} — ${gap.reason}`).join("\n")}>
           {gaps.length} {gaps.length === 1 ? "policy has" : "policies have"} no commission figure ({gaps.slice(0, 5).map((gap) => gap.policyNumber).join(", ")}{gaps.length > 5 ? `, +${gaps.length - 5} more` : ""}).{" "}
-          {isOwner ? <>Add the missing schedule in the <Link href="/app/settings#carrier-library" className="font-semibold underline">carrier library</Link>.</> : "The account owner adds the missing schedule in the carrier library."}
+          {isOwner ? <>Add the missing rate on the <Link href="/app/rate-card" className="font-semibold underline">Rate card</Link>.</> : "The account owner adds the missing rate on the Rate card."}
         </div>
       )}
 
@@ -191,21 +198,18 @@ export default async function LedgerPage({ searchParams }: { searchParams: Promi
     </>
   );
 
-  // 2026-10-06 redesign: with entries, the lists are tabs under the title (LedgerViews) and the
-  // header's actions move to the right of the tab row; with none, the empty state follows the strip.
   return (
     <div className="m-stagger flex flex-col gap-6">
-      {header(undefined, isEmpty ? headerActions : undefined)}
-      {sourceTabs()}
-
-      {isEmpty ? (
+      {header("What your hand-entered policies should earn, from the carrier library's rates and advance rules, and how it compares with what their statements reported.", headerActions)}
+      {sourceTabs(undefined, showExpected)}
+      {!showExpected ? (
         <>
           {notices}
           <TableCard>
             <EmptyState
-              title="Nothing is recorded yet"
-              hint={`${ledger.policiesRead === 0 ? "Your book has no policies to price" : "No policy in your book can be priced by the carrier library yet"}${statements.available ? ", and no carrier statement has been imported." : ", and carrier statement import is waiting on a database update."}`}
-              action={<Button asChild type="button" variant="outline"><Link href="/app/policies">Review policy transactions</Link></Button>}
+              title="Nothing expected from hand-entered policies"
+              hint={`${ledger.policiesRead === 0 ? "No policy has been entered by hand" : "No hand-entered policy can be priced by the carrier library yet"}. Policies from carrier files are priced on the Rate card.`}
+              action={<Button asChild type="button" variant="outline"><Link href="/app/policies?source=hand">Policies entered by hand</Link></Button>}
             />
           </TableCard>
         </>
@@ -213,13 +217,13 @@ export default async function LedgerPage({ searchParams }: { searchParams: Promi
         <LedgerViews
           reconciliation={reconciliation}
           policies={policyLabels}
-          reported={reported}
+          reported={[]}
           canOpenStatements={handlesStatements && statementsOnPlan}
           expected={entries}
           expectedSummary={expectedSummary}
-          actions={headerActions}
         >
           {notices}
+          {expectedNotices}
         </LedgerViews>
       )}
     </div>

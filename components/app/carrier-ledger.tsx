@@ -20,38 +20,41 @@ import type { LedgerRow } from "@/lib/ingestion/commissionLedgerStore";
 const signed = (cents: number) => `${cents < 0 ? "−" : ""}$${(Math.abs(cents) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const whole = (cents: number) => `${cents < 0 ? "−" : ""}$${Math.round(Math.abs(cents) / 100).toLocaleString("en-US")}`;
 const kindOf = (row: LedgerRow) => row.correctsType ?? row.type;
-const typeWord = (row: LedgerRow) => (row.type === "reversal" ? (row.correctsType ? `Reversal of ${ENTRY_LABELS[row.correctsType as EntryType]?.label.toLowerCase() ?? row.correctsType}` : "Reversal") : ENTRY_LABELS[row.type as EntryType]?.label ?? row.type);
-const policyHref = (row: LedgerRow) => `/app/policies/carrier/${row.carrierId}/${encodeURIComponent(row.policyNumber)}`;
+const typeWord = (row: LedgerRow) => (row.type === "adjustment" ? "Adjustment" : row.type === "reversal" ? (row.correctsType ? `Reversal of ${ENTRY_LABELS[row.correctsType as EntryType]?.label.toLowerCase() ?? row.correctsType}` : "Reversal") : ENTRY_LABELS[row.type as EntryType]?.label ?? row.type);
+const policyHref = (row: LedgerRow) => row.policyHref ?? `/app/policies/carrier/${row.carrierId}/${encodeURIComponent(row.policyNumber)}`;
 
 /**
- * LA-4.12 (Notion sprint) · the commission ledger from the carriers' own files: every line, newest
- * statement first, with the file and row it came from. Nothing here is typed in or edited; a
- * correction arrives as a reversal line.
+ * LA-4.12 (Notion sprint) · the commission ledger: every line, newest statement first, with the
+ * source behind it. Lines from the carriers' own files are never edited (a correction arrives as a
+ * reversal line); since the 2026-10-08 overlap merge the accepted lines of statements imported by
+ * hand are here too, and a source filter shows either.
  */
-export function CarrierLedger({ entries, scoped }: { entries: LedgerRow[]; scoped: boolean }) {
+export function CarrierLedger({ entries, scoped, initialSource = "" }: { entries: LedgerRow[]; scoped: boolean; initialSource?: string }) {
   const router = useRouter();
   const [refreshing, startRefresh] = useTransition();
   const [query, setQuery] = useState("");
   const [carrier, setCarrier] = useState("");
   const [type, setType] = useState("");
+  const [source, setSource] = useState(initialSource === "hand" || initialSource === "carrier" ? initialSource : "");
+  const anyHand = entries.some((row) => row.source === "hand");
   const [page, setPage] = useState(1);
 
   const carriers = useMemo(() => [...new Map(entries.map((row) => [row.carrierId, row.carrierName])).entries()].sort((a, b) => a[1].localeCompare(b[1])), [entries]);
   const visible = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    return entries.filter((row) => (!needle || `${row.policyNumber} ${row.agentIdentifier ?? ""} ${row.fileName ?? ""}`.toLowerCase().includes(needle)) && (!carrier || row.carrierId === carrier) && (!type || kindOf(row) === type));
-  }, [entries, query, carrier, type]);
+    return entries.filter((row) => (!needle || `${row.policyNumber} ${row.agentIdentifier ?? ""} ${row.fileName ?? ""}`.toLowerCase().includes(needle)) && (!carrier || row.carrierId === carrier) && (!type || kindOf(row) === type) && (!source || (source === "hand" ? row.source === "hand" : row.source !== "hand")));
+  }, [entries, query, carrier, type, source]);
   const sum = useMemo(() => rollup(visible.map((row) => ({ entry_type: row.type, corrects_type: row.correctsType, amount_cents: row.amountCents }))), [visible]);
   const { current, rows } = paginate(visible, page, 25);
-  const filtered = Boolean(query.trim() || carrier || type);
+  const filtered = Boolean(query.trim() || carrier || type || source);
   // Most carriers never say who a line was paid to; the column shows only when one does.
   const anyPayee = entries.some((row) => row.payeeLevel);
-  const clear = () => { setQuery(""); setCarrier(""); setType(""); setPage(1); };
+  const clear = () => { setQuery(""); setCarrier(""); setType(""); setSource(""); setPage(1); };
 
   function exportCsv() {
     const csv = toCsv(
-      ["Statement date", "Transaction date", "Carrier", "Policy number", "Entry", "Amount", "Payee", "Agent code", "Rate (bp)", "Months advanced", "File", "Row", "Reversal reason"],
-      visible.map((row) => [row.statementDate, row.transactionDate, row.carrierName, row.policyNumber, typeWord(row), centsText(row.amountCents), row.payeeLevel === "upline" ? "Upline" : row.payeeLevel === "writing_agent" ? "Writing agent" : null, row.agentIdentifier, row.rateBp, row.monthsAdvanced, row.fileName, row.rowNumber, row.reversalReason]),
+      ["Statement date", "Transaction date", "Carrier", "Policy number", "Entry", "Amount", "Payee", "Agent code", "Rate (bp)", "Months advanced", "File", "Row", "Reversal reason", "Source"],
+      visible.map((row) => [row.statementDate, row.transactionDate, row.carrierName, row.policyNumber, typeWord(row), centsText(row.amountCents), row.payeeLevel === "upline" ? "Upline" : row.payeeLevel === "writing_agent" ? "Writing agent" : null, row.agentIdentifier, row.rateBp, row.monthsAdvanced, row.fileName, row.rowNumber, row.reversalReason, row.source === "hand" ? "Statement imported by hand" : "Carrier file"]),
     );
     const url = URL.createObjectURL(new Blob([`﻿${csv}`], { type: "text/csv;charset=utf-8" }));
     const link = document.createElement("a");
@@ -87,7 +90,15 @@ export function CarrierLedger({ entries, scoped }: { entries: LedgerRow[]; scope
             <select aria-label="Filter by entry type" className={toolbarControl} value={type} onChange={(event) => { setType(event.target.value); setPage(1); }} title="A reversal counts with the type it corrects">
               <option value="">Every entry type</option>
               {ENTRY_TYPES.filter((key) => key !== "reversal").map((key) => <option key={key} value={key}>{ENTRY_LABELS[key].label}</option>)}
+              {entries.some((row) => row.type === "adjustment") && <option value="adjustment">Adjustment</option>}
             </select>
+            {(anyHand || source) && (
+              <select aria-label="Filter by source" className={toolbarControl} value={source} onChange={(event) => { setSource(event.target.value); setPage(1); }}>
+                <option value="">Every source</option>
+                <option value="carrier">From carrier files</option>
+                <option value="hand">Statements imported by hand</option>
+              </select>
+            )}
           </DataToolbar>
         }
         footer={entries.length ? <Pager page={current} pageSize={25} total={visible.length} onPage={setPage} noun={visible.length === 1 ? "line" : "lines"} suffix="newest statement first" /> : undefined}
@@ -122,8 +133,8 @@ export function CarrierLedger({ entries, scoped }: { entries: LedgerRow[]; scope
                   </td>
                   <td className={`text-right font-semibold tabular-nums ${row.type === "held" ? "text-muted-foreground" : row.amountCents < 0 ? "text-[var(--error-ink)]" : "text-foreground"}`} title={row.type === "held" ? "Held: not part of net received" : undefined}>{signed(row.amountCents)}</td>
                   {anyPayee && <td>{row.payeeLevel === "upline" ? "Upline" : row.payeeLevel === "writing_agent" ? "Writing agent" : <span className="text-muted-foreground">—</span>}</td>}
-                  <td title={row.fileName ? `${row.fileName}, row ${row.rowNumber}` : undefined}>
-                    <Link href={rowHref(row.fileId, row.rowNumber)} className="text-[var(--accent-ink)] hover:underline">Row {row.rowNumber}</Link>
+                  <td title={row.fileName ? `${row.fileName}, ${row.source === "hand" ? "line" : "row"} ${row.rowNumber}` : undefined}>
+                    <Link href={row.href ?? rowHref(row.fileId, row.rowNumber)} className="text-[var(--accent-ink)] hover:underline">{row.source === "hand" ? `Statement line ${row.rowNumber}` : `Row ${row.rowNumber}`}</Link>
                     {row.fileName && <span className="block max-w-[200px] truncate text-xs text-muted-foreground">{row.fileName}</span>}
                   </td>
                 </tr>

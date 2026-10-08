@@ -3,6 +3,8 @@ import "server-only";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isSchemaGap } from "@/lib/supabase/schemaGap";
 
+import type { StatementLedgerEntry } from "@/lib/ledger/statementConstants";
+
 import { flaggedFiles } from "./carrierAccountsStore";
 import { normalizeLine, rollup, unearnedAdvance, type AdvanceRule, type UnearnedTrace } from "./commissionLedger";
 
@@ -114,7 +116,36 @@ export async function loadPolicyMoney(tenantId: string, carrierId: string, polic
 }
 
 /** `orphan`: no policy file has shown this policy yet (LA-4.14) — normal, and claimed automatically when it arrives. */
-export type LedgerRow = PolicyEntry & { carrierId: string; carrierName: string; policyNumber: string; agentUserId: string | null; orphan: boolean };
+/**
+ * One ledger line. `source: "hand"` is a line from a statement the agency imported by hand and
+ * matched to a hand-entered policy (lib/ledger/statementService.ts): `href` opens that statement,
+ * `policyHref` the policy's own page. Every other line is from a carrier's commission file.
+ */
+export type LedgerRow = PolicyEntry & { carrierId: string; carrierName: string; policyNumber: string; agentUserId: string | null; orphan: boolean; source?: "hand"; href?: string; policyHref?: string };
+
+const HAND_KIND: Record<string, string> = { advance: "advance", commission: "earned", chargeback: "chargeback", adjustment: "adjustment" };
+
+/**
+ * Accepted lines of hand-imported statements as ledger lines (2026-10-08 overlap merge: one ledger,
+ * with a source filter, not a tab per source). The caller scopes them (getStatementLedger's canView);
+ * the carrier name is matched to the library so one carrier is one filter choice.
+ */
+export async function statementLinesAsLedger(entries: StatementLedgerEntry[]): Promise<LedgerRow[]> {
+  if (!entries.length) return [];
+  const carriers = ((await db().from("carriers").select("id, name")).data ?? []) as Array<{ id: string; name: string }>;
+  const byName = new Map(carriers.map((c) => [c.name.trim().toLowerCase(), c]));
+  return entries.map((e): LedgerRow => {
+    const carrier = byName.get(e.carrierName.trim().toLowerCase());
+    return {
+      id: `hand:${e.id}`, type: HAND_KIND[e.kind] ?? "adjustment", correctsType: null, amountCents: e.amountCents,
+      transactionDate: e.postedOn, statementDate: e.periodEnd, rateBp: null, monthsAdvanced: null, payeeLevel: null, agentIdentifier: null, reversalReason: null,
+      fileName: e.fileName, fileId: "", rowNumber: e.lineNumber, createdAt: e.acceptedAt, heldByStatement: false,
+      carrierId: carrier?.id ?? `hand:${e.carrierName.trim().toLowerCase()}`, carrierName: carrier?.name ?? e.carrierName, policyNumber: e.policyNumber,
+      agentUserId: e.producerUserId, orphan: false,
+      source: "hand", href: `/app/statements/${e.statementId}`, policyHref: `/app/policies/${e.policyId}`,
+    };
+  });
+}
 
 /** The ledger itself, newest statement first, for the Commission ledger page. A producer sees their own lines. */
 export async function loadLedger(viewer: { tenantId: string; userId: string; role: string }) {
