@@ -18,6 +18,8 @@
  * Pure (no I/O of its own).
  */
 
+import { isPolicyFeed } from "./constants.ts";
+
 export const STAGES = ["collect", "ingest", "parse", "store", "match", "reconcile", "analyse"] as const;
 export type Stage = (typeof STAGES)[number];
 export const FILE_STAGES = ["collect", "ingest", "parse", "store", "match", "reconcile"] as const satisfies readonly Stage[];
@@ -95,7 +97,8 @@ async function runFile(deps: RunDeps, runId: string, file: PendingFile): Promise
   await record("collect", async () => (file.arrivedThisRun ? { status: "succeeded", rowsOut: 1, note: "Detected in this run" } : { status: "skipped", note: "Arrived before this run" }));
   await record("ingest", async () => (file.arrivedThisRun ? { status: "succeeded", rowsOut: 1, note: "Registered and hashed; a duplicate is skipped at the door" } : { status: "skipped", note: "Registered before this run" }));
 
-  const policyFile = file.fileType === "policies";
+  // A new-business file makes policies too (20261009140000): applications the carrier has not issued yet.
+  const policyFile = isPolicyFeed(file.fileType);
   const ledgerFile = file.fileType === "commissions";
   const needsRows = (!done.has("store") && policyFile) || (!done.has("reconcile") && (policyFile || ledgerFile));
   let passed = null as Passed | null;

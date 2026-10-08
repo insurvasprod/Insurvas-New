@@ -5,7 +5,7 @@ import { isSchemaGap } from "@/lib/supabase/schemaGap";
 
 import { sendEmail } from "@/lib/email/transport";
 
-import type { CarrierFileType } from "./constants";
+import { isPolicyFeed, type CarrierFileType } from "./constants";
 import { chooseLayoutMap, parseWithMap, type Finding, type LayoutEntry, type LayoutMap, type ParseResult, type PublishedMapRow, type TypedRow } from "./layout";
 import type { RawColumn, RawRow } from "./grid";
 import { extractRawRows, readRawRows } from "./rawLayer";
@@ -145,7 +145,8 @@ export async function parseCarrierFile(tenantId: string, fileId: string, rows?: 
     return { outcome: "failed", mapId: resolved.map.id, version: resolved.map.version, reason: result.fatal, result };
   }
   // LA-4.5: the unknown-status gate. Only rows whose carrier word has an approved mapping go further.
-  const gate = file.file_type === "policies" ? await applyStatusGate(tenantId, fileId, file.carrier_id, resolved.map, result.rows) : null;
+  // A new-business file is gated too, with its own words: "Incomplete" there is not "Incomplete" in a policy file.
+  const gate = isPolicyFeed(file.file_type) ? await applyStatusGate(tenantId, fileId, file.carrier_id, file.file_type, resolved.map, result.rows) : null;
   const parsedAt = new Date().toISOString();
   const recorded = { ...parser, parsed_at: parsedAt, parsed_row_count: result.rows.length, ...(gate?.available ? { held_row_count: gate.heldRows } : {}) };
   await db().from("file_registry").update(movesStatus ? { ...recorded, status: "parsed" } : recorded).eq("tenant_id", tenantId).eq("id", fileId);
@@ -159,15 +160,15 @@ type Gate = { available: boolean; passed: TypedRow[]; heldRows: number };
  * with its row count, records it for the parser guardian, and tells the agency about new words.
  * Before 20261008130000 there is no gate and every row passes, as in LA-4.3.
  */
-async function applyStatusGate(tenantId: string, fileId: string, carrierId: string, map: LayoutMap, rows: TypedRow[]): Promise<Gate> {
-  const { data: mappings, error } = await db().from("carrier_status_map").select("carrier_status_raw, status_normalized").eq("carrier_id", carrierId).eq("file_type", "policies").not("approved_at", "is", null);
+async function applyStatusGate(tenantId: string, fileId: string, carrierId: string, fileType: CarrierFileType, map: LayoutMap, rows: TypedRow[]): Promise<Gate> {
+  const { data: mappings, error } = await db().from("carrier_status_map").select("carrier_status_raw, status_normalized").eq("carrier_id", carrierId).eq("file_type", fileType).not("approved_at", "is", null);
   if (error) {
     if (isSchemaGap(error)) return { available: false, passed: rows, heldRows: 0 };
     throw new Error(`Could not read the status map: ${error.message}`);
   }
   const statusMap = new Map<string, NormalizedStatus>((mappings ?? []).map((row: Loose) => [row.carrier_status_raw as string, row.status_normalized as NormalizedStatus]));
   const gate = gateStatuses(rows, statusMap);
-  const { data: queued, error: queueError } = await db().rpc("record_unmapped_statuses", { p_tenant_id: tenantId, p_file_id: fileId, p_carrier_id: carrierId, p_file_type: "policies", p_counts: gate.held });
+  const { data: queued, error: queueError } = await db().rpc("record_unmapped_statuses", { p_tenant_id: tenantId, p_file_id: fileId, p_carrier_id: carrierId, p_file_type: fileType, p_counts: gate.held });
   if (queueError) throw new Error(`The unmapped statuses could not be queued: ${queueError.message}`);
   if (gate.held.length) {
     await writeFindings(tenantId, fileId, map, [{
@@ -215,7 +216,7 @@ export async function parsePendingFiles(limit = 20): Promise<ParseSweep> {
   }
   // LA-4.6 / LA-4.12: a policy or commission file parsed but never derived (a stage failed half way) is read again. Before
   // 20261008140000 there is no derived_at column, and nothing to derive.
-  const underived = await db().from("file_registry").select("id, tenant_id").eq("status", "parsed").in("file_type", ["policies", "commissions"]).is("derived_at", null).order("received_at").limit(limit);
+  const underived = await db().from("file_registry").select("id, tenant_id").eq("status", "parsed").in("file_type", ["policies", "new_business", "commissions"]).is("derived_at", null).order("received_at").limit(limit);
   const retry = underived.error ? [] : (underived.data ?? []);
   for (const file of [...(fresh.data ?? []), ...(blocked.data ?? []), ...retry] as Array<{ id: string; tenant_id: string }>) {
     try {

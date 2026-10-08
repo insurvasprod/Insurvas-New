@@ -2,6 +2,7 @@ import "server-only";
 
 import type { ParsedFile, ReprocessFile, ReprocessStage } from "./reprocess";
 import { sweepOrphans } from "./carrierAccountsStore";
+import { isPolicyFeed } from "./constants";
 import { recordFileEntries } from "./commissionLedgerStore";
 import { runDetection } from "./discrepancyStore";
 import { evaluateRetention } from "./retentionStore";
@@ -21,7 +22,7 @@ import { rebuildFileSnapshots } from "./snapshotStore";
 const policySnapshots: ReprocessStage = {
   name: "policy_snapshot",
   async rebuild(tenantId: string, file: ReprocessFile, _rows, parsed: ParsedFile | null) {
-    if (file.fileType !== "policies" || !parsed?.typedRows) return { changed: 0 };
+    if (!isPolicyFeed(file.fileType) || !parsed?.typedRows) return { changed: 0 };
     const outcome = await rebuildFileSnapshots(tenantId, file.id, parsed.typedRows);
     return { changed: outcome.changed };
   },
@@ -47,7 +48,7 @@ const commissionEntries: ReprocessStage = {
 const expectedCommission: ReprocessStage = {
   name: "expected_commission",
   async rebuild(tenantId: string, file: ReprocessFile, _rows, parsed: ParsedFile | null) {
-    if (file.fileType !== "policies" || !parsed?.typedRows || !file.carrierId) return { changed: 0 };
+    if (!isPolicyFeed(file.fileType) || !parsed?.typedRows || !file.carrierId) return { changed: 0 };
     const outcome = await computeExpected(tenantId, file.carrierId);
     return { changed: outcome.inserted + outcome.filled };
   },
@@ -87,7 +88,7 @@ const commissionDiscrepancies: ReprocessStage = {
 const retentionResults: ReprocessStage = {
   name: "retention_result",
   async rebuild(tenantId: string, file: ReprocessFile, _rows, parsed: ParsedFile | null) {
-    if (file.fileType !== "policies" || !parsed?.typedRows) return { changed: 0 };
+    if (!isPolicyFeed(file.fileType) || !parsed?.typedRows) return { changed: 0 };
     const outcome = await evaluateRetention(tenantId);
     return { changed: outcome ? outcome.saved + outcome.lost + outcome.still_at_risk : 0 };
   },

@@ -5,6 +5,7 @@ import { createHash } from "node:crypto";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isSchemaGap } from "@/lib/supabase/schemaGap";
 
+import { isPolicyFeed } from "./constants";
 import type { RawColumn } from "./grid";
 import { refreshPolicyCurrent } from "./policyCurrentStore";
 import { matchFilePolicies } from "./policyMatchingStore";
@@ -85,7 +86,7 @@ export async function storeFileSnapshots(tenantId: string, fileId: string, typed
   const none = { available: true, changed: 0, snapshots: 0, policies: 0, duplicates: 0, carrierId: null, policyNumbers: [] };
   const { data: file, error } = await db().from("file_registry").select("id, file_type, parser_id, raw_columns").eq("tenant_id", tenantId).eq("id", fileId).maybeSingle();
   if (error) throw new Error(`Could not load the file: ${error.message}`);
-  if (!file || file.file_type !== "policies") return none;
+  if (!file || !isPolicyFeed(file.file_type)) return none;
 
   // The columns the map did not read go into each snapshot's `extra`, so no field is ever dropped.
   const { data: entries } = file.parser_id ? await db().from("carrier_layout_map_entry").select("source_column").eq("map_id", file.parser_id) : { data: [] };
