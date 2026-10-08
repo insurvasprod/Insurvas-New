@@ -8,6 +8,7 @@ import { accuracy, isStrong, ladderShare, shortlist, SHORTLIST_LOOKBACK_DAYS, sp
 import { refreshPolicyCurrent } from "./policyCurrentStore";
 import { noRecordPolicy, openImportSummary } from "./exceptionQueuesStore";
 import { identityKey } from "./exceptionQueues";
+import { allRows } from "./pages";
 
 /**
  * LA-4.8 (Notion sprint) · the matching ladder, server side.
@@ -379,9 +380,10 @@ export async function loadMatching(tenantId: string) {
   const since = new Date(Date.now() - 30 * 86_400_000).toISOString();
   const week = new Date(Date.now() - 7 * 86_400_000).toISOString();
   const [reviews, links, current, maps, members, ladder, ai, carriers] = await Promise.all([
-    db().from("policy_match_review").select("id, carrier_id, policy_number, carrier_row, shortlist, created_at").eq("tenant_id", tenantId).eq("status", "open").order("created_at").limit(300),
+    // The whole review queue and every unmapped code, page by page: one request stops at 1,000.
+    allRows(() => db().from("policy_match_review").select("id, carrier_id, policy_number, carrier_row, shortlist, created_at").eq("tenant_id", tenantId).eq("status", "open").order("created_at").order("id"), 10_000),
     db().from("policy_match").select("id, carrier_id, policy_number, method, ladder_step, matched_to_type, contact_id, confidence, confirmed_at, created_at").eq("tenant_id", tenantId).is("superseded_by_id", null).order("created_at", { ascending: false }).limit(200),
-    db().from("policy_current").select("carrier_id, agent_identifier").eq("tenant_id", tenantId).not("agent_identifier", "is", null).is("agent_user_id", null).limit(5000),
+    allRows(() => db().from("policy_current").select("carrier_id, agent_identifier").eq("tenant_id", tenantId).not("agent_identifier", "is", null).is("agent_user_id", null).order("carrier_id").order("policy_number"), 200_000),
     db().from("carrier_agent_map").select("id, carrier_id, agent_identifier, user_id").eq("tenant_id", tenantId).order("agent_identifier"),
     db().from("tenant_users").select("user_id, role, accepted_at").eq("tenant_id", tenantId),
     db().from("policy_match_ladder").select("already_linked, exact_linked, to_review").eq("tenant_id", tenantId).gte("created_at", since),
@@ -408,7 +410,7 @@ export async function loadMatching(tenantId: string) {
   const userName = new Map<string, string>((users.data ?? []).map((row: Loose) => [row.id, row.name || row.email || row.id]));
 
   const unmapped = new Map<string, UnmappedAgent>();
-  for (const row of current.data ?? []) {
+  for (const row of current.rows) {
     const key = `${row.carrier_id}|${row.agent_identifier}`;
     const entry = unmapped.get(key) ?? { carrierId: row.carrier_id, carrierName: carrierName.get(row.carrier_id) ?? "", agentIdentifier: row.agent_identifier, policies: 0 };
     entry.policies++;
@@ -422,7 +424,7 @@ export async function loadMatching(tenantId: string) {
 
   return {
     available: true as const,
-    reviews: (reviews.data ?? []).map((row: Loose): ReviewRow => ({ id: row.id, carrierId: row.carrier_id, carrierName: carrierName.get(row.carrier_id) ?? "", policyNumber: row.policy_number, carrierRow: row.carrier_row, shortlist: row.shortlist ?? [], createdAt: row.created_at })),
+    reviews: (reviews.rows as Loose[]).map((row: Loose): ReviewRow => ({ id: row.id, carrierId: row.carrier_id, carrierName: carrierName.get(row.carrier_id) ?? "", policyNumber: row.policy_number, carrierRow: row.carrier_row, shortlist: row.shortlist ?? [], createdAt: row.created_at })),
     links: (links.data ?? []).map((row: Loose): LinkRow => ({ id: row.id, carrierName: carrierName.get(row.carrier_id) ?? "", policyNumber: row.policy_number, method: row.method, step: row.ladder_step, type: row.matched_to_type, clientName: row.contact_id ? contactName.get(row.contact_id) ?? null : null, confidence: row.confidence, confirmed: Boolean(row.confirmed_at), createdAt: row.created_at })),
     unmapped: [...unmapped.values()].sort((a, b) => b.policies - a.policies || a.agentIdentifier.localeCompare(b.agentIdentifier)),
     mapped: (maps.data ?? []).map((row: Loose): MappedAgent => ({ id: row.id, carrierId: row.carrier_id, carrierName: carrierName.get(row.carrier_id) ?? "", agentIdentifier: row.agent_identifier, userId: row.user_id, userName: userName.get(row.user_id) ?? row.user_id })),

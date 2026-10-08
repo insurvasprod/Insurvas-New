@@ -176,6 +176,7 @@ export default async function LedgerPage({ searchParams }: { searchParams: Promi
         {sourceTabs(lines.length, showExpected)}
         {notices}
         {book && !book.available && <div role="status" className={`${alert} border-l-[var(--warning)] bg-[var(--warning-surface)] text-[var(--warning-ink)]`}>{LEDGER_PENDING_MESSAGE}</div>}
+        {book?.available && book.truncated && <div role="status" className={`${alert} border-l-[var(--warning)] bg-[var(--warning-surface)] text-[var(--warning-ink)]`}>Showing the newest {book.cap.toLocaleString("en-US")} lines from carrier files; older lines, and their amounts, are left out of the list and the figures here.</div>}
         <CarrierLedger entries={lines} scoped={guard.role === "producer"} initialSource={params.view === "statements" ? "hand" : params.source ?? ""} />
       </div>
     );

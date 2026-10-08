@@ -6,6 +6,8 @@ import { getCarrierCommissionContact } from "@/lib/discrepancies/carrierContacts
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isSchemaGap } from "@/lib/supabase/schemaGap";
 
+import { agencyToday } from "./agencyDay";
+import { allRows } from "./pages";
 import { flaggedFiles } from "./carrierAccountsStore";
 import { DEFAULT_TOLERANCE_CENTS, detect, type DiscrepancyType, type EngineEntry } from "./discrepancyEngine";
 import { DISPUTABLE, letterText, type LetterItem } from "./disputeLetter";
@@ -44,7 +46,9 @@ async function everyRow(build: () => Loose, max = 100_000): Promise<Loose[]> {
 }
 
 /** Run detection for one agency and record it. Safe to run any time: the same problems update the same rows. */
-export async function runDetection(tenantId: string, today = new Date().toISOString().slice(0, 10)) {
+export async function runDetection(tenantId: string, todayGiven?: string) {
+  // The agency's day: a lag that ends today has not ended yet in the US evening, when UTC is tomorrow.
+  const today = todayGiven ?? (await agencyToday(tenantId));
   const probe = await db().from("commission_discrepancy").select("id").limit(1);
   if (probe.error) {
     if (isSchemaGap(probe.error)) return { available: false as const };
@@ -100,8 +104,9 @@ export type DisputeRow = { id: string; carrierId: string; carrierName: string; d
 
 export async function loadDiscrepancies(tenantId: string) {
   const [rows, disputes, carriers, withheld] = await Promise.all([
-    db().from("commission_discrepancy").select("*").eq("tenant_id", tenantId).order("severity").order("last_seen_at", { ascending: false }).limit(5000),
-    db().from("commission_dispute").select("*").eq("tenant_id", tenantId).order("created_at", { ascending: false }).limit(500),
+    // Every item, page by page: one request stops at 1,000.
+    allRows(() => db().from("commission_discrepancy").select("*").eq("tenant_id", tenantId).order("severity").order("last_seen_at", { ascending: false }).order("id")),
+    allRows(() => db().from("commission_dispute").select("*").eq("tenant_id", tenantId).order("created_at", { ascending: false }).order("id")),
     db().from("carriers").select("id, name"),
     // LA-4.20: an item whose trace is broken on either side is not shown — an unverifiable claim is
     // worse than silence. It stays in the trace health check, as a defect for us to fix.
@@ -111,20 +116,21 @@ export async function loadDiscrepancies(tenantId: string) {
     if (isSchemaGap(rows.error)) return { available: false as const };
     throw new Error(`Could not load the discrepancies: ${rows.error.message}`);
   }
-  const shown = ((rows.data ?? []) as Loose[]).filter((d) => !withheld?.has(d.id));
+  const shown = (rows.rows as Loose[]).filter((d) => !withheld?.has(d.id));
   if (withheld?.size) console.error(`[discrepancies] ${withheld.size} item(s) withheld for ${tenantId}: the trace is incomplete`, [...withheld.entries()].slice(0, 5));
   const sources = await entrySources(tenantId, shown.flatMap((d) => (d.reported_entry_ids ?? []) as string[]));
   const name = new Map<string, string>((carriers.data ?? []).map((c: Loose) => [c.id, c.name]));
   const n = (v: unknown) => (v === null || v === undefined ? null : Number(v));
   return {
     available: true as const,
+    truncated: rows.truncated,
     items: shown.map((d): DiscrepancyRow => ({
       id: d.id, carrierId: d.carrier_id, carrierName: name.get(d.carrier_id) ?? "Carrier not known", type: d.discrepancy_type, policyNumber: d.policy_number, severity: d.severity, status: d.status,
       expectedCents: n(d.expected_amount_cents), expectedSource: d.expected_source, reportedCents: n(d.reported_amount_cents), reportedEntryIds: d.reported_entry_ids ?? [], differenceCents: n(d.difference_cents), toleranceCents: n(d.tolerance_applied_cents),
       explanation: d.explanation, evidence: d.evidence ?? {}, detectedAt: d.detected_at, lastSeenAt: d.last_seen_at, resolution: d.resolution, resolutionNote: d.resolution_note, resolvedAt: d.resolved_at, disputeId: d.dispute_id,
       reportedLines: ((d.reported_entry_ids ?? []) as string[]).flatMap((id) => { const s = sources.get(id); return s ? [{ id, ...s }] : []; }),
     })),
-    disputes: ((disputes.data ?? []) as Loose[]).map((x): DisputeRow => ({
+    disputes: (disputes.rows as Loose[]).map((x): DisputeRow => ({
       id: x.id, carrierId: x.carrier_id, carrierName: name.get(x.carrier_id) ?? "Carrier not known", discrepancyIds: x.discrepancy_ids, recipient: x.recipient, letterBody: x.letter_body, totalCents: Number(x.total_cents),
       status: x.status, sentAt: x.sent_at, sentVia: x.sent_via, outcomeCents: n(x.outcome_amount_cents), resolvedAt: x.resolved_at, notes: x.notes, createdAt: x.created_at,
     })),

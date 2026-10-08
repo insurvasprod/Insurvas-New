@@ -3,6 +3,7 @@ import "server-only";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isSchemaGap } from "@/lib/supabase/schemaGap";
 
+import { agencyToday } from "./agencyDay";
 import { ageOn, coverage, expectedFor, firstDraftDate, resolveRate, triggerOccurredOn, type AdvanceRule, type ExpectedRow, type Schedule, type Trigger } from "./expectedCommission";
 
 /**
@@ -156,7 +157,7 @@ export async function loadRateCard(tenantId: string) {
   const carrierName = new Map<string, string>((carriers.data ?? []).map((c: Loose) => [c.id, c.name]));
   const productName = new Map<string, string>((products.data ?? []).map((p: Loose) => [p.code, p.name]));
   const own = new Set((ownFamilies.data ?? []).map((f: Loose) => `${f.carrier_id}|${f.carrier_product_code}`));
-  const today = new Date().toISOString().slice(0, 10);
+  const today = await agencyToday(tenantId);
   const byCarrier = new Map<string, RateCardCarrier>();
   const priced: Array<{ carrierId: string; monthlyCents: number; priced: boolean }> = [];
   for (const p of data.policies) {

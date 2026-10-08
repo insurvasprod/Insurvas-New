@@ -4,6 +4,7 @@ import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatStrip, StatTile } from "@/components/ui/stat";
+import { agencyToday } from "@/lib/ingestion/agencyDay";
 import { ageDays } from "@/lib/ingestion/exceptionQueues";
 import { loadQueues, QUEUES_PENDING_MESSAGE } from "@/lib/ingestion/exceptionQueuesStore";
 import { hasTenantPermission } from "@/lib/tenantAuth/permissions";
@@ -18,8 +19,8 @@ export default async function ExceptionsPage() {
   // Premiums are inside: owner, producer and bookkeeper, as the API.
   if (!hasTenantPermission(guard.role, "policies.view")) return <RoleGateNotice featureLabel="Exceptions" detail="Exceptions are cleared by producers, bookkeepers and the account owner." />;
   const seesAll = guard.role === "owner" || guard.role === "bookkeeper";
-  const view = await loadQueues({ tenantId: guard.context.tenantId, userId: guard.context.userId, seesAll });
-  const today = new Date().toISOString().slice(0, 10);
+  // Ages are counted in the agency's day, not UTC's.
+  const [view, today] = await Promise.all([loadQueues({ tenantId: guard.context.tenantId, userId: guard.context.userId, seesAll }), agencyToday(guard.context.tenantId)]);
 
   return (
     <div className="m-stagger flex flex-col gap-6">

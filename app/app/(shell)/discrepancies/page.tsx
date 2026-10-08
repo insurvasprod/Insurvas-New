@@ -64,6 +64,7 @@ export default async function DiscrepanciesPage({ searchParams }: { searchParams
       />
       {!found.available && <div role="status" className={pending}>{DISCREPANCIES_PENDING_MESSAGE}</div>}
       {list && !list.available && <div role="status" className={pending}>{DISCREPANCY_SCHEMA_PENDING_MESSAGE}</div>}
+      {found.available && found.truncated && <div role="status" className={pending}>Showing the first {found.items.length.toLocaleString("en-US")} findings, most serious first; the rest are not listed here.</div>}
       {view === "letters" ? (
         found.available && <DisputeLetters disputes={found.disputes} readOnly={readOnly} />
       ) : (

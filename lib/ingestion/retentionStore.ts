@@ -5,6 +5,7 @@ import { isSchemaGap } from "@/lib/supabase/schemaGap";
 
 import { flaggedFiles } from "./carrierAccountsStore";
 import { unearnedAdvance } from "./commissionLedger";
+import { advanceRuleResolver } from "./commissionLedgerStore";
 import { boardOrder, daysLeftFor, groupOf, reasonFor, saveRates, type Group, type Outcome, type Reason } from "./retentionBoard";
 
 /**
@@ -47,7 +48,7 @@ export type BoardEntry = {
   lastAction: { outcome: Outcome; at: string; by: string | null; result: string | null } | null;
 };
 
-const POLICY_COLUMNS = "carrier_id, policy_number, contact_id, agent_user_id, status_normalized, status_reported, carrier_status_raw, paid_to_date, effective_date, days_past_due, days_until_carrier_closes, retention_rule_id, lapsed_on, payment_method, premium_cents, premium_mode, months_paid, last_snapshot_date, first_seen_date, as_of";
+const POLICY_COLUMNS = "carrier_id, policy_number, contact_id, agent_user_id, status_normalized, status_reported, carrier_status_raw, paid_to_date, effective_date, days_past_due, days_until_carrier_closes, retention_rule_id, lapsed_on, payment_method, premium_cents, premium_mode, months_paid, last_snapshot_date, first_seen_date, as_of, product_code";
 
 /** The board for this viewer (a producer sees the policies credited to them), in the default order. */
 export async function loadBoard(viewer: Viewer, only?: { carrierId: string; policyNumber: string }) {
@@ -115,12 +116,13 @@ export async function loadBoard(viewer: Viewer, only?: { carrierId: string; poli
   const contactIds = [...new Set(candidates.map((c) => c.p.contact_id).filter(Boolean))] as string[];
   const userIds = [...new Set(candidates.map((c) => c.p.agent_user_id).filter(Boolean))] as string[];
   const numbers = [...new Set(candidates.map((c) => c.p.policy_number))] as string[];
-  const [contacts, users, entries, flagged, actions] = await Promise.all([
+  const [contacts, users, entries, flagged, actions, ruleFor] = await Promise.all([
     Promise.all(chunks(contactIds, 200).map((ids) => db().from("contacts").select("id, first_name, last_name, primary_phone").eq("tenant_id", viewer.tenantId).in("id", ids))).then((r) => r.flatMap((x: Loose) => x.data ?? [])),
     userIds.length ? db().from("users").select("id, name, email").in("id", userIds) : { data: [] },
     Promise.all(chunks(numbers, 200).map((ns) => db().from("commission_entry").select("carrier_id, policy_number, entry_type, corrects_type, amount_cents, months_advanced, file_id").eq("tenant_id", viewer.tenantId).in("policy_number", ns))).then((r) => r.flatMap((x: Loose) => x.data ?? [])).catch(() => []),
     flaggedFiles(viewer.tenantId),
     Promise.all(chunks(numbers, 200).map((ns) => db().from("retention_action").select("carrier_id, policy_number, outcome, acted_at, acted_by, result").eq("tenant_id", viewer.tenantId).in("policy_number", ns).order("acted_at", { ascending: false }))).then((r) => r.flatMap((x: Loose) => x.data ?? [])).catch(() => []),
+    advanceRuleResolver(viewer.tenantId),
   ]);
   const contactOf = new Map<string, Loose>(contacts.map((c: Loose) => [c.id, c]));
   const userName = new Map<string, string>(((users.data ?? []) as Loose[]).map((u) => [u.id, u.name || u.email]));
@@ -143,7 +145,7 @@ export async function loadBoard(viewer: Viewer, only?: { carrierId: string; poli
     const contact = p.contact_id ? contactOf.get(p.contact_id) : null;
     const m = money.get(key);
     // Advance at risk from the ledger (LA-4.12): Unknown (null) without an advance on file, never $0.
-    const atRisk = m && m.advanced > 0 ? unearnedAdvance({ advancedCents: m.advanced, chargedBackCents: m.chargedBack, monthsPaid: p.months_paid, rule: null, statementMonths: m.months }).atRiskCents : null;
+    const atRisk = m && m.advanced > 0 ? unearnedAdvance({ advancedCents: m.advanced, chargedBackCents: m.chargedBack, monthsPaid: p.months_paid, rule: ruleFor(p.carrier_id, p.product_code, p.as_of), statementMonths: m.months }).atRiskCents : null;
     const last = lastAction.get(key);
     return {
       key, carrierId: p.carrier_id, carrierName: carrierName.get(p.carrier_id) ?? "Carrier not known", policyNumber: p.policy_number,

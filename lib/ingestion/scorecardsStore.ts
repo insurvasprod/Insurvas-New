@@ -57,8 +57,10 @@ async function byIds(table: string, columns: string, ids: Array<string | null>, 
   return results.flatMap((result: Loose) => result.data ?? []);
 }
 
+/** How old a carrier's latest file may be and still be "the latest" in the day's summary. */
+const LATEST_FILE_DAYS = 7;
 const addDays = (iso: string, days: number) => new Date(Date.parse(`${iso}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
-const POLICY_COLUMNS = "carrier_id, policy_number, contact_id, agent_user_id, agent_identifier, agency_id, vendor_id, campaign_id, status_normalized, issue_date, effective_date, lapsed_on, termination_date, months_paid, annualised_premium_cents, product_code, product_tier, first_seen_date, application_id, as_of, days_until_carrier_closes";
+const POLICY_COLUMNS = "carrier_id, policy_number, contact_id, agent_user_id, agent_identifier, agency_id, vendor_id, campaign_id, status_normalized, issue_date, effective_date, lapsed_on, termination_date, months_paid, annualised_premium_cents, product_code, product_tier, first_seen_date, application_id, as_of, days_until_carrier_closes, last_snapshot_date";
 
 export type ScorecardData = {
   available: true;
@@ -109,7 +111,7 @@ export async function loadScorecards(viewer: Viewer, period: { from: string; to:
       if (scoped) query = query.eq("created_by", viewer.userId);
       return query.order("submitted_at").order("id");
     }),
-    everyRow(() => db().from("policy_change").select("carrier_id, policy_number, old_value, new_value").eq("tenant_id", t).eq("field_name", "status_normalized").gte("to_snapshot_date", since).order("to_snapshot_date").order("policy_number")),
+    everyRow(() => db().from("policy_change").select("carrier_id, policy_number, old_value, new_value, to_snapshot_date").eq("tenant_id", t).eq("field_name", "status_normalized").gte("to_snapshot_date", addDays(today, -LATEST_FILE_DAYS)).order("to_snapshot_date").order("policy_number")),
     everyRow(() => {
       let query = db().from("commission_entry").select("amount_cents").eq("tenant_id", t).eq("entry_type", "chargeback").gte("created_at", `${since}T00:00:00Z`);
       if (scoped) query = query.eq("agent_user_id", viewer.userId);
@@ -179,9 +181,16 @@ export async function loadScorecards(viewer: Viewer, period: { from: string; to:
 
   const spend = await spendRead;
 
-  // The day's summary: the newest files' status changes, today's chargebacks, the call list's red rows.
-  const own = new Set(policies.map((p) => p.key));
-  const moved = (changes.error ? [] : changes.rows).filter((c: Loose) => own.has(`${c.carrier_id}|${c.policy_number}`));
+  // The day's summary: what each carrier's latest policy file changed (whatever its cadence, a week
+  // at most), today's chargebacks, the call list's red rows. A policy counts once, and only while it
+  // still has that status: one that lapsed and was paid up again in the same file is not "lapsed".
+  const latestFile = new Map<string, string>();
+  const statusOf = new Map<string, string>();
+  for (const r of rows as Loose[]) {
+    statusOf.set(`${r.carrier_id}|${r.policy_number}`, r.status_normalized);
+    if (r.last_snapshot_date && r.last_snapshot_date > (latestFile.get(r.carrier_id) ?? "")) latestFile.set(r.carrier_id, r.last_snapshot_date);
+  }
+  const moved = (changes.error ? [] : changes.rows).filter((c: Loose) => c.to_snapshot_date === latestFile.get(c.carrier_id) && statusOf.get(`${c.carrier_id}|${c.policy_number}`) === c.new_value);
   const countTo = (value: string, from?: string[]) => new Set(moved.filter((c: Loose) => c.new_value === value && (!from || from.includes(c.old_value))).map((c: Loose) => `${c.carrier_id}|${c.policy_number}`)).size;
   const cbLines = chargebackLines.error ? [] : chargebackLines.rows;
   const summary = buildSummary({

@@ -5,6 +5,7 @@ import type { ContactInput } from "@/lib/contacts/types";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isSchemaGap } from "@/lib/supabase/schemaGap";
 
+import { agencyToday } from "./agencyDay";
 import { effectiveRules, identityKey, QUEUE_TYPES, type OwnerRole, type QueueRule, type QueueType, type Resolution } from "./exceptionQueues";
 import { refreshPolicyCurrent } from "./policyCurrentStore";
 import { scoreCandidate, splitName, type Candidate, type CarrierSide } from "./policyMatching";
@@ -185,7 +186,7 @@ export async function openImportSummary(tenantId: string, file: { id: string; ca
   return openItem(tenantId, {
     queueType: "initial_import", subjectKey: `import:${file.id}`, subjectType: "file", subjectId: file.id, carrierId: file.carrierId,
     payload: { carrier_name: file.carrierName, file_date: file.fileDate, ...counts },
-    ageFrom: new Date().toISOString().slice(0, 10),
+    ageFrom: await agencyToday(tenantId),
   });
 }
 

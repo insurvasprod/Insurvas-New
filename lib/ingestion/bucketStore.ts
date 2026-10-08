@@ -4,6 +4,7 @@ import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isSchemaGap } from "@/lib/supabase/schemaGap";
 
 import { bucketRows, type BucketFile, type BucketRow, type MissingFile } from "./bucket";
+import { agencyTimezone } from "./agencyDay";
 import { runPending } from "./dailyRunStore";
 import { libraryCarriers } from "./registry";
 
@@ -27,17 +28,8 @@ export type BucketView =
   | { available: false }
   | { available: true; date: string; timezone: string; rows: BucketRow[]; missing: MissingFile[] };
 
-/** The agency's own time zone (its profile), so "today" is the agency's day. */
-export async function agencyTimezone(tenantId: string): Promise<string> {
-  const { data } = await db().from("agency_profiles").select("timezone").eq("tenant_id", tenantId).maybeSingle();
-  const zone = (data?.timezone as string | null) ?? "America/New_York";
-  try {
-    new Intl.DateTimeFormat("en-US", { timeZone: zone });
-    return zone;
-  } catch {
-    return "America/New_York";
-  }
-}
+export { agencyTimezone } from "./agencyDay";
+
 
 /** One day of the bucket, for the page (and its 20-second refresh). */
 export async function loadBucketView(tenantId: string, date: string): Promise<BucketView> {

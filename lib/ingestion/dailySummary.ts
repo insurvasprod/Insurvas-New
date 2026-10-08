@@ -13,7 +13,7 @@ import { CONTRACT_MONTH, CONTRACT_SHARE_PCT, percentOf, type PersistencyCell } f
 
 export type SummarySource = {
   date: string;
-  /** Policies whose newest carrier file (dated today or yesterday) showed them lapse, issue, or turn at risk. */
+  /** Policies their carrier's latest policy file (a week old at most) showed lapse, issue, or turn at risk, and still in that status. */
   lapsed: number;
   issued: number;
   atRisk: number;
