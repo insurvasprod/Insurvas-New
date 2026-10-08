@@ -97,6 +97,31 @@ export function isXlsxFile(file: { name: string; type?: string }) {
 }
 
 /**
+ * Every worksheet of an .xlsx file, each as CSV text, in workbook order — for a carrier file whose
+ * rows are on a sheet other than the first ("Commission Summary" then "Commission Details").
+ */
+export async function readXlsxSheetsAsCsv(buffer: ArrayBuffer): Promise<Array<{ name: string; hidden: boolean; csv: string }>> {
+  const ExcelJS = (await import("exceljs")).default;
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(buffer);
+  if (!workbook.worksheets.length) throw new Error("This workbook has no worksheet to import.");
+  return workbook.worksheets.map((sheet) => {
+    const rows: XlsxCell[][] = [];
+    const columns = Math.max(sheet.columnCount, sheet.actualColumnCount);
+    sheet.eachRow({ includeEmpty: true }, (row, rowNumber) => {
+      const cells: XlsxCell[] = [];
+      for (let column = 1; column <= columns; column++) {
+        const cell = row.getCell(column);
+        cells.push({ value: cell.value, numFmt: cell.numFmt ?? null });
+      }
+      rows[rowNumber - 1] = cells;
+    });
+    for (let index = 0; index < rows.length; index++) rows[index] ??= [];
+    return { name: sheet.name, hidden: sheet.state !== "visible", csv: rowsToCsv(rows) };
+  });
+}
+
+/**
  * The first visible worksheet of an .xlsx file, as CSV text. ExcelJS is loaded on demand, so a
  * browser importing a CSV never downloads it. The statement import also calls this on the server.
  */

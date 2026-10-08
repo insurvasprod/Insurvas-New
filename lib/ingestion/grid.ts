@@ -77,6 +77,27 @@ export function detectHeaderRow(grid: string[][]): number | null {
   return index >= 0 ? index + 1 : null;
 }
 
+/**
+ * Which sheet of a workbook holds the rows: the one a layout map names, if the workbook has it; else
+ * the visible sheet whose header row is widest (a summary sheet is narrower than its details sheet);
+ * ties go to the first. Null for a workbook with no sheet that has a header.
+ */
+export function chooseSheet<S extends { name: string; hidden?: boolean; grid: string[][] }>(sheets: S[], preferred: string | null): S | null {
+  if (preferred) {
+    const named = sheets.find((sheet) => sheet.name === preferred) ?? sheets.find((sheet) => sheet.name.trim().toLowerCase() === preferred.trim().toLowerCase());
+    if (named) return named;
+  }
+  let best: S | null = null;
+  let bestWidth = 1;
+  for (const sheet of sheets) {
+    if (sheet.hidden) continue;
+    const header = detectHeaderRow(sheet.grid);
+    const width = header ? filled(sheet.grid[header - 1]) : 0;
+    if (width > bestWidth) { best = sheet; bestWidth = width; }
+  }
+  return best;
+}
+
 export type RawColumn = { column: string; header: string; key: string };
 export type RawRow = { rowNumber: number; payload: Record<string, string> };
 export type RawExtraction = { headerRow: number; columns: RawColumn[]; preamble: string[][]; rows: RawRow[] };

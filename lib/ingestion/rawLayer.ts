@@ -1,10 +1,11 @@
 import "server-only";
 
-import { readXlsxAsCsv } from "@/lib/agentTemplates/xlsx";
+import { readXlsxSheetsAsCsv } from "@/lib/agentTemplates/xlsx";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isSchemaGap } from "@/lib/supabase/schemaGap";
 
-import { detectHeaderRow, parseCsvGrid, rawRowsFromGrid } from "./grid";
+import { chooseSheet, detectHeaderRow, parseCsvGrid, rawRowsFromGrid } from "./grid";
+import { readSpreadsheetMl } from "./spreadsheetMl";
 import type { ReprocessRow } from "./reprocess";
 import { carrierFileStorage } from "./supabaseStorage";
 
@@ -49,16 +50,31 @@ async function markFailed(tenantId: string, fileId: string, reason: string) {
   await db().from("file_registry").update({ status: "failed", error_detail: detail }).eq("tenant_id", tenantId).eq("id", fileId).eq("status", "received");
 }
 
+/**
+ * The sheet a carrier's layout map reads for this file, if its published map names one: the
+ * agency's assignment and map first, as the parser resolves them. Null when none names a sheet.
+ */
+async function layoutSheetName(tenantId: string, carrierId: string | null, fileType: string | null): Promise<string | null> {
+  if (!carrierId || !fileType) return null;
+  const { data: assignments } = await db().from("carrier_layout_assignment").select("tenant_id, layout_key").eq("carrier_id", carrierId).eq("file_type", fileType).or(`tenant_id.eq.${tenantId},tenant_id.is.null`);
+  const rows = (assignments ?? []) as Array<{ tenant_id: string | null; layout_key: string }>;
+  const assignment = rows.find((row) => row.tenant_id === tenantId) ?? rows.find((row) => row.tenant_id === null);
+  if (!assignment) return null;
+  const { data: maps } = await db().from("carrier_layout_map").select("tenant_id, sheet_name").eq("layout_key", assignment.layout_key).eq("file_type", fileType).eq("status", "published").or(`tenant_id.eq.${tenantId},tenant_id.is.null`);
+  const live = (maps ?? []) as Array<{ tenant_id: string | null; sheet_name: string | null }>;
+  return (live.find((map) => map.tenant_id === tenantId) ?? live.find((map) => map.tenant_id === null))?.sheet_name ?? null;
+}
+
 /** Reads one registered spreadsheet into raw rows. Safe to call again; a sealed file is left alone. */
 export async function extractRawRows(tenantId: string, fileId: string): Promise<ExtractOutcome> {
-  const { data: file, error } = await db().from("file_registry").select("id, tenant_id, storage_path, file_kind, status, row_count, raw_extracted_at, raw_error").eq("tenant_id", tenantId).eq("id", fileId).maybeSingle();
+  const { data: file, error } = await db().from("file_registry").select("id, tenant_id, storage_path, file_kind, status, row_count, raw_extracted_at, raw_error, carrier_id, file_type").eq("tenant_id", tenantId).eq("id", fileId).maybeSingle();
   if (error) {
     if (isSchemaGap(error)) return { outcome: "pending_schema" };
     throw new Error(`Could not load the file: ${error.message}`);
   }
   if (!file) return { outcome: "not_applicable", reason: "not found" };
   if (file.raw_extracted_at) return { outcome: "already", rowCount: file.row_count };
-  if (file.file_kind !== "csv" && file.file_kind !== "xlsx") return { outcome: "not_applicable", reason: file.file_kind === "pdf" ? "a PDF's rows come from LA-4.4 extraction" : "not a spreadsheet" };
+  if (file.file_kind !== "csv" && file.file_kind !== "xlsx" && file.file_kind !== "xls") return { outcome: "not_applicable", reason: file.file_kind === "pdf" ? "a PDF's rows come from LA-4.4 extraction" : "not a spreadsheet" };
   if (file.status === "failed") return { outcome: "not_applicable", reason: "the file failed when it arrived" };
   if (file.raw_error) return { outcome: "failed", reason: file.raw_error };
 
@@ -66,10 +82,14 @@ export async function extractRawRows(tenantId: string, fileId: string): Promise<
   let sheetName: string | null = null;
   try {
     const bytes = await carrierFileStorage().get(file.storage_path);
-    if (file.file_kind === "xlsx") {
-      const workbook = await readXlsxAsCsv(bytes.slice().buffer as ArrayBuffer);
-      sheetName = workbook.sheetName;
-      grid = parseCsvGrid(workbook.csv);
+    if (file.file_kind === "xlsx" || file.file_kind === "xls") {
+      // A workbook's rows may be on any sheet: the layout's sheet, else the widest header (chooseSheet).
+      const sheets = file.file_kind === "xlsx"
+        ? (await readXlsxSheetsAsCsv(bytes.slice().buffer as ArrayBuffer)).map((sheet) => ({ name: sheet.name, hidden: sheet.hidden, grid: parseCsvGrid(sheet.csv) }))
+        : readSpreadsheetMl(new TextDecoder("utf-8").decode(bytes)).map((sheet) => ({ name: sheet.name, hidden: false, grid: sheet.rows }));
+      const chosen = chooseSheet(sheets, await layoutSheetName(tenantId, file.carrier_id, file.file_type));
+      sheetName = chosen?.name ?? sheets[0]?.name ?? null;
+      grid = chosen?.grid ?? sheets[0]?.grid ?? [];
     } else {
       grid = parseCsvGrid(decodeCsvBytes(bytes));
     }
@@ -130,7 +150,7 @@ export async function extractPendingRawRows(limit = 20): Promise<SweepOutcome> {
     .select("id, tenant_id")
     .is("raw_extracted_at", null)
     .is("raw_error", null)
-    .in("file_kind", ["csv", "xlsx"])
+    .in("file_kind", ["csv", "xlsx", "xls"])
     .in("status", ["received", "superseded"])
     .order("received_at")
     .limit(limit);

@@ -8,7 +8,7 @@ import { toolbarControl } from "@/components/ui/data-toolbar";
 import { EmptyState } from "@/components/ui/page-states";
 import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
-import { fileDay } from "@/lib/ingestion/constants";
+import { fileDay, FILE_TYPE_LABELS, type CarrierFileType } from "@/lib/ingestion/constants";
 import type { MappingRow, QueueEntry } from "@/lib/ingestion/statusAdmin";
 import { shownWord, STATUS_LABELS, STATUS_VOCABULARY, type NormalizedStatus } from "@/lib/ingestion/statuses";
 import { notify } from "@/lib/notify";
@@ -81,7 +81,7 @@ export function StatusMapsReview({ initialQueue, initialMappings, notice }: { in
                 return (
                   <tr key={key}>
                     <td className="font-semibold text-foreground">{entry.carrierName}</td>
-                    <td>{entry.fileType === "policies" ? "Policies" : "Commissions"}</td>
+                    <td>{FILE_TYPE_LABELS[entry.fileType as CarrierFileType] ?? entry.fileType}</td>
                     <td className="font-mono text-sm text-foreground" title="Exactly as the carrier sent it; a · is a space">{shownWord(entry.raw)}</td>
                     <td className="text-right tabular-nums">{entry.rows.toLocaleString("en-US")}</td>
                     <td className="text-right tabular-nums">{entry.agencies.toLocaleString("en-US")}</td>
@@ -125,7 +125,7 @@ export function StatusMapsReview({ initialQueue, initialMappings, notice }: { in
               {mappings.map((row) => (
                 <tr key={row.id}>
                   <td className="font-semibold text-foreground">{row.carrierName}</td>
-                  <td>{row.fileType === "policies" ? "Policies" : "Commissions"}</td>
+                  <td>{FILE_TYPE_LABELS[row.fileType as CarrierFileType] ?? row.fileType}</td>
                   <td className="font-mono text-sm">{shownWord(row.raw)}</td>
                   <td>{STATUS_LABELS[row.status].label}</td>
                   <td>{row.approvedAt ? <span className="tabular-nums">{fileDay(row.approvedAt)}</span> : <StatusChip tone="action">Proposed</StatusChip>}</td>

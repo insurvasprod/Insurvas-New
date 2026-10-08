@@ -18,14 +18,11 @@ async function send(url: string, init: RequestInit): Promise<void> {
 }
 
 /**
- * LA-4.1 (Notion sprint) · the two doors that work without anyone signed in.
- *
- *   · Email: the agency's own address, and the carriers' known senders that tell the pipeline which
- *     carrier an emailed file is from (exact address, or a whole @domain).
- *   · Bucket: the folder an agency's scripts write to, and the carrier codes its paths use.
+ * LA-4.1 (Notion sprint) · the email door: the agency's own address, and the carriers' known senders
+ * that tell the pipeline which carrier an emailed file is from (exact address, or a whole @domain).
+ * The bucket has its own tab since 2026-10-09 (carrier-bucket.tsx).
  */
 export function CarrierFileDoors({
-  tenantId,
   address,
   addressConfigured,
   senders,
@@ -33,7 +30,6 @@ export function CarrierFileDoors({
   canWrite,
   writeBlockedReason,
 }: {
-  tenantId: string;
   address: string | null;
   addressConfigured: boolean;
   senders: SenderRow[];
@@ -48,6 +44,16 @@ export function CarrierFileDoors({
   const [sender, setSender] = useState("");
   const [copied, setCopied] = useState<string | null>(null);
 
+  async function copy(value: string) {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(value);
+      window.setTimeout(() => setCopied(null), 1500);
+    } catch {
+      setCopied(null);
+    }
+  }
+
   async function run(key: string, action: () => Promise<void>) {
     setBusy(key);
     setProblem(null);
@@ -60,18 +66,6 @@ export function CarrierFileDoors({
       setBusy(null);
     }
   }
-
-  async function copy(value: string) {
-    try {
-      await navigator.clipboard.writeText(value);
-      setCopied(value);
-      window.setTimeout(() => setCopied(null), 1500);
-    } catch {
-      setCopied(null);
-    }
-  }
-
-  const folder = `carrier-files/${tenantId}/inbox/<YYYY-MM-DD>/<agency>/<carrier code>/<Policies or Commissions>/`;
 
   return (
     <div className="flex flex-col gap-6">
@@ -149,28 +143,6 @@ export function CarrierFileDoors({
         )}
       </TableCard>
 
-      <TableCard
-        title="Bucket"
-        description={`Scripts write each file under ${folder}`}
-        action={<Button type="button" variant="outline" onClick={() => void copy(`carrier-files/${tenantId}/inbox/`)}>{copied === `carrier-files/${tenantId}/inbox/` ? "Copied" : "Copy folder"}</Button>}
-      >
-        <table className="portal-lead-table w-full text-left text-sm">
-          <thead>
-            <tr>
-              <th className="w-[240px]">Carrier code</th>
-              <th>Carrier</th>
-            </tr>
-          </thead>
-          <tbody>
-            {carriers.map((carrier) => (
-              <tr key={carrier.id}>
-                <td className="font-mono text-xs text-foreground">{carrier.code}</td>
-                <td>{carrier.name}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </TableCard>
     </div>
   );
 }

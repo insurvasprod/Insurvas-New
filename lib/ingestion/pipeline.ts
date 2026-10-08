@@ -16,7 +16,7 @@
  * Dependencies are passed in, so the whole flow runs in tests with fakes (ingestion.test.mjs) and
  * stays free of any provider or database type. Relative imports only.
  */
-import { carrierFileBytesMatch, carrierFileKind, FILE_KIND_CONTENT_TYPE, type CarrierFileKind, type CarrierFileSource, type CarrierFileType } from "./constants.ts";
+import { carrierFileBytesMatch, carrierFileKind, isBinaryXls, FILE_KIND_CONTENT_TYPE, type CarrierFileKind, type CarrierFileSource, type CarrierFileType } from "./constants.ts";
 import { syntheticStoragePath, type Attribution } from "./path.ts";
 import type { StorageAdapter } from "./storage.ts";
 
@@ -42,7 +42,9 @@ export type RegisterArgs = {
 
 export type RegisterOutcome =
   | { outcome: "registered"; fileId: string; supersededFileId: string | null }
-  | { outcome: "skipped"; fileId: string };
+  | { outcome: "skipped"; fileId: string }
+  /** The same bytes, removed from the bucket earlier, dropped again: the same file, back (20261009100000). */
+  | { outcome: "restored"; fileId: string };
 
 export type IngestDeps = {
   storage: StorageAdapter;
@@ -51,6 +53,8 @@ export type IngestDeps = {
   findByHash(tenantId: string, contentHash: string): Promise<{ id: string } | null>;
   /** The carrier a code names in the library, or null. */
   carrierByCode(code: string): Promise<{ id: string } | null>;
+  /** The carrier a Drive-layout folder names (its name, code or a folder alias; the agency's alias first), or null. */
+  carrierByFolder(tenantId: string, folder: string): Promise<{ id: string } | null>;
   /** Why a file of this kind does not open (a corrupt workbook), or null. Never reads its rows. */
   containerProblem(kind: CarrierFileKind, bytes: Uint8Array): Promise<string | null>;
   register(args: RegisterArgs): Promise<RegisterOutcome>;
@@ -79,7 +83,8 @@ export type DoorInput = {
 
 export type IngestResult =
   | { outcome: "registered"; fileId: string; status: "received" | "failed"; errorDetail: string | null; supersededFileId: string | null; storagePath: string }
-  | { outcome: "skipped"; fileId: string };
+  | { outcome: "skipped"; fileId: string }
+  | { outcome: "restored"; fileId: string };
 
 export async function ingestCarrierFile(deps: IngestDeps, input: DoorInput): Promise<IngestResult> {
   const contentHash = deps.sha256(input.bytes);
@@ -91,6 +96,11 @@ export async function ingestCarrierFile(deps: IngestDeps, input: DoorInput): Pro
     const carrier = await deps.carrierByCode(input.attribution.carrierCode);
     if (carrier) carrierId = carrier.id;
     else problems.push(`No carrier in the library has the code "${input.attribution.carrierCode}".`);
+  }
+  if (!carrierId && input.attribution.carrierFolder) {
+    const carrier = await deps.carrierByFolder(input.tenantId, input.attribution.carrierFolder);
+    if (carrier) carrierId = carrier.id;
+    else problems.push(`No carrier in the library is named "${input.attribution.carrierFolder}". Add the folder name as an alias of its carrier.`);
   }
   const fileType = input.attribution.fileType;
   const fileDate = input.attribution.fileDate;
@@ -126,15 +136,19 @@ export async function ingestCarrierFile(deps: IngestDeps, input: DoorInput): Pro
   const held = await deps.findByHash(input.tenantId, contentHash);
   if (held) {
     const outcome = await deps.register(registration(storedAt, "received", null, null));
-    return { outcome: "skipped", fileId: outcome.fileId };
+    return outcome.outcome === "restored" ? { outcome: "restored", fileId: outcome.fileId } : { outcome: "skipped", fileId: outcome.fileId };
   }
 
   // 3. Is it what it says it is, and does it open? Its rows are not read here (LA-4.3 does that).
   const kind = carrierFileKind({ name: input.filename, type: input.contentType });
   if (input.bytes.byteLength === 0) problems.push("The file is empty.");
-  else if (!kind) problems.push("Only CSV, Excel (.xlsx) and PDF files can be read.");
-  else if (!carrierFileBytesMatch(kind, input.bytes.subarray(0, 1024))) {
-    problems.push(kind === "csv" ? "The file is not plain text, so it cannot be read as a CSV." : `The file is not the ${kind === "pdf" ? "PDF" : "Excel workbook"} its name says it is.`);
+  else if (!kind) problems.push("Only CSV, Excel (.xlsx or Excel 2003 XML .xls) and PDF files can be read. The file is kept: save it in one of those formats and drop it again.");
+  else if (!carrierFileBytesMatch(kind, input.bytes.subarray(0, 2048))) {
+    problems.push(
+      kind === "csv" ? "The file is not plain text, so it cannot be read as a CSV."
+        : kind === "xls" ? (isBinaryXls(input.bytes.subarray(0, 8)) ? "This .xls is the old binary Excel format, which isn't read. Open it in Excel and save it as .xlsx, then drop it again." : "The file is not the Excel workbook its name says it is.")
+          : `The file is not the ${kind === "pdf" ? "PDF" : "Excel workbook"} its name says it is.`,
+    );
   } else {
     const broken = await deps.containerProblem(kind, input.bytes);
     if (broken) problems.push(broken);
@@ -153,9 +167,9 @@ export async function ingestCarrierFile(deps: IngestDeps, input: DoorInput): Pro
     if (input.source !== "bucket") await deps.storage.remove(storedAt).catch(() => undefined);
     throw error;
   }
-  if (outcome.outcome === "skipped") {
+  if (outcome.outcome === "skipped" || outcome.outcome === "restored") {
     if (input.source !== "bucket") await deps.storage.remove(storedAt).catch(() => undefined);
-    return { outcome: "skipped", fileId: outcome.fileId };
+    return { outcome: outcome.outcome, fileId: outcome.fileId };
   }
   return { outcome: "registered", fileId: outcome.fileId, status, errorDetail, supersededFileId: outcome.supersededFileId, storagePath: storedAt };
 }

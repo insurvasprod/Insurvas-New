@@ -5,9 +5,14 @@
  *
  *     <date>/<agency>/<carrier>/<Policies|Commissions>/<filename>
  *
- * In the bucket each agency's scripts write under its own workspace and an inbox:
+ * In the bucket each agency's scripts write under its own workspace, in either layout:
  *
- *     <tenant id>/inbox/2026-10-05/heritage/americo/Commissions/statement.pdf
+ *     <tenant id>/inbox/2026-10-05/heritage/americo/Commissions/statement.pdf        (carrier code)
+ *     <tenant id>/09-01-2026/Heritage/Mutual of Omaha/Policies/7376635-86416.csv      (Drive layout)
+ *
+ * The Drive layout mirrors how agencies keep carrier files in Drive: the date as MM-DD-YYYY, and the
+ * carrier folder named as people name it ("AMAM", "Mutual of Omaha"), which the pipeline matches to
+ * a carrier by its name, code or a folder alias. Its type folder may also be "New Business".
  *
  * Because the four facts come from the path, a file that turns out to be unreadable still lands in
  * the registry correctly attributed — it fails visibly instead of vanishing. An upload or an email
@@ -22,6 +27,8 @@ export type Attribution = {
   agency: string | null;
   carrierCode: string | null;
   fileType: CarrierFileType | null;
+  /** The Drive layout's carrier folder, as written ("Mutual of Omaha"); matched to a carrier by the pipeline. */
+  carrierFolder?: string | null;
 };
 
 export type ParsedDropPath = {
@@ -55,12 +62,24 @@ export function fileTypeFromSegment(segment: string): CarrierFileType | null {
   const word = segment.trim().toLowerCase();
   if (word === "policies") return "policies";
   if (word === "commissions") return "commissions";
+  if (word.replace(/[\s_-]+/g, " ") === "new business") return "new_business";
   return null;
 }
 
+/** A real calendar date written MM-DD-YYYY (the Drive layout's folder), as YYYY-MM-DD; or null. */
+export function usDate(value: string): string | null {
+  const match = /^(\d{2})-(\d{2})-(\d{4})$/.exec(value);
+  return match ? isoDate(`${match[3]}-${match[1]}-${match[2]}`) : null;
+}
+
+/** A carrier folder name compared as people write it: case, spaces and punctuation ignored. */
+export function folderKey(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
 /**
- * Reads a bucket object's name: <tenant>/inbox/<date>/<agency>/<carrier>/<Policies|Commissions>/<file>.
- * Whatever can be read is kept even when another part is wrong, so the failure says exactly why.
+ * Reads a bucket object's name, in either layout (see the top of this file). Whatever can be read is
+ * kept even when another part is wrong, so the failure says exactly why.
  */
 export function parseDropPath(objectName: string): ParsedDropPath {
   const parts = objectName.split("/");
@@ -68,6 +87,25 @@ export function parseDropPath(objectName: string): ParsedDropPath {
   const problems: string[] = [];
   const tenantId = UUID.test(parts[0] ?? "") ? parts[0] : null;
   const attribution: Attribution = { fileDate: null, agency: null, carrierCode: null, fileType: null };
+
+  // The Drive layout: <tenant>/<MM-DD-YYYY>/<agency>/<carrier folder>/<type>/<file>.
+  if (/^\d{2}-\d{2}-\d{4}$/.test(parts[1] ?? "")) {
+    if (parts.length !== 6) {
+      problems.push("The file is not in the expected folders: <MM-DD-YYYY>/<agency>/<carrier>/<Policies, Commissions or New Business>/<file>.");
+      return { tenantId, filename, attribution, problems };
+    }
+    const [, date, agency, carrier, type] = parts;
+    attribution.fileDate = usDate(date);
+    if (!attribution.fileDate) problems.push(`"${date}" is not a real date in the form MM-DD-YYYY.`);
+    attribution.agency = agency.trim() ? agency.trim().slice(0, 120) : null;
+    if (!attribution.agency) problems.push("The agency folder is empty.");
+    attribution.carrierFolder = carrier.trim() ? carrier.trim().slice(0, 120) : null;
+    if (!attribution.carrierFolder) problems.push("The carrier folder is empty.");
+    attribution.fileType = fileTypeFromSegment(type);
+    if (!attribution.fileType) problems.push(`"${type}" must be Policies, Commissions or New Business.`);
+    if (!filename.trim()) problems.push("The file has no name.");
+    return { tenantId, filename, attribution, problems };
+  }
 
   if (parts.length !== 7 || parts[1] !== "inbox") {
     problems.push("The file is not in the expected folders: <date>/<agency>/<carrier>/<Policies or Commissions>/<file>.");

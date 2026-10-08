@@ -35,7 +35,7 @@ export default async function CarrierFilePage({ params, searchParams }: { params
   const facts: Array<[string, string]> = [
     ["Carrier", file.carrierName ?? "Not known"],
     ["File date", fileDay(file.fileDate)],
-    ["Type", file.fileType === "policies" ? "Policy file" : file.fileType === "commissions" ? "Commission file" : "Not known"],
+    ["Type", file.fileType === "policies" ? "Policy file" : file.fileType === "commissions" ? "Commission file" : file.fileType === "new_business" ? "New business file" : "Not known"],
     ["Arrived", `${SOURCE[file.source] ?? file.source}, ${fileDay(file.receivedAt.slice(0, 10))}`],
     ["Format", `${(file.fileKind ?? "").toUpperCase() || "—"} · ${size(file.bytes)}`],
     ["Status", file.status[0].toUpperCase() + file.status.slice(1) + (file.supersededBy ? " (a corrected file replaced it)" : "")],

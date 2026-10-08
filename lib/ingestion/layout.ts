@@ -16,20 +16,21 @@
  *
  * Relative imports only.
  */
+import type { CarrierFileType } from "./constants.ts";
 import { gridFromRaw, rawRowsFromGrid, type RawColumn, type RawRow } from "./grid.ts";
 
 export const DATA_TYPES = ["text", "int_cents", "date", "basis_points", "enum", "integer"] as const;
 export type DataType = (typeof DATA_TYPES)[number];
 
-export const TRANSFORMS = ["none", "strip_currency", "mmddyyyy", "yyyymmdd", "digits_only", "negate", "pct_to_bp"] as const;
+export const TRANSFORMS = ["none", "strip_currency", "mmddyyyy", "mmddyy", "yyyymmdd", "digits_only", "negate", "pct_to_bp", "fraction_to_bp"] as const;
 export type Transform = (typeof TRANSFORMS)[number];
 
 /** Which transforms make sense for which type. */
 export const TRANSFORMS_FOR: Record<DataType, readonly Transform[]> = {
   text: ["none", "digits_only"],
   int_cents: ["none", "strip_currency", "negate"],
-  date: ["none", "mmddyyyy", "yyyymmdd"],
-  basis_points: ["none", "pct_to_bp", "negate"],
+  date: ["none", "mmddyyyy", "mmddyy", "yyyymmdd"],
+  basis_points: ["none", "pct_to_bp", "fraction_to_bp", "negate"],
   enum: ["none"],
   integer: ["none", "negate"],
 };
@@ -80,7 +81,8 @@ const COMMISSION_FIELDS: TargetField[] = [
   { key: "payee_level", label: "Paid to (writing agent or upline)", dataType: "enum", enumValues: ["writing_agent", "upline"] },
 ];
 
-export const TARGET_FIELDS: Record<"policies" | "commissions", TargetField[]> = { policies: POLICY_FIELDS, commissions: COMMISSION_FIELDS };
+// A new-business file (applications not issued yet) is read with the policy fields.
+export const TARGET_FIELDS: Record<CarrierFileType, TargetField[]> = { policies: POLICY_FIELDS, commissions: COMMISSION_FIELDS, new_business: POLICY_FIELDS };
 
 /** Header words → field, compared with case, spaces and punctuation removed. A suggestion staff confirm, never a mapping on its own. */
 const HEADER_HINTS: Record<"policies" | "commissions", Record<string, string[]>> = {
@@ -126,16 +128,17 @@ const HEADER_HINTS: Record<"policies" | "commissions", Record<string, string[]>>
 const headerKey = (header: string) => header.toLowerCase().replace(/[^a-z0-9]/g, "");
 
 /** The field a file's column header most likely is, or null. Only exact (normalised) words count. */
-export function guessTargetField(fileType: "policies" | "commissions", header: string): string | null {
+export function guessTargetField(fileType: CarrierFileType, header: string): string | null {
   const key = headerKey(header);
   if (!key) return null;
-  for (const [field, words] of Object.entries(HEADER_HINTS[fileType])) if (words.includes(key)) return field;
+  for (const [field, words] of Object.entries(HEADER_HINTS[fileType === "commissions" ? "commissions" : "policies"])) if (words.includes(key)) return field;
   return null;
 }
 
 /** The fields a file of each type cannot be read without. */
-export const REQUIRED_TARGETS: Record<"policies" | "commissions", string[]> = {
+export const REQUIRED_TARGETS: Record<CarrierFileType, string[]> = {
   policies: ["policy_number", "carrier_status_raw"],
+  new_business: ["policy_number", "carrier_status_raw"],
   // LA-4.12: a line the ledger cannot classify is not a ledger line.
   commissions: ["policy_number", "amount_cents", "entry_type"],
 };
@@ -143,7 +146,7 @@ export const REQUIRED_TARGETS: Record<"policies" | "commissions", string[]> = {
 export type LayoutMap = {
   id: string;
   version: number;
-  fileType: "policies" | "commissions";
+  fileType: CarrierFileType;
   headerRowIndex: number | null;
   sheetName: string | null;
   rowCountSwingPct: number;
@@ -160,15 +163,15 @@ export type LayoutEntry = {
   enumValues: Record<string, string> | null;
 };
 
-export type AssignmentRow = { tenantId: string | null; carrierId: string; fileType: "policies" | "commissions"; layoutKey: string };
-export type PublishedMapRow = { id: string; tenantId: string | null; layoutKey: string; fileType: "policies" | "commissions"; status: string };
+export type AssignmentRow = { tenantId: string | null; carrierId: string; fileType: CarrierFileType; layoutKey: string };
+export type PublishedMapRow = { id: string; tenantId: string | null; layoutKey: string; fileType: CarrierFileType; status: string };
 
 /**
  * Which map reads a carrier's file of one type for one agency — the resolution order the spec sets:
  * the agency's own assignment, else the platform's; then, for that layout, the agency's own published
  * version, else the platform's; else none. A new carrier with a known layout is one assignment row.
  */
-export function chooseLayoutMap<M extends PublishedMapRow>(input: { tenantId: string; carrierId: string; fileType: "policies" | "commissions"; assignments: AssignmentRow[]; maps: M[] }): M | null {
+export function chooseLayoutMap<M extends PublishedMapRow>(input: { tenantId: string; carrierId: string; fileType: CarrierFileType; assignments: AssignmentRow[]; maps: M[] }): M | null {
   const forCarrier = input.assignments.filter((row) => row.carrierId === input.carrierId && row.fileType === input.fileType);
   const assignment = forCarrier.find((row) => row.tenantId === input.tenantId) ?? forCarrier.find((row) => row.tenantId === null);
   if (!assignment) return null;
@@ -214,6 +217,8 @@ function cents(text: string, strip: boolean): number | null {
   if (strip) value = value.replace(/[$,\s]/g, "");
   let negative = false;
   if (/^\(.*\)$/.test(value)) { negative = true; value = value.slice(1, -1); }
+  // "13,235.56-": some statements put the minus after the amount.
+  if (value.endsWith("-") && value.length > 1) { negative = !negative; value = value.slice(0, -1); }
   if (value.startsWith("-")) { negative = !negative; value = value.slice(1); }
   const match = /^(\d+)(?:\.(\d{1,2}))?$/.exec(value);
   if (!match) return null;
@@ -224,9 +229,21 @@ function cents(text: string, strip: boolean): number | null {
   return negative ? -result : result;
 }
 
-/** "110%" or "110.5" → basis points (11000, 11050) with pct_to_bp; else a whole number of bp. */
-function basisPoints(text: string, fromPercent: boolean): number | null {
+/**
+ * "110%" or "110.5" → basis points (11000, 11050) with pct_to_bp; "0.825" or ".75000" → 8250, 7500
+ * with fraction_to_bp (a rate written as a fraction of one); else a whole number of bp.
+ */
+function basisPoints(text: string, fromPercent: boolean, fromFraction = false): number | null {
   const value = text.trim().replace(/%$/, "").trim();
+  if (fromFraction) {
+    const match = /^(-?)(\d*)(?:\.(\d{1,8}))?$/.exec(value);
+    if (!match || (!match[2] && !match[3])) return null;
+    const digits = (match[3] ?? "").padEnd(8, "0");
+    // Whole bp only: 0.825 is 8250 bp exactly; a fraction finer than a basis point is not a rate this reads.
+    if (Number(digits.slice(4)) !== 0) return null;
+    const bp = Number(match[2] || "0") * 10000 + Number(digits.slice(0, 4));
+    return match[1] ? -bp : bp;
+  }
   if (!fromPercent) return /^-?\d+$/.test(value) ? Number(value) : null;
   const match = /^(-?)(\d+)(?:\.(\d{1,2}))?$/.exec(value);
   if (!match) return null;
@@ -234,8 +251,18 @@ function basisPoints(text: string, fromPercent: boolean): number | null {
   return match[1] ? -bp : bp;
 }
 
+/**
+ * A spreadsheet "text" cell written as a formula so leading zeros survive: ="0119859720" or
+ * =("0119859720"), which a CSV keeps as =0119859720 or =(0119859720). The value inside, else the cell.
+ */
+export function unwrapExcelText(raw: string): string {
+  const match = /^=\(?"?([^"()=]*)"?\)?$/.exec(raw.trim());
+  return match ? match[1] : raw;
+}
+
 /** One cell through one map entry. An empty (or all-space) cell is null, and an error only if required. */
-export function convertCell(raw: string, entry: Pick<LayoutEntry, "dataType" | "transform" | "enumValues" | "required">, options: { verbatim?: boolean } = {}): Converted {
+export function convertCell(input: string, entry: Pick<LayoutEntry, "dataType" | "transform" | "enumValues" | "required">, options: { verbatim?: boolean } = {}): Converted {
+  const raw = unwrapExcelText(input);
   if (raw.trim() === "") return entry.required ? { ok: false, reason: "is empty" } : { ok: true, value: null };
   const negate = entry.transform === "negate";
   switch (entry.dataType) {
@@ -250,7 +277,7 @@ export function convertCell(raw: string, entry: Pick<LayoutEntry, "dataType" | "
       return { ok: true, value: negate ? -value : value };
     }
     case "basis_points": {
-      const value = basisPoints(raw, entry.transform === "pct_to_bp");
+      const value = basisPoints(raw, entry.transform === "pct_to_bp", entry.transform === "fraction_to_bp");
       if (value === null) return { ok: false, reason: `"${raw}" is not a rate` };
       return { ok: true, value: negate ? -value : value };
     }
@@ -265,6 +292,10 @@ export function convertCell(raw: string, entry: Pick<LayoutEntry, "dataType" | "
       if (entry.transform === "mmddyyyy") {
         const match = /^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/.exec(value) ?? /^(\d{2})(\d{2})(\d{4})$/.exec(value);
         if (match) parsed = realDate(Number(match[3]), Number(match[1]), Number(match[2]));
+      } else if (entry.transform === "mmddyy") {
+        // 8/6/26, 07/08/26, 061426 or 08/06/2026: a two-digit year is 20YY.
+        const match = /^(\d{1,2})[/-](\d{1,2})[/-](\d{2}|\d{4})$/.exec(value) ?? /^(\d{2})(\d{2})(\d{2})$/.exec(value);
+        if (match) parsed = realDate(match[3].length === 2 ? 2000 + Number(match[3]) : Number(match[3]), Number(match[1]), Number(match[2]));
       } else if (entry.transform === "yyyymmdd") {
         const match = /^(\d{4})[/-]?(\d{2})[/-]?(\d{2})$/.exec(value);
         if (match) parsed = realDate(Number(match[1]), Number(match[2]), Number(match[3]));
@@ -340,7 +371,10 @@ export function parseWithMap(input: ParseInput): ParseResult {
 
   const keyFor = new Map<string, string>();
   for (const column of raw.columns) if (!keyFor.has(column.header)) keyFor.set(column.header, column.key);
-  const missingRequired = entries.filter((entry) => entry.required && !keyFor.has(entry.sourceColumn));
+  // A source column written "=annual" is a fixed value for every row: what the carrier's file never
+  // says because it is always the same (Americo's premium is always annual).
+  const isConstant = (entry: LayoutEntry) => entry.sourceColumn.startsWith("=") && entry.sourceColumn.length > 1;
+  const missingRequired = entries.filter((entry) => entry.required && !isConstant(entry) && !keyFor.has(entry.sourceColumn));
   if (missingRequired.length) {
     const names = missingRequired.map((entry) => `"${entry.sourceColumn}"`).join(", ");
     findings.push({ findingType: "required_column_missing", severity: "blocking", reasoning: `The file has no ${names} column, which this map requires.`, payload: { columns: missingRequired.map((entry) => entry.sourceColumn) } });
@@ -370,8 +404,9 @@ export function parseWithMap(input: ParseInput): ParseResult {
     let rowOk = true;
     for (const entry of entries) {
       const key = keyFor.get(entry.sourceColumn);
-      if (!key) { values[entry.targetField] = null; continue; }
-      const converted = convertCell(row.payload[key] ?? "", entry, { verbatim: verbatimFields.has(entry.targetField) });
+      if (!key && !isConstant(entry)) { values[entry.targetField] = null; continue; }
+      const cell = key ? row.payload[key] ?? "" : entry.sourceColumn.slice(1);
+      const converted = convertCell(cell, entry, { verbatim: verbatimFields.has(entry.targetField) });
       if (converted.ok) values[entry.targetField] = converted.value;
       else { rowOk = false; heldBack.push({ rowNumber: row.rowNumber, field: entry.targetField, reason: converted.reason }); }
     }

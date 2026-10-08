@@ -10,8 +10,9 @@ import { isSchemaGap } from "@/lib/supabase/schemaGap";
 
 import type { CarrierFileKind, CarrierFileSource, CarrierFileStatus, CarrierFileType } from "./constants";
 import { attributeAttachment, readPostmarkInbound, type KnownSender, type PostmarkInbound } from "./inboundEmail";
-import { parseDropPath, type Attribution, type CarrierChoice } from "./path";
+import { folderKey, parseDropPath, type Attribution, type CarrierChoice } from "./path";
 import { ingestCarrierFile, type IngestDeps, type IngestResult, type RegisterArgs, type RegisterOutcome } from "./pipeline";
+import { readSpreadsheetMl } from "./spreadsheetMl";
 import { carrierFileStorage } from "./supabaseStorage";
 
 /**
@@ -67,6 +68,14 @@ async function containerProblem(kind: CarrierFileKind, bytes: Uint8Array): Promi
       return "The Excel workbook could not be opened. It may be damaged or password-protected.";
     }
   }
+  if (kind === "xls") {
+    try {
+      readSpreadsheetMl(new TextDecoder("utf-8").decode(bytes));
+      return null;
+    } catch {
+      return "The Excel 2003 XML workbook could not be read. It may be damaged.";
+    }
+  }
   if (kind === "pdf") {
     const tail = new TextDecoder("latin1").decode(bytes.subarray(Math.max(0, bytes.length - 2048)));
     return tail.includes("%%EOF") ? null : "The PDF looks cut off: it has no end-of-file marker.";
@@ -98,10 +107,9 @@ async function register(args: RegisterArgs): Promise<RegisterOutcome> {
     if (pending(error)) throw new CarrierFileError(CARRIER_FILES_PENDING_MESSAGE, 503, "schema_pending");
     throw new Error(`The file could not be registered: ${error.message}`);
   }
-  const result = data as { outcome: "registered" | "skipped"; file_id: string; superseded_file_id?: string | null };
-  return result.outcome === "skipped"
-    ? { outcome: "skipped", fileId: result.file_id }
-    : { outcome: "registered", fileId: result.file_id, supersededFileId: result.superseded_file_id ?? null };
+  const result = data as { outcome: "registered" | "skipped" | "restored"; file_id: string; superseded_file_id?: string | null };
+  if (result.outcome === "skipped" || result.outcome === "restored") return { outcome: result.outcome, fileId: result.file_id };
+  return { outcome: "registered", fileId: result.file_id, supersededFileId: result.superseded_file_id ?? null };
 }
 
 function ingestDeps(): IngestDeps {
@@ -117,9 +125,27 @@ function ingestDeps(): IngestDeps {
       return data ? { id: data.id as string } : null;
     },
     carrierByCode: async (code) => (await libraryCarriers()).find((carrier) => carrier.code === code) ?? null,
+    carrierByFolder,
     containerProblem,
     register,
   };
+}
+
+/**
+ * The carrier a Drive-layout folder names: the agency's own folder alias, else the platform's, else a
+ * carrier whose name or code reads the same (case, spaces and punctuation ignored). Null when none
+ * or more than one carrier matches: the file then fails, saying so, rather than going to a guess.
+ */
+async function carrierByFolder(tenantId: string, folder: string): Promise<{ id: string } | null> {
+  const key = folderKey(folder);
+  const { data, error } = await db().from("carrier_folder_alias").select("tenant_id, carrier_id").eq("alias", key).or(`tenant_id.eq.${tenantId},tenant_id.is.null`);
+  if (error && !pending(error)) throw new Error(`Could not look the carrier folder up: ${error.message}`);
+  const aliases = (data ?? []) as Array<{ tenant_id: string | null; carrier_id: string }>;
+  const alias = aliases.find((row) => row.tenant_id === tenantId) ?? aliases.find((row) => row.tenant_id === null);
+  if (alias) return { id: alias.carrier_id };
+  const flat = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const matches = (await libraryCarriers()).filter((carrier) => flat(carrier.name) === flat(folder) || flat(carrier.code) === flat(folder));
+  return matches.length === 1 ? { id: matches[0].id } : null;
 }
 
 /** May this agency take carrier files right now? (Feature on its plan, and a full account.) */
@@ -229,6 +255,8 @@ export type PollOutcome = {
   registered: number;
   failed: number;
   skipped: number;
+  /** The same bytes, removed from the bucket earlier, back again: restored with the data they had. */
+  restored: number;
   /** Drops left in place for an agency that cannot take files now (no feature, or read-only). */
   waiting: number;
   errors: string[];
@@ -236,9 +264,9 @@ export type PollOutcome = {
   registeredFiles: Array<{ tenantId: string; fileId: string }>;
 };
 
-/** Registers what scripts dropped into <tenant>/inbox/… since the last poll. Safe to run twice. */
+/** Registers what scripts dropped into the bucket (either layout) since the last poll. Safe to run twice. */
 export async function pollBucketDrops(limit = 100): Promise<PollOutcome> {
-  const outcome: PollOutcome = { available: true, seen: 0, registered: 0, failed: 0, skipped: 0, waiting: 0, errors: [], registeredFiles: [] };
+  const outcome: PollOutcome = { available: true, seen: 0, registered: 0, failed: 0, skipped: 0, restored: 0, waiting: 0, errors: [], registeredFiles: [] };
   const { data, error } = await db().rpc("list_unregistered_carrier_drops", { p_limit: limit });
   if (error) {
     if (pending(error)) return { ...outcome, available: false };
@@ -270,6 +298,7 @@ export async function pollBucketDrops(limit = 100): Promise<PollOutcome> {
         storagePath: drop.storage_path,
       });
       if (result.outcome === "skipped") outcome.skipped++;
+      else if (result.outcome === "restored") outcome.restored++;
       else if (result.status === "failed") outcome.failed++;
       else { outcome.registered++; outcome.registeredFiles.push({ tenantId: parsed.tenantId, fileId: result.fileId }); }
     } catch (failure) {

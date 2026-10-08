@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { EmptyState } from "@/components/ui/page-states";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
+import { FILE_TYPE_LABELS, type CarrierFileType } from "@/lib/ingestion/constants";
 import { guessTargetField, mapProblems, TARGET_FIELDS, TRANSFORMS_FOR, type LayoutEntry, type Transform } from "@/lib/ingestion/layout";
 import type { AssignmentView, CarrierOption, LayoutMapView, LayoutStatus, WaitingFile } from "@/lib/ingestion/layoutAdmin";
 import { notify } from "@/lib/notify";
@@ -27,10 +28,12 @@ const TRANSFORM_LABEL: Record<Transform, string> = {
   none: "As written",
   strip_currency: "Remove $ and commas",
   mmddyyyy: "MM/DD/YYYY",
+  mmddyy: "MM/DD/YY (or MMDDYY)",
   yyyymmdd: "YYYYMMDD",
   digits_only: "Digits only",
   negate: "Flip the sign",
   pct_to_bp: "Percent to basis points",
+  fraction_to_bp: "Fraction (0.825) to basis points",
 };
 
 const select = `${toolbarControl} w-full`;
@@ -234,7 +237,7 @@ export function LayoutMapsReview({ initialMaps, initialAssignments, carriers, no
                 return (
                   <tr key={layout.key}>
                     <td><span className="block font-semibold text-foreground">{layout.name}</span><span className="block font-mono text-xs text-muted-foreground">{layout.key}</span></td>
-                    <td>{layout.fileType === "policies" ? "Policies" : "Commissions"}</td>
+                    <td>{FILE_TYPE_LABELS[layout.fileType as CarrierFileType] ?? layout.fileType}</td>
                     <td className="tabular-nums">{layout.live ? `v${layout.live.version}` : "—"}</td>
                     <td className="tabular-nums">{layout.draft ? `v${layout.draft.version}` : "—"}</td>
                     <td className="max-w-[260px] truncate" title={using.join(", ")}>{using.length ? using.join(", ") : <span className="text-muted-foreground">None assigned</span>}</td>
@@ -373,7 +376,7 @@ export function LayoutMapsReview({ initialMaps, initialAssignments, carriers, no
               {assignments.map((row) => (
                 <tr key={row.id}>
                   <td className="font-semibold text-foreground">{row.carrierName}</td>
-                  <td>{row.fileType === "policies" ? "Policies" : "Commissions"}</td>
+                  <td>{FILE_TYPE_LABELS[row.fileType as CarrierFileType] ?? row.fileType}</td>
                   <td>{layouts.find((layout) => layout.key === row.layoutKey)?.name ?? row.layoutKey}{!layouts.find((layout) => layout.key === row.layoutKey)?.live && <span className="ml-2 text-xs text-[var(--warning-ink)]">no live version</span>}</td>
                   <td className="text-right"><Button type="button" variant="outline" size="sm" disabled={busy !== null} onClick={() => void run(`remove-${row.id}`, async () => { await call(`/api/admin/layout-maps/assignments?id=${row.id}`, { method: "DELETE" }); await reload(); notify.done("Assignment removed."); })}>Remove</Button></td>
                 </tr>

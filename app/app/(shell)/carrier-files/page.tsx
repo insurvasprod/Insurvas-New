@@ -2,6 +2,7 @@ import { guardPage } from "@/lib/entitlements/guardPage";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { ViewTabs } from "@/components/app/book-of-business-views";
+import { CarrierBucket } from "@/components/app/carrier-bucket";
 import { CarrierFileDoors } from "@/components/app/carrier-file-doors";
 import { CarrierFileUploadButton } from "@/components/app/carrier-file-upload";
 import { CarrierFilesTable } from "@/components/app/carrier-files-table";
@@ -10,8 +11,10 @@ import { PolicyChangesTable } from "@/components/app/policy-changes-table";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatStrip, StatTile } from "@/components/ui/stat";
+import { BUCKET_PENDING_MESSAGE, loadBucketSettings, loadBucketView } from "@/lib/ingestion/bucketStore";
 import { listFindings, listRuns } from "@/lib/ingestion/dailyRunStore";
 import { CARRIER_FILES_PENDING_MESSAGE, getInboundAddress, libraryCarriers, listCarrierFiles, listSenders } from "@/lib/ingestion/registry";
+import { isoDate } from "@/lib/ingestion/path";
 import { listPolicyChanges } from "@/lib/ingestion/snapshotStore";
 import { listOpenUnmappedStatuses } from "@/lib/ingestion/statusAdmin";
 import { shownWord } from "@/lib/ingestion/statuses";
@@ -25,7 +28,7 @@ import { hasTenantPermission } from "@/lib/tenantAuth/permissions";
  *
  * Owner and bookkeeper (`statements.view`), as the API. Opening the page writes nothing.
  */
-export default async function CarrierFilesPage({ searchParams }: { searchParams: Promise<{ view?: string; upload?: string }> }) {
+export default async function CarrierFilesPage({ searchParams }: { searchParams: Promise<{ view?: string; upload?: string; date?: string }> }) {
   const guard = await guardPage("statement_ingestion");
   if (!guard.entitled) {
     return <FeatureGateNotice guard={guard} featureLabel="Carrier files" description="Bring in every policy and commission file your carriers send, however it arrives." />;
@@ -36,11 +39,12 @@ export default async function CarrierFilesPage({ searchParams }: { searchParams:
 
   const tenantId = guard.context.tenantId;
   const readOnly = guard.entitlement.access === "read_only";
-  const { view, upload } = await searchParams;
+  const { view, upload, date } = await searchParams;
   const showDoors = view === "doors";
   const showChanges = view === "changes";
   const showRuns = view === "runs";
   const showFindings = view === "findings";
+  const showBucket = view === "bucket";
   const [list, carriers, unmapped] = await Promise.all([listCarrierFiles(tenantId), libraryCarriers(), listOpenUnmappedStatuses(tenantId)]);
   const [address, senders] = showDoors && list.available ? await Promise.all([getInboundAddress(tenantId), listSenders(tenantId)]) : [null, null];
   // LA-4.6: what moved between the carriers' policy files.
@@ -50,6 +54,11 @@ export default async function CarrierFilesPage({ searchParams }: { searchParams:
     showRuns && list.available ? listRuns(tenantId) : null,
     showFindings && list.available ? listFindings(tenantId) : null,
   ]);
+
+  // The bucket, one day at a time: today in the agency's check time zone unless a day is asked for.
+  const bucketSettings = showBucket && list.available ? await loadBucketSettings(tenantId) : null;
+  const bucketDate = date && isoDate(date) ? date : new Date().toLocaleDateString("en-CA", { timeZone: bucketSettings?.timezone ?? "America/New_York" });
+  const bucket = bucketSettings ? await loadBucketView(tenantId, bucketDate) : null;
 
   const blocked = !list.available ? CARRIER_FILES_PENDING_MESSAGE : readOnly ? "Receiving files is paused while the account is read-only." : null;
   const current = list.files.filter((file) => file.status !== "superseded");
@@ -76,7 +85,7 @@ export default async function CarrierFilesPage({ searchParams }: { searchParams:
         <div role="status" className="rounded-lg border border-border border-l-[3px] border-l-[var(--warning)] bg-[var(--warning-surface)] px-4 py-3 text-sm text-[var(--warning-ink)]">{blocked}</div>
       )}
 
-      {list.files.length > 0 && (
+      {list.files.length > 0 && !showBucket && (
         <StatStrip label="Carrier file totals">
           <StatTile label="Files in use" value={current.length.toLocaleString("en-US")} footnote={replaced ? `${replaced.toLocaleString("en-US")} more replaced by a corrected file` : `${current.filter((file) => file.fileType === "policies").length.toLocaleString("en-US")} policy · ${current.filter((file) => file.fileType === "commissions").length.toLocaleString("en-US")} commission`} />
           <StatTile label="Waiting for a layout" value={waiting.toLocaleString("en-US")} footnote="read once Insurvas sets up the layout" />
@@ -88,18 +97,22 @@ export default async function CarrierFilesPage({ searchParams }: { searchParams:
       {list.available && (
         <ViewTabs
           label="Carrier file views"
-          active={showDoors ? "doors" : showChanges ? "changes" : showRuns ? "runs" : showFindings ? "findings" : "files"}
+          active={showDoors ? "doors" : showBucket ? "bucket" : showChanges ? "changes" : showRuns ? "runs" : showFindings ? "findings" : "files"}
           tabs={[
             { key: "files", label: "Files", count: list.files.length, href: "/app/carrier-files" },
             { key: "changes", label: "Policy changes", href: "/app/carrier-files?view=changes" },
             { key: "runs", label: "Runs", href: "/app/carrier-files?view=runs" },
             { key: "findings", label: "Agent findings", href: "/app/carrier-files?view=findings" },
-            { key: "doors", label: "Email and bucket", href: "/app/carrier-files?view=doors" },
+            { key: "bucket", label: "Bucket", href: "/app/carrier-files?view=bucket" },
+            { key: "doors", label: "Email", href: "/app/carrier-files?view=doors" },
           ]}
         />
       )}
 
-      {showRuns && runs ? (
+      {showBucket ? (
+        bucket?.available ? <CarrierBucket initial={bucket} tenantId={tenantId} readOnly={readOnly} />
+          : <div role="status" className="rounded-lg border border-border border-l-[3px] border-l-[var(--warning)] bg-[var(--warning-surface)] px-4 py-3 text-sm text-[var(--warning-ink)]">{BUCKET_PENDING_MESSAGE}</div>
+      ) : showRuns && runs ? (
         <PipelineRuns runs={runs.runs} available={runs.available} canRun={!readOnly} />
       ) : showFindings && findings ? (
         <AgentFindings findings={findings.findings} accuracy={findings.accuracy} available={findings.available} canReview={!readOnly} />
@@ -111,7 +124,6 @@ export default async function CarrierFilesPage({ searchParams }: { searchParams:
         />
       ) : showDoors && address && senders ? (
         <CarrierFileDoors
-          tenantId={tenantId}
           address={address.address}
           addressConfigured={address.configured}
           senders={senders.senders}
