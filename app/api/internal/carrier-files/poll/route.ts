@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 
+import { rederiveBucketChanges } from "@/lib/ingestion/bucketStore";
 import { runPending } from "@/lib/ingestion/dailyRunStore";
 import { checkPollBearer } from "@/lib/ingestion/doorAuth";
 import { parsePendingFiles } from "@/lib/ingestion/parser";
@@ -28,7 +29,9 @@ export async function POST(request: NextRequest) {
     const run = await runPending("file_arrival");
     if (run.available) {
       const raw = await extractPendingRawRows(20);
-      return NextResponse.json({ ok: true, runs: run.runs.map((r) => ({ status: r.status, files: r.total, succeeded: r.succeeded, failed: r.failed, left: r.leftForNextRun })), raw: { ...raw, errors: raw.errors.length } });
+      // A scheduled check marks files removed in the database; reading them again needs the app.
+      const rederived = await rederiveBucketChanges(null, 10).catch((error) => { console.error("[carrier-files/poll] re-reading removed files failed:", error); return null; });
+      return NextResponse.json({ ok: true, runs: run.runs.map((r) => ({ status: r.status, files: r.total, succeeded: r.succeeded, failed: r.failed, left: r.leftForNextRun })), raw: { ...raw, errors: raw.errors.length }, rederived });
     }
     const outcome = await pollBucketDrops(100);
     if (outcome.errors.length) console.error(`[carrier-files/poll] ${outcome.errors.length} drop(s) failed:`, outcome.errors.slice(0, 5));

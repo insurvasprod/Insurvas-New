@@ -7,6 +7,7 @@ import { bucketDay, type BucketDay, type BucketExpectation, type BucketFile } fr
 import { FILE_TYPES, type CarrierFileType } from "./constants";
 import { runPending } from "./dailyRunStore";
 import { libraryCarriers } from "./registry";
+import { reprocessCarrierFiles } from "./reprocessRuns";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Loose = any;
@@ -111,11 +112,35 @@ export async function checkBucketNow(tenantId: string, userId: string, date: str
   const restored = ((sync?.restored ?? []) as string[]).length;
   const outcome = await runPending("manual", { tenantId });
   const registered = outcome.runs.find((run) => run.tenantId === tenantId)?.total ?? 0;
+  // A removed file stops counting, a restored one counts again: each is read again from its raw rows.
+  await rederiveBucketChanges(tenantId);
   const { error: logError } = await db().from("carrier_bucket_check").insert({ tenant_id: tenantId, check_date: date, trigger: "manual", checked_by: userId, registered, removed, restored });
   if (logError) throw new Error(`The check ran but could not be recorded: ${logError.message}`);
   return { registered, removed, restored };
 }
 
+/**
+ * The bucket files whose removal changed since they were last derived (20261009150000), read again
+ * from their raw rows: a removed file's snapshots stop counting and its lines are reversed; a
+ * restored one counts again. Check now runs it for its agency at once; the poll for everyone.
+ */
+export async function rederiveBucketChanges(tenantId: string | null, limit = 20): Promise<{ available: boolean; files: number; failed: number }> {
+  const { data, error } = await db().rpc("bucket_files_to_rederive", { p_tenant_id: tenantId, p_limit: limit });
+  if (error) {
+    if (isSchemaGap(error)) return { available: false, files: 0, failed: 0 };
+    throw new Error(`Could not list the files removed from the bucket: ${error.message}`);
+  }
+  let failed = 0;
+  const files = (data ?? []) as Array<{ tenant_id: string; file_id: string }>;
+  for (const file of files) {
+    const run = await reprocessCarrierFiles(file.tenant_id, null, { kind: "file", fileId: file.file_id }, "bucket_removal").catch((failure) => {
+      console.error(`[bucket] ${file.file_id} could not be read again after its removal changed; the poll retries:`, failure);
+      return null;
+    });
+    if (run?.status !== "succeeded") failed++;
+  }
+  return { available: true, files: files.length, failed };
+}
 const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 export async function saveBucketSettings(tenantId: string, userId: string, input: { checkTimes: string[]; timezone: string }): Promise<void> {

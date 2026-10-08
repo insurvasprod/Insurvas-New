@@ -15,7 +15,7 @@
  * Dependencies are injected; relative imports only.
  */
 
-export type ReprocessTrigger = "manual" | "parser_update" | "status_map_approval" | "reissue" | "scheduled";
+export type ReprocessTrigger = "manual" | "parser_update" | "status_map_approval" | "reissue" | "scheduled" | "bucket_removal";
 
 export type ReprocessScope =
   | { kind: "file"; fileId: string }

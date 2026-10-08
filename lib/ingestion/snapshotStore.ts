@@ -51,10 +51,12 @@ async function policyHistoryInputs(tenantId: string, carrierId: string, policies
   for (let from = 0; ; from += 1000) {
     const { data, error } = await db()
       .from("policy_snapshot")
-      .select(`policy_number, snapshot_date, file_id, ${TRACKED_FIELDS.join(", ")}, file_registry!policy_snapshot_file_id_fkey(received_at)`)
+      .select(`policy_number, snapshot_date, file_id, ${TRACKED_FIELDS.join(", ")}, file_registry!policy_snapshot_file_id_fkey!inner(received_at, removed_from_bucket_at)`)
       .eq("tenant_id", tenantId)
       .eq("carrier_id", carrierId)
       .in("policy_number", policies)
+      // A file removed from the bucket is no part of a policy's history (20261009150000); restored, it is again.
+      .is("file_registry.removed_from_bucket_at", null)
       .order("id")
       .range(from, from + 999);
     if (error) throw new Error(`Could not read the policies' snapshots: ${error.message}`);
