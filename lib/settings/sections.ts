@@ -27,7 +27,7 @@ export type SettingsSection = {
 
 export const SETTINGS_SECTIONS: SettingsSection[] = [
   { group: "Agency", id: "agency-profile", label: "Agency profile", description: "Who the agency is on a carrier application, and the health of what it is contracted to sell.", short: "The agency's legal identity and what it is contracted to sell." },
-  { group: "Agency", id: "carrier-library", label: "Carrier library", description: "Carriers, contract levels, commission schedules and advance rules. Everything the ledger multiplies by.", short: "Carriers, contract levels, commission schedules and advance rules." },
+  { group: "Agency", id: "carrier-library", label: "Carrier library", description: "The carriers you are contracted with: contract level, writing number and E&O requirement. Rates and advance rules are on the Rate card.", short: "Carriers, contract levels, writing numbers and E&O." },
   { group: "Agency", id: "states-licences", label: "States & licences", description: "Appointments, resident and non-resident licences, E&O cover and continuing education, in one place.", short: "Licences, carrier appointments, E&O cover and continuing education." },
   { group: "Agency", id: "team-access", label: "Team & access", description: "Owners, licensed agents, setters, assistants and bookkeepers — and the boundary each one works inside.", short: "Who is on the workspace, their role and where they are licensed." },
   { group: "How you call", id: "calendar", label: "Calendar & availability", description: "Working hours, blocked time and how many appointments fit in a day. Every booking rule reads these." },

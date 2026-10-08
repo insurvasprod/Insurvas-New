@@ -134,18 +134,21 @@ export type RateCardCarrier = {
   trigger: Trigger | null; lagDays: number | null; levelBp: number | null; writingNumber: string | null;
   schedules: Array<Schedule & { familyName: string }>; unmapped: Array<{ code: string; policies: number }>; mapped: Array<{ code: string; family: string; own: boolean }>;
   reasons: Array<{ reason: string; policies: number }>;
+  /** Advance rules by product family, newest first: how much is paid up front and for how long it can come back. */
+  advanceRules: Array<{ productCode: string; familyName: string; advanceMonths: number; advancePctBp: number; clawbackMonths: number; clawbackType: "full" | "prorated"; effectiveFrom: string }>;
 };
 
 /** The rate card screen: per carrier in the book, what is set, what is missing, and how much of the book that leaves unpriced. */
 export async function loadRateCard(tenantId: string) {
   const data = await inputs(tenantId);
   if (!data) return { available: false as const };
-  const [carriers, products, ownFamilies, expected, contracts] = await Promise.all([
+  const [carriers, products, ownFamilies, expected, contracts, rules] = await Promise.all([
     db().from("carriers").select("id, name"),
     db().from("products").select("code, name").eq("is_active", true).order("sort_order"),
     db().from("carrier_product_family").select("carrier_id, carrier_product_code").eq("tenant_id", tenantId),
     everyRow(() => db().from("expected_commission").select("carrier_id, confidence, expected_amount_cents, overdue_from").eq("tenant_id", tenantId).order("carrier_id").order("policy_number")),
     db().from("tenant_carriers").select("carrier_id, writing_number, effective_from").eq("tenant_id", tenantId).eq("is_active", true),
+    db().from("advance_rules").select("carrier_id, product_code, advance_months, advance_pct_bp, clawback_months, clawback_type, effective_from").eq("tenant_id", tenantId).order("effective_from", { ascending: false }),
   ]);
   const writing = new Map<string, string>();
   for (const row of [...(contracts.data ?? [])].sort((a: Loose, b: Loose) => String(a.effective_from).localeCompare(String(b.effective_from)))) writing.set(row.carrier_id, row.writing_number);
@@ -162,6 +165,7 @@ export async function loadRateCard(tenantId: string) {
       carrierId: p.carrier_id, carrierName: carrierName.get(p.carrier_id) ?? "Carrier not known", policies: 0, monthlyCents: 0, pricedMonthlyCents: 0, pricedPolicies: 0,
       trigger: data.trigger.get(p.carrier_id)?.trigger ?? null, lagDays: data.trigger.get(p.carrier_id)?.lagDays ?? null, levelBp: data.level.get(p.carrier_id) ?? null, writingNumber: writing.get(p.carrier_id) ?? null,
       schedules: (data.schedulesByCarrier.get(p.carrier_id) ?? []).map((s) => ({ ...s, familyName: productName.get(s.productCode) ?? s.productCode })), unmapped: [], mapped: [], reasons: [],
+      advanceRules: ((rules.data ?? []) as Loose[]).filter((r) => r.carrier_id === p.carrier_id).map((r) => ({ productCode: r.product_code, familyName: productName.get(r.product_code) ?? r.product_code, advanceMonths: r.advance_months, advancePctBp: r.advance_pct_bp, clawbackMonths: r.clawback_months, clawbackType: r.clawback_type, effectiveFrom: r.effective_from })),
     };
     const monthly = Math.floor(Number(p.annualised_premium_cents ?? 0) / 12);
     const family = p.product_code ? data.family.get(`${p.carrier_id}|${p.product_code}`) ?? null : null;
@@ -184,7 +188,18 @@ export async function loadRateCard(tenantId: string) {
     byCarrier.set(p.carrier_id, entry);
     priced.push({ carrierId: p.carrier_id, monthlyCents: monthly, priced: ok });
   }
-  const rows = [...byCarrier.values()].sort((a, b) => b.monthlyCents - a.monthlyCents);
+  // A carrier you're contracted with is on the card before its first file, so its rates and advance
+  // rule can be set ahead (they used to live only in Settings › Carrier library).
+  for (const contract of (contracts.data ?? []) as Loose[]) {
+    if (byCarrier.has(contract.carrier_id)) continue;
+    byCarrier.set(contract.carrier_id, {
+      carrierId: contract.carrier_id, carrierName: carrierName.get(contract.carrier_id) ?? "Carrier not known", policies: 0, monthlyCents: 0, pricedMonthlyCents: 0, pricedPolicies: 0,
+      trigger: data.trigger.get(contract.carrier_id)?.trigger ?? null, lagDays: data.trigger.get(contract.carrier_id)?.lagDays ?? null, levelBp: data.level.get(contract.carrier_id) ?? null, writingNumber: writing.get(contract.carrier_id) ?? null,
+      schedules: (data.schedulesByCarrier.get(contract.carrier_id) ?? []).map((s) => ({ ...s, familyName: productName.get(s.productCode) ?? s.productCode })), unmapped: [], mapped: [], reasons: [],
+      advanceRules: ((rules.data ?? []) as Loose[]).filter((r) => r.carrier_id === contract.carrier_id).map((r) => ({ productCode: r.product_code, familyName: productName.get(r.product_code) ?? r.product_code, advanceMonths: r.advance_months, advancePctBp: r.advance_pct_bp, clawbackMonths: r.clawback_months, clawbackType: r.clawback_type, effectiveFrom: r.effective_from })),
+    });
+  }
+  const rows = [...byCarrier.values()].sort((a, b) => b.monthlyCents - a.monthlyCents || a.carrierName.localeCompare(b.carrierName));
   for (const row of rows) row.reasons.sort((a, b) => b.policies - a.policies);
   const expectedRows = expected.error ? [] : expected.rows;
   return {

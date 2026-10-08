@@ -59,7 +59,20 @@ export function RateCardWorkspace({ carriers, products, readOnly, today }: { car
     if (!field("family")) return notify.block("Choose the product family.");
     if (rate === null) return notify.block("Enter the rate as a percentage, like 145 or 82.5.");
     if (level === null) return notify.block("Enter the contract level the rate is for, like 100.");
-    void post({ action: "save_rate", carrier_id: open.carrierId, product_code: field("family"), contract_level_bp: level, policy_year: Number(field("year", "1")) || 1, rate_bp: rate, effective_from: field("from", today) }, "Rate saved.");
+    void post({ action: "save_rate", carrier_id: open.carrierId, product_code: field("family"), contract_level_bp: level, policy_year: Number(field("year", "1")) || 1, rate_bp: rate, effective_from: field("from", today), applies_onward: field("onward") === "yes" }, "Rate saved.");
+  }
+
+  function saveAdvanceRule() {
+    if (!open) return;
+    const family = field("advFamily", open.mapped[0]?.family ?? "");
+    const months = Number(field("advMonths"));
+    const pct = percentToBp(field("advPct"));
+    const back = Number(field("advBack"));
+    if (!family) return notify.block("Choose the product family.");
+    if (!field("advMonths") || !Number.isInteger(months) || months < 0) return notify.block("Enter how many months are advanced, like 9.");
+    if (pct === null) return notify.block("Enter the advance as a percentage of year one, like 75.");
+    if (!field("advBack") || !Number.isInteger(back) || back < 0) return notify.block("Enter how many months it can be clawed back, like 12.");
+    void post({ action: "save_advance_rule", carrier_id: open.carrierId, product_code: family, advance_months: months, advance_pct_bp: pct, clawback_months: back, clawback_type: field("advType", "prorated"), effective_from: field("advFrom", today) }, "Advance rule saved.");
   }
 
   return (
@@ -93,10 +106,12 @@ export function RateCardWorkspace({ carriers, products, readOnly, today }: { car
                     <td className="text-right tabular-nums">{c.levelBp !== null ? `${bpToPercent(c.levelBp)}%` : <span className="text-[var(--warning-ink)]">Not set</span>}</td>
                     <td className="text-right tabular-nums">{c.schedules.length}</td>
                     <td>
-                      <StatusChip tone={c.pricedPolicies === c.policies ? "good" : c.pricedPolicies ? "warning" : "danger"}>{c.pricedPolicies === c.policies ? "All" : c.pricedPolicies ? `${c.pricedPolicies} of ${c.policies}` : "None"}</StatusChip>
-                      <span className="block text-xs text-muted-foreground">{share}% of premium</span>
+                      {c.policies === 0 ? <span className="text-muted-foreground">No policies yet</span> : <>
+                        <StatusChip tone={c.pricedPolicies === c.policies ? "good" : c.pricedPolicies ? "warning" : "danger"}>{c.pricedPolicies === c.policies ? "All" : c.pricedPolicies ? `${c.pricedPolicies} of ${c.policies}` : "None"}</StatusChip>
+                        <span className="block text-xs text-muted-foreground">{share}% of premium</span>
+                      </>}
                     </td>
-                    <td className="text-right"><Button type="button" variant="outline" size="sm" onClick={() => { setForm({}); setOpenId(c.carrierId); }}>{readOnly ? "Open" : c.pricedPolicies === c.policies ? "Edit" : "Set up"}</Button></td>
+                    <td className="text-right"><Button type="button" variant="outline" size="sm" onClick={() => { setForm({}); setOpenId(c.carrierId); }}>{readOnly ? "Open" : c.policies > 0 && c.pricedPolicies === c.policies ? "Edit" : "Set up"}</Button></td>
                   </tr>
                 );
               })}
@@ -112,7 +127,7 @@ export function RateCardWorkspace({ carriers, products, readOnly, today }: { car
               <DialogHeader>
                 <DialogTitle className="text-base">{open.carrierName}</DialogTitle>
                 <DialogDescription>
-                  {open.pricedPolicies} of {open.policies} policies can be checked{open.reasons.length ? `. The rest: ${open.reasons.slice(0, 3).map((r) => `${r.reason} (${r.policies})`).join("; ")}.` : "."}
+                  {open.policies === 0 ? "No policy from this carrier in your files yet. What you set here prices them as they arrive" : <>{open.pricedPolicies} of {open.policies} policies can be checked</>}{open.reasons.length ? `. The rest: ${open.reasons.slice(0, 3).map((r) => `${r.reason} (${r.policies})`).join("; ")}.` : "."}
                 </DialogDescription>
               </DialogHeader>
 
@@ -182,7 +197,7 @@ export function RateCardWorkspace({ carriers, products, readOnly, today }: { car
                       </tbody>
                     </table>
                   )}
-                  <div className="grid gap-3 sm:grid-cols-5">
+                  <div className="grid gap-3 sm:grid-cols-6">
                     <div className="grid gap-1 sm:col-span-2">
                       <Label htmlFor="rc-family">Product family</Label>
                       <select id="rc-family" className={select} value={field("family", [...open.mapped.map((m) => m.family)][0] ?? "")} onChange={(e) => set("family", e.target.value)}>
@@ -190,12 +205,62 @@ export function RateCardWorkspace({ carriers, products, readOnly, today }: { car
                         {products.map((p) => <option key={p.code} value={p.code}>{p.name}</option>)}
                       </select>
                     </div>
+                    <div className="grid gap-1"><Label htmlFor="rc-year">Policy year</Label><Input id="rc-year" className="h-9" inputMode="numeric" value={field("year", "1")} onChange={(e) => set("year", e.target.value.replace(/\D/g, ""))} /></div>
                     <div className="grid gap-1"><Label htmlFor="rc-rate">Rate (%)</Label><Input id="rc-rate" className="h-9" inputMode="decimal" placeholder="e.g. 145" value={field("rate")} onChange={(e) => set("rate", e.target.value)} /></div>
                     <div className="grid gap-1"><Label htmlFor="rc-rate-level">For level (%)</Label><Input id="rc-rate-level" className="h-9" inputMode="decimal" value={field("rateLevel", open.levelBp !== null ? bpToPercent(open.levelBp) : "")} onChange={(e) => set("rateLevel", e.target.value)} /></div>
                     <div className="grid gap-1"><Label htmlFor="rc-from">From</Label><Input id="rc-from" type="date" className="h-9" value={field("from", today)} onChange={(e) => set("from", e.target.value)} /></div>
                   </div>
+                  <label htmlFor="rc-onward" className="inline-flex items-center gap-2 text-sm text-foreground">
+                    <input id="rc-onward" type="checkbox" className="size-4 accent-[var(--primary)]" checked={field("onward") === "yes"} onChange={(e) => set("onward", e.target.checked ? "yes" : "")} />
+                    Also every later year without its own rate (year {field("year", "1") || "N"}+)
+                  </label>
                   <p className="m-0 text-xs text-muted-foreground">A rate applies from its date onward; figures already worked out never change.</p>
                   <div><Button type="button" size="sm" onClick={saveRate}>Add rate</Button></div>
+                </section>
+
+                <section className="grid gap-2 border-t border-border pt-4">
+                  <h3 className="m-0 text-sm font-semibold text-foreground">Advance rules</h3>
+                  {open.advanceRules.length > 0 ? (
+                    <table className="w-full text-left text-sm">
+                      <thead><tr className="text-xs text-muted-foreground"><th className="py-1 font-medium">Product family</th><th className="py-1 text-right font-medium">Advanced</th><th className="py-1 text-right font-medium">Of year one</th><th className="py-1 text-right font-medium">Clawback</th><th className="py-1 pl-4 font-medium">Type</th><th className="py-1 font-medium">From</th></tr></thead>
+                      <tbody>
+                        {open.advanceRules.map((r) => (
+                          <tr key={`${r.productCode}|${r.effectiveFrom}`} className="border-t border-border">
+                            <td className="py-1.5">{r.familyName}</td>
+                            <td className="py-1.5 text-right tabular-nums">{r.advanceMonths} months</td>
+                            <td className="py-1.5 text-right font-semibold tabular-nums">{bpToPercent(r.advancePctBp)}%</td>
+                            <td className="py-1.5 text-right tabular-nums">{r.clawbackMonths} months</td>
+                            <td className="py-1.5 pl-4">{r.clawbackType === "full" ? "Full" : "Prorated"}</td>
+                            <td className="py-1.5 tabular-nums">{fileDay(r.effectiveFrom)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  ) : <p className="m-0 text-muted-foreground">None yet: nothing is expected up front, and no lapse is counted as inside a clawback window.</p>}
+                  <div className="grid gap-3 sm:grid-cols-6 sm:items-end">
+                    <div className="grid gap-1 sm:col-span-2">
+                      <Label htmlFor="rc-adv-family">Product family</Label>
+                      <select id="rc-adv-family" className={select} value={field("advFamily", open.mapped[0]?.family ?? "")} onChange={(e) => set("advFamily", e.target.value)}>
+                        <option value="">Choose</option>
+                        {products.map((p) => <option key={p.code} value={p.code}>{p.name}</option>)}
+                      </select>
+                    </div>
+                    <div className="grid gap-1"><Label htmlFor="rc-adv-months">Months</Label><Input id="rc-adv-months" className="h-9" inputMode="numeric" placeholder="e.g. 9" value={field("advMonths")} onChange={(e) => set("advMonths", e.target.value.replace(/\D/g, ""))} /></div>
+                    <div className="grid gap-1"><Label htmlFor="rc-adv-pct">Advance (%)</Label><Input id="rc-adv-pct" className="h-9" inputMode="decimal" placeholder="e.g. 75" value={field("advPct")} onChange={(e) => set("advPct", e.target.value)} /></div>
+                    <div className="grid gap-1"><Label htmlFor="rc-adv-back">Clawback (mo)</Label><Input id="rc-adv-back" className="h-9" inputMode="numeric" placeholder="e.g. 12" value={field("advBack")} onChange={(e) => set("advBack", e.target.value.replace(/\D/g, ""))} /></div>
+                    <div className="grid gap-1">
+                      <Label htmlFor="rc-adv-type">Type</Label>
+                      <select id="rc-adv-type" className={select} value={field("advType", "prorated")} onChange={(e) => set("advType", e.target.value)}>
+                        <option value="prorated">Prorated</option>
+                        <option value="full">Full</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-6">
+                    <div className="grid gap-1 sm:col-span-2"><Label htmlFor="rc-adv-from">From</Label><Input id="rc-adv-from" type="date" className="h-9" value={field("advFrom", today)} onChange={(e) => set("advFrom", e.target.value)} /></div>
+                  </div>
+                  <p className="m-0 text-xs text-muted-foreground">Prorated takes back only the months not yet earned; full takes the whole advance back if the policy lapses inside the window.</p>
+                  <div><Button type="button" size="sm" onClick={saveAdvanceRule}>Save advance rule</Button></div>
                 </section>
               </fieldset>
 

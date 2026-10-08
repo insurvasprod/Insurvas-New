@@ -103,7 +103,7 @@
     "components/app/cadence-settings.tsx": 5,
     "components/app/calendar-availability-settings.tsx": 9,
     "components/app/calling-window-settings.tsx": 4,
-    "components/app/carrier-library-settings.tsx": 13,
+    "components/app/carrier-library-settings.tsx": 7,
     "components/app/confirm-email-panel.tsx": 1,
     "components/app/dialer-overlay-frame.tsx": 4,
     "components/app/dialer-preflight.tsx": 5,
