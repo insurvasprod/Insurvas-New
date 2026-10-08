@@ -5,10 +5,11 @@ import { isSchemaGap } from "@/lib/supabase/schemaGap";
 
 import { sendEmail } from "@/lib/email/transport";
 
+import { recordFileEntries } from "./commissionLedgerStore";
 import { isPolicyFeed, type CarrierFileType } from "./constants";
 import { chooseLayoutMap, parseWithMap, type Finding, type LayoutEntry, type LayoutMap, type ParseResult, type PublishedMapRow, type TypedRow } from "./layout";
 import type { RawColumn, RawRow } from "./grid";
-import { extractRawRows, readRawRows } from "./rawLayer";
+import { extractRawRows, pdfStatementTotal, readRawRows } from "./rawLayer";
 import { runStages } from "./stages";
 import { gateStatuses, shownWord, type NormalizedStatus } from "./statuses";
 
@@ -97,7 +98,7 @@ export type ParseOutcome =
  * A replaced file keeps its status; only its parser record moves.
  */
 export async function parseCarrierFile(tenantId: string, fileId: string, rows?: RawRow[]): Promise<ParseOutcome> {
-  const columns = "id, carrier_id, file_type, file_date, status, parse_block, parser_id, raw_extracted_at, raw_header_row, raw_columns, raw_preamble, sheet_name, file_kind";
+  const columns = "id, carrier_id, file_type, file_date, status, parse_block, parser_id, raw_extracted_at, raw_header_row, raw_columns, raw_preamble, sheet_name, file_kind, storage_path";
   let { data: file, error } = await db().from("file_registry").select(columns).eq("tenant_id", tenantId).eq("id", fileId).maybeSingle();
   if (error) {
     if (isSchemaGap(error)) return { outcome: "pending_schema" };
@@ -138,12 +139,22 @@ export async function parseCarrierFile(tenantId: string, fileId: string, rows?: 
     rows: rows ?? (await readRawRows(tenantId, fileId)),
     sheetName: file.sheet_name as string | null,
   };
-  const result = parseWithMap({ map: resolved.map, entries: resolved.entries, raw, previousRowCount: await previousParsedCount(tenantId, file) });
+  // LA-4.4 for a PDF read before its layout named a total: the statement is checked from the original.
+  const statement = await pdfStatementTotal(tenantId, file, raw.columns, raw.rows);
+  if (statement.row) raw.rows = [...raw.rows, statement.row];
+  const result: ParseResult = statement.problem
+    ? { fatal: statement.problem, rows: [], heldBack: [], findings: [{ findingType: "totals_mismatch", severity: "blocking", reasoning: statement.problem, payload: {} }], statedTotalCents: null, linesTotalCents: null }
+    : parseWithMap({ map: resolved.map, entries: resolved.entries, raw, previousRowCount: await previousParsedCount(tenantId, file) });
   await writeFindings(tenantId, fileId, resolved.map, result.findings);
 
   const parser = { parser_id: resolved.map.id, parser_version: resolved.map.version };
   if (result.fatal) {
     await db().from("file_registry").update(movesStatus ? { ...parser, status: "failed", error_detail: result.fatal.slice(0, 2000), parsed_row_count: null } : { ...parser, parsed_row_count: null }).eq("tenant_id", tenantId).eq("id", fileId);
+    // LA-4.4: a failing file writes nothing, so a commission file read again and failing has the
+    // lines an earlier reading recorded reversed, the reason said (20261009190000).
+    if (movesStatus && file.file_type === "commissions") {
+      await recordFileEntries(tenantId, fileId, []).catch((failure) => console.error(`[parser] ${fileId} failed, and its earlier lines could not be reversed; the next reading retries:`, failure));
+    }
     return { outcome: "failed", mapId: resolved.map.id, version: resolved.map.version, reason: result.fatal, result };
   }
   // LA-4.5: the unknown-status gate. Only rows whose carrier word has an approved mapping go further.

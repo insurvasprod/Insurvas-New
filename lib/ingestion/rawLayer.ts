@@ -4,8 +4,8 @@ import { readXlsxSheets } from "@/lib/agentTemplates/xlsx";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isSchemaGap } from "@/lib/supabase/schemaGap";
 
-import { chooseSheet, detectHeaderRow, parseCsvGrid, rawRowsFromGrid } from "./grid";
-import { pdfGrid, statementProblem, pdfLayoutProblems, type PdfLayout } from "./pdfLayout";
+import { chooseSheet, detectHeaderRow, parseCsvGrid, rawRowsFromGrid, type RawColumn } from "./grid";
+import { findAmount, pdfGrid, PDF_TOTAL_MARKER, statementProblem, pdfLayoutProblems, type PdfLayout } from "./pdfLayout";
 import { readPdfLines } from "./pdfText";
 import { readSpreadsheetMl } from "./spreadsheetMl";
 import type { ReprocessRow } from "./reprocess";
@@ -165,6 +165,32 @@ export async function extractRawRowsQuietly(tenantId: string, fileId: string): P
   }
 }
 
+/**
+ * LA-4.4 for a PDF whose raw rows were written before its layout named a total: they hold no total
+ * row, and raw rows are never rewritten. So the statement's total and balances are read from the
+ * original PDF (kept in storage) when the file is parsed: the total comes back as a total row for
+ * this reading only, or the problem that fails the file. Nothing to do for any other file.
+ */
+export async function pdfStatementTotal(
+  tenantId: string,
+  file: { carrier_id: string | null; file_type: string | null; file_kind: string | null; storage_path: string },
+  columns: RawColumn[],
+  rows: Array<{ rowNumber: number; payload: Record<string, string> }>,
+): Promise<{ problem: string | null; row: { rowNumber: number; payload: Record<string, string> } | null }> {
+  const none = { problem: null, row: null };
+  if (file.file_kind !== "pdf" || rows.some((row) => Object.values(row.payload).includes(PDF_TOTAL_MARKER))) return none;
+  const layout = (await layoutForFile(tenantId, file.carrier_id, file.file_type)).pdfLayout;
+  if (!layout?.total) return none;
+  const lines = await readPdfLines(await carrierFileStorage().get(file.storage_path));
+  const problem = statementProblem(lines, layout);
+  if (problem) return { problem: `The statement can't be read: ${problem}. Nothing was read from this file.`, row: null };
+  const total = findAmount(lines, layout.total)!;
+  const first = columns[0];
+  const amount = columns.find((column) => column.header === layout.total!.column);
+  if (!first || !amount) return { problem: `The statement's total belongs in "${layout.total.column}", a column this file was not read with. Nothing was read from this file.`, row: null };
+  const next = rows.reduce((max, row) => Math.max(max, row.rowNumber), 0) + 1;
+  return { problem: null, row: { rowNumber: next, payload: { [first.key]: PDF_TOTAL_MARKER, [amount.key]: total.text } } };
+}
 export type SweepOutcome = { available: boolean; extracted: number; failed: number; errors: string[] };
 
 /** Finishes every spreadsheet still waiting for its rows, oldest first. Run by the poll. */
