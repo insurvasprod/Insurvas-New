@@ -112,8 +112,9 @@ export function CarrierDiscrepancies({ items, readOnly, handItems = [], handCanW
   const [dismissing, setDismissing] = useState<{ id: string; note: string } | null>(null);
 
   const all: Item[] = useMemo(() => [...items.map((row) => ({ source: "carrier" as const, row })), ...handItems.map((row) => ({ source: "hand" as const, row }))], [items, handItems]);
-  const sum = useMemo(() => moneySummary(items.map((i) => ({ discrepancy_type: i.type, difference_cents: i.differenceCents, expected_amount_cents: i.expectedCents, reported_amount_cents: i.reportedCents, status: i.status }))), [items]);
-  const handWorking = handItems.filter((i) => i.status === "open" || i.status === "disputed");
+  // The tiles follow the source filter, as the list does (Policies and the ledger do the same).
+  const sum = useMemo(() => moneySummary((source === "hand" ? [] : items).map((i) => ({ discrepancy_type: i.type, difference_cents: i.differenceCents, expected_amount_cents: i.expectedCents, reported_amount_cents: i.reportedCents, status: i.status }))), [items, source]);
+  const handWorking = source === "carrier" ? [] : handItems.filter((i) => i.status === "open" || i.status === "disputed");
   const handOwedCents = handWorking.reduce((total, i) => total + Math.max(0, i.owedCents), 0);
   const carriers = useMemo(() => [...new Map(all.map((i) => [carrierKey(i), i.row.carrierName])).entries()].sort((a, b) => a[1].localeCompare(b[1])), [all]);
   const visible = useMemo(() => all.filter((i) =>

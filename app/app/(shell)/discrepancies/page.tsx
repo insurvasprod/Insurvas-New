@@ -25,7 +25,7 @@ import { hasTenantPermission } from "@/lib/tenantAuth/permissions";
  * item. A read-only account reads it and can print a letter, but cannot record decisions.
  * The old "From imported statements" address (?view=statements) lands on the list, filtered to it.
  */
-export default async function DiscrepanciesPage({ searchParams }: { searchParams: Promise<{ view?: string }> }) {
+export default async function DiscrepanciesPage({ searchParams }: { searchParams: Promise<{ view?: string; source?: string }> }) {
   const guard = await guardPage("discrepancy_report");
   if (!guard.entitled) {
     return <FeatureGateNotice guard={guard} featureLabel="Discrepancies" description="What each carrier paid against what your contract says it owes, with a dispute letter for each one." />;
@@ -35,7 +35,7 @@ export default async function DiscrepanciesPage({ searchParams }: { searchParams
   }
 
   const tenantId = guard.context.tenantId;
-  const { view } = await searchParams;
+  const { view, source } = await searchParams;
   const readOnly = guard.entitlement.access === "read_only";
   const [found, list] = await Promise.all([loadDiscrepancies(tenantId), view === "letters" ? null : listDiscrepancies(tenantId)]);
   const hand: HandDiscrepancyRow[] = (list?.available ? list.items : []).map((item) => ({
@@ -73,7 +73,7 @@ export default async function DiscrepanciesPage({ searchParams }: { searchParams
           handItems={hand}
           handCanWrite={!readOnly}
           handBlockedReason={readOnly ? "Reading and printing remain available; decisions are paused while the account is read-only." : null}
-          initialSource={view === "statements" ? "hand" : ""}
+          initialSource={view === "statements" ? "hand" : source ?? ""}
         />
       )}
     </div>

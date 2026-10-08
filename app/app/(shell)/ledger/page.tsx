@@ -42,7 +42,7 @@ import { hasTenantPermission, roleCanViewCommission } from "@/lib/tenantAuth/per
 const wholeMoney = (cents: number) => `${cents < 0 ? "−" : ""}$${Math.round(Math.abs(cents) / 100).toLocaleString("en-US")}`;
 const plural = (count: number, one: string, many: string) => `${count.toLocaleString("en-US")} ${count === 1 ? one : many}`;
 
-export default async function LedgerPage({ searchParams }: { searchParams: Promise<{ import?: string; view?: string }> }) {
+export default async function LedgerPage({ searchParams }: { searchParams: Promise<{ import?: string; view?: string; source?: string }> }) {
   const guard = await guardPage("commission_ledger");
   if (!guard.entitled) {
     return (
@@ -174,7 +174,7 @@ export default async function LedgerPage({ searchParams }: { searchParams: Promi
         {sourceTabs(lines.length, showExpected)}
         {notices}
         {book && !book.available && <div role="status" className={`${alert} border-l-[var(--warning)] bg-[var(--warning-surface)] text-[var(--warning-ink)]`}>{LEDGER_PENDING_MESSAGE}</div>}
-        <CarrierLedger entries={lines} scoped={guard.role === "producer"} initialSource={params.view === "statements" ? "hand" : ""} />
+        <CarrierLedger entries={lines} scoped={guard.role === "producer"} initialSource={params.view === "statements" ? "hand" : params.source ?? ""} />
       </div>
     );
   }
