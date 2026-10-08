@@ -18,6 +18,7 @@
  */
 import type { CarrierFileType } from "./constants.ts";
 import { gridFromRaw, rawRowsFromGrid, type RawColumn, type RawRow } from "./grid.ts";
+import { PDF_TOTAL_MARKER } from "./pdfLayout.ts";
 
 export const DATA_TYPES = ["text", "int_cents", "date", "basis_points", "enum", "integer"] as const;
 export type DataType = (typeof DATA_TYPES)[number];
@@ -390,7 +391,10 @@ export function parseWithMap(input: ParseInput): ParseResult {
   const unknown = raw.columns.filter((column) => column.header.trim() !== "" && !mapped.has(column.header)).map((column) => column.header);
   if (unknown.length) findings.push({ findingType: "unknown_column", severity: "warning", reasoning: `${unknown.length === 1 ? "A column" : `${unknown.length} columns`} this map does not read: ${unknown.map((name) => `"${name}"`).join(", ")}. Every value is kept in the raw rows.`, payload: { columns: unknown } });
 
-  const isTotalRow = (row: RawRow) => Boolean(map.totalRowColumn && keyFor.has(map.totalRowColumn) && (row.payload[keyFor.get(map.totalRowColumn)!] ?? "").trim() === map.totalRowValue);
+  // A PDF statement's own total arrives as a marked row (LA-4.4, pdfLayout.ts); a spreadsheet's is named by the map.
+  const isPdfTotal = (row: RawRow) => Object.values(row.payload).some((value) => value === PDF_TOTAL_MARKER);
+  const isTotalRow = (row: RawRow) => isPdfTotal(row) || Boolean(map.totalRowColumn && keyFor.has(map.totalRowColumn) && (row.payload[keyFor.get(map.totalRowColumn)!] ?? "").trim() === map.totalRowValue);
+  const statedByPdf = raw.rows.some(isPdfTotal);
   const amountEntry = entries.find((entry) => entry.targetField === "amount_cents");
 
   const rows: TypedRow[] = [];
@@ -426,8 +430,9 @@ export function parseWithMap(input: ParseInput): ParseResult {
   }
 
   let linesTotal: number | null = null;
-  if (map.totalRowColumn) {
+  if (map.totalRowColumn || statedByPdf) {
     if (statedTotal === null) {
+      if (statedByPdf) return result("The statement's total is not in the column this map reads the amount from, so its lines cannot be checked. Nothing was read from this file.");
       findings.push({ findingType: "total_row_not_found", severity: "warning", reasoning: `No row has "${map.totalRowValue}" in "${map.totalRowColumn}", so the file's stated total could not be checked.`, payload: {} });
     } else {
       if (heldBack.length) return result(`The stated total cannot be checked while ${new Set(heldBack.map((p) => p.rowNumber)).size} rows cannot be read, so nothing was read from this file.`, [], heldBack, statedTotal);

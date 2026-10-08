@@ -5,7 +5,7 @@ import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isSchemaGap } from "@/lib/supabase/schemaGap";
 
 import { chooseSheet, detectHeaderRow, parseCsvGrid, rawRowsFromGrid } from "./grid";
-import { pdfGrid, pdfLayoutProblems, type PdfLayout } from "./pdfLayout";
+import { pdfGrid, statementProblem, pdfLayoutProblems, type PdfLayout } from "./pdfLayout";
 import { readPdfLines } from "./pdfText";
 import { readSpreadsheetMl } from "./spreadsheetMl";
 import type { ReprocessRow } from "./reprocess";
@@ -102,6 +102,9 @@ export async function extractRawRows(tenantId: string, fileId: string): Promise<
     if (file.file_kind === "pdf") {
       const lines = await readPdfLines(bytes);
       if (!lines.length) throw new Error("the PDF has no text: it looks scanned (an image of a page), which isn't read. Ask the carrier for a text PDF, a CSV or an Excel file");
+      // LA-4.4's balance gate, the statement's own arithmetic: nothing is written when it fails.
+      const problem = statementProblem(lines, layout.pdfLayout!);
+      if (problem) throw new Error(problem);
       grid = pdfGrid(lines, layout.pdfLayout!);
       if (grid.length < 2) throw new Error("no line of the PDF matched its layout's rows. The statement's layout may have changed");
     } else if (file.file_kind === "xlsx" || file.file_kind === "xls") {

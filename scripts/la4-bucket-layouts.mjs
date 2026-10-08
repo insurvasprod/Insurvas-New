@@ -255,15 +255,52 @@ export const LAYOUTS = [
 export const LATER_VERSIONS = {
   // 20261009130000: the owner decided account-level lines are recorded (2026-10-08), so the policy
   // number is no longer required, and the line's description is read.
+  // 20261009130000 (v2): the policy number is no longer required, and the line's description is
+  // read. 20261009180000 (v3): LA-4.4's balance gate — the lines must add up to the statement's
+  // TOTAL MANUAL ADJUSTMENTS, and Beginning + Total Commissions = Ending Balance.
   ssl_statement_pdf: {
-    version: 2,
-    migration: "20261009130000",
+    version: 3,
+    migration: "20261009180000",
     entries: [
       ["Policy #", "policy_number", "text", "none", false],
       ["Adjustment Type", "entry_type", "enum", "none", true, { AI: "advance_interest" }],
       ["(+/-) Adjustment Amount", "amount_cents", "int_cents", money, true],
       ["Adjustment Description", "description", "text", "none", false],
     ],
+    pdf: {
+      start: "MANUAL ADJUSTMENTS", stop: ["TOTAL MANUAL ADJUSTMENTS"],
+      columns: [["Policy #", 40], ["Name", 75], ["Plan Code", 105], ["Adjustment Type", 125], ["Adjustment Description", 170], ["(+/-) Adjustment Amount", 260]],
+      rowStart: ["Adjustment Type", "^[A-Z]{1,4}$"],
+      total: { label: "TOTAL MANUAL ADJUSTMENTS", column: "(+/-) Adjustment Amount" },
+      balance: { opening: { label: "Beginning Commission Balance:" }, activity: { label: "Total Commissions:", after: "SUMMARY TOTALS" }, closing: { label: "Ending Balance:" } },
+    },
+  },
+  // 20261009180000 (v2): the lines must add up to PRIMARY BALANCE TOTAL, and the Primary account's
+  // Previous Bal + Activity = Close Bal.
+  americo_statement_pdf: {
+    version: 2,
+    migration: "20261009180000",
+    pdf: {
+      start: "OVERRIDE ACTIVITY", stop: ["TOTAL PAY BASIS"],
+      columns: [["Policy Number", 30], ["Name/Desc", 100], ["Issue Age", 170], ["Eff. Date", 210], ["Plan", 255], ["TRDT", 295], ["PRDT", 335], ["Months", 370], ["DU PRO LV", 410], ["Base Amount", 465], ["TRX", 520], ["Rate", 560], ["Split", 600], ["Amt Acct", 635], ["Primary Balance", 680]],
+      rowStart: ["Policy Number", "^[A-Z]{2}\\d{6,}$"],
+      continuation: [["Agent Code", 115], ["Agent Name", 155]],
+      total: { label: "PRIMARY BALANCE TOTAL", column: "Primary Balance" },
+      balance: { opening: { label: "Primary", after: "Account Balances", nth: 0 }, activity: { label: "Primary", after: "Account Balances", nth: 1 }, closing: { label: "Primary", after: "Account Balances", nth: 2 } },
+    },
+  },
+  // 20261009180000 (v2): the lines must add up to TOTAL ADVANCES PAID, and PRIOR ACCOUNT BALANCE +
+  // COMMISSIONS CURRENT PERIOD = ENDING ACCOUNT BALANCE.
+  corebridge_statement_pdf: {
+    version: 2,
+    migration: "20261009180000",
+    pdf: {
+      start: "TRANSACTION DETAIL", stop: ["TOTAL ADVANCES PAID"],
+      columns: [["CO", 30], ["POLICY", 51], ["INSURED", 101], ["EFF DATE", 156], ["AGENT#", 198], ["COMM TYPE", 232], ["ANNUAL PREM", 292], ["PREM PAID", 345], ["SPLIT", 392], ["SPLIT PREM", 425], ["ADV", 470], ["COMM RATE", 495], ["OUTSTANDING ADV BAL", 538], ["ACTIVITY", 615]],
+      rowStart: ["CO", "^[A-Z]{3}$"],
+      total: { label: "TOTAL ADVANCES PAID", column: "ACTIVITY" },
+      balance: { opening: { label: "PRIOR ACCOUNT BALANCE" }, activity: { label: "COMMISSIONS CURRENT PERIOD" }, closing: { label: "ENDING ACCOUNT BALANCE" } },
+    },
   },
 };
 
@@ -286,4 +323,6 @@ export const pdfOf = (layout) => (layout.pdf ? {
   columns: layout.pdf.columns.map(([name, x]) => ({ name, x })),
   rowStart: { column: layout.pdf.rowStart[0], pattern: layout.pdf.rowStart[1] },
   ...(layout.pdf.continuation ? { continuation: layout.pdf.continuation.map(([name, x]) => ({ name, x })) } : {}),
+  ...(layout.pdf.total ? { total: layout.pdf.total } : {}),
+  ...(layout.pdf.balance ? { balance: layout.pdf.balance } : {}),
 } : null);
