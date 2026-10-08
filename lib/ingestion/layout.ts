@@ -374,13 +374,17 @@ export function parseWithMap(input: ParseInput): ParseResult {
   // A source column written "=annual" is a fixed value for every row: what the carrier's file never
   // says because it is always the same (Americo's premium is always annual).
   const isConstant = (entry: LayoutEntry) => entry.sourceColumn.startsWith("=") && entry.sourceColumn.length > 1;
-  const missingRequired = entries.filter((entry) => entry.required && !isConstant(entry) && !keyFor.has(entry.sourceColumn));
+  // "Status + Reason": two columns read as one, their non-empty values joined by a space (SSL says
+  // what a cancellation was in a second column: "Cancelled" + "[NP] Non Payment of Premium").
+  const parts = (entry: LayoutEntry) => (entry.sourceColumn.includes(" + ") ? entry.sourceColumn.split(" + ") : null);
+  const present = (entry: LayoutEntry) => isConstant(entry) || (parts(entry) ? parts(entry)!.every((part) => keyFor.has(part)) : keyFor.has(entry.sourceColumn));
+  const missingRequired = entries.filter((entry) => entry.required && !present(entry));
   if (missingRequired.length) {
     const names = missingRequired.map((entry) => `"${entry.sourceColumn}"`).join(", ");
     findings.push({ findingType: "required_column_missing", severity: "blocking", reasoning: `The file has no ${names} column, which this map requires.`, payload: { columns: missingRequired.map((entry) => entry.sourceColumn) } });
     return result(`Required column ${names} is missing, so nothing was read from this file.`);
   }
-  const mapped = new Set(entries.map((entry) => entry.sourceColumn));
+  const mapped = new Set(entries.flatMap((entry) => parts(entry) ?? [entry.sourceColumn]));
   const unknown = raw.columns.filter((column) => column.header.trim() !== "" && !mapped.has(column.header)).map((column) => column.header);
   if (unknown.length) findings.push({ findingType: "unknown_column", severity: "warning", reasoning: `${unknown.length === 1 ? "A column" : `${unknown.length} columns`} this map does not read: ${unknown.map((name) => `"${name}"`).join(", ")}. Every value is kept in the raw rows.`, payload: { columns: unknown } });
 
@@ -403,9 +407,10 @@ export function parseWithMap(input: ParseInput): ParseResult {
     const values: Record<string, CellValue> = {};
     let rowOk = true;
     for (const entry of entries) {
+      if (!present(entry)) { values[entry.targetField] = null; continue; }
+      const joined = parts(entry);
       const key = keyFor.get(entry.sourceColumn);
-      if (!key && !isConstant(entry)) { values[entry.targetField] = null; continue; }
-      const cell = key ? row.payload[key] ?? "" : entry.sourceColumn.slice(1);
+      const cell = joined ? joined.map((part) => (row.payload[keyFor.get(part)!] ?? "").trim()).filter(Boolean).join(" ") : key ? row.payload[key] ?? "" : entry.sourceColumn.slice(1);
       const converted = convertCell(cell, entry, { verbatim: verbatimFields.has(entry.targetField) });
       if (converted.ok) values[entry.targetField] = converted.value;
       else { rowOk = false; heldBack.push({ rowNumber: row.rowNumber, field: entry.targetField, reason: converted.reason }); }

@@ -7,7 +7,7 @@ import { sendEmail } from "@/lib/email/transport";
 
 import { chooseLayoutMap, parseWithMap, type Finding, type LayoutEntry, type LayoutMap, type ParseResult, type PublishedMapRow, type TypedRow } from "./layout";
 import type { RawColumn, RawRow } from "./grid";
-import { readRawRows } from "./rawLayer";
+import { extractRawRows, readRawRows } from "./rawLayer";
 import { runStages } from "./stages";
 import { gateStatuses, shownWord, type NormalizedStatus } from "./statuses";
 
@@ -96,10 +96,20 @@ export type ParseOutcome =
  * A replaced file keeps its status; only its parser record moves.
  */
 export async function parseCarrierFile(tenantId: string, fileId: string, rows?: RawRow[]): Promise<ParseOutcome> {
-  const { data: file, error } = await db().from("file_registry").select("id, carrier_id, file_type, file_date, status, parse_block, raw_extracted_at, raw_header_row, raw_columns, raw_preamble, sheet_name").eq("tenant_id", tenantId).eq("id", fileId).maybeSingle();
+  const columns = "id, carrier_id, file_type, file_date, status, parse_block, raw_extracted_at, raw_header_row, raw_columns, raw_preamble, sheet_name, file_kind";
+  let { data: file, error } = await db().from("file_registry").select(columns).eq("tenant_id", tenantId).eq("id", fileId).maybeSingle();
   if (error) {
     if (isSchemaGap(error)) return { outcome: "pending_schema" };
     throw new Error(`Could not load the file: ${error.message}`);
+  }
+  // A PDF waits for its PDF layout before it has rows at all. When one may have been published, it
+  // goes back to received and is read into rows first; without a layout it simply waits again.
+  if (file && !file.raw_extracted_at && file.file_kind === "pdf" && file.status === "failed" && file.parse_block === "no_layout_map") {
+    await db().from("file_registry").update({ status: "received", error_detail: null, parse_block: null }).eq("tenant_id", tenantId).eq("id", fileId).eq("status", "failed");
+    const extracted = await extractRawRows(tenantId, fileId);
+    if (extracted.outcome !== "extracted" && extracted.outcome !== "already") return extracted.outcome === "failed" ? { outcome: "not_applicable", reason: extracted.reason } : { outcome: "no_layout_map" };
+    ({ data: file, error } = await db().from("file_registry").select(columns).eq("tenant_id", tenantId).eq("id", fileId).maybeSingle());
+    if (error) throw new Error(`Could not load the file: ${error.message}`);
   }
   if (!file || !file.raw_extracted_at) return { outcome: "not_applicable", reason: "its raw rows are not sealed" };
   if (file.status === "failed" && file.parse_block !== "no_layout_map") return { outcome: "not_applicable", reason: "the file failed for another reason" };

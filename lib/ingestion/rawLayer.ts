@@ -1,10 +1,12 @@
 import "server-only";
 
-import { readXlsxSheetsAsCsv } from "@/lib/agentTemplates/xlsx";
+import { readXlsxSheets } from "@/lib/agentTemplates/xlsx";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isSchemaGap } from "@/lib/supabase/schemaGap";
 
 import { chooseSheet, detectHeaderRow, parseCsvGrid, rawRowsFromGrid } from "./grid";
+import { pdfGrid, pdfLayoutProblems, type PdfLayout } from "./pdfLayout";
+import { readPdfLines } from "./pdfText";
 import { readSpreadsheetMl } from "./spreadsheetMl";
 import type { ReprocessRow } from "./reprocess";
 import { carrierFileStorage } from "./supabaseStorage";
@@ -50,19 +52,27 @@ async function markFailed(tenantId: string, fileId: string, reason: string) {
   await db().from("file_registry").update({ status: "failed", error_detail: detail }).eq("tenant_id", tenantId).eq("id", fileId).eq("status", "received");
 }
 
+/** Why a PDF waits: the same words as a spreadsheet waiting for its layout map. */
+export const NO_PDF_LAYOUT_MESSAGE = "No PDF layout for this carrier and file type yet. The file is kept and will be read as soon as one is published.";
+
 /**
- * The sheet a carrier's layout map reads for this file, if its published map names one: the
- * agency's assignment and map first, as the parser resolves them. Null when none names a sheet.
+ * What a carrier's published layout map says about reading this file — the sheet of a workbook, the
+ * PDF layout of a statement — the agency's assignment and map first, as the parser resolves them.
  */
-async function layoutSheetName(tenantId: string, carrierId: string | null, fileType: string | null): Promise<string | null> {
-  if (!carrierId || !fileType) return null;
+async function layoutForFile(tenantId: string, carrierId: string | null, fileType: string | null): Promise<{ sheetName: string | null; pdfLayout: PdfLayout | null }> {
+  const none = { sheetName: null, pdfLayout: null };
+  if (!carrierId || !fileType) return none;
   const { data: assignments } = await db().from("carrier_layout_assignment").select("tenant_id, layout_key").eq("carrier_id", carrierId).eq("file_type", fileType).or(`tenant_id.eq.${tenantId},tenant_id.is.null`);
   const rows = (assignments ?? []) as Array<{ tenant_id: string | null; layout_key: string }>;
   const assignment = rows.find((row) => row.tenant_id === tenantId) ?? rows.find((row) => row.tenant_id === null);
-  if (!assignment) return null;
-  const { data: maps } = await db().from("carrier_layout_map").select("tenant_id, sheet_name").eq("layout_key", assignment.layout_key).eq("file_type", fileType).eq("status", "published").or(`tenant_id.eq.${tenantId},tenant_id.is.null`);
-  const live = (maps ?? []) as Array<{ tenant_id: string | null; sheet_name: string | null }>;
-  return (live.find((map) => map.tenant_id === tenantId) ?? live.find((map) => map.tenant_id === null))?.sheet_name ?? null;
+  if (!assignment) return none;
+  const query = (columns: string) => db().from("carrier_layout_map").select(columns).eq("layout_key", assignment.layout_key).eq("file_type", fileType).eq("status", "published").or(`tenant_id.eq.${tenantId},tenant_id.is.null`);
+  let read = await query("tenant_id, sheet_name, pdf_layout");
+  if (read.error && isSchemaGap(read.error)) read = await query("tenant_id, sheet_name");
+  const live = (read.data ?? []) as Array<{ tenant_id: string | null; sheet_name: string | null; pdf_layout?: unknown }>;
+  const map = live.find((row) => row.tenant_id === tenantId) ?? live.find((row) => row.tenant_id === null);
+  if (!map) return none;
+  return { sheetName: map.sheet_name, pdfLayout: map.pdf_layout && pdfLayoutProblems(map.pdf_layout).length === 0 ? (map.pdf_layout as PdfLayout) : null };
 }
 
 /** Reads one registered spreadsheet into raw rows. Safe to call again; a sealed file is left alone. */
@@ -74,20 +84,32 @@ export async function extractRawRows(tenantId: string, fileId: string): Promise<
   }
   if (!file) return { outcome: "not_applicable", reason: "not found" };
   if (file.raw_extracted_at) return { outcome: "already", rowCount: file.row_count };
-  if (file.file_kind !== "csv" && file.file_kind !== "xlsx" && file.file_kind !== "xls") return { outcome: "not_applicable", reason: file.file_kind === "pdf" ? "a PDF's rows come from LA-4.4 extraction" : "not a spreadsheet" };
+  if (!["csv", "xlsx", "xls", "pdf"].includes(file.file_kind)) return { outcome: "not_applicable", reason: "not a file kind that is read" };
   if (file.status === "failed") return { outcome: "not_applicable", reason: "the file failed when it arrived" };
   if (file.raw_error) return { outcome: "failed", reason: file.raw_error };
 
   let grid: string[][];
   let sheetName: string | null = null;
+  // A PDF statement is a table only through its carrier's PDF layout: without one it waits, like a
+  // spreadsheet without a layout map, and is read the moment one is published.
+  const layout = await layoutForFile(tenantId, file.carrier_id, file.file_type);
+  if (file.file_kind === "pdf" && !layout.pdfLayout) {
+    await db().from("file_registry").update({ status: "failed", error_detail: NO_PDF_LAYOUT_MESSAGE, parse_block: "no_layout_map" }).eq("tenant_id", tenantId).eq("id", fileId).eq("status", "received");
+    return { outcome: "not_applicable", reason: NO_PDF_LAYOUT_MESSAGE };
+  }
   try {
     const bytes = await carrierFileStorage().get(file.storage_path);
-    if (file.file_kind === "xlsx" || file.file_kind === "xls") {
+    if (file.file_kind === "pdf") {
+      const lines = await readPdfLines(bytes);
+      if (!lines.length) throw new Error("the PDF has no text: it looks scanned (an image of a page), which isn't read. Ask the carrier for a text PDF, a CSV or an Excel file");
+      grid = pdfGrid(lines, layout.pdfLayout!);
+      if (grid.length < 2) throw new Error("no line of the PDF matched its layout's rows. The statement's layout may have changed");
+    } else if (file.file_kind === "xlsx" || file.file_kind === "xls") {
       // A workbook's rows may be on any sheet: the layout's sheet, else the widest header (chooseSheet).
       const sheets = file.file_kind === "xlsx"
-        ? (await readXlsxSheetsAsCsv(bytes.slice().buffer as ArrayBuffer)).map((sheet) => ({ name: sheet.name, hidden: sheet.hidden, grid: parseCsvGrid(sheet.csv) }))
+        ? await readXlsxSheets(bytes.slice().buffer as ArrayBuffer)
         : readSpreadsheetMl(new TextDecoder("utf-8").decode(bytes)).map((sheet) => ({ name: sheet.name, hidden: false, grid: sheet.rows }));
-      const chosen = chooseSheet(sheets, await layoutSheetName(tenantId, file.carrier_id, file.file_type));
+      const chosen = chooseSheet(sheets, layout.sheetName);
       sheetName = chosen?.name ?? sheets[0]?.name ?? null;
       grid = chosen?.grid ?? sheets[0]?.grid ?? [];
     } else {
@@ -150,7 +172,7 @@ export async function extractPendingRawRows(limit = 20): Promise<SweepOutcome> {
     .select("id, tenant_id")
     .is("raw_extracted_at", null)
     .is("raw_error", null)
-    .in("file_kind", ["csv", "xlsx", "xls"])
+    .in("file_kind", ["csv", "xlsx", "xls", "pdf"])
     .in("status", ["received", "superseded"])
     .order("received_at")
     .limit(limit);
