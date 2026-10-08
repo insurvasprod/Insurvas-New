@@ -45,6 +45,7 @@ export function RetentionBoard({ rows, rates, readOnly }: { rows: BoardEntry[]; 
   const today = rows.filter((r) => r.daysLeft !== null && r.daysLeft <= 3).length;
   const atRisk = rows.reduce((sum, r) => sum + (r.atRiskCents ?? 0), 0);
   const unknownRisk = rows.filter((r) => r.atRiskCents === null && r.group !== "prevention").length;
+  const knownRisk = rows.some((r) => r.atRiskCents !== null);
   const noWindow = rows.filter((r) => r.group === "no_window").length;
   const overall = rates ? rates.byReason.reduce((acc, r) => ({ saved: acc.saved + r.saved, lost: acc.lost + r.lost }), { saved: 0, lost: 0 }) : null;
 
@@ -69,7 +70,7 @@ export function RetentionBoard({ rows, rates, readOnly }: { rows: BoardEntry[]; 
       {rows.length > 0 && (
         <StatStrip label="Retention">
           <StatTile label="Call today" value={today.toLocaleString("en-US")} valueTone={today ? "danger" : undefined} footnote="3 days or fewer left" />
-          <StatTile label="Advance at risk" value={money(atRisk) ?? "$0.00"} footnote={unknownRisk ? `${unknownRisk} more with no advance on file yet` : "unearned, on the policies listed"} />
+          <StatTile label="Advance at risk" value={knownRisk ? money(atRisk) : "Unknown"} footnote={!knownRisk ? "no advance from these carriers is on file yet" : unknownRisk ? `${unknownRisk} more with no advance on file yet` : "unearned, on the policies listed"} />
           <StatTile label="Save rate" value={overall && overall.saved + overall.lost ? `${Math.floor((overall.saved * 100) / (overall.saved + overall.lost))}%` : "—"} footnote={overall && overall.saved + overall.lost ? `${overall.saved} saved of ${overall.saved + overall.lost} decided by the files` : "after your first logged calls"} />
           <StatTile label="No carrier window" value={noWindow.toLocaleString("en-US")} valueTone={noWindow ? "warning" : undefined} footnote={noWindow ? "set it in Carrier rules" : "every listed carrier has one"} />
         </StatStrip>
@@ -130,7 +131,8 @@ export function RetentionBoard({ rows, rates, readOnly }: { rows: BoardEntry[]; 
                       <Link href={`/app/policies/carrier/${row.carrierId}/${encodeURIComponent(row.policyNumber)}`} className="block text-xs text-muted-foreground hover:underline">{row.carrierName} · {row.policyNumber}</Link>
                     </td>
                     <td>
-                      <span className="text-foreground">{REASON_LABELS[row.reason]}</span>
+                      <span className="text-foreground">{row.reason === "recently_lapsed" && row.daysLeft === null ? "Lapsed in the latest file" : REASON_LABELS[row.reason]}</span>
+                      {row.reason === "recently_lapsed" && row.daysLeft === null && <span className="block text-xs text-muted-foreground">whether it can be reinstated depends on the carrier&apos;s window</span>}
                       {row.daysPastDue ? <span className="block text-xs text-muted-foreground">{row.daysPastDue} days past due</span> : null}
                     </td>
                     <td className="text-right tabular-nums">{money(row.amountDueCents) ?? "—"}{row.premiumMode && row.premiumMode !== "monthly" && <span className="block text-xs text-muted-foreground">{row.premiumMode}</span>}</td>
