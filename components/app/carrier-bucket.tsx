@@ -216,7 +216,7 @@ function BucketTableRow({ row, zone }: { row: BucketRow; zone: string }) {
           <>
             <Link href={fileHref(file.id)} className="block max-w-[360px] truncate text-[var(--accent-ink)] hover:underline" title={file.path}>{file.filename}</Link>
             <span className="block text-xs text-muted-foreground">
-              {fileSize(file.bytes)} · {stamp(file.receivedAt, zone)}{file.rows !== null ? ` · ${file.rows.toLocaleString("en-US")} rows` : ""}
+              {fileSize(file.bytes)} · {stamp(file.receivedAt, zone)}{file.rows !== null ? ` · ${file.rows.toLocaleString("en-US")} ${file.rows === 1 ? "row" : "rows"}` : ""}
               {file.removedAt ? ` · removed ${stamp(file.removedAt, zone)}` : file.restoredAt ? ` · back ${stamp(file.restoredAt, zone)}` : ""}
             </span>
             {file.problem && <span className="block max-w-[420px] truncate text-xs text-[var(--error-ink)]" title={file.problem}>{file.problem}</span>}
