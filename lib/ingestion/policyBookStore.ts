@@ -103,6 +103,40 @@ async function annotations(tenantId: string): Promise<{ available: boolean; byKe
   return { available: true, byKey: new Map(rows.map((row) => [`${row.carrier_id}|${row.policy_number}`, row])) };
 }
 
+const HAND_STATUS: Record<string, string> = { active: "active", pending: "submitted", lapsed: "lapsed", cancelled: "lapsed" };
+
+/**
+ * The policies the agency entered or imported by hand (LA-0.7's tenant_policies), as rows of the
+ * same list (2026-10-08 overlap merge: one Policies list, with a source filter, not two tabs). The
+ * carrier is free text there; it is matched to the carrier library by name, so one carrier is one
+ * filter choice. A producer sees the ones they recorded, as the carrier rows credited to them.
+ */
+export async function loadHandPolicies(viewer: Viewer): Promise<BookRow[]> {
+  const read = await everyRow(() => {
+    let query = db().from("tenant_policies").select("id, policy_number, insured_name, carrier, product, effective_date, annual_premium_cents, status, source").eq("tenant_id", viewer.tenantId);
+    if (viewer.role === "producer") query = query.eq("created_by", viewer.userId);
+    return query.order("id");
+  });
+  if (read.error) {
+    if (isSchemaGap(read.error)) return [];
+    throw new Error(`Could not load the policies entered by hand: ${read.error.message}`);
+  }
+  const carriers = ((await db().from("carriers").select("id, name")).data ?? []) as Loose[];
+  const byName = new Map<string, Loose>(carriers.map((c) => [String(c.name).trim().toLowerCase(), c]));
+  return read.rows.map((p: Loose): BookRow => {
+    const carrier = byName.get(String(p.carrier ?? "").trim().toLowerCase());
+    return {
+      carrierId: carrier?.id ?? `hand:${String(p.carrier ?? "").trim().toLowerCase()}`, carrierName: carrier?.name ?? p.carrier, policyNumber: p.policy_number,
+      clientName: p.insured_name, contactId: null, provisional: false, product: p.product ?? null,
+      premiumCents: p.annual_premium_cents, premiumMode: "annual", annualCents: p.annual_premium_cents, faceCents: null,
+      status: HAND_STATUS[p.status] ?? null, statusRaw: p.status === "cancelled" ? "Cancelled" : null,
+      daysPastDue: null, daysLeft: null, riskBand: "none", issueDate: p.effective_date ?? null,
+      agentUserId: null, agentName: null, agency: null, leadSource: null,
+      source: "hand", href: `/app/policies/${p.id}`,
+    };
+  });
+}
+
 export async function loadBook(viewer: Viewer) {
   const scoped = viewer.role === "producer";
   const read = await everyRow(() => {

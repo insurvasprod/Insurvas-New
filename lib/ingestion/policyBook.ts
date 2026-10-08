@@ -18,7 +18,10 @@ export const inForce = (status: string | null) => status === "active" || status 
 
 export const statusLabel = (status: string | null) => (status && status in STATUS_LABELS ? STATUS_LABELS[status as NormalizedStatus].label : "Unknown");
 
-/** One row of the list: policy_current plus the names it points at. */
+/**
+ * One row of the list: policy_current plus the names it points at, or (`source: "hand"`) a policy
+ * the agency entered or imported by hand (tenant_policies), which opens its own page at `href`.
+ */
 export type BookRow = {
   carrierId: string;
   carrierName: string;
@@ -41,6 +44,8 @@ export type BookRow = {
   agentName: string | null;
   agency: string | null;
   leadSource: string | null;
+  source?: "hand";
+  href?: string;
 };
 
 export type BookFilters = {
@@ -54,16 +59,18 @@ export type BookFilters = {
   lead: string;
   issuedFrom: string;
   issuedTo: string;
+  /** "carrier" (from the carriers' files), "hand" (entered or imported by hand), or both. */
+  source: string;
 };
 
 export const SORT_KEYS = ["client", "carrier", "product", "policy", "premium", "face", "status", "dpd", "risk", "issued", "agent"] as const;
 export type SortKey = (typeof SORT_KEYS)[number];
 export type Sort = { key: SortKey; dir: "asc" | "desc" };
 
-export const EMPTY_FILTERS: BookFilters = { q: "", carrier: "", product: "", status: "", risk: "", agent: "", agency: "", lead: "", issuedFrom: "", issuedTo: "" };
+export const EMPTY_FILTERS: BookFilters = { q: "", carrier: "", product: "", status: "", risk: "", agent: "", agency: "", lead: "", issuedFrom: "", issuedTo: "", source: "" };
 export const DEFAULT_SORT: Sort = { key: "risk", dir: "desc" };
 
-const FILTER_PARAMS: Record<keyof BookFilters, string> = { q: "q", carrier: "carrier", product: "product", status: "status", risk: "risk", agent: "agent", agency: "agency", lead: "lead", issuedFrom: "from", issuedTo: "to" };
+const FILTER_PARAMS: Record<keyof BookFilters, string> = { q: "q", carrier: "carrier", product: "product", status: "status", risk: "risk", agent: "agent", agency: "agency", lead: "lead", issuedFrom: "from", issuedTo: "to", source: "source" };
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 
 /** The list's state from a query string; anything unknown or malformed is dropped, never trusted. */
@@ -96,6 +103,7 @@ const matches = (want: string, have: string | null) => !want || (want === NONE ?
 export function filterRows(rows: BookRow[], filters: BookFilters): BookRow[] {
   const needle = filters.q.trim().toLowerCase();
   return rows.filter((row) =>
+    (!filters.source || (filters.source === "hand" ? row.source === "hand" : row.source !== "hand")) &&
     (!needle || `${row.policyNumber} ${row.clientName ?? ""} ${row.carrierName} ${row.agentName ?? ""}`.toLowerCase().includes(needle)) &&
     matches(filters.carrier, row.carrierId) &&
     matches(filters.product, row.product) &&
@@ -157,7 +165,7 @@ export function totals(rows: BookRow[]) {
   return { count: rows.length, annualCents, monthlyCents: Math.round(annualCents / 12), withoutPremium, atRisk };
 }
 
-export const CSV_HEADER = ["Client", "Carrier", "Product", "Policy number", "Premium", "Premium mode", "Annual premium", "Face amount", "Status", "Carrier status", "Days past due", "Risk", "Issue date", "Agent", "Lead source"];
+export const CSV_HEADER = ["Client", "Carrier", "Product", "Policy number", "Premium", "Premium mode", "Annual premium", "Face amount", "Status", "Carrier status", "Days past due", "Risk", "Issue date", "Agent", "Lead source", "Source"];
 
 const dollars = (cents: number | null) => (cents === null ? "" : (cents / 100).toFixed(2));
 
@@ -165,7 +173,7 @@ const dollars = (cents: number | null) => (cents === null ? "" : (cents / 100).t
 export function csvRows(rows: BookRow[]): Array<Array<string | number | null>> {
   return rows.map((row) => [
     row.clientName, row.carrierName, row.product, row.policyNumber, dollars(row.premiumCents), row.premiumMode, dollars(row.annualCents), dollars(row.faceCents),
-    statusLabel(row.status), row.statusRaw, row.daysPastDue, inForce(row.status) ? RISK_LABELS[row.riskBand] : "", row.issueDate, row.agentName, row.leadSource,
+    statusLabel(row.status), row.statusRaw, row.daysPastDue, inForce(row.status) && row.source !== "hand" ? RISK_LABELS[row.riskBand] : "", row.issueDate, row.agentName, row.leadSource, row.source === "hand" ? "Entered by hand" : "Carrier file",
   ]);
 }
 

@@ -5,6 +5,7 @@ import { ChevronLeft } from "lucide-react";
 import { guardPage } from "@/lib/entitlements/guardPage";
 import { hasFeature } from "@/lib/entitlements/types";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
+import { RecordLapseSignal } from "@/components/app/record-lapse-signal";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatStrip, StatTile } from "@/components/ui/stat";
@@ -99,7 +100,7 @@ export default async function PolicyPage({ params }: { params: Promise<{ id: str
   const open = (discrepancies?.items ?? []).filter((item) => item.policyId === row.id && (item.status === "open" || item.status === "disputed"));
   const status = STATUS[row.status as keyof typeof STATUS] ?? { label: row.status, tone: "neutral" as const };
   const back = (
-    <Link href="/app/policies" className="inline-flex w-fit items-center gap-1.5 text-sm font-semibold tracking-[-0.01em] text-muted-foreground transition-colors hover:text-foreground">
+    <Link href="/app/policies?source=hand" className="inline-flex w-fit items-center gap-1.5 text-sm font-semibold tracking-[-0.01em] text-muted-foreground transition-colors hover:text-foreground">
       <ChevronLeft className="size-4" aria-hidden="true" />
       Policies
     </Link>
@@ -179,7 +180,7 @@ export default async function PolicyPage({ params }: { params: Promise<{ id: str
       <PageHeader
         title={`${row.insured_name} · ${row.policy_number}`}
         description={`${row.carrier} · ${row.product} · ${statementMoney(row.annual_premium_cents)} a year · issued ${statementDay(row.effective_date)} · lead source ${leadSource}`}
-        actions={<StatusChip tone={status.tone}>{status.label}</StatusChip>}
+        actions={<><StatusChip tone={status.tone}>{status.label}</StatusChip><RecordLapseSignal policy={{ id: row.id, status: row.status }} /></>}
       />
 
       {discrepanciesFailed && (
@@ -188,7 +189,7 @@ export default async function PolicyPage({ params }: { params: Promise<{ id: str
 
       {ledger.gaps.length > 0 && (
         <div role="status" className="rounded-lg border border-border border-l-[3px] border-l-[var(--warning)] bg-[var(--warning-surface)] px-4 py-3 text-sm text-[var(--warning-ink)]">
-          {ledger.gaps[0].reason} Until it is fixed in Settings, this policy has no expected commission to compare with.
+          {ledger.gaps[0].reason} Until it is fixed on the Rate card, this policy has no expected commission to compare with.
         </div>
       )}
 
