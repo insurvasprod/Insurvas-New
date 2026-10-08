@@ -6,6 +6,7 @@ import { isSchemaGap } from "@/lib/supabase/schemaGap";
 import { ENTRY_LABELS, type EntryType } from "./commissionLedger";
 import { loadPolicyMoney } from "./commissionLedgerStore";
 import { loadPolicyExpected } from "./expectedCommissionStore";
+import { fileHref, rowHref } from "./trace";
 import { changeLabel, changeValue, fieldWord, mergeTimeline, readableDay, statusLabel, type BookRow, type RiskBand, type TimelineItem } from "./policyBook";
 
 /**
@@ -248,6 +249,8 @@ export async function loadPolicy(viewer: Viewer, carrierId: string, policyNumber
   const householdPeople = new Map<string, Loose>((await byIds("contacts", "id, first_name, last_name", householdContactIds, t)).map((c: Loose) => [c.id, c]));
   const contact = row.contact_id ? names.contact.get(row.contact_id) ?? null : null;
   const fileName = (id: string | null | undefined) => (id ? files.get(id)?.original_filename ?? null : null);
+  // The timeline names the line each item was read from, as a link to it.
+  const sourceLink = (ref: SourceRef | null) => (ref ? { href: ref.rowNumber ? rowHref(ref.fileId, ref.rowNumber) : fileHref(ref.fileId), text: `${ref.fileName ?? "The file"}${ref.rowNumber ? `, row ${ref.rowNumber}` : ""}` } : null);
 
   // Timeline: the sale (LA-3), the carrier's milestones and every change between files. Commission
   // entries join it with LA-4.12's ledger.
@@ -258,16 +261,16 @@ export async function loadPolicy(viewer: Viewer, carrierId: string, policyNumber
   const issued = row.issued_on ?? row.issue_date;
   if (issued) items.push({ date: issued, kind: "carrier", label: "Issued by the carrier" });
   if (row.effective_date) items.push({ date: row.effective_date, kind: "carrier", label: "Policy effective" });
-  for (const event of events.data ?? []) if (event.event_type === "first_seen") items.push({ date: event.snapshot_date, kind: "carrier", label: "First seen in a carrier file", detail: fileName(event.file_id) });
+  for (const event of events.data ?? []) if (event.event_type === "first_seen") items.push({ date: event.snapshot_date, kind: "carrier", label: "First seen in a carrier file", source: sourceLink(refIn(event.file_id)) });
   for (const change of changes.data ?? []) {
     if (change.field_name === "carrier_status_raw") continue; // shown with the status change it explains
-    items.push({ date: change.to_snapshot_date, kind: "change", label: changeLabel({ field: change.field_name, oldValue: change.old_value, newValue: change.new_value }), detail: `${changeValue(change.field_name, change.old_value)} → ${changeValue(change.field_name, change.new_value)}` });
+    items.push({ date: change.to_snapshot_date, kind: "change", label: changeLabel({ field: change.field_name, oldValue: change.old_value, newValue: change.new_value }), detail: `${changeValue(change.field_name, change.old_value)} → ${changeValue(change.field_name, change.new_value)}`, source: sourceLink(refIn(change.to_file_id)) });
   }
   // The lapse date, unless a status change on file already says it.
   for (const entry of ledger.entries) {
     const word = entry.type === "reversal" && entry.correctsType ? `Reversal of ${ENTRY_LABELS[entry.correctsType as EntryType]?.label.toLowerCase() ?? entry.correctsType}` : ENTRY_LABELS[entry.type as EntryType]?.label ?? entry.type;
     const amount = `${entry.amountCents < 0 ? "−" : "+"}$${(Math.abs(entry.amountCents) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-    items.push({ date: entry.transactionDate ?? entry.statementDate ?? entry.createdAt, kind: "money", label: `${word} ${amount}`, detail: [entry.payeeLevel === "upline" ? "to the upline" : null, entry.reversalReason, entry.fileName ? `${entry.fileName}, row ${entry.rowNumber}` : null].filter(Boolean).join(" · ") || null });
+    items.push({ date: entry.transactionDate ?? entry.statementDate ?? entry.createdAt, kind: "money", label: `${word} ${amount}`, detail: [entry.payeeLevel === "upline" ? "to the upline" : null, entry.reversalReason].filter(Boolean).join(" · ") || null, source: { href: rowHref(entry.fileId, entry.rowNumber), text: `${entry.fileName ?? "The file"}, row ${entry.rowNumber}` } });
   }
   if (row.lapsed_on && !(changes.data ?? []).some((c: Loose) => c.field_name === "status_normalized" && c.new_value === "lapsed")) items.push({ date: row.lapsed_on, kind: "carrier", label: "Lapsed" });
 

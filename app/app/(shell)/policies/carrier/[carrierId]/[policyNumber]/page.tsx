@@ -96,7 +96,7 @@ export default async function PolicyPage({ params }: { params: Promise<{ carrier
                   <li key={index} className="grid grid-cols-[110px_12px_minmax(0,1fr)] items-start gap-3 py-2 text-sm">
                     <span className="tabular-nums text-muted-foreground">{fileDay(item.date)}</span>
                     <span aria-hidden="true" className={`mt-1.5 size-2 rounded-full ${KIND_DOT[item.kind]}`} />
-                    <span className="min-w-0"><span className="text-foreground">{item.label}</span>{item.detail && <span className="block truncate text-xs text-muted-foreground" title={item.detail}>{item.detail}</span>}</span>
+                    <span className="min-w-0"><span className="text-foreground">{item.label}</span>{item.detail && <span className="block truncate text-xs text-muted-foreground" title={item.detail}>{item.detail}</span>}{item.source && <Link href={item.source.href} className="block truncate text-xs text-[var(--accent-ink)] hover:underline" title={item.source.text}>{item.source.text}</Link>}</span>
                   </li>
                 ))}
               </ol>

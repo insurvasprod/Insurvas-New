@@ -185,7 +185,8 @@ export function toCsv(header: string[], rows: Array<Array<string | number | null
 
 // ─── the detail page's timeline ────────────────────────────────────────────────────────────────
 
-export type TimelineItem = { date: string; kind: "sale" | "carrier" | "change" | "money"; label: string; detail?: string | null; order: number };
+/** `source`: the carrier file line the item was read from (LA-4.20), shown as a link under it. */
+export type TimelineItem = { date: string; kind: "sale" | "carrier" | "change" | "money"; label: string; detail?: string | null; source?: { href: string; text: string } | null; order: number };
 
 const FIELD_WORDS: Record<string, string> = {
   status_normalized: "Status",
