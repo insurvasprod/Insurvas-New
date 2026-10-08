@@ -63,6 +63,19 @@ export type PolicyMoney = {
   rule: (NonNullable<AdvanceRule> & { productCode: string; effectiveFrom: string }) | null;
 };
 
+/**
+ * Advance rules are keyed by our product family (products.code); a carrier file names its own
+ * product ("FE Level"). The agency's mapping wins over the platform's; with neither, the carrier's
+ * code is used as it is (it may already be ours). The same rule refresh_policy_current follows
+ * (20261008300000) for the clawback window.
+ */
+export async function productFamilyOf(tenantId: string, carrierId: string, carrierProductCode: string | null): Promise<string | null> {
+  if (!carrierProductCode) return null;
+  const { data } = await db().from("carrier_product_family").select("tenant_id, product_code").eq("carrier_id", carrierId).eq("carrier_product_code", carrierProductCode).or(`tenant_id.eq.${tenantId},tenant_id.is.null`);
+  const rows = (data ?? []) as Array<{ tenant_id: string | null; product_code: string | null }>;
+  return rows.find((r) => r.tenant_id === tenantId)?.product_code ?? rows.find((r) => r.tenant_id === null)?.product_code ?? carrierProductCode;
+}
+
 /** Everything the ledger holds for one policy, its totals, and the unearned advance with its trace. */
 export async function loadPolicyMoney(tenantId: string, carrierId: string, policyNumber: string, policy: { monthsPaid: number | null; productCode: string | null; asOf: string | null }): Promise<PolicyMoney> {
   const { data, error } = await db().from("commission_entry")
@@ -77,12 +90,12 @@ export async function loadPolicyMoney(tenantId: string, carrierId: string, polic
   if (!rows.length) return { available: true, entries: [], totals: null, unearned: null, rule: null };
 
   const fileIds = [...new Set(rows.map((row) => row.file_id))];
-  const flagged = await flaggedFiles(tenantId);
+  const [flagged, family] = await Promise.all([flaggedFiles(tenantId), productFamilyOf(tenantId, carrierId, policy.productCode)]);
   const [files, ruleRead] = await Promise.all([
     db().from("file_registry").select("id, original_filename").eq("tenant_id", tenantId).in("id", fileIds),
-    // The LA-0.4 advance rule in force for this carrier and product on the as-of date.
-    policy.productCode
-      ? db().from("advance_rules").select("product_code, advance_months, clawback_months, clawback_type, effective_from").eq("tenant_id", tenantId).eq("carrier_id", carrierId).eq("product_code", policy.productCode).lte("effective_from", policy.asOf ?? new Date().toISOString().slice(0, 10)).order("effective_from", { ascending: false }).limit(1)
+    // The LA-0.4 advance rule in force for this carrier and product family on the as-of date.
+    family
+      ? db().from("advance_rules").select("product_code, advance_months, clawback_months, clawback_type, effective_from").eq("tenant_id", tenantId).eq("carrier_id", carrierId).eq("product_code", family).lte("effective_from", policy.asOf ?? new Date().toISOString().slice(0, 10)).order("effective_from", { ascending: false }).limit(1)
       : { data: [] },
   ]);
   const fileName = new Map<string, string>((files.data ?? []).map((file: Loose) => [file.id, file.original_filename]));
