@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 
+import { archiveBucketFiles, putBackMissingFiles } from "@/lib/ingestion/bucketArchive";
 import { rederiveBucketChanges } from "@/lib/ingestion/bucketStore";
 import { runPending } from "@/lib/ingestion/dailyRunStore";
 import { checkPollBearer } from "@/lib/ingestion/doorAuth";
@@ -26,6 +27,9 @@ export async function POST(request: NextRequest) {
     // LA-4.19: one orchestrated run per agency with waiting files — collect, ingest, parse, store,
     // match, reconcile, analyse — each stage recorded, a stopped file resumed. Replaced files still
     // get their raw rows below. Before 20261008280000 the earlier sweeps run instead.
+    // Files deleted from the bucket are put back from their private copies, and new ones copied (20261009160000).
+    await putBackMissingFiles(null, 50).catch((error) => console.error("[carrier-files/poll] putting files back failed:", error));
+    await archiveBucketFiles(null, 50).catch((error) => console.error("[carrier-files/poll] copying files failed:", error));
     const run = await runPending("file_arrival");
     if (run.available) {
       const raw = await extractPendingRawRows(20);

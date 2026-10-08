@@ -80,11 +80,26 @@ export function CarrierBucket({ initial, tenantId, readOnly }: { initial: Ready;
     void load(day);
   }
 
+  // An unexpected file, expected from now on (weekdays), so the day reads Received.
+  async function expect(row: BucketRow) {
+    if (!row.carrierId || !row.fileType) return;
+    setBusy(true);
+    try {
+      await post({ action: "add_expectation", agency: row.agency, carrier_id: row.carrierId, file_type: row.fileType, weekdays: [1, 2, 3, 4, 5] });
+      notify.done(`${row.carrierName} ${typeLabel(row.fileType).toLowerCase()} expected every weekday. Change it in Settings.`);
+      await load(date, true);
+    } catch (error) {
+      notify.block(error instanceof Error ? error.message : "That did not save.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function checkNow() {
     setBusy(true);
     try {
       const outcome = await post({ action: "check_now", date });
-      const moved = [outcome.registered ? `${outcome.registered} read` : "", outcome.removed ? `${outcome.removed} removed` : "", outcome.restored ? `${outcome.restored} back` : ""].filter(Boolean).join(", ");
+      const moved = [outcome.putBack ? `${outcome.putBack} put back` : "", outcome.registered ? `${outcome.registered} read` : "", outcome.removed ? `${outcome.removed} removed` : "", outcome.restored ? `${outcome.restored} back` : ""].filter(Boolean).join(", ");
       notify.done(moved ? `Checked: ${moved}.` : "Checked: nothing new in the bucket.");
       await load(date, true);
     } catch (error) {
@@ -125,7 +140,7 @@ export function CarrierBucket({ initial, tenantId, readOnly }: { initial: Ready;
             <StatTile label="Unexpected" value={day.counts.unexpected.toLocaleString("en-US")} footnote="files in the bucket the settings don't expect" valueTone={day.counts.unexpected ? "warning" : undefined} />
           </StatStrip>
           <p className="m-0 text-sm text-muted-foreground">
-            {last ? <>Last checked {stamp(last.checkedAt, settings.timezone)}{last.checkedByName ? ` by ${last.checkedByName}` : ""} ({last.trigger === "manual" ? "Check now" : last.trigger === "schedule" ? "scheduled" : "poll"}) · {checks.length} {checks.length === 1 ? "check" : "checks"} recorded for {fileDay(date)}</> : <>No check recorded for {fileDay(date)} yet</>}
+            {last ? <>Last checked {stamp(last.checkedAt, settings.timezone)}{last.checkedByName ? ` by ${last.checkedByName}` : ""} ({last.trigger === "manual" ? "Check now" : last.trigger === "schedule" ? "scheduled" : "poll"}) · {checks.length} {checks.length === 1 ? "check" : "checks"} recorded for {fileDay(date)}{last.putBack ? ` · ${last.putBack} deleted ${last.putBack === 1 ? "file" : "files"} put back` : ""}</> : <>No check recorded for {fileDay(date)} yet</>}
             {" · "}{settings.checkTimes.length ? `scheduled daily at ${settings.checkTimes.join(" and ")} ${zoneName(settings.timezone)} time` : "no scheduled checks"}
             {" · "}new files are picked up every 5 minutes
           </p>
@@ -186,7 +201,7 @@ export function CarrierBucket({ initial, tenantId, readOnly }: { initial: Ready;
                   </tr>
                 </thead>
                 <tbody>
-                  {shown.map((row) => <BucketTableRow key={row.key} row={row} zone={settings.timezone} />)}
+                  {shown.map((row) => <BucketTableRow key={row.key} row={row} zone={settings.timezone} onExpect={readOnly || busy ? null : () => void expect(row)} />)}
                 </tbody>
               </table>
             )}
@@ -199,7 +214,7 @@ export function CarrierBucket({ initial, tenantId, readOnly }: { initial: Ready;
   );
 }
 
-function BucketTableRow({ row, zone }: { row: BucketRow; zone: string }) {
+function BucketTableRow({ row, zone, onExpect }: { row: BucketRow; zone: string; onExpect: (() => void) | null }) {
   const file = row.file;
   return (
     <tr>
@@ -210,6 +225,7 @@ function BucketTableRow({ row, zone }: { row: BucketRow; zone: string }) {
         <StatusChip tone={STATE_TONE[row.state]}>{BUCKET_STATE_LABELS[row.state]}</StatusChip>
         {row.state === "unexpected" && file && <span className="block text-xs text-muted-foreground">{file.status === "failed" ? "can't be read" : file.removedAt ? "removed from bucket" : "received"}</span>}
         {row.replaced > 0 && <span className="block text-xs text-muted-foreground">replaced {row.replaced} earlier {row.replaced === 1 ? "file" : "files"}</span>}
+        {row.state === "unexpected" && onExpect && row.carrierId && row.fileType && <Button type="button" variant="outline" size="sm" className="mt-1" onClick={onExpect} title="Expect this carrier's file every weekday">Expect it</Button>}
       </td>
       <td>
         {file ? (
@@ -251,7 +267,7 @@ function BucketSettings({ view, readOnly, folder, onSaved }: { view: Ready; read
 
   return (
     <div className="flex flex-col gap-4">
-      <TableCard title="When the bucket is checked" description="Each check notes files removed from the bucket and reads what arrived. New files are also picked up every 5 minutes.">
+      <TableCard title="When the bucket is checked" description="Each check puts back any file deleted from the bucket, from its private copy, and reads what arrived. New files are also picked up every 5 minutes.">
         <div className="flex flex-col gap-3 px-4 py-3 text-sm">
           <div className="flex flex-wrap items-center gap-2">
             {times.map((time, index) => (

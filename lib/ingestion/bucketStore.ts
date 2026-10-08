@@ -4,6 +4,7 @@ import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isSchemaGap } from "@/lib/supabase/schemaGap";
 
 import { bucketDay, type BucketDay, type BucketExpectation, type BucketFile } from "./bucket";
+import { archiveBucketFiles, putBackMissingFiles } from "./bucketArchive";
 import { FILE_TYPES, type CarrierFileType } from "./constants";
 import { runPending } from "./dailyRunStore";
 import { libraryCarriers } from "./registry";
@@ -25,7 +26,7 @@ const db = (): Loose => getSupabaseServiceClient();
 export const BUCKET_PENDING_MESSAGE = "The bucket page needs a database update (20261009100000).";
 
 export type BucketSettings = { checkTimes: string[]; timezone: string; updatedAt: string | null };
-export type BucketCheck = { checkedAt: string; trigger: "schedule" | "manual" | "poll"; checkedByName: string | null; registered: number; removed: number; restored: number };
+export type BucketCheck = { checkedAt: string; trigger: "schedule" | "manual" | "poll"; checkedByName: string | null; registered: number; removed: number; restored: number; putBack: number };
 
 export type BucketView =
   | { available: false }
@@ -53,7 +54,7 @@ export async function loadBucketView(tenantId: string, date: string): Promise<Bu
     db().from("carrier_file_expectation").select("id, path_agency, carrier_id, file_type, weekdays, active").eq("tenant_id", tenantId),
     db().from("file_registry").select("id, path_agency, carrier_id, file_type, file_date, original_filename, file_bytes, received_at, status, error_detail, raw_error, removed_from_bucket_at, restored_at, superseded_by_file_id, row_count, storage_path")
       .eq("tenant_id", tenantId).eq("source", "bucket").eq("file_date", date).order("received_at", { ascending: false }).limit(1000),
-    db().from("carrier_bucket_check").select("checked_at, trigger, checked_by, registered, removed, restored").eq("tenant_id", tenantId).eq("check_date", date).order("checked_at", { ascending: false }).limit(50),
+    db().from("carrier_bucket_check").select("*").eq("tenant_id", tenantId).eq("check_date", date).order("checked_at", { ascending: false }).limit(50),
     libraryCarriers(),
     // Every agency folder seen, so the settings can offer them.
     db().from("file_registry").select("path_agency").eq("tenant_id", tenantId).eq("source", "bucket").not("path_agency", "is", null).order("received_at", { ascending: false }).limit(2000),
@@ -85,7 +86,7 @@ export async function loadBucketView(tenantId: string, date: string): Promise<Bu
     available: true,
     day: bucketDay({ date, timezone: settings.timezone, expectations: expectationRows, files: fileRows }),
     settings,
-    checks: ((checks.data ?? []) as Loose[]).map((row) => ({ checkedAt: row.checked_at, trigger: row.trigger, checkedByName: row.checked_by ? userName.get(row.checked_by) ?? "A teammate" : null, registered: row.registered, removed: row.removed, restored: row.restored })),
+    checks: ((checks.data ?? []) as Loose[]).map((row) => ({ checkedAt: row.checked_at, trigger: row.trigger, checkedByName: row.checked_by ? userName.get(row.checked_by) ?? "A teammate" : null, registered: row.registered, removed: row.removed, restored: row.restored, putBack: row.put_back ?? 0 })),
     carriers: carriers.map((carrier) => ({ id: carrier.id, name: carrier.name })),
     agencies,
     expectations: [...expectationRows].sort((a, b) => a.agency.localeCompare(b.agency) || a.carrierName.localeCompare(b.carrierName) || a.fileType.localeCompare(b.fileType)),
@@ -102,7 +103,11 @@ export class BucketError extends Error {
  * Check now: files removed from the bucket (or back), then one run over whatever arrived, then the
  * check recorded for the agency's day. Returns what moved.
  */
-export async function checkBucketNow(tenantId: string, userId: string, date: string): Promise<{ registered: number; removed: number; restored: number }> {
+export async function checkBucketNow(tenantId: string, userId: string, date: string): Promise<{ registered: number; removed: number; restored: number; putBack: number }> {
+  // A file deleted from the bucket is put back from its private copy first, so it is never marked
+  // removed; then every file still without a copy gets one (20261009160000).
+  const putBack = await putBackMissingFiles(tenantId);
+  await archiveBucketFiles(tenantId);
   const { data: sync, error } = await db().rpc("sync_carrier_bucket_removals", { p_tenant_id: tenantId });
   if (error) {
     if (isSchemaGap(error)) throw new BucketError(BUCKET_PENDING_MESSAGE, 503);
@@ -114,9 +119,9 @@ export async function checkBucketNow(tenantId: string, userId: string, date: str
   const registered = outcome.runs.find((run) => run.tenantId === tenantId)?.total ?? 0;
   // A removed file stops counting, a restored one counts again: each is read again from its raw rows.
   await rederiveBucketChanges(tenantId);
-  const { error: logError } = await db().from("carrier_bucket_check").insert({ tenant_id: tenantId, check_date: date, trigger: "manual", checked_by: userId, registered, removed, restored });
+  const { error: logError } = await db().from("carrier_bucket_check").insert({ tenant_id: tenantId, check_date: date, trigger: "manual", checked_by: userId, registered, removed, restored, ...(putBack.available ? { put_back: putBack.putBack } : {}) });
   if (logError) throw new Error(`The check ran but could not be recorded: ${logError.message}`);
-  return { registered, removed, restored };
+  return { registered, removed, restored, putBack: putBack.putBack };
 }
 
 /**

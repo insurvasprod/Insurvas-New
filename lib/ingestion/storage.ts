@@ -23,6 +23,15 @@ export interface StorageAdapter {
   remove(path: string): Promise<void>;
   /** A short-lived link to download the original, named as it was received. */
   signedUrl(path: string, seconds: number, downloadName: string): Promise<string>;
+  /**
+   * The private copy of a bucket file (20261009160000), kept apart from the agency's folders under
+   * its own key, so a file deleted from the bucket can be put back. Writing a key twice is fine.
+   */
+  archive(key: string, bytes: Uint8Array): Promise<void>;
+  /** Copies the bytes at a storage path into the archive under the key. */
+  archiveFrom(path: string, key: string): Promise<void>;
+  /** Copies an archived file back to its storage path. */
+  putBack(key: string, path: string): Promise<void>;
 }
 
 export class StorageNotFoundError extends Error {

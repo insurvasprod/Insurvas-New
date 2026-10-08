@@ -10,6 +10,8 @@
  */
 
 export const CARRIER_FILE_BUCKET = "carrier-files";
+/** Private copies of bucket files, so a file deleted from the bucket can be put back (20261009160000). */
+export const CARRIER_FILE_ARCHIVE_BUCKET = "carrier-files-archive";
 
 export const FILE_TYPES = ["policies", "commissions", "new_business"] as const;
 export type CarrierFileType = (typeof FILE_TYPES)[number];

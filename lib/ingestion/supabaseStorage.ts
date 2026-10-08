@@ -2,7 +2,7 @@ import "server-only";
 
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 
-import { CARRIER_FILE_BUCKET } from "./constants";
+import { CARRIER_FILE_ARCHIVE_BUCKET, CARRIER_FILE_BUCKET } from "./constants";
 import { StorageNotFoundError, storageProviderFrom, type StorageAdapter } from "./storage";
 
 /**
@@ -70,6 +70,26 @@ class SupabaseStorageAdapter implements StorageAdapter {
     const { data, error } = await this.bucket().createSignedUrl(path, seconds, { download: downloadName });
     if (error || !data?.signedUrl) throw new Error(`A download link could not be made: ${error?.message ?? "no link"}`);
     return data.signedUrl;
+  }
+
+  // The archive: a second private bucket, one object per bucket file (20261009160000).
+  private archiveBucket() {
+    return getSupabaseServiceClient().storage.from(CARRIER_FILE_ARCHIVE_BUCKET);
+  }
+
+  async archive(key: string, bytes: Uint8Array): Promise<void> {
+    const { error } = await this.archiveBucket().upload(key, bytes, { contentType: "application/octet-stream", upsert: false });
+    if (error && !/already exists|duplicate/i.test(error.message)) throw new Error(`The file could not be copied to the archive: ${error.message}`);
+  }
+
+  async archiveFrom(path: string, key: string): Promise<void> {
+    await this.archive(key, await this.get(path));
+  }
+
+  async putBack(key: string, path: string): Promise<void> {
+    const { data, error } = await this.archiveBucket().download(key);
+    if (error || !data) throw new Error(`The archived copy could not be read: ${error?.message ?? "nothing there"}`);
+    await this.put(path, new Uint8Array(await data.arrayBuffer()), data.type || null);
   }
 }
 
