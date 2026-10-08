@@ -4,6 +4,7 @@ import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isSchemaGap } from "@/lib/supabase/schemaGap";
 
 import { AGENT_INFO, AGENTS, weeklyAccuracy, type AgentName } from "./agents";
+import { FILE_KINDS, FILE_TYPES, type CarrierFileType } from "./constants";
 import { FILE_STAGES, runPipeline, type FileStage, type PendingFile, type RunDeps, type RunSummary, type StageResult, type Trigger } from "./dailyRun";
 import { parseCarrierFile, resolveLayoutMap } from "./parser";
 import { extractRawRows } from "./rawLayer";
@@ -56,8 +57,8 @@ async function pending(filter: { tenantId?: string; fileIds?: string[]; arrived:
     return q;
   };
   const [fresh, waiting, underway] = await Promise.all([
-    // To read: a spreadsheet that arrived and hasn't been parsed.
-    scoped(db().from("file_registry").select(columns).eq("status", "received").in("file_kind", ["csv", "xlsx"]).is("raw_error", null)).order("received_at").limit(FILES_PER_RUN),
+    // To read: a file that arrived and hasn't been parsed (a PDF without a PDF layout waits, below).
+    scoped(db().from("file_registry").select(columns).eq("status", "received").in("file_kind", FILE_KINDS).is("raw_error", null)).order("received_at").limit(FILES_PER_RUN),
     // Waiting for a layout map: picked up only once one exists.
     scoped(db().from("file_registry").select(columns).eq("status", "failed").eq("parse_block", "no_layout_map")).order("received_at").limit(FILES_PER_RUN),
     // Parsed, but not through every stage (a stage failed, or the run stopped).
@@ -68,9 +69,9 @@ async function pending(filter: { tenantId?: string; fileIds?: string[]; arrived:
   const ready: FileRow[] = [];
   const maps = new Map<string, boolean>();
   for (const file of (waiting.data ?? []) as FileRow[]) {
-    if (!file.carrier_id || (file.file_type !== "policies" && file.file_type !== "commissions")) continue;
+    if (!file.carrier_id || !(FILE_TYPES as readonly string[]).includes(file.file_type)) continue;
     const key = `${file.tenant_id}|${file.carrier_id}|${file.file_type}`;
-    if (!maps.has(key)) maps.set(key, Boolean(await resolveLayoutMap(file.tenant_id, file.carrier_id, file.file_type).catch(() => null)));
+    if (!maps.has(key)) maps.set(key, Boolean(await resolveLayoutMap(file.tenant_id, file.carrier_id, file.file_type as CarrierFileType).catch(() => null)));
     if (maps.get(key)) ready.push(file);
   }
   const candidates = [...((fresh.data ?? []) as FileRow[]), ...ready, ...((underway.data ?? []) as FileRow[])].slice(0, FILES_PER_RUN);
