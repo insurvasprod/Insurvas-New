@@ -14,7 +14,6 @@ import { folderKey, parseDropPath, type Attribution, type CarrierChoice } from "
 import { ingestCarrierFile, type IngestDeps, type IngestResult, type RegisterArgs, type RegisterOutcome } from "./pipeline";
 import { readSpreadsheetMl } from "./spreadsheetMl";
 import { carrierFileStorage } from "./supabaseStorage";
-import { archiveBucketFile } from "./bucketArchive";
 
 /**
  * LA-4.1 (Notion sprint) · the file registry, server side: the three doors, the list the agency sees,
@@ -298,8 +297,6 @@ export async function pollBucketDrops(limit = 100): Promise<PollOutcome> {
         problems: parsed.problems,
         storagePath: drop.storage_path,
       });
-      // The private copy, so the file can be put back if it is deleted from the bucket (20261009160000).
-      if (result.outcome !== "skipped") await archiveBucketFile(parsed.tenantId, result.fileId, bytes);
       if (result.outcome === "skipped") outcome.skipped++;
       else if (result.outcome === "restored") outcome.restored++;
       else if (result.status === "failed") outcome.failed++;

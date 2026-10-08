@@ -11,7 +11,7 @@ import { PolicyChangesTable } from "@/components/app/policy-changes-table";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatStrip, StatTile } from "@/components/ui/stat";
-import { BUCKET_PENDING_MESSAGE, loadBucketSettings, loadBucketView } from "@/lib/ingestion/bucketStore";
+import { agencyTimezone, BUCKET_PENDING_MESSAGE, loadBucketView } from "@/lib/ingestion/bucketStore";
 import { listFindings, listRuns } from "@/lib/ingestion/dailyRunStore";
 import { CARRIER_FILES_PENDING_MESSAGE, getInboundAddress, libraryCarriers, listCarrierFiles, listSenders } from "@/lib/ingestion/registry";
 import { isoDate } from "@/lib/ingestion/path";
@@ -55,10 +55,10 @@ export default async function CarrierFilesPage({ searchParams }: { searchParams:
     showFindings && list.available ? listFindings(tenantId) : null,
   ]);
 
-  // The bucket, one day at a time: today in the agency's check time zone unless a day is asked for.
-  const bucketSettings = showBucket && list.available ? await loadBucketSettings(tenantId) : null;
-  const bucketDate = date && isoDate(date) ? date : new Date().toLocaleDateString("en-CA", { timeZone: bucketSettings?.timezone ?? "America/New_York" });
-  const bucket = bucketSettings ? await loadBucketView(tenantId, bucketDate) : null;
+  // The bucket, one day at a time: today in the agency's time zone unless a day is asked for.
+  const bucketZone = showBucket && list.available ? await agencyTimezone(tenantId) : null;
+  const bucketDate = date && isoDate(date) ? date : new Date().toLocaleDateString("en-CA", { timeZone: bucketZone ?? "America/New_York" });
+  const bucket = bucketZone ? await loadBucketView(tenantId, bucketDate) : null;
 
   const blocked = !list.available ? CARRIER_FILES_PENDING_MESSAGE : readOnly ? "Receiving files is paused while the account is read-only." : null;
   const current = list.files.filter((file) => file.status !== "superseded");
