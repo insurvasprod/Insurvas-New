@@ -71,7 +71,7 @@ export function RetentionBoard({ rows, rates, readOnly }: { rows: BoardEntry[]; 
         <StatStrip label="Retention">
           <StatTile label="Call today" value={today.toLocaleString("en-US")} valueTone={today ? "danger" : undefined} footnote="3 days or fewer left" />
           <StatTile label="Advance at risk" value={knownRisk ? money(atRisk) : "Unknown"} footnote={!knownRisk ? "no advance from these carriers is on file yet" : unknownRisk ? `${unknownRisk} more with no advance on file yet` : "unearned, on the policies listed"} />
-          <StatTile label="Save rate" value={overall && overall.saved + overall.lost ? `${Math.floor((overall.saved * 100) / (overall.saved + overall.lost))}%` : "—"} footnote={overall && overall.saved + overall.lost ? `${overall.saved} saved of ${overall.saved + overall.lost} decided by the files` : "after your first logged calls"} />
+          <StatTile label="Save rate" value={overall && overall.saved + overall.lost ? `${Math.floor((overall.saved * 100) / (overall.saved + overall.lost))}%` : "—"} footnote={overall && overall.saved + overall.lost ? `${overall.saved} saved of ${overall.saved + overall.lost} decided by the files` : rates && rates.calls ? `${rates.calls} logged ${rates.calls === 1 ? "call is" : "calls are"} waiting for the next carrier file` : "after your first logged calls"} />
           <StatTile label="No carrier window" value={noWindow.toLocaleString("en-US")} valueTone={noWindow ? "warning" : undefined} footnote={noWindow ? "set it in Carrier rules" : "every listed carrier has one"} />
         </StatStrip>
       )}
