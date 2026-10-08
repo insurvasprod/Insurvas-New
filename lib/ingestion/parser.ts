@@ -97,7 +97,7 @@ export type ParseOutcome =
  * A replaced file keeps its status; only its parser record moves.
  */
 export async function parseCarrierFile(tenantId: string, fileId: string, rows?: RawRow[]): Promise<ParseOutcome> {
-  const columns = "id, carrier_id, file_type, file_date, status, parse_block, raw_extracted_at, raw_header_row, raw_columns, raw_preamble, sheet_name, file_kind";
+  const columns = "id, carrier_id, file_type, file_date, status, parse_block, parser_id, raw_extracted_at, raw_header_row, raw_columns, raw_preamble, sheet_name, file_kind";
   let { data: file, error } = await db().from("file_registry").select(columns).eq("tenant_id", tenantId).eq("id", fileId).maybeSingle();
   if (error) {
     if (isSchemaGap(error)) return { outcome: "pending_schema" };
@@ -113,7 +113,9 @@ export async function parseCarrierFile(tenantId: string, fileId: string, rows?: 
     if (error) throw new Error(`Could not load the file: ${error.message}`);
   }
   if (!file || !file.raw_extracted_at) return { outcome: "not_applicable", reason: "its raw rows are not sealed" };
-  if (file.status === "failed" && file.parse_block !== "no_layout_map") return { outcome: "not_applicable", reason: "the file failed for another reason" };
+  // A file that failed when it arrived is not read. One that failed while being read (it has a
+  // parser) is read again: its layout may have been fixed or reassigned since.
+  if (file.status === "failed" && file.parse_block !== "no_layout_map" && !file.parser_id) return { outcome: "not_applicable", reason: "the file failed when it arrived" };
   const movesStatus = file.status !== "superseded";
 
   let resolved: ResolvedMap | null;
