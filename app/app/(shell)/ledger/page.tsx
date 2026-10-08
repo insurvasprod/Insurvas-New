@@ -60,14 +60,16 @@ export default async function LedgerPage({ searchParams }: { searchParams: Promi
   const params = await searchParams;
   // One header for both sources; only its sentence and actions differ.
   const header = (description?: string, actions?: React.ReactNode) => <PageHeader title="Commission ledger" description={description} actions={actions} />;
-  const view = params.view === "accounts" ? "accounts" : params.view === "expected" ? "expected" : "lines";
+  // Carrier accounts are the agency's running balances with each carrier: owners and bookkeepers only.
+  const seesAccounts = guard.role === "owner" || guard.role === "bookkeeper";
+  const view = params.view === "accounts" && seesAccounts ? "accounts" : params.view === "expected" ? "expected" : "lines";
   const sourceTabs = (count?: number, showExpected = true) => (
     <ViewTabs
       label="Ledger views"
       active={view}
       tabs={[
         { key: "lines", label: "Lines", count, href: "/app/ledger" },
-        { key: "accounts", label: "Carrier accounts", href: "/app/ledger?view=accounts" },
+        ...(seesAccounts ? [{ key: "accounts", label: "Carrier accounts", href: "/app/ledger?view=accounts" }] : []),
         ...(showExpected || view === "expected" ? [{ key: "expected", label: "Expected (entered by hand)", href: "/app/ledger?view=expected" }] : []),
       ]}
     />
@@ -81,7 +83,7 @@ export default async function LedgerPage({ searchParams }: { searchParams: Promi
         {header("What each carrier says it holds for you: opening and closing balance per statement, whether it adds up, and whether one is missing.")}
         {sourceTabs()}
         {accounts.available
-          ? <CarrierAccounts statements={accounts.statements} orphans={accounts.orphans} files={accounts.files} carriers={accounts.carriers} readOnly={readOnly || (guard.role !== "owner" && guard.role !== "bookkeeper")} today={new Date().toISOString().slice(0, 10)} />
+          ? <CarrierAccounts orphanDays={accounts.orphanDays} statements={accounts.statements} orphans={accounts.orphans} files={accounts.files} carriers={accounts.carriers} readOnly={readOnly || (guard.role !== "owner" && guard.role !== "bookkeeper")} today={new Date().toISOString().slice(0, 10)} />
           : <div role="status" className="rounded-lg border border-border border-l-[3px] border-l-[var(--warning)] bg-[var(--warning-surface)] px-4 py-3 text-sm text-[var(--warning-ink)]">{ACCOUNTS_PENDING_MESSAGE}</div>}
       </div>
     );

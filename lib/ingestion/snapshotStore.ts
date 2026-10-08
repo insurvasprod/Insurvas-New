@@ -51,7 +51,7 @@ async function policyHistoryInputs(tenantId: string, carrierId: string, policies
   for (let from = 0; ; from += 1000) {
     const { data, error } = await db()
       .from("policy_snapshot")
-      .select(`policy_number, snapshot_date, file_id, ${TRACKED_FIELDS.join(", ")}, file_registry!policy_snapshot_file_id_fkey(received_at)`)
+      .select(`policy_number, snapshot_date, file_id, superseded, ${TRACKED_FIELDS.join(", ")}, file_registry!policy_snapshot_file_id_fkey(received_at, file_type)`)
       .eq("tenant_id", tenantId)
       .eq("carrier_id", carrierId)
       .in("policy_number", policies)
@@ -59,6 +59,10 @@ async function policyHistoryInputs(tenantId: string, carrierId: string, policies
       .range(from, from + 999);
     if (error) throw new Error(`Could not read the policies' snapshots: ${error.message}`);
     for (const row of (data ?? []) as Loose[]) {
+      // A new-business snapshot the day's policy file set aside (20261009140000) is no part of the
+      // policy's history: reading it would flip the status back and forth. A reissue's stays (the
+      // correction is a change like any other).
+      if (row.superseded && row.file_registry?.file_type === "new_business") continue;
       const values = Object.fromEntries(TRACKED_FIELDS.map((field) => [field, row[field] ?? null])) as Record<TrackedField, string | number | null>;
       out.push({ policyNumber: row.policy_number, snapshotDate: row.snapshot_date, fileId: row.file_id, fileReceivedAt: row.file_registry?.received_at ?? "", values });
     }
@@ -163,8 +167,11 @@ export async function linkFilePolicies(tenantId: string, fileId: string, input: 
 
 export type ChangeRow = {
   id: string;
+  carrierId: string;
   carrierName: string;
   policyNumber: string;
+  /** The file that showed the new value: the change opens it. */
+  toFileId: string;
   fieldName: TrackedField;
   oldValue: string | null;
   newValue: string | null;
@@ -174,10 +181,10 @@ export type ChangeRow = {
 
 /** The agency's most recent policy changes, newest file date first. */
 export async function listPolicyChanges(tenantId: string, limit = 500): Promise<{ available: boolean; changes: ChangeRow[] }> {
-  const { data, error } = await db().from("policy_change").select("id, policy_number, field_name, old_value, new_value, from_snapshot_date, to_snapshot_date, carriers(name)").eq("tenant_id", tenantId).order("to_snapshot_date", { ascending: false }).order("policy_number").limit(limit);
+  const { data, error } = await db().from("policy_change").select("id, carrier_id, policy_number, field_name, old_value, new_value, from_snapshot_date, to_snapshot_date, to_file_id, carriers(name)").eq("tenant_id", tenantId).order("to_snapshot_date", { ascending: false }).order("policy_number").limit(limit);
   if (error) {
     if (isSchemaGap(error)) return { available: false, changes: [] };
     throw new Error(`Could not load policy changes: ${error.message}`);
   }
-  return { available: true, changes: (data ?? []).map((row: Loose) => ({ id: row.id, carrierName: row.carriers?.name ?? "", policyNumber: row.policy_number, fieldName: row.field_name, oldValue: row.old_value, newValue: row.new_value, fromDate: row.from_snapshot_date, toDate: row.to_snapshot_date })) };
+  return { available: true, changes: (data ?? []).map((row: Loose) => ({ id: row.id, carrierId: row.carrier_id, carrierName: row.carriers?.name ?? "", policyNumber: row.policy_number, toFileId: row.to_file_id, fieldName: row.field_name, oldValue: row.old_value, newValue: row.new_value, fromDate: row.from_snapshot_date, toDate: row.to_snapshot_date })) };
 }

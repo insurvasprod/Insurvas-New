@@ -26,10 +26,10 @@ const nameOf = (p: { firstName?: string | null; lastName?: string | null }) => [
  * LA-4.8 (Notion sprint) · policies to link, the links made, and agent codes to map. A person picks
  * the client for a policy whose number we don't hold; the AI does it once a provider is configured.
  */
-export function PolicyMatchingWorkspace({ reviews, links, unmapped, mapped, members, readOnly, aiNote }: { reviews: ReviewRow[]; links: LinkRow[]; unmapped: UnmappedAgent[]; mapped: MappedAgent[]; members: Array<{ userId: string; name: string; role: string }>; readOnly: boolean; aiNote: string }) {
+export function PolicyMatchingWorkspace({ reviews, links, unmapped, mapped, members, readOnly, aiNote, initialTab = "review" }: { reviews: ReviewRow[]; links: LinkRow[]; unmapped: UnmappedAgent[]; mapped: MappedAgent[]; members: Array<{ userId: string; name: string; role: string }>; readOnly: boolean; aiNote: string; initialTab?: Tab }) {
   const router = useRouter();
   const [refreshing, startRefresh] = useTransition();
-  const [tab, setTab] = useState<Tab>("review");
+  const [tab, setTab] = useState<Tab>(initialTab);
   const [query, setQuery] = useState("");
   const [openId, setOpenId] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);

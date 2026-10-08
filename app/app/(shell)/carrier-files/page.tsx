@@ -87,7 +87,7 @@ export default async function CarrierFilesPage({ searchParams }: { searchParams:
 
       {list.files.length > 0 && !showBucket && (
         <StatStrip label="Carrier file totals">
-          <StatTile label="Files in use" value={current.length.toLocaleString("en-US")} footnote={replaced ? `${replaced.toLocaleString("en-US")} more replaced by a corrected file` : `${current.filter((file) => file.fileType === "policies").length.toLocaleString("en-US")} policy · ${current.filter((file) => file.fileType === "commissions").length.toLocaleString("en-US")} commission`} />
+          <StatTile label="Files in use" value={current.length.toLocaleString("en-US")} footnote={replaced ? `${replaced.toLocaleString("en-US")} more replaced by a corrected file` : [["policies", "policy"], ["commissions", "commission"], ["new_business", "new business"]].map(([type, word]) => [current.filter((file) => file.fileType === type).length, word] as const).filter(([count], index) => index < 2 || count > 0).map(([count, word]) => `${count.toLocaleString("en-US")} ${word}`).join(" · ")} />
           <StatTile label="Waiting for a layout" value={waiting.toLocaleString("en-US")} footnote="read once Insurvas sets up the layout" />
           <StatTile label="Failed" value={failed.toLocaleString("en-US")} valueTone={failed ? "warning" : undefined} footnote="cannot be read, see the reason" />
           <StatTile label="Duplicates skipped" value={list.skips.length.toLocaleString("en-US")} footnote="already received" />

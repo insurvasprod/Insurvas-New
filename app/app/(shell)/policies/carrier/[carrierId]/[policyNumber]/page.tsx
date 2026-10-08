@@ -80,10 +80,16 @@ export default async function PolicyPage({ params }: { params: Promise<{ carrier
                 ["Payment method", policy.paymentMethod ? METHOD[policy.paymentMethod] ?? policy.paymentMethod : "—"],
                 ["Draft day", policy.draftDay ? String(policy.draftDay) : "—"],
                 ["Months paid", policy.monthsPaid === null ? "—" : String(policy.monthsPaid)],
-                ["Agent", policy.agentName ?? (policy.agentCode ? `Code ${policy.agentCode}, not mapped` : "—")],
               ].map(([term, value]) => (
                 <div key={term} className="min-w-0"><dt className="text-xs text-muted-foreground">{term}</dt><dd className="m-0 truncate font-medium text-foreground" title={value}>{value}</dd></div>
               ))}
+              {/* An agent code no member is mapped to links to where it is mapped (Policy matching › Agent codes). */}
+              <div className="min-w-0">
+                <dt className="text-xs text-muted-foreground">Agent</dt>
+                <dd className="m-0 truncate font-medium text-foreground" title={policy.agentName ?? policy.agentCode ?? undefined}>
+                  {policy.agentName ?? (policy.agentCode ? <>Code {policy.agentCode}, <Link href="/app/policy-matching?tab=agents" className="text-[var(--accent-ink)] hover:underline">not mapped</Link></> : "—")}
+                </dd>
+              </div>
             </dl>
           </TableCard>
 
@@ -194,7 +200,8 @@ export default async function PolicyPage({ params }: { params: Promise<{ carrier
                     </p>
                   </details>
                 )}
-                {policy.inClawbackWindow && <p className="m-0 mt-1 text-xs text-[var(--warning-ink)]">Inside the chargeback window: a lapse now means part of the advance comes back.</p>}
+                {/* Only while some advance is still at risk (or that is unknown): a fully charged-back advance has nothing left to lose. */}
+                {policy.inClawbackWindow && view.ledger.unearned && view.ledger.unearned.atRiskCents !== 0 && <p className="m-0 mt-1 text-xs text-[var(--warning-ink)]">Inside the chargeback window: a lapse now means part of the advance comes back.</p>}
               </div>
             )}
             {/* LA-4.13: what the carrier should pay, once its trigger has occurred. */}

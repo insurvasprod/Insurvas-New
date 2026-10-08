@@ -15,7 +15,7 @@ import { Pager, paginate } from "@/components/ui/pager";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
-import { DISCREPANCY_KINDS, DISCREPANCY_KIND_LABELS, type DiscrepancyKind } from "@/lib/discrepancies/compute";
+import { DISCREPANCY_KIND_LABELS, type DiscrepancyKind } from "@/lib/discrepancies/compute";
 import { fileDay } from "@/lib/ingestion/constants";
 import { DISCREPANCY_LABELS, DISCREPANCY_TYPES, moneySummary, type DiscrepancyType } from "@/lib/ingestion/discrepancyEngine";
 import { DISPUTABLE } from "@/lib/ingestion/disputeLetter";
@@ -23,6 +23,9 @@ import type { DiscrepancyRow, DisputeRow } from "@/lib/ingestion/discrepancyStor
 import { rowHref } from "@/lib/ingestion/trace";
 import { statementDay, statementPeriod } from "@/lib/ledger/statementConstants";
 import { notify } from "@/lib/notify";
+
+/** One vocabulary for both sources: a hand-imported statement's kind, named as the carrier-file kind it is. */
+const HAND_TYPE: Record<DiscrepancyKind, (typeof DISCREPANCY_TYPES)[number]> = { never_paid: "missing", short_paid: "short_paid", mis_rated: "mis_rated", duplicate_chargeback: "duplicate_chargeback", unexpected_chargeback: "unexpected_chargeback" };
 
 const money = (cents: number | null) => {
   if (cents === null) return "—";
@@ -119,7 +122,7 @@ export function CarrierDiscrepancies({ items, readOnly, handItems = [], handCanW
   const carriers = useMemo(() => [...new Map(all.map((i) => [carrierKey(i), i.row.carrierName])).entries()].sort((a, b) => a[1].localeCompare(b[1])), [all]);
   const visible = useMemo(() => all.filter((i) =>
     (!source || i.source === source) &&
-    (!type || (type.startsWith("hand:") ? i.source === "hand" && i.row.kind === type.slice(5) : i.source === "carrier" && i.row.type === type)) &&
+    (!type || (i.source === "hand" ? HAND_TYPE[i.row.kind] === type : i.row.type === type)) &&
     (!carrier || carrierKey(i) === carrier) &&
     statusMatches(i, status)), [all, source, type, carrier, status]);
   const { current, rows } = paginate(visible, page, 25);
@@ -249,7 +252,7 @@ export function CarrierDiscrepancies({ items, readOnly, handItems = [], handCanW
       <tr key={key}>
         <td>{canPickHand(row) && <input type="checkbox" aria-label={`Put ${row.policyNumber} on a letter`} className="size-4 accent-[var(--primary)]" checked={handPicked.includes(row.id)} onChange={(e) => setHandPicked((now) => (e.target.checked ? [...now, row.id] : now.filter((id) => id !== row.id)))} />}</td>
         <td>
-          <span className="inline-flex items-center gap-2"><StatusChip tone={row.owedCents > 0 ? "warning" : "info"}>{DISCREPANCY_KIND_LABELS[row.kind].label}</StatusChip></span>
+          <span className="inline-flex items-center gap-2"><StatusChip tone={row.owedCents > 0 ? "warning" : "info"}>{DISCREPANCY_LABELS[HAND_TYPE[row.kind]].label}</StatusChip></span>
           <span className="mt-0.5 block text-xs text-muted-foreground">{row.carrierName} · statement imported by hand</span>
         </td>
         <td className="tabular-nums">{row.policyNumber}<span className="block text-xs text-muted-foreground">{row.insuredName}</span></td>
@@ -319,12 +322,7 @@ export function CarrierDiscrepancies({ items, readOnly, handItems = [], handCanW
             </select>
             <select aria-label="Filter by type" className={toolbarControl} value={type} onChange={(e) => { setType(e.target.value); setPage(1); }}>
               <option value="">Every kind</option>
-              {handItems.length > 0 ? (
-                <>
-                  <optgroup label="From carrier files">{DISCREPANCY_TYPES.map((t) => <option key={t} value={t}>{DISCREPANCY_LABELS[t].label}</option>)}</optgroup>
-                  <optgroup label="Statements imported by hand">{DISCREPANCY_KINDS.map((k) => <option key={k} value={`hand:${k}`}>{DISCREPANCY_KIND_LABELS[k].label}</option>)}</optgroup>
-                </>
-              ) : DISCREPANCY_TYPES.map((t) => <option key={t} value={t}>{DISCREPANCY_LABELS[t].label}</option>)}
+              {DISCREPANCY_TYPES.map((t) => <option key={t} value={t}>{DISCREPANCY_LABELS[t].label}</option>)}
             </select>
             {carriers.length > 1 && (
               <select aria-label="Filter by carrier" className={toolbarControl} value={carrier} onChange={(e) => { setCarrier(e.target.value); setPage(1); }}>

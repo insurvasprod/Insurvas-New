@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
@@ -11,6 +12,7 @@ import { useFittingPageSize } from "@/components/app/book-of-business-views";
 import { fileDay } from "@/lib/ingestion/constants";
 import { changeWindow, TRACKED_FIELD_LABELS, type TrackedField } from "@/lib/ingestion/snapshots";
 import type { ChangeRow } from "@/lib/ingestion/snapshotStore";
+import { fileHref } from "@/lib/ingestion/trace";
 import { isNormalizedStatus, shownWord, STATUS_LABELS } from "@/lib/ingestion/statuses";
 
 function shown(field: TrackedField, value: string | null): string {
@@ -88,12 +90,12 @@ export function PolicyChangesTable({ changes, emptyTitle, emptyHint }: { changes
           <tbody className="m-seq">
             {rows.map((change) => (
               <tr key={change.id} className="m-row">
-                <td className="font-semibold tabular-nums text-foreground">{change.policyNumber}</td>
+                <td className="font-semibold tabular-nums text-foreground"><Link href={`/app/policies/carrier/${change.carrierId}/${encodeURIComponent(change.policyNumber)}`} className="hover:underline">{change.policyNumber}</Link></td>
                 <td><span className="block whitespace-normal break-words leading-snug">{change.carrierName}</span></td>
                 <td>{TRACKED_FIELD_LABELS[change.fieldName]}</td>
                 <td className="text-muted-foreground" title={change.oldValue ?? ""}><span className="block max-w-[160px] truncate">{shown(change.fieldName, change.oldValue)}</span></td>
                 <td className="font-semibold text-foreground" title={change.newValue ?? ""}><span className="block max-w-[160px] truncate">{shown(change.fieldName, change.newValue)}</span></td>
-                <td className="tabular-nums text-muted-foreground">{changeWindow(change.fromDate, change.toDate, fileDay)}</td>
+                <td className="tabular-nums text-muted-foreground"><Link href={fileHref(change.toFileId)} className="hover:text-foreground hover:underline" title="Open the file that showed the new value">{changeWindow(change.fromDate, change.toDate, fileDay)}</Link></td>
               </tr>
             ))}
           </tbody>

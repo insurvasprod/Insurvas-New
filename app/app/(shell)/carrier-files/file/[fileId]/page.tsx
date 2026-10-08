@@ -2,12 +2,13 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { guardPage } from "@/lib/entitlements/guardPage";
-import { fileDay } from "@/lib/ingestion/constants";
+import { FILE_STATUS_LABELS, fileDay, type CarrierFileStatus } from "@/lib/ingestion/constants";
 import { isRecordUuid } from "@/lib/ingestion/path";
 import { rowHref } from "@/lib/ingestion/trace";
 import { loadFileTrace } from "@/lib/ingestion/traceStore";
 import { hasTenantPermission } from "@/lib/tenantAuth/permissions";
 import { CarrierFileDownload } from "@/components/app/carrier-file-download";
+import { CarrierFileReread } from "@/components/app/carrier-file-reread";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { PageHeader } from "@/components/ui/page-header";
@@ -38,7 +39,7 @@ export default async function CarrierFilePage({ params, searchParams }: { params
     ["Type", file.fileType === "policies" ? "Policy file" : file.fileType === "commissions" ? "Commission file" : file.fileType === "new_business" ? "New business file" : "Not known"],
     ["Arrived", `${SOURCE[file.source] ?? file.source}, ${fileDay(file.receivedAt.slice(0, 10))}`],
     ["Format", `${(file.fileKind ?? "").toUpperCase() || "—"} · ${size(file.bytes)}`],
-    ["Status", file.status[0].toUpperCase() + file.status.slice(1) + (file.supersededBy ? " (a corrected file replaced it)" : "")],
+    ["Status", (FILE_STATUS_LABELS[file.status as CarrierFileStatus] ?? file.status) + (file.supersededBy ? " (a corrected file replaced it)" : "")],
     ["Read with", file.map ? `${file.map.name}, version ${file.map.version}` : "No layout map yet"],
     ["Rows", file.rowCount === null ? "Not read yet" : `${file.rowCount.toLocaleString("en-US")} kept as they arrived${file.parsedRows !== null ? ` · ${file.parsedRows.toLocaleString("en-US")} read` : ""}${file.heldRows ? ` · ${file.heldRows} held` : ""}`],
     ["Content hash (SHA-256)", file.contentHash],
@@ -46,7 +47,7 @@ export default async function CarrierFilePage({ params, searchParams }: { params
 
   return (
     <div className="m-stagger flex flex-col gap-6">
-      <PageHeader title={file.name} description="One carrier file, exactly as it arrived: each row opens what it became." actions={<CarrierFileDownload fileId={file.id} />} />
+      <PageHeader title={file.name} description="One carrier file, exactly as it arrived: each row opens what it became." actions={<>{file.rowCount !== null && guard.entitlement.access !== "read_only" && <CarrierFileReread fileId={file.id} />}<CarrierFileDownload fileId={file.id} /></>} />
       <TableCard>
         <dl className="grid gap-x-6 gap-y-3 px-4 py-4 text-sm sm:grid-cols-3">
           {facts.map(([term, value]) => (
@@ -68,7 +69,7 @@ export default async function CarrierFilePage({ params, searchParams }: { params
           </span>
         ) : undefined}
       >
-        {file.rows.length === 0 ? <EmptyState title="No rows kept" hint={file.fileKind === "pdf" ? "A PDF's lines are read by PDF extraction, which isn't set up yet." : "The rows are kept once the file is read."} /> : (
+        {file.rows.length === 0 ? <EmptyState title="No rows kept" hint={file.fileKind === "pdf" ? "A PDF is read with its carrier's PDF layout: its rows are kept once one is published." : "The rows are kept once the file is read."} /> : (
           <table className="portal-lead-table w-full min-w-[820px] text-left text-sm">
             <thead><tr><th className="w-[80px] text-right">Row</th>{file.headers.map((h) => <th key={h}>{h}</th>)}<th>Became</th></tr></thead>
             <tbody>

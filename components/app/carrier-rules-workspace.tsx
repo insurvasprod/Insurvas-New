@@ -18,6 +18,12 @@ import { notify } from "@/lib/notify";
 const select = `${toolbarControl} w-full`;
 const TRIGGER_LABEL = { on_issue: "On issue", on_first_draft: "On first draft" } as const;
 const CADENCE_LABEL = { daily: "Daily", weekly: "Weekly", monthly: "Monthly", ad_hoc: "Now and then" } as const;
+
+/** A carrier setting at a glance: its value and whose it is, or "Not set". */
+function settingCell(setting: { value: string | number | null; scope: "agency" | "platform" | null }, labels: Record<string, string>) {
+  if (setting.value === null) return <span className="text-muted-foreground">Not set</span>;
+  return <span className="block leading-snug">{labels[String(setting.value)] ?? String(setting.value)}<span className="block text-xs text-muted-foreground">{setting.scope === "agency" ? "yours" : "platform"}</span></span>;
+}
 const FORMAT_LABEL = { spreadsheet: "Spreadsheet", pdf: "PDF" } as const;
 
 function ruleCell(rule: ResolvedRule | null) {
@@ -97,6 +103,8 @@ export function CarrierRulesWorkspace({ carriers, plane, endpoint, readOnly, asO
               <tr>
                 <th className="w-[180px]">Carrier</th>
                 {RULE_TYPES.map((type) => <th key={type} className="w-[108px]" style={{ whiteSpace: "normal" }} title={`Days the carrier gives: its ${RULE_TYPE_LABELS[type].window}`}>{RULE_TYPE_LABELS[type].label}</th>)}
+                <th className="w-[110px]" title="When the carrier pays commission (expected commission waits for it)">Pays</th>
+                <th className="w-[110px]" title="How often its files arrive: the file monitor flags a file that doesn't come">Files</th>
                 {plane === "agency" && <th className="w-[80px] text-right" title="Policies in force with this carrier">In force</th>}
                 <th className="w-[80px] text-right" title="Rules not set yet; hover a number to see which">Missing</th>
                 <th className="w-[76px] text-right"><span className="sr-only">Actions</span></th>
@@ -107,6 +115,8 @@ export function CarrierRulesWorkspace({ carriers, plane, endpoint, readOnly, asO
                 <tr key={row.carrierId}>
                   <td><span className="block whitespace-normal break-words font-semibold leading-snug text-foreground">{row.carrierName}</span></td>
                   {RULE_TYPES.map((type) => <td key={type}>{ruleCell(row.rules[type])}</td>)}
+                  <td>{settingCell(row.settings.commissionTrigger, TRIGGER_LABEL)}</td>
+                  <td>{settingCell(row.settings.expectedCadence, CADENCE_LABEL)}</td>
                   {plane === "agency" && <td className="text-right tabular-nums">{(row.inForce ?? 0).toLocaleString("en-US")}</td>}
                   <td className={`text-right tabular-nums ${row.gaps.length ? "text-[var(--warning-ink)]" : "text-muted-foreground"}`} title={row.gaps.map((gap) => gap.sentence).join("\n")}>{row.gaps.length}</td>
                   <td className="text-right"><Button type="button" variant="outline" size="sm" onClick={() => { setEditing(null); setOpenId(row.carrierId); }}>{readOnly ? "Open" : "Edit"}</Button></td>

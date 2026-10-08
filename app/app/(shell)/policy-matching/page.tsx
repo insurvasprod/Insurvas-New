@@ -12,12 +12,15 @@ import { hasTenantPermission } from "@/lib/tenantAuth/permissions";
  * carrier policy belongs to, and how each link was made. Owner and bookkeeper. Opening it writes
  * nothing.
  */
-export default async function PolicyMatchingPage() {
+export default async function PolicyMatchingPage({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
   const guard = await guardPage("statement_ingestion");
   if (!guard.entitled) return <FeatureGateNotice guard={guard} featureLabel="Policy matching" description="Link every carrier policy to the right client and agent." />;
   if (!hasTenantPermission(guard.role, "statements.view")) return <RoleGateNotice featureLabel="Policy matching" detail="Policy matching is done by the account owner or a bookkeeper." />;
 
   const view = await loadMatching(guard.context.tenantId);
+  // ?tab=agents opens the agent codes (a policy whose agent code is not mapped links here).
+  const { tab } = await searchParams;
+  const initialTab = tab === "agents" || tab === "links" ? tab : "review";
   const pct = (value: number | null) => (value === null ? "—" : `${value}%`);
 
   return (
@@ -34,7 +37,7 @@ export default async function PolicyMatchingPage() {
             {view.aiAccuracy.reviewed > 0 && <StatTile label="AI accuracy, 7 days" value={pct(view.aiAccuracy.pct)} footnote={`${view.aiAccuracy.correct} of ${view.aiAccuracy.reviewed} confirmed`} />}
             <StatTile label="Agent codes to map" value={view.unmapped.length.toLocaleString("en-US")} valueTone={view.unmapped.length ? "warning" : undefined} footnote="so each policy credits the right agent" />
           </StatStrip>
-          <PolicyMatchingWorkspace reviews={view.reviews} links={view.links} unmapped={view.unmapped} mapped={view.mapped} members={view.members} readOnly={guard.entitlement.access === "read_only"} aiNote={AI_REVIEW_PENDING} />
+          <PolicyMatchingWorkspace reviews={view.reviews} links={view.links} unmapped={view.unmapped} mapped={view.mapped} members={view.members} readOnly={guard.entitlement.access === "read_only"} aiNote={AI_REVIEW_PENDING} initialTab={initialTab} />
         </>
       )}
     </div>

@@ -35,7 +35,19 @@ function fail(error: { message: string; code?: string }, fallback: string): neve
   throw new Error(`${fallback}: ${error.message}`);
 }
 
-const today = () => new Date().toISOString().slice(0, 10);
+/**
+ * The agency's own calendar day (its profile's time zone), so a rule saved in a US evening is dated
+ * today, as refresh_policy_current dates it — not tomorrow, as UTC would. The platform plane: UTC.
+ */
+async function today(scope?: RulesScope): Promise<string> {
+  if (scope?.plane !== "agency") return new Date().toISOString().slice(0, 10);
+  const { data } = await db().from("agency_profiles").select("timezone").eq("tenant_id", scope.tenantId).maybeSingle();
+  try {
+    return new Date().toLocaleDateString("en-CA", { timeZone: (data?.timezone as string | null) ?? "UTC" });
+  } catch {
+    return new Date().toISOString().slice(0, 10);
+  }
+}
 
 function toRule(row: Loose): RuleRow {
   return { id: row.id, tenantId: row.tenant_id, carrierId: row.carrier_id, ruleType: row.rule_type, windowDays: row.window_days, graceDays: row.grace_days, redraftAttempts: row.redraft_attempts, redraftIntervalDays: row.redraft_interval_days, source: row.source, notes: row.notes, effectiveFrom: row.effective_from, createdAt: row.created_at, cleared: row.cleared, verifiedAt: row.verified_at };
@@ -57,7 +69,7 @@ export type CarrierRulesRow = {
 };
 
 export async function loadCarrierRules(scope: RulesScope): Promise<{ available: boolean; carriers: CarrierRulesRow[]; asOf: string }> {
-  const asOf = today();
+  const asOf = await today(scope);
   const tenantId = scope.plane === "agency" ? scope.tenantId : null;
   const scoped = (query: Loose) => (tenantId ? query.or(`tenant_id.eq.${tenantId},tenant_id.is.null`) : query.is("tenant_id", null));
   const [carriers, rules, settings, counts, contacts, assignments, overrides] = await Promise.all([
@@ -143,7 +155,7 @@ export async function addRule(scope: RulesScope, input: RuleInput): Promise<stri
     redraft_interval_days: input.redraftIntervalDays,
     source: input.source,
     notes: input.notes,
-    effective_from: input.effectiveFrom ?? today(),
+    effective_from: input.effectiveFrom ?? (await today(scope)),
     created_by: scope.plane === "agency" ? scope.userId : null,
     created_by_admin: scope.plane === "platform" ? scope.adminId : null,
   }).select("id").single();
@@ -154,7 +166,7 @@ export async function addRule(scope: RulesScope, input: RuleInput): Promise<stri
 
 /** Hands an agency's rule back to the platform's, from today. */
 export async function clearOverride(scope: Extract<RulesScope, { plane: "agency" }>, carrierId: string, ruleType: RuleType): Promise<string> {
-  const { data, error } = await db().from("carrier_retention_rule").insert({ tenant_id: scope.tenantId, carrier_id: carrierId, rule_type: ruleType, cleared: true, effective_from: today(), created_by: scope.userId }).select("id").single();
+  const { data, error } = await db().from("carrier_retention_rule").insert({ tenant_id: scope.tenantId, carrier_id: carrierId, rule_type: ruleType, cleared: true, effective_from: await today(scope), created_by: scope.userId }).select("id").single();
   if (error) fail(error, "Could not clear the override");
   await recount(scope.tenantId, carrierId);
   return data.id;
@@ -186,4 +198,16 @@ export async function saveCarrierSettings(scope: RulesScope, carrierId: string, 
     : db().from("carrier_operating_settings").insert({ ...row, tenant_id: tenantId, carrier_id: carrierId });
   const { error: writeError } = await write;
   if (writeError) fail(writeError, "Could not save the carrier's settings");
+  // A changed trigger or lag moves when commission is due: the agency's expected figures follow it
+  // (their amounts stay as computed, 20261009200000), and its discrepancies are found again.
+  if (tenantId && ("commissionTrigger" in values || "expectedLagDays" in values)) {
+    try {
+      const { computeExpected } = await import("./expectedCommissionStore");
+      const { runDetection } = await import("./discrepancyStore");
+      await computeExpected(tenantId, carrierId);
+      await runDetection(tenantId);
+    } catch (failure) {
+      console.error("[carrier-rules] expected commission could not be recomputed after a settings change:", failure);
+    }
+  }
 }

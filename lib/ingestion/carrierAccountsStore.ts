@@ -27,11 +27,13 @@ export class AccountError extends Error {
 const n = (value: unknown) => (value === null || value === undefined ? null : Number(value));
 
 export async function loadAccounts(tenantId: string) {
-  const [checks, orphans, carriers, files] = await Promise.all([
+  const [checks, orphans, carriers, files, threshold] = await Promise.all([
     db().from("carrier_account_checks").select("*").eq("tenant_id", tenantId).order("carrier_id").order("statement_date"),
     db().from("commission_orphan_summary").select("*").eq("tenant_id", tenantId),
     db().from("carriers").select("id, name"),
     db().from("file_registry").select("id, carrier_id, original_filename, file_date, status").eq("tenant_id", tenantId).eq("file_type", "commissions").neq("status", "superseded").order("file_date", { ascending: false }).limit(500),
+    // How long a line may wait for its policy before it goes to Exceptions: the agency's own, else 60.
+    db().from("queue_assignment_rule").select("open_after_days").eq("tenant_id", tenantId).eq("queue_type", "orphan_commission").maybeSingle(),
   ]);
   if (checks.error) {
     if (isSchemaGap(checks.error)) return { available: false as const };
@@ -47,6 +49,7 @@ export async function loadAccounts(tenantId: string) {
   return {
     available: true as const,
     statements,
+    orphanDays: Number(threshold.data?.open_after_days ?? 60),
     orphans: (orphans.data ?? []).map((o: Loose) => ({ carrierId: o.carrier_id as string, carrierName: name.get(o.carrier_id) ?? "Carrier not known", policies: Number(o.orphan_policies), lines: Number(o.orphan_lines), amountCents: Number(o.orphan_amount_cents), heldCents: Number(o.orphan_held_cents), oldest: o.oldest_orphan_date as string | null, pastThreshold: Number(o.past_threshold) })),
     files: (files.data ?? []).map((f: Loose) => ({ id: f.id as string, carrierId: f.carrier_id as string, label: `${f.original_filename}${f.file_date ? ` · ${f.file_date}` : ""}`, fileDate: f.file_date as string | null })),
     carriers: [...new Map((files.data ?? []).map((f: Loose) => [f.carrier_id, name.get(f.carrier_id) ?? "Carrier not known"])).entries()].map(([id, label]) => ({ id: id as string, name: label as string })),

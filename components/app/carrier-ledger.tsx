@@ -44,7 +44,8 @@ export function CarrierLedger({ entries, scoped, initialSource = "" }: { entries
     const needle = query.trim().toLowerCase();
     return entries.filter((row) => (!needle || `${row.account ? "account-level" : row.policyNumber} ${row.description ?? ""} ${row.agentIdentifier ?? ""} ${row.fileName ?? ""}`.toLowerCase().includes(needle)) && (!carrier || row.carrierId === carrier) && (!type || kindOf(row) === type) && (!source || (source === "hand" ? row.source === "hand" : row.source !== "hand")));
   }, [entries, query, carrier, type, source]);
-  const sum = useMemo(() => rollup(visible.map((row) => ({ entry_type: row.type, corrects_type: row.correctsType, amount_cents: row.amountCents }))), [visible]);
+  // A line whose statement doesn't add up is held out of every total, here as on the policy page.
+  const sum = useMemo(() => rollup(visible.filter((row) => !row.heldByStatement).map((row) => ({ entry_type: row.type, corrects_type: row.correctsType, amount_cents: row.amountCents }))), [visible]);
   const { current, rows } = paginate(visible, page, 25);
   const filtered = Boolean(query.trim() || carrier || type || source);
   // Most carriers never say who a line was paid to; the column shows only when one does.
@@ -67,11 +68,11 @@ export function CarrierLedger({ entries, scoped, initialSource = "" }: { entries
   return (
     <>
       {/* No lines yet means unknown, not $0: the totals appear with the first line. */}
-      {entries.length > 0 && <StatStrip label="Commission from carrier files">
+      {entries.length > 0 && <StatStrip label={source === "hand" ? "Commission from statements imported by hand" : source === "carrier" ? "Commission from carrier files" : "Commission, every source"}>
         <StatTile label="Advanced" value={whole(sum.advancedCents)} footnote="paid ahead of earning" />
         <StatTile label="Earned" value={whole(sum.earnedCents)} footnote={sum.overrideCents ? `plus ${whole(sum.overrideCents)} overrides` : "from premiums paid"} />
         <StatTile label="Charged back" value={whole(sum.chargedBackCents)} valueTone={sum.chargedBackCents ? "danger" : undefined} footnote="unearned advance taken back" />
-        <StatTile label="Net received" value={whole(sum.netReceivedCents)} footnote={sum.feeCents || sum.interestCents ? `after ${whole(sum.feeCents + sum.interestCents)} fees and interest` : "everything but held"} />
+        <StatTile label="Net received" value={whole(sum.netReceivedCents)} footnote={sum.feeCents || sum.interestCents ? `after ${whole(Math.abs(sum.feeCents + sum.interestCents))} of fees and interest` : "everything but held"} />
         <StatTile label="Held" value={whole(sum.heldCents)} footnote="earned, not paid yet" />
       </StatStrip>}
 

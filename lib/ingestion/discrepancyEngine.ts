@@ -66,6 +66,13 @@ const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "
 const day = (iso: string | null) => (iso ? `${MONTHS[Number(iso.slice(5, 7)) - 1]} ${Number(iso.slice(8, 10))}, ${iso.slice(0, 4)}` : "an unknown date");
 const daysBetween = (a: string, b: string) => Math.abs(Math.round((Date.UTC(+a.slice(0, 4), +a.slice(5, 7) - 1, +a.slice(8, 10)) - Date.UTC(+b.slice(0, 4), +b.slice(5, 7) - 1, +b.slice(8, 10))) / 86_400_000));
 const kind = (e: EngineEntry) => e.correctsType ?? e.type;
+/** A line dated within 12 months of the trigger (or undated, so it is not silently dropped). */
+const inFirstYear = (e: EngineEntry, triggerOn: string | null) => {
+  const on = e.transactionDate ?? e.statementDate;
+  if (!on || !triggerOn) return true;
+  const end = `${Number(triggerOn.slice(0, 4)) + 1}${triggerOn.slice(4)}`;
+  return on < end;
+};
 
 /** The entries still standing: an entry a reprocess reversed, and that reversal, cancel out. */
 function standing(entries: EngineEntry[]) {
@@ -94,8 +101,11 @@ export function detect(input: {
   for (const x of input.expected) {
     const key = `${x.carrierId}|${x.policyNumber}`;
     const policy = policyOf.get(key);
-    if (!policy || ["declined", "withdrawn", "submitted"].includes(policy.status ?? "")) continue;
-    const rows = byPolicy.get(key) ?? [];
+    if (!policy || ["declined", "withdrawn", "submitted", "not_taken"].includes(policy.status ?? "")) continue;
+    // A policy that lapsed before a single payment was never really in force: nothing is owed on it.
+    if (policy.status === "lapsed" && !(policy.monthsPaid ?? 0)) continue;
+    // Lines a reprocess or a corrected reissue reversed, and those reversals, cancel out.
+    const rows = standing(byPolicy.get(key) ?? []);
     const tol = input.tolerance(x.carrierId);
     const source = x.scheduleId ? { schedule_id: x.scheduleId, schedule_version: x.scheduleVersion, rate_bp: x.rateBp, commissionable_premium_cents: x.premiumCents, confidence: x.confidence } : { confidence: x.confidence, reason: x.reason };
     const paidLines = rows.filter((e) => ["advance", "earned", "held"].includes(kind(e)));
@@ -117,7 +127,12 @@ export function detect(input: {
     const earned = sum(rows, "earned");
     let compare: { expected: number; reported: number; what: string; entryIds: string[] } | null = null;
     if (advanced > 0 && x.expectedAdvanceCents !== null) compare = { expected: x.expectedAdvanceCents, reported: advanced, what: "the advance", entryIds: ids(rows, ["advance"]) };
-    else if (advanced === 0 && earned > 0 && (policy.monthsPaid ?? 0) >= 12) compare = { expected: x.expectedAmountCents, reported: earned, what: "the first year's commission", entryIds: ids(rows, ["earned"]) };
+    else if (advanced === 0 && earned > 0 && (policy.monthsPaid ?? 0) >= 12) {
+      // The first year only: renewals paid after it are not part of the first-year figure.
+      const yearOne = rows.filter((e) => kind(e) === "earned" && inFirstYear(e, x.triggerOn));
+      const firstYear = yearOne.reduce((s, e) => s + e.amountCents, 0);
+      if (firstYear > 0) compare = { expected: x.expectedAmountCents, reported: firstYear, what: "the first year's commission", entryIds: yearOne.map((e) => e.id) };
+    }
     if (compare) {
       const diff = compare.expected - compare.reported;
       if (Math.abs(diff) > tol) {

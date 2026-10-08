@@ -37,7 +37,7 @@ const select = `${toolbarControl} w-full`;
  * whether each one adds up, whether one is missing, and which way the balance is moving. A debit
  * balance means the carrier keeps every commission until it clears — not missing money.
  */
-export function CarrierAccounts({ statements, orphans, files, carriers, readOnly, today }: { statements: Statement[]; orphans: Orphan[]; files: Array<{ id: string; carrierId: string; label: string; fileDate: string | null }>; carriers: Array<{ id: string; name: string }>; readOnly: boolean; today: string }) {
+export function CarrierAccounts({ statements, orphans, files, carriers, readOnly, today, orphanDays = 60 }: { orphanDays?: number; statements: Statement[]; orphans: Orphan[]; files: Array<{ id: string; carrierId: string; label: string; fileDate: string | null }>; carriers: Array<{ id: string; name: string }>; readOnly: boolean; today: string }) {
   const router = useRouter();
   const [refreshing, startRefresh] = useTransition();
   const [open, setOpen] = useState(false);
@@ -147,9 +147,9 @@ export function CarrierAccounts({ statements, orphans, files, carriers, readOnly
       </TableCard>
 
       {orphans.length > 0 && (
-        <TableCard title="Commission for policies not seen yet" description="Normal while policy files catch up; each line joins its policy the moment the policy arrives. After 60 days a line goes to Exceptions.">
+        <TableCard title="Commission for policies not seen yet" description={`Normal while policy files catch up; each line joins its policy the moment the policy arrives. After ${orphanDays} days a line goes to Exceptions.`}>
           <table className="portal-lead-table w-full text-left text-sm">
-            <thead><tr><th>Carrier</th><th className="w-[100px] text-right">Policies</th><th className="w-[100px] text-right">Lines</th><th className="w-[140px] text-right">Amount</th><th className="w-[130px]">Oldest</th><th className="w-[140px] text-right">Past 60 days</th></tr></thead>
+            <thead><tr><th>Carrier</th><th className="w-[100px] text-right">Policies</th><th className="w-[100px] text-right">Lines</th><th className="w-[140px] text-right">Amount</th><th className="w-[130px]">Oldest</th><th className="w-[140px] text-right">Past {orphanDays} days</th></tr></thead>
             <tbody>
               {orphans.map((o) => (
                 <tr key={o.carrierId}>

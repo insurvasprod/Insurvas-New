@@ -47,36 +47,50 @@ export type BoardEntry = {
   lastAction: { outcome: Outcome; at: string; by: string | null; result: string | null } | null;
 };
 
-const POLICY_COLUMNS = "carrier_id, policy_number, contact_id, agent_user_id, status_normalized, status_reported, carrier_status_raw, paid_to_date, effective_date, days_past_due, days_until_carrier_closes, retention_rule_id, lapsed_on, payment_method, premium_cents, premium_mode, months_paid, last_snapshot_date";
+const POLICY_COLUMNS = "carrier_id, policy_number, contact_id, agent_user_id, status_normalized, status_reported, carrier_status_raw, paid_to_date, effective_date, days_past_due, days_until_carrier_closes, retention_rule_id, lapsed_on, payment_method, premium_cents, premium_mode, months_paid, last_snapshot_date, first_seen_date, as_of";
 
 /** The board for this viewer (a producer sees the policies credited to them), in the default order. */
 export async function loadBoard(viewer: Viewer, only?: { carrierId: string; policyNumber: string }) {
-  const today = new Date().toISOString().slice(0, 10);
+  const utcToday = new Date().toISOString().slice(0, 10);
   const policies = await everyRow(() => {
     let q = db().from("policy_current").select(POLICY_COLUMNS).eq("tenant_id", viewer.tenantId).not("status_normalized", "in", "(submitted,declined,withdrawn)");
     if (viewer.role === "producer") q = q.eq("agent_user_id", viewer.userId);
     if (only) q = q.eq("carrier_id", only.carrierId).eq("policy_number", only.policyNumber);
     return q.order("carrier_id").order("policy_number");
   });
+  // "Today" is the agency's day the book was computed for (policy_current.as_of, its own time zone),
+  // not UTC, which runs a day ahead in US evenings.
+  const today = (policies.map((p) => p.as_of as string | null).filter(Boolean).sort().at(-1) as string | undefined) ?? utcToday;
   const ruleIds = [...new Set(policies.map((p) => p.retention_rule_id).filter(Boolean))] as string[];
   const [rules, reinstatement, changes, carriers] = await Promise.all([
     ruleIds.length ? db().from("carrier_retention_rule").select("id, grace_days").in("id", ruleIds) : { data: [] },
-    db().from("carrier_retention_rule").select("tenant_id, carrier_id, window_days, cleared, effective_from, created_at").eq("rule_type", "reinstatement").or(`tenant_id.eq.${viewer.tenantId},tenant_id.is.null`).lte("effective_from", today).order("effective_from", { ascending: true }).order("created_at", { ascending: true }),
-    everyRow(() => db().from("policy_change").select("carrier_id, policy_number, old_value, new_value, to_snapshot_date").eq("tenant_id", viewer.tenantId).eq("field_name", "paid_to_date").gte("to_snapshot_date", new Date(Date.now() - 120 * 86_400_000).toISOString().slice(0, 10)).order("to_snapshot_date").order("detected_at")),
+    db().from("carrier_retention_rule").select("tenant_id, carrier_id, rule_type, window_days, cleared, effective_from, created_at").in("rule_type", ["reinstatement", "conservation", "cancellation_request"]).or(`tenant_id.eq.${viewer.tenantId},tenant_id.is.null`).lte("effective_from", today).order("effective_from", { ascending: true }).order("created_at", { ascending: true }),
+    everyRow(() => db().from("policy_change").select("carrier_id, policy_number, field_name, old_value, new_value, to_snapshot_date").eq("tenant_id", viewer.tenantId).in("field_name", ["paid_to_date", "carrier_status_raw"]).gte("to_snapshot_date", new Date(Date.now() - 120 * 86_400_000).toISOString().slice(0, 10)).order("to_snapshot_date").order("detected_at")),
     db().from("carriers").select("id, name"),
   ]);
   const grace = new Map<string, number | null>((rules.data ?? []).map((r: Loose) => [r.id, r.grace_days]));
-  // Reinstatement window: the agency's own (unless cleared), else the platform's; latest in force.
-  const reinstate = new Map<string, number | null>();
-  for (const scope of ["platform", "agency"] as const) {
-    for (const r of reinstatement.data ?? []) {
-      if ((scope === "platform") !== (r.tenant_id === null)) continue;
-      if (scope === "agency" && r.cleared) reinstate.delete(r.carrier_id);
-      else reinstate.set(r.carrier_id, r.window_days);
+  // Each window: the agency's own (unless cleared, then back to the platform's), else the platform's;
+  // the latest in force. Reinstatement, conservation and cancellation-request alike.
+  const windowFor = (ruleType: string) => {
+    const platform = new Map<string, number | null>();
+    const own = new Map<string, number | null>();
+    for (const r of (reinstatement.data ?? []) as Loose[]) {
+      if (r.rule_type !== ruleType) continue;
+      if (r.tenant_id === null) platform.set(r.carrier_id, r.window_days);
+      else if (r.cleared) own.delete(r.carrier_id);
+      else own.set(r.carrier_id, r.window_days);
     }
-  }
+    return new Map([...platform, ...own]);
+  };
+  const reinstate = windowFor("reinstatement");
+  const conservationWindow = windowFor("conservation");
+  const cancellationWindow = windowFor("cancellation_request");
   const lastChange = new Map<string, Loose>();
-  for (const c of changes) lastChange.set(`${c.carrier_id}|${c.policy_number}`, c);
+  const wordSince = new Map<string, string>();
+  for (const c of changes) {
+    if (c.field_name === "carrier_status_raw") wordSince.set(`${c.carrier_id}|${c.policy_number}`, c.to_snapshot_date);
+    else lastChange.set(`${c.carrier_id}|${c.policy_number}`, c);
+  }
 
   type Candidate = { p: Loose; reason: Reason; daysLeft: number | null };
   const candidates: Candidate[] = [];
@@ -88,7 +102,12 @@ export async function loadBoard(viewer: Viewer, only?: { carrierId: string; poli
       effectiveDate: p.effective_date, daysPastDue: p.days_past_due, daysUntilClose: p.days_until_carrier_closes, graceDays: p.retention_rule_id ? grace.get(p.retention_rule_id) ?? null : null,
       lapsedOn: p.lapsed_on, paymentMethod: p.payment_method, lastPaidToChange: change ? { from: change.old_value, to: change.new_value, on: change.to_snapshot_date } : null,
       reinstatementDays: reinstate.get(p.carrier_id) ?? null, lastSnapshotDate: p.last_snapshot_date,
+      noticeSince: wordSince.get(key) ?? p.first_seen_date ?? null,
+      noticeWindowDays: null as number | null,
     };
+    const first = reasonFor(input, today);
+    if (first === "conservation") input.noticeWindowDays = conservationWindow.get(p.carrier_id) ?? null;
+    if (first === "cancellation_request") input.noticeWindowDays = cancellationWindow.get(p.carrier_id) ?? null;
     const reason = reasonFor(input, today);
     if (reason) candidates.push({ p, reason, daysLeft: daysLeftFor(input, reason, today) });
   }

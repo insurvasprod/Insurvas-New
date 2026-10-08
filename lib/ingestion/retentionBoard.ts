@@ -49,6 +49,12 @@ export type BoardPolicy = {
   reinstatementDays: number | null;
   /** The date of the latest carrier file for this policy. */
   lastSnapshotDate: string | null;
+  /**
+   * A cancellation request or a conservation notice runs on its own carrier window (LA-4.17), counted
+   * from the file that first showed the carrier's current word. Null: no window, or not such a row.
+   */
+  noticeWindowDays?: number | null;
+  noticeSince?: string | null;
 };
 
 const dayNumber = (iso: string) => Math.floor(Date.UTC(+iso.slice(0, 4), +iso.slice(5, 7) - 1, +iso.slice(8, 10)) / 86_400_000);
@@ -89,6 +95,7 @@ export function reasonFor(p: BoardPolicy, today: string): Reason | null {
 export function daysLeftFor(p: BoardPolicy, reason: Reason, today: string): number | null {
   if (reason === "direct_bill") return null;
   if (reason === "recently_lapsed") return p.lapsedOn && p.reinstatementDays !== null ? Math.max(0, p.reinstatementDays - daysSince(p.lapsedOn, today)) : null;
+  if ((reason === "cancellation_request" || reason === "conservation") && p.noticeWindowDays != null && p.noticeSince) return Math.max(0, p.noticeWindowDays - daysSince(p.noticeSince, today));
   return p.daysUntilClose === null ? null : Math.max(0, p.daysUntilClose);
 }
 

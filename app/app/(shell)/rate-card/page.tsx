@@ -32,7 +32,7 @@ export default async function RateCardPage() {
               <StatTile label="Carriers covered" value={`${view.coverage.carriersCovered} of ${view.coverage.carriers}`} footnote="with at least one policy they can price" valueTone={view.coverage.carriersCovered < view.coverage.carriers ? "warning" : undefined} />
               <StatTile label="Premium covered" value={view.coverage.pricedPct === null ? "—" : `${view.coverage.pricedPct}%`} footnote={`${whole(view.coverage.pricedMonthlyCents)} of ${whole(view.coverage.totalMonthlyCents)} a month`} />
               <StatTile label="Expected so far" value={view.expected.available && view.expected.priced > 0 ? whole(view.expected.dueCents) : "—"} footnote={view.expected.available ? `${view.expected.priced.toLocaleString("en-US")} policies priced · ${view.expected.unpriced.toLocaleString("en-US")} without a rate` : "after the database update"} />
-              <StatTile label="Past the usual lag" value={view.expected.available ? view.expected.pastLag.toLocaleString("en-US") : "—"} footnote="should have been paid by now" />
+              <StatTile label="Past the usual lag" value={view.expected.available ? view.expected.pastLag.toLocaleString("en-US") : "—"} footnote="due by now; any still unpaid are in Discrepancies" />
             </StatStrip>
           )}
           <RateCardWorkspace carriers={view.carriers} products={view.products} readOnly={guard.entitlement.access === "read_only"} today={today} />
