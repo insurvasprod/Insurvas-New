@@ -3,6 +3,7 @@ import "server-only";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isSchemaGap } from "@/lib/supabase/schemaGap";
 
+import type { CarrierFileType } from "./constants";
 import { reprocessCarrierFiles } from "./reprocessRuns";
 import { isNormalizedStatus, type NormalizedStatus } from "./statuses";
 
@@ -39,7 +40,7 @@ function fail(error: { message: string; code?: string }, fallback: string): neve
 export type QueueEntry = {
   carrierId: string;
   carrierName: string;
-  fileType: "policies" | "commissions";
+  fileType: CarrierFileType;
   raw: string;
   rows: number;
   agencies: number;
@@ -51,7 +52,7 @@ export type MappingRow = {
   id: string;
   carrierId: string;
   carrierName: string;
-  fileType: "policies" | "commissions";
+  fileType: CarrierFileType;
   raw: string;
   status: NormalizedStatus;
   approvedAt: string | null;
@@ -110,7 +111,7 @@ async function approve(adminId: string, mapId: string): Promise<{ files: Array<{
  * Maps one carrier word (exactly as given — never trimmed) to one of the nine statuses and approves
  * it in one step. The files whose rows were held are returned for reprocessing by the caller.
  */
-export async function mapAndApproveStatus(adminId: string, input: { carrierId: string; fileType: "policies" | "commissions"; raw: string; status: string; notes: string | null }): Promise<{ mapId: string; files: Array<{ tenant_id: string; file_id: string }> }> {
+export async function mapAndApproveStatus(adminId: string, input: { carrierId: string; fileType: CarrierFileType; raw: string; status: string; notes: string | null }): Promise<{ mapId: string; files: Array<{ tenant_id: string; file_id: string }> }> {
   if (!isNormalizedStatus(input.status)) throw new StatusMapError("Choose one of the nine statuses.", 400);
   if (!input.raw.length || input.raw.length > 200) throw new StatusMapError("The carrier's word is missing.", 400);
   const { data: existing, error } = await db().from("carrier_status_map").select("id, approved_at").eq("carrier_id", input.carrierId).eq("file_type", input.fileType).eq("carrier_status_raw", input.raw).maybeSingle();

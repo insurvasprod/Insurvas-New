@@ -2,6 +2,7 @@ import "server-only";
 
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { FILE_TYPES } from "./constants";
 
 import type { AdminContext } from "@/lib/adminAuth/requireAdminRole";
 import { canAccessConfigurationSection } from "@/lib/configuration/sections";
@@ -31,7 +32,7 @@ export const isId = (value: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-
 export const createSchema = z.object({
   layout_key: z.string().regex(/^[a-z][a-z0-9_]{2,60}$/, "A layout key is lowercase letters, digits and underscores, like aetna_aflac_ahl_policies."),
   name: z.string().trim().min(1, "Name the layout.").max(120),
-  file_type: z.enum(["policies", "commissions"]),
+  file_type: z.enum(FILE_TYPES),
 }).strict();
 
 const entrySchema = z.object({
@@ -55,6 +56,6 @@ export const saveSchema = z.object({
 
 export const assignmentSchema = z.object({
   carrier_id: z.string().refine(isId, "Choose the carrier."),
-  file_type: z.enum(["policies", "commissions"]),
+  file_type: z.enum(FILE_TYPES),
   layout_key: z.string().regex(/^[a-z][a-z0-9_]{2,60}$/),
 }).strict();

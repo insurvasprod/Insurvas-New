@@ -3,6 +3,7 @@ import "server-only";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isSchemaGap } from "@/lib/supabase/schemaGap";
 
+import type { CarrierFileType } from "./constants";
 import { mapProblems, type DataType, type LayoutEntry, type Transform } from "./layout";
 
 /**
@@ -35,7 +36,7 @@ export type LayoutMapView = {
   id: string;
   layoutKey: string;
   name: string;
-  fileType: "policies" | "commissions";
+  fileType: CarrierFileType;
   version: number;
   status: LayoutStatus;
   headerRowIndex: number | null;
@@ -43,12 +44,14 @@ export type LayoutMapView = {
   rowCountSwingPct: number;
   totalRowColumn: string | null;
   totalRowValue: string | null;
+  /** How a PDF statement is cut into columns (pdfLayout.ts); null for a spreadsheet layout. */
+  pdfLayout: unknown | null;
   approvedAt: string | null;
   updatedAt: string;
   entries: LayoutEntryView[];
 };
 
-export type AssignmentView = { id: string; carrierId: string; carrierName: string; fileType: "policies" | "commissions"; layoutKey: string };
+export type AssignmentView = { id: string; carrierId: string; carrierName: string; fileType: CarrierFileType; layoutKey: string };
 export type CarrierOption = { id: string; code: string; name: string };
 
 function fail(error: { message: string; code?: string }, fallback: string): never {
@@ -59,7 +62,7 @@ function fail(error: { message: string; code?: string }, fallback: string): neve
   throw new Error(`${fallback}: ${error.message}`);
 }
 
-const MAP_COLUMNS = "id, layout_key, name, file_type, version, status, header_row_index, sheet_name, row_count_swing_pct, total_row_column, total_row_value, approved_at, updated_at, carrier_layout_map_entry(source_column, target_field, data_type, transform, required, sort_order, enum_values)";
+const MAP_COLUMNS = "id, layout_key, name, file_type, version, status, header_row_index, sheet_name, row_count_swing_pct, total_row_column, total_row_value, pdf_layout, approved_at, updated_at, carrier_layout_map_entry(source_column, target_field, data_type, transform, required, sort_order, enum_values)";
 
 function view(row: Loose): LayoutMapView {
   return {
@@ -74,6 +77,7 @@ function view(row: Loose): LayoutMapView {
     rowCountSwingPct: row.row_count_swing_pct,
     totalRowColumn: row.total_row_column,
     totalRowValue: row.total_row_value,
+    pdfLayout: row.pdf_layout ?? null,
     approvedAt: row.approved_at,
     updatedAt: row.updated_at,
     entries: [...(row.carrier_layout_map_entry ?? [])]
@@ -105,7 +109,7 @@ async function getMap(id: string): Promise<LayoutMapView> {
   return view(data);
 }
 
-export async function createLayoutMap(adminId: string, input: { layoutKey: string; name: string; fileType: "policies" | "commissions" }): Promise<LayoutMapView> {
+export async function createLayoutMap(adminId: string, input: { layoutKey: string; name: string; fileType: CarrierFileType }): Promise<LayoutMapView> {
   const { data: latest, error } = await db().from("carrier_layout_map").select("version").is("tenant_id", null).eq("layout_key", input.layoutKey).order("version", { ascending: false }).limit(1);
   if (error) fail(error, "Could not read the layout's versions");
   if (latest?.length) throw new LayoutMapError(`Layout "${input.layoutKey}" already exists; open it and start a new version.`, 409);
@@ -182,6 +186,8 @@ export async function newLayoutVersion(adminId: string, id: string): Promise<Lay
     row_count_swing_pct: source.rowCountSwingPct,
     total_row_column: source.totalRowColumn,
     total_row_value: source.totalRowValue,
+    // A PDF layout carries over to the next version, like the sheet and header row.
+    pdf_layout: source.pdfLayout,
     created_by_admin: adminId,
   }).select("id").single();
   if (error) fail(error, "Could not start the new version");
@@ -197,7 +203,7 @@ export async function retireLayoutMap(id: string): Promise<LayoutMapView> {
 }
 
 /** Points a carrier's files of one type at a layout (platform-wide). */
-export async function setLayoutAssignment(adminId: string, input: { carrierId: string; fileType: "policies" | "commissions"; layoutKey: string }): Promise<void> {
+export async function setLayoutAssignment(adminId: string, input: { carrierId: string; fileType: CarrierFileType; layoutKey: string }): Promise<void> {
   const { data: layout } = await db().from("carrier_layout_map").select("file_type").is("tenant_id", null).eq("layout_key", input.layoutKey).limit(1);
   if (!layout?.length) throw new LayoutMapError(`There is no layout "${input.layoutKey}".`, 404);
   if (layout[0].file_type !== input.fileType) throw new LayoutMapError(`Layout "${input.layoutKey}" reads ${layout[0].file_type} files.`, 400);
@@ -222,7 +228,7 @@ export type WaitingFile = { id: string; label: string };
  * Files held back for want of a layout, newest first, so staff can write one from a real file's
  * headers instead of typing them. Staff see the carrier, file name and date; never the rows.
  */
-export async function listFilesWaitingForLayout(fileType: "policies" | "commissions"): Promise<WaitingFile[]> {
+export async function listFilesWaitingForLayout(fileType: CarrierFileType): Promise<WaitingFile[]> {
   const { data, error } = await db().from("file_registry").select("id, carrier_id, original_filename, file_date").eq("parse_block", "no_layout_map").eq("file_type", fileType).order("received_at", { ascending: false }).limit(25);
   if (error) {
     if (isSchemaGap(error)) return [];

@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
       if (!isId(fileId)) return NextResponse.json({ error: "Choose a file from the list." }, { status: 400 });
       return NextResponse.json({ headers: await waitingFileHeaders(fileId) }, { headers: { "Cache-Control": "no-store" } });
     }
-    if (fileType !== "policies" && fileType !== "commissions") return NextResponse.json({ error: "Say which file type." }, { status: 400 });
+    if (fileType !== "policies" && fileType !== "commissions" && fileType !== "new_business") return NextResponse.json({ error: "Say which file type." }, { status: 400 });
     return NextResponse.json({ files: await listFilesWaitingForLayout(fileType) }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     return layoutFailure(error);

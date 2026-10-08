@@ -5,6 +5,7 @@ import { resolveAdminContext } from "@/lib/adminAuth/requireAdminRole";
 import { audit } from "@/lib/audit/log";
 import { isId, layoutAdmin } from "@/lib/ingestion/layoutAdminHttp";
 import { listStatusQueue, mapAndApproveStatus, reprocessHeld, StatusMapError } from "@/lib/ingestion/statusAdmin";
+import { FILE_TYPES } from "@/lib/ingestion/constants";
 import { STATUS_VOCABULARY } from "@/lib/ingestion/statuses";
 
 /**
@@ -14,7 +15,7 @@ import { STATUS_VOCABULARY } from "@/lib/ingestion/statuses";
  */
 const mapSchema = z.object({
   carrier_id: z.string().refine(isId, "Choose the carrier."),
-  file_type: z.enum(["policies", "commissions"]),
+  file_type: z.enum(FILE_TYPES),
   // Not trimmed: "ACTIVE " is a different word from "ACTIVE".
   carrier_status_raw: z.string().min(1).max(200),
   status_normalized: z.enum(STATUS_VOCABULARY),

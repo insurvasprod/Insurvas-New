@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { EmptyState } from "@/components/ui/page-states";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
-import { FILE_TYPE_LABELS, type CarrierFileType } from "@/lib/ingestion/constants";
+import { FILE_TYPE_LABELS, FILE_TYPES, type CarrierFileType } from "@/lib/ingestion/constants";
 import { guessTargetField, mapProblems, TARGET_FIELDS, TRANSFORMS_FOR, type LayoutEntry, type Transform } from "@/lib/ingestion/layout";
 import type { AssignmentView, CarrierOption, LayoutMapView, LayoutStatus, WaitingFile } from "@/lib/ingestion/layoutAdmin";
 import { notify } from "@/lib/notify";
@@ -97,8 +97,8 @@ export function LayoutMapsReview({ initialMaps, initialAssignments, carriers, no
   const [problems, setProblems] = useState<string[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
-  const [newLayout, setNewLayout] = useState({ layoutKey: "", name: "", fileType: "policies" as "policies" | "commissions" });
-  const [assign, setAssign] = useState({ carrierId: "", fileType: "policies" as "policies" | "commissions", layoutKey: "" });
+  const [newLayout, setNewLayout] = useState({ layoutKey: "", name: "", fileType: "policies" as CarrierFileType });
+  const [assign, setAssign] = useState({ carrierId: "", fileType: "policies" as CarrierFileType, layoutKey: "" });
   const [waiting, setWaiting] = useState<WaitingFile[]>([]);
   const [unmatched, setUnmatched] = useState<string[]>([]);
 
@@ -353,9 +353,8 @@ export function LayoutMapsReview({ initialMaps, initialAssignments, carriers, no
               <option value="">Carrier</option>
               {carriers.map((carrier) => <option key={carrier.id} value={carrier.id}>{carrier.name}</option>)}
             </select>
-            <select aria-label="File type" className={toolbarControl} value={assign.fileType} onChange={(event) => setAssign({ ...assign, fileType: event.target.value as "policies" | "commissions", layoutKey: "" })}>
-              <option value="policies">Policies</option>
-              <option value="commissions">Commissions</option>
+            <select aria-label="File type" className={toolbarControl} value={assign.fileType} onChange={(event) => setAssign({ ...assign, fileType: event.target.value as CarrierFileType, layoutKey: "" })}>
+              {FILE_TYPES.map((key) => <option key={key} value={key}>{FILE_TYPE_LABELS[key]}</option>)}
             </select>
             <select aria-label="Layout" className={toolbarControl} value={assign.layoutKey} onChange={(event) => setAssign({ ...assign, layoutKey: event.target.value })}>
               <option value="">Layout</option>
@@ -397,9 +396,8 @@ export function LayoutMapsReview({ initialMaps, initialAssignments, carriers, no
             <div className="grid gap-1.5"><Label htmlFor="new-layout-key">Key</Label><Input id="new-layout-key" className="h-9 font-mono" placeholder="aetna_aflac_ahl_policies" value={newLayout.layoutKey} onChange={(event) => setNewLayout({ ...newLayout, layoutKey: event.target.value.toLowerCase().replace(/[^a-z0-9_]/g, "_") })} /></div>
             <div className="grid gap-1.5">
               <Label htmlFor="new-layout-type">File type</Label>
-              <select id="new-layout-type" className={select} value={newLayout.fileType} onChange={(event) => setNewLayout({ ...newLayout, fileType: event.target.value as "policies" | "commissions" })}>
-                <option value="policies">Policies</option>
-                <option value="commissions">Commissions</option>
+              <select id="new-layout-type" className={select} value={newLayout.fileType} onChange={(event) => setNewLayout({ ...newLayout, fileType: event.target.value as CarrierFileType })}>
+                {FILE_TYPES.map((key) => <option key={key} value={key}>{FILE_TYPE_LABELS[key]}</option>)}
               </select>
             </div>
           </div>

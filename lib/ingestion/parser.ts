@@ -5,6 +5,7 @@ import { isSchemaGap } from "@/lib/supabase/schemaGap";
 
 import { sendEmail } from "@/lib/email/transport";
 
+import type { CarrierFileType } from "./constants";
 import { chooseLayoutMap, parseWithMap, type Finding, type LayoutEntry, type LayoutMap, type ParseResult, type PublishedMapRow, type TypedRow } from "./layout";
 import type { RawColumn, RawRow } from "./grid";
 import { extractRawRows, readRawRows } from "./rawLayer";
@@ -42,7 +43,7 @@ function toEntry(row: Loose): LayoutEntry {
 const MAP_COLUMNS = "id, tenant_id, layout_key, name, file_type, version, header_row_index, sheet_name, row_count_swing_pct, total_row_column, total_row_value, carrier_layout_map_entry(source_column, target_field, data_type, transform, required, sort_order, enum_values)";
 
 /** The layout map a carrier's file of this type is read with for this agency, or null. */
-export async function resolveLayoutMap(tenantId: string, carrierId: string, fileType: "policies" | "commissions"): Promise<ResolvedMap | null> {
+export async function resolveLayoutMap(tenantId: string, carrierId: string, fileType: CarrierFileType): Promise<ResolvedMap | null> {
   const { data: assignments, error } = await db().from("carrier_layout_assignment").select("tenant_id, carrier_id, file_type, layout_key").eq("carrier_id", carrierId).eq("file_type", fileType).or(`tenant_id.eq.${tenantId},tenant_id.is.null`);
   if (error) throw new Error(`Could not read layout assignments: ${error.message}`);
   const assignmentRows = (assignments ?? []).map((row: Loose) => ({ tenantId: row.tenant_id, carrierId: row.carrier_id, fileType: row.file_type, layoutKey: row.layout_key }));
