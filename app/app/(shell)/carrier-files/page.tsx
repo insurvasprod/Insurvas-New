@@ -5,10 +5,12 @@ import { ViewTabs } from "@/components/app/book-of-business-views";
 import { CarrierFileDoors } from "@/components/app/carrier-file-doors";
 import { CarrierFileUploadButton } from "@/components/app/carrier-file-upload";
 import { CarrierFilesTable } from "@/components/app/carrier-files-table";
+import { AgentFindings, PipelineRuns } from "@/components/app/pipeline-runs";
 import { PolicyChangesTable } from "@/components/app/policy-changes-table";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatStrip, StatTile } from "@/components/ui/stat";
+import { listFindings, listRuns } from "@/lib/ingestion/dailyRunStore";
 import { CARRIER_FILES_PENDING_MESSAGE, getInboundAddress, libraryCarriers, listCarrierFiles, listSenders } from "@/lib/ingestion/registry";
 import { listPolicyChanges } from "@/lib/ingestion/snapshotStore";
 import { listOpenUnmappedStatuses } from "@/lib/ingestion/statusAdmin";
@@ -37,10 +39,17 @@ export default async function CarrierFilesPage({ searchParams }: { searchParams:
   const { view, upload } = await searchParams;
   const showDoors = view === "doors";
   const showChanges = view === "changes";
+  const showRuns = view === "runs";
+  const showFindings = view === "findings";
   const [list, carriers, unmapped] = await Promise.all([listCarrierFiles(tenantId), libraryCarriers(), listOpenUnmappedStatuses(tenantId)]);
   const [address, senders] = showDoors && list.available ? await Promise.all([getInboundAddress(tenantId), listSenders(tenantId)]) : [null, null];
   // LA-4.6: what moved between the carriers' policy files.
   const changes = showChanges && list.available ? await listPolicyChanges(tenantId) : null;
+  // LA-4.19: the runs, and what the agents raised in them.
+  const [runs, findings] = await Promise.all([
+    showRuns && list.available ? listRuns(tenantId) : null,
+    showFindings && list.available ? listFindings(tenantId) : null,
+  ]);
 
   const blocked = !list.available ? CARRIER_FILES_PENDING_MESSAGE : readOnly ? "Receiving files is paused while the account is read-only." : null;
   const current = list.files.filter((file) => file.status !== "superseded");
@@ -79,16 +88,22 @@ export default async function CarrierFilesPage({ searchParams }: { searchParams:
       {list.available && (
         <ViewTabs
           label="Carrier file views"
-          active={showDoors ? "doors" : showChanges ? "changes" : "files"}
+          active={showDoors ? "doors" : showChanges ? "changes" : showRuns ? "runs" : showFindings ? "findings" : "files"}
           tabs={[
             { key: "files", label: "Files", count: list.files.length, href: "/app/carrier-files" },
             { key: "changes", label: "Policy changes", href: "/app/carrier-files?view=changes" },
+            { key: "runs", label: "Runs", href: "/app/carrier-files?view=runs" },
+            { key: "findings", label: "Agent findings", href: "/app/carrier-files?view=findings" },
             { key: "doors", label: "Email and bucket", href: "/app/carrier-files?view=doors" },
           ]}
         />
       )}
 
-      {showChanges && changes ? (
+      {showRuns && runs ? (
+        <PipelineRuns runs={runs.runs} available={runs.available} canRun={!readOnly} />
+      ) : showFindings && findings ? (
+        <AgentFindings findings={findings.findings} accuracy={findings.accuracy} available={findings.available} canReview={!readOnly} />
+      ) : showChanges && changes ? (
         <PolicyChangesTable
           changes={changes.changes}
           emptyTitle={changes.available ? "No policy has changed yet" : "Policy changes are not available yet"}

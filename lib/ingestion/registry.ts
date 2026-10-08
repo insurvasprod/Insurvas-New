@@ -232,11 +232,13 @@ export type PollOutcome = {
   /** Drops left in place for an agency that cannot take files now (no feature, or read-only). */
   waiting: number;
   errors: string[];
+  /** LA-4.19: the files this poll registered, for the run that follows it. */
+  registeredFiles: Array<{ tenantId: string; fileId: string }>;
 };
 
 /** Registers what scripts dropped into <tenant>/inbox/… since the last poll. Safe to run twice. */
 export async function pollBucketDrops(limit = 100): Promise<PollOutcome> {
-  const outcome: PollOutcome = { available: true, seen: 0, registered: 0, failed: 0, skipped: 0, waiting: 0, errors: [] };
+  const outcome: PollOutcome = { available: true, seen: 0, registered: 0, failed: 0, skipped: 0, waiting: 0, errors: [], registeredFiles: [] };
   const { data, error } = await db().rpc("list_unregistered_carrier_drops", { p_limit: limit });
   if (error) {
     if (pending(error)) return { ...outcome, available: false };
@@ -269,7 +271,7 @@ export async function pollBucketDrops(limit = 100): Promise<PollOutcome> {
       });
       if (result.outcome === "skipped") outcome.skipped++;
       else if (result.status === "failed") outcome.failed++;
-      else outcome.registered++;
+      else { outcome.registered++; outcome.registeredFiles.push({ tenantId: parsed.tenantId, fileId: result.fileId }); }
     } catch (failure) {
       outcome.errors.push(`${drop.storage_path}: ${failure instanceof Error ? failure.message : String(failure)}`);
     }

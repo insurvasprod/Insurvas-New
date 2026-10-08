@@ -4,6 +4,7 @@ import { z } from "zod";
 import { audit } from "@/lib/audit/log";
 import { BOOK_IMPORT_PENDING_MESSAGE, BookImportError, loadBookImport, setSkipped, uploadForImport } from "@/lib/ingestion/bookImport";
 import { MAX_UPLOAD_BYTES, carrierFileBytesMatch, carrierFileKind } from "@/lib/ingestion/constants";
+import { runArrival } from "@/lib/ingestion/dailyRunStore";
 import { processFileQuietly } from "@/lib/ingestion/parser";
 import { isRecordUuid, isoDate } from "@/lib/ingestion/path";
 import { extractRawRows } from "@/lib/ingestion/rawLayer";
@@ -76,7 +77,7 @@ export async function POST(request: NextRequest) {
     const result = await uploadForImport(tenantId, userId, { filename: file.name, contentType: file.type || null, bytes, carrierId, fileDate, agency: null });
     await audit({ actorType: "tenant", actorId: userId, action: result.outcome === "skipped" ? "tenant.carrier_file_skipped" : "tenant.carrier_file_received", targetType: "carrier_file", targetId: result.fileId, metadata: { tenantId, source: "upload", fileType: "policies", fileDate, carrierId, initialImport: true, status: result.outcome === "registered" ? result.status : "skipped" }, request });
     // Parsed straight after the response, so the screen can show this carrier's result in seconds.
-    if (result.outcome === "registered" && result.status === "received") after(() => processFileQuietly(tenantId, result.fileId, extractRawRows));
+    if (result.outcome === "registered" && result.status === "received") after(() => runArrival(tenantId, result.fileId, () => processFileQuietly(tenantId, result.fileId, extractRawRows)));
     return NextResponse.json({ ok: true, ...result }, { status: result.outcome === "registered" ? 201 : 200 });
   } catch (error) {
     return failure(error, "The file could not be uploaded");

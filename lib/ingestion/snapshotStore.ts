@@ -66,11 +66,26 @@ async function policyHistoryInputs(tenantId: string, carrierId: string, policies
   return out;
 }
 
-/** Rebuilds one policy file's snapshots from its typed rows, then the history of the policies it touched. */
+/**
+ * Rebuilds one policy file's snapshots from its typed rows, then the history of the policies it
+ * touched, then their links and current rows. A reprocess runs it whole; the LA-4.19 run takes it in
+ * its two stages, STORE (storeFileSnapshots) and MATCH (linkFilePolicies), and records each.
+ */
 export async function rebuildFileSnapshots(tenantId: string, fileId: string, typedRows: Array<{ rowNumber: number; values: Record<string, string | number | null> }>): Promise<SnapshotOutcome> {
+  const stored = await storeFileSnapshots(tenantId, fileId, typedRows);
+  if (!stored.available || !stored.carrierId) return stored;
+  await linkFilePolicies(tenantId, fileId, { carrierId: stored.carrierId, policies: stored.policyNumbers, swallowMatchErrors: true });
+  return stored;
+}
+
+export type StoreOutcome = SnapshotOutcome & { carrierId: string | null; policyNumbers: string[] };
+
+/** STORE: the file's snapshots (Layer 2), then the change log of every policy it touched. */
+export async function storeFileSnapshots(tenantId: string, fileId: string, typedRows: Array<{ rowNumber: number; values: Record<string, string | number | null> }>): Promise<StoreOutcome> {
+  const none = { available: true, changed: 0, snapshots: 0, policies: 0, duplicates: 0, carrierId: null, policyNumbers: [] };
   const { data: file, error } = await db().from("file_registry").select("id, file_type, parser_id, raw_columns").eq("tenant_id", tenantId).eq("id", fileId).maybeSingle();
   if (error) throw new Error(`Could not load the file: ${error.message}`);
-  if (!file || file.file_type !== "policies") return { available: true, changed: 0, snapshots: 0, policies: 0, duplicates: 0 };
+  if (!file || file.file_type !== "policies") return none;
 
   // The columns the map did not read go into each snapshot's `extra`, so no field is ever dropped.
   const { data: entries } = file.parser_id ? await db().from("carrier_layout_map_entry").select("source_column").eq("map_id", file.parser_id) : { data: [] };
@@ -83,7 +98,7 @@ export async function rebuildFileSnapshots(tenantId: string, fileId: string, typ
   const rows = snapshots.map((snapshot) => ({ ...snapshot, content_hash: createHash("sha256").update(snapshotContent(snapshot)).digest("hex") }));
   const { data: replaced, error: replaceError } = await db().rpc("replace_file_snapshots", { p_tenant_id: tenantId, p_file_id: fileId, p_rows: rows });
   if (replaceError) {
-    if (isSchemaGap(replaceError)) return { available: false, changed: 0, snapshots: 0, policies: 0, duplicates: 0 };
+    if (isSchemaGap(replaceError)) return { ...none, available: false };
     throw new Error(`The file's snapshots could not be written: ${replaceError.message}`);
   }
   const result = replaced as { changed: number; policies: string[]; carrier_id: string };
@@ -106,18 +121,43 @@ export async function rebuildFileSnapshots(tenantId: string, fileId: string, typ
     const history = historyOf(await policyHistoryInputs(tenantId, result.carrier_id, chunk));
     const { error: historyError } = await db().rpc("replace_policy_changes", { p_tenant_id: tenantId, p_carrier_id: result.carrier_id, p_policies: chunk, p_changes: history.changes, p_events: history.events });
     if (historyError) throw new Error(`The policies' history could not be written: ${historyError.message}`);
-    // LA-4.8: link the policies to our clients. A failure here leaves them unlinked (and logged);
-    // it never loses the snapshots, and the current rows below are still right without the links.
+  }
+  return { available: true, changed: result.changed, snapshots: rows.length, policies: result.policies.length, duplicates: duplicates.length, carrierId: result.carrier_id, policyNumbers: result.policies };
+}
+
+/** The policy numbers a policy file's own snapshots hold (MATCH run on its own, after STORE in an earlier run). */
+export async function filePolicyNumbers(tenantId: string, fileId: string): Promise<{ carrierId: string | null; policies: string[] }> {
+  const policies = new Set<string>();
+  let carrierId: string | null = null;
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await db().from("policy_snapshot").select("carrier_id, policy_number").eq("tenant_id", tenantId).eq("file_id", fileId).order("policy_number").range(from, from + 999);
+    if (error) throw new Error(`Could not read the file's policies: ${error.message}`);
+    for (const row of (data ?? []) as Loose[]) { carrierId = row.carrier_id; policies.add(row.policy_number); }
+    if ((data ?? []).length < 1000) break;
+  }
+  return { carrierId, policies: [...policies] };
+}
+
+/**
+ * MATCH: link the file's policies to our clients (LA-4.8), then refresh their current rows (Layer 3:
+ * lapsed_on and issued_on read the history, the links the ladder made). A matching failure never
+ * loses the snapshots, and the current rows are refreshed without the links before it is reported.
+ */
+export async function linkFilePolicies(tenantId: string, fileId: string, input: { carrierId: string; policies: string[]; swallowMatchErrors?: boolean }): Promise<{ policies: number }> {
+  let matchFailure: unknown = null;
+  for (let start = 0; start < input.policies.length; start += POLICY_CHUNK) {
+    const chunk = input.policies.slice(start, start + POLICY_CHUNK);
     try {
-      await matchFilePolicies(tenantId, result.carrier_id, fileId, chunk);
+      await matchFilePolicies(tenantId, input.carrierId, fileId, chunk);
     } catch (matchError) {
       console.error("[policy-matching]", fileId, matchError);
+      matchFailure ??= matchError;
     }
-    // Layer 3 last: lapsed_on and issued_on read the history just written, the links the ladder made.
-    await refreshPolicyCurrent({ tenantId, carrierId: result.carrier_id, policies: chunk });
+    await refreshPolicyCurrent({ tenantId, carrierId: input.carrierId, policies: chunk });
   }
   await db().from("file_registry").update({ derived_at: new Date().toISOString() }).eq("tenant_id", tenantId).eq("id", fileId);
-  return { available: true, changed: result.changed, snapshots: rows.length, policies: result.policies.length, duplicates: duplicates.length };
+  if (matchFailure && !input.swallowMatchErrors) throw matchFailure;
+  return { policies: input.policies.length };
 }
 
 export type ChangeRow = {

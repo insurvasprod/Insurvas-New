@@ -35,7 +35,7 @@ The repo's [TASKS.md](TASKS.md) (11 tasks, 2026-10-02) is the earlier, smaller s
 | 4.16 Retention board | **Done 2026-10-08.** Migration `20261008260000` live and verified against the live functions (below). The call list is the new default tab on Lapse risk; the earlier board stays as "Recorded signals". |
 | 4.17 Carrier rules | **Done 2026-10-07.** Migration `20261008150000` live and verified (below). Rules, settings, coverage screen (below). The old statements engine still hard-codes 45 days; it retires with that code. |
 | 4.18 Scorecards, persistency, AI summary | **Done 2026-10-08.** Migration `20261008270000` live and verified (below). New page Insight › Book scorecards. The summary is written from templates; AI prose waits for a provider, behind a figure-and-prediction gate. |
-| 4.19 Daily run, AI agents | Not started |
+| 4.19 Daily run, AI agents | **Done 2026-10-08 (deterministic parts).** Migration `20261008280000` live and verified (below). The orchestrated run, stage records and resume, the file monitor, the agent role and contract, prompt safety, batching, accuracy. The model-backed agents wait for an AI provider. |
 | 4.20 Traceability | Partial: original download (now logged), arithmetic on findings |
 
 ## LA-4.1: how it is built
@@ -1108,3 +1108,99 @@ It follows LA-3.13's carrier field maps on purpose: the same statuses, the same 
   - The API refused a sample of 1, a fractional sample, an unknown field and an unknown action (400, nothing stored).
   - Through the loader, the owner sees 8 policies and 14 vendors' spend. The credited producer sees only their 4 (DEMO-1001, -1002, -1005, -1007) and no spend.
   - No setting was saved for real: a settings row can't be removed.
+
+## LA-4.19 · The orchestrated run and the agent framework
+
+**The run** (`lib/ingestion/dailyRun.ts`, pure, tested against a fake world; wiring in `dailyRunStore.ts`):
+- **Stages, per file:** collect, ingest, parse, store, match, reconcile. Then **analyse** once per agency.
+- **Where it runs:** files run side by side, 4 at a time, with stages in order within each file.
+- **What starts it:**
+  - the five-minute poll (`/api/internal/carrier-files/poll`, trigger `file_arrival`);
+  - each door right after a file arrives (upload, book import, email; `runArrival` for that one file);
+  - **Run now** on Carrier files › Runs (`manual`).
+- **Before the migration:** the earlier sweeps run instead, so files keep flowing either way.
+- **What each stage does:**
+  - **Collect:** the bucket poll.
+  - **Ingest:** registration, hashing and dedup, which the doors already do; the stage records it.
+  - **Parse:** raw rows, then the layout map, then the status gate.
+  - **Store:** snapshots and the change log.
+  - **Match:** client links, then current rows. `rebuildFileSnapshots` was split into `storeFileSnapshots` and `linkFilePolicies`; a reprocess still runs them together.
+  - **Reconcile:** expected commission, retention results, commission lines, orphans and discrepancies (4.12–4.16).
+  - **Analyse:** ties the run's findings to it and counts what is open. Boards are computed when opened; the written summary waits for a provider.
+- **Records:**
+  - `pipeline_run`: trigger, status (succeeded, partial or failed), and files total, succeeded and failed.
+  - `pipeline_stage_run`: one row per file per stage (unique), with status, timings, rows in and out, the error, a note, and the findings raised.
+  - When a file finishes every stage, `file_registry.pipeline_completed_at` is set. Existing derived files are back-filled, so nothing old runs again.
+- **Failures and resume:**
+  - A failure stops that file at that stage. Every earlier stage's output stays, and the later stages are recorded as "Not run: …".
+  - A **blocked** parse (no layout map; a missing required column or totals that don't balance) stops the file. Held rows with an unmapped status stop only those rows.
+  - A stopped file is picked up by the next run **after its last completed stage**. Stages already done read "Done in an earlier run". When a later stage needs the typed rows, parse reads them again from the raw rows "to resume".
+  - A failed file is retried hourly, not every five minutes. A run still "running" after 15 minutes is marked failed by the next run.
+- **Time limit:** a run stops starting files after about 40 s (the poll's limit is 60 s); the rest wait for the next run.
+- **No double processing:** every stage is idempotent, and the unique keys on snapshots and ledger lines make a second run harmless. A test runs every stage twice on the same files and finds no duplicates.
+
+**The file monitor** (`file_monitor_sweep`, SQL, deterministic; pg_cron `la4-file-monitor-daily` at 07:15 UTC):
+- **Missing file:** a carrier the agency (or the platform) expects **daily** (business days), **weekly** or **monthly** that sent nothing by its due day raises one `missing_file` warning the next morning. Its reasoning reads: "X files every business day; the last file arrived on …, and none came by …".
+  - One finding per missed due day.
+  - An **ad-hoc** or unset carrier never raises one.
+- **Late file:** when the file then arrives, the finding resolves itself and leaves a `late_file` note ("5 days late").
+- **Duplicates:** every duplicate the doors skipped is noted once.
+
+**The agent framework** (`lib/ingestion/agents.ts`):
+- **The six agents:** what each watches and raises, and whether it needs a model.
+  - Deterministic today: the file monitor and the parser guardian.
+  - Waiting for a provider: the PDF extractor, the matching agent's AI step, the reconciler's explanations, and the insights analyst's prose.
+- **The contract:** `findingRow` requires the reasoning (under 4,000 characters) and a confidence between 0 and 1.
+  - A model-backed finding must name its model and prompt version; a deterministic one names neither.
+  - `agent_findings` is now indexed by (agent, model id, prompt version) and tied to its run.
+- **Prompt safety:** `assertPromptSafe` refuses any payload with an SSN (dashed anywhere, or 9 bare digits outside a policy number, phone or date), a bank account (by key), a routing number (ABA checksum), or a card number (Luhn). It checks keys and values, nested.
+  - The matching exception (name, date of birth, phone) passes.
+  - Every batch is checked before it leaves.
+- **Batching and pacing:** `runBatched` sends batches at most N calls a minute. A test sends 55 rows in 3 calls, 10 s apart at 6 a minute.
+- **Blocking stops the stage:** `stopsStage` holds the rule that a blocking finding stops its stage and a warning doesn't.
+- **The agent role:** `insurvas_agent` (no login) reads what the agents watch and may only insert findings. UPDATE and DELETE on `raw_rows` and `commission_entry` fail for it; the migration proves this by taking the role.
+- **Accuracy:** on Carrier files › Agent findings a person marks each open finding **Right** or **Wrong** (owner, bookkeeper). Approving executes nothing.
+  - Accuracy is computed per agent per week from those marks (`weeklyAccuracy`, and the view `agent_accuracy_weekly`). Self-resolved and unmarked findings don't count.
+
+**Screens:** Carrier files gets two tabs:
+- **Runs:** each run, then each file with a chip per stage. Hovering shows rows, time, the note or error; a stopped stage says why. "Run now" is here.
+- **Agent findings:** filters by agent and status; the agent, what it saw, severity and file; Right or Wrong; and accuracy by week.
+
+**Not done, and why:**
+- **The model-backed agents:** no AI provider has been chosen yet (owner decision 2026-10-07).
+- **Autonomy that shrinks as accuracy drops:** every action needs approval today, so there is no autonomy to reduce yet. The accuracy is measured and shown.
+- **"A 1,000-policy book across 8 carriers, stages 1–4 within the hour":** not measured; there is no such book yet. Each stage's timing is now recorded, so it can be.
+- **No app code runs as `insurvas_agent` yet:** nothing model-backed exists to run.
+- **The poll in production** still needs its Vault secrets (as in 4.1).
+
+**Before the apply (2026-10-08):**
+- **Rolled-back rehearsals on production:**
+  - The agent role was refused an update and a delete on raw rows, an update on the ledger, and an edit of a finding. It could read raw rows.
+  - The back-fill left no fully derived file pending.
+  - Monitor, daily carrier on the demo agency (last file Wed Oct 7): nothing on Thursday; one missing-file finding on Friday morning; no second one on Monday for the same missed day. An earlier missing finding resolved itself when a file arrived and left "5 days late". After switching to ad hoc, nothing.
+- **The pages:** Runs shows "Run history isn't available yet (20261008280000)". Agent findings shows the demo's "No findings yet", and through the store the fixture's 15 parser-guardian findings with their files.
+- 2213 tests pass; `tsc` clean.
+- **Three source-pinning tests updated** to the new door, poll and snapshot calls, with the same intent.
+- **What the apply will write:** the migration's check runs the monitor once, which adds 4 duplicate-file notes (already resolved) for "LA-1.25 Alert Demo", and the back-fill stamps 13 completed files.
+
+**Live verification (2026-10-08, after the apply):**
+- **The verifier** reports `20261008280000` as applied. The cron job `la4-file-monitor-daily` (`15 7 * * *`) is active.
+- **Catalog:**
+  - The run tables: `service_role` can insert and update but not delete or truncate; `tenant_app` only reads; `anon` has no access.
+  - `file_monitor_sweep` runs as `service_role` only. The `insurvas_agent` role exists without a login.
+  - **Indexes:** the findings → run foreign key, and the model, run and open indexes.
+  - **The accuracy view:** `agent_accuracy_weekly` is present.
+- **What the apply wrote:** 13 files stamped complete, one parsed fixture commission file left pending, and 4 duplicate-file notes (resolved) for "LA-1.25 Alert Demo". No run exists yet.
+- **A rolled-back block against the live objects:**
+  - Taking `insurvas_agent` for real: updating or deleting raw rows, updating the ledger, and editing a finding were refused. Inserting a finding was allowed.
+  - **The run records refused:** the same stage twice for one file, analyse with a file, a file stage without a file, and "failed" without a reason. `service_role` couldn't delete a run.
+  - The monitor gave nothing on Oct 8, one missing file on Oct 9, and nothing new on Oct 12.
+  - A finding marked right showed in `agent_accuracy_weekly` as file_monitor 1/1 for that week.
+- **The app, on the demo agency:**
+  - Runs shows "No run yet" with **Run now**.
+  - The API refused a review of a finding that isn't open on the agency (409), a bad id or verdict (400), and an unknown action (400).
+- **Not exercised:** a real run (Run now, the poll, or a door).
+  - Run records are permanent, so none was started.
+  - On the demo agency nothing is waiting, so a run would have 0 files and only Analyse.
+  - On the fixture, the first run would read its pending commission file into the ledger.
+  - The production poll calls the deployed app, which doesn't have this code yet.

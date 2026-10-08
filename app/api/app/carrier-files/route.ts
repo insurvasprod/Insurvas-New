@@ -4,6 +4,7 @@ import { z } from "zod";
 import { audit } from "@/lib/audit/log";
 import { FILE_TYPES, MAX_UPLOAD_BYTES, carrierFileBytesMatch, carrierFileKind } from "@/lib/ingestion/constants";
 import { isRecordUuid, isoDate } from "@/lib/ingestion/path";
+import { runArrival } from "@/lib/ingestion/dailyRunStore";
 import { processFileQuietly } from "@/lib/ingestion/parser";
 import { extractRawRows } from "@/lib/ingestion/rawLayer";
 import { CARRIER_FILES_PENDING_MESSAGE, CarrierFileError, listCarrierFiles, uploadCarrierFile } from "@/lib/ingestion/registry";
@@ -95,7 +96,7 @@ export async function POST(request: NextRequest) {
     // LA-4.2/4.3: its rows go into the raw layer and are parsed after the response; the poll sweeps the rest.
     if (result.outcome === "registered" && result.status === "received") {
       const { tenantId } = auth.context;
-      after(() => processFileQuietly(tenantId, result.fileId, extractRawRows));
+      after(() => runArrival(tenantId, result.fileId, () => processFileQuietly(tenantId, result.fileId, extractRawRows)));
     }
     return NextResponse.json({ ok: true, ...result }, { status: result.outcome === "registered" ? 201 : 200 });
   } catch (error) {
