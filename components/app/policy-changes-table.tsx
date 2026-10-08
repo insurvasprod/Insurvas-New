@@ -77,22 +77,22 @@ export function PolicyChangesTable({ changes, emptyTitle, emptyHint }: { changes
         <table className="portal-lead-table w-full min-w-[1000px] text-left text-sm">
           <thead>
             <tr>
-              <th className="w-[170px]">Policy</th>
-              <th>Carrier</th>
-              <th className="w-[160px]">Field</th>
-              <th>Was</th>
-              <th>Now</th>
-              <th className="w-[300px]">When</th>
+              <th className="w-[130px]">Policy</th>
+              <th className="w-[180px]">Carrier</th>
+              <th className="w-[150px]">Field</th>
+              <th className="w-[160px]">Was</th>
+              <th className="w-[160px]">Now</th>
+              <th>When</th>
             </tr>
           </thead>
           <tbody className="m-seq">
             {rows.map((change) => (
               <tr key={change.id} className="m-row">
                 <td className="font-semibold tabular-nums text-foreground">{change.policyNumber}</td>
-                <td className="max-w-[200px] truncate" title={change.carrierName}>{change.carrierName}</td>
+                <td><span className="block whitespace-normal break-words leading-snug">{change.carrierName}</span></td>
                 <td>{TRACKED_FIELD_LABELS[change.fieldName]}</td>
-                <td className="max-w-[200px] truncate text-muted-foreground" title={change.oldValue ?? ""}>{shown(change.fieldName, change.oldValue)}</td>
-                <td className="max-w-[200px] truncate font-semibold text-foreground" title={change.newValue ?? ""}>{shown(change.fieldName, change.newValue)}</td>
+                <td className="text-muted-foreground" title={change.oldValue ?? ""}><span className="block max-w-[160px] truncate">{shown(change.fieldName, change.oldValue)}</span></td>
+                <td className="font-semibold text-foreground" title={change.newValue ?? ""}><span className="block max-w-[160px] truncate">{shown(change.fieldName, change.newValue)}</span></td>
                 <td className="tabular-nums text-muted-foreground">{changeWindow(change.fromDate, change.toDate, fileDay)}</td>
               </tr>
             ))}

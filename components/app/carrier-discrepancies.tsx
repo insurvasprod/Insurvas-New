@@ -160,6 +160,8 @@ export function CarrierDiscrepancies({ items, readOnly }: { items: DiscrepancyRo
             <tbody>
               {rows.flatMap((row) => {
                 const expanded = open === row.id;
+                // A chargeback still to come has nothing paid to compare: its amount is what will be taken back.
+                const coming = row.type === "missing_chargeback" && row.differenceCents === null;
                 const main = (
                   <tr key={row.id}>
                     <td>{canPick(row) && <input type="checkbox" aria-label={`Put ${row.policyNumber ?? row.carrierName} on a letter`} className="size-4 accent-[var(--primary)]" checked={picked.includes(row.id)} onChange={(e) => setPicked((now) => (e.target.checked ? [...now, row.id] : now.filter((id) => id !== row.id)))} />}</td>
@@ -167,11 +169,12 @@ export function CarrierDiscrepancies({ items, readOnly }: { items: DiscrepancyRo
                       <span className="inline-flex items-center gap-2"><StatusChip tone={SEVERITY_TONE[row.severity]}>{DISCREPANCY_LABELS[row.type as DiscrepancyType]?.label ?? row.type}</StatusChip></span>
                       <span className="mt-0.5 block text-xs text-muted-foreground">{row.carrierName}</span>
                     </td>
-                    <td className="font-mono text-xs">{row.policyNumber ? <Link href={policyHref(row)} className="hover:underline">{row.policyNumber}</Link> : <span className="font-sans text-muted-foreground">Whole account</span>}</td>
-                    <td className="text-right tabular-nums" title={row.expectedSource?.schedule_id ? `From your rate card: ${Number(row.expectedSource.rate_bp) / 100}% (rate effective ${row.expectedSource.schedule_version})` : undefined}>{money(row.expectedCents)}</td>
-                    <td className="text-right tabular-nums" title={row.reportedEntryIds.length ? `${row.reportedEntryIds.length} ledger ${row.reportedEntryIds.length === 1 ? "line" : "lines"}` : undefined}>{money(row.reportedCents)}</td>
+                    <td className="tabular-nums">{row.policyNumber ? <Link href={policyHref(row)} className="hover:underline">{row.policyNumber}</Link> : <span className="text-muted-foreground">Whole account</span>}</td>
+                    <td className="text-right tabular-nums" title={row.expectedSource?.schedule_id ? `From your rate card: ${Number(row.expectedSource.rate_bp) / 100}% (rate effective ${row.expectedSource.schedule_version})` : undefined}>{coming ? <span className="text-muted-foreground">—</span> : money(row.expectedCents)}</td>
+                    <td className="text-right tabular-nums" title={row.reportedEntryIds.length ? `${row.reportedEntryIds.length} ledger ${row.reportedEntryIds.length === 1 ? "line" : "lines"}` : undefined}>{coming ? <span className="text-muted-foreground">—</span> : money(row.reportedCents)}</td>
                     <td className={`text-right font-semibold tabular-nums ${row.differenceCents !== null && row.differenceCents > 0 ? "text-[var(--warning-ink)]" : ""}`}>
-                      {money(row.differenceCents)}
+                      {coming ? money(row.expectedCents) : money(row.differenceCents)}
+                      {coming && <span className="block text-xs font-normal text-muted-foreground">not taken back yet</span>}
                       {row.toleranceCents !== null && <span className="block text-xs font-normal text-muted-foreground">tolerance {money(row.toleranceCents)}</span>}
                     </td>
                     <td><StatusChip tone={STATUS_TONE[row.status] ?? "neutral"}>{STATUS_WORD[row.status] ?? row.status}</StatusChip></td>

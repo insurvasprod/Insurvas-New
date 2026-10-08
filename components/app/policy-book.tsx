@@ -33,16 +33,16 @@ type Saved = { id: string; name: string; query: string };
 
 const COLUMNS: Array<{ key: SortKey; label: string; className?: string; title?: string }> = [
   { key: "client", label: "Client" },
-  { key: "carrier", label: "Carrier", className: "w-[120px]" },
+  { key: "carrier", label: "Carrier", className: "w-[140px]" },
   { key: "product", label: "Product", className: "w-[100px]" },
-  { key: "policy", label: "Policy", className: "w-[110px]" },
+  { key: "policy", label: "Policy", className: "w-[100px]" },
   { key: "premium", label: "Premium", className: "w-[96px] text-right", title: "Premium as the carrier bills it; sorted by its yearly amount" },
   { key: "face", label: "Face", className: "w-[84px] text-right" },
-  { key: "status", label: "Status", className: "w-[106px]", title: "Our status; hover a status for the carrier's own word" },
-  { key: "dpd", label: "Late", className: "w-[64px] text-right", title: "Days past the paid-to date" },
-  { key: "risk", label: "Risk", className: "w-[90px]" },
-  { key: "issued", label: "Issued", className: "w-[104px]" },
-  { key: "agent", label: "Agent", className: "w-[104px]" },
+  { key: "status", label: "Status", className: "w-[96px]", title: "Our status; hover a status for the carrier's own word" },
+  { key: "dpd", label: "Late", className: "w-[56px] text-right", title: "Days past the paid-to date" },
+  { key: "risk", label: "Risk", className: "w-[84px]" },
+  { key: "issued", label: "Issued", className: "w-[96px]" },
+  { key: "agent", label: "Agent", className: "w-[120px]" },
 ];
 
 /**
@@ -220,16 +220,16 @@ export function PolicyBook({ rows, initialQuery, saved, savedAvailable, scoped, 
                     <Link href={policyHref(row)} className="font-semibold text-foreground hover:underline">{row.clientName ?? <span className="font-normal text-muted-foreground">No client linked</span>}</Link>
                     {row.provisional && <span className="mt-0.5 block"><ProvisionalBadge /></span>}
                   </td>
-                  <td className="max-w-[120px] truncate" title={row.carrierName}>{row.carrierName}</td>
-                  <td className="max-w-[100px] truncate" title={row.product ?? undefined}>{row.product ?? <span className="text-muted-foreground">—</span>}</td>
-                  <td className="font-mono text-xs"><Link href={policyHref(row)} className="hover:underline">{row.policyNumber}</Link></td>
+                  <td><span className="block whitespace-normal break-words leading-snug">{row.carrierName}</span></td>
+                  <td>{row.product ? <span className="block whitespace-normal break-words leading-snug">{row.product}</span> : <span className="text-muted-foreground">—</span>}</td>
+                  <td className="tabular-nums"><Link href={policyHref(row)} className="hover:underline">{row.policyNumber}</Link></td>
                   <td className="text-right tabular-nums">{row.premiumCents === null ? "—" : <>{money2(row.premiumCents)}<span className="text-xs text-muted-foreground">{row.premiumMode ? MODE_SHORT[row.premiumMode] ?? "" : ""}</span></>}</td>
                   <td className="text-right tabular-nums">{money(row.faceCents)}</td>
                   <td><span title={row.statusRaw ? `The carrier's word: ${row.statusRaw}` : undefined}><StatusChip tone={STATUS_TONE[row.status ?? ""] ?? "neutral"}>{statusLabel(row.status)}</StatusChip></span></td>
                   <td className={`text-right tabular-nums ${row.daysPastDue ? "text-[var(--warning-ink)]" : "text-muted-foreground"}`}>{row.daysPastDue ?? "—"}</td>
                   <td>{inForce(row.status) ? <span title={row.daysLeft !== null ? `${row.daysLeft} day${row.daysLeft === 1 ? "" : "s"} until the carrier closes it` : undefined}><StatusChip tone={RISK_TONE[row.riskBand]}>{RISK_LABELS[row.riskBand]}</StatusChip></span> : <span className="text-muted-foreground" title="Not in force, so no save window">—</span>}</td>
                   <td className="tabular-nums">{fileDay(row.issueDate)}</td>
-                  <td className="max-w-[104px] truncate" title={row.agentName ?? "No agent code mapped"}>{row.agentName ?? <span className="text-muted-foreground">Not mapped</span>}</td>
+                  <td title={row.agentName ? undefined : "No agent code mapped"}><span className="block whitespace-normal break-words leading-snug">{row.agentName ?? <span className="text-muted-foreground">Not mapped</span>}</span></td>
                 </tr>
               ))}
             </tbody>

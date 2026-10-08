@@ -116,17 +116,17 @@ export function CarrierFilesTable({ files, emptyTitle, emptyHint }: { files: Car
       ) : visible.length === 0 ? (
         <NoMatches noun="files" onClear={clear} />
       ) : (
-        <table className="portal-lead-table w-full min-w-[960px] text-left text-sm">
+        <table className="portal-lead-table w-full min-w-[900px] text-left text-sm">
           <thead>
             <tr>
-              <th className="w-[120px]">File date</th>
-              <th>Carrier</th>
-              <th className="w-[120px]">Type</th>
+              <th className="w-[104px]">File date</th>
+              <th className="w-[160px]">Carrier</th>
+              <th className="w-[104px]">Type</th>
               <th>File</th>
-              <th className="w-[150px]">Arrived</th>
-              <th className="w-[80px] text-right">Rows</th>
-              <th className="w-[160px]">Status</th>
-              <th className="w-[110px] text-right"><span className="sr-only">Actions</span></th>
+              <th className="w-[140px]">Arrived</th>
+              <th className="w-[64px] text-right">Rows</th>
+              <th className="w-[150px]">Status</th>
+              <th className="w-[100px] text-right"><span className="sr-only">Actions</span></th>
             </tr>
           </thead>
           <tbody className="m-seq">
@@ -135,16 +135,16 @@ export function CarrierFilesTable({ files, emptyTitle, emptyHint }: { files: Car
               return (
                 <tr key={file.id} className="m-row">
                   <td className="tabular-nums">{fileDay(file.fileDate)}</td>
-                  <td className="max-w-[160px] truncate font-semibold text-foreground" title={file.carrierName ?? "Carrier not known"}>{file.carrierName ?? <span className="font-normal text-muted-foreground">Not known</span>}</td>
+                  <td>{file.carrierName ? <span className="block whitespace-normal break-words font-semibold leading-snug text-foreground">{file.carrierName}</span> : <span className="text-muted-foreground">Not known</span>}</td>
                   <td>{file.fileType ? FILE_TYPE_LABELS[file.fileType] : <span className="text-muted-foreground">Not known</span>}</td>
-                  <td className="max-w-[230px]">
-                    <Link href={fileHref(file.id)} className="block truncate text-foreground hover:underline" title={`${file.originalFilename} · ${fileSize(file.fileBytes)} · open its rows`}>{file.originalFilename}</Link>
-                    {file.status === "failed" && file.errorDetail && <span className={`block truncate text-xs ${file.waitingForLayout ? "text-muted-foreground" : "text-[var(--error-ink)]"}`} title={file.errorDetail}>{file.errorDetail}</span>}
-                    {file.status !== "failed" && file.rawError && <span className="block truncate text-xs text-[var(--error-ink)]" title={file.rawError}>{file.rawError}</span>}
+                  <td>
+                    <Link href={fileHref(file.id)} className="block max-w-[200px] truncate text-foreground hover:underline" title={`${file.originalFilename} · ${fileSize(file.fileBytes)} · open its rows`}>{file.originalFilename}</Link>
+                    {file.status === "failed" && file.errorDetail && <span className={`block max-w-[200px] truncate text-xs ${file.waitingForLayout ? "text-muted-foreground" : "text-[var(--error-ink)]"}`} title={file.errorDetail}>{file.errorDetail}</span>}
+                    {file.status !== "failed" && file.rawError && <span className="block max-w-[200px] truncate text-xs text-[var(--error-ink)]" title={file.rawError}>{file.rawError}</span>}
                   </td>
-                  <td className="max-w-[150px] truncate" title={`${FILE_SOURCE_LABELS[file.source]} · ${from} · ${fileDay(file.receivedAt)}`}>
-                    <span className="block truncate tabular-nums">{fileDay(file.receivedAt)}</span>
-                    <span className="block truncate text-xs text-muted-foreground">{FILE_SOURCE_LABELS[file.source]} · {from}</span>
+                  <td title={`${FILE_SOURCE_LABELS[file.source]} · ${from} · ${fileDay(file.receivedAt)}`}>
+                    <span className="block tabular-nums">{fileDay(file.receivedAt)}</span>
+                    <span className="block max-w-[130px] truncate text-xs text-muted-foreground">{FILE_SOURCE_LABELS[file.source]} · {from}</span>
                   </td>
                   <td
                     className="text-right tabular-nums"

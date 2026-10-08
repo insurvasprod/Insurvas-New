@@ -188,7 +188,7 @@ function Overview({ model, Fig, refresh }: Parts) {
                   <td className="font-semibold text-foreground">{r.name}</td>
                   <td className="text-right tabular-nums">{centsText(r.advancedCents)}<span className="block text-xs text-muted-foreground">{count(r.advancedPolicies)} {r.advancedPolicies === 1 ? "policy" : "policies"}</span></td>
                   <td className="text-right tabular-nums">{centsText(r.chargedBackCents)}</td>
-                  <td className="text-right"><Fig d={{ kind: "chargeback", dim: cbDim, key: r.key }}>{chargebackText(r, model.minSample) ?? <span title={`A ratio needs ${model.minSample} advanced policies`}>{r.advancedPolicies} {r.advancedPolicies === 1 ? "policy" : "policies"}</span>}</Fig></td>
+                  <td className="text-right"><Fig d={{ kind: "chargeback", dim: cbDim, key: r.key }}>{chargebackText(r, model.minSample) ?? <span className="text-muted-foreground" title={`A ratio needs ${model.minSample} advanced policies; ${r.advancedPolicies} so far`}>—<span className="block text-xs">needs {model.minSample} policies</span></span>}</Fig></td>
                 </tr>
               ))}
             </tbody>

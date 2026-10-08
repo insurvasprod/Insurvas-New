@@ -44,11 +44,13 @@ export function CarrierLedger({ entries, scoped }: { entries: LedgerRow[]; scope
   const sum = useMemo(() => rollup(visible.map((row) => ({ entry_type: row.type, corrects_type: row.correctsType, amount_cents: row.amountCents }))), [visible]);
   const { current, rows } = paginate(visible, page, 25);
   const filtered = Boolean(query.trim() || carrier || type);
+  // Most carriers never say who a line was paid to; the column shows only when one does.
+  const anyPayee = entries.some((row) => row.payeeLevel);
   const clear = () => { setQuery(""); setCarrier(""); setType(""); setPage(1); };
 
   function exportCsv() {
     const csv = toCsv(
-      ["Statement date", "Transaction date", "Carrier", "Policy number", "Entry", "Amount", "Paid to", "Agent code", "Rate (bp)", "Months advanced", "File", "Row", "Reversal reason"],
+      ["Statement date", "Transaction date", "Carrier", "Policy number", "Entry", "Amount", "Payee", "Agent code", "Rate (bp)", "Months advanced", "File", "Row", "Reversal reason"],
       visible.map((row) => [row.statementDate, row.transactionDate, row.carrierName, row.policyNumber, typeWord(row), centsText(row.amountCents), row.payeeLevel === "upline" ? "Upline" : row.payeeLevel === "writing_agent" ? "Writing agent" : null, row.agentIdentifier, row.rateBp, row.monthsAdvanced, row.fileName, row.rowNumber, row.reversalReason]),
     );
     const url = URL.createObjectURL(new Blob([`﻿${csv}`], { type: "text/csv;charset=utf-8" }));
@@ -95,32 +97,35 @@ export function CarrierLedger({ entries, scoped }: { entries: LedgerRow[]; scope
         ) : visible.length === 0 ? (
           <NoMatches noun="lines" onClear={clear} />
         ) : (
-          <table className="portal-lead-table w-full min-w-[900px] text-left text-sm">
+          <table className="portal-lead-table w-full min-w-[860px] text-left text-sm">
             <thead>
               <tr>
                 <th className="w-[120px]">Statement</th>
-                <th className="w-[140px]">Carrier</th>
+                <th className="min-w-[160px]">Carrier</th>
                 <th className="w-[130px]">Policy</th>
-                <th>Entry</th>
+                <th className="w-[220px]">Entry</th>
                 <th className="w-[120px] text-right">Amount</th>
-                <th className="w-[110px]">Paid to</th>
-                <th className="w-[200px]">Source</th>
+                {anyPayee && <th className="w-[120px]">Payee</th>}
+                <th className="w-[220px]">Source</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((row) => (
                 <tr key={row.id}>
                   <td className="tabular-nums">{fileDay(row.statementDate ?? row.transactionDate)}</td>
-                  <td className="max-w-[140px] truncate" title={row.carrierName}>{row.carrierName}</td>
-                  <td className="font-mono text-xs"><Link href={policyHref(row)} className="hover:underline">{row.policyNumber}</Link>{row.orphan && <span className="block font-sans text-xs text-muted-foreground" title="No policy file has shown this policy yet. The line joins it the moment it arrives.">Policy not seen yet</span>}</td>
+                  <td><span className="block whitespace-normal break-words leading-snug">{row.carrierName}</span></td>
+                  <td className="tabular-nums"><Link href={policyHref(row)} className="hover:underline">{row.policyNumber}</Link>{row.orphan && <span className="block font-sans text-xs text-muted-foreground" title="No policy file has shown this policy yet. The line joins it the moment it arrives.">Policy not seen yet</span>}</td>
                   <td title={ENTRY_LABELS[kindOf(row) as EntryType]?.meaning}>
                     <span className="text-foreground">{typeWord(row)}</span>
                     {row.reversalReason && <span className="block text-xs text-muted-foreground">{row.reversalReason}</span>}
                     {row.heldByStatement && <span className="block text-xs text-[var(--warning-ink)]">Held out of totals: its statement doesn&apos;t add up</span>}
                   </td>
                   <td className={`text-right font-semibold tabular-nums ${row.type === "held" ? "text-muted-foreground" : row.amountCents < 0 ? "text-[var(--error-ink)]" : "text-foreground"}`} title={row.type === "held" ? "Held: not part of net received" : undefined}>{signed(row.amountCents)}</td>
-                  <td>{row.payeeLevel === "upline" ? "Upline" : row.payeeLevel === "writing_agent" ? "Writing agent" : <span className="text-muted-foreground">—</span>}</td>
-                  <td className="max-w-[200px] truncate text-xs text-muted-foreground" title={row.fileName ? `${row.fileName}, row ${row.rowNumber}` : undefined}><Link href={rowHref(row.fileId, row.rowNumber)} className="hover:text-foreground hover:underline">{row.fileName ?? "—"}, row {row.rowNumber}</Link></td>
+                  {anyPayee && <td>{row.payeeLevel === "upline" ? "Upline" : row.payeeLevel === "writing_agent" ? "Writing agent" : <span className="text-muted-foreground">—</span>}</td>}
+                  <td title={row.fileName ? `${row.fileName}, row ${row.rowNumber}` : undefined}>
+                    <Link href={rowHref(row.fileId, row.rowNumber)} className="text-[var(--accent-ink)] hover:underline">Row {row.rowNumber}</Link>
+                    {row.fileName && <span className="block max-w-[200px] truncate text-xs text-muted-foreground">{row.fileName}</span>}
+                  </td>
                 </tr>
               ))}
             </tbody>

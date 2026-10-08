@@ -91,7 +91,7 @@ export function PolicyMatchingWorkspace({ reviews, links, unmapped, mapped, memb
                     const best = review.shortlist[0];
                     return (
                       <tr key={review.id}>
-                        <td className="font-mono text-xs text-foreground">{review.policyNumber}</td>
+                        <td className="tabular-nums text-foreground">{review.policyNumber}</td>
                         <td>{review.carrierName}</td>
                         <td>{nameOf(review.carrierRow ?? {})}</td>
                         <td className="tabular-nums">{review.carrierRow?.fileDate ? fileDay(review.carrierRow.fileDate) : "—"}</td>
@@ -117,7 +117,7 @@ export function PolicyMatchingWorkspace({ reviews, links, unmapped, mapped, memb
                 <tbody>
                   {visibleLinks.map((link) => (
                     <tr key={link.id}>
-                      <td className="font-mono text-xs text-foreground">{link.policyNumber}</td>
+                      <td className="tabular-nums text-foreground">{link.policyNumber}</td>
                       <td>{link.carrierName}</td>
                       <td>{link.clientName ?? TYPE_LABEL[link.type] ?? link.type}</td>
                       <td>{METHOD_LABEL[link.method] ?? link.method}{link.confidence !== null ? ` · ${link.confidence}%` : ""}</td>

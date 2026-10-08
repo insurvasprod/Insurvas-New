@@ -71,11 +71,11 @@ export function RateCardWorkspace({ carriers, products, readOnly, today }: { car
           <table className="portal-lead-table w-full min-w-[960px] text-left text-sm">
             <thead>
               <tr>
-                <th>Carrier</th>
+                <th className="min-w-[180px]">Carrier</th>
                 <th className="w-[90px] text-right">Policies</th>
                 <th className="w-[120px] text-right">Monthly premium</th>
                 <th className="w-[150px]" title="When the carrier pays: on issue, or once the first premium drafts">Pays</th>
-                <th className="w-[110px]" title="Your contract level with the carrier">Your level</th>
+                <th className="w-[110px] text-right" title="Your contract level with the carrier">Your level</th>
                 <th className="w-[80px] text-right">Rates</th>
                 <th className="w-[170px]" title="Policies the rate card can price today">Can be checked</th>
                 <th className="w-[96px] text-right"><span className="sr-only">Actions</span></th>
@@ -86,11 +86,11 @@ export function RateCardWorkspace({ carriers, products, readOnly, today }: { car
                 const share = c.monthlyCents ? Math.floor((c.pricedMonthlyCents * 100) / c.monthlyCents) : 0;
                 return (
                   <tr key={c.carrierId}>
-                    <td className="font-semibold text-foreground">{c.carrierName}</td>
+                    <td><span className="block whitespace-normal break-words font-semibold leading-snug text-foreground">{c.carrierName}</span></td>
                     <td className="text-right tabular-nums">{c.policies.toLocaleString("en-US")}</td>
                     <td className="text-right tabular-nums">{whole(c.monthlyCents)}</td>
                     <td>{c.trigger ? <>{TRIGGER_LABELS[c.trigger]}<span className="block text-xs text-muted-foreground">{c.lagDays !== null ? `usually within ${c.lagDays} days` : "lag not set"}</span></> : <span className="text-[var(--warning-ink)]">Not set</span>}</td>
-                    <td className="tabular-nums">{c.levelBp !== null ? `${bpToPercent(c.levelBp)}%` : <span className="text-[var(--warning-ink)]">Not set</span>}</td>
+                    <td className="text-right tabular-nums">{c.levelBp !== null ? `${bpToPercent(c.levelBp)}%` : <span className="text-[var(--warning-ink)]">Not set</span>}</td>
                     <td className="text-right tabular-nums">{c.schedules.length}</td>
                     <td>
                       <StatusChip tone={c.pricedPolicies === c.policies ? "good" : c.pricedPolicies ? "warning" : "danger"}>{c.pricedPolicies === c.policies ? "All" : c.pricedPolicies ? `${c.pricedPolicies} of ${c.policies}` : "None"}</StatusChip>

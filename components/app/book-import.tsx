@@ -114,18 +114,18 @@ export function BookImport({ carriers, others, processing, readOnly }: { carrier
                   onDragLeave={() => setOver((cur) => (cur === c.carrierId ? null : cur))}
                   onDrop={(e) => { e.preventDefault(); setOver(null); const file = e.dataTransfer.files?.[0]; if (file && !readOnly) void upload(c.carrierId, file); }}
                 >
-                  <td className="font-semibold text-foreground">{c.carrierName}{c.writes && <span className="block text-xs font-normal text-muted-foreground">you write this carrier</span>}</td>
+                  <td className="font-semibold text-foreground"><span className="block whitespace-normal break-words leading-snug">{c.carrierName}</span>{c.writes && <span className="block text-xs font-normal text-muted-foreground">you write this carrier</span>}</td>
                   <td>
                     {g ? (
-                      <span className="block text-sm">
+                      <span className="block whitespace-normal text-sm">
                         {g.whereInPortal}
                         {g.reportName && <span className="block text-xs text-muted-foreground">Usually called: {g.reportName}</span>}
                         {g.formatHint && <span className="block text-xs text-muted-foreground">Choose: {g.formatHint}</span>}
                         {g.notes && <span className="block text-xs text-muted-foreground">{g.notes}</span>}
                       </span>
-                    ) : <span className="text-muted-foreground">The in-force report in its agent portal</span>}
+                    ) : <span className="block whitespace-normal text-muted-foreground">The in-force report in its agent portal</span>}
                   </td>
-                  <td className={TONE[line.tone]} role="status">{line.text}</td>
+                  <td className={TONE[line.tone]} role="status"><span className="block whitespace-normal">{line.text}</span></td>
                   <td><input type="date" aria-label={`File date for ${c.carrierName}`} className={`${toolbarControl} w-full`} value={dates[c.carrierId] ?? today} max={today} disabled={readOnly} onChange={(e) => setDates((all) => ({ ...all, [c.carrierId]: e.target.value }))} /></td>
                   <td className="text-right">
                     <input ref={(el) => { inputs.current[c.carrierId] = el; }} type="file" accept=".csv,.xlsx" className="hidden" onChange={(e) => { const file = e.target.files?.[0]; e.target.value = ""; if (file) void upload(c.carrierId, file); }} />

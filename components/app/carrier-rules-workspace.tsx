@@ -22,7 +22,7 @@ const FORMAT_LABEL = { spreadsheet: "Spreadsheet", pdf: "PDF" } as const;
 
 function ruleCell(rule: ResolvedRule | null) {
   if (!rule || rule.windowDays === null) {
-    return <span className="text-muted-foreground">{rule?.graceDays !== null && rule?.graceDays !== undefined ? `Grace ${rule.graceDays} d, no window` : "Not set"}</span>;
+    return <span className="text-muted-foreground">{rule?.graceDays !== null && rule?.graceDays !== undefined ? `Grace ${rule.graceDays} d, no window` : <span title="Not set">—</span>}</span>;
   }
   return (
     <span title={`${rule.scope === "agency" ? "This agency's own rule" : "The platform's rule"} · ${rule.source ? RULE_SOURCE_LABELS[rule.source] : ""} · from ${rule.effectiveFrom}${rule.notes ? ` · ${rule.notes}` : ""}`}>
@@ -92,11 +92,11 @@ export function CarrierRulesWorkspace({ carriers, plane, endpoint, readOnly, asO
         ) : visible.length === 0 ? (
           <NoMatches noun="carriers" onClear={() => { setQuery(""); setGapsOnly(false); }} />
         ) : (
-          <table className="portal-lead-table w-full min-w-[980px] text-left text-sm">
+          <table className="portal-lead-table w-full min-w-[900px] text-left text-sm">
             <thead>
               <tr>
-                <th>Carrier</th>
-                {RULE_TYPES.map((type) => <th key={type} className="w-[118px]" style={{ whiteSpace: "normal" }} title={`Days the carrier gives: its ${RULE_TYPE_LABELS[type].window}`}>{RULE_TYPE_LABELS[type].label}</th>)}
+                <th className="w-[180px]">Carrier</th>
+                {RULE_TYPES.map((type) => <th key={type} className="w-[108px]" style={{ whiteSpace: "normal" }} title={`Days the carrier gives: its ${RULE_TYPE_LABELS[type].window}`}>{RULE_TYPE_LABELS[type].label}</th>)}
                 {plane === "agency" && <th className="w-[80px] text-right" title="Policies in force with this carrier">In force</th>}
                 <th className="w-[80px] text-right" title="Rules not set yet; hover a number to see which">Missing</th>
                 <th className="w-[76px] text-right"><span className="sr-only">Actions</span></th>
@@ -105,7 +105,7 @@ export function CarrierRulesWorkspace({ carriers, plane, endpoint, readOnly, asO
             <tbody>
               {visible.map((row) => (
                 <tr key={row.carrierId}>
-                  <td className="font-semibold text-foreground">{row.carrierName}</td>
+                  <td><span className="block whitespace-normal break-words font-semibold leading-snug text-foreground">{row.carrierName}</span></td>
                   {RULE_TYPES.map((type) => <td key={type}>{ruleCell(row.rules[type])}</td>)}
                   {plane === "agency" && <td className="text-right tabular-nums">{(row.inForce ?? 0).toLocaleString("en-US")}</td>}
                   <td className={`text-right tabular-nums ${row.gaps.length ? "text-[var(--warning-ink)]" : "text-muted-foreground"}`} title={row.gaps.map((gap) => gap.sentence).join("\n")}>{row.gaps.length}</td>

@@ -36,10 +36,10 @@ function subject(item: QueueItemRow) {
   if (item.queueType === "orphan_commission") {
     const p = item.payload ?? {};
     const cents = Number(p.amount_cents ?? 0);
-    return <span><span className="font-mono text-xs">{item.policyNumber}</span> · {item.carrierName ?? "—"} · {Number(p.lines ?? 0).toLocaleString("en-US")} commission {Number(p.lines ?? 0) === 1 ? "line" : "lines"}, {cents < 0 ? "−" : ""}{dollars(Math.abs(cents))}, since {String(p.first_seen ?? "")}</span>;
+    return <span><span className="font-medium tabular-nums">{item.policyNumber}</span> · {item.carrierName ?? "—"} · {Number(p.lines ?? 0).toLocaleString("en-US")} commission {Number(p.lines ?? 0) === 1 ? "line" : "lines"}, {cents < 0 ? "−" : ""}{dollars(Math.abs(cents))}, since {String(p.first_seen ?? "")}</span>;
   }
   if (item.queueType === "multi_policy") return <span className="inline-flex flex-wrap items-center gap-1"><Client person={item.contact} /> and <Client person={item.related} /></span>;
-  return <span className="inline-flex flex-wrap items-center gap-1.5"><span className="font-mono text-xs">{item.policyNumber}</span> · {item.carrierName} · <Client person={item.contact} /></span>;
+  return <span className="inline-flex flex-wrap items-center gap-1.5"><span className="font-medium tabular-nums">{item.policyNumber}</span> · {item.carrierName} · <Client person={item.contact} /></span>;
 }
 
 /**
