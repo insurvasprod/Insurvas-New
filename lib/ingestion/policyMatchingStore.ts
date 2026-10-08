@@ -7,6 +7,7 @@ import { annualisedPremiumCents } from "./policyCurrent";
 import { accuracy, isStrong, ladderShare, shortlist, SHORTLIST_LOOKBACK_DAYS, splitName, WRITING_ROLES, type Candidate, type CarrierSide, type LadderCounts, type Scored } from "./policyMatching";
 import { refreshPolicyCurrent } from "./policyCurrentStore";
 import { noRecordPolicy, openImportSummary } from "./exceptionQueuesStore";
+import { identityKey } from "./exceptionQueues";
 
 /**
  * LA-4.8 (Notion sprint) · the matching ladder, server side.
@@ -168,8 +169,32 @@ async function candidatesFor(tenantId: string, carrier: { id: string; name: stri
 
 const storedEntry = (scored: Scored) => ({ ...scored.candidate, score: scored.score, fields: scored.fields, likely: isStrong(scored) });
 
+/** How many policies of a file are matched side by side. */
+const MATCH_WIDTH = 8;
+
+/**
+ * The policies of one person stay in one group, in order, so the second finds the client the first
+ * created (an exact identity, or a name to suggest) instead of racing it to make another. Groups
+ * run side by side, `MATCH_WIDTH` at a time; the first failure fails the whole, as one at a time did.
+ */
+async function byPerson(snapshots: Map<string, Snapshot>, policies: string[], carrierName: string, work: (policy: string, snapshot: Snapshot) => Promise<void>) {
+  const groups = new Map<string, string[]>();
+  for (const policy of policies) {
+    const snapshot = snapshots.get(policy);
+    if (!snapshot) continue;
+    const side = carrierSide(snapshot, carrierName);
+    const name = `${side.firstName ?? ""} ${side.lastName ?? ""}`.trim().toLowerCase().replace(/\s+/g, " ");
+    const key = identityKey(side) ?? (name ? `name:${name}` : `policy:${policy}`);
+    groups.set(key, [...(groups.get(key) ?? []), policy]);
+  }
+  const queue = [...groups.values()];
+  await Promise.all(Array.from({ length: Math.min(MATCH_WIDTH, queue.length) }, async () => {
+    for (let group = queue.shift(); group; group = queue.shift()) for (const policy of group) await work(policy, snapshots.get(policy)!);
+  }));
+}
+
 /** Step 3: a scored shortlist per policy, into the review queue (one open review per policy). */
-async function queueReviews(tenantId: string, carrier: { id: string; name: string; code: string | null }, policies: string[], fileId: string | null, options: { reviewEvenIfEmpty?: boolean } = {}): Promise<number> {
+async function queueReviews(tenantId: string, carrier: { id: string; name: string; code: string | null }, policies: string[], fileId: string | null, options: { reviewEvenIfEmpty?: boolean; refreshCurrent?: boolean } = {}): Promise<number> {
   if (!policies.length) return 0;
   const snapshots = await latestSnapshots(tenantId, carrier.id, policies);
   const dates = [...snapshots.values()].map((s) => s.snapshot_date).sort();
@@ -182,19 +207,17 @@ async function queueReviews(tenantId: string, carrier: { id: string; name: strin
   const openId = new Map<string, string>((open ?? []).map((row: Loose) => [row.policy_number, row.id]));
 
   let queued = 0;
-  for (const policy of policies) {
-    const snapshot = snapshots.get(policy);
-    if (!snapshot) continue;
+  await byPerson(snapshots, policies, carrier.name, async (policy, snapshot) => {
     const row = carrierSide(snapshot, carrier.name);
     const agent = snapshot.agent_identifier ? agentOf.get(snapshot.agent_identifier) ?? null : null;
     const from = addDays(snapshot.snapshot_date, -SHORTLIST_LOOKBACK_DAYS);
     const candidates = pool.filter((c) => c.date >= from && c.date <= snapshot.snapshot_date && (!agent || c.agentUserId === agent));
     const listed = shortlist(row, candidates);
     // LA-4.9: nobody to choose from is not a review — it is a policy with no sale on record.
-    if (!listed.length && !options.reviewEvenIfEmpty && (await noRecordPolicy(tenantId, policySide(snapshot, carrier), agent))) {
+    if (!listed.length && !options.reviewEvenIfEmpty && (await noRecordPolicy(tenantId, policySide(snapshot, carrier), agent, { refreshCurrent: options.refreshCurrent }))) {
       if (openId.has(policy)) await db().from("policy_match_review").update({ updated_at: new Date().toISOString() }).eq("id", openId.get(policy));
       queued++;
-      continue;
+      return;
     }
     const payload = {
       carrier_row: { ...row, agentIdentifier: snapshot.agent_identifier, fileDate: snapshot.snapshot_date },
@@ -208,7 +231,7 @@ async function queueReviews(tenantId: string, carrier: { id: string; name: strin
       : await db().from("policy_match_review").insert({ tenant_id: tenantId, carrier_id: carrier.id, policy_number: policy, ...payload });
     if (write.error && write.error.code !== "23505") fail(write.error, "The policy could not be queued for review");
     queued++;
-  }
+  });
   return queued;
 }
 
@@ -233,13 +256,14 @@ async function importedBook(tenantId: string, carrier: { id: string; name: strin
   const { data: maps } = identifiers.length ? await db().from("carrier_agent_map").select("agent_identifier, user_id").eq("tenant_id", tenantId).eq("carrier_id", carrier.id).in("agent_identifier", identifiers) : { data: [] };
   const agentOf = new Map<string, string>((maps ?? []).map((row: Loose) => [row.agent_identifier, row.user_id]));
   let handled = 0;
-  for (const policy of policies) {
-    const snapshot = snapshots.get(policy);
-    if (!snapshot) continue;
+  let pending = false;
+  await byPerson(snapshots, policies, carrier.name, async (_policy, snapshot) => {
+    if (pending) return;
     const done = await noRecordPolicy(tenantId, policySide(snapshot, carrier), snapshot.agent_identifier ? agentOf.get(snapshot.agent_identifier) ?? null : null, { bulk: true });
-    if (!done) return null; // before 20261008180000: the normal ladder
-    handled++;
-  }
+    if (!done) pending = true; // before 20261008180000: the normal ladder
+    else handled++;
+  });
+  if (pending) return null;
   // One summary per file, counted from what is now true of the file's policies — so a file that
   // arrives in chunks, or is reprocessed, gives the same summary, never a doubled one.
   const { data: rows } = await db().from("policy_snapshot").select("policy_number").eq("tenant_id", tenantId).eq("file_id", fileId).eq("superseded", false);
@@ -268,7 +292,8 @@ async function carrierOf(carrierId: string) {
 
 /**
  * The ladder for the policies one file touched (the snapshot stage calls this before refreshing
- * policy_current). Returns the counts per step, or null before the migration.
+ * policy_current for the same policies — so nothing here refreshes them one by one). Returns the
+ * counts per step, or null before the migration.
  */
 export async function matchFilePolicies(tenantId: string, carrierId: string, fileId: string | null, policies: string[]): Promise<LadderCounts | null> {
   if (!policies.length) return { alreadyLinked: 0, exactLinked: 0, toReview: 0 };
@@ -282,7 +307,7 @@ export async function matchFilePolicies(tenantId: string, carrierId: string, fil
   const unlinked = policies.filter((policy) => !linked.has(policy));
   const exact = await linkExact(tenantId, carrier, unlinked);
   const rest = unlinked.filter((policy) => !exact.has(policy));
-  const toReview = (await importedBook(tenantId, carrier, fileId, rest)) ?? (await queueReviews(tenantId, carrier, rest, fileId));
+  const toReview = (await importedBook(tenantId, carrier, fileId, rest)) ?? (await queueReviews(tenantId, carrier, rest, fileId, { refreshCurrent: false }));
   const counts = { alreadyLinked: linked.size, exactLinked: exact.size, toReview };
   await db().from("policy_match_ladder").insert({ tenant_id: tenantId, carrier_id: carrierId, file_id: fileId, already_linked: counts.alreadyLinked, exact_linked: counts.exactLinked, to_review: counts.toReview });
   return counts;

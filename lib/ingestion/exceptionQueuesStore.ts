@@ -74,16 +74,26 @@ function carrierPerson(side: PolicySide) {
   };
 }
 
+/** Whether the queues exist (20261008180000), asked once per process rather than once per policy. */
+let queuesReady = false;
+
 /**
  * A policy nobody could match: give it a client (an exact-identity existing one, or a provisional
  * one), link it, and queue it for the writing agent. Returns the client and the queue-1 item.
+ *
+ * `refreshCurrent: false` when the caller refreshes the policies' current rows itself (a file's
+ * matching stage does, for its whole chunk, right after): one refresh per policy was most of the
+ * time a large file took.
  */
-export async function noRecordPolicy(tenantId: string, side: PolicySide, writingAgent: string | null, options: { bulk?: boolean } = {}): Promise<{ contactId: string | null; provisional: boolean; itemId: string | null } | null> {
+export async function noRecordPolicy(tenantId: string, side: PolicySide, writingAgent: string | null, options: { bulk?: boolean; refreshCurrent?: boolean } = {}): Promise<{ contactId: string | null; provisional: boolean; itemId: string | null } | null> {
   // Before 20261008180000 there is no provisional flag: create nothing (the caller keeps a review).
-  const probe = await db().from("queue_item").select("id").limit(1);
-  if (probe.error) {
-    if (isSchemaGap(probe.error)) return null;
-    fail(probe.error, "Could not read the queues");
+  if (!queuesReady) {
+    const probe = await db().from("queue_item").select("id").limit(1);
+    if (probe.error) {
+      if (isSchemaGap(probe.error)) return null;
+      fail(probe.error, "Could not read the queues");
+    }
+    queuesReady = true;
   }
   const person = carrierPerson(side);
   const identity = identityKey(person);
@@ -163,7 +173,7 @@ export async function noRecordPolicy(tenantId: string, side: PolicySide, writing
     payload: { carrier_name: side.carrierName, file_date: side.fileDate, insured: { first_name: person.firstName, last_name: person.lastName, dob: person.dob }, premium_cents: side.premiumCents, face_cents: side.faceCents, provisional, client_blocked: blocked },
     writingAgent, ageFrom: side.fileDate,
   });
-  await refreshPolicyCurrent({ tenantId, carrierId: side.carrierId, policies: [side.policyNumber] });
+  if (options.refreshCurrent !== false) await refreshPolicyCurrent({ tenantId, carrierId: side.carrierId, policies: [side.policyNumber] });
   return { contactId, provisional, itemId };
 }
 
