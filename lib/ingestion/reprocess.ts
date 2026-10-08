@@ -72,6 +72,9 @@ export async function reprocess(
   const runId = await deps.startRun({ tenantId: input.tenantId, trigger: input.trigger, triggeredBy: input.triggeredBy, scope: input.scope, parserVersion: runParserVersion(files) });
   const stages: StageSummary[] = deps.stages.map((stage) => ({ name: stage.name, files: 0, changed: 0 }));
   let rowsRead = 0;
+  // A file that cannot be read with its map fails the run, and says so: its stages still run (they
+  // reverse what it wrote before, LA-4.4) but the run is not reported as a success.
+  const unread: string[] = [];
   const versions: Array<number | null> = files.map((file) => file.parserVersion);
   const version = () => runParserVersion(versions.map((parserVersion) => ({ parserVersion })) as ReprocessFile[]);
   try {
@@ -81,13 +84,14 @@ export async function reprocess(
       rowsRead += rows.length;
       const parsed = deps.parse ? await deps.parse(input.tenantId, file, rows) : null;
       if (parsed) versions[position] = parsed.parserVersion;
+      if (parsed?.fatal) unread.push(`File ${file.id} could not be read: ${parsed.fatal}`);
       for (const [index, stage] of deps.stages.entries()) {
         const { changed } = await stage.rebuild(input.tenantId, file, rows, parsed);
         stages[index].files += 1;
         stages[index].changed += changed;
       }
     }
-    const result = { status: "succeeded" as const, fileIds: files.map((file) => file.id), rowsRead, rowsChanged: stages.reduce((sum, stage) => sum + stage.changed, 0), stages, errorDetail: null };
+    const result = { status: unread.length ? ("failed" as const) : ("succeeded" as const), fileIds: files.map((file) => file.id), rowsRead, rowsChanged: stages.reduce((sum, stage) => sum + stage.changed, 0), stages, errorDetail: unread.length ? unread.join(" ").slice(0, 2000) : null };
     await deps.finishRun(runId, { ...result, parserVersion: version() });
     return { runId, ...result };
   } catch (error) {
