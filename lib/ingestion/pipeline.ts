@@ -41,7 +41,8 @@ export type RegisterArgs = {
 };
 
 export type RegisterOutcome =
-  | { outcome: "registered"; fileId: string; supersededFileId: string | null }
+  /** `attributed`: a file that failed only for want of its carrier was told it by these bytes (20261009210000). */
+  | { outcome: "registered"; fileId: string; supersededFileId: string | null; attributed?: boolean; storagePath?: string }
   | { outcome: "skipped"; fileId: string }
   /** The same bytes, removed from the bucket earlier, dropped again: the same file, back (20261009100000). */
   | { outcome: "restored"; fileId: string };
@@ -49,8 +50,11 @@ export type RegisterOutcome =
 export type IngestDeps = {
   storage: StorageAdapter;
   sha256(bytes: Uint8Array): string;
-  /** The file already held with these bytes, if any. A fast pre-check; register() is the authority. */
-  findByHash(tenantId: string, contentHash: string): Promise<{ id: string } | null>;
+  /**
+   * The file already held with these bytes, if any. A fast pre-check; register() is the authority.
+   * `awaitingCarrier`: it failed only because no one knew its carrier, and was never read.
+   */
+  findByHash(tenantId: string, contentHash: string): Promise<{ id: string; awaitingCarrier?: boolean } | null>;
   /** The carrier a code names in the library, or null. */
   carrierByCode(code: string): Promise<{ id: string } | null>;
   /** The carrier a Drive-layout folder names (its name, code or a folder alias; the agency's alias first), or null. */
@@ -132,9 +136,10 @@ export async function ingestCarrierFile(deps: IngestDeps, input: DoorInput): Pro
       : syntheticStoragePath(input.tenantId, input.source, carrierId ? input.attribution : { ...input.attribution, carrierCode: null }, contentHash, input.filename);
   if (input.source === "bucket" && !storedAt.startsWith(`${input.tenantId}/`)) throw new Error("A dropped file is registered only under its own workspace.");
 
-  // 2. Already held: record the skip, store nothing.
+  // 2. Already held: record the skip, store nothing. Unless the held copy is only waiting for its
+  // carrier and this one names it: then this copy is checked as usual and tells the held file.
   const held = await deps.findByHash(input.tenantId, contentHash);
-  if (held) {
+  if (held && !(held.awaitingCarrier && carrierId)) {
     const outcome = await deps.register(registration(storedAt, "received", null, null));
     return outcome.outcome === "restored" ? { outcome: "restored", fileId: outcome.fileId } : { outcome: "skipped", fileId: outcome.fileId };
   }
@@ -156,20 +161,21 @@ export async function ingestCarrierFile(deps: IngestDeps, input: DoorInput): Pro
   const status = problems.length ? "failed" : "received";
   const errorDetail = problems.length ? problems.join(" ").slice(0, 2000) : null;
 
-  // 4. Store (the bucket door's file is already where it was dropped).
-  if (input.source !== "bucket") await deps.storage.put(storedAt, input.bytes, input.contentType ?? (kind ? FILE_KIND_CONTENT_TYPE[kind] : null));
+  // 4. Store (the bucket door's file is already where it was dropped; a held file's bytes are stored).
+  const stores = input.source !== "bucket" && !held;
+  if (stores) await deps.storage.put(storedAt, input.bytes, input.contentType ?? (kind ? FILE_KIND_CONTENT_TYPE[kind] : null));
 
   // 5. Register; on a lost race or an error, take back what this call stored.
   let outcome: RegisterOutcome;
   try {
     outcome = await deps.register(registration(storedAt, status, errorDetail, kind));
   } catch (error) {
-    if (input.source !== "bucket") await deps.storage.remove(storedAt).catch(() => undefined);
+    if (stores) await deps.storage.remove(storedAt).catch(() => undefined);
     throw error;
   }
   if (outcome.outcome === "skipped" || outcome.outcome === "restored") {
-    if (input.source !== "bucket") await deps.storage.remove(storedAt).catch(() => undefined);
+    if (stores) await deps.storage.remove(storedAt).catch(() => undefined);
     return { outcome: outcome.outcome, fileId: outcome.fileId };
   }
-  return { outcome: "registered", fileId: outcome.fileId, status, errorDetail, supersededFileId: outcome.supersededFileId, storagePath: storedAt };
+  return { outcome: "registered", fileId: outcome.fileId, status, errorDetail, supersededFileId: outcome.supersededFileId, storagePath: outcome.storagePath ?? storedAt };
 }

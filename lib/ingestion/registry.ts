@@ -107,9 +107,9 @@ async function register(args: RegisterArgs): Promise<RegisterOutcome> {
     if (pending(error)) throw new CarrierFileError(CARRIER_FILES_PENDING_MESSAGE, 503, "schema_pending");
     throw new Error(`The file could not be registered: ${error.message}`);
   }
-  const result = data as { outcome: "registered" | "skipped" | "restored"; file_id: string; superseded_file_id?: string | null };
+  const result = data as { outcome: "registered" | "skipped" | "restored"; file_id: string; superseded_file_id?: string | null; attributed?: boolean; storage_path?: string };
   if (result.outcome === "skipped" || result.outcome === "restored") return { outcome: result.outcome, fileId: result.file_id };
-  return { outcome: "registered", fileId: result.file_id, supersededFileId: result.superseded_file_id ?? null };
+  return { outcome: "registered", fileId: result.file_id, supersededFileId: result.superseded_file_id ?? null, ...(result.attributed ? { attributed: true, storagePath: result.storage_path } : {}) };
 }
 
 function ingestDeps(): IngestDeps {
@@ -117,12 +117,12 @@ function ingestDeps(): IngestDeps {
     storage: carrierFileStorage(),
     sha256: (bytes) => createHash("sha256").update(bytes).digest("hex"),
     findByHash: async (tenantId, contentHash) => {
-      const { data, error } = await db().from("file_registry").select("id").eq("tenant_id", tenantId).eq("content_hash", contentHash).maybeSingle();
+      const { data, error } = await db().from("file_registry").select("id, carrier_id, status, raw_extracted_at").eq("tenant_id", tenantId).eq("content_hash", contentHash).maybeSingle();
       if (error) {
         if (pending(error)) throw new CarrierFileError(CARRIER_FILES_PENDING_MESSAGE, 503, "schema_pending");
         throw new Error(`Could not check for the same file: ${error.message}`);
       }
-      return data ? { id: data.id as string } : null;
+      return data ? { id: data.id as string, awaitingCarrier: data.carrier_id === null && data.status === "failed" && data.raw_extracted_at === null } : null;
     },
     carrierByCode: async (code) => (await libraryCarriers()).find((carrier) => carrier.code === code) ?? null,
     carrierByFolder,
