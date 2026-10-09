@@ -128,7 +128,7 @@ export function BookImport({ carriers, others, processing, readOnly }: { carrier
                   <td className={TONE[line.tone]} role="status"><span className="block whitespace-normal">{line.text}</span></td>
                   <td><input type="date" aria-label={`File date for ${c.carrierName}`} className={`${toolbarControl} w-full`} value={dates[c.carrierId] ?? today} max={today} disabled={readOnly} onChange={(e) => setDates((all) => ({ ...all, [c.carrierId]: e.target.value }))} /></td>
                   <td className="text-right">
-                    <input ref={(el) => { inputs.current[c.carrierId] = el; }} type="file" accept=".csv,.xlsx" className="hidden" onChange={(e) => { const file = e.target.files?.[0]; e.target.value = ""; if (file) void upload(c.carrierId, file); }} />
+                    <input ref={(el) => { inputs.current[c.carrierId] = el; }} type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={(e) => { const file = e.target.files?.[0]; e.target.value = ""; if (file) void upload(c.carrierId, file); }} />
                     {!readOnly && (
                       <span className="inline-flex gap-2">
                         <Button type="button" size="sm" disabled={busy !== null} onClick={() => inputs.current[c.carrierId]?.click()}>{busy === c.carrierId ? "Uploading…" : c.file ? "Replace" : "Upload"}</Button>

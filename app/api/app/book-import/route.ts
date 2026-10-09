@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
   const file = form.get("file");
   if (!(file instanceof File)) return NextResponse.json({ error: "Choose a file to upload." }, { status: 400 });
   const kind = carrierFileKind(file);
-  if (!kind || kind === "pdf") return NextResponse.json({ error: "Choose the carrier's policy file as a CSV or an Excel (.xlsx) file." }, { status: 400 });
+  if (!kind || kind === "pdf") return NextResponse.json({ error: "Choose the carrier's policy file as a CSV or an Excel (.xlsx or .xls) file." }, { status: 400 });
   if (file.size <= 0) return NextResponse.json({ error: "That file is empty." }, { status: 400 });
   if (file.size > MAX_UPLOAD_BYTES) return NextResponse.json({ error: `That file is larger than ${MAX_UPLOAD_BYTES / 1_000_000} MB.` }, { status: 400 });
   const carrierId = String(form.get("carrier_id") ?? "");
