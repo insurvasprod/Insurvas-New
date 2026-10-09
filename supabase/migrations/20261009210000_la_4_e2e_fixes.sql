@@ -13,7 +13,8 @@
 -- Rollback: re-run file_registry_guard and register_carrier_file from 20261009100000, and
 -- record_expected_commission and expected_commission_guard from 20261009200000.
 
--- ─── 1. a file that came in without its carrier ──────────────────────────────────────────────────create or replace function public.file_registry_guard()
+-- ─── 1. a file that came in without its carrier ──────────────────────────────────────────────────
+create or replace function public.file_registry_guard()
 returns trigger
 language plpgsql
 set search_path = public, pg_temp
