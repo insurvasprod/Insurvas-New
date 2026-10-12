@@ -48,7 +48,8 @@ export default async function PolicyPage({ params }: { params: Promise<{ carrier
       </div>
     );
   }
-  const { policy, client, lead, timeline, source, others, household } = view;
+  const { policy, client, sale, lead, timeline, source, others, household } = view;
+  const saleState = sale ? (sale.outcome ? sale.outcome.replaceAll("_", " ") : sale.status ? sale.status.replaceAll("_", " ") : null) : null;
   const readOnly = guard.entitlement.access === "read_only";
   const monthly = policy.annualCents === null ? null : Math.round(policy.annualCents / 12);
 
@@ -56,11 +57,13 @@ export default async function PolicyPage({ params }: { params: Promise<{ carrier
     <div className="m-stagger flex flex-col gap-6">
       <Link href="/app/policies" className="text-sm text-muted-foreground hover:underline">← Policies</Link>
       <PageHeader
-        title={client?.name ?? `Policy ${policy.policyNumber}`}
+        title={client?.name ?? sale?.name ?? `Policy ${policy.policyNumber}`}
         description={`${policy.carrierName} · Policy ${policy.policyNumber}${policy.product ? ` · ${policy.product}` : ""}`}
       />
       {client?.provisional && <p role="status" className="-mt-4 m-0 text-sm"><ProvisionalBadge /> <span className="text-muted-foreground">This client was built from the carrier&apos;s file. <Link href="/app/duplicates" className="font-medium text-[var(--accent-ink)] hover:underline">Check it in the contact directory</Link>.</span></p>}
-      {!client && <p role="status" className="-mt-4 m-0 text-sm text-[var(--warning-ink)]">No client is linked to this policy yet. <Link href="/app/policy-matching" className="font-medium underline">Link it in Policy matching</Link>.</p>}
+      {/* The sale this policy is linked to (LA-3): shown whether or not its client is known yet. */}
+      {sale && <p role="status" className="-mt-4 m-0 text-sm text-muted-foreground">Linked to {sale.name ? `${sale.name}'s` : "an"} application{saleState ? ` (${saleState})` : ""}. <Link href={`/app/applications/${sale.caseId}`} className="font-medium text-[var(--accent-ink)] hover:underline">Open the application</Link></p>}
+      {!client && !sale && <p role="status" className="-mt-4 m-0 text-sm text-[var(--warning-ink)]">No client is linked to this policy yet. <Link href="/app/policy-matching" className="font-medium underline">Link it in Policy matching</Link>.</p>}
 
       <StatStrip label="This policy">
         <StatTile label="Premium" value={dollars(policy.premiumCents)} footnote={policy.premiumMode ? `${MODE[policy.premiumMode] ?? policy.premiumMode}${monthly !== null && policy.premiumMode !== "monthly" ? ` · ${dollars(monthly)} a month` : ""}` : "mode not given"} />

@@ -1,5 +1,7 @@
 import "server-only";
 
+import { addressHash, addressSearch, nameSearch, normalizePhone } from "@/lib/contacts/normalization";
+import type { ContactInput } from "@/lib/contacts/types";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isSchemaGap } from "@/lib/supabase/schemaGap";
 
@@ -97,6 +99,84 @@ async function contactsOfLeads(leadIds: string[]): Promise<Map<string, string | 
   return out;
 }
 
+const leadText = (values: Record<string, unknown>, keys: string[]) => {
+  for (const key of keys) if (typeof values[key] === "string" && (values[key] as string).trim()) return (values[key] as string).trim().slice(0, 240);
+  return null;
+};
+
+/**
+ * The client behind a sale whose lead has none. A partner's lead creates no contact (intake only
+ * links a confident existing one), so a policy linked to its application would otherwise point at
+ * nobody. Once a carrier policy proves the sale, the lead's person becomes a client: the one
+ * existing client with the same name and date of birth, or a new one — not provisional, because a
+ * sale stands behind it. The lead is linked to it too. Null when the lead has no name, or when the
+ * agency's contact records can't take a new contact (the LA-0 bridge gap noRecordPolicy also meets).
+ */
+async function clientForLead(tenantId: string, leadId: string): Promise<string | null> {
+  const { data: lead } = await db().from("agent_leads").select("id, contact_id, values").eq("tenant_id", tenantId).eq("id", leadId).maybeSingle();
+  if (!lead) return null;
+  if (lead.contact_id) return lead.contact_id as string;
+  const values = (lead.values && typeof lead.values === "object" ? lead.values : {}) as Record<string, unknown>;
+  let first = leadText(values, ["first_name"]);
+  let last = leadText(values, ["last_name"]);
+  if (!first || !last) {
+    const full = splitName(leadText(values, ["full_name", "name"]));
+    first = first ?? full.firstName;
+    last = last ?? full.lastName;
+  }
+  if (!first || !last) return null;
+  const dobText = leadText(values, ["date_of_birth", "dob"]);
+  const dob = dobText && /^\d{4}-\d\d-\d\d$/.test(dobText) ? dobText : null;
+  const identity = identityKey({ firstName: first, lastName: last, dob });
+  let contactId: string | null = null;
+  if (identity) {
+    const { data: near } = await db().from("contacts").select("id, first_name, last_name, dob").eq("tenant_id", tenantId).is("merged_into_id", null).eq("dob", dob).limit(50);
+    const same = (near ?? []).filter((c: Loose) => identityKey({ firstName: c.first_name, lastName: c.last_name, dob: c.dob }) === identity);
+    if (same.length === 1) contactId = same[0].id;
+  }
+  if (!contactId) {
+    const phone = normalizePhone(leadText(values, ["phone", "phone_number", "primary_phone"]));
+    const stateText = leadText(values, ["state", "state_code"]);
+    const input = {
+      first_name: first, last_name: last, dob, primary_phone: phone.length >= 7 && phone.length <= 15 ? phone : null,
+      state: stateText && /^[A-Za-z]{2}$/.test(stateText) ? stateText.toUpperCase() : null,
+      address_line1: leadText(values, ["address_line1", "address", "street_address"]), city: leadText(values, ["city"]), postal_code: leadText(values, ["postal_code", "zip", "zip_code"]),
+    } as unknown as ContactInput;
+    const { data: created, error } = await db().rpc("save_contact", {
+      p_tenant_id: tenantId, p_first_name: first, p_last_name: last, p_dob: dob, p_primary_phone: input.primary_phone ?? null,
+      p_state: input.state ?? null, p_name_search: nameSearch(input).slice(0, 241).padEnd(2, "x"), p_custom_fields: {}, p_address_hash: addressHash(input),
+      p_address_search: addressSearch(input) || null, p_address_line1: input.address_line1 ?? null, p_city: input.city ?? null, p_postal_code: input.postal_code ?? null,
+      p_phones: input.primary_phone ? [{ phone: input.primary_phone, type: "other", is_primary: true }] : [], p_emails: [],
+    });
+    if (error?.code === "23503") return null;
+    if (error) fail(error, "The sale's client could not be created");
+    contactId = created as string;
+  }
+  // Only a lead still without a client: never overwrite a link someone else made meanwhile.
+  await db().from("agent_leads").update({ contact_id: contactId }).eq("tenant_id", tenantId).eq("id", leadId).is("contact_id", null);
+  return contactId;
+}
+
+/**
+ * Links made before clientForLead existed (or while the lead had no name) point at a sale but at
+ * no client. Each one gets the sale's client now, as a new link that supersedes the old.
+ */
+async function fillSaleClients(tenantId: string, carrierId: string, policies: string[]) {
+  if (!policies.length) return;
+  const { data: links } = await db().from("policy_match").select("policy_number, matched_to_type, matched_to_id, household_id, method, ladder_step, confidence, reasoning, confirmed_by, confirmed_at")
+    .eq("tenant_id", tenantId).eq("carrier_id", carrierId).is("superseded_by_id", null).is("contact_id", null).eq("matched_to_type", "application").in("policy_number", policies);
+  if (!links?.length) return;
+  const { data: apps } = await db().from("tenant_applications").select("id, lead_id").eq("tenant_id", tenantId).in("id", [...new Set(links.map((link: Loose) => link.matched_to_id))]);
+  const leadOf = new Map<string, string>((apps ?? []).filter((app: Loose) => app.lead_id).map((app: Loose) => [app.id, app.lead_id]));
+  for (const link of links) {
+    const leadId = leadOf.get(link.matched_to_id);
+    const contactId = leadId ? await clientForLead(tenantId, leadId) : null;
+    if (!contactId) continue;
+    const { policy_number: policyNumber, ...rest } = link;
+    await record(tenantId, carrierId, policyNumber, { ...rest, contact_id: contactId });
+  }
+}
+
 /** Step 2: the policies whose number we already hold. Returns those it linked. */
 async function linkExact(tenantId: string, carrier: { id: string; name: string; code: string | null }, policies: string[]): Promise<Set<string>> {
   const linked = new Set<string>();
@@ -112,7 +192,9 @@ async function linkExact(tenantId: string, carrier: { id: string; name: string; 
   for (const policy of policies) {
     const hit = submissions.find((row: Loose) => row.policy_number === policy || row.carrier_reference === policy);
     if (!hit || !leadOf.has(hit.application_id)) continue;
-    await record(tenantId, carrier.id, policy, { matched_to_type: "application", matched_to_id: hit.application_id, contact_id: contactOf.get(leadOf.get(hit.application_id)!) ?? null, method: "submission_record", ladder_step: 2 });
+    const leadId = leadOf.get(hit.application_id)!;
+    const contactId = contactOf.get(leadId) ?? (await clientForLead(tenantId, leadId));
+    await record(tenantId, carrier.id, policy, { matched_to_type: "application", matched_to_id: hit.application_id, contact_id: contactId, method: "submission_record", ladder_step: 2 });
     linked.add(policy);
   }
 
@@ -124,7 +206,7 @@ async function linkExact(tenantId: string, carrier: { id: string; name: string; 
   for (const policy of rest) {
     const hit = ours.find((row: Loose) => row.policy_number === policy);
     if (!hit) continue;
-    const contactId = hit.lead_id ? issuedContacts.get(hit.lead_id) ?? null : null;
+    const contactId = hit.lead_id ? issuedContacts.get(hit.lead_id) ?? (await clientForLead(tenantId, hit.lead_id)) : null;
     const target = hit.deal_id ? { matched_to_type: "deal_flow", matched_to_id: hit.deal_id } : contactId ? { matched_to_type: "contact", matched_to_id: contactId } : null;
     if (!target) continue;
     await record(tenantId, carrier.id, policy, { ...target, contact_id: contactId, method: "policy_number_exact", ladder_step: 2 });
@@ -303,7 +385,8 @@ export async function matchFilePolicies(tenantId: string, carrierId: string, fil
     if (isSchemaGap(error)) return null;
     throw new Error(`Could not read the policies' links: ${error.message}`);
   }
-  const linked = new Set((current ?? []).map((row: Loose) => row.policy_number as string));
+  const linked = new Set<string>((current ?? []).map((row: Loose) => row.policy_number as string));
+  await fillSaleClients(tenantId, carrierId, [...linked]);
   const carrier = await carrierOf(carrierId);
   const unlinked = policies.filter((policy) => !linked.has(policy));
   const exact = await linkExact(tenantId, carrier, unlinked);
