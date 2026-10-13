@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
@@ -135,6 +136,12 @@ export function CarrierRulesWorkspace({ carriers, plane, endpoint, readOnly, asO
                 <DialogTitle className="text-base">{open.carrierName}</DialogTitle>
                 <DialogDescription>{plane === "agency" ? "Your rules override the platform's. A change applies from its date; past countdowns keep the rule they used." : "The platform's defaults, for every agency without its own rule."}</DialogDescription>
               </DialogHeader>
+              {/* LA-4.17: each missing rule, with the policies it leaves without a countdown. */}
+              {open.gaps.length > 0 && (
+                <ul role="status" className="m-0 grid list-none gap-1 rounded-lg border border-border border-l-[3px] border-l-[var(--warning)] bg-[var(--warning-surface)] px-4 py-2.5 text-sm text-[var(--warning-ink)]">
+                  {open.gaps.map((gap) => <li key={gap.sentence}>{gap.sentence}</li>)}
+                </ul>
+              )}
 
 
               <fieldset disabled={readOnly || busy !== null} className="grid gap-4 text-sm">
@@ -234,11 +241,28 @@ export function CarrierRulesWorkspace({ carriers, plane, endpoint, readOnly, asO
                   })()}
                 </section>
 
+                <section className="grid gap-2 border-t border-border pt-4 text-sm">
+                  <h3 className="m-0 text-sm font-semibold text-foreground">Commissions department</h3>
+                  {plane === "agency"
+                    ? <CommissionsContactForm key={open.carrierId} carrierId={open.carrierId} carrierName={open.carrierName} saved={open.commissionsContact} onSaved={() => router.refresh()} />
+                    : <p className="m-0 text-muted-foreground">Set by each agency, for its dispute letters.</p>}
+                </section>
+
                 <section className="grid gap-1 border-t border-border pt-4 text-sm">
-                  <h3 className="m-0 text-sm font-semibold text-foreground">Kept with the carrier elsewhere</h3>
-                  <p className="m-0">Commissions address: {open.elsewhere.commissionsAddress ? "saved (from a dispute letter)" : plane === "agency" ? "not saved yet — save it on a dispute letter" : "set by each agency"}</p>
+                  <h3 className="m-0 text-sm font-semibold text-foreground">Finding its files</h3>
+                  {open.guidance ? (
+                    <dl className="m-0 grid gap-1 sm:grid-cols-[140px_1fr]">
+                      {open.guidance.whereInPortal && <><dt className="text-muted-foreground">In the portal</dt><dd className="m-0 whitespace-pre-line">{open.guidance.whereInPortal}</dd></>}
+                      {open.guidance.reportName && <><dt className="text-muted-foreground">Report</dt><dd className="m-0">{open.guidance.reportName}</dd></>}
+                      {open.guidance.formatHint && <><dt className="text-muted-foreground">Format</dt><dd className="m-0">{open.guidance.formatHint}</dd></>}
+                      {open.guidance.notes && <><dt className="text-muted-foreground">Notes</dt><dd className="m-0 whitespace-pre-line">{open.guidance.notes}</dd></>}
+                    </dl>
+                  ) : <p className="m-0 text-muted-foreground">No portal guidance written for this carrier yet.</p>}
                   <p className="m-0">Layout map: {open.elsewhere.layoutKey ? <span className="font-mono text-xs">{open.elsewhere.layoutKey}</span> : "none assigned"}</p>
-                  <p className="m-0">Portal: {open.elsewhere.portalOrigin ?? "not set"} · Reference pattern: {open.elsewhere.referencePattern ? <span className="font-mono text-xs">{open.elsewhere.referencePattern}</span> : "not set"}</p>
+                  <p className="m-0">
+                    Portal: {open.elsewhere.portalOrigin ?? "not set"} · Policy number pattern: {open.elsewhere.referencePattern ? <span className="font-mono text-xs">{open.elsewhere.referencePattern}</span> : "not set"}
+                    {plane === "agency" && <> · <Link href="/app/settings#sales-carriers" className="font-semibold underline">Change</Link></>}
+                  </p>
                 </section>
               </fieldset>
 
@@ -250,6 +274,45 @@ export function CarrierRulesWorkspace({ carriers, plane, endpoint, readOnly, asO
         </DialogContent>
       </Dialog>
     </>
+  );
+}
+
+/**
+ * The agency's commissions department for this carrier: where its dispute letters go (LA-4.15),
+ * kept with the carrier's other facts (LA-4.17). The same record the dispute letter saves.
+ */
+function CommissionsContactForm({ carrierId, carrierName, saved, onSaved }: { carrierId: string; carrierName: string; saved: { address: string; email: string | null } | null; onSaved: () => void }) {
+  const [address, setAddress] = useState(saved?.address ?? "");
+  const [email, setEmail] = useState(saved?.email ?? "");
+  const [saving, setSaving] = useState(false);
+  const changed = address.trim() !== (saved?.address ?? "").trim() || email.trim() !== (saved?.email ?? "").trim();
+  async function save() {
+    setSaving(true);
+    try {
+      const response = await fetch("/api/app/discrepancies/carrier-contact", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ carrier_id: carrierId, address, email: email.trim() || null }) });
+      const data = (await response.json().catch(() => ({}))) as { error?: string };
+      if (!response.ok) throw new Error(data.error ?? "The address was not saved.");
+      notify.done(`Saved: ${carrierName}'s dispute letters go to this address.`);
+      onSaved();
+    } catch (error) {
+      notify.block(error instanceof Error ? error.message : "The address was not saved.");
+    } finally {
+      setSaving(false);
+    }
+  }
+  return (
+    <div className="grid gap-3 sm:grid-cols-[1fr_220px]">
+      <div className="grid gap-1">
+        <Label htmlFor={`${carrierId}-addr`}>Address for dispute letters</Label>
+        <textarea id={`${carrierId}-addr`} rows={3} maxLength={600} value={address} placeholder={`${carrierName}
+Commissions Department`} onChange={(e) => setAddress(e.target.value)} className="w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm leading-relaxed text-foreground outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30" />
+      </div>
+      <div className="grid content-start gap-1">
+        <Label htmlFor={`${carrierId}-mail`}>Email (optional)</Label>
+        <Input id={`${carrierId}-mail`} type="email" className="h-9" maxLength={254} value={email} onChange={(e) => setEmail(e.target.value)} />
+        <Button type="button" size="sm" className="mt-2 w-fit" disabled={saving || !changed || !address.trim()} onClick={() => void save()}>{saving ? "Saving…" : "Save address"}</Button>
+      </div>
+    </div>
   );
 }
 

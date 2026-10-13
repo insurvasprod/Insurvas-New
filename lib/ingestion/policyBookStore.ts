@@ -157,6 +157,83 @@ export async function loadHandPolicies(viewer: Viewer): Promise<BookRow[]> {
   });
 }
 
+/** The carrier library row a free-text carrier name or code stands for, or undefined. */
+function carrierByText(carriers: Loose[], text: unknown): Loose | undefined {
+  const key = String(text ?? "").trim().toLowerCase();
+  return key ? carriers.find((c) => String(c.name).trim().toLowerCase() === key || String(c.code ?? "").trim().toLowerCase() === key) : undefined;
+}
+
+export type AwaitingSale = { carrierId: string | null; carrierName: string; policyNumber: string; clientName: string | null; leadId: string | null; dealId: string | null; issuedOn: string | null; monthlyCents: number | null; faceCents: number | null; product: string | null; agentUserId: string | null; agentName: string | null };
+
+/**
+ * Module 4 · Door 1: sales recorded as issued (LA-2.17's tenant_issued_policies, written when an
+ * application closes as issued) whose policy no carrier file has listed yet. One row per sale; a
+ * sale whose carrier and number the book already holds is left out, so the carrier's own row takes
+ * over the moment its file arrives. A producer sees the sales they worked.
+ */
+async function issuedAwaiting(viewer: Viewer, only?: { carrierId: string; policyNumber: string }): Promise<AwaitingSale[]> {
+  let query = db().from("tenant_issued_policies").select("lead_id, deal_id, carrier, policy_number, issued_at, product_line").eq("tenant_id", viewer.tenantId).eq("status", "issued").not("policy_number", "is", null);
+  if (only) query = query.eq("policy_number", only.policyNumber);
+  const { data, error } = await query.limit(5000);
+  if (error) {
+    if (isSchemaGap(error)) return [];
+    throw new Error(`Could not load the recorded sales: ${error.message}`);
+  }
+  if (!data?.length) return [];
+  const carriers = ((await db().from("carriers").select("id, name, code")).data ?? []) as Loose[];
+  const sales = (data as Loose[]).map((row) => ({ row, carrier: carrierByText(carriers, row.carrier) })).filter(({ carrier }) => !only || carrier?.id === only.carrierId);
+  if (!sales.length) return [];
+  // Already in the book: the carrier's own row is the truth from then on.
+  const known = new Set<string>();
+  for (const carrierId of [...new Set(sales.map(({ carrier }) => carrier?.id).filter(Boolean))] as string[]) {
+    const numbers = sales.filter(({ carrier }) => carrier?.id === carrierId).map(({ row }) => row.policy_number);
+    for (let start = 0; start < numbers.length; start += 500) {
+      const { data: current } = await db().from("policy_current").select("policy_number").eq("tenant_id", viewer.tenantId).eq("carrier_id", carrierId).in("policy_number", numbers.slice(start, start + 500));
+      for (const row of current ?? []) known.add(`${carrierId}|${row.policy_number}`);
+    }
+  }
+  const waiting = sales.filter(({ row, carrier }) => !carrier || !known.has(`${carrier.id}|${row.policy_number}`));
+  const [deals, leads] = await Promise.all([
+    byIds("deal_flow", "id, worked_by, insured_name, monthly_premium_cents, face_amount_cents, product_type", waiting.map(({ row }) => row.deal_id), viewer.tenantId),
+    byIds("agent_leads", "id, values", waiting.map(({ row }) => row.lead_id), viewer.tenantId),
+  ]);
+  const dealById = new Map<string, Loose>(deals.map((deal: Loose) => [deal.id, deal]));
+  const leadById = new Map<string, Loose>(leads.map((lead: Loose) => [lead.id, lead]));
+  const users = await byIds("users", "id, name, email", deals.map((deal: Loose) => deal.worked_by));
+  const userName = new Map<string, string>(users.map((user: Loose) => [user.id, user.name || user.email]));
+  return waiting
+    .map(({ row, carrier }): AwaitingSale => {
+      const deal = row.deal_id ? dealById.get(row.deal_id) : undefined;
+      return {
+        carrierId: carrier?.id ?? null, carrierName: carrier?.name ?? String(row.carrier ?? ""), policyNumber: row.policy_number,
+        clientName: leadPersonName(row.lead_id ? leadById.get(row.lead_id)?.values : null) ?? deal?.insured_name ?? null,
+        leadId: row.lead_id ?? null, dealId: row.deal_id ?? null, issuedOn: row.issued_at ? String(row.issued_at).slice(0, 10) : null,
+        monthlyCents: deal?.monthly_premium_cents ?? null, faceCents: deal?.face_amount_cents ?? null, product: deal?.product_type ?? row.product_line ?? null,
+        agentUserId: deal?.worked_by ?? null, agentName: deal?.worked_by ? userName.get(deal.worked_by) ?? null : null,
+      };
+    })
+    .filter((sale) => viewer.role !== "producer" || sale.agentUserId === viewer.userId);
+}
+
+/** The recorded sales still waiting for their carrier's file, as rows of the one Policies list. */
+export async function loadIssuedAwaiting(viewer: Viewer): Promise<BookRow[]> {
+  return (await issuedAwaiting(viewer)).map((sale): BookRow => ({
+    carrierId: sale.carrierId ?? `issued:${sale.carrierName.trim().toLowerCase()}`, carrierName: sale.carrierName, policyNumber: sale.policyNumber,
+    clientName: sale.clientName, contactId: null, provisional: false, product: sale.product,
+    premiumCents: sale.monthlyCents, premiumMode: sale.monthlyCents === null ? null : "monthly", annualCents: sale.monthlyCents === null ? null : sale.monthlyCents * 12, faceCents: sale.faceCents,
+    status: null, statusRaw: null, daysPastDue: null, daysLeft: null, riskBand: "none", issueDate: sale.issuedOn,
+    agentUserId: sale.agentUserId, agentName: sale.agentName, agency: null, leadSource: null,
+    source: "issued",
+    // A carrier we know opens the policy page (which says what it is waiting for); otherwise the sale's lead.
+    href: sale.carrierId ? undefined : sale.leadId ? `/app/leads/${sale.leadId}` : undefined,
+  }));
+}
+
+/** One recorded sale awaiting its carrier file, for the policy page, or null. */
+export async function loadIssuedAwaitingOne(viewer: Viewer, carrierId: string, policyNumber: string): Promise<AwaitingSale | null> {
+  return (await issuedAwaiting(viewer, { carrierId, policyNumber }))[0] ?? null;
+}
+
 export async function loadBook(viewer: Viewer) {
   const scoped = viewer.role === "producer";
   const read = await everyRow(() => {

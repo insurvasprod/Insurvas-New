@@ -6,7 +6,8 @@ import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isSchemaGap } from "@/lib/supabase/schemaGap";
 
 import { agencyToday } from "./agencyDay";
-import { effectiveRules, identityKey, QUEUE_TYPES, type OwnerRole, type QueueRule, type QueueType, type Resolution } from "./exceptionQueues";
+import { findDuplicatesQuietly, queueDuplicateReviews } from "@/lib/contacts/service";
+import { chooseExistingClient, effectiveRules, identityKey, QUEUE_TYPES, type OwnerRole, type QueueRule, type QueueType, type Resolution } from "./exceptionQueues";
 import { refreshPolicyCurrent } from "./policyCurrentStore";
 import { scoreCandidate, splitName, type Candidate, type CarrierSide } from "./policyMatching";
 
@@ -102,17 +103,24 @@ export async function noRecordPolicy(tenantId: string, side: PolicySide, writing
   const phoneKey = normalizePhone(person.phone);
   const ors = [nameKey.length >= 2 ? `name_search.eq.${nameKey}` : null, person.dob && /^\d{4}-\d\d-\d\d$/.test(person.dob) ? `dob.eq.${person.dob}` : null, phoneKey.length >= 7 ? `primary_phone.eq.${phoneKey}` : null].filter(Boolean);
   const { data: near } = ors.length
-    ? await db().from("contacts").select("id, first_name, last_name, dob, primary_phone, provisional").eq("tenant_id", tenantId).is("merged_into_id", null).or(ors.join(",")).limit(50)
+    ? await db().from("contacts").select("id, first_name, last_name, dob, primary_phone, provisional, created_at").eq("tenant_id", tenantId).is("merged_into_id", null).or(ors.join(",")).limit(50)
     : { data: [] };
   const existing = (near ?? []).filter((c: Loose) => identity !== null && identityKey({ firstName: c.first_name, lastName: c.last_name, dob: c.dob }) === identity);
+  // One person, one client (LA-0.6): the confirmed one, else the oldest carrier-made one — never a new copy.
+  const same = chooseExistingClient<Loose & { id: string }>(existing);
 
   let contactId: string | null;
   let provisional = false;
   let blocked: string | null = null;
-  if (existing.length === 1) {
+  if (same && !same.provisional) {
     // The same human, certainly: a client with one more policy. No question to ask.
-    contactId = existing[0].id;
+    contactId = same.id;
     await link(tenantId, side.carrierId, side.policyNumber, { matched_to_type: "contact", matched_to_id: contactId, contact_id: contactId, method: "identity_exact", ladder_step: 3 });
+  } else if (same) {
+    // Only a carrier-made client so far: this policy joins it, still provisional until someone confirms it.
+    contactId = same.id;
+    provisional = true;
+    await link(tenantId, side.carrierId, side.policyNumber, { matched_to_type: "provisional", matched_to_id: null, contact_id: contactId, method: "no_match", ladder_step: 3 });
   } else {
     const input = {
       first_name: person.firstName ?? "Unknown",
@@ -122,6 +130,8 @@ export async function noRecordPolicy(tenantId: string, side: PolicySide, writing
       state: person.state && /^[A-Za-z]{2}$/.test(person.state) ? person.state.toUpperCase() : null,
       address_line1: person.address, city: null, postal_code: person.zip,
     } as unknown as ContactInput;
+    // LA-0.6: the one duplicate check, run before the save so the new client does not find itself.
+    const duplicates = await findDuplicatesQuietly(tenantId, input);
     const { data: created, error } = await db().rpc("save_contact", {
       p_tenant_id: tenantId, p_first_name: input.first_name, p_last_name: input.last_name, p_dob: input.dob ?? null, p_primary_phone: input.primary_phone ?? null,
       p_state: input.state ?? null, p_name_search: nameSearch(input).slice(0, 241).padEnd(2, "x"), p_custom_fields: {}, p_address_hash: addressHash(input),
@@ -138,9 +148,10 @@ export async function noRecordPolicy(tenantId: string, side: PolicySide, writing
       fail(error, "The provisional client could not be created");
     } else {
       contactId = created as string;
+      await queueDuplicateReviews(tenantId, contactId, input.dob ?? null, duplicates);
     }
   }
-  if (contactId && existing.length !== 1) {
+  if (contactId && !same) {
     provisional = true;
     const { error: flagError } = await db().from("contacts").update({
       provisional: true,
@@ -215,7 +226,41 @@ async function contactOfDeal(tenantId: string, dealId: string): Promise<{ leadId
 }
 
 /** A provisional client no policy points at any more is folded into the real one. */
-async function retireProvisional(tenantId: string, provisionalId: string | null, intoId: string | null) {
+/**
+ * LA-4.9 · the items a policy link answers, closed the moment the link is made rather than at the
+ * next nightly sweep: a no-record policy now linked to a sale, and a sale now linked to its policy.
+ * The same rule and the same resolution as sweep_exception_queues ("auto_linked"). Never throws.
+ */
+export async function closeAnsweredItems(tenantId: string, carrierId: string, policies: string[]): Promise<number> {
+  if (!policies.length) return 0;
+  try {
+    const { data: links } = await db().from("policy_match").select("policy_number, matched_to_type, matched_to_id")
+      .eq("tenant_id", tenantId).eq("carrier_id", carrierId).is("superseded_by_id", null).in("matched_to_type", ["deal_flow", "application"]).in("policy_number", policies);
+    if (!links?.length) return 0;
+    const appIds = links.filter((link: Loose) => link.matched_to_type === "application").map((link: Loose) => link.matched_to_id);
+    const { data: apps } = appIds.length ? await db().from("tenant_applications").select("lead_id").eq("tenant_id", tenantId).in("id", appIds) : { data: [] };
+    const leadIds = [...new Set((apps ?? []).map((app: Loose) => app.lead_id).filter(Boolean))];
+    const { data: deals } = leadIds.length ? await db().from("deal_flow").select("id").eq("tenant_id", tenantId).in("lead_id", leadIds) : { data: [] };
+    const dealIds = [...new Set([...links.filter((link: Loose) => link.matched_to_type === "deal_flow").map((link: Loose) => link.matched_to_id), ...(deals ?? []).map((deal: Loose) => deal.id)])];
+    const keys = [
+      ...links.map((link: Loose) => `policy:${carrierId}:${link.policy_number}`),
+      ...dealIds.map((id) => `deal:${id}`),
+    ];
+    const { data: open } = await db().from("queue_item").select("id").eq("tenant_id", tenantId).eq("status", "open").in("queue_type", ["no_deal_flow", "no_policy"]).in("subject_key", keys);
+    let closed = 0;
+    for (const item of open ?? []) {
+      const { error } = await db().rpc("resolve_queue_item", { p_tenant_id: tenantId, p_item_id: item.id, p_user_id: null, p_status: "resolved", p_resolution: "auto_linked", p_note: "A policy link answered it.", p_ref: null });
+      if (error) console.error("[exception-queues] could not close an answered item", item.id, error.message);
+      else closed++;
+    }
+    return closed;
+  } catch (error) {
+    console.error("[exception-queues] closing answered items failed", error instanceof Error ? error.message : error);
+    return 0;
+  }
+}
+
+export async function retireProvisional(tenantId: string, provisionalId: string | null, intoId: string | null) {
   if (!provisionalId || !intoId || provisionalId === intoId) return;
   const { data: c } = await db().from("contacts").select("provisional").eq("tenant_id", tenantId).eq("id", provisionalId).maybeSingle();
   if (!c?.provisional) return;

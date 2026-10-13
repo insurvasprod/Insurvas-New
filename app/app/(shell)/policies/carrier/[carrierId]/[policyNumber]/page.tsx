@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { PolicyAnnotationForm } from "@/components/app/policy-annotation-form";
+import { PolicyAwaitingFile } from "@/components/app/policy-awaiting-file";
 import { ProvisionalBadge } from "@/components/app/provisional-badge";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { PageHeader } from "@/components/ui/page-header";
@@ -14,7 +15,7 @@ import { guardPage } from "@/lib/entitlements/guardPage";
 import { fileDay } from "@/lib/ingestion/constants";
 import { fileHref, rowHref } from "@/lib/ingestion/trace";
 import { RISK_LABELS, statusLabel, type RiskBand } from "@/lib/ingestion/policyBook";
-import { loadPolicy } from "@/lib/ingestion/policyBookStore";
+import { loadIssuedAwaitingOne, loadPolicy } from "@/lib/ingestion/policyBookStore";
 import { moneyOrUnknown } from "@/lib/ingestion/policyCurrent";
 import { isRecordUuid } from "@/lib/ingestion/path";
 
@@ -41,6 +42,9 @@ export default async function PolicyPage({ params }: { params: Promise<{ carrier
 
   const view = await loadPolicy({ tenantId: guard.context.tenantId, userId: guard.context.userId, role: guard.role }, carrierId, policyNumber);
   if (!view) {
+    // Module 4 · Door 1: a sale recorded as issued is in the book before its carrier file lists it.
+    const awaiting = await loadIssuedAwaitingOne({ tenantId: guard.context.tenantId, userId: guard.context.userId, role: guard.role }, carrierId, policyNumber).catch(() => null);
+    if (awaiting) return <PolicyAwaitingFile sale={awaiting} />;
     return (
       <div className="m-stagger flex flex-col gap-6">
         <Link href="/app/policies" className="text-sm text-muted-foreground hover:underline">← Policies</Link>

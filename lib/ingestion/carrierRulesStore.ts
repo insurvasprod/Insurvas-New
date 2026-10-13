@@ -66,20 +66,25 @@ export type CarrierRulesRow = {
   gaps: Gap[];
   settings: ReturnType<typeof resolveSettings>;
   elsewhere: { commissionsAddress: boolean; layoutKey: string | null; portalOrigin: string | null; referencePattern: string | null };
+  /** The agency's commissions department contact for dispute letters (LA-4.15), on the same screen (LA-4.17). */
+  commissionsContact: { address: string; email: string | null } | null;
+  /** Where in the carrier's portal its files are (LA-4.10), platform-kept; null when none is written. */
+  guidance: { whereInPortal: string | null; reportName: string | null; formatHint: string | null; notes: string | null } | null;
 };
 
 export async function loadCarrierRules(scope: RulesScope): Promise<{ available: boolean; carriers: CarrierRulesRow[]; asOf: string }> {
   const asOf = await today(scope);
   const tenantId = scope.plane === "agency" ? scope.tenantId : null;
   const scoped = (query: Loose) => (tenantId ? query.or(`tenant_id.eq.${tenantId},tenant_id.is.null`) : query.is("tenant_id", null));
-  const [carriers, rules, settings, counts, contacts, assignments, overrides] = await Promise.all([
+  const [carriers, rules, settings, counts, contacts, assignments, overrides, guidance] = await Promise.all([
     db().from("carriers").select("id, code, name, portal_origin, reference_pattern").eq("is_active", true).order("name"),
     scoped(db().from("carrier_retention_rule").select("*")).limit(5000),
     scoped(db().from("carrier_operating_settings").select("*")).limit(2000),
     tenantId ? db().rpc("in_force_policy_counts", { p_tenant_id: tenantId }) : Promise.resolve({ data: [], error: null }),
-    tenantId ? db().from("tenant_carrier_commission_contacts").select("carrier_id").eq("tenant_id", tenantId) : Promise.resolve({ data: [], error: null }),
+    tenantId ? db().from("tenant_carrier_commission_contacts").select("carrier_id, address, email").eq("tenant_id", tenantId) : Promise.resolve({ data: [], error: null }),
     scoped(db().from("carrier_layout_assignment").select("tenant_id, carrier_id, layout_key")),
     tenantId ? db().from("tenant_carrier_settings").select("carrier_id, portal_origin, reference_pattern").eq("tenant_id", tenantId) : Promise.resolve({ data: [], error: null }),
+    db().from("carrier_portal_guidance").select("carrier_id, where_in_portal, report_name, format_hint, notes"),
   ]);
   for (const read of [rules, settings]) {
     if (read.error) {
@@ -91,7 +96,8 @@ export async function loadCarrierRules(scope: RulesScope): Promise<{ available: 
   const ruleRows: RuleRow[] = (rules.data ?? []).map(toRule);
   const settingRows: SettingsRow[] = (settings.data ?? []).map(toSettings);
   const inForce = new Map<string, number>(((counts.data ?? []) as Loose[]).map((row) => [row.carrier_id, Number(row.policies)]));
-  const withContact = new Set(((contacts.data ?? []) as Loose[]).map((row) => row.carrier_id));
+  const contactOf = new Map<string, Loose>(((contacts.data ?? []) as Loose[]).map((row) => [row.carrier_id, row]));
+  const guideOf = new Map<string, Loose>(((guidance.error ? [] : guidance.data ?? []) as Loose[]).map((row) => [row.carrier_id, row]));
   const layouts = (assignments.data ?? []) as Loose[];
   const own = new Map(((overrides.data ?? []) as Loose[]).map((row) => [row.carrier_id, row]));
 
@@ -111,11 +117,13 @@ export async function loadCarrierRules(scope: RulesScope): Promise<{ available: 
         gaps: coverageGaps({ carrierName: carrier.name, inForce: count ?? 0, resolved }),
         settings: resolveSettings(settingRows.find((row) => row.carrierId === carrier.id && row.tenantId === null) ?? null, tenantId ? settingRows.find((row) => row.carrierId === carrier.id && row.tenantId === tenantId) ?? null : null),
         elsewhere: {
-          commissionsAddress: withContact.has(carrier.id),
+          commissionsAddress: contactOf.has(carrier.id),
           layoutKey: layout?.layout_key ?? null,
           portalOrigin: own.get(carrier.id)?.portal_origin ?? carrier.portal_origin ?? null,
           referencePattern: own.get(carrier.id)?.reference_pattern ?? carrier.reference_pattern ?? null,
         },
+        commissionsContact: contactOf.has(carrier.id) ? { address: contactOf.get(carrier.id).address, email: contactOf.get(carrier.id).email ?? null } : null,
+        guidance: guideOf.has(carrier.id) ? { whereInPortal: guideOf.get(carrier.id).where_in_portal, reportName: guideOf.get(carrier.id).report_name, formatHint: guideOf.get(carrier.id).format_hint, notes: guideOf.get(carrier.id).notes } : null,
       };
     }),
   };

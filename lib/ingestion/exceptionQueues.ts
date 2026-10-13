@@ -88,6 +88,25 @@ export function identityKey(person: { firstName: string | null; lastName: string
   return `${first}|${last}|${person.dob}`;
 }
 
+/**
+ * Which existing client a carrier policy (or a sale) belongs to when several clients share its exact
+ * identity. One person is one record (LA-0.6), and several policies of one person link to one
+ * contact (LA-4.9 queue 3, resolved silently at high confidence), so a match never makes another
+ * client:
+ *  - the one confirmed client, when exactly one is confirmed (provisional ones beside it are the
+ *    carrier-made copies of the same person);
+ *  - with none confirmed, the oldest provisional one;
+ *  - two or more confirmed clients with the same identity are a duplicate for a person to settle
+ *    (Duplicate check), so nothing is picked.
+ */
+export function chooseExistingClient<T extends { id: string; provisional?: boolean | null; created_at?: string | null }>(same: readonly T[]): T | null {
+  if (!same.length) return null;
+  const confirmed = same.filter((client) => !client.provisional);
+  if (confirmed.length === 1) return confirmed[0];
+  if (confirmed.length > 1) return null;
+  return [...same].sort((a, b) => (a.created_at ?? "").localeCompare(b.created_at ?? "") || a.id.localeCompare(b.id))[0];
+}
+
 /** The resolutions each queue offers, in the order the screen shows them. */
 export const RESOLUTIONS = {
   no_deal_flow: ["confirm_client", "link_existing_client", "found_the_sale", "not_mine"],

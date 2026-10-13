@@ -1,6 +1,7 @@
 import "server-only";
 
 import { addressHash, addressSearch, nameSearch, normalizePhone } from "@/lib/contacts/normalization";
+import { findDuplicatesQuietly, queueDuplicateReviews } from "@/lib/contacts/service";
 import type { ContactInput } from "@/lib/contacts/types";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isSchemaGap } from "@/lib/supabase/schemaGap";
@@ -9,8 +10,8 @@ import { annualisedPremiumCents } from "./policyCurrent";
 import { accuracy, isStrong, ladderShare, shortlist, SHORTLIST_LOOKBACK_DAYS, splitName, WRITING_ROLES, type Candidate, type CarrierSide, type LadderCounts, type Scored } from "./policyMatching";
 import { recordCarrierIssues } from "./applicationIssueStore";
 import { refreshPolicyCurrent } from "./policyCurrentStore";
-import { noRecordPolicy, openImportSummary } from "./exceptionQueuesStore";
-import { identityKey } from "./exceptionQueues";
+import { closeAnsweredItems, noRecordPolicy, openImportSummary, retireProvisional } from "./exceptionQueuesStore";
+import { chooseExistingClient, identityKey } from "./exceptionQueues";
 import { allRows } from "./pages";
 
 /**
@@ -131,9 +132,10 @@ async function clientForLead(tenantId: string, leadId: string): Promise<string |
   const identity = identityKey({ firstName: first, lastName: last, dob });
   let contactId: string | null = null;
   if (identity) {
-    const { data: near } = await db().from("contacts").select("id, first_name, last_name, dob").eq("tenant_id", tenantId).is("merged_into_id", null).eq("dob", dob).limit(50);
+    const { data: near } = await db().from("contacts").select("id, first_name, last_name, dob, provisional, created_at").eq("tenant_id", tenantId).is("merged_into_id", null).eq("dob", dob).limit(50);
     const same = (near ?? []).filter((c: Loose) => identityKey({ firstName: c.first_name, lastName: c.last_name, dob: c.dob }) === identity);
-    if (same.length === 1) contactId = same[0].id;
+    // One person, one client (LA-0.6): the confirmed one, else the carrier-made one — never a new copy.
+    contactId = chooseExistingClient<Loose & { id: string }>(same)?.id ?? null;
   }
   if (!contactId) {
     const phone = normalizePhone(leadText(values, ["phone", "phone_number", "primary_phone"]));
@@ -143,6 +145,8 @@ async function clientForLead(tenantId: string, leadId: string): Promise<string |
       state: stateText && /^[A-Za-z]{2}$/.test(stateText) ? stateText.toUpperCase() : null,
       address_line1: leadText(values, ["address_line1", "address", "street_address"]), city: leadText(values, ["city"]), postal_code: leadText(values, ["postal_code", "zip", "zip_code"]),
     } as unknown as ContactInput;
+    // LA-0.6: the one duplicate check, run before the save so the new client does not find itself.
+    const duplicates = await findDuplicatesQuietly(tenantId, input);
     const { data: created, error } = await db().rpc("save_contact", {
       p_tenant_id: tenantId, p_first_name: first, p_last_name: last, p_dob: dob, p_primary_phone: input.primary_phone ?? null,
       p_state: input.state ?? null, p_name_search: nameSearch(input).slice(0, 241).padEnd(2, "x"), p_custom_fields: {}, p_address_hash: addressHash(input),
@@ -152,6 +156,7 @@ async function clientForLead(tenantId: string, leadId: string): Promise<string |
     if (error?.code === "23503") return null;
     if (error) fail(error, "The sale's client could not be created");
     contactId = created as string;
+    await queueDuplicateReviews(tenantId, contactId, dob, duplicates);
   }
   // Only a lead still without a client: never overwrite a link someone else made meanwhile.
   await db().from("agent_leads").update({ contact_id: contactId }).eq("tenant_id", tenantId).eq("id", leadId).is("contact_id", null);
@@ -214,6 +219,45 @@ async function linkExact(tenantId: string, carrier: { id: string; name: string; 
     linked.add(policy);
   }
   return linked;
+}
+
+/**
+ * A policy the system linked before its sale had a number — to a provisional client (no sale on
+ * record) or to a client by identity — moves to the sale once a submission or an issued policy holds
+ * its number: ladder step 2 is certain (LA-4.8), and the new link supersedes the old, which stays
+ * readable. The stand-in provisional client is then retired into the sale's client. Links a person
+ * made (human, AI review) are never moved. Returns the policies it re-linked.
+ */
+export async function relinkToSale(tenantId: string, carrierId: string, policies: string[]): Promise<Set<string>> {
+  if (!policies.length) return new Set();
+  const { data: links, error } = await db().from("policy_match").select("policy_number, contact_id")
+    .eq("tenant_id", tenantId).eq("carrier_id", carrierId).is("superseded_by_id", null)
+    .in("matched_to_type", ["provisional", "contact"]).in("method", ["no_match", "identity_exact", "import"]).in("policy_number", policies);
+  if (error || !links?.length) return new Set();
+  const relinked = await linkExact(tenantId, await carrierOf(carrierId), links.map((link: Loose) => link.policy_number));
+  if (!relinked.size) return relinked;
+  const { data: now } = await db().from("policy_match").select("policy_number, contact_id").eq("tenant_id", tenantId).eq("carrier_id", carrierId).is("superseded_by_id", null).in("policy_number", [...relinked]);
+  const nowContact = new Map<string, string | null>((now ?? []).map((row: Loose) => [row.policy_number, row.contact_id]));
+  for (const link of links) {
+    if (relinked.has(link.policy_number)) await retireProvisional(tenantId, link.contact_id, nowContact.get(link.policy_number) ?? null);
+  }
+  return relinked;
+}
+
+/**
+ * A sale just got its carrier policy number (recorded as issued, or the number added later): if the
+ * carrier's file already listed that policy, it moves to the sale now — not at the next file — and
+ * the exception items the link answers close. Never throws; the sale is already saved.
+ */
+export async function answerWithSale(tenantId: string, carrierId: string | null, policyNumber: string | null): Promise<void> {
+  if (!carrierId || !policyNumber?.trim()) return;
+  try {
+    const relinked = await relinkToSale(tenantId, carrierId, [policyNumber.trim()]);
+    if (relinked.size) await refreshPolicyCurrent({ tenantId, carrierId, policies: [...relinked] });
+    await closeAnsweredItems(tenantId, carrierId, [policyNumber.trim()]);
+  } catch (error) {
+    console.error("[policy-matching] the sale's policy could not be linked now", error instanceof Error ? error.message : error);
+  }
 }
 
 /** Deal-flow entries and applications for one carrier between two dates, as comparable people. */
@@ -388,6 +432,8 @@ export async function matchFilePolicies(tenantId: string, carrierId: string, fil
   }
   const linked = new Set<string>((current ?? []).map((row: Loose) => row.policy_number as string));
   await fillSaleClients(tenantId, carrierId, [...linked]);
+  // A sale whose number arrived since the policy was linked without one takes the policy now (step 2).
+  await relinkToSale(tenantId, carrierId, [...linked]);
   const carrier = await carrierOf(carrierId);
   const unlinked = policies.filter((policy) => !linked.has(policy));
   const exact = await linkExact(tenantId, carrier, unlinked);
@@ -395,6 +441,8 @@ export async function matchFilePolicies(tenantId: string, carrierId: string, fil
   const toReview = (await importedBook(tenantId, carrier, fileId, rest)) ?? (await queueReviews(tenantId, carrier, rest, fileId, { refreshCurrent: false }));
   const counts = { alreadyLinked: linked.size, exactLinked: exact.size, toReview };
   await db().from("policy_match_ladder").insert({ tenant_id: tenantId, carrier_id: carrierId, file_id: fileId, already_linked: counts.alreadyLinked, exact_linked: counts.exactLinked, to_review: counts.toReview });
+  // LA-4.9: the items these links answer close now, not at the next nightly sweep.
+  await closeAnsweredItems(tenantId, carrierId, policies);
   return counts;
 }
 
@@ -425,6 +473,7 @@ export async function resolveReview(scope: MatchingScope, reviewId: string, choi
   await refreshPolicyCurrent({ tenantId: scope.tenantId, carrierId: review.carrier_id, policies: [review.policy_number] });
   // A person linked it to a sale: if the carrier already lists it issued, the application records it (LA-3.18).
   await recordCarrierIssues(scope.tenantId, review.carrier_id, [review.policy_number]);
+  await closeAnsweredItems(scope.tenantId, review.carrier_id, [review.policy_number]);
   return { matchId, policyNumber: review.policy_number, carrierId: review.carrier_id };
 }
 

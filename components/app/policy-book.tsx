@@ -17,7 +17,7 @@ import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 import { fileDay } from "@/lib/ingestion/constants";
-import { activeFilterCount, inForce, CSV_HEADER, csvRows, EMPTY_FILTERS, filterRows, NONE, readQuery, RISK_LABELS, sortRows, statusLabel, toCsv, totals, writeQuery, type BookFilters, type BookRow, type RiskBand, type Sort, type SortKey } from "@/lib/ingestion/policyBook";
+import { activeFilterCount, inForce, CSV_HEADER, csvRows, EMPTY_FILTERS, filterRows, NONE, readQuery, RISK_LABELS, rowStatusLabel, sortRows, toCsv, totals, writeQuery, type BookFilters, type BookRow, type RiskBand, type Sort, type SortKey } from "@/lib/ingestion/policyBook";
 import { STATUS_LABELS, STATUS_VOCABULARY } from "@/lib/ingestion/statuses";
 import { notify } from "@/lib/notify";
 
@@ -77,7 +77,7 @@ export function PolicyBook({ rows, initialQuery, saved, savedAvailable, scoped, 
     const carriers = unique(rows.map((row) => `${row.carrierId}|${row.carrierName}`)).map((pair) => { const [id, name] = pair.split("|"); return { id, name }; }).sort((a, b) => a.name.localeCompare(b.name));
     const agents = unique(rows.filter((row) => row.agentUserId).map((row) => `${row.agentUserId}|${row.agentName ?? "An agent"}`)).map((pair) => { const [id, name] = pair.split("|"); return { id, name }; }).sort((a, b) => a.name.localeCompare(b.name));
     const sortText = (values: Array<string | null>) => unique(values.filter((value): value is string => Boolean(value))).sort((a, b) => a.localeCompare(b));
-    return { carriers, agents, products: sortText(rows.map((row) => row.product)), leads: sortText(rows.map((row) => row.leadSource)), agencies: sortText(rows.map((row) => row.agency)), statuses: STATUS_VOCABULARY.filter((status) => rows.some((row) => row.status === status)), anyUnassigned: rows.some((row) => !row.agentUserId), anyHand: rows.some((row) => row.source === "hand") };
+    return { carriers, agents, products: sortText(rows.map((row) => row.product)), leads: sortText(rows.map((row) => row.leadSource)), agencies: sortText(rows.map((row) => row.agency)), statuses: STATUS_VOCABULARY.filter((status) => rows.some((row) => row.status === status)), anyUnassigned: rows.some((row) => !row.agentUserId), anyHand: rows.some((row) => Boolean(row.source)) };
   }, [rows]);
 
   const visible = useMemo(() => sortRows(filterRows(rows, filters), sort), [rows, filters, sort]);
@@ -159,6 +159,7 @@ export function PolicyBook({ rows, initialQuery, saved, savedAvailable, scoped, 
                 <option value="">Every source</option>
                 <option value="carrier">From carrier files</option>
                 <option value="hand">Entered by hand</option>
+                <option value="issued">Recorded sales, awaiting file</option>
               </select>
             )}
             <FilterButton open={more} count={[filters.product, filters.agent, filters.agency, filters.lead, filters.issuedFrom, filters.issuedTo].filter(Boolean).length} onClick={() => setMore(!more)}>More filters</FilterButton>
@@ -229,12 +230,12 @@ export function PolicyBook({ rows, initialQuery, saved, savedAvailable, scoped, 
                   </td>
                   <td><span className="block whitespace-normal break-words leading-snug">{row.carrierName}</span></td>
                   <td>{row.product ? <span className="block whitespace-normal break-words leading-snug">{row.product}</span> : <span className="text-muted-foreground">—</span>}</td>
-                  <td className="tabular-nums"><Link href={row.href ?? policyHref(row)} className="hover:underline">{row.policyNumber}</Link>{row.source === "hand" && <span className="block text-xs text-muted-foreground">Entered by hand</span>}</td>
+                  <td className="tabular-nums"><Link href={row.href ?? policyHref(row)} className="hover:underline">{row.policyNumber}</Link>{row.source && <span className="block text-xs text-muted-foreground">{row.source === "hand" ? "Entered by hand" : "Recorded sale"}</span>}</td>
                   <td className="text-right tabular-nums">{row.premiumCents === null ? "—" : <>{money2(row.premiumCents)}<span className="text-xs text-muted-foreground">{row.premiumMode ? MODE_SHORT[row.premiumMode] ?? "" : ""}</span></>}</td>
                   <td className="text-right tabular-nums">{money(row.faceCents)}</td>
-                  <td><span title={row.statusRaw ? `The carrier's word: ${row.statusRaw}` : undefined}><StatusChip tone={STATUS_TONE[row.status ?? ""] ?? "neutral"}>{statusLabel(row.status)}</StatusChip></span></td>
+                  <td><span title={row.statusRaw ? `The carrier's word: ${row.statusRaw}` : undefined}><StatusChip tone={row.source === "issued" ? "info" : STATUS_TONE[row.status ?? ""] ?? "neutral"}>{rowStatusLabel(row)}</StatusChip></span></td>
                   <td className={`text-right tabular-nums ${row.daysPastDue ? "text-[var(--warning-ink)]" : "text-muted-foreground"}`}>{row.daysPastDue ?? "—"}</td>
-                  <td>{inForce(row.status) && row.source !== "hand" ? <span title={row.daysLeft !== null ? `${row.daysLeft} day${row.daysLeft === 1 ? "" : "s"} until the carrier closes it` : undefined}><StatusChip tone={RISK_TONE[row.riskBand]}>{RISK_LABELS[row.riskBand]}</StatusChip></span> : <span className="text-muted-foreground" title={row.source === "hand" ? "Entered by hand: no carrier file to read a payment from" : "Not in force, so no save window"}>—</span>}</td>
+                  <td>{inForce(row.status) && !row.source ? <span title={row.daysLeft !== null ? `${row.daysLeft} day${row.daysLeft === 1 ? "" : "s"} until the carrier closes it` : undefined}><StatusChip tone={RISK_TONE[row.riskBand]}>{RISK_LABELS[row.riskBand]}</StatusChip></span> : <span className="text-muted-foreground" title={row.source === "hand" ? "Entered by hand: no carrier file to read a payment from" : row.source === "issued" ? "No carrier file yet to read a payment from" : "Not in force, so no save window"}>—</span>}</td>
                   <td className="tabular-nums">{fileDay(row.issueDate)}</td>
                   <td title={row.agentName ? undefined : row.source === "hand" ? "Entered by hand: no writing agent on file" : "No agent code mapped"}><span className="block whitespace-normal break-words leading-snug">{row.agentName ?? <span className="text-muted-foreground">{row.source === "hand" ? "—" : "Not mapped"}</span>}</span></td>
                 </tr>

@@ -2,6 +2,7 @@ import "server-only";
 
 import { audit } from "@/lib/audit/log";
 import { markDealPolicyIssued } from "@/lib/issuedPolicies/service";
+import { answerWithSale } from "@/lib/ingestion/policyMatchingStore";
 import { checkBeneficiaries, FULL_SHARE } from "./beneficiaries";
 import { CANONICAL_GROUPS, isSensitiveKey, OUTCOMES_NEEDING_REASON, type ApplicationOutcome, type InsuredRole, type PaymentMethod } from "./constants";
 import { decryptSensitive, encryptSensitive } from "./crypto";
@@ -680,6 +681,8 @@ async function linkIssuedPolicy(actor: Actor, applicationId: string, policyNumbe
   const number = policyNumber?.trim() || sub.data?.policy_number || null;
   if (policyNumber?.trim() && sub.data) await client.from("tenant_application_submissions").update({ policy_number: policyNumber.trim() }).eq("tenant_id", actor.tenantId).eq("id", sub.data.id);
   if (!number) return { linked: false, message: "Recorded as issued. Add the policy number so the commission can find this sale." };
+  // LA-4.8 step 2: if a carrier file already listed this policy, it moves to this sale now.
+  await answerWithSale(actor.tenantId, head.carrier_id, number);
   const [deal, carrier] = await Promise.all([
     client.from("deal_flow").select("id").eq("tenant_id", actor.tenantId).eq("lead_id", head.lead_id).maybeSingle(),
     head.carrier_id ? client.from("carriers").select("name").eq("id", head.carrier_id).maybeSingle() : Promise.resolve({ data: null }),
@@ -729,13 +732,15 @@ export async function recordSubmission(actor: Actor, applicationId: string, inpu
     await client.from("deal_flow").update({ carrier: attempt.carrierName, product_type: attempt.productLabel ?? attempt.productCode, monthly_premium_cents: quote.monthlyPremiumCents, face_amount_cents: quote.faceAmountCents, updated_at: new Date().toISOString() })
       .eq("tenant_id", actor.tenantId).eq("lead_id", head.lead_id);
   }
+  // Submitted under its policy number: a carrier file that already listed it links to this sale now.
+  if (reference && input.referenceKind === "policy_no") await answerWithSale(actor.tenantId, head.carrier_id, reference);
   await audit({ actorType: "tenant", actorId: actor.userId, action: "tenant.application_submitted", targetType: "tenant_application", targetId: applicationId, metadata: { reference, via: input.submittedVia, verdict: verdict.verdict }, request: actor.request });
   await syncLeadStageForApplication(actor.tenantId, applicationId);
   return { submissionId: ins.data.id as string, duplicate };
 }
 
 export async function setSubmissionReference(actor: Actor, applicationId: string, submissionId: string, input: { reference?: string | null; referenceKind?: "application_no" | "policy_no" | null; policyNumber?: string | null }) {
-  await attemptHead(actor.tenantId, applicationId, { allowClosed: true });
+  const head = await attemptHead(actor.tenantId, applicationId, { allowClosed: true });
   const patch: Record<string, unknown> = {};
   // The kind the agent chose is kept (LA-3.15: reference_kind application_no | policy_no); it was
   // forced to application_no, so a policy number added here never matched a carrier file (LA-4.8 step 2).
@@ -744,6 +749,9 @@ export async function setSubmissionReference(actor: Actor, applicationId: string
   if (input.policyNumber !== undefined) patch.policy_number = input.policyNumber?.trim() || null;
   const { error } = await db().from("tenant_application_submissions").update(patch).eq("tenant_id", actor.tenantId).eq("application_id", applicationId).eq("id", submissionId);
   if (error) fail(error, "Could not save the reference");
+  // A policy number added later: if a carrier file already listed it, the policy moves to this sale now (LA-4.8 step 2).
+  const policyNumber = typeof patch.policy_number === "string" ? patch.policy_number : patch.reference_kind === "policy_no" && typeof patch.carrier_reference === "string" ? patch.carrier_reference : null;
+  if (policyNumber) await answerWithSale(actor.tenantId, head.carrier_id, policyNumber);
   return { saved: true };
 }
 

@@ -6,12 +6,13 @@ import { PolicyEntryActions } from "@/components/app/policy-entry-actions";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { PageHeader } from "@/components/ui/page-header";
 import { guardPage } from "@/lib/entitlements/guardPage";
-import { loadBook, loadHandPolicies, POLICY_BOOK_PENDING_MESSAGE } from "@/lib/ingestion/policyBookStore";
+import { loadBook, loadHandPolicies, loadIssuedAwaiting, POLICY_BOOK_PENDING_MESSAGE } from "@/lib/ingestion/policyBookStore";
 
 /**
  * Book of Business › Policies: one list (2026-10-08 overlap merge) of every policy the carriers'
  * files hold (LA-4.11, read from LA-4.7's current-state table, read-only) and every policy the
- * agency entered or imported by hand (LA-0.7, for carriers that send no file), with a source filter.
+ * agency entered or imported by hand (LA-0.7, for carriers that send no file), and every sale recorded
+ * as issued whose carrier file hasn't listed it yet (Module 4, Door 1), with a source filter.
  * Owner, producer and bookkeeper; a producer sees the policies credited to them or that they recorded.
  * Adding by hand is owner and producer, as the API.
  */
@@ -22,11 +23,11 @@ export default async function PoliciesPage({ searchParams }: { searchParams: Pro
   const readOnly = guard.entitlement.access === "read_only";
   const params = await searchParams;
   const viewer = { tenantId: guard.context.tenantId, userId: guard.context.userId, role: guard.role };
-  const [book, hand] = await Promise.all([loadBook(viewer), loadHandPolicies(viewer)]);
+  const [book, hand, issued] = await Promise.all([loadBook(viewer), loadHandPolicies(viewer), loadIssuedAwaiting(viewer).catch(() => [])]);
   // The old "Entered by hand" tab address lands on the same list, filtered to that source.
   const query = new URLSearchParams([...Object.entries(params).flatMap(([key, value]) => (typeof value === "string" && key !== "view" ? [[key, value]] : [])), ...(params.view === "entered" && !params.source ? [["source", "hand"]] : [])]).toString();
   const canAdd = !readOnly && guard.role !== "bookkeeper";
-  const rows = [...(book.available ? book.rows : []), ...hand];
+  const rows = [...(book.available ? book.rows : []), ...hand, ...issued];
 
   return (
     <div className="m-stagger flex flex-col gap-6">
@@ -45,7 +46,7 @@ export default async function PoliciesPage({ searchParams }: { searchParams: Pro
       {!book.available && (
         <div role="status" className="rounded-lg border border-border border-l-[3px] border-l-[var(--warning)] bg-[var(--warning-surface)] px-4 py-3 text-sm text-[var(--warning-ink)]">{POLICY_BOOK_PENDING_MESSAGE}</div>
       )}
-      {(book.available || hand.length > 0) && (
+      {(book.available || hand.length > 0 || issued.length > 0) && (
         <PolicyBook rows={rows} initialQuery={query} saved={book.available ? book.savedFilters : []} savedAvailable={book.available && book.savedFiltersAvailable} scoped={guard.role === "producer"} readOnly={readOnly} />
       )}
     </div>

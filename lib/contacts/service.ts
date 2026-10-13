@@ -410,6 +410,33 @@ export async function createContact(tenantId: string, userId: string, input: Con
   return { contact, duplicates, outcome: plan.queue.length ? "review" : "created", mergeId: null, queued: plan.queue.length, reviewsReady };
 }
 
+/**
+ * LA-0.6's one duplicate check, for a contact a carrier file or a proven sale created (LA-4.8/4.9):
+ * the probable duplicates found before it was saved go to the Duplicate check review queue. Nothing
+ * merges on its own here — a client built from carrier data is checked by a person first (LA-4.9).
+ * Never throws: a failed check leaves the client as it is.
+ */
+export async function queueDuplicateReviews(tenantId: string, contactId: string, dob: string | null, duplicates: readonly DuplicateMatch[]): Promise<number> {
+  const queue = planForMatches(dob, duplicates.filter((match) => match.contact_id !== contactId)).queue;
+  if (!queue.length) return 0;
+  const inserted = await loose().from("contact_duplicate_reviews").insert(queue.map((match) => ({ tenant_id: tenantId, contact_id: contactId, candidate_id: match.contact_id, score: match.score, confidence: match.confidence, matched_on: match.matched_on })));
+  if (inserted.error) {
+    if (!isMissingSchema(inserted.error)) console.error("[contacts] review pairs could not be queued", inserted.error);
+    return 0;
+  }
+  return queue.length;
+}
+
+/** findDuplicates for a caller that must not fail on it (a carrier file, a sale's client). */
+export async function findDuplicatesQuietly(tenantId: string, input: ContactInput): Promise<DuplicateMatch[]> {
+  try {
+    return await findDuplicates(tenantId, input);
+  } catch (error) {
+    console.error("[contacts] duplicate check skipped", error instanceof Error ? error.message : error);
+    return [];
+  }
+}
+
 export async function mergeContacts(tenantId: string, userId: string, input: { kept_id: string; merged_id: string; field_choices: Record<string, "kept" | "merged">; review_id?: string | null }, source: "manual" | "auto" = "manual") {
   const base = { p_tenant_id: tenantId, p_kept_id: input.kept_id, p_merged_id: input.merged_id, p_field_choices: input.field_choices as Json, p_merged_by: userId };
   let result = await loose().rpc("merge_contacts", { ...base, p_review_id: input.review_id ?? null, p_source: source });

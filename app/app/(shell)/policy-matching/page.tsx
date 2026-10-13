@@ -32,8 +32,10 @@ export default async function PolicyMatchingPage({ searchParams }: { searchParam
         <>
           <StatStrip label="Policy matching totals">
             <StatTile label="Waiting for you" value={view.reviews.length.toLocaleString("en-US")} valueTone={view.reviews.length ? "warning" : undefined} footnote="pick the right client" />
-            <StatTile label="Linked automatically" value={view.ladder.all ? pct(Math.round((100 - (view.ladder.toReviewPct ?? 0)) * 10) / 10) : "—"} footnote={`of ${view.ladder.all.toLocaleString("en-US")} policy rows read, 30 days`} />
-            <StatTile label="Sent to review" value={pct(view.ladder.toReviewPct)} footnote="lower when numbers are saved at the sale" />
+            {/* LA-4.8: the share of rows resolving at each ladder step, 30 days of files. */}
+            <StatTile label="Already linked" value={pct(view.ladder.alreadyLinkedPct)} footnote={`of ${view.ladder.all.toLocaleString("en-US")} policy rows read, 30 days`} />
+            <StatTile label="Linked by number" value={pct(view.ladder.exactLinkedPct)} footnote="the sale's policy number" />
+            <StatTile label="Matched by search" value={pct(view.ladder.toReviewPct)} footnote="no number: a review or no sale on record" />
             {view.aiAccuracy.reviewed > 0 && <StatTile label="AI accuracy, 7 days" value={pct(view.aiAccuracy.pct)} footnote={`${view.aiAccuracy.correct} of ${view.aiAccuracy.reviewed} confirmed`} />}
             <StatTile label="Agent codes to map" value={view.unmapped.length.toLocaleString("en-US")} valueTone={view.unmapped.length ? "warning" : undefined} footnote="so each policy credits the right agent" />
           </StatStrip>

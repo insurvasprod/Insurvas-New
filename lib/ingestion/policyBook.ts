@@ -18,9 +18,18 @@ export const inForce = (status: string | null) => status === "active" || status 
 
 export const statusLabel = (status: string | null) => (status && status in STATUS_LABELS ? STATUS_LABELS[status as NormalizedStatus].label : "Unknown");
 
+/** A sale recorded as issued whose carrier file hasn't listed the policy yet (Module 4 · Door 1). */
+export const AWAITING_FILE = "Issued, waiting for the carrier's file";
+
+/** The status words a row shows: the carrier's status, or the recorded sale's own. */
+export const rowStatusLabel = (row: Pick<BookRow, "status" | "source">) => (row.source === "issued" ? AWAITING_FILE : statusLabel(row.status));
+
 /**
  * One row of the list: policy_current plus the names it points at, or (`source: "hand"`) a policy
- * the agency entered or imported by hand (tenant_policies), which opens its own page at `href`.
+ * the agency entered or imported by hand (tenant_policies), which opens its own page at `href`, or
+ * (`source: "issued"`) a sale recorded as issued that no carrier file has listed yet (Module 4,
+ * Door 1: "an application in LA-3 reaches issued" and the policy is in the book) — it leaves the
+ * list by itself once the carrier's own row arrives for the same carrier and number.
  */
 export type BookRow = {
   carrierId: string;
@@ -44,7 +53,7 @@ export type BookRow = {
   agentName: string | null;
   agency: string | null;
   leadSource: string | null;
-  source?: "hand";
+  source?: "hand" | "issued";
   href?: string;
 };
 
@@ -59,7 +68,7 @@ export type BookFilters = {
   lead: string;
   issuedFrom: string;
   issuedTo: string;
-  /** "carrier" (from the carriers' files), "hand" (entered or imported by hand), or both. */
+  /** "carrier" (from the carriers' files), "hand" (entered or imported by hand), "issued" (a recorded sale awaiting its file), or all. */
   source: string;
 };
 
@@ -103,7 +112,7 @@ const matches = (want: string, have: string | null) => !want || (want === NONE ?
 export function filterRows(rows: BookRow[], filters: BookFilters): BookRow[] {
   const needle = filters.q.trim().toLowerCase();
   return rows.filter((row) =>
-    (!filters.source || (filters.source === "hand" ? row.source === "hand" : row.source !== "hand")) &&
+    (!filters.source || (filters.source === "carrier" ? !row.source : row.source === filters.source)) &&
     (!needle || `${row.policyNumber} ${row.clientName ?? ""} ${row.carrierName} ${row.agentName ?? ""}`.toLowerCase().includes(needle)) &&
     matches(filters.carrier, row.carrierId) &&
     matches(filters.product, row.product) &&
@@ -173,7 +182,7 @@ const dollars = (cents: number | null) => (cents === null ? "" : (cents / 100).t
 export function csvRows(rows: BookRow[]): Array<Array<string | number | null>> {
   return rows.map((row) => [
     row.clientName, row.carrierName, row.product, row.policyNumber, dollars(row.premiumCents), row.premiumMode, dollars(row.annualCents), dollars(row.faceCents),
-    statusLabel(row.status), row.statusRaw, row.daysPastDue, inForce(row.status) && row.source !== "hand" ? RISK_LABELS[row.riskBand] : "", row.issueDate, row.agentName, row.leadSource, row.source === "hand" ? "Entered by hand" : "Carrier file",
+    rowStatusLabel(row), row.statusRaw, row.daysPastDue, inForce(row.status) && !row.source ? RISK_LABELS[row.riskBand] : "", row.issueDate, row.agentName, row.leadSource, row.source === "hand" ? "Entered by hand" : row.source === "issued" ? "Recorded sale" : "Carrier file",
   ]);
 }
 
