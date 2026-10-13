@@ -183,7 +183,7 @@ export function PendingCases({
                 </thead>
                 <tbody className="m-seq">
                   {rows.map((row) => {
-                    const href = caseHref(row.caseId, { insured: row.insuredRole, step: "after" });
+                    const href = caseHref(row.caseId, { insured: row.insuredRole, step: "after", from: "/app/pending" });
                     const who = shortPersonName(row.lastChasedByName);
                     return (
                       <tr key={row.id} className="m-row">
@@ -229,7 +229,7 @@ export function PendingCases({
                 </thead>
                 <tbody className="m-seq">
                   {rows.map((row) => {
-                    const href = caseHref(row.caseId, { insured: row.insuredRole, step: "after" });
+                    const href = caseHref(row.caseId, { insured: row.insuredRole, step: "after", from: "/app/pending" });
                     const countdown = expiryCountdown(row.expiresAt, now);
                     const premiumChanged = row.applied.monthlyCents !== row.offered.monthlyCents;
                     return (
@@ -277,7 +277,7 @@ export function PendingCases({
                 </thead>
                 <tbody className="m-seq">
                   {rows.map(({ row, days }) => {
-                    const href = caseHref(row.caseId, { insured: row.insuredRole, attempt: row.attemptNo, step: "after" });
+                    const href = caseHref(row.caseId, { insured: row.insuredRole, attempt: row.attemptNo, step: "after", from: "/app/pending" });
                     return (
                       <tr key={`${row.applicationId}-${row.insuredRole}`} className="m-row">
                         <td className="max-w-[220px] truncate" title={row.clientName}><Link href={href} className={clientLinkClass}>{row.clientName}</Link></td>

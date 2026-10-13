@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { withFrom } from "@/lib/applications/backLink";
 import { notify, setCallInProgress } from "@/lib/notify";
 
 import { openSlots, type PickerContext } from "@/lib/appointments/calendarMath";
@@ -201,7 +202,7 @@ export function useDialer({ readOnly = false, role = "producer", requestedLeadId
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ work_item_id: panel.lead.workItemId, product_line: panel.lead.productCode || undefined }),
       }).then((r) => (r.ok ? r.json() : null)).catch(() => null) as { href?: string } | null;
-      router.push(workspace?.href ?? `/app/leads/${panel.lead.id}`);
+      router.push(workspace?.href ? withFrom(workspace.href, window.location.pathname) : `/app/leads/${panel.lead.id}`);
     } catch { notify.fail("Could not start the application"); }
     finally { setStarting(false); }
   }

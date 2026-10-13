@@ -85,11 +85,13 @@ export function useLiveRefresh<T>(opts: { sample: boolean; url: string; pick: (b
 export const clientLinkClass = "font-semibold text-foreground underline-offset-4 hover:underline focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]";
 
 /** The case link for a row, landing on the right insured and (optionally) step. */
-export function caseHref(caseId: string, opts: { insured?: "primary" | "spouse"; step?: string; attempt?: number } = {}) {
+export function caseHref(caseId: string, opts: { insured?: "primary" | "spouse"; step?: string; attempt?: number; from?: string } = {}) {
   const q = new URLSearchParams();
   if (opts.attempt) q.set("attempt", String(opts.attempt));
   if (opts.insured === "spouse") q.set("insured", "spouse");
   if (opts.step) q.set("step", opts.step);
+  // The workspace's back link returns here (lib/applications/backLink.ts).
+  if (opts.from) q.set("from", opts.from);
   const query = q.toString();
   return `/app/applications/${caseId}${query ? `?${query}` : ""}`;
 }

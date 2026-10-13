@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Bell, ChevronDown, ChevronLeft, Loader2 } from "lucide-react";
 
 import { Callout, KeyValues, Pill, SettingsMeter, Timeline, type PillTone } from "@/components/app/settings/primitives";
+import { withFrom } from "@/lib/applications/backLink";
 import { DispositionWizardDialog } from "@/components/app/disposition-wizard-dialog";
 import { Button } from "@/components/ui/button";
 import { toolbarControl } from "@/components/ui/data-toolbar";
@@ -237,7 +238,7 @@ export function VerificationPanel({ workItemId, readOnly, canHandoff }: { workIt
       const response = await fetch("/api/app/applications/start", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ work_item_id: workItemId }) });
       const result = await response.json().catch(() => null) as { href?: string; error?: string } | null;
       if (!response.ok || !result?.href) { setContinueError(result?.error ?? "Could not open the application."); return; }
-      window.location.assign(result.href);
+      window.location.assign(withFrom(result.href, window.location.pathname));
     } catch {
       setContinueError("Could not open the application — check your connection.");
     } finally {
