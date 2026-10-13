@@ -91,7 +91,7 @@ export const submissionSchema = z.object({
   notes: z.string().max(2000).nullish(),
 }).strict();
 
-export const submissionReferenceSchema = z.object({ reference: z.string().max(120).nullish(), policy_number: z.string().max(120).nullish() }).strict();
+export const submissionReferenceSchema = z.object({ reference: z.string().max(120).nullish(), reference_kind: z.enum(["application_no", "policy_no"]).nullish(), policy_number: z.string().max(120).nullish() }).strict();
 
 export const closeCaseSchema = z.object({ reason_code: z.string().min(1).max(60), reason_text: z.string().max(2000).nullish() }).strict();
 

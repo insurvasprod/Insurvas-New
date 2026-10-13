@@ -230,7 +230,8 @@ export type CaseView = {
   openedAt: string;
   interviews: Partial<Record<InsuredRole, InterviewView>>;
   attempts: AttemptView[];
-  verification: { workItemId: string | null; complete: boolean } | null;
+  /** `confirmedKeys`: application keys the agent already confirmed or corrected on the call (LA-1.11). */
+  verification: { workItemId: string | null; complete: boolean; confirmedKeys?: string[] } | null;
   /**
    * The agency's QA preferences (LA-3.17 · Settings › Sales), so the live QA rail judges with the same
    * rules the server's `ready` guard does. Absent in sample data: the defaults apply.

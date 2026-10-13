@@ -97,6 +97,7 @@ export function LayoutMapsReview({ initialMaps, initialAssignments, carriers, no
   const [problems, setProblems] = useState<string[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [newLayout, setNewLayout] = useState({ layoutKey: "", name: "", fileType: "policies" as CarrierFileType });
   const [assign, setAssign] = useState({ carrierId: "", fileType: "policies" as CarrierFileType, layoutKey: "" });
   const [waiting, setWaiting] = useState<WaitingFile[]>([]);
@@ -261,6 +262,7 @@ export function LayoutMapsReview({ initialMaps, initialAssignments, carriers, no
                 <>
                   <Button type="button" variant="outline" disabled={busy !== null} onClick={() => save()}>{busy === "save" ? "Saving…" : "Save draft"}</Button>
                   <Button type="button" disabled={busy !== null || localProblems.length > 0} title={localProblems[0]} onClick={publish}>Publish</Button>
+                  <Button type="button" variant="outline" disabled={busy !== null} onClick={() => setDeleting(true)}>Delete draft</Button>
                 </>
               ) : (
                 <>
@@ -410,6 +412,32 @@ export function LayoutMapsReview({ initialMaps, initialAssignments, carriers, no
               setCreating(false);
               setNewLayout({ layoutKey: "", name: "", fileType: "policies" });
             })}>{busy === "create" ? "Creating…" : "Create draft"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={deleting && Boolean(open)} onOpenChange={(next) => { if (!busy) setDeleting(next); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-base">Delete draft v{open?.version}?</DialogTitle>
+            <DialogDescription>
+              {open && layouts.find((layout) => layout.key === open.layoutKey)?.versions.length === 1
+                ? `This is the only version of "${open.name}", so the layout and its carrier assignments go too.`
+                : "The draft and its columns are deleted. Published and retired versions stay as they are."}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" variant="outline" disabled={busy !== null} onClick={() => setDeleting(false)}>Cancel</Button>
+            <Button type="button" variant="destructive" disabled={busy !== null} onClick={() => void run("delete", async () => {
+              if (!open) return;
+              await call(`/api/admin/layout-maps/${open.id}`, { method: "DELETE" });
+              const version = open.version;
+              setDeleting(false);
+              setOpenId(null);
+              setDraft(null);
+              await reload();
+              notify.done(`Draft v${version} deleted.`);
+            })}>{busy === "delete" ? "Deleting…" : "Delete draft"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

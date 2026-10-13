@@ -9,12 +9,14 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { ArrowLeft, Check, ExternalLink, UserPlus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { toolbarControl } from "@/components/ui/data-toolbar";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusChip } from "@/components/ui/status-chip";
+import { backLink } from "@/lib/applications/backLink";
 import { WORKSPACE_STEPS, PRODUCT_LABEL, type WorkspaceStep } from "@/lib/applications/constants";
 import type { AttemptView, CaseView } from "@/lib/applications/types";
 import { notify } from "@/lib/notify";
@@ -140,6 +142,8 @@ function Workspace() {
   const ws = useWorkspace();
   const { caseView, attempt, attemptsForInsured, insured, step, readOnly, sample, selectAttempt } = ws;
   const [spouseOpen, setSpouseOpen] = useState(false);
+  // Back to where the agent came from (the verification panel, a lead, the dialer…), not always the list.
+  const back = backLink(useSearchParams().get("from"));
   const household = caseView.attempts.some((a) => a.insuredRole === "spouse");
   const Step = STEP_COMPONENT[step];
   const selected = attempt.quotes.find((q) => q.id === attempt.selectedQuoteId);
@@ -162,8 +166,8 @@ function Workspace() {
 
   return (
     <div className="m-stagger flex flex-col gap-6">
-      <Link href="/app/applications" className="-mb-3 inline-flex w-fit items-center gap-1.5 text-sm font-semibold tracking-[-0.01em] text-muted-foreground transition-colors hover:text-foreground">
-        <ArrowLeft className="size-4" aria-hidden="true" />Applications
+      <Link href={back.href} className="-mb-3 inline-flex w-fit items-center gap-1.5 text-sm font-semibold tracking-[-0.01em] text-muted-foreground transition-colors hover:text-foreground">
+        <ArrowLeft className="size-4" aria-hidden="true" />{back.label}
       </Link>
       <PageHeader
         title={insured === "spouse" ? ((spouseName || spouseOption) ? `${spouseName || spouseOption} · spouse` : `${caseView.clientName}'s spouse`) : caseView.clientName}

@@ -734,10 +734,12 @@ export async function recordSubmission(actor: Actor, applicationId: string, inpu
   return { submissionId: ins.data.id as string, duplicate };
 }
 
-export async function setSubmissionReference(actor: Actor, applicationId: string, submissionId: string, input: { reference?: string | null; policyNumber?: string | null }) {
+export async function setSubmissionReference(actor: Actor, applicationId: string, submissionId: string, input: { reference?: string | null; referenceKind?: "application_no" | "policy_no" | null; policyNumber?: string | null }) {
   await attemptHead(actor.tenantId, applicationId, { allowClosed: true });
   const patch: Record<string, unknown> = {};
-  if (input.reference !== undefined) { patch.carrier_reference = input.reference?.trim() || null; patch.reference_kind = input.reference?.trim() ? "application_no" : null; }
+  // The kind the agent chose is kept (LA-3.15: reference_kind application_no | policy_no); it was
+  // forced to application_no, so a policy number added here never matched a carrier file (LA-4.8 step 2).
+  if (input.reference !== undefined) { patch.carrier_reference = input.reference?.trim() || null; patch.reference_kind = input.reference?.trim() ? input.referenceKind ?? "application_no" : null; }
   // A later policy number never overwrites the application number it was submitted under.
   if (input.policyNumber !== undefined) patch.policy_number = input.policyNumber?.trim() || null;
   const { error } = await db().from("tenant_application_submissions").update(patch).eq("tenant_id", actor.tenantId).eq("application_id", applicationId).eq("id", submissionId);

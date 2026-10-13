@@ -202,6 +202,27 @@ export async function retireLayoutMap(id: string): Promise<LayoutMapView> {
   return getMap(id);
 }
 
+/**
+ * Deletes a draft (or in-review) version and its columns. A published or retired version is never
+ * deleted (LA-4.3: published maps are immutable and files record the version that read them); the
+ * database refuses it too. Deleting the only version of a layout also removes its carrier assignments,
+ * which would otherwise point at nothing.
+ */
+export async function deleteLayoutDraft(id: string): Promise<LayoutMapView> {
+  const current = await getMap(id);
+  if (current.status !== "draft" && current.status !== "in_review") throw new LayoutMapError(`Version ${current.version} is ${current.status}; only a draft can be deleted. Retire a published version instead.`, 409);
+  const { data, error } = await db().from("carrier_layout_map").delete().eq("id", id).is("tenant_id", null).in("status", ["draft", "in_review"]).select("id");
+  if (error) fail(error, "Could not delete the draft");
+  if (!data?.length) throw new LayoutMapError("That draft no longer exists.", 404);
+  const { data: others, error: othersError } = await db().from("carrier_layout_map").select("id").is("tenant_id", null).eq("layout_key", current.layoutKey).limit(1);
+  if (othersError) fail(othersError, "Could not read the layout's other versions");
+  if (!others?.length) {
+    const removed = await db().from("carrier_layout_assignment").delete().is("tenant_id", null).eq("layout_key", current.layoutKey);
+    if (removed.error) fail(removed.error, "Could not remove the layout's assignments");
+  }
+  return current;
+}
+
 /** Points a carrier's files of one type at a layout (platform-wide). */
 export async function setLayoutAssignment(adminId: string, input: { carrierId: string; fileType: CarrierFileType; layoutKey: string }): Promise<void> {
   const { data: layout } = await db().from("carrier_layout_map").select("file_type").is("tenant_id", null).eq("layout_key", input.layoutKey).limit(1);

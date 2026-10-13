@@ -15,7 +15,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const input = await body(request, submissionReferenceSchema);
   if (input instanceof NextResponse) return input;
   try {
-    return NextResponse.json(await setSubmissionReference(actor, id, submissionId, { reference: input.reference, policyNumber: input.policy_number }));
+    return NextResponse.json(await setSubmissionReference(actor, id, submissionId, { reference: input.reference, referenceKind: input.reference_kind, policyNumber: input.policy_number }));
   } catch (error) {
     return failure(error);
   }

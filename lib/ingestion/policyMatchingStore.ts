@@ -7,6 +7,7 @@ import { isSchemaGap } from "@/lib/supabase/schemaGap";
 
 import { annualisedPremiumCents } from "./policyCurrent";
 import { accuracy, isStrong, ladderShare, shortlist, SHORTLIST_LOOKBACK_DAYS, splitName, WRITING_ROLES, type Candidate, type CarrierSide, type LadderCounts, type Scored } from "./policyMatching";
+import { recordCarrierIssues } from "./applicationIssueStore";
 import { refreshPolicyCurrent } from "./policyCurrentStore";
 import { noRecordPolicy, openImportSummary } from "./exceptionQueuesStore";
 import { identityKey } from "./exceptionQueues";
@@ -422,6 +423,8 @@ export async function resolveReview(scope: MatchingScope, reviewId: string, choi
     if (snapshot) await noRecordPolicy(scope.tenantId, policySide(snapshot, carrier), map?.user_id ?? null);
   }
   await refreshPolicyCurrent({ tenantId: scope.tenantId, carrierId: review.carrier_id, policies: [review.policy_number] });
+  // A person linked it to a sale: if the carrier already lists it issued, the application records it (LA-3.18).
+  await recordCarrierIssues(scope.tenantId, review.carrier_id, [review.policy_number]);
   return { matchId, policyNumber: review.policy_number, carrierId: review.carrier_id };
 }
 

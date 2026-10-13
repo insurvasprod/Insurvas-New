@@ -219,6 +219,7 @@ export const AUDIT_ACTIONS = [
   "layout_map.updated",
   "layout_map.published",
   "layout_map.retired",
+  "layout_map.deleted",
   "layout_assignment.saved",
   "layout_assignment.removed",
   // LA-4.5 (Notion sprint) · the carrier status map (20261008130000).
@@ -626,6 +627,7 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   "layout_map.updated": "Carrier layout map draft edited",
   "layout_map.published": "Carrier layout map published",
   "layout_map.retired": "Carrier layout map retired",
+  "layout_map.deleted": "Carrier layout map draft deleted",
   "layout_assignment.saved": "Carrier assigned a layout map",
   "layout_assignment.removed": "Carrier layout assignment removed",
   "status_map.approved": "Carrier status mapped and approved",

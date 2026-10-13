@@ -7,6 +7,7 @@ import { isSchemaGap } from "@/lib/supabase/schemaGap";
 
 import { isPolicyFeed } from "./constants";
 import type { RawColumn } from "./grid";
+import { recordCarrierIssues } from "./applicationIssueStore";
 import { refreshPolicyCurrent } from "./policyCurrentStore";
 import { matchFilePolicies } from "./policyMatchingStore";
 import { historyOf, snapshotContent, snapshotsForFile, TRACKED_FIELDS, type StoredSnapshot, type TrackedField } from "./snapshots";
@@ -159,6 +160,9 @@ export async function linkFilePolicies(tenantId: string, fileId: string, input: 
       matchFailure ??= matchError;
     }
     await refreshPolicyCurrent({ tenantId, carrierId: input.carrierId, policies: chunk });
+    // LA-3.18: a linked application still waiting on the carrier is closed as issued when the
+    // carrier's file shows the policy issued. Never throws.
+    await recordCarrierIssues(tenantId, input.carrierId, chunk);
   }
   await db().from("file_registry").update({ derived_at: new Date().toISOString() }).eq("tenant_id", tenantId).eq("id", fileId);
   if (matchFailure && !input.swallowMatchErrors) throw matchFailure;

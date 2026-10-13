@@ -28,6 +28,20 @@ const SYNONYMS: Record<string, readonly string[]> = {
   "addr.zip": ["zip", "zip_code", "postal_code", "zipcode"],
 };
 
+/**
+ * The application keys a set of lead fields covers, read through the same synonyms as the prefill.
+ * Used to carry what the agent confirmed on the call (LA-1.11 verification fields) into the
+ * application's Verify step, so it is not asked for a second time (LA-2.14: one flow).
+ * A confirmed full name covers both first and last name.
+ */
+export function applicationKeysForLeadKeys(leadKeys: Iterable<string>): Set<string> {
+  const lead = new Set(leadKeys);
+  const out = new Set<string>();
+  for (const [key, synonyms] of Object.entries(SYNONYMS)) if (synonyms.some((s) => lead.has(s))) out.add(key);
+  if (lead.has("full_name") || lead.has("name")) { out.add("insured.first_name"); out.add("insured.last_name"); }
+  return out;
+}
+
 function first(values: LeadValues, keys: readonly string[]) {
   for (const k of keys) {
     const v = values[k];

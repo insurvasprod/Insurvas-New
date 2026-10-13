@@ -3,7 +3,7 @@ import "server-only";
 import { startApplicationFromLead } from "@/lib/outboundApplication/service";
 import { appointmentIsActiveAt } from "@/lib/appointments/eligibility";
 import { maskFromLast4, normaliseProse } from "./formats";
-import { prefillFromLead } from "./prefill";
+import { applicationKeysForLeadKeys, prefillFromLead } from "./prefill";
 import { encryptSensitive } from "./crypto";
 import { fieldSetRequired, interviewQuestions, type StoredDefinition } from "./templates";
 import { ApplicationError, db, isMissingSchema, rows, SchemaPendingError } from "./db";
@@ -177,7 +177,7 @@ export async function getCaseView(tenantId: string, caseId: string): Promise<Cas
     carrierIds.length ? optional<{ carrier_id: string; contract_level_bp: number; effective_from: string; is_active: boolean }>(client.from("tenant_carriers").select("carrier_id, contract_level_bp, effective_from, is_active").eq("tenant_id", tenantId).in("carrier_id", carrierIds)) : Promise.resolve([]),
     carrierIds.length ? optional<{ carrier_id: string; product_code: string; advance_months: number; advance_pct_bp: number; effective_from: string }>(client.from("advance_rules").select("carrier_id, product_code, advance_months, advance_pct_bp, effective_from").eq("tenant_id", tenantId).in("carrier_id", carrierIds)) : Promise.resolve([]),
     // The LA-1.11 verification session this case was opened with: complete when every required field was confirmed.
-    c.work_item_id ? optional<{ progress_percentage: number | null; completed_at: string | null; started_at: string }>(client.from("tenant_verification_sessions").select("progress_percentage, completed_at, started_at").eq("tenant_id", tenantId).eq("work_item_id", c.work_item_id).order("started_at", { ascending: false }).limit(1)) : Promise.resolve([]),
+    c.work_item_id ? optional<{ id: string; progress_percentage: number | null; completed_at: string | null; started_at: string }>(client.from("tenant_verification_sessions").select("id, progress_percentage, completed_at, started_at").eq("tenant_id", tenantId).eq("work_item_id", c.work_item_id).order("started_at", { ascending: false }).limit(1)) : Promise.resolve([]),
     ackUserIds.length ? optional<{ id: string; name: string | null }>(client.from("users").select("id, name").in("id", ackUserIds)) : Promise.resolve([]),
     optional<{ settings: unknown }>(client.from("tenant_sales_settings").select("settings").eq("tenant_id", tenantId).limit(1)),
   ]);
@@ -188,6 +188,13 @@ export async function getCaseView(tenantId: string, caseId: string): Promise<Cas
   const draftLinks = spouseIds.length ? await optional<{ id: string; draft_day_linked: boolean }>(client.from("tenant_applications").select("id, draft_day_linked").eq("tenant_id", tenantId).in("id", spouseIds)).catch(() => []) : [];
   const draftDayLinked = new Set(draftLinks.filter((r) => r.draft_day_linked).map((r) => r.id));
   const verificationComplete = Boolean(verificationRows[0] && (verificationRows[0].completed_at || verificationRows[0].progress_percentage === 100));
+  // Field by field, what the agent already confirmed or corrected on the call (LA-1.11), so a
+  // partly verified call still counts on the Verify step (LA-2.14: verify once). The session row
+  // was read under the tenant filter above; its fields are keyed by that session.
+  const verifiedFields = verificationRows[0] && !verificationComplete
+    ? await optional<{ field_key: string }>(client.from("verification_fields").select("field_key").eq("session_id", verificationRows[0].id).in("state", ["confirmed", "corrected"])).catch(() => [])
+    : [];
+  const confirmedKeys = [...applicationKeysForLeadKeys(verifiedFields.map((f) => f.field_key))];
   const userName = new Map(ackUsers.map((u) => [u.id, u.name ?? "A colleague"]));
 
   const carrierById = new Map(carriers.map((x) => [x.id, x]));
@@ -318,7 +325,7 @@ export async function getCaseView(tenantId: string, caseId: string): Promise<Cas
     caseId: c.id, leadId: c.lead_id, status: (["open", "won", "lost"].includes(c.status) ? c.status : "open") as CaseView["status"], source: c.source,
     clientName: leadName(leadValues), clientState, clientPhone: typeof leadValues.phone === "string" ? leadValues.phone : null,
     campaignName: (campaign as { data: { name?: string } | null }).data?.name ?? null, openedAt: c.opened_at,
-    interviews: interviewViews, attempts: attemptViews, verification: { workItemId: c.work_item_id, complete: verificationComplete },
+    interviews: interviewViews, attempts: attemptViews, verification: { workItemId: c.work_item_id, complete: verificationComplete, confirmedKeys },
     qaSettings: { appointmentBlocks: qa.appointmentBlocks, per1000Band: qa.per1000Band },
   };
 }
