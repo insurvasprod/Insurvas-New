@@ -69,7 +69,7 @@ type Vault = {
   /** False until migration 20260924110000: licence type/lines, E&O limits and ethics credits cannot be stored. */
   extendedFields?: boolean;
   /** Which carriers require E&O in force (migration 20260924220100); null before it. */
-  carrierRequirements?: Array<{ carrier_id: string; requires_eo: boolean }> | null;
+  carrierRequirements?: Array<{ carrier_id: string; requires_eo: boolean; contracted?: boolean }> | null;
 };
 const LICENCE_TYPE_LABEL: Record<LicenceType, string> = { resident: "Resident", non_resident: "Non-resident" };
 const NUMBER_WORDS = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve"];
@@ -131,8 +131,10 @@ export function AppointmentVaultSettings({
 
   const configuredCarriers = useMemo(() => {
     if (!vault) return [];
+    // LA-0.4: a carrier the agency switched off is not offered here.
+    const off = new Set((vault.carrierRequirements ?? []).filter((row) => row.contracted === false).map((row) => row.carrier_id));
     const ids = new Set(vault.tenantCarriers.map((row) => row.carrier_id));
-    return vault.carriers.filter((row) => ids.has(row.id));
+    return vault.carriers.filter((row) => ids.has(row.id) && !off.has(row.id));
   }, [vault]);
   const states = useMemo(
     () =>

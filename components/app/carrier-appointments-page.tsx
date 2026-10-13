@@ -92,7 +92,7 @@ type Vault = {
   eoPolicies: EoPolicyRow[];
   ceRecords: CeRecordRow[];
   extendedFields?: boolean;
-  carrierRequirements?: Array<{ carrier_id: string; requires_eo: boolean }> | null;
+  carrierRequirements?: Array<{ carrier_id: string; requires_eo: boolean; contracted?: boolean }> | null;
   /** False until 20260924310000: no pending status, no expiry. */
   appointmentDetails?: boolean;
   /** Null until 20260924310100. */
@@ -179,8 +179,10 @@ export function CarrierAppointmentsPage({ canEdit, isOwner, readOnlyReason = nul
   const latestByKey = useMemo(() => latestAppointmentByCell(vault?.appointments ?? []), [vault]);
   const configuredCarriers = useMemo(() => {
     if (!vault) return [];
+    // LA-0.4: a carrier the agency switched off is not offered here.
+    const off = new Set((vault.carrierRequirements ?? []).filter((row) => row.contracted === false).map((row) => row.carrier_id));
     const ids = new Set(vault.tenantCarriers.map((row) => row.carrier_id));
-    return vault.carriers.filter((row) => ids.has(row.id));
+    return vault.carriers.filter((row) => ids.has(row.id) && !off.has(row.id));
   }, [vault]);
   const gridStates = useMemo(
     () =>

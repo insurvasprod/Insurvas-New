@@ -9,7 +9,8 @@ export { resolveCommissionRate } from "./resolve";
 export type TenantCarrierRow = { id: string; tenant_id: string; carrier_id: string; contract_level_bp: number; writing_number: string; effective_from: string; is_active: boolean; created_at: string };
 export type CommissionScheduleRow = import("./service-types").CommissionScheduleRow;
 export type AdvanceRuleRow = { id: string; tenant_id: string; carrier_id: string; product_code: string; advance_months: number; advance_pct_bp: number; clawback_months: number; clawback_type: "full" | "prorated"; effective_from: string; created_at: string };
-export type CarrierRequirementRow = { carrier_id: string; requires_eo: boolean };
+/** `contracted` is LA-0.4's agency switch (migration 20261013100000); false = switched off. */
+export type CarrierRequirementRow = { carrier_id: string; requires_eo: boolean; contracted: boolean };
 export type CarrierLibrarySnapshot = {
   carriers: CarrierRow[];
   products: ProductRow[];
@@ -20,6 +21,8 @@ export type CarrierLibrarySnapshot = {
   carrierRequirements: CarrierRequirementRow[];
   /** False until migration 20260924220100 is applied: the requirement cannot be recorded yet. */
   requirementsAvailable: boolean;
+  /** False until migration 20261013100000 is applied: every carrier reads as on and the switch cannot be saved. */
+  switchAvailable: boolean;
 };
 
 const SCHEDULE_COLUMNS = "id, tenant_id, carrier_id, product_code, contract_level_bp, policy_year, rate_bp, effective_from, created_at";
@@ -47,29 +50,67 @@ export async function getCarrierLibrary(tenantId: string): Promise<CarrierLibrar
   ]);
   const error = [carriers, products, tenantCarriers, schedules, rules].find((result) => result.error)?.error;
   if (error) throw new Error(`Could not load carrier library: ${error.message}`);
-  return { carriers: (carriers.data ?? []) as CarrierRow[], products: (products.data ?? []) as ProductRow[], tenantCarriers: (tenantCarriers.data ?? []) as TenantCarrierRow[], commissionSchedules: (schedules.data ?? []) as CommissionScheduleRow[], advanceRules: (rules.data ?? []) as AdvanceRuleRow[], carrierRequirements: requirements.rows, requirementsAvailable: requirements.available };
+  return { carriers: (carriers.data ?? []) as CarrierRow[], products: (products.data ?? []) as ProductRow[], tenantCarriers: (tenantCarriers.data ?? []) as TenantCarrierRow[], commissionSchedules: (schedules.data ?? []) as CommissionScheduleRow[], advanceRules: (rules.data ?? []) as AdvanceRuleRow[], carrierRequirements: requirements.rows, requirementsAvailable: requirements.available, switchAvailable: requirements.switchAvailable };
 }
 
-/** Garnish: a missing table (migration 20260924220100 not applied) reads as "nothing recorded yet". */
-async function readRequirements(tenantId: string): Promise<{ rows: CarrierRequirementRow[]; available: boolean }> {
-  const { data, error } = await getSupabaseServiceClient().from("tenant_carrier_requirements" as never).select("carrier_id, requires_eo").eq("tenant_id" as never, tenantId as never);
+/**
+ * Garnish: a missing table (migration 20260924220100 not applied) reads as "nothing recorded yet",
+ * and a missing `contracted` column (20261013100000 not applied) as "every carrier is on".
+ */
+async function readRequirements(tenantId: string): Promise<{ rows: CarrierRequirementRow[]; available: boolean; switchAvailable: boolean }> {
+  const read = (columns: string) => getSupabaseServiceClient().from("tenant_carrier_requirements" as never).select(columns).eq("tenant_id" as never, tenantId as never);
+  let { data, error } = await read("carrier_id, requires_eo, contracted");
+  let switchAvailable = true;
+  if (error && isPendingSchema(error as { message: string; code?: string })) {
+    switchAvailable = false;
+    ({ data, error } = await read("carrier_id, requires_eo"));
+  }
   const failure = error as { message: string; code?: string } | null;
-  if (failure && isPendingSchema(failure)) return { rows: [], available: false };
+  if (failure && isPendingSchema(failure)) return { rows: [], available: false, switchAvailable: false };
   if (failure) throw new Error(`Could not load carrier requirements: ${failure.message}`);
-  return { rows: (data ?? []) as unknown as CarrierRequirementRow[], available: true };
+  const rows = ((data ?? []) as unknown as Partial<CarrierRequirementRow>[]).map((row) => ({ carrier_id: row.carrier_id!, requires_eo: row.requires_eo === true, contracted: row.contracted !== false }));
+  return { rows, available: true, switchAvailable };
 }
 
-/** Records whether a carrier requires E&O in force. SchemaPendingError (503) before migration 20260924220100. */
-export async function saveCarrierRequirement(tenantId: string, actorId: string, input: { carrier_id: string; requires_eo: boolean }): Promise<CarrierRequirementRow> {
+/**
+ * Records a carrier's per-agency terms: whether it requires E&O in force, and LA-0.4's switch
+ * (`contracted`). Only the fields given are written, so saving one never resets the other.
+ * SchemaPendingError (503) before migration 20260924220100, or 20261013100000 for the switch.
+ */
+export async function saveCarrierRequirement(tenantId: string, actorId: string, input: { carrier_id: string; requires_eo?: boolean; contracted?: boolean }): Promise<CarrierRequirementRow> {
+  const fields = {
+    ...(input.requires_eo === undefined ? {} : { requires_eo: input.requires_eo }),
+    ...(input.contracted === undefined ? {} : { contracted: input.contracted }),
+  };
   const { data, error } = await getSupabaseServiceClient()
     .from("tenant_carrier_requirements" as never)
-    .upsert({ tenant_id: tenantId, carrier_id: input.carrier_id, requires_eo: input.requires_eo, updated_at: new Date().toISOString(), updated_by: actorId } as never, { onConflict: "tenant_id,carrier_id" })
-    .select("carrier_id, requires_eo")
+    .upsert({ tenant_id: tenantId, carrier_id: input.carrier_id, ...fields, updated_at: new Date().toISOString(), updated_by: actorId } as never, { onConflict: "tenant_id,carrier_id" })
+    .select(input.contracted === undefined ? "carrier_id, requires_eo" : "carrier_id, requires_eo, contracted")
     .single();
   const failure = error as { message: string; code?: string } | null;
   if (failure && isPendingSchema(failure)) throw new SchemaPendingError();
   if (failure || !data) throw new Error(failure?.message ?? "Could not save the carrier requirement");
-  return data as unknown as CarrierRequirementRow;
+  const row = data as unknown as Partial<CarrierRequirementRow>;
+  return { carrier_id: row.carrier_id!, requires_eo: row.requires_eo === true, contracted: row.contracted !== false };
+}
+
+/**
+ * LA-0.4 · the carriers this agency has switched off. Every "who do we write with now" list drops
+ * them; money on existing policies does not read this. Before migration 20261013100000 (or on any
+ * read error) nothing is switched off — a failed read must never hide a carrier the agency writes.
+ */
+export async function switchedOffCarrierIds(tenantId: string): Promise<Set<string>> {
+  try {
+    const { data, error } = await getSupabaseServiceClient()
+      .from("tenant_carrier_requirements" as never)
+      .select("carrier_id")
+      .eq("tenant_id" as never, tenantId as never)
+      .eq("contracted" as never, false as never);
+    if (error) return new Set();
+    return new Set(((data ?? []) as unknown as { carrier_id: string }[]).map((row) => row.carrier_id));
+  } catch {
+    return new Set();
+  }
 }
 
 export async function saveTenantCarrier(tenantId: string, input: { carrier_id: string; contract_level_bp: number; writing_number: string; effective_from: string }) {

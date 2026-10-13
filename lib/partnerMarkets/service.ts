@@ -43,9 +43,15 @@ export async function eligibleTenantMarkets(
   const carrierNames = new Map(
     vault.carriers.map((carrier) => [carrier.id, carrier.name]),
   );
+  // LA-0.4: a carrier the agency switched off is no market.
+  const switchedOff = new Set(
+    (vault.carrierRequirements ?? [])
+      .filter((row) => !row.contracted)
+      .map((row) => row.carrier_id),
+  );
   const activeCarrierIds = new Set(
     vault.tenantCarriers
-      .filter((carrier) => carrier.is_active && carrier.effective_from <= asOf)
+      .filter((carrier) => carrier.is_active && carrier.effective_from <= asOf && !switchedOff.has(carrier.carrier_id))
       .map((carrier) => carrier.carrier_id),
   );
   const latest = new Map<string, (typeof vault.appointments)[number]>();

@@ -1,6 +1,7 @@
 import "server-only";
 
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
+import { switchedOffCarrierIds } from "@/lib/carriers/service";
 import { getQueueSlaSettings } from "@/lib/queueSla/service";
 import { listDueCallbacks } from "@/lib/callbacks/service";
 import { owedToYou } from "@/lib/discrepancies/service";
@@ -177,9 +178,14 @@ async function callbacks(tenantId: string): Promise<TileMetric> {
 }
 
 async function carriers(tenantId: string): Promise<TileMetric> {
-  const active = await db().from("tenant_carriers").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId).eq("is_active", true);
+  const [active, switchedOff] = await Promise.all([
+    db().from("tenant_carriers").select("carrier_id").eq("tenant_id", tenantId).eq("is_active", true),
+    switchedOffCarrierIds(tenantId),
+  ]);
   if (active.error) throw new Error("carriers summary unavailable");
-  return { value: active.count ?? 0, caption: "active carriers", detail: carriersSentence(active.count ?? 0) };
+  // LA-0.4: a carrier the agency switched off is not active.
+  const count = ((active.data ?? []) as Array<{ carrier_id: string }>).filter((row) => !switchedOff.has(row.carrier_id)).length;
+  return { value: count, caption: "active carriers", detail: carriersSentence(count) };
 }
 
 async function appointments(tenantId: string): Promise<TileMetric> {

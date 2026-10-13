@@ -26,12 +26,19 @@ export async function POST(request: NextRequest) {
   }
 }
 
-const requirementSchema = z.object({ carrier_id: z.string().uuid("Choose a valid carrier"), requires_eo: z.boolean() }).strict();
+const requirementSchema = z
+  .object({ carrier_id: z.string().uuid("Choose a valid carrier"), requires_eo: z.boolean().optional(), contracted: z.boolean().optional() })
+  .strict()
+  .refine((body) => body.requires_eo !== undefined || body.contracted !== undefined, "Say whether the carrier requires E&O or whether you still write with it");
 
 /**
  * Whether this carrier requires E&O cover in force — a term of the carrier's contract, counted on
  * Agency profile ("N carriers require it") and States & licences. 503 until migration
  * 20260924220100 is applied.
+ *
+ * Also LA-0.4's switch, `contracted`: false takes the carrier out of quoting, assignment and every
+ * "who do we write with" list; the contract history and money on existing policies stay. 503 until
+ * migration 20261013100000 is applied.
  */
 export async function PATCH(request: NextRequest) {
   const auth = await requireFeatureRole("appointment_vault", ["owner"], { write: true });
@@ -40,7 +47,7 @@ export async function PATCH(request: NextRequest) {
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Choose a carrier and whether it requires E&O" }, { status: 400 });
   try {
     const requirement = await saveCarrierRequirement(auth.context.tenantId, auth.context.userId, parsed.data);
-    await audit({ actorType: "tenant", actorId: auth.context.userId, action: "tenant.carrier_configured", targetType: "tenant_carrier", targetId: parsed.data.carrier_id, metadata: { carrierId: parsed.data.carrier_id, requiresEo: requirement.requires_eo }, request });
+    await audit({ actorType: "tenant", actorId: auth.context.userId, action: "tenant.carrier_configured", targetType: "tenant_carrier", targetId: parsed.data.carrier_id, metadata: { carrierId: parsed.data.carrier_id, ...(parsed.data.requires_eo === undefined ? {} : { requiresEo: requirement.requires_eo }), ...(parsed.data.contracted === undefined ? {} : { contracted: requirement.contracted }) }, request });
     return NextResponse.json({ requirement });
   } catch (error) {
     if (error instanceof SchemaPendingError) return NextResponse.json({ error: error.message, code: "schema_pending" }, { status: 503 });

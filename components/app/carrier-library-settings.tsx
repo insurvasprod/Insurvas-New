@@ -51,8 +51,10 @@ type Snapshot = {
   commissionSchedules: CommissionScheduleRow[];
   advanceRules: AdvanceRuleRow[];
   /** Migration 20260924220100: which carriers require E&O in force. */
-  carrierRequirements?: Array<{ carrier_id: string; requires_eo: boolean }>;
+  carrierRequirements?: Array<{ carrier_id: string; requires_eo: boolean; contracted?: boolean }>;
   requirementsAvailable?: boolean;
+  /** Migration 20261013100000: LA-0.4's switch can be saved. Until then every carrier reads as on. */
+  switchAvailable?: boolean;
 };
 type DialogState = { mode: "add" | "edit"; carrierId: string; productCode: string };
 
@@ -68,6 +70,7 @@ export function CarrierLibrarySettings() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [dialog, setDialog] = useState<DialogState | null>(null);
   const [query, setQuery] = useState("");
+  const [switching, setSwitching] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -91,6 +94,24 @@ export function CarrierLibrarySettings() {
   const rows = useMemo(() => (snapshot ? buildContractRows(snapshot) : []), [snapshot]);
   const needle = query.trim().toLowerCase();
   const shownRows = needle ? rows.filter((row) => row.carrierName.toLowerCase().includes(needle) || (row.productName ?? "").toLowerCase().includes(needle)) : rows;
+  const isContracted = (carrierId: string) => snapshot?.carrierRequirements?.find((row) => row.carrier_id === carrierId)?.contracted !== false;
+  /**
+   * LA-0.4 "Contracted? [x]": off takes the carrier out of quoting, lead assignment and every "who do
+   * we write with" list. Its contract history, rates and the money on policies already written stay.
+   */
+  async function setContracted(carrierId: string, carrierName: string, next: boolean) {
+    setSwitching(carrierId);
+    const response = await fetch("/api/app/carrier-library/tenant-carriers", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ carrier_id: carrierId, contracted: next }) });
+    const result = await response.json().catch(() => null);
+    setSwitching(null);
+    if (!response.ok) {
+      notify.block(result?.error ?? "Could not save the switch");
+      return;
+    }
+    notify.done(next ? `${carrierName} is switched back on` : `${carrierName} is switched off: no new quotes, applications or leads for it`);
+    await load();
+  }
+
   function openAdd() {
     if (!snapshot) return;
     setDialog({ mode: "add", carrierId: snapshot.carriers.find((carrier) => !activeContract(snapshot.tenantCarriers, carrier.id))?.id ?? snapshot.carriers[0]?.id ?? "", productCode: snapshot.products[0]?.code ?? "" });
@@ -157,6 +178,7 @@ export function CarrierLibrarySettings() {
                 <th scope="col" className={cn(st.th, "w-[200px]")}>Product</th>
                 <th scope="col" className={cn(st.th, st.num, "w-[150px]")}>Contract level</th>
                 <th scope="col" className={cn(st.th, st.num, "w-[140px]")}>Effective from</th>
+                <th scope="col" className={cn(st.th, "w-[120px]")}>Contracted?</th>
                 <th scope="col" className={cn(st.th, st.num, "w-[90px]")}><span className="sr-only">Actions</span></th>
               </tr>
             </thead>
@@ -164,10 +186,24 @@ export function CarrierLibrarySettings() {
               {shownRows.map((row) => {
                 return (
                   <tr key={row.key}>
-                    <td className={st.td}>{row.carrierName}</td>
+                    <td className={st.td}>
+                      <span className={isContracted(row.carrierId) ? undefined : "text-[var(--muted)]"}>{row.carrierName}</span>
+                      {!isContracted(row.carrierId) && <span className="block text-xs text-[var(--muted)]">Switched off</span>}
+                    </td>
                     <td className={st.td}>{row.productName ?? <span className="text-[var(--muted)]">No products yet</span>}</td>
                     <td className={cn(st.td, st.num)}>{formatBps(row.levelBp)}</td>
                     <td className={cn(st.td, st.num)}>{formatDay(row.effectiveFrom)}</td>
+                    <td className={st.td}>
+                      <input
+                        type="checkbox"
+                        className="size-4 accent-[var(--primary)] align-middle"
+                        checked={isContracted(row.carrierId)}
+                        disabled={snapshot.switchAvailable === false || switching === row.carrierId}
+                        title={snapshot.switchAvailable === false ? "This switch needs a database update that has not been applied yet." : undefined}
+                        aria-label={`Contracted with ${row.carrierName}`}
+                        onChange={(event) => void setContracted(row.carrierId, row.carrierName, event.target.checked)}
+                      />
+                    </td>
                     <td className={cn(st.td, st.num)}>
                       <Button type="button" variant="outline" size="sm" onClick={() => openEdit(row)} aria-label={`Edit ${row.carrierName}${row.productName ? `, ${row.productName}` : ""}`}>
                         Edit

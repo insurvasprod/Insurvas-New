@@ -23,8 +23,8 @@ export type LibraryLike = {
   tenantCarriers: TenantCarrierLike[];
   commissionSchedules: CommissionScheduleRow[];
   advanceRules: AdvanceRuleLike[];
-  /** Migration 20260924220100; absent or empty before it. */
-  carrierRequirements?: Array<{ carrier_id: string; requires_eo: boolean }>;
+  /** Migration 20260924220100; absent or empty before it. `contracted: false` = switched off (LA-0.4, 20261013100000); absent reads as on. */
+  carrierRequirements?: Array<{ carrier_id: string; requires_eo: boolean; contracted?: boolean }>;
   requirementsAvailable?: boolean;
 };
 
@@ -45,6 +45,11 @@ export const todayIso = () => new Date().toISOString().slice(0, 10);
 
 export function activeContract(tenantCarriers: TenantCarrierLike[], carrierId: string) {
   return tenantCarriers.find((row) => row.carrier_id === carrierId && row.is_active) ?? null;
+}
+
+/** LA-0.4: false only when the agency switched the carrier off; no requirement row means on. */
+export function carrierSwitchedOn(library: Pick<LibraryLike, "carrierRequirements">, carrierId: string) {
+  return !(library.carrierRequirements ?? []).some((row) => row.carrier_id === carrierId && row.contracted === false);
 }
 
 /** Table rows for "Carriers & contract levels", in library order then product order. */
@@ -82,9 +87,10 @@ export type LibrarySummary = {
 };
 
 export function summarizeLibrary(library: LibraryLike): LibrarySummary {
-  const rows = buildContractRows(library);
+  // LA-0.4: a carrier the agency switched off is not counted.
+  const rows = buildContractRows(library).filter((row) => carrierSwitchedOn(library, row.carrierId));
   const products = rows.filter((row) => row.productCode !== null);
-  const active = library.carriers.filter((carrier) => activeContract(library.tenantCarriers, carrier.id));
+  const active = library.carriers.filter((carrier) => activeContract(library.tenantCarriers, carrier.id) && carrierSwitchedOn(library, carrier.id));
   return {
     activeCarriers: active.length,
     libraryCarriers: library.carriers.length,
@@ -157,5 +163,5 @@ export function formatDay(iso: string | null | undefined, zone = viewerTimeZone(
 export function carriersRequiringEo(library: LibraryLike): string[] | null {
   if (library.requirementsAvailable === false || !library.carrierRequirements) return null;
   const required = new Set(library.carrierRequirements.filter((row) => row.requires_eo).map((row) => row.carrier_id));
-  return library.carriers.filter((carrier) => required.has(carrier.id) && activeContract(library.tenantCarriers, carrier.id)).map((carrier) => carrier.name);
+  return library.carriers.filter((carrier) => required.has(carrier.id) && activeContract(library.tenantCarriers, carrier.id) && carrierSwitchedOn(library, carrier.id)).map((carrier) => carrier.name);
 }

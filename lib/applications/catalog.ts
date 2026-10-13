@@ -1,6 +1,7 @@
 import "server-only";
 
 import { appointmentIsActiveAt } from "@/lib/appointments/eligibility";
+import { switchedOffCarrierIds } from "@/lib/carriers/service";
 import { bandFallback } from "@/lib/quotes/math";
 import { pickQuotationTemplate, quotationFieldsOf, type QuotationField } from "@/lib/quotes/quotationTemplate";
 import { preferTenantCopies } from "@/lib/salesSettings/carriers";
@@ -52,9 +53,13 @@ async function readProducts(tenantId: string, carrierIds: string[]): Promise<Pro
 
 export async function quoteCatalog(tenantId: string, clientState: string | null, productLine: string | null): Promise<QuoteCatalog> {
   const client = db();
-  const contracts = await client.from("tenant_carriers").select("carrier_id, is_active").eq("tenant_id", tenantId).eq("is_active", true);
+  const [contracts, switchedOff] = await Promise.all([
+    client.from("tenant_carriers").select("carrier_id, is_active").eq("tenant_id", tenantId).eq("is_active", true),
+    switchedOffCarrierIds(tenantId),
+  ]);
   if (contracts.error && !isMissingSchema(contracts.error)) throw new Error(contracts.error.message);
-  const carrierIds = [...new Set(rows<{ carrier_id: string }>(contracts.data).map((c) => c.carrier_id))];
+  // LA-0.4: a carrier the agency switched off is not offered.
+  const carrierIds = [...new Set(rows<{ carrier_id: string }>(contracts.data).map((c) => c.carrier_id))].filter((id) => !switchedOff.has(id));
   if (!carrierIds.length) return { carriers: [], quotationTemplate: null };
   const today = new Date().toISOString().slice(0, 10);
   const [carriers, products, appointments, template, settings] = await Promise.all([

@@ -2,6 +2,7 @@ import "server-only";
 
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { appointmentCountsForRouting } from "@/lib/appointments/eligibility";
+import { switchedOffCarrierIds } from "@/lib/carriers/service";
 
 import {
   LEAD_LIST_ASSIGN_LIMIT,
@@ -206,18 +207,20 @@ async function appointmentsForRouting(client: Db, tenantId: string): Promise<Res
 async function eligibleStatesFallback(tenantId: string, userIds: string[]): Promise<Record<string, string[]> | null> {
   if (!userIds.length) return {};
   const client = db();
-  const [licenses, appointments, carriers, own] = await Promise.all([
+  const [licenses, appointments, carriers, own, switchedOff] = await Promise.all([
     client.from("licenses").select("state, expires_at").eq("tenant_id", tenantId),
     appointmentsForRouting(client, tenantId),
     client.from("tenant_carriers").select("carrier_id, is_active").eq("tenant_id", tenantId),
     client.from("tenant_user_licensed_states").select("user_id, state").eq("tenant_id", tenantId),
+    switchedOffCarrierIds(tenantId),
   ]);
   if (licenses.error || appointments.error || carriers.error) return null;
   const today = new Date().toISOString().slice(0, 10);
   const up = (value: unknown) => String(value ?? "").trim().toUpperCase();
   const licensed = new Set(rows<{ state: string; expires_at: string | null }>(licenses.data)
     .filter((l) => up(l.state) && (!l.expires_at || l.expires_at.slice(0, 10) >= today)).map((l) => up(l.state)));
-  const activeCarriers = new Set(rows<{ carrier_id: string; is_active: boolean }>(carriers.data).filter((c) => c.is_active).map((c) => c.carrier_id));
+  // LA-0.4: a carrier the agency switched off does not count, as in the SQL gate.
+  const activeCarriers = new Set(rows<{ carrier_id: string; is_active: boolean }>(carriers.data).filter((c) => c.is_active && !switchedOff.has(c.carrier_id)).map((c) => c.carrier_id));
   const appointed = new Set(rows<{ state: string; status: string; effective_from: string | null; terminated_at: string | null; expires_at?: string | null; carrier_id: string }>(appointments.data)
     .filter((a) => activeCarriers.has(a.carrier_id) && appointmentCountsForRouting(a, today))
     .map((a) => up(a.state)));

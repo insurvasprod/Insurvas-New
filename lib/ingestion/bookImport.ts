@@ -1,5 +1,6 @@
 import "server-only";
 
+import { switchedOffCarrierIds } from "@/lib/carriers/service";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isSchemaGap } from "@/lib/supabase/schemaGap";
 
@@ -45,7 +46,7 @@ export type CarrierImport = {
 const FILE_COLUMNS = "id, carrier_id, original_filename, status, file_date, row_count, held_row_count, error_detail, parse_block, received_at, is_initial_import, derived_at";
 
 export async function loadBookImport(tenantId: string) {
-  const [writes, rows, guidance, files, current, summaries, library, monthsRead] = await Promise.all([
+  const [writes, rows, guidance, files, current, summaries, library, monthsRead, switchedOff] = await Promise.all([
     db().from("tenant_carriers").select("carrier_id").eq("tenant_id", tenantId).eq("is_active", true),
     db().from("book_import_carrier").select("carrier_id, status, file_id, updated_at").eq("tenant_id", tenantId),
     db().from("carrier_portal_guidance").select("carrier_id, where_in_portal, report_name, format_hint, notes"),
@@ -54,6 +55,7 @@ export async function loadBookImport(tenantId: string) {
     db().from("queue_item").select("carrier_id, subject_id, payload").eq("tenant_id", tenantId).eq("queue_type", "initial_import"),
     db().from("carriers").select("id, name").eq("is_active", true).order("name"),
     db().from("file_registry").select("file_date").eq("tenant_id", tenantId).eq("file_type", "policies").eq("status", "parsed").limit(5000),
+    switchedOffCarrierIds(tenantId),
   ]);
   for (const read of [rows, guidance, files]) {
     if (read.error) {
@@ -61,7 +63,8 @@ export async function loadBookImport(tenantId: string) {
       throw new Error(`Could not load the import: ${read.error.message}`);
     }
   }
-  const writing = new Set<string>((writes.data ?? []).map((row: Loose) => row.carrier_id));
+  // LA-0.4: a carrier the agency switched off is not one it writes.
+  const writing = new Set<string>((writes.data ?? []).map((row: Loose) => row.carrier_id as string).filter((id: string) => !switchedOff.has(id)));
   const progress = new Map<string, Loose>((rows.data ?? []).map((row: Loose) => [row.carrier_id, row]));
   const guide = new Map<string, Guidance>((guidance.data ?? []).map((row: Loose) => [row.carrier_id, { whereInPortal: row.where_in_portal, reportName: row.report_name, formatHint: row.format_hint, notes: row.notes }]));
   const latestFile = new Map<string, Loose>();

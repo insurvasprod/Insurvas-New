@@ -5,6 +5,7 @@ import { z } from "zod";
 import type { Actor } from "@/lib/applications/http";
 import { ApplicationError, db, isMissingSchema, rows, SchemaPendingError, type DbError } from "@/lib/applications/db";
 import { CANONICAL_GROUPS, isSensitiveKey } from "@/lib/applications/constants";
+import { switchedOffCarrierIds } from "@/lib/carriers/service";
 import { normaliseProse } from "@/lib/applications/formats";
 import { US_STATES } from "@/lib/signup/constants";
 import { CLAUSE_FIELD, CLAUSE_OPS, type Clause } from "./editing";
@@ -110,8 +111,12 @@ function fail(error: DbError, what: string): never {
 
 async function tenantCarriers(tenantId: string) {
   const client = db();
-  const contracted = await client.from("tenant_carriers").select("carrier_id").eq("tenant_id", tenantId);
-  const ids = [...new Set(rows<{ carrier_id: string }>(contracted.error ? [] : contracted.data).map((c) => c.carrier_id))];
+  const [contracted, switchedOff] = await Promise.all([
+    client.from("tenant_carriers").select("carrier_id").eq("tenant_id", tenantId).eq("is_active", true),
+    switchedOffCarrierIds(tenantId),
+  ]);
+  // LA-0.4: only carriers with a current contract that the agency has switched on.
+  const ids = [...new Set(rows<{ carrier_id: string }>(contracted.error ? [] : contracted.data).map((c) => c.carrier_id))].filter((id) => !switchedOff.has(id));
   if (!ids.length) return [];
   const carriers = await client.from("carriers").select("id, name").in("id", ids).order("name");
   return rows<{ id: string; name: string }>(carriers.error ? [] : carriers.data);

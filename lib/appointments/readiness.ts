@@ -166,12 +166,15 @@ export type ReadinessInput = {
   eoPolicies: readonly EoPolicyRow[];
   ceRecords: readonly CeRecordRow[];
   carrierTrainings?: readonly CarrierTrainingRow[] | null;
-  carrierRequirements?: ReadonlyArray<{ carrier_id: string; requires_eo: boolean }> | null;
+  /** `contracted: false` = the agency switched the carrier off (LA-0.4); absent reads as on. */
+  carrierRequirements?: ReadonlyArray<{ carrier_id: string; requires_eo: boolean; contracted?: boolean }> | null;
 };
 
 /** The carrier × state cells that route a lead today, as the SQL gate decides it (any in-date active row, carrier switched on). */
-export function routingCells(input: Pick<ReadinessInput, "tenantCarriers" | "appointments">, today: string): Set<string> {
-  const activeCarriers = new Set(input.tenantCarriers.filter((row) => row.is_active).map((row) => row.carrier_id));
+export function routingCells(input: Pick<ReadinessInput, "tenantCarriers" | "appointments" | "carrierRequirements">, today: string): Set<string> {
+  // LA-0.4: a carrier the agency switched off routes nothing.
+  const switchedOff = new Set((input.carrierRequirements ?? []).filter((row) => row.contracted === false).map((row) => row.carrier_id));
+  const activeCarriers = new Set(input.tenantCarriers.filter((row) => row.is_active && !switchedOff.has(row.carrier_id)).map((row) => row.carrier_id));
   return new Set(
     input.appointments
       .filter((row) => activeCarriers.has(row.carrier_id) && appointmentCountsForRouting(row, today))
