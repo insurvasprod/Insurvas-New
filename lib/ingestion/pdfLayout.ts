@@ -28,6 +28,14 @@
 export type PdfColumn = { name: string; x: number };
 /** Where a stated amount is: the label before it, the line to look after, which amount after it. */
 export type PdfAmount = { label: string; after?: string; nth?: number };
+/**
+ * A statement with more than one table, each with its own columns (Corebridge's real weekly statement
+ * prints ANNUALIZATION and OVERRIDE one under the other, at different positions). From a line
+ * containing a part's `start`, rows are cut with that part's columns, and the part's `label` is
+ * written into `column` — so the layout map can tell an advance from an override by where it was printed.
+ * Every part must have the row-start column. Before any part starts, the layout's own columns apply.
+ */
+export type PdfSections = { column: string; parts: Array<{ start: string; label: string; columns: PdfColumn[] }> };
 export type PdfLayout = {
   columns: PdfColumn[];
   rowStart: { column: string; pattern: string };
@@ -36,6 +44,7 @@ export type PdfLayout = {
   stop?: string[];
   total?: PdfAmount & { column: string };
   balance?: { opening: PdfAmount; activity: PdfAmount; closing: PdfAmount };
+  sections?: PdfSections;
 };
 export type PdfLineInput = { pieces: Array<{ x: number; text: string }>; text: string };
 
@@ -116,6 +125,30 @@ export function pdfLayoutProblems(layout: unknown): string[] {
   if (value.balance !== undefined && !(labelled(value.balance?.opening) && labelled(value.balance?.activity) && labelled(value.balance?.closing))) {
     problems.push("The balance check needs the labels of the opening balance, the activity and the closing balance.");
   }
+  if (value.sections !== undefined) {
+    const sections = value.sections;
+    if (!sections || typeof sections.column !== "string" || !sections.column.trim()) problems.push("Sections need the name of the column their label is written into.");
+    const parts = Array.isArray(sections?.parts) ? sections.parts : [];
+    if (!parts.length) problems.push("Sections need at least one part.");
+    for (const part of parts) {
+      const name = part && typeof part.label === "string" && part.label.trim() ? part.label : "a section";
+      if (!part || typeof part.start !== "string" || !part.start.trim()) problems.push(`${name} needs the text that starts it.`);
+      if (!part || typeof part.label !== "string" || !part.label.trim()) problems.push("Every section needs a label.");
+      const own = Array.isArray(part?.columns) ? part.columns : [];
+      if (own.length < 2) problems.push(`${name} needs at least two columns.`);
+      let left = -Infinity;
+      const seen = new Set<string>();
+      for (const column of own) {
+        if (!column || typeof column.name !== "string" || !column.name.trim() || typeof column.x !== "number" || !Number.isFinite(column.x)) { problems.push(`${name}: every column needs a name and a left edge.`); continue; }
+        if (seen.has(column.name)) problems.push(`${name}: "${column.name}" is named twice.`);
+        seen.add(column.name);
+        if (column.x <= left) problems.push(`${name}: "${column.name}" must be right of the column before it.`);
+        left = column.x;
+      }
+      if (value.rowStart && !own.some((column) => column?.name === value.rowStart?.column)) problems.push(`${name} needs the row-start column "${value.rowStart.column}".`);
+    }
+    if (sections?.column && [...columns, ...(value.continuation ?? [])].some((column) => column?.name === sections.column)) problems.push(`The section column "${sections.column}" is also a printed column.`);
+  }
   return problems;
 }
 
@@ -148,29 +181,41 @@ function assign(pieces: PdfLineInput["pieces"], columns: PdfColumn[]): string[] 
 
 /** The table as a grid: the column names, then one line per row. */
 export function pdfGrid(lines: PdfLineInput[], layout: PdfLayout): string[][] {
-  const columns = [...layout.columns].sort((a, b) => a.x - b.x);
+  const base = [...layout.columns].sort((a, b) => a.x - b.x);
   const extra = layout.continuation ? [...layout.continuation].sort((a, b) => a.x - b.x) : [];
-  const startIndex = columns.findIndex((column) => column.name === layout.rowStart.column);
+  const parts = (layout.sections?.parts ?? []).map((part) => ({ ...part, columns: [...part.columns].sort((a, b) => a.x - b.x) }));
   const pattern = new RegExp(layout.rowStart.pattern);
-  const header = [...columns.map((column) => column.name), ...extra.map((column) => column.name)];
+  // The layout's columns, then any a section adds, then the continuation, then the section label.
+  const header = base.map((column) => column.name);
+  for (const part of parts) for (const column of part.columns) if (!header.includes(column.name)) header.push(column.name);
+  const extraAt = header.length;
+  header.push(...extra.map((column) => column.name));
+  const sectionAt = layout.sections ? header.push(layout.sections.column) - 1 : -1;
   const rows: string[][] = [];
   let active = !layout.start;
+  let columns = base;
+  let label = "";
   let open: { cells: string[]; continued: boolean } | null = null;
   for (const line of lines) {
     const said = flat(line.pieces.map((piece) => piece.text).join(" "));
     if (layout.start && said.includes(flat(layout.start))) { active = true; open = null; continue; }
     if (!active) continue;
     if (layout.stop?.some((text) => said.includes(flat(text)))) { active = false; open = null; continue; }
+    // A section's heading is a line saying only its name ("OVERRIDE"): it switches the columns and is not a row.
+    const part = parts.find((candidate) => said === flat(candidate.start));
+    if (part) { columns = part.columns; label = part.label; open = null; continue; }
     const cells = assign(line.pieces, columns);
-    if (pattern.test(cells[startIndex] ?? "")) {
-      const row = [...cells, ...extra.map(() => "")];
+    if (pattern.test(cells[columns.findIndex((column) => column.name === layout.rowStart.column)] ?? "")) {
+      const row = header.map(() => "");
+      columns.forEach((column, index) => { row[header.indexOf(column.name)] = cells[index]; });
+      if (sectionAt >= 0) row[sectionAt] = label;
       rows.push(row);
       open = { cells: row, continued: false };
     } else if (open && extra.length && !open.continued) {
       const more = assign(line.pieces, extra);
       // Only a line wholly inside the continuation columns continues the row.
       if (line.pieces.every((piece) => piece.x + EDGE_TOLERANCE >= extra[0].x)) {
-        more.forEach((value, index) => { open!.cells[columns.length + index] = value; });
+        more.forEach((value, index) => { open!.cells[extraAt + index] = value; });
         open.continued = true;
       }
     }

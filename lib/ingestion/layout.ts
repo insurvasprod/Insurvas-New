@@ -304,6 +304,20 @@ export function restoreZip(value: CellValue): CellValue {
   return match ? match[1].padStart(5, "0") + (match[2] ?? "") : value;
 }
 
+/**
+ * A policy's premium or face amount written past the cent ("41.92302": Corebridge's in-force report,
+ * 2026-10-13) is that amount to the nearest cent. Only these two policy fields: a commission line's
+ * money must be exact, and still refuses a third decimal.
+ */
+export const ROUNDED_TO_CENT = new Set(["premium_cents", "face_amount_cents"]);
+export function roundToCent(raw: string): string {
+  const match = /^(\s*\(?)(-?)(\$?)([\d,]*)\.(\d{3,})(\)?-?\s*)$/.exec(raw);
+  if (!match) return raw;
+  const value = Number(`${match[4].replaceAll(",", "") || "0"}.${match[5]}`);
+  if (!Number.isFinite(value)) return raw;
+  return `${match[1]}${match[2]}${match[3]}${(Math.round(value * 100) / 100).toFixed(2)}${match[6]}`;
+}
+
 /** One cell through one map entry. An empty (or all-space) cell is null, and an error only if required. */
 export function convertCell(input: string, entry: Pick<LayoutEntry, "dataType" | "transform" | "enumValues" | "required">, options: { verbatim?: boolean } = {}): Converted {
   const raw = unwrapExcelText(input);
@@ -414,8 +428,16 @@ export function parseWithMap(input: ParseInput): ParseResult {
     raw = { ...raw, ...reread };
   }
 
-  const keyFor = new Map<string, string>();
-  for (const column of raw.columns) if (!keyFor.has(column.header)) keyFor.set(column.header, column.key);
+  // A header is found by its exact text first, then with the spaces around it ignored on both sides:
+  // the same carrier's report can say "Date of Issue " one month and "Date of Issue  " the next
+  // (Corebridge, 2026-10-13), and the spaces are invisible to whoever builds the map.
+  const byHeader = new Map<string, string>();
+  for (const column of raw.columns) if (!byHeader.has(column.header)) byHeader.set(column.header, column.key);
+  for (const column of raw.columns) if (column.header.trim() && !byHeader.has(column.header.trim())) byHeader.set(column.header.trim(), column.key);
+  const keyFor = {
+    has: (name: string) => byHeader.has(name) || byHeader.has(name.trim()),
+    get: (name: string) => byHeader.get(name) ?? byHeader.get(name.trim()),
+  };
   // A source column written "=annual" is a fixed value for every row: what the carrier's file never
   // says because it is always the same (Americo's premium is always annual).
   const isConstant = (entry: LayoutEntry) => entry.sourceColumn.startsWith("=") && entry.sourceColumn.length > 1;
@@ -429,8 +451,8 @@ export function parseWithMap(input: ParseInput): ParseResult {
     findings.push({ findingType: "required_column_missing", severity: "blocking", reasoning: `The file has no ${names} column, which this map requires.`, payload: { columns: missingRequired.map((entry) => entry.sourceColumn) } });
     return result(`Required column ${names} is missing, so nothing was read from this file.`);
   }
-  const mapped = new Set(entries.flatMap((entry) => parts(entry) ?? [entry.sourceColumn]));
-  const unknown = raw.columns.filter((column) => column.header.trim() !== "" && !mapped.has(column.header)).map((column) => column.header);
+  const mapped = new Set(entries.flatMap((entry) => parts(entry) ?? [entry.sourceColumn]).map((name) => name.trim()));
+  const unknown = raw.columns.filter((column) => column.header.trim() !== "" && !mapped.has(column.header.trim())).map((column) => column.header);
   if (unknown.length) findings.push({ findingType: "unknown_column", severity: "warning", reasoning: `${unknown.length === 1 ? "A column" : `${unknown.length} columns`} this map does not read: ${unknown.map((name) => `"${name}"`).join(", ")}. Every value is kept in the raw rows.`, payload: { columns: unknown } });
 
   // A PDF statement's own total arrives as a marked row (LA-4.4, pdfLayout.ts); a spreadsheet's is named by the map.
@@ -459,7 +481,7 @@ export function parseWithMap(input: ParseInput): ParseResult {
       const joined = parts(entry);
       const key = keyFor.get(entry.sourceColumn);
       const cell = joined ? joined.map((part) => (row.payload[keyFor.get(part)!] ?? "").trim()).filter(Boolean).join(" ") : key ? row.payload[key] ?? "" : entry.sourceColumn.slice(1);
-      const converted = convertCell(cell, entry, { verbatim: verbatimFields.has(entry.targetField) });
+      const converted = convertCell(ROUNDED_TO_CENT.has(entry.targetField) ? roundToCent(cell) : cell, entry, { verbatim: verbatimFields.has(entry.targetField) });
       if (converted.ok) values[entry.targetField] = entry.targetField === "insured_zip" ? restoreZip(converted.value) : converted.value;
       else { rowOk = false; heldBack.push({ rowNumber: row.rowNumber, field: entry.targetField, reason: converted.reason }); }
     }
