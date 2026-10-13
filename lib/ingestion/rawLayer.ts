@@ -5,7 +5,7 @@ import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isSchemaGap } from "@/lib/supabase/schemaGap";
 
 import { chooseSheet, detectHeaderRow, parseCsvGrid, rawRowsFromGrid, type RawColumn } from "./grid";
-import { findAmount, pdfGrid, PDF_TOTAL_MARKER, statementProblem, pdfLayoutProblems, type PdfLayout } from "./pdfLayout";
+import { balanceCheck, findAmount, pdfGrid, PDF_TOTAL_MARKER, statementProblem, pdfLayoutProblems, type BalanceCheck, type PdfLayout } from "./pdfLayout";
 import { readPdfLines } from "./pdfText";
 import { readSpreadsheetMl } from "./spreadsheetMl";
 import type { ReprocessRow } from "./reprocess";
@@ -232,4 +232,22 @@ export async function readRawRows(tenantId: string, fileId: string): Promise<Rep
     if ((data ?? []).length < 1000) break;
   }
   return rows;
+}
+
+/**
+ * LA-4.4 · a PDF statement that failed its balance gate, read again for a person to review: its
+ * lines and its arithmetic side by side. Null when the file isn't a failed PDF, has no published PDF
+ * layout, or can't be read. Writes nothing.
+ */
+export async function pdfBalanceReview(tenantId: string, fileId: string): Promise<BalanceCheck | null> {
+  const { data: file } = await db().from("file_registry").select("storage_path, file_kind, status, carrier_id, file_type").eq("tenant_id", tenantId).eq("id", fileId).maybeSingle();
+  if (!file || file.file_kind !== "pdf" || file.status !== "failed") return null;
+  const layout = (await layoutForFile(tenantId, file.carrier_id, file.file_type)).pdfLayout;
+  if (!layout) return null;
+  try {
+    const lines = await readPdfLines(await carrierFileStorage().get(file.storage_path));
+    return lines.length ? balanceCheck(lines, layout) : null;
+  } catch {
+    return null;
+  }
 }

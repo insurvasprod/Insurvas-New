@@ -14,6 +14,7 @@ import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 import { FILE_TYPE_LABELS, FILE_TYPES, type CarrierFileType } from "@/lib/ingestion/constants";
 import { guessTargetField, mapProblems, TARGET_FIELDS, TRANSFORMS_FOR, type LayoutEntry, type Transform } from "@/lib/ingestion/layout";
+import { pdfLayoutProblems } from "@/lib/ingestion/pdfLayout";
 import type { AssignmentView, CarrierOption, LayoutMapView, LayoutStatus, WaitingFile } from "@/lib/ingestion/layoutAdmin";
 import { notify } from "@/lib/notify";
 
@@ -69,8 +70,19 @@ type Draft = {
   rowCountSwingPct: string;
   totalRowColumn: string;
   totalRowValue: string;
+  /** LA-4.4: the PDF extraction profile as JSON text; empty for a spreadsheet layout. */
+  pdfText: string;
   entries: Array<LayoutEntry & { enumText: string }>;
 };
+
+/** The PDF profile typed so far: its value to save and what is wrong with it. */
+function readPdfText(text: string): { value: Record<string, unknown> | null; problems: string[] } {
+  if (!text.trim()) return { value: null, problems: [] };
+  let value: unknown;
+  try { value = JSON.parse(text); } catch { return { value: null, problems: ["The PDF layout is not valid JSON."] }; }
+  if (!value || typeof value !== "object" || Array.isArray(value)) return { value: null, problems: ["The PDF layout is an object with columns and a row start."] };
+  return { value: value as Record<string, unknown>, problems: pdfLayoutProblems(value).map((problem) => `PDF layout: ${problem}`) };
+}
 
 function draftOf(map: LayoutMapView): Draft {
   return {
@@ -80,6 +92,7 @@ function draftOf(map: LayoutMapView): Draft {
     rowCountSwingPct: String(map.rowCountSwingPct),
     totalRowColumn: map.totalRowColumn ?? "",
     totalRowValue: map.totalRowValue ?? "",
+    pdfText: map.pdfLayout ? JSON.stringify(map.pdfLayout, null, 2) : "",
     entries: map.entries.map((entry) => ({ ...entry, enumText: enumText(entry.enumValues) })),
   };
 }
@@ -180,6 +193,7 @@ export function LayoutMapsReview({ initialMaps, initialAssignments, carriers, no
       row_count_swing_pct: Number(current.rowCountSwingPct) || 50,
       total_row_column: current.totalRowColumn.trim() || null,
       total_row_value: current.totalRowValue.trim() || null,
+      pdf_layout: readPdfText(current.pdfText).value,
       entries: current.entries.map((entry) => ({
         source_column: entry.sourceColumn,
         target_field: entry.targetField,
@@ -209,7 +223,8 @@ export function LayoutMapsReview({ initialMaps, initialAssignments, carriers, no
   });
 
   const fields = open ? TARGET_FIELDS[open.fileType] : [];
-  const localProblems = open && draft && editable ? mapProblems({ fileType: open.fileType }, draft.entries.map((entry) => ({ ...entry, enumValues: entry.dataType === "enum" ? enumValues(entry.enumText) : null }))) : [];
+  const pdf = draft ? readPdfText(draft.pdfText) : { value: null, problems: [] };
+  const localProblems = open && draft && editable ? [...mapProblems({ fileType: open.fileType }, draft.entries.map((entry) => ({ ...entry, enumValues: entry.dataType === "enum" ? enumValues(entry.enumText) : null }))), ...pdf.problems] : [];
 
   return (
     <div className="flex flex-col gap-6">
@@ -287,6 +302,21 @@ export function LayoutMapsReview({ initialMaps, initialAssignments, carriers, no
                 </>
               )}
             </div>
+
+            {(open.fileType === "commissions" || draft.pdfText.trim() !== "") && (
+              <div className="grid gap-1.5">
+                <Label htmlFor="layout-pdf">PDF layout (JSON: columns and their left edges, the row start, the statement total and balances; empty for a spreadsheet)</Label>
+                <textarea
+                  id="layout-pdf"
+                  rows={draft.pdfText.trim() ? 12 : 3}
+                  spellCheck={false}
+                  value={draft.pdfText}
+                  onChange={(event) => setDraft({ ...draft, pdfText: event.target.value })}
+                  className="w-full resize-y rounded-md border border-input bg-background px-3 py-2 font-mono text-xs leading-relaxed text-foreground outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 disabled:opacity-70"
+                />
+                {editable && pdf.problems.length > 0 && <p role="alert" className="m-0 text-xs text-[var(--error-ink)]">{pdf.problems[0]}</p>}
+              </div>
+            )}
 
             <div className="overflow-x-auto rounded-lg border border-border">
               <table className="portal-lead-table w-full min-w-[980px] text-left text-sm">

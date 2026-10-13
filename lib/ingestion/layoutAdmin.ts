@@ -5,6 +5,7 @@ import { isSchemaGap } from "@/lib/supabase/schemaGap";
 
 import type { CarrierFileType } from "./constants";
 import { mapProblems, type DataType, type LayoutEntry, type Transform } from "./layout";
+import { pdfLayoutProblems } from "./pdfLayout";
 
 /**
  * LA-4.3 (Notion sprint) · the platform's layout maps, for staff (the admin plane).
@@ -126,6 +127,8 @@ export type LayoutSave = {
   totalRowColumn: string | null;
   totalRowValue: string | null;
   entries: LayoutEntry[];
+  /** LA-4.4: the PDF extraction profile; undefined leaves it as it is, null clears it. */
+  pdfLayout?: unknown | null;
 };
 
 /** Saves a draft: its settings and its whole column list. A published version is refused by the database. */
@@ -139,6 +142,7 @@ export async function saveLayoutMap(id: string, input: LayoutSave): Promise<Layo
     row_count_swing_pct: input.rowCountSwingPct,
     total_row_column: input.totalRowColumn,
     total_row_value: input.totalRowValue,
+    ...(input.pdfLayout !== undefined ? { pdf_layout: input.pdfLayout } : {}),
   }).eq("id", id).is("tenant_id", null);
   if (error) fail(error, "Could not save the layout map");
   const removed = await db().from("carrier_layout_map_entry").delete().eq("map_id", id);
@@ -162,7 +166,8 @@ export async function saveLayoutMap(id: string, input: LayoutSave): Promise<Layo
 /** Publishes a draft once its columns make sense for its file type; the version before it retires. */
 export async function publishLayoutMap(adminId: string, id: string): Promise<LayoutMapView> {
   const current = await getMap(id);
-  const problems = mapProblems({ fileType: current.fileType }, current.entries);
+  // LA-4.4: a PDF extraction profile is checked before a person approves it, not when a file fails.
+  const problems = [...mapProblems({ fileType: current.fileType }, current.entries), ...(current.pdfLayout ? pdfLayoutProblems(current.pdfLayout).map((problem) => `PDF layout: ${problem}`) : [])];
   if (problems.length) throw new LayoutMapError("This map cannot be published yet.", 400, problems);
   const { error } = await db().rpc("publish_layout_map", { p_map_id: id, p_admin_id: adminId, p_user_id: null });
   if (error) fail(error, "Could not publish the layout map");
@@ -263,9 +268,14 @@ export async function listFilesWaitingForLayout(fileType: CarrierFileType): Prom
 
 /** The column headers of one waiting file, read from its first kept row (alphabetical: the row keeps names, not order). */
 export async function waitingFileHeaders(fileId: string): Promise<string[]> {
-  const { data: file, error } = await db().from("file_registry").select("id, tenant_id").eq("id", fileId).eq("parse_block", "no_layout_map").maybeSingle();
+  const { data: file, error } = await db().from("file_registry").select("id, tenant_id, raw_columns").eq("id", fileId).eq("parse_block", "no_layout_map").maybeSingle();
   if (error) throw new Error(`Could not open the file: ${error.message}`);
   if (!file) throw new LayoutMapError("That file is no longer waiting for a layout.", 404);
+  // The file's own column order (LA-4.2 keeps it on the registry row): a row's payload is jsonb,
+  // which does not keep key order, so the headers came back alphabetical and staff mapped them
+  // out of the order they read in the carrier's file.
+  const ordered = Array.isArray(file.raw_columns) ? (file.raw_columns as Array<{ header?: unknown }>).map((column) => (typeof column?.header === "string" ? column.header : "")).filter((header) => header.trim() !== "") : [];
+  if (ordered.length) return ordered;
   const { data: rows, error: rowError } = await db().from("raw_rows").select("payload").eq("tenant_id", file.tenant_id).eq("file_id", file.id).order("row_number").limit(1);
   if (rowError) throw new Error(`Could not read the file's columns: ${rowError.message}`);
   const payload = rows?.[0]?.payload;

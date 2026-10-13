@@ -21,6 +21,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       rowCountSwingPct: body.data.row_count_swing_pct,
       totalRowColumn: body.data.total_row_column,
       totalRowValue: body.data.total_row_value,
+      pdfLayout: body.data.pdf_layout,
       entries: body.data.entries.map((entry) => ({ sourceColumn: entry.source_column, targetField: entry.target_field, dataType: entry.data_type, transform: entry.transform, required: entry.required, enumValues: entry.enum_values })),
     });
     await audit({ actorType: "admin", actorId: scope.adminId, action: "layout_map.updated", targetType: "carrier_layout_map", targetId: id, metadata: { layoutKey: map.layoutKey, version: map.version, columns: map.entries.length }, request });

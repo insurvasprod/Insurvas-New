@@ -52,6 +52,9 @@ export const saveSchema = z.object({
   total_row_column: z.string().min(1).max(200).nullable(),
   total_row_value: z.string().min(1).max(200).nullable(),
   entries: z.array(entrySchema).max(200),
+  // LA-4.4: a PDF statement's extraction profile, edited on a draft and checked at publish. Absent:
+  // unchanged; null: none (a spreadsheet layout). Its shape is checked by pdfLayoutProblems.
+  pdf_layout: z.record(z.string(), z.unknown()).nullable().optional(),
 }).strict().refine((value) => (value.total_row_column === null) === (value.total_row_value === null), "A total row needs both its column and its value.");
 
 export const assignmentSchema = z.object({

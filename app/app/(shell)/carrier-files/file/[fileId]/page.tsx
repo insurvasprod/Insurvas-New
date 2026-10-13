@@ -5,11 +5,13 @@ import { guardPage } from "@/lib/entitlements/guardPage";
 import { FILE_STATUS_LABELS, fileDay, type CarrierFileStatus } from "@/lib/ingestion/constants";
 import { isRecordUuid } from "@/lib/ingestion/path";
 import { rowHref } from "@/lib/ingestion/trace";
+import { pdfBalanceReview } from "@/lib/ingestion/rawLayer";
 import { loadFileTrace } from "@/lib/ingestion/traceStore";
 import { hasTenantPermission } from "@/lib/tenantAuth/permissions";
 import { CarrierFileDownload } from "@/components/app/carrier-file-download";
 import { CarrierFileReread } from "@/components/app/carrier-file-reread";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
+import { PdfBalanceReview } from "@/components/app/pdf-balance-review";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/page-states";
@@ -32,6 +34,8 @@ export default async function CarrierFilePage({ params, searchParams }: { params
   const { page } = await searchParams;
   const file = await loadFileTrace(guard.context.tenantId, fileId, Number(page) || 1);
   if (!file) notFound();
+  // LA-4.4: a PDF statement the balance gate refused, read again for review (writes nothing).
+  const balance = file.fileKind === "pdf" && file.status === "failed" ? await pdfBalanceReview(guard.context.tenantId, file.id) : null;
 
   const facts: Array<[string, string]> = [
     ["Carrier", file.carrierName ?? "Not known"],
@@ -56,6 +60,8 @@ export default async function CarrierFilePage({ params, searchParams }: { params
         </dl>
         {file.errorDetail && <p className="m-0 border-t border-border px-4 py-3 text-sm text-[var(--warning-ink)]">{file.errorDetail}</p>}
       </TableCard>
+
+      {balance && <PdfBalanceReview check={balance} />}
 
       <TableCard
         title="Rows"

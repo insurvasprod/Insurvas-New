@@ -188,3 +188,37 @@ export function pdfGrid(lines: PdfLineInput[], layout: PdfLayout): string[][] {
   }
   return [header, ...rows];
 }
+
+export type BalanceCheck = {
+  /** The lines the layout reads, as a grid (column names first), without the statement-total row. */
+  grid: string[][];
+  /** Sum of the total column over the lines, in cents; null when the layout names no total column. */
+  linesCents: number | null;
+  /** What the statement itself states. Null when the layout doesn't ask, or the statement lacks it. */
+  totalCents: number | null;
+  openingCents: number | null;
+  activityCents: number | null;
+  closingCents: number | null;
+};
+
+/**
+ * LA-4.4's review of a statement that failed the balance gate: the lines it reads, and the arithmetic
+ * beside them — the lines' sum against the stated total, and opening + activity against closing — so
+ * a person sees at once whether a line was missed or misread. Reads only; nothing is written.
+ */
+export function balanceCheck(lines: PdfLineInput[], layout: PdfLayout): BalanceCheck {
+  const full = pdfGrid(lines, layout);
+  const [header, ...rows] = full;
+  const lineRows = rows.filter((row) => row[0] !== PDF_TOTAL_MARKER);
+  const at = layout.total ? header.indexOf(layout.total.column) : -1;
+  const linesCents = at >= 0 ? lineRows.reduce((sum, row) => sum + (moneyCents(row[at] ?? "") ?? 0), 0) : null;
+  const amount = (where: PdfAmount | undefined) => (where ? findAmount(lines, where)?.cents ?? null : null);
+  return {
+    grid: [header, ...lineRows],
+    linesCents,
+    totalCents: amount(layout.total),
+    openingCents: amount(layout.balance?.opening),
+    activityCents: amount(layout.balance?.activity),
+    closingCents: amount(layout.balance?.closing),
+  };
+}
