@@ -53,7 +53,7 @@ import {
 
 import type { MenuItem, MenuSection } from "@/lib/menu/definition";
 import { InsurvasLogo } from "@/components/shared/insurvas-logo";
-import { buildSidebarTree, initialOpenModule, NAV_BUSINESS_ICON, NAV_PARTNERS_ICON, type ModuleAccess, type SidebarModule, type SidebarTree } from "@/lib/menu/sidebar";
+import { buildSidebarTree, initialOpenGroups, type ModuleAccess } from "@/lib/menu/sidebar";
 
 /** Which acquisition modules the effective tenant entitlement includes (inbound, outbound). */
 export type AgentModuleAccess = ModuleAccess;
@@ -172,109 +172,6 @@ function DisclosureSection({
   );
 }
 
-function BusinessGroups({
-  groups,
-  onNavigate,
-}: {
-  groups: SidebarTree["business"];
-  onNavigate?: () => void;
-}) {
-  const pathname = usePathname();
-  const activeGroups = groups.filter((group) =>
-    group.items.some((item) => isActivePath(pathname, item.path)),
-  );
-  const [openGroups, setOpenGroups] = useState<string[]>(() =>
-    activeGroups.map((group) => group.label),
-  );
-
-  if (groups.length === 0) return null;
-
-  return (
-    <div className="portal-agent-nav-business-groups" aria-label="Business workspaces">
-      {groups.map((group) => (
-        <DisclosureSection
-          key={group.label}
-          label={group.label}
-          icon={iconFor(group.icon)}
-          items={group.items}
-          open={openGroups.includes(group.label)}
-          active={activeGroups.some((activeGroup) => activeGroup.label === group.label)}
-          nested
-          onToggle={() =>
-            setOpenGroups((current) =>
-              current.includes(group.label)
-                ? current.filter((label) => label !== group.label)
-                : [...current, group.label],
-            )
-          }
-          onNavigate={onNavigate}
-        />
-      ))}
-    </div>
-  );
-}
-
-function ModuleSection({
-  module,
-  open,
-  onToggle,
-  onNavigate,
-}: {
-  module: SidebarModule;
-  open: boolean;
-  onToggle: () => void;
-  onNavigate?: () => void;
-}) {
-  const { id, items, status, disabled } = module;
-  const Icon = iconFor(module.icon);
-
-  return (
-    <section className={`portal-agent-module portal-agent-module-${id}`}>
-      <button
-        type="button"
-        className="portal-agent-module-button"
-        aria-expanded={open}
-        aria-controls={`agent-module-${id}`}
-        aria-label={`${module.fullName}, ${status}`}
-        title={module.fullName}
-        aria-disabled={disabled}
-        disabled={disabled}
-        data-available={!disabled}
-        data-open={open}
-        onClick={onToggle}
-      >
-        <span className="portal-agent-module-icon" aria-hidden="true">
-          {createElement(Icon, { className: "size-4" })}
-        </span>
-        <span className="portal-agent-module-copy">
-          <span className="portal-agent-module-label">{module.label}</span>
-          <span className="portal-agent-module-status">{status}</span>
-        </span>
-        {disabled ? (
-          <LockKeyhole className="portal-agent-module-lock" aria-hidden="true" />
-        ) : (
-          <ChevronDown
-            className={`portal-agent-nav-chevron ${open ? "is-open" : ""}`}
-            aria-hidden="true"
-          />
-        )}
-      </button>
-      {open && items.length > 0 && (
-        <ul id={`agent-module-${id}`} className="portal-agent-module-items">
-          {items.map((item) => (
-            <NavItemLink
-              key={item.key}
-              item={item}
-              nested
-              onNavigate={onNavigate}
-            />
-          ))}
-        </ul>
-      )}
-    </section>
-  );
-}
-
 export type AgentPlanSummary = {
   /** Display name of the plan, or null when the workspace has none. */
   name: string | null;
@@ -308,8 +205,8 @@ function PlanCard({ plan }: { plan: AgentPlanSummary }) {
  * Entitlement-aware navigation for the licensed-agent shell.
  *
  * The server still supplies the filtered menu and every route keeps its own guard. The arrangement
- * — module headings, their order, Business groups, Partners — is data in `lib/menu/sidebar.ts`
- * (UX-3); this component renders `buildSidebarTree()` and only owns what is open.
+ * — Home, the job groups in order, Settings — is data in `lib/menu/sidebar.ts` (UX-3; regrouped by
+ * job 2026-10-13); this component renders `buildSidebarTree()` and only owns what is open.
  */
 function NavList({
   menu,
@@ -323,12 +220,7 @@ function NavList({
   const pathname = usePathname();
   const tree = buildSidebarTree(menu, moduleAccess);
   const isActive = (item: MenuItem) => isActivePath(pathname, item.path);
-  const activeBusiness = tree.business.some((group) => group.items.some(isActive));
-  const activePartners = tree.partners.some(isActive);
-
-  const [openModule, setOpenModule] = useState<string | null>(() => initialOpenModule(tree, isActive));
-  const [businessOpen, setBusinessOpen] = useState(activeBusiness);
-  const [partnersOpen, setPartnersOpen] = useState(activePartners);
+  const [openGroups, setOpenGroups] = useState<string[]>(() => initialOpenGroups(tree, isActive));
 
   return (
     <nav className="portal-agent-nav" aria-label="Agent workspace navigation">
@@ -338,39 +230,24 @@ function NavList({
         ))}
       </ul>
 
-      <div className="portal-agent-module-stack" aria-label="Licensed agent modules">
-        {tree.modules.map((module) => (
-          <ModuleSection
-            key={module.id}
-            module={module}
-            open={openModule === module.id}
-            onToggle={() => setOpenModule(openModule === module.id ? null : module.id)}
-            onNavigate={onNavigate}
-          />
-        ))}
-      </div>
-
-      {/* No rule between the modules and Business: the board runs the headings on at an even 8px. */}
-      <DisclosureSection
-        label="Business"
-        icon={iconFor(NAV_BUSINESS_ICON)}
-        items={[]}
-        open={businessOpen}
-        active={activeBusiness}
-        onToggle={() => setBusinessOpen((value) => !value)}
-        onNavigate={onNavigate}
-      >
-        <BusinessGroups groups={tree.business} onNavigate={onNavigate} />
-      </DisclosureSection>
-      <DisclosureSection
-        label="Partners"
-        icon={iconFor(NAV_PARTNERS_ICON)}
-        items={tree.partners}
-        open={partnersOpen}
-        active={activePartners}
-        onToggle={() => setPartnersOpen((value) => !value)}
-        onNavigate={onNavigate}
-      />
+      {tree.groups.map((group) => (
+        <DisclosureSection
+          key={group.label}
+          label={group.label}
+          icon={iconFor(group.icon)}
+          items={group.items}
+          open={openGroups.includes(group.label)}
+          active={group.items.some(isActive)}
+          onToggle={() =>
+            setOpenGroups((current) =>
+              current.includes(group.label)
+                ? current.filter((label) => label !== group.label)
+                : [...current, group.label],
+            )
+          }
+          onNavigate={onNavigate}
+        />
+      ))}
 
       {tree.settings.map((item) => (
         <ul key={item.key} className="portal-agent-nav-settings">
