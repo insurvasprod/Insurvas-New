@@ -9,6 +9,7 @@ import { notify } from "@/lib/notify";
 import { Callout } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
+import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip } from "@/components/admin/status-chip";
 import type { FeatureModuleGroup } from "@/lib/features/constants";
 import type { PlanLimits } from "@/lib/metering/constants";
@@ -181,6 +182,24 @@ export function PlanVersionEditor({
           <StatusChip tone={publishes ? "warning" : "neutral"}>{subscriberCount.toLocaleString()} live {subscriberCount === 1 ? "subscriber" : "subscribers"} on this version</StatusChip>
         </div>
       </div>
+
+      <StatStrip label="This version">
+        <StatTile
+          label="Features granted"
+          value={grantedCount.toLocaleString("en-US")}
+          valueTone={grantedCount === 0 ? "danger" : undefined}
+          footnote={`of ${groups.flatMap((group) => group.features.filter((feature) => !feature.is_archived)).length.toLocaleString("en-US")} in the catalog`}
+        />
+        <StatTile label="Monthly" value={monthly.trim() === "" ? "—" : `$${monthly}`} footnote={yearly.trim() === "" ? "no yearly price" : `$${yearly} a year`} />
+        <StatTile label="Trial" value={trialInvalid ? "—" : `${trial} ${trial === 1 ? "day" : "days"}`} footnote={parsedSetup.cents ? `$${setupFee} setup fee` : "no setup fee"} />
+        <StatTile label="Limits set" value={Object.values(limits).filter((value) => value.trim() !== "").length.toLocaleString("en-US")} footnote={`of ${EDITABLE_LIMITS.length} · empty means unlimited`} />
+        <StatTile
+          label="Subscribers"
+          value={subscriberCount.toLocaleString("en-US")}
+          valueTone={publishes ? "warning" : undefined}
+          footnote={publishes ? "saving publishes a new version" : "on this version"}
+        />
+      </StatStrip>
 
       {publishes && (
         <Callout

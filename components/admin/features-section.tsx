@@ -9,6 +9,7 @@ import { FeatureSwitchesPanel, type SwitchableFeature } from "@/components/admin
 import { Callout } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
+import { StatStrip, StatTile } from "@/components/ui/stat";
 import type { FeatureModuleGroup, FeatureModuleRow } from "@/lib/features/constants";
 import { switchSummaryTitle, type FeatureSwitch, type SwitchReason } from "@/lib/features/killSwitchRules";
 import { cn } from "@/lib/utils";
@@ -74,6 +75,21 @@ export function FeaturesSection({
           </Button>
         }
       />
+
+      {(() => {
+        const all = groups.flatMap((group) => group.features);
+        const live = all.filter((feature) => !feature.is_archived);
+        const unsold = live.filter((feature) => feature.plan_reference_count + feature.addon_reference_count === 0).length;
+        return (
+          <StatStrip label="Features">
+            <StatTile label="Features" value={live.length.toLocaleString("en-US")} footnote={`${(all.length - live.length).toLocaleString("en-US")} archived`} />
+            <StatTile label="Modules" value={modules.length.toLocaleString("en-US")} footnote="groups in the catalog" />
+            <StatTile label="In no plan or add-on" value={unsold.toLocaleString("en-US")} valueTone={unsold > 0 ? "warning" : undefined} footnote="not sold anywhere" />
+            <StatTile label="Switched off" value={counts.off.toLocaleString("en-US")} valueTone={counts.off > 0 ? "danger" : undefined} footnote="for every customer" />
+            <StatTile label="In beta" value={counts.beta.toLocaleString("en-US")} footnote={`of ${switchable.length.toLocaleString("en-US")} switchable`} />
+          </StatStrip>
+        );
+      })()}
 
       {title && <Callout tone="warning" title={title} />}
 

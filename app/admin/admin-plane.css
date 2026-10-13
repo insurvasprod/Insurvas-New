@@ -1,13 +1,69 @@
 /*
- * The admin console's colours: the app's own (owner decision, 2026-10-13: "follow the colours …
- * make everything similar to the app side").
+ * The admin console's accent: blue. Everything else is the app's.
  *
- * Until then this file re-pointed the design tokens to a blue accent, a navy rail and neutral ink
- * while an admin page was on screen (decision 1 of 2026-09). That override is gone: the console now
- * paints with app/globals.css as it stands — the brand's bright green for action, the deep olive for
- * the rail, the top bar and headings, and the same canvas and borders as the agent app — in both
- * themes. Staff and agents see one product.
+ * Owner decisions, 2026-10-13: first "make everything similar to the app side" (the console took the
+ * app's colours and its rail, bar and page spacing), then "bring back the blue color" for the
+ * accent only. So this file re-points the ACCENT tokens and nothing else: buttons, links, focus
+ * rings, soft chips and the rail's active row turn blue, while the canvas, surfaces, ink, borders,
+ * the deep-olive rail and the top bar stay exactly the app's (app/globals.css).
  *
- * The file and the `.admin-plane` marker (app/admin/layout.tsx) stay: a console-only token belongs
- * here, as `:root:has(.admin-plane) { … }`, never in a component.
+ * Why `:root:has(.admin-plane)`: the alias tokens in globals.css (`--color-brand: var(--primary)`,
+ * `--portal-primary: var(--primary)` and the Tailwind theme that reads them) are computed on :root,
+ * so overriding --primary on a descendant would leave every alias green. Overriding on :root itself
+ * recomputes them and reaches dialogs and menus, which portal to <body>. `.admin-plane` is the
+ * marker app/admin/layout.tsx renders. `:root:not(.dark):has(…)` and `:root.dark:has(…)` (0,3,0)
+ * beat globals.css's `:root` and `.dark` (0,1,0), whatever order the files load in.
+ *
+ * Contrast (WCAG, the console's blue family #0070cc, measured when it was first set):
+ *   light  white on --primary #0070cc 5.0:1 · --accent-ink #005ba8 on white 6.9:1, on --brand-50 6.0:1
+ *          --ring-color #0070cc on white 5.0:1
+ *   dark   --on-primary #0b1a2b on --primary #4da3ff 6.7:1 · --accent-ink #7cbcff on the dark surface 8.7:1
+ *          --ring-color #4da3ff on the dark canvas 7.4:1
+ *   rail   (dark olive in both themes) active text #ffffff, active icon #4da3ff, 2px bar in --primary
  */
+
+:root:not(.dark):has(.admin-plane) {
+  --primary:        #0070cc;
+  --accent-hover:   #005ba8;
+  --accent-pressed: #004a8a;
+  /* Ink on the brand green is the right glyph there; on this blue it measures 3.6:1. White is 5.0:1. */
+  --on-primary:     #ffffff;
+  --accent-ink:     #005ba8;
+  --ring-color:     #0070cc;
+  --primary-soft:   #e6f1fb;
+
+  --brand-50:  #e6f1fb;
+  --brand-100: #cce3f7;
+  --brand-200: #99c6ef;
+  --brand-300: #66a9e6;
+  --brand-400: #338dde;
+  --brand-500: #0070cc;
+  --brand-600: #005ba8;
+
+  /* The rail stays the app's deep olive; only its one accent object, the active row, turns blue. */
+  --nav-active-bg:   rgba(77, 163, 255, .18);
+  --nav-active-ink:  #ffffff;
+  --nav-active-icon: #4da3ff;
+}
+
+:root.dark:has(.admin-plane) {
+  --primary:        #4da3ff;
+  --accent-hover:   #74b6ff;
+  --accent-pressed: #3a8fe6;
+  --on-primary:     #0b1a2b;
+  --accent-ink:     #7cbcff;
+  --ring-color:     #4da3ff;
+  --primary-soft:   #102a47;
+
+  --brand-50:  #102a47;
+  --brand-100: #13304d;
+  --brand-200: #1a4570;
+  --brand-300: #22609c;
+  --brand-400: #3a8fe6;
+  --brand-500: #4da3ff;
+  --brand-600: #74b6ff;
+
+  --nav-active-bg:   rgba(77, 163, 255, .18);
+  --nav-active-ink:  #ffffff;
+  --nav-active-icon: #4da3ff;
+}

@@ -26,6 +26,7 @@ import { DataToolbar, RefreshButton, toolbarControl } from "@/components/ui/data
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
+import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 import { Callout, control, Field } from "@/components/app/settings/primitives";
@@ -194,6 +195,24 @@ export function FieldMapsReview({ initialMaps, carriers, sample, notice, lastFil
       />
       {sample && <SampleDataNotice />}
       {notice && <Callout tone="warning" title={notice} />}
+      {!notice && (
+        <StatStrip label="Field maps">
+          <StatTile label="Carrier forms" value={rows.length.toLocaleString("en-US")} footnote="carrier and product pairs" />
+          <StatTile label="Published" value={rows.filter((g) => g.live).length.toLocaleString("en-US")} footnote="filling applications" />
+          <StatTile
+            label="Drafts"
+            value={rows.filter((g) => g.draft).length.toLocaleString("en-US")}
+            footnote={`${rows.filter((g) => g.draft?.status === "in_review").length.toLocaleString("en-US")} in review`}
+          />
+          <StatTile
+            label="Needs review"
+            labelTitle="A published map whose fill missed a field"
+            value={rows.filter((g) => g.live?.status === "needs_review").length.toLocaleString("en-US")}
+            valueTone={rows.some((g) => g.live?.status === "needs_review") ? "warning" : undefined}
+            footnote="a fill missed a field"
+          />
+        </StatStrip>
+      )}
 
       <TableCard
         toolbar={<DataToolbar actions={<RefreshButton onClick={sample ? sampleRefresh.refresh : reload} refreshing={sample ? sampleRefresh.refreshing : loading} />} />}

@@ -330,7 +330,7 @@ export function OffersTable({
           label="Overlapping offers"
           value={overlapping.length.toLocaleString()}
           tone={overlapping.length > 0 ? "warning" : "default"}
-          footnote={firstOverlap ? `${firstOverlap.offer.name} with ${firstOverlap.with[0].name}${firstOverlap.with.length > 1 ? ` +${firstOverlap.with.length - 1}` : ""}` : "no two could apply at once"}
+          footnote={firstOverlap ? "could apply together, named below" : "no two could apply at once"}
           title="Active or scheduled offers whose windows, plans, cycles and customer rules overlap, so both could apply to the same subscription."
         />
       </BoardStatGrid>

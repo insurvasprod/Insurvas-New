@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -52,7 +52,14 @@ import {
 } from "lucide-react";
 
 import { usePersistedState } from "./use-persisted-state";
-import { groupIdForPath, isLinkActive, type SidebarIconKey, type SidebarNode } from "@/lib/adminNav/types";
+import {
+  groupIdForPath,
+  isLinkActive,
+  type SidebarGroup,
+  type SidebarIconKey,
+  type SidebarLink,
+  type SidebarNode,
+} from "@/lib/adminNav/types";
 import { InsurvasLogo } from "@/components/shared/insurvas-logo";
 
 // Icon components are functions with methods and cannot cross the server->client boundary as props,
@@ -107,188 +114,123 @@ const ICONS: Record<SidebarIconKey, typeof LayoutDashboard> = {
 };
 
 const COLLAPSED_KEY = "insurvas.admin.sidebar.collapsed";
-const OPEN_GROUPS_KEY = "insurvas.admin.sidebar.openGroups";
-// Every group starts shut, as p-adm-home draws them; the one holding the current page opens itself
-// (see `isOpen` below).
-const DEFAULT_OPEN_GROUPS: string[] = [];
 
-const ACTIVE_STYLE = {
-  background: "var(--primary-soft)",
-  boxShadow: "inset 2px 0 0 var(--primary)",
-} as const;
+type Props = { nodes: SidebarNode[]; adminName: string; roleLabel: string; footer?: ReactNode };
 
-type Props = { nodes: SidebarNode[]; adminName: string; roleLabel: string };
-
-/**
- * The staff rail. The same rail as the agent's (p-adm-home draws them one-for-one): 264px, 33px
- * items at 14px, 30px uppercase headings led by their arrow, one accent chip for the page you are
- * on, and a card at the foot. It stays on the product's one palette — the board's navy and blue are
- * the palette the design system replaced, not a staff identity.
- */
-export function AdminSidebar({ nodes, adminName, roleLabel }: Props) {
+/** One row, drawn with the agent rail's own classes so the two rails cannot drift apart. */
+function NavItemLink({ entry, nested = false, onNavigate }: { entry: SidebarLink; nested?: boolean; onNavigate?: () => void }) {
   const pathname = usePathname();
-  const activeGroupId = useMemo(() => groupIdForPath(nodes, pathname), [nodes, pathname]);
+  const active = isLinkActive(entry.href, pathname);
+  const Icon = ICONS[entry.icon];
 
-  const [collapsed, setCollapsed] = usePersistedState<boolean>(COLLAPSED_KEY, false);
-  const [openGroups, setOpenGroups] = usePersistedState<string[]>(OPEN_GROUPS_KEY, DEFAULT_OPEN_GROUPS);
-  const [flyout, setFlyout] = useState<string | null>(null);
-  const [mobileOpen, setMobileOpen] = useState(false);
-
-  function toggleGroup(id: string) {
-    setOpenGroups(openGroups.includes(id) ? openGroups.filter((entry) => entry !== id) : [...openGroups, id]);
-  }
-
-  function toggleCollapsed() {
-    setCollapsed(!collapsed);
-    setFlyout(null);
-  }
-
-  /**
-   * The section you are currently inside is always open, whatever was remembered.
-   *
-   * Deliberately not "opened once, then closeable": collapsing the group that holds the page you
-   * are looking at hides your own location in the tree, and a deep link would otherwise land you
-   * in a section that appears shut. Every other group is yours to open and close.
-   */
-  const isOpen = (id: string) => openGroups.includes(id) || id === activeGroupId;
-
-  function renderLink(entry: Extract<SidebarNode, { kind: "link" }>, rail: boolean, onNavigate?: () => void) {
-    const Icon = ICONS[entry.icon];
-    const active = isLinkActive(entry.href, pathname);
-
-    return (
+  return (
+    <li>
       <Link
-        key={entry.href}
         href={entry.href}
         onClick={onNavigate}
         aria-current={active ? "page" : undefined}
-        title={rail ? entry.label : undefined}
-        // 8px radius, 14px label, 33px tall — the artboard's rail item. The active one is the
-        // only accent object on the column: a soft accent chip with a 2px bar cut into its left
-        // edge, so "where am I" is answered by a shape rather than by a slightly bolder grey.
-        className={`flex h-[33px] shrink-0 items-center gap-2 rounded-lg text-sm leading-normal tracking-[-0.02em] transition-all focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)] ${
-          // Children sit flush with the headings, as the board draws them — no extra indent.
-          rail ? "justify-center px-0" : "px-2.5"
-        }`}
-        style={{
-          background: active ? ACTIVE_STYLE.background : "transparent",
-          boxShadow: active ? ACTIVE_STYLE.boxShadow : "none",
-          fontWeight: 500,
-          // Links are drawn in --nav-ink; only the section headings are muted.
-          color: active ? "var(--accent-ink)" : "var(--nav-ink)",
-        }}
-        onMouseEnter={(event) => {
-          if (active) return;
-          event.currentTarget.style.background = "rgba(255,255,255,.06)";
-          event.currentTarget.style.color = "var(--nav-ink)";
-        }}
-        onMouseLeave={(event) => {
-          if (active) return;
-          event.currentTarget.style.background = "transparent";
-          event.currentTarget.style.color = "var(--nav-ink)";
-        }}
+        title={entry.label}
+        className={`portal-agent-nav-link ${nested ? "portal-agent-nav-link-nested" : ""} ${active ? "is-active" : ""}`}
       >
-        {/* Every row keeps its icon, child rows included (design contract D-05). */}
-        <Icon size={17} strokeWidth={1.8} className="shrink-0" aria-hidden="true" />
-        {!rail && <span className="truncate">{entry.label}</span>}
+        <span className="portal-agent-nav-link-copy">
+          <Icon className="portal-agent-nav-icon" aria-hidden="true" />
+          <span className="portal-agent-nav-label">{entry.label}</span>
+        </span>
       </Link>
-    );
+    </li>
+  );
+}
+
+/**
+ * The staff menu, in the agent rail's structure (owner request 2026-10-13: "exactly the same sidebar
+ * and nav bar"): top-level links, then each group as a disclosure with its icon and chevron, its
+ * pages listed beneath. The group holding the current page starts open, as the agent rail does.
+ */
+function NavList({
+  nodes,
+  onNavigate,
+  onGroupFromCollapsed,
+}: {
+  nodes: SidebarNode[];
+  onNavigate?: () => void;
+  /** In the collapsed rail a group has no room for its pages, so choosing it opens the rail. */
+  onGroupFromCollapsed?: () => void;
+}) {
+  const pathname = usePathname();
+  const activeGroupId = groupIdForPath(nodes, pathname);
+  const [openGroups, setOpenGroups] = useState<string[]>(() => (activeGroupId ? [activeGroupId] : []));
+
+  // Consecutive top-level links share one list, as Home does on the agent rail.
+  const blocks: (SidebarLink[] | SidebarGroup)[] = [];
+  for (const node of nodes) {
+    if (node.kind === "group") blocks.push(node);
+    else if (Array.isArray(blocks.at(-1))) (blocks.at(-1) as SidebarLink[]).push(node);
+    else blocks.push([node]);
   }
 
-  /** One tree for both the desktop rail and the phone drawer, so the two can no longer drift. */
-  function renderNav(rail: boolean, onNavigate?: () => void) {
-    return nodes.map((node) => {
-      if (node.kind === "link") return renderLink(node, rail, onNavigate);
+  return (
+    <nav className="portal-agent-nav" aria-label="Admin navigation">
+      {blocks.map((block, index) => {
+        if (Array.isArray(block)) {
+          return (
+            <ul key={`links-${index}`} className={index === 0 ? "portal-agent-nav-home" : "portal-agent-nav-settings"}>
+              {block.map((entry) => <NavItemLink key={entry.href} entry={entry} onNavigate={onNavigate} />)}
+            </ul>
+          );
+        }
 
-      const Icon = ICONS[node.icon];
-      const open = isOpen(node.id);
-      const containsActive = node.id === activeGroupId;
-
-      return (
-        <div
-          key={node.id}
-          className="relative"
-          onMouseEnter={() => rail && setFlyout(node.id)}
-          onMouseLeave={() => rail && setFlyout(null)}
-        >
-          <button
-            type="button"
-            onClick={() => (rail ? toggleCollapsed() : toggleGroup(node.id))}
-            title={rail ? node.label : undefined}
-            aria-expanded={rail ? undefined : open}
-            // The board's heading margin is 8px above, 2px below, and its margins collapse; flex gaps
-            // do not, so the nav's 2px gap plus 6px here makes the same 8px, and the children's own
-            // 2px top margin makes the 2px below.
-            className={`portal-admin-rail-group flex w-full items-center gap-2 rounded-lg text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] transition-all focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)] ${
-              rail ? "h-[33px] justify-center px-0" : "mt-1.5 h-[30px] px-2.5"
-            }`}
-            style={{
-              // In the collapsed rail there are no child links to show the active state, so the
-              // group itself carries it — otherwise the whole sidebar looks unselected.
-              background: rail && containsActive ? ACTIVE_STYLE.background : undefined,
-            }}
-          >
-            {rail ? (
-              // The collapsed rail is nothing but icons; a heading has no room for its words there.
-              <Icon size={15} strokeWidth={1.8} className="shrink-0" />
-            ) : (
-              <>
-                {/* The arrow leads the heading: right when shut, down when open. */}
-                <ChevronDown
-                  size={14}
-                  aria-hidden="true"
-                  className={`shrink-0 transition-transform ${open ? "" : "-rotate-90"}`}
-                />
-                {/* Then the group's own icon, so each section is known by its picture as well as its name. */}
-                <Icon size={14} strokeWidth={1.8} aria-hidden="true" className="shrink-0 opacity-80" />
-                <span className="truncate">{node.label}</span>
-              </>
-            )}
-          </button>
-
-          {!rail && open && (
-            <div className="mt-0.5 flex flex-col gap-0.5">
-              {node.links.map((entry) => renderLink(entry, false, onNavigate))}
-            </div>
-          )}
-
-          {rail && flyout === node.id && (
-            <div
-              className="absolute left-full top-0 z-50 ml-2 w-56 rounded-xl border border-border p-2 text-foreground shadow-[0_4px_16px_rgba(0,0,0,0.12)]"
-              style={{ background: "var(--surface)" }}
-            >
-              <p className="px-3 pb-2 pt-1 text-xs font-semibold uppercase tracking-[0.02em] text-muted-foreground">
-                {node.label}
-              </p>
-              {node.links.map((entry) => {
-                const active = isLinkActive(entry.href, pathname);
-                const ChildIcon = ICONS[entry.icon];
-                return (
-                  <Link
-                    key={entry.href}
-                    href={entry.href}
-                    aria-current={active ? "page" : undefined}
-                    className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors hover:bg-muted"
-                    style={{
-                      fontWeight: 500,
-                      background: active ? "var(--primary-soft)" : "transparent",
-                      color: active ? "var(--accent-ink)" : undefined,
-                    }}
-                  >
-                    <ChildIcon size={16} strokeWidth={1.8} aria-hidden="true" className="shrink-0" />
-                    <span className="truncate">{entry.label}</span>
-                  </Link>
+        const Icon = ICONS[block.icon];
+        const open = openGroups.includes(block.id);
+        const sectionId = `admin-nav-${block.id}`;
+        return (
+          <section key={block.id} className={`portal-agent-nav-section ${block.id === activeGroupId ? "is-active" : ""}`}>
+            <button
+              type="button"
+              className="portal-agent-nav-disclosure"
+              aria-expanded={open}
+              aria-controls={sectionId}
+              title={block.label}
+              onClick={() => {
+                if (onGroupFromCollapsed) {
+                  // Collapsed: open the rail with this group showing, never shut it.
+                  onGroupFromCollapsed();
+                  setOpenGroups((current) => (current.includes(block.id) ? current : [...current, block.id]));
+                  return;
+                }
+                setOpenGroups((current) =>
+                  current.includes(block.id) ? current.filter((id) => id !== block.id) : [...current, block.id],
                 );
-              })}
-            </div>
-          )}
-        </div>
-      );
-    });
-  }
+              }}
+            >
+              <span className="portal-agent-nav-disclosure-copy">
+                <Icon className="portal-agent-nav-icon" aria-hidden="true" />
+                <span>{block.label}</span>
+              </span>
+              <ChevronDown className={`portal-agent-nav-chevron ${open ? "is-open" : ""}`} aria-hidden="true" />
+            </button>
+            {open && (
+              <ul id={sectionId} className="portal-agent-nav-sublist">
+                {block.links.map((entry) => <NavItemLink key={entry.href} entry={entry} nested onNavigate={onNavigate} />)}
+              </ul>
+            )}
+          </section>
+        );
+      })}
+    </nav>
+  );
+}
 
-  // The admin rail and drawer are always dark; the white phone bar follows the theme.
-  const brand = (tone?: "dark") => (
+/**
+ * The staff rail: the agent rail itself (components/app/agent-sidebar.tsx), class for class — the
+ * brand row with its collapse button, the menu, the card at the foot and the theme toggle — holding
+ * the staff menu and who is signed in. Only the accent differs, and that is a token
+ * (app/admin/admin-plane.css), not a style here.
+ */
+export function AdminSidebar({ nodes, adminName, roleLabel, footer }: Props) {
+  const [open, setOpen] = useState(false);
+  const [collapsed, setCollapsed] = usePersistedState<boolean>(COLLAPSED_KEY, false);
+
+  const brandMark = (tone?: "dark") => (
     <div className="flex items-center gap-2.5">
       <InsurvasLogo size="sidebar" tone={tone} />
     </div>
@@ -312,89 +254,69 @@ export function AdminSidebar({ nodes, adminName, roleLabel }: Props) {
       >
         <button
           type="button"
-          onClick={() => setMobileOpen(true)}
+          onClick={() => setOpen(true)}
           aria-label="Open admin menu"
-          aria-expanded={mobileOpen}
+          aria-expanded={open}
           className="-ml-1 rounded-md p-1.5 transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
         >
           <Menu className="size-5" aria-hidden="true" />
         </button>
-        {brand()}
+        {brandMark()}
       </header>
 
-      {mobileOpen && (
+      {open && (
         <div className="fixed inset-0 z-40 md:hidden">
           <button
             type="button"
             aria-label="Close admin menu"
-            onClick={() => setMobileOpen(false)}
+            onClick={() => setOpen(false)}
             className="absolute inset-0 bg-black/50"
           />
-          {/* The same rail, not a white sheet with its own 15px rows: a phone gets the product. */}
-          <aside
-            data-print-hide
-            className="portal-agent-sidebar-mobile-drawer absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col overflow-y-auto"
-          >
-            <div className="portal-agent-sidebar-brand flex items-center justify-between">
-              {brand("dark")}
-              <button
-                type="button"
-                onClick={() => setMobileOpen(false)}
-                aria-label="Close admin menu"
-                className="portal-agent-sidebar-collapse rounded-md p-1.5 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
-              >
-                <X className="size-5" aria-hidden="true" />
-              </button>
+          <div className="portal-agent-sidebar-mobile-drawer absolute inset-y-0 left-0 flex w-80 max-w-[88vw] flex-col overflow-y-auto p-4 text-foreground">
+            <div className="min-h-0 flex-1">
+              <div className="portal-agent-sidebar-brand">
+                {brandMark("dark")}
+                <button
+                  type="button"
+                  onClick={() => setOpen(false)}
+                  aria-label="Close admin menu"
+                  className="portal-agent-sidebar-collapse rounded-md p-1.5 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
+                >
+                  <X className="size-5" aria-hidden="true" />
+                </button>
+              </div>
+              <NavList nodes={nodes} onNavigate={() => setOpen(false)} />
             </div>
-            <nav className="flex flex-1 flex-col gap-0.5 p-2.5" aria-label="Admin navigation">
-              {renderNav(false, () => setMobileOpen(false))}
-            </nav>
             {staffCard}
-          </aside>
+            {footer && <div className="portal-agent-sidebar-footer">{footer}</div>}
+          </div>
         </div>
       )}
 
       <aside
         data-print-hide
-        // No right border: the board's rail ends in its own dark edge.
-        className={`relative hidden shrink-0 flex-col transition-[width] duration-200 md:flex ${
-          collapsed ? "w-[76px]" : "w-[264px]"
-        }`}
-        style={{
-          background: "var(--nav-bg)",
-          color: "var(--nav-ink)",
-        }}
+        className={`portal-agent-sidebar-desktop hidden shrink-0 flex-col md:flex ${collapsed ? "is-collapsed" : ""}`}
+        data-collapsed={collapsed}
       >
-        <div
-          className={`flex items-center ${collapsed ? "justify-center py-4" : "px-[18px] py-4"}`}
-          style={{ borderBottom: "1px solid var(--nav-line)" }}
-        >
-          {collapsed ? (
-            <InsurvasLogo size="compact" variant="symbol" tone="dark" alt="Insurvas staff" />
-          ) : (
-            brand("dark")
-          )}
-        </div>
-
-        <nav className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto p-2.5" aria-label="Admin navigation">
-          {renderNav(collapsed)}
-        </nav>
-
-        {!collapsed && staffCard}
-
-        <div className="portal-admin-rail-footer p-2.5" style={{ borderTop: "1px solid var(--nav-line)" }}>
+        <div className="portal-agent-sidebar-brand">
+          <div className="insurvas-agent-brand-full">{brandMark("dark")}</div>
+          <InsurvasLogo size="compact" variant="symbol" tone="dark" alt="Insurvas staff" className="insurvas-agent-brand-compact" />
           <button
             type="button"
-            onClick={toggleCollapsed}
+            className="portal-agent-sidebar-collapse rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
+            onClick={() => setCollapsed(!collapsed)}
             aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-            className={`portal-admin-rail-collapse flex h-[33px] w-full items-center gap-2 rounded-lg px-2.5 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)] ${
-              collapsed ? "justify-center px-0" : ""
-            }`}
+            aria-pressed={collapsed}
+            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
           >
-            {collapsed ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}
-            {!collapsed && <span>Collapse</span>}
+            {collapsed ? <PanelLeftOpen className="size-4" aria-hidden="true" /> : <PanelLeftClose className="size-4" aria-hidden="true" />}
           </button>
         </div>
+        <div className="portal-agent-sidebar-scroll min-h-0 flex-1">
+          <NavList nodes={nodes} onGroupFromCollapsed={collapsed ? () => setCollapsed(false) : undefined} />
+        </div>
+        {staffCard}
+        {footer && <div className="portal-agent-sidebar-footer">{footer}</div>}
       </aside>
     </>
   );

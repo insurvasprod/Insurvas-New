@@ -252,8 +252,8 @@ export function LayoutMapsReview({ initialMaps, initialAssignments, carriers, no
         <StatTile label="Layouts" value={layouts.length.toLocaleString("en-US")} footnote={`${figures.published.toLocaleString("en-US")} published`} />
         <StatTile label="Open drafts" value={figures.drafts.toLocaleString("en-US")} valueTone={figures.drafts > 0 ? "warning" : undefined} footnote={figures.inReview > 0 ? `${figures.inReview.toLocaleString("en-US")} in review` : "none in review"} />
         <StatTile label="Carrier assignments" value={assignments.length.toLocaleString("en-US")} footnote={`${carriers.length.toLocaleString("en-US")} active carriers`} />
-        <StatTile label="No policies layout" labelTitle="Active carriers with no layout assigned for policy files" value={figures.noPolicies.toLocaleString("en-US")} valueTone={figures.noPolicies > 0 ? "warning" : undefined} footnote="active carriers" />
-        <StatTile label="No commissions layout" labelTitle="Active carriers with no layout assigned for commission files" value={figures.noCommissions.toLocaleString("en-US")} valueTone={figures.noCommissions > 0 ? "warning" : undefined} footnote="active carriers" />
+        <StatTile label="No policy map" labelTitle="Active carriers with no layout assigned for policy files" value={figures.noPolicies.toLocaleString("en-US")} valueTone={figures.noPolicies > 0 ? "warning" : undefined} footnote="active carriers" />
+        <StatTile label="No commission map" labelTitle="Active carriers with no layout assigned for commission files" value={figures.noCommissions.toLocaleString("en-US")} valueTone={figures.noCommissions > 0 ? "warning" : undefined} footnote="active carriers" />
       </StatStrip>
 
       {notice && <div role="status" className="rounded-lg border border-border border-l-[3px] border-l-[var(--warning)] bg-[var(--warning-surface)] px-4 py-3 text-sm text-[var(--warning-ink)]">{notice}</div>}

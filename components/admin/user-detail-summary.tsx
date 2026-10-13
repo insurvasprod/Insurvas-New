@@ -75,29 +75,29 @@ export function UserDetailSummary({ user }: { user: UserDetail }) {
 
       {/* The same strip as the tenant record, so the person and the agency read alike. */}
       <StatStrip label="Key facts">
-        <StatTile
+        <StatTile valueSize="text"
           label="Email"
           value={<span className={FACT} title={user.email ?? undefined}>{user.email ?? "—"}</span>}
           footnote={user.phone ? <span className="block truncate">{user.phone}</span> : "no phone"}
         />
-        <StatTile
+        <StatTile valueSize="text"
           label="Last login"
           value={<span className={FACT}>{when(user.lastLoginAt, user.lastLoginAt ? utcDateTime(user.lastLoginAt) : "Never")}</span>}
           valueTone={sharedAccountSuspected ? "warning" : undefined}
           footnote={`${user.distinctIps24h.toLocaleString("en-US")} ${user.distinctIps24h === 1 ? "address" : "addresses"} in 24 hours`}
         />
-        <StatTile
+        <StatTile valueSize="text"
           label={agencies.length === 1 ? "Agency" : "Agencies"}
           value={<span className={FACT} title={agencies.join(", ") || undefined}>{agencies[0] ?? "None"}</span>}
           footnote={agencies.length > 1 ? `and ${agencies.length - 1} more` : (roleLabel(user.memberships[0]?.role ?? null) ?? "not in an agency")}
         />
-        <StatTile label="Plan" value={<span className={FACT}>{user.planCode ?? "No plan yet"}</span>} footnote={isOnboarded(user) ? "account set up" : "invite pending"} />
-        <StatTile
+        <StatTile valueSize="text" label="Plan" value={<span className={FACT}>{user.planCode ?? "No plan yet"}</span>} footnote={isOnboarded(user) ? "account set up" : "invite pending"} />
+        <StatTile valueSize="text"
           label="Joined"
           value={<span className={FACT}>{when(user.createdAt, utcDate(user.createdAt))}</span>}
           footnote={user.suspendedAt ? <>Suspended {when(user.suspendedAt, utcDateTime(user.suspendedAt))}</> : "not suspended"}
         />
-        <StatTile
+        <StatTile valueSize="text"
           label="User id"
           value={<span className="block truncate font-mono text-sm leading-[1.5]" title={user.id}>{user.id}</span>}
           reserveFootnote

@@ -8,6 +8,7 @@ import { Field, Pill, SettingsMeter, control, st } from "@/components/app/settin
 import { Button } from "@/components/ui/button";
 import { DataToolbar, RefreshButton, toolbarControl } from "@/components/ui/data-toolbar";
 import { PageHeader } from "@/components/ui/page-header";
+import { StatStrip, StatTile } from "@/components/ui/stat";
 import { TableCard } from "@/components/ui/table-card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
@@ -293,6 +294,18 @@ export function CreditLimitsPanel({ initial }: { initial: CreditsLimitsData }) {
           </Button>
         }
       />
+
+      <StatStrip label="Credits and limits">
+        <StatTile label="Over a limit" value={overCount.toLocaleString("en-US")} valueTone={overCount > 0 ? "danger" : undefined} footnote={overCount === 1 ? "tenant" : "tenants"} />
+        <StatTile
+          label="Near a limit"
+          value={new Set(entries.filter((entry) => entry.state === "near").map((entry) => entry.tenantId)).size.toLocaleString("en-US")}
+          footnote={`at ${warnPercent}% or more`}
+        />
+        <StatTile label="Limits watched" value={entries.length.toLocaleString("en-US")} footnote="meters and seats" />
+        <StatTile label="Credit packs" value={packs.filter((pack) => pack.is_active).length.toLocaleString("en-US")} footnote={`on sale · ${packs.filter((pack) => !pack.is_active).length.toLocaleString("en-US")} retired`} />
+        <StatTile label="Meters priced" value={pricing.filter((meter) => meter.sell_cents > 0).length.toLocaleString("en-US")} footnote={`of ${pricing.length.toLocaleString("en-US")} meters`} />
+      </StatStrip>
 
       {/* Usage monitor */}
       <TableCard

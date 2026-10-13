@@ -11,6 +11,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { notify } from "@/lib/notify";
 import { PageHeader } from "@/components/ui/page-header";
+import { StatStrip, StatTile } from "@/components/ui/stat";
 import { btn, Pill } from "@/components/app/settings/primitives";
 import { LEGAL_DOC_LABELS, type LegalDocType } from "@/lib/legal/constants";
 import { LEGAL_MIN_CONTENT_LENGTH, legalDay, nextLegalVersion, type AdminLegalVersion, type LegalDraft } from "@/lib/legal/adminTypes";
@@ -201,6 +202,17 @@ export function LegalScreen({
   return (
     <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
       <PageHeader title="Legal" actions={<DocSwitch value={doc} onChange={switchDoc} />} />
+
+      <StatStrip label={LEGAL_DOC_LABELS[doc]}>
+        <StatTile label="Live version" value={current ? `v${current.version}` : "None"} footnote={current ? `effective ${legalDay(current.effective_date)}` : "nothing published"} />
+        <StatTile
+          label="Accepted"
+          value={stat && stat.eligible_users > 0 ? `${Math.round((stat.accepted_count / stat.eligible_users) * 100)}%` : "—"}
+          footnote={stat ? `${stat.accepted_count.toLocaleString("en-US")} of ${stat.eligible_users.toLocaleString("en-US")} active users` : "not counted"}
+        />
+        <StatTile label="Versions" value={docVersions.length.toLocaleString("en-US")} footnote={current?.requires_reacceptance ? "live one needs re-acceptance" : "published so far"} />
+        <StatTile label="Draft" value={draft ? "Saved" : "None"} valueSize="text" footnote={draftsSupported ? (draft ? "ready to publish" : "start one to edit") : "drafts not set up"} />
+      </StatStrip>
 
       <div className="flex min-w-0 flex-col gap-6 lg:flex-row">
         {/* ── left column ───────────────────────────────────────────────────────────────── */}
