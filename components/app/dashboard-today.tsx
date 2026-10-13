@@ -1,23 +1,31 @@
 "use client";
 
-import { useEffect, useId, useLayoutEffect, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useLayoutEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { ArrowRight, ArrowDownRight, ArrowUpRight, Phone, Trophy } from "lucide-react";
+import { ArrowRight, ArrowDownRight, ArrowUpRight, Trophy } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { LinkArrow } from "@/components/ui/link-arrow";
+import { EmptyState } from "@/components/ui/page-states";
+import { StatStrip, StatTile } from "@/components/ui/stat";
+import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
+import { TableCard } from "@/components/ui/table-card";
 import { countdown, dayOnDay } from "@/lib/dashboard/todayMath";
 import { hourLabel, periodChange } from "@/lib/dashboard/insights";
+import type { HomeFigureKey, HomeNeedKey, HomeSectionKey } from "@/lib/dashboard/roleHome";
 import type { DashboardToday } from "@/lib/dashboard/today";
 
 /**
- * The dashboard's metrics: a compact band (who, when, the next call), a strip of KPI cells with
- * fourteen-day sparklines, what needs the reader today, and the analysis panels — activity by day,
- * the outcome mix, the best hour to call and, for an owner, the team's standings.
+ * The dashboard's streamed sections, in the order the reader's role home asks for
+ * (lib/dashboard/roleHome.ts, 2026-10-09): the one strip of today's figures, what needs the reader
+ * today, today's appointments, and the analysis panels — activity by day, the outcome mix, the best
+ * hour to call and, for an owner, the team's standings. The "Your day" header (greeting, date, the
+ * next callback, the role's actions) is the page's.
  *
  * Everything interactive answers hover and keyboard focus alike. The motion (figures counting up,
- * sparklines drawing in, bars growing) runs once on arrival and stands still under
- * prefers-reduced-motion. The server renders the final numbers, so the page is right before this
- * script has run; the animation only replays them.
+ * bars growing) runs once on arrival and stands still under prefers-reduced-motion. The server
+ * renders the final numbers, so the page is right before this script has run; the animation only
+ * replays them.
  */
 function useReducedMotion() {
   const [reduced, setReduced] = useState(false);
@@ -75,34 +83,15 @@ const sum = (values: Array<number | null>) => values.reduce<number>((total, valu
 const toneInk = { good: "text-[var(--success-ink)]", warning: "text-[var(--warning-ink)]", danger: "text-[var(--error-ink)]", neutral: "text-muted-foreground" } as const;
 type Tone = keyof typeof toneInk;
 const cardClass = "rounded-xl border border-border bg-card";
-const labelClass = "text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] text-muted-foreground";
 
-/* ── Sparkline ───────────────────────────────────────────────────────────── */
+/* ── Next callback: the live countdown in the "Your day" header ──────────── */
 
-function Sparkline({ values, delay = 0 }: { values: Array<number | null>; delay?: number }) {
-  const points = values.map((value) => value ?? 0);
-  const max = Math.max(1, ...points);
-  const x = (index: number) => (index / (points.length - 1)) * 100;
-  const y = (value: number) => 26 - (value / max) * 22;
-  const line = points.map((value, index) => `${index ? "L" : "M"}${x(index).toFixed(2)},${y(value).toFixed(2)}`).join(" ");
-  const id = `spark${useId().replace(/:/g, "")}`;
-  return (
-    <svg viewBox="0 0 100 28" preserveAspectRatio="none" className="h-7 w-full overflow-visible" aria-hidden="true">
-      <defs>
-        <linearGradient id={id} x1="0" x2="0" y1="0" y2="1">
-          <stop offset="0%" stopColor="var(--primary)" stopOpacity="0.28" />
-          <stop offset="100%" stopColor="var(--primary)" stopOpacity="0" />
-        </linearGradient>
-      </defs>
-      <path d={`${line} L100,28 L0,28 Z`} fill={`url(#${id})`} />
-      <path d={line} pathLength={1} fill="none" stroke="var(--primary)" strokeWidth="1.75" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" className="m-draw" style={{ animationDelay: `${delay}ms` }} />
-    </svg>
-  );
-}
-
-/* ── Band: greeting, next callback, start calling ────────────────────────── */
-
-function NextCallback({ callback, serverNow }: { callback: NonNullable<DashboardToday["nextCallback"]>; serverNow: number }) {
+/**
+ * One line, as tall as the header's buttons: who, and how long until (or how late). The customer's
+ * own clock is in the hover text and the accessible name. The page renders it only for a reader who
+ * can open the callbacks calendar it links to.
+ */
+export function NextCallback({ callback, serverNow, href }: { callback: NonNullable<DashboardToday["nextCallback"]>; serverNow: number; href: string }) {
   const [now, setNow] = useState(serverNow);
   const reduced = useReducedMotion();
   useEffect(() => {
@@ -114,60 +103,30 @@ function NextCallback({ callback, serverNow }: { callback: NonNullable<Dashboard
   const theirs = new Intl.DateTimeFormat("en-US", { timeZone: callback.customerTimezone, hour: "numeric", minute: "2-digit", timeZoneName: "short" }).format(new Date(target));
   const soon = !left.late && target - now < 15 * 60_000;
   return (
-    <Link href="/app/callbacks" className="group flex min-w-0 items-center gap-3 rounded-lg border border-border bg-[var(--surface-alt)] px-3.5 py-2 text-inherit no-underline transition-colors hover:border-[var(--border-strong)]" title={`${callback.name} · ${theirs} their time`}>
-      <span className={`size-2.5 shrink-0 rounded-full ${left.late ? "bg-[var(--error)]" : "bg-[var(--primary)]"} ${reduced ? "" : "m-live"}`} aria-hidden="true" />
-      <span className="min-w-0">
-        <span className="block text-xs leading-[1.33] text-muted-foreground">Next callback · <span className="text-foreground">{callback.name}</span></span>
-        <span className={`block text-sm font-semibold tabular-nums leading-normal ${left.late ? "text-[var(--error-ink)]" : soon ? "text-[var(--accent-ink)]" : "text-foreground"}`} aria-live="off">{left.text} <span className="font-normal text-muted-foreground">· {theirs}</span></span>
-      </span>
+    <Link
+      href={href}
+      aria-label={`Next callback: ${callback.name}, ${left.text}, ${theirs} their time`}
+      title={`${callback.name} · ${theirs} their time`}
+      className="group inline-flex h-9 min-w-0 max-w-full items-center gap-2 rounded-full border border-border bg-[var(--surface-alt)] px-3 text-sm text-inherit no-underline transition-colors hover:border-[var(--border-strong)]"
+    >
+      <span className={`size-2 shrink-0 rounded-full ${left.late ? "bg-[var(--error)]" : "bg-[var(--primary)]"} ${reduced ? "" : "m-live"}`} aria-hidden="true" />
+      <span className="truncate text-muted-foreground">Next · <span className="font-semibold text-foreground">{callback.name}</span></span>
+      <span className={`shrink-0 font-semibold tabular-nums ${left.late ? "text-[var(--error-ink)]" : soon ? "text-[var(--accent-ink)]" : "text-foreground"}`} aria-live="off">{left.text}</span>
       <ArrowRight className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
     </Link>
   );
 }
 
-function TodayBand({ data, serverNow, canDial }: { data: DashboardToday; serverNow: number; canDial: boolean }) {
-  return (
-    <section className={`${cardClass} relative overflow-hidden`} aria-labelledby="today-heading">
-      {/* One soft wash of the accent in the corner, so the band reads as the page's lead. */}
-      <span className="pointer-events-none absolute -left-32 -top-40 size-[420px] rounded-full bg-[radial-gradient(closest-side,color-mix(in_srgb,var(--primary)_12%,transparent),transparent_70%)]" aria-hidden="true" />
-      <div className="relative flex flex-wrap items-center gap-x-6 gap-y-3 px-5 py-4">
-        <div className="min-w-0 flex-1">
-          <h2 id="today-heading" className="text-2xl font-semibold leading-[1.2] tracking-[-0.02em] text-foreground">{data.greeting}{data.firstName ? `, ${data.firstName}` : ""}</h2>
-          <p className="mt-0.5 text-sm leading-normal text-muted-foreground">
-            {data.dateLabel} · {data.queueReady === null ? "Here is how today is going." : data.queueReady === 0 ? "The dial queue is empty right now." : <><strong className="font-semibold text-foreground">{data.queueReady.toLocaleString()}</strong> lead{data.queueReady === 1 ? "" : "s"} waiting in the dial queue.</>}
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-3">
-          {data.nextCallback && <NextCallback callback={data.nextCallback} serverNow={serverNow} />}
-          {canDial && <Button asChild><Link href="/app/dialer"><Phone aria-hidden="true" />Start calling</Link></Button>}
-        </div>
-      </div>
-    </section>
-  );
-}
+/* ── Today's figures: the page's one strip ───────────────────────────────── */
 
-/* ── KPI strip ───────────────────────────────────────────────────────────── */
+type Figure = { label: string; value: ReactNode; foot?: string; tone?: Tone; trend?: "up" | "down" | null; spark?: Array<number | null>; tip?: string };
 
-type Kpi = { key: string; label: string; value: number | null; decimals?: number; prefix?: string; suffix?: string; compact?: boolean; foot: string; tone?: Tone; trend?: "up" | "down" | null; spark?: Array<number | null> };
-
-function KpiCell({ kpi, index }: { kpi: Kpi; index: number }) {
-  return (
-    <div className="flex min-w-0 flex-col bg-card px-4 pb-3 pt-3.5">
-      <p className={`${labelClass} truncate`}>{kpi.label}</p>
-      <p className="mt-1 text-2xl font-semibold leading-[1.2] tracking-[-0.025em] tabular-nums text-foreground">
-        {kpi.value === null ? "—" : <CountUp value={kpi.value} decimals={kpi.decimals} prefix={kpi.prefix} suffix={kpi.suffix} compact={kpi.compact} />}
-      </p>
-      <p className={`mt-0.5 flex min-h-[18px] items-center gap-1 truncate text-xs leading-normal ${toneInk[kpi.tone ?? "neutral"]}`}>
-        {kpi.trend === "up" && <ArrowUpRight className="size-3.5 shrink-0" aria-hidden="true" />}
-        {kpi.trend === "down" && <ArrowDownRight className="size-3.5 shrink-0" aria-hidden="true" />}
-        <span className="truncate">{kpi.foot}</span>
-      </p>
-      <div className="mt-2">{kpi.spark ? <Sparkline values={kpi.spark} delay={150 + index * 70} /> : <span className="block h-7" aria-hidden="true" />}</div>
-    </div>
-  );
-}
-
-function KpiStrip({ data }: { data: DashboardToday }) {
+/**
+ * The figures this reader's home lists, in its order, each only when its number was read: a figure
+ * whose read failed (or that the plan does not include) is left out rather than shown as a zero.
+ * At most six (UI-CONSISTENCY §4). Each links to the page it summarises.
+ */
+function HomeFigures({ data, figures }: { data: DashboardToday; figures: Array<{ key: HomeFigureKey; href: string }> }) {
   const series = data.series;
   const dials = series.map((day) => day.dials);
   const contacts = series.map((day) => day.contacts);
@@ -178,47 +137,83 @@ function KpiStrip({ data }: { data: DashboardToday }) {
   const weekRate = pct(weekContacts, weekDials);
   const change = data.dialsToday === null ? null : dayOnDay(data.dialsToday, data.dialsYesterday);
   const wow = periodChange(weekDials, lastWeekDials);
-  const kpis: Kpi[] = [];
-  if (data.dialsToday !== null) {
-    kpis.push(
-      { key: "dials", label: "Dials today", value: data.dialsToday, foot: change?.text ?? "none yesterday by now", tone: change?.tone === "warning" ? "warning" : change?.tone === "good" ? "good" : "neutral", trend: change?.tone === "good" ? "up" : change?.tone === "warning" ? "down" : null, spark: dials },
-      { key: "reached", label: "Reached", value: data.contactsToday, foot: "real conversations", spark: contacts },
-      {
-        key: "rate", label: "Contact rate", value: data.contactRatePct, decimals: 1, suffix: "%",
-        foot: weekRate === null ? "no dials this week" : `7-day ${weekRate.toFixed(1)}%`,
-        tone: data.contactRatePct === null || weekRate === null ? "neutral" : data.contactRatePct >= weekRate ? "good" : "warning",
-        trend: data.contactRatePct === null || weekRate === null ? null : data.contactRatePct >= weekRate ? "up" : "down",
-        spark: rates,
-      },
-      { key: "appts", label: "Appointments today", value: data.appointmentsToday, foot: data.appointmentsWeek === null ? "on today's diary" : `${data.appointmentsWeek.toLocaleString()} booked this week` },
-      { key: "week", label: "Dials · 7 days", value: weekDials, foot: wow === null ? "no dials the week before" : `${wow >= 0 ? "+" : ""}${wow.toFixed(0)}% vs last week`, tone: wow === null ? "neutral" : wow >= 0 ? "good" : "warning", trend: wow === null ? null : wow >= 0 ? "up" : "down", spark: dials.slice(-7) },
-    );
-  }
-  if (data.policies30) {
-    kpis.push({ key: "premium", label: "Premium · 30 days", value: data.policies30.premiumCents / 100, prefix: "$", compact: true, foot: `${data.policies30.count.toLocaleString()} polic${data.policies30.count === 1 ? "y" : "ies"} written`, tone: data.policies30.count ? "good" : "neutral" });
-  } else if (data.queueReady !== null) {
-    kpis.push({ key: "queue", label: "Queue ready", value: data.queueReady, foot: "leads waiting to dial" });
-  }
-  if (!kpis.length) return null;
-  const cols = kpis.length >= 6 ? "xl:grid-cols-6" : kpis.length === 5 ? "xl:grid-cols-5" : kpis.length === 4 ? "xl:grid-cols-4" : "";
+  const dialing = data.dialsToday !== null;
+
+  const build: Record<HomeFigureKey, () => Figure | null> = {
+    dials: () => data.dialsToday === null ? null : {
+      label: "Dials today", value: <CountUp value={data.dialsToday} />, foot: change?.text ?? "none yesterday by now",
+      tone: change?.tone === "warning" ? "warning" : change?.tone === "good" ? "good" : "neutral", trend: change?.tone === "good" ? "up" : change?.tone === "warning" ? "down" : null, spark: dials,
+    },
+    reached: () => !dialing || data.contactsToday === null ? null : { label: "Reached", value: <CountUp value={data.contactsToday} />, foot: "real conversations", spark: contacts },
+    rate: () => !dialing ? null : {
+      label: "Contact rate", value: data.contactRatePct === null ? "—" : <CountUp value={data.contactRatePct} decimals={1} suffix="%" />,
+      foot: weekRate === null ? "no dials this week" : `7-day ${weekRate.toFixed(1)}%`,
+      tone: data.contactRatePct === null || weekRate === null ? "neutral" : data.contactRatePct >= weekRate ? "good" : "warning",
+      trend: data.contactRatePct === null || weekRate === null ? null : data.contactRatePct >= weekRate ? "up" : "down",
+      spark: rates,
+    },
+    appointments: () => data.appointmentsToday === null ? null : { label: "Appointments today", value: <CountUp value={data.appointmentsToday} />, foot: data.appointmentsWeek === null ? "on today's diary" : `${data.appointmentsWeek.toLocaleString()} booked this week` },
+    dials7: () => !dialing ? null : {
+      label: "Dials · 7 days", value: <CountUp value={weekDials} />, foot: wow === null ? "no dials the week before" : `${wow >= 0 ? "+" : ""}${wow.toFixed(0)}% vs last week`,
+      tone: wow === null ? "neutral" : wow >= 0 ? "good" : "warning", trend: wow === null ? null : wow >= 0 ? "up" : "down", spark: dials.slice(-7),
+    },
+    premium: () => !data.policies30 ? null : {
+      label: "Premium · 30 days", value: <CountUp value={data.policies30.premiumCents / 100} prefix="$" compact />,
+      foot: `${data.policies30.count.toLocaleString()} polic${data.policies30.count === 1 ? "y" : "ies"} written`, tone: data.policies30.count ? "good" : "neutral",
+    },
+    queue: () => data.queueReady === null ? null : { label: "Queue ready", value: <CountUp value={data.queueReady} />, foot: "leads waiting to dial" },
+    booked: () => {
+      const week = data.setterWeek;
+      if (!week) return null;
+      // Decision 12: the show rate never travels without its coverage.
+      const decided = week.showed + week.noShow;
+      const showRate = pct(week.showed, decided);
+      const coverage = pct(week.closedOut, week.closeable);
+      return {
+        label: "Booked · 7 days", value: <CountUp value={week.booked} />,
+        foot: showRate === null ? "none closed out yet" : `${showRate.toFixed(0)}% showed · ${coverage === null ? "—" : `${coverage.toFixed(0)}%`} closed out`,
+        tip: "Show rate counts only appointments with a recorded outcome. Closed out is the share of your past appointments that have one.",
+      };
+    },
+  };
+
+  const cells = figures
+    .map((figure) => ({ ...figure, cell: build[figure.key]() }))
+    .filter((figure): figure is { key: HomeFigureKey; href: string; cell: Figure } => figure.cell !== null)
+    .slice(0, 6);
+  if (!cells.length) return null;
   return (
-    <section aria-label="Today's numbers" className={`${cardClass} overflow-hidden`}>
-      {/* One-pixel gaps over the border colour draw the dividers at any column count. */}
-      <div className={`grid grid-cols-2 gap-px bg-border sm:grid-cols-3 ${cols}`}>
-        {kpis.map((kpi, index) => <KpiCell key={kpi.key} kpi={kpi} index={index} />)}
-      </div>
-    </section>
+    <StatStrip label="Today's numbers">
+      {cells.map(({ key, href, cell }) => (
+        <StatTile
+          key={key}
+          label={cell.label}
+          labelTitle={cell.tip}
+          value={cell.value}
+          trend={cell.spark ? { points: cell.spark.map((point) => point ?? 0), tone: cell.tone === "good" ? "good" : cell.tone === "warning" ? "warning" : "neutral" } : undefined}
+          reserveFootnote
+          footnote={cell.foot ? (
+            <span className={`inline-flex items-center gap-1 ${toneInk[cell.tone ?? "neutral"]}`}>
+              {cell.trend === "up" && <ArrowUpRight className="size-3.5 shrink-0" aria-hidden="true" />}
+              {cell.trend === "down" && <ArrowDownRight className="size-3.5 shrink-0" aria-hidden="true" />}
+              {cell.foot}
+            </span>
+          ) : undefined}
+          action={<Link href={href} aria-label={`Open ${cell.label.toLowerCase()}`} className="font-semibold text-foreground no-underline hover:underline">Open</Link>}
+        />
+      ))}
+    </StatStrip>
   );
 }
 
 /* ── Today's appointments (LA-2.11-8) ────────────────────────────────────── */
 
-const APPOINTMENT_STATUS: Record<string, { label: string; tone: string }> = {
-  booked: { label: "Booked", tone: "bg-[var(--surface-alt)] text-foreground" },
-  confirmed: { label: "Confirmed", tone: "bg-[var(--success-surface)] text-[var(--success-ink)]" },
-  pending: { label: "Awaiting close-out", tone: "bg-[var(--warning-surface)] text-[var(--warning-ink)]" },
-  showed: { label: "Showed", tone: "bg-[var(--success-surface)] text-[var(--success-ink)]" },
-  no_show: { label: "No-show", tone: "bg-[var(--error-surface)] text-[var(--error-ink)]" },
+const APPOINTMENT_STATUS: Record<string, { label: string; tone: StatusTone }> = {
+  booked: { label: "Booked", tone: "neutral" },
+  confirmed: { label: "Confirmed", tone: "good" },
+  pending: { label: "Awaiting close-out", tone: "warning" },
+  showed: { label: "Showed", tone: "good" },
+  no_show: { label: "No-show", tone: "danger" },
 };
 
 function clockIn(iso: string, zone: string, withZone: boolean) {
@@ -229,78 +224,90 @@ function clockIn(iso: string, zone: string, withZone: boolean) {
   }
 }
 
-/** The diary for today, earliest first: the agency's clock, and the customer's when it differs. */
+/**
+ * The diary for today, earliest first: the agency's clock, and the customer's when it differs.
+ * Hidden when the diary could not be read; an empty day says so and offers the calendar.
+ */
 function TodayAppointments({ data }: { data: DashboardToday }) {
   const list = data.appointmentsTodayList;
-  if (!list || list.length === 0) return null;
+  if (!list) return null;
   const more = (data.appointmentsToday ?? list.length) - list.length;
   return (
-    <section className={`${cardClass} overflow-hidden`} aria-labelledby="appointments-today-heading">
-      <div className="flex items-baseline justify-between gap-3 px-4 pb-2 pt-3">
-        <h2 id="appointments-today-heading" className="text-sm font-semibold leading-normal tracking-[-0.01em] text-foreground">Today&apos;s appointments</h2>
-        <Link href="/app/calendar" className="text-xs font-semibold text-muted-foreground no-underline hover:text-foreground">{more > 0 ? `${more} more · Calendar` : "Calendar"}</Link>
-      </div>
-      <ul className="m-0 list-none divide-y divide-border border-t border-border p-0">
-        {list.map((item) => {
-          const status = APPOINTMENT_STATUS[item.status] ?? APPOINTMENT_STATUS.booked;
-          const theirs = item.customerTimezone && item.customerTimezone !== data.zone ? clockIn(item.startsAtUtc, item.customerTimezone, true) : "";
-          return (
-            <li key={item.id}>
-              <Link href={`/app/calendar?appointment=${item.id}`} className="m-row flex items-center gap-3 px-4 py-2 text-inherit no-underline">
-                <span className="w-[72px] shrink-0 text-sm font-semibold tabular-nums text-foreground">{clockIn(item.startsAtUtc, data.zone, false)}</span>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-semibold text-foreground">{item.customerName}</span>
-                  <span className="block truncate text-xs text-muted-foreground">with {item.agentName}{theirs ? ` · ${theirs} their time` : ""}</span>
-                </span>
-                <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${status.tone}`}>{status.label}</span>
-              </Link>
-            </li>
-          );
-        })}
-      </ul>
-    </section>
+    <TableCard
+      title="Today's appointments"
+      action={<LinkArrow href="/app/calendar" className="text-xs">{more > 0 ? `${more} more · Calendar` : "Calendar"}</LinkArrow>}
+    >
+      {list.length === 0 ? (
+        <EmptyState title="No appointments today" hint="Booked appointments for today show here." action={<Button asChild variant="outline"><Link href="/app/calendar">Open calendar</Link></Button>} />
+      ) : (
+        <ul className="m-0 list-none divide-y divide-border border-t border-border p-0">
+          {list.map((item) => {
+            const status = APPOINTMENT_STATUS[item.status] ?? APPOINTMENT_STATUS.booked;
+            const theirs = item.customerTimezone && item.customerTimezone !== data.zone ? clockIn(item.startsAtUtc, item.customerTimezone, true) : "";
+            return (
+              <li key={item.id}>
+                <Link href={`/app/calendar?appointment=${item.id}`} className="m-row flex items-center gap-3 px-4 py-2 text-inherit no-underline">
+                  <span className="w-[72px] shrink-0 text-sm font-semibold tabular-nums text-foreground">{clockIn(item.startsAtUtc, data.zone, false)}</span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-semibold text-foreground">{item.customerName}</span>
+                    <span className="block truncate text-xs text-muted-foreground">with {item.agentName}{theirs ? ` · ${theirs} their time` : ""}</span>
+                  </span>
+                  <StatusChip tone={status.tone}>{status.label}</StatusChip>
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </TableCard>
   );
 }
 
 /* ── Needs you today ─────────────────────────────────────────────────────── */
 
-type NeedCell = { key: string; label: string; value: number; sentence: string; href: string; tone: "danger" | "warning" | "good" };
+const NEED_DOT = { danger: "bg-[var(--error)]", warning: "bg-[var(--warning)]", good: "bg-[var(--success)]" } as const;
 
-function NeedsStrip({ needs }: { needs: DashboardToday["needs"] }) {
-  const cells: NeedCell[] = [];
-  if (needs.slaBreaching !== null) cells.push({ key: "sla", label: "Breaching SLA", value: needs.slaBreaching, sentence: needs.slaBreaching ? `Transfers waiting over ${needs.slaMinutes ?? 15}m` : "No transfer past the SLA", href: "/app/inbound", tone: needs.slaBreaching ? "danger" : "good" });
-  if (needs.callbacksOverdue !== null) cells.push({ key: "callbacks", label: "Callbacks overdue", value: needs.callbacksOverdue, sentence: needs.callbacksToday ? `${needs.callbacksToday} more due later today` : "Nothing else due today", href: "/app/callbacks", tone: needs.callbacksOverdue ? "warning" : "good" });
-  if (needs.lapsing !== null) cells.push({ key: "lapse", label: "Lapse risk", value: needs.lapsing, sentence: needs.lapsing ? "Policies with an open lapse signal" : "No open lapse signal", href: "/app/lapse-risk", tone: needs.lapsing ? "warning" : "good" });
-  if (needs.licences !== null) {
-    const bad = needs.licences.expired + needs.licences.expiring;
-    cells.push({ key: "licences", label: "Licences", value: bad, sentence: bad ? `${needs.licences.expired ? `${needs.licences.expired} expired` : ""}${needs.licences.expired && needs.licences.expiring ? ", " : ""}${needs.licences.expiring ? `${needs.licences.expiring} expiring` : ""} · ${needs.licences.states.join(", ")}` : "None expiring in 30 days", href: "/app/settings#states-licences", tone: needs.licences.expired ? "danger" : bad ? "warning" : "good" });
-  }
-  if (!cells.length) return null;
-  const attention = cells.filter((cell) => cell.value > 0).length;
-  const dot = { danger: "bg-[var(--error)]", warning: "bg-[var(--warning)]", good: "bg-[var(--success)]" };
+type NeedRow ={ key: HomeNeedKey; label: string; value: number; sentence: string; href: string; tone: "danger" | "warning" | "good" };
+
+/** The rows this reader's home lists, each only when it was read; links go where the role can act. */
+function NeedsList({ needs, rows: wanted }: { needs: DashboardToday["needs"]; rows: Array<{ key: HomeNeedKey; href: string }> }) {
+  const build: Record<HomeNeedKey, (href: string) => NeedRow | null> = {
+    transfers: (href) => needs.transfersWaiting === null ? null : {
+      key: "transfers", label: "Transfers waiting", value: needs.transfersWaiting, href,
+      sentence: needs.slaBreaching ? `${needs.slaBreaching} past the ${needs.slaMinutes ?? 15}m SLA` : needs.transfersWaiting ? "None past the SLA" : "Nobody waiting",
+      tone: needs.slaBreaching ? "danger" : needs.transfersWaiting ? "warning" : "good",
+    },
+    callbacks: (href) => needs.callbacksOverdue === null ? null : { key: "callbacks", label: "Callbacks overdue", value: needs.callbacksOverdue, sentence: needs.callbacksToday ? `${needs.callbacksToday} more due later today` : "Nothing else due today", href, tone: needs.callbacksOverdue ? "warning" : "good" },
+    lapse: (href) => needs.lapsing === null ? null : { key: "lapse", label: "Lapse risk", value: needs.lapsing, sentence: needs.lapsing ? "Policies with an open lapse signal" : "No open lapse signal", href, tone: needs.lapsing ? "warning" : "good" },
+    licences: (href) => {
+      if (needs.licences === null) return null;
+      const bad = needs.licences.expired + needs.licences.expiring;
+      return { key: "licences", label: "Licences", value: bad, sentence: bad ? `${needs.licences.expired ? `${needs.licences.expired} expired` : ""}${needs.licences.expired && needs.licences.expiring ? ", " : ""}${needs.licences.expiring ? `${needs.licences.expiring} expiring` : ""} · ${needs.licences.states.join(", ")}` : "None expiring in 30 days", href, tone: needs.licences.expired ? "danger" : bad ? "warning" : "good" };
+    },
+  };
+  const rows = wanted.map((row) => build[row.key](row.href)).filter((row): row is NeedRow => row !== null);
+  if (!rows.length) return null;
+  const attention = rows.filter((row) => row.value > 0).length;
   return (
-    <section className={`${cardClass} overflow-hidden`} aria-labelledby="needs-heading">
-      <div className="flex flex-col lg:flex-row">
-        <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3 lg:w-[200px] lg:shrink-0 lg:flex-col lg:items-start lg:justify-center lg:border-b-0 lg:border-r">
-          <h2 id="needs-heading" className="text-sm font-semibold leading-normal tracking-[-0.01em] text-foreground">Needs you today</h2>
-          <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-[3px] text-xs font-semibold ${attention ? "bg-[var(--error-surface)] text-[var(--error-ink)]" : "bg-[var(--success-surface)] text-[var(--success-ink)]"}`}>
-            <span className={`size-1.5 rounded-full ${attention ? "bg-[var(--error)]" : "bg-[var(--success)]"}`} aria-hidden="true" />{attention ? `${attention} need attention` : "All clear"}
-          </span>
-        </div>
-        <div className={`grid flex-1 grid-cols-1 gap-px bg-border sm:grid-cols-2 ${cells.length >= 4 ? "xl:grid-cols-4" : cells.length === 3 ? "xl:grid-cols-3" : ""}`}>
-          {cells.map((cell) => (
-            <Link key={cell.key} href={cell.href} className="m-row group flex items-center gap-3 bg-card px-4 py-3 text-inherit no-underline">
-              <span className={`text-2xl font-semibold leading-none tracking-[-0.03em] tabular-nums ${cell.tone === "danger" && cell.value ? "text-[var(--error-ink)]" : "text-foreground"}`}><CountUp value={cell.value} /></span>
+    <TableCard
+      title="Needs you today"
+      action={<StatusChip tone={attention ? "danger" : "good"} dot>{attention ? `${attention} need attention` : "All clear"}</StatusChip>}
+    >
+      <ul className="m-0 grid list-none grid-cols-1 gap-px overflow-hidden border-t border-border bg-border p-0sm:grid-cols-2 xl:grid-flow-col xl:auto-cols-fr xl:grid-cols-none">
+        {rows.map((row) => (
+          <li key={row.key} className="bg-card">
+            <Link href={row.href} className="m-row group flex items-center gap-3 px-4 py-3 text-inherit no-underline">
+              <span className={`text-2xl font-semibold leading-none tracking-[-0.03em] tabular-nums ${row.tone === "danger" && row.value ? "text-[var(--error-ink)]" : "text-foreground"}`}><CountUp value={row.value} /></span>
               <span className="min-w-0 flex-1">
-                <span className="flex items-center gap-1.5"><span className={`size-[7px] shrink-0 rounded-full ${dot[cell.tone]}`} aria-hidden="true" /><span className="truncate text-xs font-semibold text-foreground">{cell.label}</span></span>
-                <span className="mt-0.5 block truncate text-xs text-muted-foreground">{cell.sentence}</span>
+                <span className="flex items-center gap-1.5"><span className={`size-[7px] shrink-0 rounded-full ${NEED_DOT[row.tone]}`} aria-hidden="true" /><span className="truncate text-xs font-semibold text-foreground">{row.label}</span></span>
+                <span className="mt-0.5 block truncate text-xs text-muted-foreground">{row.sentence}</span>
               </span>
               <ArrowRight className="size-4 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100" aria-hidden="true" />
             </Link>
-          ))}
-        </div>
-      </div>
-    </section>
+          </li>
+        ))}
+      </ul>
+    </TableCard>
   );
 }
 
@@ -602,46 +609,69 @@ function LeadersPanel({ leaders }: { leaders: NonNullable<NonNullable<DashboardT
   );
 }
 
-/* ── The composed overview ───────────────────────────────────────────────── */
+
+/* ── The analysis panels ─────────────────────────────────────────────────── */
 
 /**
- * Band, KPI strip, needs, then the analysis grid. `aside` is what sits beside the heatmap when there
- * is no team to rank (a producer's own dashboard): the page passes its callbacks card.
+ * Activity beside the outcome mix, then the best hour — with the team's standings beside it when the
+ * home has a team to rank (the owner's). Nothing when the reader's plan or role has no dialling.
  */
-export function DashboardOverview({ data, serverNow, canDial, aside }: { data: DashboardToday; serverNow: number; canDial: boolean; aside?: ReactNode }) {
+function AnalysisPanels({ data, team }: { data: DashboardToday; team: boolean }) {
   const insights = data.insights;
-  const hasDialing = data.dialsToday !== null;
-  const side = insights?.leaders ? <LeadersPanel leaders={insights.leaders} /> : aside ?? null;
+  if (data.dialsToday === null) return null;
+  const side = team && insights?.leaders ? <LeadersPanel leaders={insights.leaders} /> : null;
   return (
-    <div className="flex flex-col gap-4">
-      <TodayBand data={data} serverNow={serverNow} canDial={canDial} />
-      <KpiStrip data={data} />
-      <NeedsStrip needs={data.needs} />
-      <TodayAppointments data={data} />
-      {hasDialing && (
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
-          <ActivityPanel data={data} />
-          {insights ? <OutcomesPanel insights={insights} sampled={insights.sampled} /> : <div className={`${cardClass} p-5 text-sm text-muted-foreground`}>Outcomes could not be read just now.</div>}
-        </div>
-      )}
-      {hasDialing && insights && (
+    <>
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
+        <ActivityPanel data={data} />
+        {insights ? <OutcomesPanel insights={insights} sampled={insights.sampled} /> : <div className={`${cardClass} p-5 text-sm text-muted-foreground`}>Outcomes could not be read just now.</div>}
+      </div>
+      {insights && (
         <div className={`grid gap-4 ${side ? "lg:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]" : ""}`}>
           <HeatmapPanel heat={insights.heat} zone={data.zone} />
           {side}
         </div>
       )}
-      {!hasDialing && aside}
-    </div>
+    </>
   );
 }
 
-/** Held while the overview's reads finish — the page itself has already rendered. */
-export function DashboardTodaySkeleton() {
+/* ── The streamed sections, in the role's order ──────────────────────────── */
+
+/**
+ * Renders `sections` in order. The data sections draw from `data`; any other section in the run
+ * (the callbacks list between "needs" and the diary, say) is passed in rendered, as a slot. `team`
+ * is not a block of its own: it puts the standings beside the best-hour panel.
+ */
+export function DashboardStreamed({ data, sections, figures, needs, slots }: {
+  data: DashboardToday;
+  sections: HomeSectionKey[];
+  figures: Array<{ key: HomeFigureKey; href: string }>;
+  needs: Array<{ key: HomeNeedKey; href: string }>;
+  slots: Partial<Record<HomeSectionKey, ReactNode>>;
+}) {
+  const team = sections.includes("team");
+  const render = (key: HomeSectionKey): ReactNode => {
+    switch (key) {
+      case "figures": return <HomeFigures data={data} figures={figures} />;
+      case "needs": return <NeedsList needs={data.needs} rows={needs} />;
+      case "appointments": return <TodayAppointments data={data} />;
+      case "activity": return <AnalysisPanels data={data} team={team} />;
+      case "team": return null;
+      default: return slots[key] ?? null;
+    }
+  };
+  return <>{sections.map((key) => <Fragment key={key}>{render(key)}</Fragment>)}</>;
+}
+
+/** Held while the streamed sections' reads finish — the header and the rest have already rendered. */
+export function DashboardTodaySkeleton({ strip = true, panels = true }: { strip?: boolean; panels?: boolean }) {
   return (
     <div className="flex flex-col gap-4" aria-busy="true" aria-label="Loading today">
-      <div className={`${cardClass} px-5 py-4`}><div className="m-skel h-3.5 w-48 rounded" /><div className="m-skel mt-2 h-7 w-72 rounded" /></div>
-      <div className={`${cardClass} grid grid-cols-2 gap-4 p-4 sm:grid-cols-3 xl:grid-cols-6`}>{[0, 1, 2, 3, 4, 5].map((i) => <div key={i} className="m-skel h-[92px] rounded" />)}</div>
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]"><div className="m-skel h-[260px] rounded-xl" /><div className="m-skel h-[260px] rounded-xl" /></div>
+      {strip && <div className={`${cardClass} grid grid-cols-2 gap-4 p-4 sm:grid-cols-3 xl:grid-cols-6`}>{[0, 1, 2, 3, 4, 5].map((i) => <div key={i} className="m-skel h-[92px] rounded" />)}</div>}
+      {panels
+        ? <div className="grid gap-4 lg:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]"><div className="m-skel h-[260px] rounded-xl" /><div className="m-skel h-[260px] rounded-xl" /></div>
+        : <div className="m-skel h-[160px] rounded-xl" />}
     </div>
   );
 }

@@ -1,5 +1,3 @@
-import { isOnboardingComplete } from "../signup/constants.ts";
-
 export type SetupChecklistStep = {
   key: string;
   label: string;
@@ -32,23 +30,73 @@ const SETUP_STEPS = [
   { key: "phone", label: "Connect your phone number", path: "/app/settings#agency-profile", action: "Open settings tab" },
 ] as const;
 
+export type SetupStepKey = (typeof SETUP_STEPS)[number]["key"];
+
 /**
- * Onboarding completion is already persisted on tenants. Until the platform has per-step
- * completion timestamps, the honest progress signal is 0/5 for an unfinished tenant and 5/5 at
- * the durable completed state. This avoids pretending that a recommended step list is progress.
- *
- * The comparison goes through `isOnboardingComplete` because the column holds **two spellings** of
- * the finished state. This line read `onboardingState === "completed"`, which matched 197 tenants
- * and missed the 383 stored as `"complete"` — so two thirds of the platform saw a permanent
- * "0 of 5" checklist telling them to redo setup they had already finished.
+ * The durable fact behind each step, read server-side by `loadSetupProgress` (setupProgress.ts).
+ * A missing or false field means "not proven yet", never "failed": a read that errors leaves the
+ * step undone rather than breaking the dashboard.
  */
-export function setupChecklistForState(onboardingState: string, progress: { statementImported?: boolean } = {}): SetupChecklist {
-  const complete = isOnboardingComplete(onboardingState);
-  // LA-4.6: the one step with its own durable signal. A statement that stands (not voided) means the
-  // step is done, whatever the onboarding state says.
-  const steps = SETUP_STEPS.map((step) => ({ ...step, complete: complete || (step.key === "statement" && Boolean(progress.statementImported)) }));
+export type SetupProgress = {
+  /** LA-4.6 · a carrier statement that stands (not voided). */
+  statementImported?: boolean;
+  /** An active row in the tenant's carrier library (tenant_carriers.is_active). */
+  carriersAdded?: boolean;
+  /** An agency appointment still in force (appointments.terminated_at is null). */
+  appointmentsConfirmed?: boolean;
+  /** A lead source on the Partners screen that is not offboarded (partners.status). */
+  leadSourcesAdded?: boolean;
+  /** The agency's phone on the agency profile tab (tenants.support_phone). */
+  phoneAdded?: boolean;
+  /**
+   * LA-0.3 "disappears once complete and does not come back": tenants.setup_checklist_completed_at
+   * is set the first time every step is done, and from then on the checklist is finished even if a
+   * fact later stops holding (a carrier switched off, a lead source offboarded).
+   */
+  finished?: boolean;
+};
+
+const PROGRESS_FIELD: Record<SetupStepKey, keyof SetupProgress> = {
+  carriers: "carriersAdded",
+  statement: "statementImported",
+  appointments: "appointmentsConfirmed",
+  "lead-sources": "leadSourcesAdded",
+  phone: "phoneAdded",
+};
+
+/**
+ * Each step is done when its own durable fact is true — so the checklist moves one row at a time
+ * as the owner works through it, instead of jumping from 0/5 to 5/5 at the end of onboarding.
+ *
+ * A finished onboarding does NOT tick the steps (owner decision 2026-10-13, "show until done").
+ * Checkout writes the finished onboarding state before the agency has set anything up, so counting
+ * it hid the checklist from every new agency on its first visit. `onboardingState` stays in the
+ * signature for the callers; only the stamp in `progress.finished` closes the checklist for good.
+ */
+export function setupChecklistForState(onboardingState: string, progress: SetupProgress = {}): SetupChecklist {
+  const finished = progress.finished === true;
+  const steps = SETUP_STEPS.map((step) => ({ ...step, complete: finished || progress[PROGRESS_FIELD[step.key]] === true }));
   const completed = steps.filter((step) => step.complete).length;
   return { complete: completed === steps.length, completed, total: steps.length, steps };
+}
+
+/** One existence read as Supabase returns it: rows (or one row) and an error. */
+export type ExistenceRead = { data?: unknown; error?: unknown } | null | undefined;
+
+/**
+ * Whether an existence read proves its step. An error — a table or column not migrated yet, a
+ * timeout — proves nothing, so the step stays undone and the dashboard still renders.
+ */
+export function readFoundRow(read: ExistenceRead): boolean {
+  if (!read || read.error) return false;
+  return Array.isArray(read.data) ? read.data.length > 0 : read.data != null;
+}
+
+/** The phone step reads one tenants row; a blank or missing support_phone is no phone. */
+export function readHasPhone(read: ExistenceRead): boolean {
+  if (!readFoundRow(read)) return false;
+  const phone = (read?.data as { support_phone?: unknown }).support_phone;
+  return typeof phone === "string" && phone.trim().length > 0;
 }
 
 export function setupStepDefinitions(): readonly Omit<SetupChecklistStep, "complete">[] {
