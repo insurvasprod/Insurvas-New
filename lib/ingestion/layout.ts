@@ -223,6 +223,13 @@ function cents(text: string, strip: boolean): number | null {
   // "13,235.56-": some statements put the minus after the amount.
   if (value.endsWith("-") && value.length > 1) { negative = !negative; value = value.slice(0, -1); }
   if (value.startsWith("-")) { negative = !negative; value = value.slice(1); }
+  // Binary noise from a spreadsheet save: Excel writes 276.72 as 276.72000000000003 and 1083.60 as
+  // 1083.5999999999999. Ten or more decimals within a millionth of a cent are that cent; a real
+  // third decimal (12.345) is still not an amount.
+  if (/^\d+\.\d{10,}$/.test(value)) {
+    const hundredths = Number(value) * 100;
+    if (Math.abs(hundredths - Math.round(hundredths)) < 1e-6) value = (Math.round(hundredths) / 100).toFixed(2);
+  }
   const match = /^(\d+)(?:\.(\d{1,2}))?$/.exec(value);
   if (!match) return null;
   const whole = Number(match[1]);
@@ -261,6 +268,40 @@ function basisPoints(text: string, fromPercent: boolean, fromFraction = false): 
 export function unwrapExcelText(raw: string): string {
   const match = /^=\(?"?([^"()=]*)"?\)?$/.exec(raw.trim());
   return match ? match[1] : raw;
+}
+
+/**
+ * A carrier date after someone opened the file in Excel and saved it (owner request 2026-10-13:
+ * a file we edit ourselves must still read). Tried only when the map's own format did not match:
+ *   - ISO 2026-07-08, kept by some saves whatever the column's format;
+ *   - US 7/8/2026 (four-digit year), what Excel writes into a CSV for any date it recognised;
+ *   - an Excel date serial, 46202 = 2026-06-29, what Excel 2003 XML (.xls) and some CSV saves hold
+ *     once a date cell has lost its format. Five digits, 1950–2100 only: a six- or eight-digit date
+ *     (mmddyy, yyyymmdd) can never be read as one.
+ */
+export function excelSavedDate(value: string): string | null {
+  let match = /^(\d{4})-(\d{2})-(\d{2})(?:[T ].*)?$/.exec(value);
+  if (match) return realDate(Number(match[1]), Number(match[2]), Number(match[3]));
+  match = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(value);
+  if (match) return realDate(Number(match[3]), Number(match[1]), Number(match[2]));
+  if (/^\d{5}$/.test(value)) {
+    const serial = Number(value);
+    // 18264 = 1950-01-01, 73415 = 2100-12-31. Day 0 is 1899-12-30 (Excel's 1900 leap-year quirk folded in).
+    if (serial < 18264 || serial > 73415) return null;
+    const day = new Date(Date.UTC(1899, 11, 30) + serial * 86_400_000);
+    return realDate(day.getUTCFullYear(), day.getUTCMonth() + 1, day.getUTCDate());
+  }
+  return null;
+}
+
+/**
+ * A US ZIP that a spreadsheet stored as a number lost its leading zero: Excel saves 08270 as 8270
+ * (and 08270-1234 as 8270-1234). Three or four digits are put back to five; anything else is left.
+ */
+export function restoreZip(value: CellValue): CellValue {
+  if (typeof value !== "string") return value;
+  const match = /^(\d{3,4})(-\d{4})?$/.exec(value);
+  return match ? match[1].padStart(5, "0") + (match[2] ?? "") : value;
 }
 
 /** One cell through one map entry. An empty (or all-space) cell is null, and an error only if required. */
@@ -306,6 +347,7 @@ export function convertCell(input: string, entry: Pick<LayoutEntry, "dataType" |
         const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
         if (match) parsed = realDate(Number(match[1]), Number(match[2]), Number(match[3]));
       }
+      parsed ??= excelSavedDate(value);
       return parsed ? { ok: true, value: parsed } : { ok: false, reason: `"${raw}" is not a date this map reads` };
     }
     case "enum": {
@@ -418,7 +460,7 @@ export function parseWithMap(input: ParseInput): ParseResult {
       const key = keyFor.get(entry.sourceColumn);
       const cell = joined ? joined.map((part) => (row.payload[keyFor.get(part)!] ?? "").trim()).filter(Boolean).join(" ") : key ? row.payload[key] ?? "" : entry.sourceColumn.slice(1);
       const converted = convertCell(cell, entry, { verbatim: verbatimFields.has(entry.targetField) });
-      if (converted.ok) values[entry.targetField] = converted.value;
+      if (converted.ok) values[entry.targetField] = entry.targetField === "insured_zip" ? restoreZip(converted.value) : converted.value;
       else { rowOk = false; heldBack.push({ rowNumber: row.rowNumber, field: entry.targetField, reason: converted.reason }); }
     }
     if (rowOk) rows.push({ rowNumber: row.rowNumber, values });
