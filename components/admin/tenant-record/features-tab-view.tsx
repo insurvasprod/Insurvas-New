@@ -6,6 +6,7 @@ import { Fragment, useId, useMemo, useState, type FormEvent } from "react";
 import { Field, Pill, SettingsCard, btn, control, st } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { TableCard } from "@/components/ui/table-card";
+import { Pager, paginate } from "@/components/ui/pager";
 import type { AdminRole } from "@/lib/adminAuth/roles";
 import { ADMIN_ROLE_LABELS, isAdminRole } from "@/lib/adminAuth/roles";
 import {
@@ -66,6 +67,8 @@ export function FeaturesTabView({
   const overrides = state.features.filter((row) => row.override);
   const deviations = overrides.filter(isDeviation).length;
   const granted = cancelled ? [] : state.features.filter((row) => row.plan_grants);
+  const [grantedPage, setGrantedPage] = useState(1);
+  const { current: grantedCurrent, rows: grantedRows } = paginate(granted, grantedPage);
 
   return (
     <div className="flex w-full min-w-0 flex-col gap-6">
@@ -74,6 +77,7 @@ export function FeaturesTabView({
       <div className="grid items-start gap-5 lg:grid-cols-2">
         <TableCard
           title={`Everything ${plan} grants`}
+          footer={<Pager page={grantedCurrent} total={granted.length} noun="features" onPage={setGrantedPage} />}
           action={<Pill tone="neutral">{granted.length === 1 ? "1 feature" : `${granted.length} features`}</Pill>}
         >
           <table className={st.table}>
@@ -91,7 +95,7 @@ export function FeaturesTabView({
                   </td>
                 </tr>
               ) : (
-                granted.map((row) => (
+                grantedRows.map((row) => (
                   <tr key={row.feature_key} className="m-row">
                     <td className={st.td}>
                       {row.label}
@@ -150,6 +154,8 @@ function OverridesTable({
   const [error, setError] = useState<string | null>(null);
   const mayRemove = state.schemaReady && canRemoveOverride(role);
   const columns = mayRemove ? 6 : 5;
+  const [page, setPage] = useState(1);
+  const { current, rows: pageRows } = paginate(rows, page);
 
   async function remove(featureKey: string) {
     if (reason.trim().length < 5) {
@@ -182,6 +188,7 @@ function OverridesTable({
   return (
     <TableCard
       title="Overrides on this tenant"
+      footer={<Pager page={current} total={rows.length} noun="overrides" onPage={setPage} />}
       action={
         deviations > 0 ? (
           <Pill tone="warning" dot>
@@ -217,7 +224,7 @@ function OverridesTable({
               </td>
             </tr>
           ) : (
-            rows.map((row) => {
+            pageRows.map((row) => {
               const override = row.override!;
               const who = shortName(override.set_by_name);
               const roleLabel = override.set_by_role && isAdminRole(override.set_by_role) ? ADMIN_ROLE_LABELS[override.set_by_role] : null;

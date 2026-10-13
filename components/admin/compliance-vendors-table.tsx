@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { DataToolbar, RefreshButton } from "@/components/ui/data-toolbar";
 import { PageHeader } from "@/components/ui/page-header";
 import { TableCard } from "@/components/ui/table-card";
+import { Pager, paginate } from "@/components/ui/pager";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/ui/page-states";
 import { COMPLIANCE_VENDOR_TYPES, COMPLIANCE_VENDOR_TYPE_LABELS, type ComplianceVendor, type ComplianceVendorType } from "@/lib/compliance/constants";
@@ -61,11 +62,13 @@ export function ComplianceVendorsTable({ initial }: { initial: ComplianceRegistr
   const [toggling, setToggling] = useState<string | null>(null);
   const [pending, setPending] = useState<PendingConfirmation | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [page, setPage] = useState(1);
   const mounted = useMounted();
   const formId = useId();
 
   const editing = editingId ? vendors.find((vendor) => vendor.id === editingId) ?? null : null;
   const roles = useMemo(() => vendorRoles(vendors), [vendors]);
+  const { current, rows: pageRows } = paginate(vendors, page);
   const unreachable = unreachableVendors(vendors);
   const posture = dialingPosture(vendors, dialing);
   const enabledCount = vendors.filter((vendor) => vendor.is_enabled).length;
@@ -180,7 +183,7 @@ export function ComplianceVendorsTable({ initial }: { initial: ComplianceRegistr
       )}
       {dialing.demo && <Callout tone="info" title={posture.title} />}
 
-      <TableCard toolbar={<DataToolbar actions={<RefreshButton onClick={() => void reload()} refreshing={refreshing} />} />}>
+      <TableCard toolbar={<DataToolbar actions={<RefreshButton onClick={() => void reload()} refreshing={refreshing} />} />} footer={<Pager page={current} total={vendors.length} noun="vendors" onPage={setPage} />}>
         <div className="min-w-0 overflow-x-auto">
           <table className={cn(st.table, "min-w-[880px] table-fixed")}>
             <thead>
@@ -201,7 +204,7 @@ export function ComplianceVendorsTable({ initial }: { initial: ComplianceRegistr
                   </td>
                 </tr>
               )}
-              {vendors.map((vendor) => {
+              {pageRows.map((vendor) => {
                 const pill = healthPill(vendor);
                 const role = roles.get(vendor.id) ?? "Unused";
                 return (

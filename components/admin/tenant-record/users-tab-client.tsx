@@ -10,6 +10,7 @@ import { Callout, Pill, btn, st, type PillTone } from "@/components/app/settings
 import { Button } from "@/components/ui/button";
 import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { TableCard } from "@/components/ui/table-card";
+import { Pager, paginate } from "@/components/ui/pager";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { TENANT_ROLES, TENANT_ROLE_LABELS, type TenantRole } from "@/lib/tenantAuth/roles";
 import { lastSeenLabel, memberState, seatCallout } from "@/lib/adminTenantUsers/present";
@@ -50,6 +51,7 @@ export function TenantUsersPanel({ tenantId, data, can }: { tenantId: string; da
   const [revoking, setRevoking] = useState<AdminTenantMember | null>(null);
   const [staleOpen, setStaleOpen] = useState(false);
   const [refreshing, startRefresh] = useTransition();
+  const [page, setPage] = useState(1);
 
   const rows = useMemo(() => {
     const term = query.trim().toLowerCase();
@@ -61,6 +63,7 @@ export function TenantUsersPanel({ tenantId, data, can }: { tenantId: string; da
       return true;
     });
   }, [members, query, roleFilter, stateFilter]);
+  const { current, rows: pageRows } = paginate(rows, page);
 
   const breakdown = [`${seats.active} active`, seats.suspended ? `${seats.suspended} suspended` : null, `${seats.invited} invited`].filter(Boolean).join(" · ");
 
@@ -70,6 +73,7 @@ export function TenantUsersPanel({ tenantId, data, can }: { tenantId: string; da
 
       <TableCard
         title="People"
+        footer={<Pager page={current} total={rows.length} noun="members" onPage={setPage} />}
         description={`${seats.max === null ? `${seats.held} seats held · no limit` : `${seats.held} of ${seats.max} seats held`} · ${breakdown}`}
         toolbar={
           <DataToolbar
@@ -105,8 +109,8 @@ export function TenantUsersPanel({ tenantId, data, can }: { tenantId: string; da
               </>
             }
           >
-            <ToolbarSearch value={query} onChange={setQuery} placeholder="Search this tenant" label="Search this tenant's people" />
-            <select aria-label="State" className={toolbarControl} value={stateFilter} onChange={(event) => setStateFilter(event.target.value as StateFilter)}>
+            <ToolbarSearch value={query} onChange={(value) => { setQuery(value); setPage(1); }} placeholder="Search this tenant" label="Search this tenant's people" />
+            <select aria-label="State" className={toolbarControl} value={stateFilter} onChange={(event) => { setStateFilter(event.target.value as StateFilter); setPage(1); }}>
               {STATE_FILTERS.map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}
@@ -117,7 +121,7 @@ export function TenantUsersPanel({ tenantId, data, can }: { tenantId: string; da
               aria-label="Role"
               className={toolbarControl}
               value={roleFilter}
-              onChange={(event) => setRoleFilter(event.target.value as TenantRole | "all")}
+              onChange={(event) => { setRoleFilter(event.target.value as TenantRole | "all"); setPage(1); }}
             >
               <option value="all">Every role</option>
               {TENANT_ROLES.map((role) => (
@@ -148,7 +152,7 @@ export function TenantUsersPanel({ tenantId, data, can }: { tenantId: string; da
                 </td>
               </tr>
             )}
-            {rows.map((member) => {
+            {pageRows.map((member) => {
               const state = memberState(member);
               return (
                 <tr key={member.id} className="m-row">

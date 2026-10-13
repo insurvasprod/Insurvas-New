@@ -6,6 +6,7 @@ import { DashboardUtcTime } from "@/components/admin/dashboard-utc-time";
 import { Callout, Field, KeyValues, Pill, btn, control, st } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { TableCard } from "@/components/ui/table-card";
+import { Pager, paginate } from "@/components/ui/pager";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { formatUtcDateTime } from "@/lib/adminDashboard/figures";
 import { formatEffectiveDate, STATE_NAME, type CoverageRow, type ScopeProduct } from "@/lib/stateDisclosures/board";
@@ -60,7 +61,11 @@ export function StateDisclosuresReviewCard({
 }) {
   const [open, setOpen] = useState<DisclosureProposal | null>(null);
   const [showRecent, setShowRecent] = useState(false);
+  const [page, setPage] = useState(1);
   const names = useMemo(() => new Map(scope.map((entry) => [entry.code, entry.name])), [scope]);
+  // One pager over the rows on screen: the pending proposals first, then the recent decisions when shown.
+  const visible = showRecent ? [...proposals.pending, ...proposals.recent] : proposals.pending;
+  const { current, rows: pageRows } = paginate(visible, page);
 
   if (proposals.error) {
     return <Callout tone="error" title="Proposals could not be loaded">{proposals.error}</Callout>;
@@ -70,6 +75,7 @@ export function StateDisclosuresReviewCard({
   return (
     <TableCard
       title={`Awaiting review · ${proposals.pending.length}`}
+      footer={<Pager page={current} total={visible.length} noun="proposals" onPage={setPage} />}
       action={
         proposals.recent.length > 0 && (
           <Button type="button" variant="outline" onClick={() => setShowRecent((value) => !value)} aria-expanded={showRecent}>
@@ -100,7 +106,7 @@ export function StateDisclosuresReviewCard({
                 </td>
               </tr>
             )}
-            {proposals.pending.map((proposal) => (
+            {pageRows.filter((proposal) => proposal.status === "pending").map((proposal) => (
               <tr key={proposal.id} className="m-row">
                 <td className={st.td}>
                   {names.get(proposal.product_code) ?? proposal.product_code}
@@ -126,7 +132,7 @@ export function StateDisclosuresReviewCard({
               </tr>
             ))}
             {showRecent &&
-              proposals.recent.map((proposal) => {
+              pageRows.filter((proposal) => proposal.status !== "pending").map((proposal) => {
                 const outcome = OUTCOME[proposal.status as keyof typeof OUTCOME] ?? OUTCOME.cancelled;
                 return (
                   <tr key={proposal.id} className="m-row bg-[var(--canvas)]">
