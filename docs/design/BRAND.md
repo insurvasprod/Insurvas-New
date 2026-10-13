@@ -29,7 +29,7 @@ authority for colour, type and the logo.
 |---|---|
 | Colour tokens (light and dark) | `app/globals.css`, `:root` and `.dark` |
 | Contrast and naming rules, enforced | `lib/design/brandContrast.test.mjs` |
-| Admin console (keeps its own blue, by decision) | `app/admin/admin-plane.css` |
+| Admin console (the app's colours since 2026-10-13; the place for a console-only token) | `app/admin/admin-plane.css` |
 | Font | `app/layout.tsx` (Montserrat via `next/font`, self-hosted at build); `--font-sans` / `--font-display` |
 | Logo | `components/shared/insurvas-logo.tsx`, which reads `public/brand/*.svg` |
 | Favicon / home-screen icon | `app/icon.svg`, `app/apple-icon.tsx` (rendered from the isotype) |

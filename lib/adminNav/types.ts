@@ -35,6 +35,17 @@ export const SIDEBAR_ICONS = [
   "email",
   "system",
   "advanced",
+  // One icon per screen (owner request 2026-10-13: "the appropriate icons for each sub-page"), so no
+  // two rows of the rail share a picture.
+  "billing-workspace",
+  "payments-setup",
+  "field-maps",
+  "layout-maps",
+  "status-maps",
+  "carrier-rules",
+  "portal-guidance",
+  "disclosures",
+  "calling-rules",
 ] as const;
 
 export type SidebarIconKey = (typeof SIDEBAR_ICONS)[number];

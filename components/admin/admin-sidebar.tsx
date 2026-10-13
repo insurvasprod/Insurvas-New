@@ -4,38 +4,50 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  Activity,
+  BadgePercent,
+  BookCheck,
+  Boxes,
   Building2,
   ChevronDown,
-  ClipboardList,
+  Compass,
+  ContactRound,
   CreditCard,
+  FileInput,
+  FileWarning,
+  Gauge,
   Hourglass,
+  Landmark,
   LayoutDashboard,
+  LayoutGrid,
+  LayoutTemplate,
+  LibraryBig,
+  ListChecks,
+  LogIn,
+  Mail,
+  Menu,
   Package,
   PanelLeftClose,
   PanelLeftOpen,
+  PhoneOff,
+  PlugZap,
   Puzzle,
+  Radar,
   Receipt,
   Repeat,
   Scale,
   ScrollText,
-  Settings,
-  SlidersHorizontal,
-  CreditCard as CardIcon,
-  BadgePercent,
-  Boxes,
-  LayoutTemplate,
-  ShieldCheck as ShieldIcon,
-  Gauge,
-  Mail,
-  Menu,
   ServerCog,
+  Settings2,
+  ShieldCheck,
+  SlidersHorizontal,
+  TableProperties,
   Tag,
   ToggleRight,
   TrendingUp,
   Undo2,
+  UserCog,
   UserRound,
-  Users,
+  Wallet,
   X,
 } from "lucide-react";
 
@@ -47,36 +59,51 @@ import { InsurvasLogo } from "@/components/shared/insurvas-logo";
 // so the server sends a key and it is resolved here.
 const ICONS: Record<SidebarIconKey, typeof LayoutDashboard> = {
   dashboard: LayoutDashboard,
+  // The five groups: who we serve, what they pay, what we sell, what we watch, how it runs.
+  customers: ContactRound,
+  billing: Wallet,
+  catalog: LibraryBig,
+  monitoring: Radar,
+  platform: Settings2,
+  // Customers
   tenants: Building2,
   users: UserRound,
-  activity: Activity,
-  features: ToggleRight,
-  plans: Package,
+  // Billing
+  "billing-workspace": LayoutGrid,
   subscriptions: Repeat,
-  addons: Puzzle,
-  invoices: Receipt,
-  coupons: Tag,
-  "credit-notes": Undo2,
-  revenue: TrendingUp,
   trials: Hourglass,
-  admins: Users,
-  "audit-log": ScrollText,
-  legal: Scale,
-  customers: Building2,
-  billing: CreditCard,
-  catalog: Package,
-  monitoring: ClipboardList,
-  platform: Settings,
-  payments: CardIcon,
+  invoices: Receipt,
+  "credit-notes": Undo2,
+  coupons: Tag,
   offers: BadgePercent,
-  products: Boxes,
-  carriers: Building2,
-  templates: LayoutTemplate,
-  compliance: ShieldIcon,
   limits: Gauge,
+  revenue: TrendingUp,
+  "payments-setup": PlugZap,
+  payments: CreditCard,
+  // Catalog
+  plans: Package,
+  addons: Puzzle,
+  features: ToggleRight,
+  products: Boxes,
+  carriers: Landmark,
+  "field-maps": FileInput,
+  "layout-maps": TableProperties,
+  "status-maps": ListChecks,
+  "carrier-rules": BookCheck,
+  "portal-guidance": Compass,
+  templates: LayoutTemplate,
+  // Monitoring
+  activity: LogIn,
+  "audit-log": ScrollText,
+  // Platform
+  compliance: ShieldCheck,
+  disclosures: FileWarning,
+  "calling-rules": PhoneOff,
   email: Mail,
   system: ServerCog,
   advanced: SlidersHorizontal,
+  admins: UserCog,
+  legal: Scale,
 };
 
 const COLLAPSED_KEY = "insurvas.admin.sidebar.collapsed";
@@ -162,7 +189,8 @@ export function AdminSidebar({ nodes, adminName, roleLabel }: Props) {
         }}
       >
         {/* Every row keeps its icon, child rows included (design contract D-05). */}
-        <Icon size={17} strokeWidth={1.8} className="shrink-0" aria-hidden="true" />        {!rail && <span className="truncate">{entry.label}</span>}
+        <Icon size={17} strokeWidth={1.8} className="shrink-0" aria-hidden="true" />
+        {!rail && <span className="truncate">{entry.label}</span>}
       </Link>
     );
   }
@@ -211,6 +239,8 @@ export function AdminSidebar({ nodes, adminName, roleLabel }: Props) {
                   aria-hidden="true"
                   className={`shrink-0 transition-transform ${open ? "" : "-rotate-90"}`}
                 />
+                {/* Then the group's own icon, so each section is known by its picture as well as its name. */}
+                <Icon size={14} strokeWidth={1.8} aria-hidden="true" className="shrink-0 opacity-80" />
                 <span className="truncate">{node.label}</span>
               </>
             )}
@@ -232,19 +262,21 @@ export function AdminSidebar({ nodes, adminName, roleLabel }: Props) {
               </p>
               {node.links.map((entry) => {
                 const active = isLinkActive(entry.href, pathname);
+                const ChildIcon = ICONS[entry.icon];
                 return (
                   <Link
                     key={entry.href}
                     href={entry.href}
                     aria-current={active ? "page" : undefined}
-                    className="block rounded-lg px-3 py-2 text-sm transition-colors hover:bg-muted"
+                    className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors hover:bg-muted"
                     style={{
                       fontWeight: 500,
                       background: active ? "var(--primary-soft)" : "transparent",
                       color: active ? "var(--accent-ink)" : undefined,
                     }}
                   >
-                    {entry.label}
+                    <ChildIcon size={16} strokeWidth={1.8} aria-hidden="true" className="shrink-0" />
+                    <span className="truncate">{entry.label}</span>
                   </Link>
                 );
               })}

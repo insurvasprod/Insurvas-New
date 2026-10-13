@@ -6,6 +6,7 @@ import { PaymentStatusPanel } from "@/components/admin/payment-status-panel";
 import { getProviderStatus } from "@/lib/payments/status";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { PageHeader } from "@/components/ui/page-header";
+import { StatStrip, StatTile } from "@/components/ui/stat";
 
 export default async function PaymentsPage() {
   const admin = await getCurrentAdmin();
@@ -24,12 +25,29 @@ export default async function PaymentsPage() {
     db.from("webhook_events").select("id", { count: "exact", head: true }).eq("provider", "whop").is("processed_at", null).not("process_error", "is", null),
   ]);
 
+  const stuckCount = stuck.count ?? 0;
+  // Presence only, from what getProviderStatus() already reports; no value is read here.
+  const missing = [
+    status.baseUrl ? null : "API address",
+    status.apiKeyFingerprint ? null : "API key",
+    status.webhookSecretPresent ? null : "webhook secret",
+    status.productId ? null : "product",
+    status.accountId ? null : "account",
+  ].filter((name): name is string => name !== null);
+  const modeLabel = status.mode === "production" ? "Production" : status.mode === "sandbox" ? "Sandbox" : "Unknown";
+
   return (
     <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
       <PageHeader title="Payment setup" />
+      <StatStrip label="Payments at a glance">
+        <StatTile label="Mode" valueSize="text" value={modeLabel} valueTone={status.mode === "unknown" ? "warning" : undefined} footnote={status.mode === "sandbox" ? "test payments only" : status.mode === "production" ? "real payments" : "address not recognised"} />
+        <StatTile label="Failed calls, 24h" value={status.health.failures24h.toLocaleString("en-US")} valueTone={status.health.failures24h > 0 ? "danger" : undefined} footnote={`${status.health.totalCalls.toLocaleString("en-US")} calls logged in all`} />
+        <StatTile label="Stuck webhooks" labelTitle="Events that failed and were never processed" value={stuckCount.toLocaleString("en-US")} valueTone={stuckCount > 0 ? "danger" : undefined} footnote={stuckCount > 0 ? "failed, never processed" : "none stuck"} />
+        <StatTile label="Credentials missing" value={missing.length.toLocaleString("en-US")} valueTone={missing.length > 0 ? "warning" : undefined} footnote={missing.length > 0 ? missing.join(", ") : "all set"} />
+      </StatStrip>
       <PaymentStatusPanel
         status={status}
-        webhooks={{ lastReceivedAt: lastReceived.data?.received_at ?? null, lastProcessedAt: lastProcessed.data?.processed_at ?? null, stuck: stuck.count ?? 0 }}
+        webhooks={{ lastReceivedAt: lastReceived.data?.received_at ?? null, lastProcessedAt: lastProcessed.data?.processed_at ?? null, stuck: stuckCount }}
       />
     </div>
   );

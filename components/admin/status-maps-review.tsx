@@ -6,6 +6,8 @@ import { AdminPageHeader } from "@/components/admin/page-header";
 import { Button } from "@/components/ui/button";
 import { toolbarControl } from "@/components/ui/data-toolbar";
 import { EmptyState } from "@/components/ui/page-states";
+import { Pager, paginate } from "@/components/ui/pager";
+import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 import { fileDay, FILE_TYPE_LABELS, type CarrierFileType } from "@/lib/ingestion/constants";
@@ -31,6 +33,18 @@ export function StatusMapsReview({ initialQueue, initialMappings, notice }: { in
   const [mappings, setMappings] = useState(initialMappings);
   const [choice, setChoice] = useState<Record<string, NormalizedStatus | "">>({});
   const [busy, setBusy] = useState<string | null>(null);
+  const [queuePage, setQueuePage] = useState(1);
+  const [mappingPage, setMappingPage] = useState(1);
+
+  const shownQueue = paginate(queue, queuePage, 25);
+  const shownMappings = paginate(mappings, mappingPage, 25);
+  const rowsHeld = queue.reduce((sum, entry) => sum + entry.rows, 0);
+  const carriersWaiting = new Set(queue.map((entry) => entry.carrierId)).size;
+  // Each word carries its own agency count; the same agency can sit behind several words, so the
+  // honest floor is the largest single count, not the sum.
+  const agenciesAtLeast = queue.reduce((most, entry) => Math.max(most, entry.agencies), 0);
+  const approved = mappings.filter((row) => row.approvedAt).length;
+  const proposed = mappings.length - approved;
 
   const keyOf = (entry: QueueEntry) => `${entry.carrierId}|${entry.fileType}|${entry.raw}`;
 
@@ -55,9 +69,16 @@ export function StatusMapsReview({ initialQueue, initialMappings, notice }: { in
   return (
     <div className="flex flex-col gap-6">
       <AdminPageHeader title="Status maps" subtitle="Every carrier's status words, mapped to the nine statuses the book uses. A word nobody has mapped holds its rows back." />
+      <StatStrip label="Status map totals">
+        <StatTile label="Words waiting" value={queue.length.toLocaleString("en-US")} valueTone={queue.length > 0 ? "warning" : undefined} footnote={queue.length > 0 ? `${carriersWaiting.toLocaleString("en-US")} carrier${carriersWaiting === 1 ? "" : "s"}` : "none waiting"} />
+        <StatTile label="Rows held" value={rowsHeld.toLocaleString("en-US")} valueTone={rowsHeld > 0 ? "warning" : undefined} footnote="until their word is mapped" />
+        <StatTile label="Agencies affected" labelTitle="The most agencies behind any one waiting word. One agency can be behind several words, so this is a floor, not a total." value={agenciesAtLeast.toLocaleString("en-US")} footnote={queue.length > 0 ? "at least" : "none held"} />
+        <StatTile label="Mappings approved" value={approved.toLocaleString("en-US")} footnote={proposed > 0 ? `${proposed.toLocaleString("en-US")} proposed` : "none proposed"} />
+      </StatStrip>
+
       {notice && <div role="status" className="rounded-lg border border-border border-l-[3px] border-l-[var(--warning)] bg-[var(--warning-surface)] px-4 py-3 text-sm text-[var(--warning-ink)]">{notice}</div>}
 
-      <TableCard title="Waiting to be mapped" description="Gathered across agencies: a carrier's word means the same for everyone.">
+      <TableCard title="Waiting to be mapped" description="Gathered across agencies: a carrier's word means the same for everyone." footer={queue.length > 0 ? <Pager page={shownQueue.current} pageSize={25} total={queue.length} noun="words" onPage={setQueuePage} /> : undefined}>
         {queue.length === 0 ? (
           <EmptyState title="No status is waiting" hint="When a carrier file has a status word nobody has mapped, it appears here and its rows are held." />
         ) : (
@@ -75,7 +96,7 @@ export function StatusMapsReview({ initialQueue, initialMappings, notice }: { in
               </tr>
             </thead>
             <tbody>
-              {queue.map((entry) => {
+              {shownQueue.rows.map((entry) => {
                 const key = keyOf(entry);
                 const picked = choice[key] ?? entry.proposal?.status ?? "";
                 return (
@@ -106,7 +127,7 @@ export function StatusMapsReview({ initialQueue, initialMappings, notice }: { in
         )}
       </TableCard>
 
-      <TableCard title="Status map" description="An approved mapping is what files were read with; it never changes.">
+      <TableCard title="Status map" description="An approved mapping is what files were read with; it never changes." footer={mappings.length > 0 ? <Pager page={shownMappings.current} pageSize={25} total={mappings.length} noun="mappings" onPage={setMappingPage} /> : undefined}>
         {mappings.length === 0 ? (
           <EmptyState title="No status mapped yet" hint="Mappings come from the words real carrier files use; none is guessed." />
         ) : (
@@ -122,7 +143,7 @@ export function StatusMapsReview({ initialQueue, initialMappings, notice }: { in
               </tr>
             </thead>
             <tbody>
-              {mappings.map((row) => (
+              {shownMappings.rows.map((row) => (
                 <tr key={row.id}>
                   <td className="font-semibold text-foreground">{row.carrierName}</td>
                   <td>{FILE_TYPE_LABELS[row.fileType as CarrierFileType] ?? row.fileType}</td>

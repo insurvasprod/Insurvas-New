@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { DataToolbar, ToolbarCheckbox, ToolbarSearch } from "@/components/ui/data-toolbar";
 import { Input } from "@/components/ui/input";
 import { NoMatches } from "@/components/ui/page-states";
+import { Pager, paginate } from "@/components/ui/pager";
 import { TableCard } from "@/components/ui/table-card";
 import type { Guidance } from "@/lib/ingestion/bookImport";
 import { notify } from "@/lib/notify";
@@ -25,7 +26,12 @@ export function CarrierGuidanceEditor({ rows }: { rows: Row[] }) {
   const [missingOnly, setMissingOnly] = useState(false);
   const [drafts, setDrafts] = useState<Record<string, Guidance>>({});
   const [busy, setBusy] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
   const visible = rows.filter((r) => (!query.trim() || r.carrierName.toLowerCase().includes(query.trim().toLowerCase())) && (!missingOnly || !r.guidance));
+  const shown = paginate(visible, page, 25);
+  // A new search or filter starts from the first page.
+  const search = (value: string) => { setQuery(value); setPage(1); };
+  const filterMissing = (value: boolean) => { setMissingOnly(value); setPage(1); };
   const draft = (r: Row) => drafts[r.carrierId] ?? { ...blank, ...(r.guidance ?? {}) };
   const set = (r: Row, patch: Partial<Guidance>) => setDrafts((all) => ({ ...all, [r.carrierId]: { ...draft(r), ...patch } }));
 
@@ -46,12 +52,15 @@ export function CarrierGuidanceEditor({ rows }: { rows: Row[] }) {
   }
 
   return (
-    <TableCard toolbar={<DataToolbar><ToolbarSearch value={query} onChange={setQuery} placeholder="Search carriers" /><ToolbarCheckbox checked={missingOnly} onChange={setMissingOnly} label="Only carriers with no guidance" /></DataToolbar>}>
-      {visible.length === 0 ? <NoMatches noun="carriers" onClear={() => { setQuery(""); setMissingOnly(false); }} /> : (
+    <TableCard
+      toolbar={<DataToolbar><ToolbarSearch value={query} onChange={search} placeholder="Search carriers" /><ToolbarCheckbox checked={missingOnly} onChange={filterMissing} label="Only carriers with no guidance" /></DataToolbar>}
+      footer={visible.length > 0 ? <Pager page={shown.current} pageSize={25} total={visible.length} noun="carriers" onPage={setPage} /> : undefined}
+    >
+      {visible.length === 0 ? <NoMatches noun="carriers" onClear={() => { setQuery(""); setMissingOnly(false); setPage(1); }} /> : (
         <table className="portal-lead-table w-full min-w-[1100px] text-left text-sm">
           <thead><tr><th className="w-[170px]">Carrier</th><th>Where in the portal</th><th className="w-[200px]">Report is called</th><th className="w-[170px]">Format to choose</th><th className="w-[220px]">Notes</th><th className="w-[90px] text-right"><span className="sr-only">Save</span></th></tr></thead>
           <tbody>
-            {visible.map((r) => {
+            {shown.rows.map((r) => {
               const d = draft(r);
               return (
                 <tr key={r.carrierId}>

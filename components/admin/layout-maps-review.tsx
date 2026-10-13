@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { EmptyState } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
+import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 import { FILE_TYPE_LABELS, FILE_TYPES, type CarrierFileType } from "@/lib/ingestion/constants";
@@ -128,6 +129,18 @@ export function LayoutMapsReview({ initialMaps, initialAssignments, carriers, no
     });
   }, [maps]);
   const shownLayouts = paginate(layouts, layoutPage, 25);
+  const figures = useMemo(() => {
+    const assigned = (type: CarrierFileType) => new Set(assignments.filter((row) => row.fileType === type).map((row) => row.carrierId));
+    const policies = assigned("policies");
+    const commissions = assigned("commissions");
+    return {
+      published: layouts.filter((layout) => layout.live).length,
+      drafts: layouts.filter((layout) => layout.draft).length,
+      inReview: maps.filter((map) => map.status === "in_review").length,
+      noPolicies: carriers.filter((carrier) => !policies.has(carrier.id)).length,
+      noCommissions: carriers.filter((carrier) => !commissions.has(carrier.id)).length,
+    };
+  }, [layouts, maps, assignments, carriers]);
   const shownAssignments = paginate(assignments, assignmentPage, 25);
   const open = maps.find((map) => map.id === openId) ?? null;
   const editable = open?.status === "draft" || open?.status === "in_review";
@@ -234,6 +247,14 @@ export function LayoutMapsReview({ initialMaps, initialAssignments, carriers, no
   return (
     <div className="flex flex-col gap-6">
       <AdminPageHeader title="Layout maps" subtitle="How each carrier's spreadsheets are read: one map per layout, shared by every carrier that uses it." actions={<Button type="button" onClick={() => setCreating(true)} disabled={Boolean(notice)}>New layout</Button>} />
+
+      <StatStrip label="Layout map totals">
+        <StatTile label="Layouts" value={layouts.length.toLocaleString("en-US")} footnote={`${figures.published.toLocaleString("en-US")} published`} />
+        <StatTile label="Open drafts" value={figures.drafts.toLocaleString("en-US")} valueTone={figures.drafts > 0 ? "warning" : undefined} footnote={figures.inReview > 0 ? `${figures.inReview.toLocaleString("en-US")} in review` : "none in review"} />
+        <StatTile label="Carrier assignments" value={assignments.length.toLocaleString("en-US")} footnote={`${carriers.length.toLocaleString("en-US")} active carriers`} />
+        <StatTile label="No policies layout" labelTitle="Active carriers with no layout assigned for policy files" value={figures.noPolicies.toLocaleString("en-US")} valueTone={figures.noPolicies > 0 ? "warning" : undefined} footnote="active carriers" />
+        <StatTile label="No commissions layout" labelTitle="Active carriers with no layout assigned for commission files" value={figures.noCommissions.toLocaleString("en-US")} valueTone={figures.noCommissions > 0 ? "warning" : undefined} footnote="active carriers" />
+      </StatStrip>
 
       {notice && <div role="status" className="rounded-lg border border-border border-l-[3px] border-l-[var(--warning)] bg-[var(--warning-surface)] px-4 py-3 text-sm text-[var(--warning-ink)]">{notice}</div>}
 

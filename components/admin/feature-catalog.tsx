@@ -8,6 +8,7 @@ import { StatusChip } from "@/components/ui/status-chip";
 import { Button } from "@/components/ui/button";
 import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { NoMatches } from "@/components/ui/page-states";
+import { Pager } from "@/components/ui/pager";
 import { TableCard } from "@/components/ui/table-card";
 import {
   DropdownMenu,
@@ -47,6 +48,7 @@ export function FeatureCatalog({
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [moduleFilter, setModuleFilter] = useState("all");
+  const [page, setPage] = useState(1);
   const refresh = onRefresh;
 
   async function setArchived(feature: FeatureRow, is_archived: boolean) {
@@ -88,6 +90,30 @@ export function FeatureCatalog({
 
   const shown = filteredGroups.reduce((n, group) => n + group.features.filter((f) => !f.is_archived).length, 0);
 
+  // Paged by feature row, 25 a page, across the module groups: a group split by a page boundary
+  // repeats its module row at the top of the next page, so every row still sits under its module.
+  const PAGE_SIZE = 25;
+  const listed = filteredGroups.map((group) => ({
+    group,
+    visible: showArchived ? group.features : group.features.filter((f) => !f.is_archived),
+  }));
+  const rowTotal = listed.reduce((n, entry) => n + entry.visible.length, 0);
+  const pages = Math.max(1, Math.ceil(rowTotal / PAGE_SIZE));
+  const current = Math.min(Math.max(1, page), pages);
+  const pageStart = (current - 1) * PAGE_SIZE;
+  const pageEnd = pageStart + PAGE_SIZE;
+  // Each group's first row's position in the whole list.
+  const starts = listed.reduce<number[]>((acc, entry, index) => [...acc, index === 0 ? 0 : acc[index - 1] + listed[index - 1].visible.length], []);
+  const onPage = listed.flatMap(({ group, visible }, index) => {
+    const from = starts[index];
+    // An empty module shows on the page where it falls in the order (the last page if at the end).
+    if (visible.length === 0) return from >= pageStart && (from < pageEnd || current === pages) ? [{ group, visible }] : [];
+    const rows = visible.filter((_, index) => from + index >= pageStart && from + index < pageEnd);
+    return rows.length > 0 ? [{ group, visible: rows }] : [];
+  });
+  const search = (value: string) => { setQuery(value); setPage(1); };
+  const filterModule = (value: string) => { setModuleFilter(value); setPage(1); };
+
   return (
     <div className="space-y-4">
       <TableCard
@@ -96,7 +122,7 @@ export function FeatureCatalog({
             actions={
               <>
                 {totalArchived > 0 && (
-                  <Button type="button" variant="outline" onClick={() => setShowArchived((v) => !v)}>
+                  <Button type="button" variant="outline" onClick={() => { setShowArchived((v) => !v); setPage(1); }}>
                     {showArchived ? "Hide archived" : "Show archived"}
                   </Button>
                 )}
@@ -104,12 +130,12 @@ export function FeatureCatalog({
               </>
             }
           >
-            <ToolbarSearch value={query} onChange={setQuery} placeholder="Search features or keys" label="Search features" />
+            <ToolbarSearch value={query} onChange={search} placeholder="Search features or keys" label="Search features" />
             <select
               id="feature-module-filter"
               aria-label="Filter by module"
               value={moduleFilter}
-              onChange={(event) => setModuleFilter(event.target.value)}
+              onChange={(event) => filterModule(event.target.value)}
               className={toolbarControl}
             >
               <option value="all">All modules</option>
@@ -121,6 +147,7 @@ export function FeatureCatalog({
             </span>
           </DataToolbar>
         }
+        footer={rowTotal > 0 ? <Pager page={current} pageSize={PAGE_SIZE} total={rowTotal} noun="features" onPage={setPage} /> : undefined}
       >
         {filteredGroups.length === 0 ? (
           <NoMatches
@@ -128,6 +155,7 @@ export function FeatureCatalog({
             onClear={() => {
               setQuery("");
               setModuleFilter("all");
+              setPage(1);
             }}
           />
         ) : (
@@ -142,8 +170,7 @@ export function FeatureCatalog({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredGroups.map((group) => {
-                const visible = showArchived ? group.features : group.features.filter((f) => !f.is_archived);
+              {onPage.map(({ group, visible }) => {
                 return (
                   <Fragment key={group.module.key}>
                     <TableRow className="bg-[var(--canvas)] hover:bg-[var(--canvas)]">

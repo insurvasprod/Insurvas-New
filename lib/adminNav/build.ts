@@ -60,7 +60,7 @@ export function buildAdminNav(role: AdminRole): SidebarNode[] {
     ]),
 
     ...group("billing", "Billing", "billing", [
-      invoices ? link("/admin/billing", "Billing workspace", "billing") : null,
+      invoices ? link("/admin/billing", "Billing workspace", "billing-workspace") : null,
       subscriptions ? link("/admin/subscriptions", "Subscriptions", "subscriptions") : null,
       subscriptions ? link("/admin/trials", "Trials", "trials") : null,
       // SA-3.3: a support_agent cannot open invoice screens at all, so no link is rendered for
@@ -80,7 +80,7 @@ export function buildAdminNav(role: AdminRole): SidebarNode[] {
       // configuration behind them. It keeps the section registry's permission, which is stricter
       // than the rest of Billing: live provider credentials stay super_admin only, so a billing
       // admin sees Invoices and Coupons here but not this.
-      section("payments", "/admin/payments", "Setup", "payments"),
+      section("payments", "/admin/payments", "Setup", "payments-setup"),
     ]),
 
     ...group("catalog", "Catalog", "catalog", [
@@ -97,15 +97,15 @@ export function buildAdminNav(role: AdminRole): SidebarNode[] {
       section("carriers", "/admin/carriers", "Carriers", "carriers"),
       // LA-3.13 · the platform's carrier field maps. Same permission as the carrier library it
       // belongs to: whoever may change a carrier may review where its application fields go.
-      section("carriers", "/admin/field-maps", "Field maps", "carriers"),
+      section("carriers", "/admin/field-maps", "Field maps", "field-maps"),
       // LA-4.3 · how each carrier's spreadsheets are read. Same rule: it belongs to the carrier library.
-      section("carriers", "/admin/layout-maps", "Layout maps", "carriers"),
+      section("carriers", "/admin/layout-maps", "Layout maps", "layout-maps"),
       // LA-4.5 · carrier status words waiting to be mapped, and the status map.
-      section("carriers", "/admin/status-maps", "Status maps", "carriers"),
+      section("carriers", "/admin/status-maps", "Status maps", "status-maps"),
       // LA-4.17 · the platform's default carrier rules and settings.
-      section("carriers", "/admin/carrier-rules", "Carrier rules", "carriers"),
+      section("carriers", "/admin/carrier-rules", "Carrier rules", "carrier-rules"),
       // LA-4.10 · where each carrier's policy file lives in its portal, for the book import.
-      section("carriers", "/admin/carrier-guidance", "Portal guidance", "carriers"),
+      section("carriers", "/admin/carrier-guidance", "Portal guidance", "portal-guidance"),
       section("templates", "/admin/templates", "Templates", "templates"),
     ]),
 
@@ -116,8 +116,8 @@ export function buildAdminNav(role: AdminRole): SidebarNode[] {
 
     ...group("platform", "Platform", "platform", [
       section("compliance-sources", "/admin/compliance-sources", "Compliance", "compliance"),
-      section("state-disclosures", "/admin/state-disclosures", "Disclosures", "compliance"),
-      isSuperAdmin ? link("/admin/calling-rules", "Calling rules", "compliance") : null,
+      section("state-disclosures", "/admin/state-disclosures", "Disclosures", "disclosures"),
+      isSuperAdmin ? link("/admin/calling-rules", "Calling rules", "calling-rules") : null,
       section("email", "/admin/email", "Mail Setup", "email"),
       section("system", "/admin/system", "Maintenance", "system"),
       section("advanced", "/admin/advanced", "Advanced", "advanced"),
