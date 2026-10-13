@@ -73,7 +73,7 @@ export function TabbedPanels<K extends string>({ tabs, label, actions, initial }
 export function useFittingPageSize(reserved: number, rowHeight: number, fallback = 10) {
   const [size, setSize] = useState(fallback);
   useEffect(() => {
-    const fit = () => setSize(Math.min(50, Math.max(5, Math.floor((window.innerHeight - reserved) / rowHeight))));
+    const fit = () => setSize(Math.min(10, Math.max(5, Math.floor((window.innerHeight - reserved) / rowHeight))));
     fit();
     window.addEventListener("resize", fit);
     return () => window.removeEventListener("resize", fit);

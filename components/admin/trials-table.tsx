@@ -21,7 +21,7 @@ import type { TrialBoardRow, TrialEngagement } from "@/lib/trials/board";
 import { ENDING_SOON_DAYS, SIGNAL_KEYS, SIGNAL_LABELS, SIGNAL_MEANINGS } from "@/lib/trials/boardModel";
 import { cn } from "@/lib/utils";
 
-const PAGE_SIZE = 25;
+const PAGE_SIZE = 10;
 
 type EndsFilter = "any" | "soon" | "week";
 type SignalFilter = "any" | "no_leads" | "no_team" | "no_carrier" | "neither";

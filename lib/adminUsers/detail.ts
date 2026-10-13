@@ -130,7 +130,7 @@ export async function fetchLatestUserSuspension(userId: string): Promise<UserSus
   return { ts: row.ts, actorName, reason: row.reason };
 }
 
-export const USER_AUDIT_PAGE_SIZE = 25;
+export const USER_AUDIT_PAGE_SIZE = 10;
 
 export type UserAuditRow = {
   id: string;

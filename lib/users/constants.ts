@@ -60,4 +60,4 @@ export const USER_SORT_COLUMNS = [
 
 export type UserSortColumn = (typeof USER_SORT_COLUMNS)[number];
 
-export const USERS_PAGE_SIZE = 20;
+export const USERS_PAGE_SIZE = 10;

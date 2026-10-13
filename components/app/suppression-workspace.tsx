@@ -66,7 +66,7 @@ const stamp = (iso: string) => { const d = new Date(iso); return Number.isNaN(d.
 function useFittingPageSize(reserved: number, rowHeight: number) {
   const [size, setSize] = useState(10);
   useEffect(() => {
-    const fit = () => setSize(Math.min(50, Math.max(5, Math.floor((window.innerHeight - reserved) / rowHeight))));
+    const fit = () => setSize(Math.min(10, Math.max(5, Math.floor((window.innerHeight - reserved) / rowHeight))));
     fit();
     window.addEventListener("resize", fit);
     return () => window.removeEventListener("resize", fit);

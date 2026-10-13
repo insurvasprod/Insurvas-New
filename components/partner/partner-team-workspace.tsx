@@ -21,7 +21,7 @@ import { activityLabel, dayMonth, dayMonthTime, expiresInLabel } from "@/lib/for
 import type { PartnerRole } from "@/lib/partnerAuth/roles";
 import { cn } from "@/lib/utils";
 
-const PAGE_SIZE = 25;
+const PAGE_SIZE = 10;
 
 type PartnerUser = {
   id: string;

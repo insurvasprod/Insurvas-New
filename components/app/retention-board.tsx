@@ -44,7 +44,7 @@ export function RetentionBoard({ rows, rates, readOnly }: { rows: BoardEntry[]; 
 
   const carriers = useMemo(() => [...new Map(rows.map((r) => [r.carrierId, r.carrierName])).entries()].sort((a, b) => a[1].localeCompare(b[1])), [rows]);
   const visible = useMemo(() => rows.filter((r) => (!reason || r.reason === reason) && (!carrier || r.carrierId === carrier)), [rows, reason, carrier]);
-  const shown = paginate(visible, page, 25);
+  const shown = paginate(visible, page, 10);
   const today = rows.filter((r) => r.daysLeft !== null && r.daysLeft <= 3).length;
   const atRisk = rows.reduce((sum, r) => sum + (r.atRiskCents ?? 0), 0);
   const unknownRisk = rows.filter((r) => r.atRiskCents === null && r.group !== "prevention").length;
@@ -98,7 +98,7 @@ export function RetentionBoard({ rows, rates, readOnly }: { rows: BoardEntry[]; 
             <span className="text-sm text-muted-foreground">Soonest deadline first, then the most money</span>
           </DataToolbar>
         }
-        footer={visible.length > 25 ? <Pager page={shown.current} pageSize={25} total={visible.length} noun="policies" onPage={setPage} /> : undefined}
+        footer={visible.length > 10 ? <Pager page={shown.current} pageSize={10} total={visible.length} noun="policies" onPage={setPage} /> : undefined}
       >
         {rows.length === 0 ? (
           <EmptyState title="Nobody to call" hint="Policies appear here when a carrier file shows a missed or bounced draft, a conservation notice, a request to cancel, a recent lapse that can still be reinstated, or a mailed bill worth converting." />

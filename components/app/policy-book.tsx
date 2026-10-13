@@ -82,7 +82,7 @@ export function PolicyBook({ rows, initialQuery, saved, savedAvailable, scoped, 
 
   const visible = useMemo(() => sortRows(filterRows(rows, filters), sort), [rows, filters, sort]);
   const sum = useMemo(() => totals(visible), [visible]);
-  const { current, rows: pageRows } = paginate(visible, page, 25);
+  const { current, rows: pageRows } = paginate(visible, page, 10);
   const set = (key: keyof BookFilters, value: string) => { setFilters((now) => ({ ...now, [key]: value })); setPage(1); };
   const clear = () => { setFilters(EMPTY_FILTERS); setPage(1); };
   const filtered = activeFilterCount(filters) > 0 || Boolean(filters.q.trim());
@@ -172,7 +172,7 @@ export function PolicyBook({ rows, initialQuery, saved, savedAvailable, scoped, 
             {savedNow && !readOnly && <Button type="button" variant="ghost" disabled={busy} onClick={() => void post({ action: "delete_filter", id: savedNow.id }, `"${savedNow.name}" removed.`)}>Remove &ldquo;{savedNow.name}&rdquo;</Button>}
           </DataToolbar>
         }
-        footer={rows.length ? <Pager page={current} pageSize={25} total={visible.length} onPage={setPage} noun={visible.length === 1 ? "policy" : "policies"} /> : undefined}
+        footer={rows.length ? <Pager page={current} pageSize={10} total={visible.length} onPage={setPage} noun={visible.length === 1 ? "policy" : "policies"} /> : undefined}
       >
         {more && (
           <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-3">

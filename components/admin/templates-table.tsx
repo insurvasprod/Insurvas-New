@@ -43,7 +43,7 @@ import { TemplateEditorDialog } from "./template-editor-dialog";
 
 export type CatalogTemplate = TemplateRow & { state: TemplateState };
 
-const PAGE_SIZE = 25;
+const PAGE_SIZE = 10;
 
 const STATE_TONE: Record<TemplateState, PillTone> = {
   published: "success",

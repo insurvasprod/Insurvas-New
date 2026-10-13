@@ -52,7 +52,7 @@ function SelectedTeammateDrawer({ selected, leads, onClose }: { selected: Select
 /** Below this many leads a member's conversion rate is noise, and showing it would rank people on it. */
 const MIN_CONVERSION_SAMPLE = 10;
 const DAY_MS = 86_400_000;
-const PAGE_SIZE = 25;
+const PAGE_SIZE = 10;
 
 function localDay(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;

@@ -36,7 +36,7 @@ const vendorLabel = (vendor: string | null) => {
 const th = "bg-[var(--surface-alt)] px-3 py-2 text-left text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] whitespace-nowrap text-muted-foreground";
 const td = "border-t border-border px-3 py-2 text-sm leading-normal tracking-[-0.02em] text-[var(--body)]";
 
-export function TcpaScreeningAudit({ className, pageSize = 25 }: { className?: string; pageSize?: number } = {}) {
+export function TcpaScreeningAudit({ className, pageSize = 10 }: { className?: string; pageSize?: number } = {}) {
   const [rows, setRows] = useState<ScreeningAuditRow[] | null>(null);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);

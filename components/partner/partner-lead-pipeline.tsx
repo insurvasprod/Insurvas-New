@@ -31,7 +31,7 @@ type PipelineResponse = {
 };
 type Filters = { date_from: string; date_to: string; closer_id: string; product: string; stage_id: string; outcome: string };
 const EMPTY_FILTERS: Filters = { date_from: "", date_to: "", closer_id: "", product: "", stage_id: "", outcome: "" };
-const PAGE_SIZE = 25;
+const PAGE_SIZE = 10;
 
 /** Each lane's header ground and ink, as the board draws them. */
 const LANE_TONE: Record<(typeof PARTNER_LANES)[number]["key"], string> = {

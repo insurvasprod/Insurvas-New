@@ -34,7 +34,7 @@ import {
 import type { DisclosureProposal, StateDisclosure } from "@/lib/stateDisclosures/constants";
 import { cn } from "@/lib/utils";
 
-const PAGE_SIZE = 25;
+const PAGE_SIZE = 10;
 const TOTAL_STATES = STATE_CODES.length;
 
 type CoverageFilter = "all" | "in_force" | "not_covered";

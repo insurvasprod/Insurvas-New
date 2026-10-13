@@ -97,7 +97,7 @@ export function downloadCsv(filename: string, header: string[], rows: (string | 
 
 export type DrilldownRequest = { label: string; partnerId: string; metric: PartnerQualityMetric; period: Period; disposition?: string; partnerUserId?: string };
 
-const DRAWER_PAGE_SIZE = 50;
+const DRAWER_PAGE_SIZE = 10;
 
 /** Opens the exact leads behind a figure in a side drawer. Returns the opener and the drawer to render. */
 export function useDrilldown(labels: Record<string, string> = {}) {
@@ -126,14 +126,17 @@ export function useDrilldown(labels: Record<string, string> = {}) {
 
   const open = useCallback((next: DrilldownRequest) => { setRequest(next); setPage(1); setData(null); void load(next, 1); }, [load]);
   const close = useCallback(() => { setRequest(null); setData(null); setError(""); }, []);
-  const turn = (nextPage: number) => { if (!request) return; setPage(nextPage); void load(request, nextPage); };
+  // A partner user's leads are all in hand: turning the page only moves through them.
+  const turn = (nextPage: number) => { if (!request) return; setPage(nextPage); if (!request.partnerUserId) void load(request, nextPage); };
 
-  const drawer = request ? <PartnerQualityDrawer label={request.label} data={data} loading={loading} error={error} labels={labels} page={page} pageSize={request.partnerUserId ? 1000 : DRAWER_PAGE_SIZE} onPage={turn} onClose={close} /> : null;
+  const drawer = request ? <PartnerQualityDrawer label={request.label} data={data} loading={loading} error={error} labels={labels} page={page} pageSize={DRAWER_PAGE_SIZE} onPage={turn} onClose={close} /> : null;
   return { open, drawer };
 }
 
 function PartnerQualityDrawer({ label, data, loading, error, labels, page, pageSize, onPage, onClose }: { label: string; data: PartnerQualityLeadResult | null; loading: boolean; error: string; labels: Record<string, string>; page: number; pageSize: number; onPage: (page: number) => void; onClose: () => void }) {
   const closeRef = useRef<HTMLButtonElement>(null);
+  // A server page holds at most pageSize rows; more means every row came at once, so page them here.
+  const rows = data ? (data.rows.length > pageSize ? data.rows.slice((page - 1) * pageSize, page * pageSize) : data.rows) : [];
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -160,7 +163,7 @@ function PartnerQualityDrawer({ label, data, loading, error, labels, page, pageS
             ? <EmptyState title="No leads" hint="Nothing matches this figure in the selected period." />
             : <table className="portal-lead-table w-full min-w-[720px] text-left text-sm">
                 <thead><tr><th>Received</th><th>Customer</th><th>State</th><th>Product</th><th>Disposition</th><th className="text-right"><span className="sr-only">Open</span></th></tr></thead>
-                <tbody>{data.rows.map((lead) => (
+                <tbody>{rows.map((lead) => (
                   <tr key={lead.lead_id}>
                     <td className="tabular-nums">{dateText(lead.date)}</td>
                     <td><span className="block font-semibold">{lead.full_name}</span><span className="block text-xs text-muted-foreground tabular-nums">{lead.phone ?? "No phone"}</span></td>

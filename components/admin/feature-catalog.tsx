@@ -90,9 +90,9 @@ export function FeatureCatalog({
 
   const shown = filteredGroups.reduce((n, group) => n + group.features.filter((f) => !f.is_archived).length, 0);
 
-  // Paged by feature row, 25 a page, across the module groups: a group split by a page boundary
+  // Paged by feature row, 10 a page, across the module groups: a group split by a page boundary
   // repeats its module row at the top of the next page, so every row still sits under its module.
-  const PAGE_SIZE = 25;
+  const PAGE_SIZE = 10;
   const listed = filteredGroups.map((group) => ({
     group,
     visible: showArchived ? group.features : group.features.filter((f) => !f.is_archived),

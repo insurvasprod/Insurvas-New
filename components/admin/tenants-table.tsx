@@ -23,7 +23,7 @@ import {
 } from "@/lib/tenantsList/present";
 import { cn } from "@/lib/utils";
 
-const PAGE_SIZE = 25;
+const PAGE_SIZE = 10;
 const NO_PLAN = "__none__";
 
 type StatusFilter = "all" | ListStatus;

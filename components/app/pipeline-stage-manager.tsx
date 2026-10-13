@@ -618,7 +618,7 @@ function actionSentence(row: LibraryRow) {
 }
 
 const LIBRARY_FILTERS: Array<[LibraryFilter, string]> = [["all", "All"], ["nowhere", "Lands nowhere"], ["advancing", "Advancing"], ["terminal", "Terminal"], ["retired", "Retired"]];
-const LIBRARY_PAGE_SIZE = 25;
+const LIBRARY_PAGE_SIZE = 10;
 
 /**
  * The disposition library (DispositionLibrary): every outcome an agent can record, written once,

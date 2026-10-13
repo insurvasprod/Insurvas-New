@@ -92,7 +92,7 @@ export function CarrierBucket({ initial, tenantId, readOnly }: { initial: Ready;
       (!type || row.fileType === type) &&
       (!state || row.state === state));
   }, [view.rows, query, agency, carrier, type, state]);
-  const { current, rows: shown } = paginate(rows, page, 25);
+  const { current, rows: shown } = paginate(rows, page, 10);
   const filtered = Boolean(query.trim() || agency || carrier || type || state);
   const clear = () => { setQuery(""); setAgency(""); setCarrier(""); setType(""); setState(""); setPage(1); };
   const dayAgencies = [...new Set(view.rows.map((row) => row.agency))].sort((a, b) => a.localeCompare(b));
@@ -159,7 +159,7 @@ export function CarrierBucket({ initial, tenantId, readOnly }: { initial: Ready;
             </select>
           </DataToolbar>
         }
-        footer={view.rows.length ? <Pager page={current} pageSize={25} total={rows.length} onPage={setPage} noun={rows.length === 1 ? "file" : "files"} suffix="new files are picked up every 5 minutes" /> : undefined}
+        footer={view.rows.length ? <Pager page={current} pageSize={10} total={rows.length} onPage={setPage} noun={rows.length === 1 ? "file" : "files"} suffix="new files are picked up every 5 minutes" /> : undefined}
       >
         {view.rows.length === 0 ? (
           <EmptyState

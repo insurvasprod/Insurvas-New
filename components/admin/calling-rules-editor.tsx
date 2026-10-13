@@ -40,7 +40,7 @@ import { cn } from "@/lib/utils";
 
 const STATE_NAMES = new Map<string, string>(US_STATES.map(([code, name]) => [code, name]));
 const stateName = (code: string) => STATE_NAMES.get(code) ?? code;
-const PAGE_SIZE = 15;
+const PAGE_SIZE = 10;
 
 type StateFilter = "all" | "no_rule" | "has_rule" | "scheduled";
 type HolidayScope = "upcoming" | "all";

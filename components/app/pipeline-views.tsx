@@ -273,7 +273,7 @@ export function TableView({
   const [saved, setSaved] = useState<SavedView>("all");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [page, setPage] = useState(1);
-  const PAGE = 25;
+  const PAGE = 10;
   const counts = {
     all: leads.length,
     overdue: leads.filter((lead) => isOverdue(lead, context, now)).length,

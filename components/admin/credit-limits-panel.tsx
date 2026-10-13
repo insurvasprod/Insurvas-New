@@ -31,7 +31,7 @@ import { buildMonitorEntries, tenantsOverCount, tenantsOverLabel, type LimitStat
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 
-const PAGE_SIZE = 25;
+const PAGE_SIZE = 10;
 const money = (cents: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
 const count = (value: number) => value.toLocaleString("en-US");
 

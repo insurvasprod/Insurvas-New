@@ -16,7 +16,7 @@ import type { SubscriptionStatus } from "@/lib/subscriptions/access";
 import { LIST_ORDER, LIST_STATUS, LIST_STATUS_ORDER, type QueuedKind, type SubscriptionListRow } from "@/lib/subscriptionsList/model";
 import { cn } from "@/lib/utils";
 
-const PAGE_SIZE = 25;
+const PAGE_SIZE = 10;
 
 type StatusFilter = "all" | "current" | SubscriptionStatus;
 type QueuedFilter = "any" | "plan" | "ends" | "trial" | "none";

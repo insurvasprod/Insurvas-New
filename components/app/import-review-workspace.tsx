@@ -71,7 +71,7 @@ const CHECKS: Array<{ bucket: ReviewBucket; outcome: Outcome; label: string; blu
   { bucket: "unreadable", outcome: "unreadable", label: "Unreadable", decision: null, blurb: "These could not be read, so they cannot be imported. Fix them in the file and upload it again." },
 ];
 
-const LIST_PAGE = 50;
+const LIST_PAGE = 10;
 
 /** A definition on demand — click, focus or hover — for a figure whose name alone is not enough. */
 function InfoTip({ id, label, children }: { id: string; label: string; children: ReactNode }) {

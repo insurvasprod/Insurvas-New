@@ -33,7 +33,7 @@ type WorkspacePayload = Workspace & { queue: ReviewQueue };
 type Side = "existing" | "incoming";
 
 const emptyForm = { first_name: "", last_name: "", dob: "", primary_phone: "", email: "", state: "", address_line1: "", city: "", postal_code: "", custom_fields: {} as Record<string, unknown> };
-const PAGE_SIZE = 25;
+const PAGE_SIZE = 10;
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 /* ── formatting ─────────────────────────────────────────────────────────── */

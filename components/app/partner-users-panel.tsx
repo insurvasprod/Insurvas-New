@@ -33,7 +33,7 @@ import type { PartnerRole } from "@/lib/partnerAuth/roles";
 import { capacityLabel } from "@/lib/partners/limits";
 import { cn } from "@/lib/utils";
 
-const PAGE_SIZE = 25;
+const PAGE_SIZE = 10;
 const TIMEOUT_MS = 10000;
 
 type Member = {

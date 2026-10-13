@@ -45,9 +45,9 @@ export function PolicyMatchingWorkspace({ reviews, links, unmapped, mapped, memb
   const visibleReviews = useMemo(() => reviews.filter((r) => has(r.policyNumber, r.carrierName, nameOf(r.carrierRow ?? {}))), [reviews, q]); // eslint-disable-line react-hooks/exhaustive-deps
   const visibleLinks = useMemo(() => links.filter((l) => has(l.policyNumber, l.carrierName, l.clientName)), [links, q]); // eslint-disable-line react-hooks/exhaustive-deps
   const visibleAgents = useMemo(() => unmapped.filter((a) => has(a.agentIdentifier, a.carrierName)), [unmapped, q]); // eslint-disable-line react-hooks/exhaustive-deps
-  const shownReviews = paginate(visibleReviews, reviewPage, 25);
-  const shownLinks = paginate(visibleLinks, linkPage, 25);
-  const shownAgents = paginate(visibleAgents, agentPage, 25);
+  const shownReviews = paginate(visibleReviews, reviewPage, 10);
+  const shownLinks = paginate(visibleLinks, linkPage, 10);
+  const shownAgents = paginate(visibleAgents, agentPage, 10);
 
   async function post(key: string, body: Record<string, unknown>, done: string) {
     setBusy(key);
@@ -88,7 +88,7 @@ export function PolicyMatchingWorkspace({ reviews, links, unmapped, mapped, memb
       />
 
       {tab === "review" && (
-        <TableCard toolbar={toolbar} footer={visibleReviews.length > 25 ? <Pager page={shownReviews.current} pageSize={25} total={visibleReviews.length} noun="policies" onPage={setReviewPage} /> : undefined}>
+        <TableCard toolbar={toolbar} footer={visibleReviews.length > 10 ? <Pager page={shownReviews.current} pageSize={10} total={visibleReviews.length} noun="policies" onPage={setReviewPage} /> : undefined}>
           {reviews.length === 0 ? <EmptyState title="Nothing to review" hint="Policies whose number we don't hold appear here with the closest clients." />
             : visibleReviews.length === 0 ? <NoMatches noun="policies" onClear={() => search("")} />
             : (
@@ -116,7 +116,7 @@ export function PolicyMatchingWorkspace({ reviews, links, unmapped, mapped, memb
       )}
 
       {tab === "links" && (
-        <TableCard toolbar={toolbar} footer={visibleLinks.length > 25 ? <Pager page={shownLinks.current} pageSize={25} total={visibleLinks.length} noun="links" onPage={setLinkPage} /> : undefined}>
+        <TableCard toolbar={toolbar} footer={visibleLinks.length > 10 ? <Pager page={shownLinks.current} pageSize={10} total={visibleLinks.length} noun="links" onPage={setLinkPage} /> : undefined}>
           {links.length === 0 ? <EmptyState title="No policy is linked yet" hint="Links appear as carrier files arrive: by policy number when we hold it, otherwise once a person decides." />
             : visibleLinks.length === 0 ? <NoMatches noun="links" onClear={() => search("")} />
             : (
@@ -140,7 +140,7 @@ export function PolicyMatchingWorkspace({ reviews, links, unmapped, mapped, memb
       )}
 
       {tab === "agents" && (
-        <TableCard toolbar={toolbar} footer={visibleAgents.length > 25 ? <Pager page={shownAgents.current} pageSize={25} total={visibleAgents.length} noun="unmapped agent codes" onPage={setAgentPage} /> : undefined}>
+        <TableCard toolbar={toolbar} footer={visibleAgents.length > 10 ? <Pager page={shownAgents.current} pageSize={10} total={visibleAgents.length} noun="unmapped agent codes" onPage={setAgentPage} /> : undefined}>
           {unmapped.length === 0 && mapped.length === 0 ? <EmptyState title="No agent codes yet" hint="Each carrier's writing-agent code appears here the first time a file carries it." />
             : (
               <table className="portal-lead-table w-full min-w-[820px] text-left text-sm">

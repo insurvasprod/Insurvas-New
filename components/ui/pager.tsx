@@ -31,7 +31,7 @@ export function Pager({
   noun,
   onPage,
   pageHref,
-  pageSize = 25,
+  pageSize = 10,
   suffix,
   disabled = false,
   approximate = false,
@@ -125,7 +125,7 @@ function Step({ to, off, current = false, label, hrefFor, onPage, className, chi
 }
 
 /** Clamp a 1-based page number to the rows that exist, and slice them. */
-export function paginate<T>(rows: T[], page: number, pageSize = 25) {
+export function paginate<T>(rows: T[], page: number, pageSize = 10) {
   const pages = Math.max(1, Math.ceil(rows.length / pageSize));
   const current = Math.min(Math.max(1, page), pages);
   return { current, pages, rows: rows.slice((current - 1) * pageSize, current * pageSize) };

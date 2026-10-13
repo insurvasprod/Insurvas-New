@@ -58,7 +58,7 @@ export function ExceptionQueues({ open, closed, rules, isOwner, today, readOnly,
   const [ruleDraft, setRuleDraft] = useState<Record<QueueType, QueueRule>>(rules);
   const [openPage, setOpenPage] = useState<Partial<Record<QueueType, number>>>({});
   const [closedPage, setClosedPage] = useState(1);
-  const closedShown = paginate(closed, closedPage, 25);
+  const closedShown = paginate(closed, closedPage, 10);
 
   async function post(body: Record<string, unknown>, done: string) {
     setBusy(true);
@@ -100,9 +100,9 @@ export function ExceptionQueues({ open, closed, rules, isOwner, today, readOnly,
       ) : QUEUE_TYPES.filter((type) => open.some((item) => item.queueType === type)).map((type, index) => {
         const items = open.filter((item) => item.queueType === type).sort((a, b) => a.ageFrom.localeCompare(b.ageFrom));
         if (!items.length) return null;
-        const shown = paginate(items, openPage[type] ?? 1, 25);
+        const shown = paginate(items, openPage[type] ?? 1, 10);
         return (
-          <TableCard key={type} toolbar={index === 0 ? toolbar : undefined} footer={items.length > 25 ? <Pager page={shown.current} pageSize={25} total={items.length} noun="items" onPage={(to) => setOpenPage((all) => ({ ...all, [type]: to }))} /> : undefined}>
+          <TableCard key={type} toolbar={index === 0 ? toolbar : undefined} footer={items.length > 10 ? <Pager page={shown.current} pageSize={10} total={items.length} noun="items" onPage={(to) => setOpenPage((all) => ({ ...all, [type]: to }))} /> : undefined}>
             <div className="border-b border-border px-4 py-3">
               <h2 className="m-0 text-sm font-semibold text-foreground">{QUEUE_LABELS[type].title} <span className="text-muted-foreground">· {items.length}</span></h2>
               <p className="m-0 mt-0.5 text-xs text-muted-foreground">{QUEUE_LABELS[type].why}</p>
@@ -129,7 +129,7 @@ export function ExceptionQueues({ open, closed, rules, isOwner, today, readOnly,
       }))}
 
       {tab === "closed" && (
-        <TableCard toolbar={toolbar} footer={closed.length > 25 ? <Pager page={closedShown.current} pageSize={25} total={closed.length} noun="closed items" onPage={setClosedPage} /> : undefined}>
+        <TableCard toolbar={toolbar} footer={closed.length > 10 ? <Pager page={closedShown.current} pageSize={10} total={closed.length} noun="closed items" onPage={setClosedPage} /> : undefined}>
           {closed.length === 0 ? <EmptyState title="Nothing closed in the last 30 days" hint="Every resolution is recorded here with who closed it and how." /> : (
             <table className="portal-lead-table w-full min-w-[900px] text-left text-sm">
               <thead><tr><th>Queue</th><th>What</th><th>How</th><th>By</th><th className="w-[110px]">When</th></tr></thead>

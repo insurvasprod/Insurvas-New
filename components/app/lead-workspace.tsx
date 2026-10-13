@@ -113,7 +113,7 @@ function PipelineCard({ lead, selected, readOnly, now, money, late, onSelect, on
 }
 
 /** Cards per board column before "Show more". */
-const BOARD_PAGE = 20;
+const BOARD_PAGE = 10;
 
 function PipelineBoard({ stages, leads, selectedId, readOnly, now, money, context, onSelect, onStageChange }: { stages: PipelineStage[]; leads: Lead[]; selectedId: string | null; readOnly: boolean; now: number; money: boolean; context: ViewContext | null; onSelect: (lead: Lead) => void; onStageChange: (lead: Lead, stage: string) => void }) {
   const [draggedId, setDraggedId] = useState<string | null>(null); const [dragOver, setDragOver] = useState<string | null>(null);

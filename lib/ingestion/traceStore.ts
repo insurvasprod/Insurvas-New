@@ -16,7 +16,7 @@ type Loose = any;
 const db = (): Loose => getSupabaseServiceClient();
 
 export const TRACE_PENDING_MESSAGE = "The trace check needs a database update (20261008290000).";
-const ROWS_PER_PAGE = 100;
+const ROWS_PER_PAGE = 10;
 
 export type FileTrace = {
   id: string;

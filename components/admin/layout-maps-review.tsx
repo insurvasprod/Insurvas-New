@@ -128,7 +128,7 @@ export function LayoutMapsReview({ initialMaps, initialAssignments, carriers, no
       return { key, name: sorted[0].name, fileType: sorted[0].fileType, versions: sorted, live: sorted.find((map) => map.status === "published") ?? null, draft: sorted.find((map) => map.status === "draft" || map.status === "in_review") ?? null };
     });
   }, [maps]);
-  const shownLayouts = paginate(layouts, layoutPage, 25);
+  const shownLayouts = paginate(layouts, layoutPage, 10);
   const figures = useMemo(() => {
     const assigned = (type: CarrierFileType) => new Set(assignments.filter((row) => row.fileType === type).map((row) => row.carrierId));
     const policies = assigned("policies");
@@ -141,7 +141,7 @@ export function LayoutMapsReview({ initialMaps, initialAssignments, carriers, no
       noCommissions: carriers.filter((carrier) => !commissions.has(carrier.id)).length,
     };
   }, [layouts, maps, assignments, carriers]);
-  const shownAssignments = paginate(assignments, assignmentPage, 25);
+  const shownAssignments = paginate(assignments, assignmentPage, 10);
   const open = maps.find((map) => map.id === openId) ?? null;
   const editable = open?.status === "draft" || open?.status === "in_review";
 
@@ -258,7 +258,7 @@ export function LayoutMapsReview({ initialMaps, initialAssignments, carriers, no
 
       {notice && <div role="status" className="rounded-lg border border-border border-l-[3px] border-l-[var(--warning)] bg-[var(--warning-surface)] px-4 py-3 text-sm text-[var(--warning-ink)]">{notice}</div>}
 
-      <TableCard title="Layouts" footer={layouts.length > 25 ? <Pager page={shownLayouts.current} pageSize={25} total={layouts.length} noun="layouts" onPage={setLayoutPage} /> : undefined}>
+      <TableCard title="Layouts" footer={layouts.length > 10 ? <Pager page={shownLayouts.current} pageSize={10} total={layouts.length} noun="layouts" onPage={setLayoutPage} /> : undefined}>
         {layouts.length === 0 ? (
           <EmptyState title="No layout maps yet" hint="Layouts are written from real carrier sample files; until one is published for a carrier, its files wait." />
         ) : (
@@ -421,7 +421,7 @@ export function LayoutMapsReview({ initialMaps, initialAssignments, carriers, no
             <Button type="submit" variant="outline" disabled={busy !== null || !assign.carrierId || !assign.layoutKey}>{busy === "assign" ? "Saving…" : "Assign"}</Button>
           </form>
         }
-        footer={assignments.length > 25 ? <Pager page={shownAssignments.current} pageSize={25} total={assignments.length} noun="assignments" onPage={setAssignmentPage} /> : undefined}
+        footer={assignments.length > 10 ? <Pager page={shownAssignments.current} pageSize={10} total={assignments.length} noun="assignments" onPage={setAssignmentPage} /> : undefined}
       >
         {assignments.length === 0 ? (
           <EmptyState title="No carrier assigned a layout" hint="Assign a layout to a carrier and file type once the layout is written." />

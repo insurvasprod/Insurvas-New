@@ -62,7 +62,7 @@ export function CarrierRulesWorkspace({ carriers, plane, endpoint, readOnly, asO
   const [page, setPage] = useState(1);
 
   const visible = useMemo(() => carriers.filter((row) => (!query.trim() || row.carrierName.toLowerCase().includes(query.trim().toLowerCase())) && (!gapsOnly || row.gaps.length > 0)), [carriers, query, gapsOnly]);
-  const shown = paginate(visible, page, 25);
+  const shown = paginate(visible, page, 10);
   const open = carriers.find((row) => row.carrierId === openId) ?? null;
 
   async function post(key: string, body: Record<string, unknown>, done: string) {
@@ -96,7 +96,7 @@ export function CarrierRulesWorkspace({ carriers, plane, endpoint, readOnly, asO
             <ToolbarCheckbox checked={gapsOnly} onChange={(value) => { setGapsOnly(value); setPage(1); }} label="Only carriers with a missing rule" />
           </DataToolbar>
         }
-        footer={visible.length > 25 ? <Pager page={shown.current} pageSize={25} total={visible.length} noun="carriers" onPage={setPage} /> : undefined}
+        footer={visible.length > 10 ? <Pager page={shown.current} pageSize={10} total={visible.length} noun="carriers" onPage={setPage} /> : undefined}
       >
         {carriers.length === 0 ? (
           <EmptyState title="No carriers in the library" hint="Carriers come from the platform's carrier library." />

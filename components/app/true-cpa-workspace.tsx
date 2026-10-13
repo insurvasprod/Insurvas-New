@@ -61,7 +61,7 @@ function queryFor(value: Scope) { const params = new URLSearchParams({ from: val
  * key identifies the figure so a second click closes it.
  */
 type DrillSpec = { key: string; title: string; params: Record<string, string> };
-const DRILL_PAGE = 100;
+const DRILL_PAGE = 10;
 const STAGE_NOUN: Record<ScorecardStage, string> = {
   received: "leads received", dialable: "dialable leads", undialable: "undialable leads", dialed: "leads dialled",
   contacted: "leads contacted", quoted: "leads quoted", applied: "leads with an application", issued: "leads with an issued policy",

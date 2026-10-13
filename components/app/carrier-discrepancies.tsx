@@ -125,7 +125,7 @@ export function CarrierDiscrepancies({ items, readOnly, handItems = [], handCanW
     (!type || (i.source === "hand" ? HAND_TYPE[i.row.kind] === type : i.row.type === type)) &&
     (!carrier || carrierKey(i) === carrier) &&
     statusMatches(i, status)), [all, source, type, carrier, status]);
-  const { current, rows } = paginate(visible, page, 25);
+  const { current, rows } = paginate(visible, page, 10);
   const pickedRows = items.filter((i) => picked.includes(i.id));
   const pickedCarrier = pickedRows[0]?.carrierId ?? null;
   const canPick = (row: DiscrepancyRow) => !readOnly && handPicked.length === 0 && row.status === "open" && DISPUTABLE.has(row.type) && (!pickedCarrier || pickedCarrier === row.carrierId);
@@ -339,7 +339,7 @@ export function CarrierDiscrepancies({ items, readOnly, handItems = [], handCanW
             )}
           </DataToolbar>
         }
-        footer={all.length ? <Pager page={current} pageSize={25} total={visible.length} onPage={setPage} noun={visible.length === 1 ? "item" : "items"} /> : undefined}
+        footer={all.length ? <Pager page={current} pageSize={10} total={visible.length} onPage={setPage} noun={visible.length === 1 ? "item" : "items"} /> : undefined}
       >
         {all.length === 0 ? (
           <EmptyState title="Nothing found yet" hint="Discrepancies appear once commission files are read: commission that never came, was paid short or at the wrong rate, chargebacks that look wrong or are coming, held money and debit balances." />

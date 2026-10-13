@@ -17,7 +17,7 @@ import type { PlanListRow } from "@/lib/plans/constants";
 import { cn } from "@/lib/utils";
 import { AddonDialog, type AddonFeatureOption, type AddonMeterOption } from "./addon-dialog";
 
-const PAGE_SIZE = 25;
+const PAGE_SIZE = 10;
 
 type StatusFilter = "all" | "active" | "retired";
 

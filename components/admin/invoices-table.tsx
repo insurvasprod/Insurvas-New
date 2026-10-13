@@ -19,7 +19,7 @@ import { INVOICE_STATUSES, INVOICE_STATUS_LABELS, type InvoiceStatus } from "@/l
 import type { InvoiceListRow, InvoiceTotals } from "@/lib/invoices/queries";
 import { cn } from "@/lib/utils";
 
-const PAGE = 25;
+const PAGE = 10;
 type Lens = "all" | "overdue" | "mismatched";
 
 const th = "px-3 py-2 text-left text-[12px] leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]";

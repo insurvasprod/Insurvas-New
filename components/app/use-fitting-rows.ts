@@ -8,7 +8,7 @@ import { useEffect, useState } from "react";
  * Recomputed on resize. The same rule as the transfer inbox's local hook (2026-10-06 redesign), for
  * the partner, vendor and campaign screens.
  */
-export function useFittingRows(reserved: number, rowHeight: number, min = 5, max = 50) {
+export function useFittingRows(reserved: number, rowHeight: number, min = 5, max = 10) {
   const [size, setSize] = useState(10);
   useEffect(() => {
     const fit = () => setSize(Math.min(max, Math.max(min, Math.floor((window.innerHeight - reserved) / rowHeight))));

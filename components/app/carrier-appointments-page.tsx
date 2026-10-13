@@ -283,10 +283,10 @@ export function CarrierAppointmentsPage({ canEdit, isOwner, readOnlyReason = nul
     !licenceNeedle || [state, stateName(state), ...more].some((value) => value?.toLowerCase().includes(licenceNeedle));
   const shownLicences = licenceRows.filter((row) => matchesState(row.state, row.license_number));
   const shownUnlicensed = unlicensedAppointedStates.filter((state) => matchesState(state));
-  const carrierRows = paginate(shownCarriers, carrierPage, 25);
+  const carrierRows = paginate(shownCarriers, carrierPage, 10);
   // Licences first, then the appointed states with none, paged as one list (a state is a string).
   const licenceTotal = shownLicences.length + shownUnlicensed.length;
-  const licencePageRows = paginate<LicenseRow | string>([...shownLicences, ...shownUnlicensed], licencePage, 25);
+  const licencePageRows = paginate<LicenseRow | string>([...shownLicences, ...shownUnlicensed], licencePage, 10);
 
   const eoPolicy = currentEoPolicy(vault.eoPolicies, today);
   const eoDays = eoPolicy ? daysUntilExpiry(eoPolicy.expires_at, today) : null;
@@ -408,7 +408,7 @@ export function CarrierAppointmentsPage({ canEdit, isOwner, readOnlyReason = nul
               </select>
             </DataToolbar>
           }
-          footer={tableCarriers.length > 0 && footprint.length > 0 ? shownCarriers.length > 25 && columns.length > 0 ? <Pager page={carrierRows.current} pageSize={25} total={shownCarriers.length} noun="carriers" onPage={setCarrierPage} suffix={`${columns.length} of ${footprint.length} states · grouped by region`} /> : <span>{shownCarriers.length} of {plural(tableCarriers.length, "carrier")} · {columns.length} of {footprint.length} states · grouped by region</span> : undefined}
+          footer={tableCarriers.length > 0 && footprint.length > 0 ? shownCarriers.length > 10 && columns.length > 0 ? <Pager page={carrierRows.current} pageSize={10} total={shownCarriers.length} noun="carriers" onPage={setCarrierPage} suffix={`${columns.length} of ${footprint.length} states · grouped by region`} /> : <span>{shownCarriers.length} of {plural(tableCarriers.length, "carrier")} · {columns.length} of {footprint.length} states · grouped by region</span> : undefined}
         >
           {tableCarriers.length === 0 ? (
             noCarrier
@@ -491,7 +491,7 @@ export function CarrierAppointmentsPage({ canEdit, isOwner, readOnlyReason = nul
               <ToolbarSearch value={licenceQuery} onChange={(value) => { setLicenceQuery(value); setLicencePage(1); }} placeholder="Search states, licences" />
             </DataToolbar>
           }
-          footer={licenceRows.length + unlicensedAppointedStates.length > 0 ? licenceTotal > 25 ? <Pager page={licencePageRows.current} pageSize={25} total={licenceTotal} noun="rows" onPage={setLicencePage} suffix={<>{plural(licenceRows.length, "licence")}{unlicensedAppointedStates.length ? ` · ${plural(unlicensedAppointedStates.length, "appointed state")} without one` : ""}</>} /> : <span>{plural(licenceRows.length, "licence")}{unlicensedAppointedStates.length ? ` · ${plural(unlicensedAppointedStates.length, "appointed state")} without one` : ""}</span> : undefined}
+          footer={licenceRows.length + unlicensedAppointedStates.length > 0 ? licenceTotal > 10 ? <Pager page={licencePageRows.current} pageSize={10} total={licenceTotal} noun="rows" onPage={setLicencePage} suffix={<>{plural(licenceRows.length, "licence")}{unlicensedAppointedStates.length ? ` · ${plural(unlicensedAppointedStates.length, "appointed state")} without one` : ""}</>} /> : <span>{plural(licenceRows.length, "licence")}{unlicensedAppointedStates.length ? ` · ${plural(unlicensedAppointedStates.length, "appointed state")} without one` : ""}</span> : undefined}
         >
           {licenceRows.length + unlicensedAppointedStates.length === 0 ? (
             <EmptyState title="No licences recorded yet" hint="Until one is, no lead can be assigned to an owner or producer." />

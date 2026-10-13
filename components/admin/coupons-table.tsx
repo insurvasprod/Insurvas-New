@@ -38,7 +38,7 @@ import {
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 
-const PAGE_SIZE = 25;
+const PAGE_SIZE = 10;
 
 type StatusFilter = "all" | CouponStatus;
 type TypeFilter = "any" | "percent" | "fixed";

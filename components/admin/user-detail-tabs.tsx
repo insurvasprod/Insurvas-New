@@ -190,7 +190,7 @@ function who(row: UserAuditRow): { name: string; sub: string | null } {
   return { name: "Staff member", sub: row.actorId ? "No longer on the admin list" : null };
 }
 
-/** Audit: what has been done to this person, newest first, 25 a page. Read-only. */
+/** Audit: what has been done to this person, newest first, 10 a page. Read-only. */
 export async function UserAuditTab({ userId, page }: { userId: string; page: number }) {
   const { rows, total } = await fetchUserAuditPage(userId, page);
   const auditLogHref = `/admin/audit-log?target=${encodeURIComponent(userId)}`;

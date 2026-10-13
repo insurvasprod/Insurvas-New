@@ -32,7 +32,7 @@ import { cn } from "@/lib/utils";
 import { CarrierDialog } from "./carrier-dialog";
 import { CarrierDeactivateDialog } from "./carrier-deactivate-dialog";
 
-const PAGE_SIZE = 25;
+const PAGE_SIZE = 10;
 const MENU_ITEM = "text-[14px] tracking-[-0.02em] text-[var(--ink)]";
 
 type StateFilter = "all" | "active" | "inactive";

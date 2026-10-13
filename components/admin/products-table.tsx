@@ -18,7 +18,7 @@ import { PRODUCT_CATEGORIES, PRODUCT_CATEGORY_LABELS, type ProductCategory, type
 import { cn } from "@/lib/utils";
 import { ProductDialog } from "./product-dialog";
 
-const PAGE = 25;
+const PAGE = 10;
 const th = "px-3 py-2 text-left text-[12px] leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]";
 const td = "border-t border-[var(--border)] px-3 py-2 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--body)]";
 
