@@ -25,6 +25,7 @@ import { ClearFiltersButton, DataToolbar, RefreshButton, ToolbarSearch, toolbarC
 import { PageHeader } from "@/components/ui/page-header";
 import { PageLoading } from "@/components/ui/page-loading";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
+import { Pager, paginate } from "@/components/ui/pager";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
@@ -134,6 +135,8 @@ export function CarrierAppointmentsPage({ canEdit, isOwner, readOnlyReason = nul
   const [carrierQuery, setCarrierQuery] = useState("");
   const [regionFilter, setRegionFilter] = useState("");
   const [licenceQuery, setLicenceQuery] = useState("");
+  const [carrierPage, setCarrierPage] = useState(1);
+  const [licencePage, setLicencePage] = useState(1);
   const [refreshing, setRefreshing] = useState(false);
   const [tab, setTab] = useState<Tab>("appointments");
 
@@ -278,6 +281,10 @@ export function CarrierAppointmentsPage({ canEdit, isOwner, readOnlyReason = nul
     !licenceNeedle || [state, stateName(state), ...more].some((value) => value?.toLowerCase().includes(licenceNeedle));
   const shownLicences = licenceRows.filter((row) => matchesState(row.state, row.license_number));
   const shownUnlicensed = unlicensedAppointedStates.filter((state) => matchesState(state));
+  const carrierRows = paginate(shownCarriers, carrierPage, 25);
+  // Licences first, then the appointed states with none, paged as one list (a state is a string).
+  const licenceTotal = shownLicences.length + shownUnlicensed.length;
+  const licencePageRows = paginate<LicenseRow | string>([...shownLicences, ...shownUnlicensed], licencePage, 25);
 
   const eoPolicy = currentEoPolicy(vault.eoPolicies, today);
   const eoDays = eoPolicy ? daysUntilExpiry(eoPolicy.expires_at, today) : null;
@@ -388,25 +395,25 @@ export function CarrierAppointmentsPage({ canEdit, isOwner, readOnlyReason = nul
             <DataToolbar
               actions={<>
                 {canEdit && tableCarriers.length > 0 && <Button type="button" variant="outline" onClick={() => setEditing(true)}>Edit appointments</Button>}
-                {(carrierQuery || regionFilter) && <ClearFiltersButton onClick={() => { setCarrierQuery(""); setRegionFilter(""); }} />}
+                {(carrierQuery || regionFilter) && <ClearFiltersButton onClick={() => { setCarrierQuery(""); setRegionFilter(""); setCarrierPage(1); }} />}
                 {refreshButton}
               </>}
             >
-              <ToolbarSearch value={carrierQuery} onChange={setCarrierQuery} placeholder="Search carriers" />
-              <select aria-label="Filter states by region" className={toolbarControl} value={regionFilter} onChange={(event) => setRegionFilter(event.target.value)}>
+              <ToolbarSearch value={carrierQuery} onChange={(value) => { setCarrierQuery(value); setCarrierPage(1); }} placeholder="Search carriers" />
+              <select aria-label="Filter states by region" className={toolbarControl} value={regionFilter} onChange={(event) => { setRegionFilter(event.target.value); setCarrierPage(1); }}>
                 <option value="">All regions</option>
                 {US_REGIONS.map((region) => <option key={region.name} value={region.name}>{region.name}</option>)}
               </select>
             </DataToolbar>
           }
-          footer={tableCarriers.length > 0 && footprint.length > 0 ? <span>{shownCarriers.length} of {plural(tableCarriers.length, "carrier")} · {columns.length} of {footprint.length} states · grouped by region</span> : undefined}
+          footer={tableCarriers.length > 0 && footprint.length > 0 ? shownCarriers.length > 25 && columns.length > 0 ? <Pager page={carrierRows.current} pageSize={25} total={shownCarriers.length} noun="carriers" onPage={setCarrierPage} suffix={`${columns.length} of ${footprint.length} states · grouped by region`} /> : <span>{shownCarriers.length} of {plural(tableCarriers.length, "carrier")} · {columns.length} of {footprint.length} states · grouped by region</span> : undefined}
         >
           {tableCarriers.length === 0 ? (
             noCarrier
           ) : footprint.length === 0 ? (
             <EmptyState title="No appointment or licence recorded yet" hint={canEdit ? "Choose Edit appointments to mark the states where each carrier has appointed you." : "Appointments appear here once an owner records them."} />
           ) : shownCarriers.length === 0 || columns.length === 0 ? (
-            <NoMatches noun="appointments" onClear={() => { setCarrierQuery(""); setRegionFilter(""); }} />
+            <NoMatches noun="appointments" onClear={() => { setCarrierQuery(""); setRegionFilter(""); setCarrierPage(1); }} />
           ) : (
             <table className={st.table} style={{ minWidth: 190 + 120 * columns.length }}>
               <thead>
@@ -424,7 +431,7 @@ export function CarrierAppointmentsPage({ canEdit, isOwner, readOnlyReason = nul
                 </tr>
               </thead>
               <tbody className="m-seq">
-                {shownCarriers.map((carrier) => (
+                {carrierRows.rows.map((carrier) => (
                   <tr key={carrier.id}>
                     <th scope="row" className={cn(st.td, "max-w-[220px] truncate pl-4 text-left font-normal")} title={carrier.name}>
                       {carrier.name}
@@ -475,19 +482,19 @@ export function CarrierAppointmentsPage({ canEdit, isOwner, readOnlyReason = nul
                     Add a licence
                   </Button>
                 )}
-                {licenceQuery && <ClearFiltersButton onClick={() => setLicenceQuery("")} />}
+                {licenceQuery && <ClearFiltersButton onClick={() => { setLicenceQuery(""); setLicencePage(1); }} />}
                 {refreshButton}
               </>}
             >
-              <ToolbarSearch value={licenceQuery} onChange={setLicenceQuery} placeholder="Search states, licences" />
+              <ToolbarSearch value={licenceQuery} onChange={(value) => { setLicenceQuery(value); setLicencePage(1); }} placeholder="Search states, licences" />
             </DataToolbar>
           }
-          footer={licenceRows.length + unlicensedAppointedStates.length > 0 ? <span>{plural(licenceRows.length, "licence")}{unlicensedAppointedStates.length ? ` · ${plural(unlicensedAppointedStates.length, "appointed state")} without one` : ""}</span> : undefined}
+          footer={licenceRows.length + unlicensedAppointedStates.length > 0 ? licenceTotal > 25 ? <Pager page={licencePageRows.current} pageSize={25} total={licenceTotal} noun="rows" onPage={setLicencePage} suffix={<>{plural(licenceRows.length, "licence")}{unlicensedAppointedStates.length ? ` · ${plural(unlicensedAppointedStates.length, "appointed state")} without one` : ""}</>} /> : <span>{plural(licenceRows.length, "licence")}{unlicensedAppointedStates.length ? ` · ${plural(unlicensedAppointedStates.length, "appointed state")} without one` : ""}</span> : undefined}
         >
           {licenceRows.length + unlicensedAppointedStates.length === 0 ? (
             <EmptyState title="No licences recorded yet" hint="Until one is, no lead can be assigned to an owner or producer." />
           ) : shownLicences.length + shownUnlicensed.length === 0 ? (
-            <NoMatches noun="licences" onClear={() => setLicenceQuery("")} />
+            <NoMatches noun="licences" onClear={() => { setLicenceQuery(""); setLicencePage(1); }} />
           ) : (
             <table className={cn(st.table, "min-w-[760px]")}>
               <thead>
@@ -500,7 +507,7 @@ export function CarrierAppointmentsPage({ canEdit, isOwner, readOnlyReason = nul
                 </tr>
               </thead>
               <tbody className="m-seq">
-                {shownLicences.map((row) => {
+                {licencePageRows.rows.filter((row): row is LicenseRow => typeof row !== "string").map((row) => {
                   const status = licenceStatus(row.expires_at, today);
                   return (
                     <tr key={row.id}>
@@ -512,7 +519,7 @@ export function CarrierAppointmentsPage({ canEdit, isOwner, readOnlyReason = nul
                     </tr>
                   );
                 })}
-                {shownUnlicensed.map((state) => (
+                {licencePageRows.rows.filter((row): row is string => typeof row === "string").map((state) => (
                   <tr key={`unlicensed-${state}`}>
                     <td className={cn(st.td, "whitespace-nowrap pl-4")}>{stateName(state)}</td>
                     {/* The fact itself, on the row: an active carrier appointment here and no licence. */}

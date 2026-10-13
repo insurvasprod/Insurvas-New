@@ -4,13 +4,18 @@ import { notFound } from "next/navigation";
 import { guardPage } from "@/lib/entitlements/guardPage";
 import { fileDay } from "@/lib/ingestion/constants";
 import { isRecordUuid } from "@/lib/ingestion/path";
-import { fileHref } from "@/lib/ingestion/trace";
+import { fileHref, rowHref } from "@/lib/ingestion/trace";
 import { loadRowTrace } from "@/lib/ingestion/traceStore";
 import { hasTenantPermission } from "@/lib/tenantAuth/permissions";
 import { CarrierFileDownload } from "@/components/app/carrier-file-download";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
+import { ChevronLeft, ChevronRight } from "lucide-react";
+
+import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
+import { EmptyState } from "@/components/ui/page-states";
+import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 
@@ -32,14 +37,32 @@ export default async function RawRowPage({ params }: { params: Promise<{ fileId:
   const row = await loadRowTrace(guard.context.tenantId, fileId, n);
   if (!row) notFound();
   const policyHref = row.snapshot ? `/app/policies/carrier/${row.snapshot.carrierId}/${encodeURIComponent(row.snapshot.policyNumber)}` : null;
+  const read = row.columns.filter((c) => c.becameField);
+  const unread = row.columns.filter((c) => !c.becameField);
+  const prev = row.prevRow !== null ? rowHref(row.file.id, row.prevRow) : null;
+  const next = row.nextRow !== null ? rowHref(row.file.id, row.nextRow) : null;
+  const became = row.snapshot ? `Policy ${row.snapshot.policyNumber}` : row.lines.length ? `${row.lines.length} commission ${row.lines.length === 1 ? "line" : "lines"}` : "Nothing yet";
+  const columnChip = (column: string) => <span className="inline-flex h-6 min-w-7 items-center justify-center rounded-md bg-[var(--surface-alt)] px-1.5 font-mono text-xs text-muted-foreground">{column}</span>;
 
   return (
     <div className="m-stagger flex flex-col gap-6">
       <PageHeader
-        title={`Row ${row.rowNumber}${row.rowCount ? ` of ${row.rowCount.toLocaleString("en-US")}` : ""}`}
-        description={`${row.file.carrierName ?? "Carrier not known"} · ${row.file.name} · file of ${fileDay(row.file.fileDate)}`}
-        actions={<><Link href={fileHref(row.file.id)} className="inline-flex h-9 items-center rounded-md border border-border px-3 text-sm font-semibold hover:bg-[var(--surface-alt)]">The whole file</Link><CarrierFileDownload fileId={row.file.id} /></>}
+        title={`Row ${row.rowNumber}`}
+        description={`${row.position && row.rowCount ? `Line ${row.position.toLocaleString("en-US")} of ${row.rowCount.toLocaleString("en-US")} · ` : ""}${row.file.carrierName ?? "Carrier not known"} · ${row.file.name} · file of ${fileDay(row.file.fileDate)}`}
+        actions={<>
+          {prev ? <Button asChild variant="outline"><Link href={prev}><ChevronLeft aria-hidden="true" />Previous row</Link></Button> : <Button type="button" variant="outline" disabled><ChevronLeft aria-hidden="true" />Previous row</Button>}
+          {next ? <Button asChild variant="outline"><Link href={next}>Next row<ChevronRight aria-hidden="true" /></Link></Button> : <Button type="button" variant="outline" disabled>Next row<ChevronRight aria-hidden="true" /></Button>}
+          <Button asChild variant="outline"><Link href={fileHref(row.file.id)}>The whole file</Link></Button>
+          <CarrierFileDownload fileId={row.file.id} />
+        </>}
       />
+
+      <StatStrip label="This row">
+        <StatTile label="Columns" value={row.columns.length.toLocaleString("en-US")} footnote="as the carrier sent them" />
+        <StatTile label="Read by the layout" value={read.length.toLocaleString("en-US")} footnote={row.map ? `${row.map.name}, v${row.map.version}` : "no layout map yet"} />
+        <StatTile label="Kept, not read" value={unread.length.toLocaleString("en-US")} footnote="stored with the row" />
+        <StatTile label="Became" value={became} valueSize="text" footnote={row.snapshot ? (row.snapshot.isCurrent ? "the policy's current values" : "an earlier snapshot") : row.lines.length ? "in the commission ledger" : "held, or not read yet"} />
+      </StatStrip>
 
       <TableCard title="What it became">
         <div className="grid gap-2 px-4 pb-4 text-sm">
@@ -56,31 +79,52 @@ export default async function RawRowPage({ params }: { params: Promise<{ fileId:
             </p>
           ))}
           {!row.snapshot && row.lines.length === 0 && <p className="m-0 text-muted-foreground">Nothing: the row was held (an unmapped status or an unreadable value), or the file hasn&apos;t been read yet.</p>}
-          <p className="m-0 text-xs text-muted-foreground">Read with {row.map ? `${row.map.name}, version ${row.map.version}` : "no layout map yet"}.</p>
         </div>
       </TableCard>
 
-      <TableCard title="Every column, as the carrier sent it">
-        <table className="portal-lead-table w-full min-w-[820px] text-left text-sm">
-          <thead><tr><th className="w-[70px]">Column</th><th>Header</th><th>Value as sent</th><th>Became</th><th>Stored as</th></tr></thead>
-          <tbody>
-            {row.columns.map((c) => (
-              <tr key={c.column + c.header}>
-                <td className="font-mono text-xs text-muted-foreground">{c.column}</td>
-                <td className="font-mono text-xs text-foreground">{c.header}</td>
-                <td className="max-w-[260px] truncate font-mono text-xs" title={c.value}>{c.value === "" ? <span className="text-muted-foreground">(empty)</span> : c.value}</td>
-                <td className="text-xs">{c.becameField ? <><span className="font-semibold text-foreground">{c.becameField}</span>{c.dataType ? <span className="text-muted-foreground"> · {c.dataType}{c.transform && c.transform !== "none" ? `, ${c.transform}` : ""}{c.required ? ", required" : ""}</span> : null}</> : <span className="text-muted-foreground">Not read by the map{row.snapshot ? "; kept with the snapshot" : ""}</span>}</td>
-                <td className="max-w-[200px] truncate font-mono text-xs" title={c.stored ?? undefined}>{c.stored ?? (c.becameField?.startsWith("insured_") ? <span className="font-sans text-muted-foreground">Used to match the client, not kept on the policy</span> : <span className="text-muted-foreground">—</span>)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <TableCard title="Read by the layout" description="Each column the layout map reads, the field it fills and the value kept.">
+        {read.length === 0 ? <EmptyState title="No column of this row is read" hint={row.map ? "The layout map reads none of this file's columns." : "The file has no layout map yet."} /> : (
+          <table className="portal-lead-table w-full min-w-[860px] text-left text-sm">
+            <thead><tr><th className="w-[70px]">Column</th><th className="w-[200px]">Header</th><th>Value as sent</th><th className="w-[230px]">Becomes</th><th>Kept as</th></tr></thead>
+            <tbody>
+              {read.map((c) => (
+                <tr key={c.column + c.header}>
+                  <td>{columnChip(c.column)}</td>
+                  <td className="font-mono text-xs text-foreground">{c.header}</td>
+                  <td className="max-w-[260px] truncate font-mono text-xs" title={c.value}>{c.value === "" ? <span className="font-sans text-muted-foreground">(empty)</span> : c.value}</td>
+                  <td className="text-xs">
+                    <StatusChip tone="info">{c.becameField}</StatusChip>
+                    {c.dataType ? <span className="mt-1 block text-muted-foreground">{c.dataType}{c.transform && c.transform !== "none" ? ` · ${c.transform}` : ""}{c.required ? " · required" : ""}</span> : null}
+                  </td>
+                  <td className="max-w-[200px] truncate font-mono text-xs" title={c.stored ?? undefined}>{c.stored ?? (c.becameField?.startsWith("insured_") ? <span className="font-sans text-muted-foreground">Used to match the client, not kept on the policy</span> : <span className="text-muted-foreground">—</span>)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
         {row.missingFields.length > 0 && (
           <p className="m-0 border-t border-border px-4 py-3 text-xs text-[var(--warning-ink)]">
             The map also reads {row.missingFields.map((f) => `${f.targetField} from “${f.sourceColumn}”`).join(", ")}, and this file has no such column.
           </p>
         )}
       </TableCard>
+
+      {unread.length > 0 && (
+        <TableCard title="Kept, not read" description={row.snapshot ? "Columns the layout doesn't read, kept with the row and the policy snapshot." : "Columns the layout doesn't read, kept with the row."}>
+          <table className="portal-lead-table w-full min-w-[640px] text-left text-sm">
+            <thead><tr><th className="w-[70px]">Column</th><th className="w-[260px]">Header</th><th>Value as sent</th></tr></thead>
+            <tbody>
+              {unread.map((c) => (
+                <tr key={c.column + c.header}>
+                  <td>{columnChip(c.column)}</td>
+                  <td className="font-mono text-xs text-foreground">{c.header}</td>
+                  <td className="max-w-[420px] truncate font-mono text-xs" title={c.value}>{c.value === "" ? <span className="font-sans text-muted-foreground">(empty)</span> : c.value}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </TableCard>
+      )}
     </div>
   );
 }

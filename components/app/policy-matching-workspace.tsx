@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { ClearFiltersButton, DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
+import { Pager, paginate } from "@/components/ui/pager";
 import { TableCard } from "@/components/ui/table-card";
 import { fileDay } from "@/lib/ingestion/constants";
 import { MATCH_FIELD_LABELS, MATCH_FIELDS, type FieldOutcome } from "@/lib/ingestion/policyMatching";
@@ -34,12 +35,19 @@ export function PolicyMatchingWorkspace({ reviews, links, unmapped, mapped, memb
   const [openId, setOpenId] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [assign, setAssign] = useState<Record<string, string>>({});
+  const [reviewPage, setReviewPage] = useState(1);
+  const [linkPage, setLinkPage] = useState(1);
+  const [agentPage, setAgentPage] = useState(1);
+  const search = (value: string) => { setQuery(value); setReviewPage(1); setLinkPage(1); setAgentPage(1); };
   const open = reviews.find((review) => review.id === openId) ?? null;
   const q = query.trim().toLowerCase();
   const has = (...values: Array<string | null | undefined>) => !q || values.some((value) => (value ?? "").toLowerCase().includes(q));
   const visibleReviews = useMemo(() => reviews.filter((r) => has(r.policyNumber, r.carrierName, nameOf(r.carrierRow ?? {}))), [reviews, q]); // eslint-disable-line react-hooks/exhaustive-deps
   const visibleLinks = useMemo(() => links.filter((l) => has(l.policyNumber, l.carrierName, l.clientName)), [links, q]); // eslint-disable-line react-hooks/exhaustive-deps
   const visibleAgents = useMemo(() => unmapped.filter((a) => has(a.agentIdentifier, a.carrierName)), [unmapped, q]); // eslint-disable-line react-hooks/exhaustive-deps
+  const shownReviews = paginate(visibleReviews, reviewPage, 25);
+  const shownLinks = paginate(visibleLinks, linkPage, 25);
+  const shownAgents = paginate(visibleAgents, agentPage, 25);
 
   async function post(key: string, body: Record<string, unknown>, done: string) {
     setBusy(key);
@@ -59,10 +67,10 @@ export function PolicyMatchingWorkspace({ reviews, links, unmapped, mapped, memb
 
   const toolbar = (
     <DataToolbar actions={<>
-      {q && <ClearFiltersButton onClick={() => setQuery("")} />}
+      {q && <ClearFiltersButton onClick={() => search("")} />}
       <RefreshButton onClick={() => startRefresh(() => router.refresh())} refreshing={refreshing} />
     </>}>
-      <ToolbarSearch value={query} onChange={setQuery} placeholder={tab === "agents" ? "Search agent codes" : "Search policies or clients"} />
+      <ToolbarSearch value={query} onChange={search} placeholder={tab === "agents" ? "Search agent codes" : "Search policies or clients"} />
     </DataToolbar>
   );
 
@@ -80,14 +88,14 @@ export function PolicyMatchingWorkspace({ reviews, links, unmapped, mapped, memb
       />
 
       {tab === "review" && (
-        <TableCard toolbar={toolbar}>
+        <TableCard toolbar={toolbar} footer={visibleReviews.length > 25 ? <Pager page={shownReviews.current} pageSize={25} total={visibleReviews.length} noun="policies" onPage={setReviewPage} /> : undefined}>
           {reviews.length === 0 ? <EmptyState title="Nothing to review" hint="Policies whose number we don't hold appear here with the closest clients." />
-            : visibleReviews.length === 0 ? <NoMatches noun="policies" onClear={() => setQuery("")} />
+            : visibleReviews.length === 0 ? <NoMatches noun="policies" onClear={() => search("")} />
             : (
               <table className="portal-lead-table w-full min-w-[900px] text-left text-sm">
                 <thead><tr><th>Policy</th><th>Carrier</th><th>Insured (carrier)</th><th>File date</th><th className="w-[140px]">Best candidate</th><th className="w-[90px] text-right">Score</th><th className="w-[90px] text-right"><span className="sr-only">Actions</span></th></tr></thead>
                 <tbody>
-                  {visibleReviews.map((review) => {
+                  {shownReviews.rows.map((review) => {
                     const best = review.shortlist[0];
                     return (
                       <tr key={review.id}>
@@ -108,14 +116,14 @@ export function PolicyMatchingWorkspace({ reviews, links, unmapped, mapped, memb
       )}
 
       {tab === "links" && (
-        <TableCard toolbar={toolbar}>
+        <TableCard toolbar={toolbar} footer={visibleLinks.length > 25 ? <Pager page={shownLinks.current} pageSize={25} total={visibleLinks.length} noun="links" onPage={setLinkPage} /> : undefined}>
           {links.length === 0 ? <EmptyState title="No policy is linked yet" hint="Links appear as carrier files arrive: by policy number when we hold it, otherwise once a person decides." />
-            : visibleLinks.length === 0 ? <NoMatches noun="links" onClear={() => setQuery("")} />
+            : visibleLinks.length === 0 ? <NoMatches noun="links" onClear={() => search("")} />
             : (
               <table className="portal-lead-table w-full min-w-[900px] text-left text-sm">
                 <thead><tr><th>Policy</th><th>Carrier</th><th>Linked to</th><th>How</th><th className="w-[120px]">When</th><th className="w-[100px] text-right"><span className="sr-only">Actions</span></th></tr></thead>
                 <tbody>
-                  {visibleLinks.map((link) => (
+                  {shownLinks.rows.map((link) => (
                     <tr key={link.id}>
                       <td className="tabular-nums text-foreground">{link.policyNumber}</td>
                       <td>{link.carrierName}</td>
@@ -132,13 +140,13 @@ export function PolicyMatchingWorkspace({ reviews, links, unmapped, mapped, memb
       )}
 
       {tab === "agents" && (
-        <TableCard toolbar={toolbar}>
+        <TableCard toolbar={toolbar} footer={visibleAgents.length > 25 ? <Pager page={shownAgents.current} pageSize={25} total={visibleAgents.length} noun="unmapped agent codes" onPage={setAgentPage} /> : undefined}>
           {unmapped.length === 0 && mapped.length === 0 ? <EmptyState title="No agent codes yet" hint="Each carrier's writing-agent code appears here the first time a file carries it." />
             : (
               <table className="portal-lead-table w-full min-w-[820px] text-left text-sm">
                 <thead><tr><th>Carrier&apos;s agent code</th><th>Carrier</th><th className="w-[90px] text-right">Policies</th><th className="w-[260px]">Agent</th><th className="w-[100px] text-right"><span className="sr-only">Actions</span></th></tr></thead>
                 <tbody>
-                  {visibleAgents.map((agent) => {
+                  {shownAgents.rows.map((agent) => {
                     const key = `${agent.carrierId}|${agent.agentIdentifier}`;
                     return (
                       <tr key={key}>
@@ -155,7 +163,7 @@ export function PolicyMatchingWorkspace({ reviews, links, unmapped, mapped, memb
                       </tr>
                     );
                   })}
-                  {mapped.filter((m) => has(m.agentIdentifier, m.carrierName, m.userName)).map((m) => (
+                  {shownAgents.current === shownAgents.pages && mapped.filter((m) => has(m.agentIdentifier, m.carrierName, m.userName)).map((m) => (
                     <tr key={m.id}>
                       <td className="font-mono text-xs text-foreground">{m.agentIdentifier}</td>
                       <td>{m.carrierName}</td>

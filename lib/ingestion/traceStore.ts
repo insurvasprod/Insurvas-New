@@ -40,8 +40,11 @@ export type FileTrace = {
   supersededBy: string | null;
   rows: Array<{ rowNumber: number; preview: string[]; produced: string | null }>;
   headers: string[];
+  /** How many of the file's columns the rows table shows (the rest open on the row's own page). */
+  columnCount: number;
   page: number;
   pages: number;
+  pageSize: number;
 };
 
 export async function loadFileTrace(tenantId: string, fileId: string, page = 1): Promise<FileTrace | null> {
@@ -52,7 +55,8 @@ export async function loadFileTrace(tenantId: string, fileId: string, page = 1):
   const at = Math.min(Math.max(1, page), pages);
   const from = (at - 1) * ROWS_PER_PAGE;
   const columns = ((f.raw_columns ?? []) as RawColumnView[]).filter((c) => c.header.trim() !== "");
-  const preview = columns.slice(0, 4);
+  // Enough columns to recognise a row at a glance; every column is on the row's own page.
+  const preview = columns.slice(0, 8);
   const [carrier, map, raw] = await Promise.all([
     f.carrier_id ? db().from("carriers").select("name").eq("id", f.carrier_id).maybeSingle() : { data: null },
     f.parser_id ? db().from("carrier_layout_map").select("id, name, version").eq("id", f.parser_id).maybeSingle() : { data: null },
@@ -73,9 +77,11 @@ export async function loadFileTrace(tenantId: string, fileId: string, page = 1):
     map: map.data ? { id: map.data.id, name: map.data.name, version: map.data.version } : null,
     parsedAt: f.parsed_at, rowCount: f.row_count, parsedRows: f.parsed_row_count, heldRows: f.held_row_count, supersededBy: f.superseded_by_file_id,
     headers: preview.map((c) => c.header),
+    columnCount: columns.length,
     rows: rawRows.map((r) => ({ rowNumber: r.row_number, preview: preview.map((c) => String(r.payload?.[c.key] ?? "")), produced: producedBy.get(r.id) ?? null })),
     page: at,
     pages,
+    pageSize: ROWS_PER_PAGE,
   };
 }
 
@@ -83,6 +89,11 @@ export type RowTrace = {
   file: { id: string; name: string; carrierName: string | null; fileType: string | null; fileDate: string | null; source: string; contentHash: string; status: string };
   rowNumber: number;
   rowCount: number | null;
+  /** The row's place among the file's rows (1-based): row numbers are the sheet's, so a header makes them start at 2. */
+  position: number | null;
+  /** The sheet row numbers of the rows before and after this one, or null at either end. */
+  prevRow: number | null;
+  nextRow: number | null;
   map: { name: string; version: number; layoutKey: string } | null;
   columns: ColumnTrace[];
   missingFields: MapEntryView[];
@@ -97,12 +108,15 @@ export async function loadRowTrace(tenantId: string, fileId: string, rowNumber: 
   ]);
   if (error) throw new Error(`Could not load the file: ${error.message}`);
   if (!f || !raw) return null;
-  const [carrier, map, entries, snapshot, lines] = await Promise.all([
+  const [carrier, map, entries, snapshot, lines, before, after, earlier] = await Promise.all([
     f.carrier_id ? db().from("carriers").select("name").eq("id", f.carrier_id).maybeSingle() : { data: null },
     f.parser_id ? db().from("carrier_layout_map").select("name, version, layout_key").eq("id", f.parser_id).maybeSingle() : { data: null },
     f.parser_id ? db().from("carrier_layout_map_entry").select("source_column, target_field, data_type, transform, required, sort_order").eq("map_id", f.parser_id).order("sort_order") : { data: [] },
     db().from("policy_snapshot").select("id, policy_number, carrier_id, snapshot_date, superseded, extra, carrier_status_raw, status_normalized, paid_to_date, effective_date, issue_date, application_date, termination_date, premium_cents, premium_mode, payment_method, face_amount_cents, product_code, product_tier, agent_identifier").eq("tenant_id", tenantId).eq("file_id", fileId).eq("raw_row_id", raw.id).maybeSingle(),
     db().from("commission_entry").select("id, entry_type, corrects_type, amount_cents, policy_number, carrier_id, transaction_date, statement_date, rate_bp, commissionable_premium_cents, months_advanced, agent_identifier, payee_level").eq("tenant_id", tenantId).eq("file_id", fileId).eq("raw_row_id", raw.id).order("created_at"),
+    db().from("raw_rows").select("row_number").eq("tenant_id", tenantId).eq("file_id", fileId).lt("row_number", rowNumber).order("row_number", { ascending: false }).limit(1),
+    db().from("raw_rows").select("row_number").eq("tenant_id", tenantId).eq("file_id", fileId).gt("row_number", rowNumber).order("row_number").limit(1),
+    db().from("raw_rows").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId).eq("file_id", fileId).lt("row_number", rowNumber),
   ]);
   const mapEntries: MapEntryView[] = ((entries.data ?? []) as Loose[]).map((e) => ({ sourceColumn: e.source_column, targetField: e.target_field, dataType: e.data_type, transform: e.transform, required: Boolean(e.required) }));
   const columns = ((f.raw_columns ?? []) as RawColumnView[]).filter((c) => c.header.trim() !== "");
@@ -116,6 +130,9 @@ export async function loadRowTrace(tenantId: string, fileId: string, rowNumber: 
     file: { id: f.id, name: f.original_filename, carrierName: carrier.data?.name ?? null, fileType: f.file_type, fileDate: f.file_date, source: f.source, contentHash: f.content_hash, status: f.status },
     rowNumber: raw.row_number,
     rowCount: f.row_count,
+    position: typeof earlier.count === "number" ? earlier.count + 1 : null,
+    prevRow: (before.data as Loose[] | null)?.[0]?.row_number ?? null,
+    nextRow: (after.data as Loose[] | null)?.[0]?.row_number ?? null,
     map: map.data ? { name: map.data.name, version: map.data.version, layoutKey: map.data.layout_key } : null,
     columns: columnTrace(columns, raw.payload ?? {}, mapEntries, stored, s?.extra ?? null),
     missingFields: unmatchedFields(columns, mapEntries),

@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { EmptyState } from "@/components/ui/page-states";
+import { Pager, paginate } from "@/components/ui/pager";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 import { FILE_TYPE_LABELS, FILE_TYPES, type CarrierFileType } from "@/lib/ingestion/constants";
@@ -115,6 +116,8 @@ export function LayoutMapsReview({ initialMaps, initialAssignments, carriers, no
   const [assign, setAssign] = useState({ carrierId: "", fileType: "policies" as CarrierFileType, layoutKey: "" });
   const [waiting, setWaiting] = useState<WaitingFile[]>([]);
   const [unmatched, setUnmatched] = useState<string[]>([]);
+  const [layoutPage, setLayoutPage] = useState(1);
+  const [assignmentPage, setAssignmentPage] = useState(1);
 
   const layouts = useMemo(() => {
     const byKey = new Map<string, LayoutMapView[]>();
@@ -124,6 +127,8 @@ export function LayoutMapsReview({ initialMaps, initialAssignments, carriers, no
       return { key, name: sorted[0].name, fileType: sorted[0].fileType, versions: sorted, live: sorted.find((map) => map.status === "published") ?? null, draft: sorted.find((map) => map.status === "draft" || map.status === "in_review") ?? null };
     });
   }, [maps]);
+  const shownLayouts = paginate(layouts, layoutPage, 25);
+  const shownAssignments = paginate(assignments, assignmentPage, 25);
   const open = maps.find((map) => map.id === openId) ?? null;
   const editable = open?.status === "draft" || open?.status === "in_review";
 
@@ -232,7 +237,7 @@ export function LayoutMapsReview({ initialMaps, initialAssignments, carriers, no
 
       {notice && <div role="status" className="rounded-lg border border-border border-l-[3px] border-l-[var(--warning)] bg-[var(--warning-surface)] px-4 py-3 text-sm text-[var(--warning-ink)]">{notice}</div>}
 
-      <TableCard title="Layouts">
+      <TableCard title="Layouts" footer={layouts.length > 25 ? <Pager page={shownLayouts.current} pageSize={25} total={layouts.length} noun="layouts" onPage={setLayoutPage} /> : undefined}>
         {layouts.length === 0 ? (
           <EmptyState title="No layout maps yet" hint="Layouts are written from real carrier sample files; until one is published for a carrier, its files wait." />
         ) : (
@@ -248,7 +253,7 @@ export function LayoutMapsReview({ initialMaps, initialAssignments, carriers, no
               </tr>
             </thead>
             <tbody>
-              {layouts.map((layout) => {
+              {shownLayouts.rows.map((layout) => {
                 const using = assignments.filter((row) => row.layoutKey === layout.key).map((row) => row.carrierName);
                 return (
                   <tr key={layout.key}>
@@ -395,6 +400,7 @@ export function LayoutMapsReview({ initialMaps, initialAssignments, carriers, no
             <Button type="submit" variant="outline" disabled={busy !== null || !assign.carrierId || !assign.layoutKey}>{busy === "assign" ? "Saving…" : "Assign"}</Button>
           </form>
         }
+        footer={assignments.length > 25 ? <Pager page={shownAssignments.current} pageSize={25} total={assignments.length} noun="assignments" onPage={setAssignmentPage} /> : undefined}
       >
         {assignments.length === 0 ? (
           <EmptyState title="No carrier assigned a layout" hint="Assign a layout to a carrier and file type once the layout is written." />
@@ -404,7 +410,7 @@ export function LayoutMapsReview({ initialMaps, initialAssignments, carriers, no
               <tr><th>Carrier</th><th className="w-[140px]">File type</th><th>Layout</th><th className="w-[110px] text-right"><span className="sr-only">Actions</span></th></tr>
             </thead>
             <tbody>
-              {assignments.map((row) => (
+              {shownAssignments.rows.map((row) => (
                 <tr key={row.id}>
                   <td className="font-semibold text-foreground">{row.carrierName}</td>
                   <td>{FILE_TYPE_LABELS[row.fileType as CarrierFileType] ?? row.fileType}</td>

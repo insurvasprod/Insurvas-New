@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 
 import { ClearFiltersButton, DataToolbar, RefreshButton, toolbarControl } from "@/components/ui/data-toolbar";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
+import { Pager, paginate } from "@/components/ui/pager";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
@@ -39,9 +40,11 @@ export function RetentionBoard({ rows, rates, readOnly }: { rows: BoardEntry[]; 
   const [reason, setReason] = useState("");
   const [carrier, setCarrier] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
 
   const carriers = useMemo(() => [...new Map(rows.map((r) => [r.carrierId, r.carrierName])).entries()].sort((a, b) => a[1].localeCompare(b[1])), [rows]);
   const visible = useMemo(() => rows.filter((r) => (!reason || r.reason === reason) && (!carrier || r.carrierId === carrier)), [rows, reason, carrier]);
+  const shown = paginate(visible, page, 25);
   const today = rows.filter((r) => r.daysLeft !== null && r.daysLeft <= 3).length;
   const atRisk = rows.reduce((sum, r) => sum + (r.atRiskCents ?? 0), 0);
   const unknownRisk = rows.filter((r) => r.atRiskCents === null && r.group !== "prevention").length;
@@ -79,15 +82,15 @@ export function RetentionBoard({ rows, rates, readOnly }: { rows: BoardEntry[]; 
       <TableCard
         toolbar={
           <DataToolbar actions={<>
-            {(reason || carrier) && <ClearFiltersButton onClick={() => { setReason(""); setCarrier(""); }} />}
+            {(reason || carrier) && <ClearFiltersButton onClick={() => { setReason(""); setCarrier(""); setPage(1); }} />}
             <RefreshButton onClick={() => startRefresh(() => router.refresh())} refreshing={refreshing} />
           </>}>
-            <select aria-label="Filter by reason" className={toolbarControl} value={reason} onChange={(e) => setReason(e.target.value)}>
+            <select aria-label="Filter by reason" className={toolbarControl} value={reason} onChange={(e) => { setReason(e.target.value); setPage(1); }}>
               <option value="">Every reason</option>
               {REASONS.map((r) => <option key={r} value={r}>{REASON_LABELS[r]}</option>)}
             </select>
             {carriers.length > 1 && (
-              <select aria-label="Filter by carrier" className={toolbarControl} value={carrier} onChange={(e) => setCarrier(e.target.value)}>
+              <select aria-label="Filter by carrier" className={toolbarControl} value={carrier} onChange={(e) => { setCarrier(e.target.value); setPage(1); }}>
                 <option value="">All carriers</option>
                 {carriers.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
               </select>
@@ -95,11 +98,12 @@ export function RetentionBoard({ rows, rates, readOnly }: { rows: BoardEntry[]; 
             <span className="text-sm text-muted-foreground">Soonest deadline first, then the most money</span>
           </DataToolbar>
         }
+        footer={visible.length > 25 ? <Pager page={shown.current} pageSize={25} total={visible.length} noun="policies" onPage={setPage} /> : undefined}
       >
         {rows.length === 0 ? (
           <EmptyState title="Nobody to call" hint="Policies appear here when a carrier file shows a missed or bounced draft, a conservation notice, a request to cancel, a recent lapse that can still be reinstated, or a mailed bill worth converting." />
         ) : visible.length === 0 ? (
-          <NoMatches noun="policies" onClear={() => { setReason(""); setCarrier(""); }} />
+          <NoMatches noun="policies" onClear={() => { setReason(""); setCarrier(""); setPage(1); }} />
         ) : (
           <table className="portal-lead-table w-full min-w-[980px] text-left text-sm">
             <thead>
@@ -114,7 +118,7 @@ export function RetentionBoard({ rows, rates, readOnly }: { rows: BoardEntry[]; 
               </tr>
             </thead>
             <tbody>
-              {visible.flatMap((row) => {
+              {shown.rows.flatMap((row) => {
                 const out = [];
                 if (row.group !== lastGroup) {
                   lastGroup = row.group;

@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { ClearFiltersButton, DataToolbar, RefreshButton, toolbarControl } from "@/components/ui/data-toolbar";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
+import { Pager, paginate } from "@/components/ui/pager";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 import { AGENT_INFO, AGENTS, type AgentName } from "@/lib/ingestion/agents";
@@ -46,6 +47,8 @@ export function PipelineRuns({ runs, available, canRun }: { runs: RunRow[]; avai
   const [refreshing, startRefresh] = useTransition();
   const [busy, setBusy] = useState(false);
   const [open, setOpen] = useState<string | null>(runs[0]?.id ?? null);
+  const [page, setPage] = useState(1);
+  const shown = paginate(runs, page, 25);
 
   async function runNow() {
     setBusy(true);
@@ -70,6 +73,7 @@ export function PipelineRuns({ runs, available, canRun }: { runs: RunRow[]; avai
           <span className="text-sm text-muted-foreground">Each file goes through {FILE_STAGES.map((s) => STAGE_LABELS[s]).join(", ")}, then the day is analysed</span>
         </DataToolbar>
       }
+      footer={available && runs.length > 25 ? <Pager page={shown.current} pageSize={25} total={runs.length} noun="runs" onPage={setPage} /> : undefined}
     >
       {!available ? <EmptyState title="Run history isn't available yet" hint="It appears once the database update (20261008280000) is applied." />
         : runs.length === 0 ? <EmptyState title="No run yet" hint="A run starts when a file arrives, every five minutes for anything waiting, or with Run now." />
@@ -77,7 +81,7 @@ export function PipelineRuns({ runs, available, canRun }: { runs: RunRow[]; avai
           <table className="portal-lead-table w-full min-w-[900px] text-left text-sm">
             <thead><tr><th className="w-[170px]">Started</th><th className="w-[140px]">Why</th><th className="w-[120px]">Result</th><th className="w-[160px] text-right">Files</th><th>Notes</th></tr></thead>
             <tbody>
-              {runs.map((run) => (
+              {shown.rows.map((run) => (
                 <Fragment key={run.id}>
                   <tr>
                     <td className="font-semibold text-foreground"><button type="button" className="text-left hover:underline" aria-expanded={open === run.id} onClick={() => setOpen(open === run.id ? null : run.id)}>{when(run.startedAt)}</button></td>
@@ -117,7 +121,9 @@ export function AgentFindings({ findings, accuracy, available, canReview }: { fi
   const [agent, setAgent] = useState("");
   const [status, setStatus] = useState("open");
   const [busy, setBusy] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
   const visible = useMemo(() => findings.filter((f) => (!agent || f.agent === agent) && (!status || f.status === status)), [findings, agent, status]);
+  const shown = paginate(visible, page, 25);
 
   async function review(id: string, verdict: "approved" | "rejected") {
     setBusy(id);
@@ -132,22 +138,23 @@ export function AgentFindings({ findings, accuracy, available, canReview }: { fi
     }
   }
 
-  const clear = () => { setAgent(""); setStatus("open"); };
+  const clear = () => { setAgent(""); setStatus("open"); setPage(1); };
   return (
     <>
       <TableCard
         toolbar={
           <DataToolbar actions={<>{(agent || status !== "open") && <ClearFiltersButton onClick={clear} />}<RefreshButton onClick={() => startRefresh(() => router.refresh())} refreshing={refreshing} /></>}>
-            <select aria-label="Filter by agent" className={toolbarControl} value={agent} onChange={(e) => setAgent(e.target.value)}>
+            <select aria-label="Filter by agent" className={toolbarControl} value={agent} onChange={(e) => { setAgent(e.target.value); setPage(1); }}>
               <option value="">Every agent</option>
               {AGENTS.map((a) => <option key={a} value={a}>{AGENT_INFO[a].label}</option>)}
             </select>
-            <select aria-label="Filter by status" className={toolbarControl} value={status} onChange={(e) => setStatus(e.target.value)}>
+            <select aria-label="Filter by status" className={toolbarControl} value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }}>
               <option value="">Any status</option>
               {Object.entries(STATUS_WORD).map(([key, word]) => <option key={key} value={key}>{word}</option>)}
             </select>
           </DataToolbar>
         }
+        footer={available && visible.length > 25 ? <Pager page={shown.current} pageSize={25} total={visible.length} noun="findings" onPage={setPage} /> : undefined}
       >
         {!available ? <EmptyState title="Findings aren't available yet" hint="They appear once the database update (20261008280000) is applied." />
           : findings.length === 0 ? <EmptyState title="No findings yet" hint="Agents note what they see in each run: a missing file, an unknown column, a status nobody has mapped." />
@@ -156,7 +163,7 @@ export function AgentFindings({ findings, accuracy, available, canReview }: { fi
             <table className="portal-lead-table w-full min-w-[980px] text-left text-sm">
               <thead><tr><th className="w-[160px]">Agent</th><th>What it saw</th><th className="w-[110px]">Severity</th><th className="w-[130px]">When</th><th className="w-[200px] text-right">Was it right?</th></tr></thead>
               <tbody>
-                {visible.map((f) => (
+                {shown.rows.map((f) => (
                   <tr key={f.id}>
                     <td><span className="block font-semibold text-foreground">{f.agentLabel}</span><span className="block text-xs text-muted-foreground">{f.modelId ? `${f.modelId} · prompt ${f.promptVersion}` : "No model: a fixed check"}</span></td>
                     <td><span className="block text-foreground">{f.reasoning}</span>{f.fileName && <span className="block text-xs text-muted-foreground">{f.fileName}</span>}{f.confidence !== null && <span className="block text-xs text-muted-foreground">Confidence {Math.round(f.confidence * 100)}%</span>}</td>

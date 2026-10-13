@@ -15,6 +15,8 @@ import { PdfBalanceReview } from "@/components/app/pdf-balance-review";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/page-states";
+import { Pager } from "@/components/ui/pager";
+import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 
 /**
@@ -65,25 +67,30 @@ export default async function CarrierFilePage({ params, searchParams }: { params
 
       <TableCard
         title="Rows"
-        footer={file.pages > 1 ? (
-          <span className="flex w-full items-center justify-between">
-            <span>Page {file.page} of {file.pages}</span>
-            <span className="flex gap-3">
-              {file.page > 1 && <Link className="font-semibold text-[var(--accent-ink)] hover:underline" href={`?page=${file.page - 1}`}>Previous</Link>}
-              {file.page < file.pages && <Link className="font-semibold text-[var(--accent-ink)] hover:underline" href={`?page=${file.page + 1}`}>Next</Link>}
-            </span>
-          </span>
-        ) : undefined}
+        description={file.rowCount ? `As the carrier sent them${file.columnCount > file.headers.length ? `: the first ${file.headers.length} of ${file.columnCount} columns here, every column on a row's own page` : ""}.` : undefined}
+        footer={file.rowCount ? <Pager page={file.page} pageSize={file.pageSize} total={file.rowCount} noun="rows" pageHref="?" /> : undefined}
       >
         {file.rows.length === 0 ? <EmptyState title="No rows kept" hint={file.fileKind === "pdf" ? "A PDF is read with its carrier's PDF layout: its rows are kept once one is published." : "The rows are kept once the file is read."} /> : (
-          <table className="portal-lead-table w-full min-w-[820px] text-left text-sm">
-            <thead><tr><th className="w-[80px] text-right">Row</th>{file.headers.map((h) => <th key={h}>{h}</th>)}<th>Became</th></tr></thead>
+          <table className="portal-lead-table w-full min-w-[960px] text-left text-sm">
+            <thead>
+              <tr>
+                <th className="sticky left-0 z-[2] w-[76px] bg-[var(--surface-alt)] text-right">Row</th>
+                {file.headers.map((h) => <th key={h} className="max-w-[180px] truncate" title={h}>{h}</th>)}
+                <th className="w-[200px]">Became</th>
+              </tr>
+            </thead>
             <tbody>
               {file.rows.map((r) => (
-                <tr key={r.rowNumber}>
-                  <td className="text-right tabular-nums"><Link href={rowHref(file.id, r.rowNumber)} className="font-semibold text-[var(--accent-ink)] hover:underline">{r.rowNumber}</Link></td>
-                  {r.preview.map((v, i) => <td key={i} className="max-w-[200px] truncate font-mono text-xs" title={v}>{v}</td>)}
-                  <td className="text-xs">{r.produced ?? <span className="text-muted-foreground">Nothing (held, or not read)</span>}</td>
+                <tr key={r.rowNumber} className="group">
+                  <td className="sticky left-0 z-[1] bg-[var(--surface)] text-right group-hover:bg-[var(--surface-alt)]">
+                    <Link href={rowHref(file.id, r.rowNumber)} className="inline-flex h-7 min-w-9 items-center justify-center rounded-full border border-border px-2 text-xs font-semibold tabular-nums text-[var(--accent-ink)] hover:border-[var(--border-strong)] hover:bg-[var(--primary-soft)]" aria-label={`Open row ${r.rowNumber}`}>{r.rowNumber}</Link>
+                  </td>
+                  {r.preview.map((v, i) => <td key={i} className="max-w-[180px] truncate font-mono text-xs" title={v}>{v === "" ? <span className="font-sans text-muted-foreground">—</span> : v}</td>)}
+                  <td className="text-xs">
+                    {r.produced
+                      ? <StatusChip tone={r.produced.startsWith("Policy") ? "good" : "info"}>{r.produced}</StatusChip>
+                      : <StatusChip tone="neutral">Held, or not read</StatusChip>}
+                  </td>
                 </tr>
               ))}
             </tbody>

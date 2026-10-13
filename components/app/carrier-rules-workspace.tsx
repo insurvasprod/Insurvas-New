@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
+import { Pager, paginate } from "@/components/ui/pager";
 import { TableCard } from "@/components/ui/table-card";
 import { CADENCES, COMMISSION_TRIGGERS, RULE_SOURCE_LABELS, RULE_SOURCES, RULE_TYPE_LABELS, RULE_TYPES, STATEMENT_FORMATS, type ResolvedRule, type RuleSource, type RuleType } from "@/lib/ingestion/carrierRules";
 import type { CarrierRulesRow } from "@/lib/ingestion/carrierRulesStore";
@@ -58,8 +59,10 @@ export function CarrierRulesWorkspace({ carriers, plane, endpoint, readOnly, asO
   const [busy, setBusy] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, Record<string, string>>>({});
   const [editing, setEditing] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
 
   const visible = useMemo(() => carriers.filter((row) => (!query.trim() || row.carrierName.toLowerCase().includes(query.trim().toLowerCase())) && (!gapsOnly || row.gaps.length > 0)), [carriers, query, gapsOnly]);
+  const shown = paginate(visible, page, 25);
   const open = carriers.find((row) => row.carrierId === openId) ?? null;
 
   async function post(key: string, body: Record<string, unknown>, done: string) {
@@ -86,18 +89,19 @@ export function CarrierRulesWorkspace({ carriers, plane, endpoint, readOnly, asO
       <TableCard
         toolbar={
           <DataToolbar actions={<>
-            {(query.trim() || gapsOnly) && <ClearFiltersButton onClick={() => { setQuery(""); setGapsOnly(false); }} />}
+            {(query.trim() || gapsOnly) && <ClearFiltersButton onClick={() => { setQuery(""); setGapsOnly(false); setPage(1); }} />}
             <RefreshButton onClick={() => startRefresh(() => router.refresh())} refreshing={refreshing} />
           </>}>
-            <ToolbarSearch value={query} onChange={setQuery} placeholder="Search carriers" />
-            <ToolbarCheckbox checked={gapsOnly} onChange={setGapsOnly} label="Only carriers with a missing rule" />
+            <ToolbarSearch value={query} onChange={(value) => { setQuery(value); setPage(1); }} placeholder="Search carriers" />
+            <ToolbarCheckbox checked={gapsOnly} onChange={(value) => { setGapsOnly(value); setPage(1); }} label="Only carriers with a missing rule" />
           </DataToolbar>
         }
+        footer={visible.length > 25 ? <Pager page={shown.current} pageSize={25} total={visible.length} noun="carriers" onPage={setPage} /> : undefined}
       >
         {carriers.length === 0 ? (
           <EmptyState title="No carriers in the library" hint="Carriers come from the platform's carrier library." />
         ) : visible.length === 0 ? (
-          <NoMatches noun="carriers" onClear={() => { setQuery(""); setGapsOnly(false); }} />
+          <NoMatches noun="carriers" onClear={() => { setQuery(""); setGapsOnly(false); setPage(1); }} />
         ) : (
           <table className="portal-lead-table w-full min-w-[900px] text-left text-sm">
             <thead>
@@ -112,7 +116,7 @@ export function CarrierRulesWorkspace({ carriers, plane, endpoint, readOnly, asO
               </tr>
             </thead>
             <tbody>
-              {visible.map((row) => (
+              {shown.rows.map((row) => (
                 <tr key={row.carrierId}>
                   <td><span className="block whitespace-normal break-words font-semibold leading-snug text-foreground">{row.carrierName}</span></td>
                   {RULE_TYPES.map((type) => <td key={type}>{ruleCell(row.rules[type])}</td>)}
