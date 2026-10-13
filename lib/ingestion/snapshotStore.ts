@@ -32,6 +32,8 @@ type Loose = any;
 const db = (): Loose => getSupabaseServiceClient();
 
 const POLICY_CHUNK = 200;
+/** Postgres cancelling a statement for its time limit (57014): a busy moment, worth one more try. */
+const STATEMENT_TIMEOUT = /statement timeout|canceling statement/i;
 
 export type SnapshotOutcome = { available: boolean; changed: number; snapshots: number; policies: number; duplicates: number };
 
@@ -95,14 +97,22 @@ export async function storeFileSnapshots(tenantId: string, fileId: string, typed
 
   // The columns the map did not read go into each snapshot's `extra`, so no field is ever dropped.
   const { data: entries } = file.parser_id ? await db().from("carrier_layout_map_entry").select("source_column").eq("map_id", file.parser_id) : { data: [] };
-  const read = new Set(((entries ?? []) as Array<{ source_column: string }>).map((entry) => entry.source_column));
-  const columns = ((file.raw_columns ?? []) as RawColumn[]).filter((column) => column.header.trim() !== "" && !read.has(column.header));
+  // Spaces around a header ignored, as the parser matches them (layout.ts parseWithMap).
+  const read = new Set(((entries ?? []) as Array<{ source_column: string }>).flatMap((entry) => entry.source_column.split(" + ")).map((name) => name.trim()));
+  const columns = ((file.raw_columns ?? []) as RawColumn[]).filter((column) => column.header.trim() !== "" && !read.has(column.header.trim()));
   const { ids, payloads } = await rawRowIndex(tenantId, fileId);
   const unreadColumnsOf = (rowNumber: number) => Object.fromEntries(columns.map((column) => [column.header, payloads.get(rowNumber)?.[column.key] ?? ""]));
 
   const { snapshots, duplicates } = snapshotsForFile(typedRows, ids, unreadColumnsOf);
   const rows = snapshots.map((snapshot) => ({ ...snapshot, content_hash: createHash("sha256").update(snapshotContent(snapshot)).digest("hex") }));
-  const { data: replaced, error: replaceError } = await db().rpc("replace_file_snapshots", { p_tenant_id: tenantId, p_file_id: fileId, p_rows: rows });
+  // One transaction, so a write cut off by the statement timeout changed nothing and is tried again:
+  // 990 AHL rows timed out on 2026-10-13 only while six other files were being written at once.
+  let { data: replaced, error: replaceError } = await db().rpc("replace_file_snapshots", { p_tenant_id: tenantId, p_file_id: fileId, p_rows: rows });
+  for (const pause of [2_000, 6_000]) {
+    if (!replaceError || !STATEMENT_TIMEOUT.test(replaceError.message ?? "")) break;
+    await new Promise((resolve) => setTimeout(resolve, pause));
+    ({ data: replaced, error: replaceError } = await db().rpc("replace_file_snapshots", { p_tenant_id: tenantId, p_file_id: fileId, p_rows: rows }));
+  }
   if (replaceError) {
     if (isSchemaGap(replaceError)) return { ...none, available: false };
     throw new Error(`The file's snapshots could not be written: ${replaceError.message}`);
