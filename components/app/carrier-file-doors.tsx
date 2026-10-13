@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { toolbarControl } from "@/components/ui/data-toolbar";
 import { Input } from "@/components/ui/input";
 import { EmptyState } from "@/components/ui/page-states";
-import { TableCard } from "@/components/ui/table-card";
+import { PagedBody, PagedTableCard } from "@/components/ui/paged";
 import type { CarrierChoice } from "@/lib/ingestion/path";
 import type { SenderRow } from "@/lib/ingestion/registry";
 
@@ -71,7 +71,9 @@ export function CarrierFileDoors({
     <div className="flex flex-col gap-6">
       {problem && <p role="alert" className="rounded-lg border border-border border-l-[3px] border-l-[var(--error)] bg-[var(--error-surface)] px-4 py-3 text-sm text-[var(--error-ink)]">{problem}</p>}
 
-      <TableCard
+      <PagedTableCard
+        total={senders.length}
+        noun="senders"
         title="Email"
         description={
           !addressConfigured
@@ -123,7 +125,7 @@ export function CarrierFileDoors({
                 <th className="w-[110px] text-right"><span className="sr-only">Actions</span></th>
               </tr>
             </thead>
-            <tbody>
+            <PagedBody>
               {senders.map((row) => (
                 <tr key={row.id}>
                   <td className="font-semibold text-foreground">{row.sender}</td>
@@ -138,10 +140,10 @@ export function CarrierFileDoors({
                   </td>
                 </tr>
               ))}
-            </tbody>
+            </PagedBody>
           </table>
         )}
-      </TableCard>
+      </PagedTableCard>
 
     </div>
   );

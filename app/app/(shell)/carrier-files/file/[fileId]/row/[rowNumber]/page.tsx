@@ -17,6 +17,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/page-states";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip } from "@/components/ui/status-chip";
+import { PagedBody, PagedTableCard } from "@/components/ui/paged";
 import { TableCard } from "@/components/ui/table-card";
 
 /**
@@ -82,11 +83,11 @@ export default async function RawRowPage({ params }: { params: Promise<{ fileId:
         </div>
       </TableCard>
 
-      <TableCard title="Read by the layout" description="Each column the layout map reads, the field it fills and the value kept.">
+      <PagedTableCard total={read.length} noun="columns" title="Read by the layout" description="Each column the layout map reads, the field it fills and the value kept.">
         {read.length === 0 ? <EmptyState title="No column of this row is read" hint={row.map ? "The layout map reads none of this file's columns." : "The file has no layout map yet."} /> : (
           <table className="portal-lead-table w-full min-w-[860px] text-left text-sm">
             <thead><tr><th className="w-[70px]">Column</th><th className="w-[200px]">Header</th><th>Value as sent</th><th className="w-[230px]">Becomes</th><th>Kept as</th></tr></thead>
-            <tbody>
+            <PagedBody>
               {read.map((c) => (
                 <tr key={c.column + c.header}>
                   <td>{columnChip(c.column)}</td>
@@ -99,7 +100,7 @@ export default async function RawRowPage({ params }: { params: Promise<{ fileId:
                   <td className="max-w-[200px] truncate font-mono text-xs" title={c.stored ?? undefined}>{c.stored ?? (c.becameField?.startsWith("insured_") ? <span className="font-sans text-muted-foreground">Used to match the client, not kept on the policy</span> : <span className="text-muted-foreground">—</span>)}</td>
                 </tr>
               ))}
-            </tbody>
+            </PagedBody>
           </table>
         )}
         {row.missingFields.length > 0 && (
@@ -107,13 +108,13 @@ export default async function RawRowPage({ params }: { params: Promise<{ fileId:
             The map also reads {row.missingFields.map((f) => `${f.targetField} from “${f.sourceColumn}”`).join(", ")}, and this file has no such column.
           </p>
         )}
-      </TableCard>
+      </PagedTableCard>
 
       {unread.length > 0 && (
-        <TableCard title="Kept, not read" description={row.snapshot ? "Columns the layout doesn't read, kept with the row and the policy snapshot." : "Columns the layout doesn't read, kept with the row."}>
+        <PagedTableCard total={unread.length} noun="columns" title="Kept, not read" description={row.snapshot ? "Columns the layout doesn't read, kept with the row and the policy snapshot." : "Columns the layout doesn't read, kept with the row."}>
           <table className="portal-lead-table w-full min-w-[640px] text-left text-sm">
             <thead><tr><th className="w-[70px]">Column</th><th className="w-[260px]">Header</th><th>Value as sent</th></tr></thead>
-            <tbody>
+            <PagedBody>
               {unread.map((c) => (
                 <tr key={c.column + c.header}>
                   <td>{columnChip(c.column)}</td>
@@ -121,9 +122,9 @@ export default async function RawRowPage({ params }: { params: Promise<{ fileId:
                   <td className="max-w-[420px] truncate font-mono text-xs" title={c.value}>{c.value === "" ? <span className="font-sans text-muted-foreground">(empty)</span> : c.value}</td>
                 </tr>
               ))}
-            </tbody>
+            </PagedBody>
           </table>
-        </TableCard>
+        </PagedTableCard>
       )}
     </div>
   );

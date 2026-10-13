@@ -11,6 +11,8 @@ import { Label } from "@/components/ui/label";
 import { EmptyState } from "@/components/ui/page-states";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip } from "@/components/ui/status-chip";
+import { PagedBody, PagedTableCard } from "@/components/ui/paged";
+import { Pager, paginate } from "@/components/ui/pager";
 import { TableCard } from "@/components/ui/table-card";
 import { accountTrend, statementProblem, type StatementCheck } from "@/lib/ingestion/carrierAccounts";
 import { fileDay } from "@/lib/ingestion/constants";
@@ -55,6 +57,9 @@ export function CarrierAccounts({ statements, orphans, files, carriers, readOnly
   const gaps = byCarrier.reduce((sum, c) => sum + c.gaps, 0);
   const orphanCents = orphans.reduce((sum, o) => sum + o.amountCents, 0);
   const carrierFiles = files.filter((f) => f.carrierId === form.carrier);
+  const [page, setPage] = useState(1);
+  const statementRows = byCarrier.flatMap((carrier) => carrier.rows.map((s, index) => ({ carrier, s, index })));
+  const shown = paginate(statementRows, page);
 
   async function save() {
     const opening = toCents(form.opening ?? "");
@@ -101,6 +106,7 @@ export function CarrierAccounts({ statements, orphans, files, carriers, readOnly
             <span className="text-sm text-muted-foreground">Oldest statement first, per carrier</span>
           </DataToolbar>
         }
+        footer={statementRows.length > 10 ? <Pager page={shown.current} total={statementRows.length} noun="statements" onPage={setPage} /> : undefined}
       >
         {byCarrier.length === 0 ? (
           <EmptyState title="No statement totals yet" hint="Each carrier statement starts with its account: opening balance, activity, closing balance. Add those for a commission file to check that it adds up and to follow the balance from one statement to the next." />
@@ -119,11 +125,12 @@ export function CarrierAccounts({ statements, orphans, files, carriers, readOnly
               </tr>
             </thead>
             <tbody>
-              {byCarrier.flatMap((carrier) => carrier.rows.map((s, index) => {
+              {shown.rows.map(({ carrier, s, index }, position) => {
                 const problem = statementProblem(s);
+                // A carrier's name heads its first statement, and the first row of a page.
                 return (
                   <tr key={s.id}>
-                    <td className="font-semibold text-foreground">{index === 0 ? carrier.carrierName : ""}{index === 0 && carrier.growingDebit && <span className="block text-xs font-normal text-[var(--error-ink)]">debit growing{carrier.fallingFor > 1 ? ` for ${carrier.fallingFor} statements` : ""}</span>}</td>
+                    <td className="font-semibold text-foreground">{index === 0 || position === 0 ? carrier.carrierName : ""}{index === 0 && carrier.growingDebit && <span className="block text-xs font-normal text-[var(--error-ink)]">debit growing{carrier.fallingFor > 1 ? ` for ${carrier.fallingFor} statements` : ""}</span>}</td>
                     <td className="tabular-nums">{fileDay(s.statementDate)}</td>
                     <td className="text-right tabular-nums">{signed(s.openingCents)}</td>
                     <td className="text-right tabular-nums" title={s.entriesCents !== null ? `Its ${s.entries} lines add up to ${signed(s.entriesCents)}` : "No commission file attached"}>{signed(s.activityCents)}</td>
@@ -140,17 +147,17 @@ export function CarrierAccounts({ statements, orphans, files, carriers, readOnly
                     </td>
                   </tr>
                 );
-              }))}
+              })}
             </tbody>
           </table>
         )}
       </TableCard>
 
       {orphans.length > 0 && (
-        <TableCard title="Commission for policies not seen yet" description={`Normal while policy files catch up; each line joins its policy the moment the policy arrives. After ${orphanDays} days a line goes to Exceptions.`}>
+        <PagedTableCard total={orphans.length} noun="carriers" title="Commission for policies not seen yet" description={`Normal while policy files catch up; each line joins its policy the moment the policy arrives. After ${orphanDays} days a line goes to Exceptions.`}>
           <table className="portal-lead-table w-full text-left text-sm">
             <thead><tr><th>Carrier</th><th className="w-[100px] text-right">Policies</th><th className="w-[100px] text-right">Lines</th><th className="w-[140px] text-right">Amount</th><th className="w-[130px]">Oldest</th><th className="w-[140px] text-right">Past {orphanDays} days</th></tr></thead>
-            <tbody>
+            <PagedBody>
               {orphans.map((o) => (
                 <tr key={o.carrierId}>
                   <td className="font-semibold text-foreground">{o.carrierName}</td>
@@ -161,9 +168,9 @@ export function CarrierAccounts({ statements, orphans, files, carriers, readOnly
                   <td className={`text-right tabular-nums ${o.pastThreshold ? "text-[var(--warning-ink)]" : "text-muted-foreground"}`}>{o.pastThreshold}</td>
                 </tr>
               ))}
-            </tbody>
+            </PagedBody>
           </table>
-        </TableCard>
+        </PagedTableCard>
       )}
 
       <Dialog open={open} onOpenChange={(next) => { if (!busy) setOpen(next); }}>

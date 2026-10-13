@@ -1,3 +1,4 @@
+import { PagedBody, PagedPager, PagedProvider } from "@/components/ui/paged";
 import { TableCard } from "@/components/ui/table-card";
 import { StatusChip } from "@/components/ui/status-chip";
 import {
@@ -53,9 +54,13 @@ export function LoginActivityTable({
   /** Board layout only: false when a TableCard already draws the card around the table. */
   framed?: boolean;
 }) {
-  if (layout === "board") return <BoardLoginTable events={events} footer={footer} empty={empty} busy={busy} hideActor={hideActor} minWidth={minWidth} framed={framed} />;
+  // Ten rows a page (owner rule, 2026-10-13). A caller that pages on the server passes ten at most,
+  // so its own footer stays; a longer list gets the shared Pager in the footer instead.
+  const pagedFooter = events.length > PAGE_SIZE ? <PagedFooter total={events.length} /> : footer;
+  if (layout === "board") return <PagedProvider><BoardLoginTable events={events} footer={pagedFooter} empty={empty} busy={busy} hideActor={hideActor} minWidth={minWidth} framed={framed} /></PagedProvider>;
 
   return (
+    <PagedProvider>
     <div className={tableShell}>
       <Table>
         <TableHeader>
@@ -78,6 +83,8 @@ export function LoginActivityTable({
               </TableCell>
             </TableRow>
           )}
+        </TableBody>
+        <PagedBody className="m-seq [&_tr:last-child]:border-0">
           {events.map((event) => (
             <TableRow key={event.id}>
               <TableCell className="text-muted-foreground">{new Date(event.ts).toLocaleString()}</TableCell>
@@ -105,9 +112,20 @@ export function LoginActivityTable({
               </TableCell>
             </TableRow>
           ))}
-        </TableBody>
+        </PagedBody>
       </Table>
-      {footer}
+      {pagedFooter}
+    </div>
+    </PagedProvider>
+  );
+}
+
+const PAGE_SIZE = 10;
+
+function PagedFooter({ total }: { total: number }) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-4 py-3 text-xs text-muted-foreground">
+      <PagedPager total={total} noun="attempts" suffix="newest first" />
     </div>
   );
 }
@@ -145,7 +163,7 @@ function BoardLoginTable({
               <th scope="col" className={cn(TH, !hideActor && "w-[240px]")}>User agent</th>
             </tr>
           </thead>
-          <tbody className="m-seq">
+          <tbody>
             {events.length === 0 && (
               <tr>
                 <td colSpan={hideActor ? 4 : 5} className="border-t border-[var(--border)] p-0">
@@ -153,6 +171,8 @@ function BoardLoginTable({
                 </td>
               </tr>
             )}
+          </tbody>
+          <PagedBody className="m-seq">
             {events.map((event) => {
               const agent = summariseUserAgent(event.user_agent);
               return (
@@ -179,7 +199,7 @@ function BoardLoginTable({
                 </tr>
               );
             })}
-          </tbody>
+          </PagedBody>
         </table>
       </div>
       <div className="flex-1" />

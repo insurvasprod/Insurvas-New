@@ -1,4 +1,4 @@
-import { TableCard } from "@/components/ui/table-card";
+import { PagedBody, PagedTableCard } from "@/components/ui/paged";
 import { dollars, type BalanceCheck } from "@/lib/ingestion/pdfLayout";
 
 const money = (cents: number | null) => (cents === null ? "not found" : dollars(cents));
@@ -30,7 +30,7 @@ export function PdfBalanceReview({ check }: { check: BalanceCheck }) {
     });
   }
   return (
-    <TableCard title="Balance check" description="The lines this statement's layout reads, beside its own totals. Nothing from it is written until they agree.">
+    <PagedTableCard total={rows.length} noun="lines" title="Balance check" description="The lines this statement's layout reads, beside its own totals. Nothing from it is written until they agree.">
       <dl className="grid gap-x-6 gap-y-2 px-4 py-3 text-sm sm:grid-cols-[260px_1fr_1fr_160px]">
         {sums.map((sum) => (
           <div key={sum.label} className="contents">
@@ -45,17 +45,17 @@ export function PdfBalanceReview({ check }: { check: BalanceCheck }) {
         <div className="overflow-x-auto border-t border-border">
           <table className="portal-lead-table w-full min-w-[820px] text-left text-sm">
             <thead><tr><th className="w-[60px] text-right">Line</th>{header.map((name) => <th key={name}>{name}</th>)}</tr></thead>
-            <tbody>
+            <PagedBody>
               {rows.map((row, index) => (
                 <tr key={index}>
                   <td className="text-right tabular-nums text-muted-foreground">{index + 1}</td>
                   {row.map((cell, at) => <td key={at} className="max-w-[220px] truncate font-mono text-xs" title={cell}>{cell}</td>)}
                 </tr>
               ))}
-            </tbody>
+            </PagedBody>
           </table>
         </div>
       )}
-    </TableCard>
+    </PagedTableCard>
   );
 }

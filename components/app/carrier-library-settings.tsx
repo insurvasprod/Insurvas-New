@@ -27,6 +27,7 @@ import { Button } from "@/components/ui/button";
 import { DataToolbar, RefreshButton, ToolbarSearch } from "@/components/ui/data-toolbar";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { EmptyState, NoMatches, SectionLoading } from "@/components/ui/page-states";
+import { PagedBody, PagedPager, PagedProvider, PagedTableCard } from "@/components/ui/paged";
 import { TableCard } from "@/components/ui/table-card";
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
@@ -148,7 +149,9 @@ export function CarrierLibrarySettings() {
     <SettingsStack>
       <SettingsSectionHeader />
 
-      <TableCard
+      <PagedTableCard
+        total={shownRows.length}
+        noun="contracts"
         toolbar={
           <DataToolbar
             actions={
@@ -182,7 +185,7 @@ export function CarrierLibrarySettings() {
                 <th scope="col" className={cn(st.th, st.num, "w-[90px]")}><span className="sr-only">Actions</span></th>
               </tr>
             </thead>
-            <tbody>
+            <PagedBody>
               {shownRows.map((row) => {
                 return (
                   <tr key={row.key}>
@@ -212,10 +215,10 @@ export function CarrierLibrarySettings() {
                   </tr>
                 );
               })}
-            </tbody>
+            </PagedBody>
           </table>
         )}
-      </TableCard>
+      </PagedTableCard>
 
       {dialog && (
         <ContractDialog
@@ -377,7 +380,8 @@ function ContractDialog({
         {contracts.length > 0 && (
           <div>
             <p className={subhead}>Contract history for {carrier?.name ?? "carrier"}</p>
-            <div className="mt-1">
+            <PagedProvider>
+            <PagedBody as="div" className="mt-1">
               {contracts.map((row) => (
                 <div key={row.id} className={listRow}>
                   <Pill tone={row.is_active ? "success" : "neutral"}>{row.is_active ? "Current" : "History"}</Pill>
@@ -385,7 +389,9 @@ function ContractDialog({
                   <span className="text-[var(--muted)]">effective {formatDay(row.effective_from)}</span>
                 </div>
               ))}
-            </div>
+            </PagedBody>
+            {contracts.length > 10 && <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-4 py-3 text-xs text-muted-foreground"><PagedPager total={contracts.length} noun="contracts" /></div>}
+            </PagedProvider>
           </div>
         )}
 

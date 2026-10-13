@@ -9,6 +9,7 @@ import { DataToolbar, RefreshButton, ToolbarSearch } from "@/components/ui/data-
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { EmptyState, NoMatches, SectionLoading } from "@/components/ui/page-states";
 import { SettingsSaveBar } from "@/components/ui/settings-layout";
+import { PagedBody, PagedTableCard } from "@/components/ui/paged";
 import { TableCard } from "@/components/ui/table-card";
 import {
   Callout,
@@ -310,7 +311,9 @@ export function LeadPostKeysSettings() {
         </p>
       </SettingsCard>
 
-      <TableCard
+      <PagedTableCard
+        total={shownKeys.length}
+        noun="keys"
         title="Posting keys"
         toolbar={
           <DataToolbar
@@ -346,7 +349,7 @@ export function LeadPostKeysSettings() {
                 <th scope="col" className={st.th}><span className="sr-only">Actions</span></th>
               </tr>
             </thead>
-            <tbody>
+            <PagedBody>
               {shownKeys.map((key) => {
                 const stats = statsByKey.get(key.id);
                 const campaigns = campaignsByVendor(key.vendorId);
@@ -424,10 +427,10 @@ export function LeadPostKeysSettings() {
                   </tr>
                 );
               })}
-            </tbody>
+            </PagedBody>
           </table>
         )}
-      </TableCard>
+      </PagedTableCard>
 
       <SettingsGrid>
         <SettingsCard

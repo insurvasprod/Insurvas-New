@@ -19,7 +19,7 @@ import { Button } from "@/components/ui/button";
 import { DataToolbar, RefreshButton } from "@/components/ui/data-toolbar";
 import { EmptyState } from "@/components/ui/page-states";
 import { SettingsSaveBar } from "@/components/ui/settings-layout";
-import { TableCard } from "@/components/ui/table-card";
+import { PagedBody, PagedTableCard } from "@/components/ui/paged";
 import { notify } from "@/lib/notify";
 import type { StoredDefinition } from "@/lib/applications/templates";
 import { QUOTE_INPUTS, quoteInputsOn, quoteInputsSummary, quoteValidDays, withQuoteInputs } from "@/lib/salesSettings/templateDefinition";
@@ -133,7 +133,9 @@ export function SalesQuotationTemplates() {
           {shownProblem && <Callout tone="error" title={shownProblem} />}
           {!canEdit && <ReadOnlyNotice what="quotation templates" />}
 
-          <TableCard
+          <PagedTableCard
+            total={rowsShown.length}
+            noun="templates"
             title="What each carrier and product needs"
             description="One row per pair. A pair with no template falls back to the platform one."
             toolbar={
@@ -164,7 +166,7 @@ export function SalesQuotationTemplates() {
                     <th scope="col" className={cn(st.th, "w-[200px] text-right")}><span className="sr-only">Actions</span></th>
                   </tr>
                 </thead>
-                <tbody className="m-seq">
+                <PagedBody className="m-seq">
                   {rowsShown.map((t) => {
                     const isOpen = t.id === selectedId;
                     const verb = isOpen ? "Close" : canEdit && t.tenantOwned ? "Edit" : "View";
@@ -193,10 +195,10 @@ export function SalesQuotationTemplates() {
                       </tr>
                     );
                   })}
-                </tbody>
+                </PagedBody>
               </table>
             )}
-          </TableCard>
+          </PagedTableCard>
 
           {selected && (
             <SettingsCard

@@ -12,6 +12,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageLoading } from "@/components/ui/page-loading";
+import { PagedBody, PagedPager, PagedProvider } from "@/components/ui/paged";
+import { Pager, paginate } from "@/components/ui/pager";
 import { TableCard } from "@/components/ui/table-card";
 import { MONTHS } from "@/lib/format/dates";
 import { ErrorState } from "@/components/ui/page-states";
@@ -53,6 +55,7 @@ function NotesTab({ data, refresh }: { data: Workspace; refresh: () => Promise<v
   const [busy, setBusy] = useState(false);
   const [search, setSearch] = useState("");
   const [searchResults, setSearchResults] = useState<Note[] | null>(null);
+  const [page, setPage] = useState(1);
   const canWrite = !data.readOnly && ["owner", "producer", "assistant"].includes(data.role);
   const edit = (note: Note) => { setEditing(note); setBody(note.body ?? ""); setNoteVisibility(note.visibility); setMentions(note.mentions); };
   const reset = () => { setEditing(null); setBody(""); setNoteVisibility("internal"); setMentions([]); };
@@ -75,11 +78,13 @@ function NotesTab({ data, refresh }: { data: Workspace; refresh: () => Promise<v
     if (!response.ok) { notify.block(result?.error ?? "Could not change visibility"); return; } notify.done("Note visibility changed"); await refresh();
   }
   async function runSearch() {
+    setPage(1);
     if (search.trim().length < 2) { setSearchResults(null); return; }
     const response = await fetch(`/api/app/notes/search?q=${encodeURIComponent(search)}`, { cache: "no-store" }); const result = await response.json().catch(() => null); if (!response.ok) { notify.block(result?.error ?? "Could not search notes"); return; } setSearchResults(result.notes ?? []);
   }
   function toggleMention(id: string) { setMentions((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]); }
   const shown = searchResults ?? data.notes;
+  const paged = paginate(shown, page);
   // The board draws the tab flat: the composer, then one ruled row per note, no card inside the card.
   // Mentions, cross-lead search and edit history are not on the board but people use them, so they
   // stay, drawn in the same rows.
@@ -108,9 +113,9 @@ function NotesTab({ data, refresh }: { data: Workspace; refresh: () => Promise<v
         <label className="text-sm leading-normal tracking-[-0.02em] text-[var(--body)]" htmlFor="note-search">Search notes across leads</label>
         <input id="note-search" value={search} onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void runSearch(); }} placeholder="Search note text" className={`${FIELD} h-9 w-full max-w-xs px-3 text-sm`} />
         <Button type="button" variant="outline" onClick={() => void runSearch()}>Search</Button>
-        {searchResults && <Button type="button" variant="ghost" onClick={() => { setSearchResults(null); setSearch(""); }}>Clear</Button>}
+        {searchResults && <Button type="button" variant="ghost" onClick={() => { setSearchResults(null); setSearch(""); setPage(1); }}>Clear</Button>}
       </div>
-      {shown.map((note) => {
+      {paged.rows.map((note) => {
         const related = [note.visibility === "shared" && !note.deletedAt ? `Posted to ${data.partner?.name ? `the ${data.partner.name}` : "the partner's"} channel` : null, note.mentions.length ? `${note.mentions.length} mention${note.mentions.length === 1 ? "" : "s"}` : null].filter(Boolean).join(" · ");
         const mine = !note.deletedAt && note.author.id === data.currentUserId;
         const canShare = !note.deletedAt && data.role === "owner" && note.author.id !== data.currentUserId;
@@ -137,6 +142,7 @@ function NotesTab({ data, refresh }: { data: Workspace; refresh: () => Promise<v
           </div>
         );
       })}
+      {shown.length > 10 && <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-5 py-3 text-xs text-muted-foreground"><Pager page={paged.current} total={shown.length} noun="notes" onPage={setPage} /></div>}
       {shown.length === 0 && <p className="border-t border-border px-5 py-6 text-sm leading-normal tracking-[-0.02em] text-muted-foreground">{searchResults ? "No note matches that search." : "No notes yet."}</p>}
     </div>
   );
@@ -421,8 +427,8 @@ export function LeadDetailWorkspace({ leadId }: { leadId: string }) {
             <div className="p-5">
               {tab === "verification" && <VerificationTab data={data} />}
               {tab === "timeline" && (
-                <div>
-                  <ol className="space-y-4 border-l border-border pl-5">
+                <PagedProvider>
+                  <PagedBody as="ol" className="space-y-4 border-l border-border pl-5">
                     {data.timeline.map((event) => (
                       <li key={event.id} className="relative">
                         <span className="absolute -left-[1.43rem] top-1 size-2 rounded-full bg-[var(--primary)]" />
@@ -431,9 +437,10 @@ export function LeadDetailWorkspace({ leadId }: { leadId: string }) {
                         {event.detail && <p className="mt-1 break-words text-sm text-muted-foreground">{event.detail}</p>}
                       </li>
                     ))}
-                  </ol>
+                  </PagedBody>
+                  {data.timeline.length > 10 && <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3 text-xs text-muted-foreground"><PagedPager total={data.timeline.length} noun="events" /></div>}
                   {data.timeline.length === 0 && <p className="text-sm text-muted-foreground">No events recorded yet.</p>}
-                </div>
+                </PagedProvider>
               )}
             </div>
           )}
@@ -496,7 +503,8 @@ export function LeadDetailWorkspace({ leadId }: { leadId: string }) {
                 are the first; this is every one of them, each with its own campaign and cost. */}
             {(lineage?.sources?.length ?? 0) > 1 && lineage && <div className="mt-4 border-t border-border pt-3.5">
               <h3 className="text-sm font-semibold leading-[1.5] tracking-[-0.02em]">Every source ({lineage.sources.length})</h3>
-              <ul className="mt-2 flex list-none flex-col gap-2 p-0">
+              <PagedProvider>
+              <PagedBody as="ul" className="mt-2 flex list-none flex-col gap-2 p-0">
                 {lineage.sources.map((source, index) => <li key={`${source.campaignId ?? "none"}-${source.at ?? index}`} className="flex min-w-0 flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 text-sm leading-[1.5]">
                   <span className="min-w-0">
                     {source.campaignId && source.campaignName ? <Link href={`/app/lead-lists/${source.campaignId}`} className="font-medium hover:underline">{source.campaignName}</Link> : <span className="font-medium">{source.campaignName ?? "No campaign"}</span>}
@@ -506,7 +514,9 @@ export function LeadDetailWorkspace({ leadId }: { leadId: string }) {
                     {lineage.money ? (source.costCents != null ? `$${(source.costCents / 100).toFixed(2)}` : "No cost") : "Cost hidden"} · {source.at ? dayOnly(source.at) : "—"}
                   </span>
                 </li>)}
-              </ul>
+              </PagedBody>
+              {lineage.sources.length > 10 && <div className="mt-2 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-2 text-xs text-muted-foreground"><PagedPager total={lineage.sources.length} noun="sources" /></div>}
+              </PagedProvider>
               {lineage.money && lineage.totalCostCents != null && <p className="mt-2 text-xs text-muted-foreground tabular-nums">All sources together: ${(lineage.totalCostCents / 100).toFixed(2)}</p>}
             </div>}
           </section>

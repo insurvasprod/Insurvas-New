@@ -8,6 +8,7 @@ import { ProvisionalBadge } from "@/components/app/provisional-badge";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/page-states";
+import { PagedBody, PagedPager, PagedProvider, PagedTableCard } from "@/components/ui/paged";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
@@ -100,11 +101,11 @@ export default async function PolicyPage({ params }: { params: Promise<{ carrier
             </dl>
           </TableCard>
 
-          <TableCard title="Timeline" description="What has happened to this policy, oldest first.">
+          <PagedTableCard total={timeline.length} noun="events" title="Timeline" description="What has happened to this policy, oldest first.">
             {timeline.length === 0 ? (
               <p className="m-0 px-4 py-4 text-sm text-muted-foreground">Nothing recorded yet.</p>
             ) : (
-              <ol className="m-0 list-none px-4 py-3">
+              <PagedBody as="ol" className="m-0 list-none px-4 py-3">
                 {timeline.map((item, index) => (
                   <li key={index} className="grid grid-cols-[110px_12px_minmax(0,1fr)] items-start gap-3 py-2 text-sm">
                     <span className="tabular-nums text-muted-foreground">{fileDay(item.date)}</span>
@@ -112,9 +113,9 @@ export default async function PolicyPage({ params }: { params: Promise<{ carrier
                     <span className="min-w-0"><span className="text-foreground">{item.label}</span>{item.detail && <span className="block truncate text-xs text-muted-foreground" title={item.detail}>{item.detail}</span>}{item.source && <Link href={item.source.href} className="block truncate text-xs text-[var(--accent-ink)] hover:underline" title={item.source.text}>{item.source.text}</Link>}</span>
                   </li>
                 ))}
-              </ol>
+              </PagedBody>
             )}
-          </TableCard>
+          </PagedTableCard>
 
           <details className="rounded-lg border border-border bg-card">
             <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-foreground">Source{source.file ? ` · ${source.file.name}${source.file.rowNumber ? `, row ${source.file.rowNumber}` : ""}` : ""}</summary>
@@ -183,14 +184,17 @@ export default async function PolicyPage({ params }: { params: Promise<{ carrier
                         <span className="text-muted-foreground group-open:text-foreground">{term} <span className="text-xs">({lines.length})</span></span>
                         <span className="font-semibold tabular-nums text-foreground">{signed(cents)}</span>
                       </summary>
-                      <ul className="m-0 mb-2 list-none border-l-2 border-border pl-3 text-xs">
+                      <PagedProvider>
+                      <PagedBody as="ul" className="m-0 mb-2 list-none border-l-2 border-border pl-3 text-xs">
                         {lines.map((entry) => (
                           <li key={entry.id} className="flex justify-between gap-2 py-0.5">
                             <span className="min-w-0 truncate text-muted-foreground" title={[entry.reversalReason, entry.fileName ? `${entry.fileName}, row ${entry.rowNumber}` : null].filter(Boolean).join(" · ")}>{fileDay(entry.transactionDate ?? entry.statementDate)} · {entry.type === "reversal" ? "reversal" : entry.type.replaceAll("_", " ")}{entry.fileName ? <> · <Link href={rowHref(entry.fileId, entry.rowNumber)} className="hover:text-foreground hover:underline">row {entry.rowNumber}</Link></> : ""}</span>
                             <span className="shrink-0 tabular-nums">{signed(entry.amountCents)}</span>
                           </li>
                         ))}
-                      </ul>
+                      </PagedBody>
+                      {lines.length > 10 && <div className="mb-2 flex flex-wrap items-center justify-between gap-3 border-t border-border py-2 text-xs text-muted-foreground"><PagedPager total={lines.length} noun="lines" /></div>}
+                      </PagedProvider>
                     </details>
                   );
                 })}
@@ -238,15 +242,15 @@ export default async function PolicyPage({ params }: { params: Promise<{ carrier
           </TableCard>
 
           {(others.length > 0 || household) && (
-            <TableCard title={others.length ? `${client?.name ?? "This client"} has ${others.length + 1} policies` : "Household"}>
-              <ul className="m-0 list-none px-4 py-3 text-sm">
+            <PagedTableCard total={others.length} noun="policies" title={others.length ? `${client?.name ?? "This client"} has ${others.length + 1} policies` : "Household"}>
+              <PagedBody as="ul" className="m-0 list-none px-4 py-3 text-sm">
                 {others.map((other) => (
                   <li key={`${other.carrierId}|${other.policyNumber}`} className="flex items-baseline justify-between gap-3 py-1">
                     <Link href={policyHref(other.carrierId, other.policyNumber)} className="min-w-0 truncate hover:underline">{other.carrierName} · <span className="font-mono text-xs">{other.policyNumber}</span></Link>
                     <span className="shrink-0 text-xs text-muted-foreground">{statusLabel(other.status)}{other.annualCents !== null ? ` · ${dollars(Math.round(other.annualCents / 12))}/mo` : ""}</span>
                   </li>
                 ))}
-              </ul>
+              </PagedBody>
               {household && (
                 <div className="border-t border-border px-4 py-3 text-sm">
                   <span className="block text-xs text-muted-foreground">Household ({household.people.join(", ")})</span>
@@ -254,7 +258,7 @@ export default async function PolicyPage({ params }: { params: Promise<{ carrier
                   <span className="text-xs text-muted-foreground"> across {household.policies} policies in force or at risk</span>
                 </div>
               )}
-            </TableCard>
+            </PagedTableCard>
           )}
 
           <TableCard title="Your notes">

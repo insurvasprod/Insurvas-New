@@ -8,7 +8,7 @@ import { BoardStatGrid, BoardStatTile } from "@/components/admin/board-stat-tile
 import { Callout } from "@/components/app/settings/primitives";
 import { EmptyState } from "@/components/ui/page-states";
 import { PageHeader } from "@/components/ui/page-header";
-import { TableCard } from "@/components/ui/table-card";
+import { PagedBody, PagedTableCard } from "@/components/ui/paged";
 import { formatCentsAsCurrency } from "@/lib/money";
 import { cn } from "@/lib/utils";
 
@@ -168,13 +168,13 @@ export async function RevenueView() {
       </div>
 
       <div className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1fr)_520px] xl:items-start">
-        <TableCard className="min-w-0" title={`Plan mix${snapshotLabel ? ` · ${snapshotLabel}` : ""}`}>
+        <PagedTableCard total={planRows.length} noun="plans" className="min-w-0" title={`Plan mix${snapshotLabel ? ` · ${snapshotLabel}` : ""}`}>
           {planRows.length === 0 ? (
             <EmptyState title="No revenue to break down yet" hint="It fills in once a subscription has billed at least once." />
           ) : (
               <table className="w-full min-w-[420px] border-collapse">
                 <thead><tr className="bg-[var(--surface-alt)]"><th scope="col" className={th}>Plan</th><th scope="col" className={cn(th, "text-right")}>Customers</th><th scope="col" className={cn(th, "text-right")}>MRR</th><th scope="col" className={cn(th, "text-right")}>Share</th></tr></thead>
-                <tbody>
+                <PagedBody>
                   {planRows.map(([code, stats]) => (
                     <tr key={code}>
                       <td className={cn(td, "font-semibold text-[var(--ink)]")}>{code}</td>
@@ -183,10 +183,10 @@ export async function RevenueView() {
                       <td className={cn(td, "text-right tabular-nums")}>{mrr > 0 ? `${((stats.mrr_cents / mrr) * 100).toFixed(1)}%` : "—"}</td>
                     </tr>
                   ))}
-                </tbody>
+                </PagedBody>
               </table>
           )}
-        </TableCard>
+        </PagedTableCard>
 
         <section className={card} aria-labelledby="customers-churn">
           <h2 id="customers-churn" className={h2}>Customers &amp; churn</h2>

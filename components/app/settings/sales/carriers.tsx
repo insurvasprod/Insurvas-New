@@ -20,7 +20,7 @@ import { Button } from "@/components/ui/button";
 import { DataToolbar, RefreshButton } from "@/components/ui/data-toolbar";
 import { EmptyState } from "@/components/ui/page-states";
 import { SettingsSaveBar } from "@/components/ui/settings-layout";
-import { TableCard } from "@/components/ui/table-card";
+import { PagedBody, PagedTableCard } from "@/components/ui/paged";
 import type { PaymentMethod } from "@/lib/applications/constants";
 import { notify } from "@/lib/notify";
 import { patternProblem, toHttpsOrigin, toHttpsUrl } from "@/lib/salesSettings/carrierSchemas";
@@ -237,7 +237,9 @@ export function SalesCarriersSettings() {
           {saveError && <Callout tone="error" title={saveError} />}
           {!canEdit && <ReadOnlyNotice what="carriers and products" />}
 
-          <TableCard
+          <PagedTableCard
+            total={carriers.length}
+            noun="carriers"
             title="Carriers"
             description="The reference pattern is what validates a number typed in after submission."
             toolbar={
@@ -270,7 +272,7 @@ export function SalesCarriersSettings() {
                     <th scope="col" className={cn(st.th, "w-[80px] text-right")}><span className="sr-only">Actions</span></th>
                   </tr>
                 </thead>
-                <tbody className="m-seq">
+                <PagedBody className="m-seq">
                   {carriers.map((c) => {
                     const url = c.portal?.portalUrl ?? c.effective.portalOrigin;
                     const isOpen = c.id === selectedId;
@@ -307,10 +309,10 @@ export function SalesCarriersSettings() {
                       </tr>
                     );
                   })}
-                </tbody>
+                </PagedBody>
               </table>
             )}
-          </TableCard>
+          </PagedTableCard>
 
           {selected && (
             <PortalAccountCard

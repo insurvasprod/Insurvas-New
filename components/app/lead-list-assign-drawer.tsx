@@ -8,6 +8,7 @@ import { Dialog as DialogPrimitive } from "radix-ui";
 
 import { Button } from "@/components/ui/button";
 import { SectionLoading } from "@/components/ui/page-states";
+import { PagedBody, PagedPager, PagedProvider } from "@/components/ui/paged";
 import { Callout, control } from "@/components/app/settings/primitives";
 import { LICENCE_WARNING_DAYS, LIST_CHANGED_MESSAGE, daysUntil, lapseDay, ownerWhy, shortDate, type LeadListAssignMode, type LeadListAssignmentPreview, type LicenceExpiry } from "@/lib/assignment/constants";
 import { notify } from "@/lib/notify";
@@ -317,6 +318,7 @@ export function LeadListAssignDrawer({ campaignId, listName, assignable }: { cam
 
             {changed && <Callout tone="warning" title={LIST_CHANGED_MESSAGE}>Nothing was assigned. The numbers below are from a fresh run.</Callout>}
 
+            <PagedProvider>
             <div>
               <div className="mb-2 text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]">
                 {mode === "chain" ? "What the chain would do" : "What this would do"}
@@ -330,12 +332,8 @@ export function LeadListAssignDrawer({ campaignId, listName, assignable }: { cam
                       <th scope="col" className="w-[210px] px-3 py-2 text-left text-xs leading-[1.33] font-semibold tracking-[0.02em] text-[var(--muted)] uppercase">Why</th>
                     </tr>
                   </thead>
-                  <tbody className="m-seq">
-                    {preview ? (
-                      preview.total === 0 ? (
-                        <PlainRow>Nothing in this list is waiting in the pool: every lead is owned or closed.</PlainRow>
-                      ) : (
-                        <>
+                  {preview && preview.total > 0 ? (
+                    <PagedBody className="m-seq">
                           {preview.per_owner.map((row) => (
                             <tr key={row.user_id} className="m-row">
                               <Cell>{row.name}</Cell>
@@ -350,8 +348,11 @@ export function LeadListAssignDrawer({ campaignId, listName, assignable }: { cam
                               <Cell>{group.reason}</Cell>
                             </tr>
                           ))}
-                        </>
-                      )
+                    </PagedBody>
+                  ) : (
+                  <tbody className="m-seq">
+                    {preview ? (
+                      <PlainRow>Nothing in this list is waiting in the pool: every lead is owned or closed.</PlainRow>
                     ) : state.status === "loading" || (state.status === "idle" && mode === "chain") ? (
                       [0, 1, 2].map((index) => (
                         <tr key={index}>
@@ -369,8 +370,14 @@ export function LeadListAssignDrawer({ campaignId, listName, assignable }: { cam
                       <PlainRow>{mode === "owner" ? "Choose an owner to see what this would do." : "Choose the members to rotate between to see what this would do."}</PlainRow>
                     )}
                   </tbody>
+                  )}
                 </table>
               </div>
+              {preview && preview.per_owner.length + preview.nobody.length > 10 && (
+                <div className="mt-2 flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground">
+                  <PagedPager total={preview.per_owner.length + preview.nobody.length} noun="rows" />
+                </div>
+              )}
               {capacitySkips && (
                 // User decision: capacity is respected, with no override from here.
                 <p className="mt-2 text-xs leading-[1.5] tracking-[-0.01em] text-[var(--warning-ink)]">
@@ -384,6 +391,7 @@ export function LeadListAssignDrawer({ campaignId, listName, assignable }: { cam
                 </p>
               )}
             </div>
+            </PagedProvider>
 
             {preview && nobody > 0 && (
               <Callout tone="error" title={`${leads(nobody)} would land on nobody`} className="m-deny">

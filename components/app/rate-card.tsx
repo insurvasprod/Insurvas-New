@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { EmptyState } from "@/components/ui/page-states";
 import { StatusChip } from "@/components/ui/status-chip";
-import { TableCard } from "@/components/ui/table-card";
+import { PagedBody, PagedPager, PagedProvider, PagedTableCard } from "@/components/ui/paged";
 import { bpToPercent, percentToBp, TRIGGER_LABELS } from "@/lib/ingestion/expectedCommission";
 import type { RateCardCarrier } from "@/lib/ingestion/expectedCommissionStore";
 import { fileDay } from "@/lib/ingestion/constants";
@@ -32,6 +32,7 @@ export function RateCardWorkspace({ carriers, products, readOnly, today }: { car
   const [busy, setBusy] = useState(false);
   const [form, setForm] = useState<Record<string, string>>({});
   const open = carriers.find((c) => c.carrierId === openId) ?? null;
+  const productRows = open ? [...open.unmapped.map((u) => ({ code: u.code, family: "", note: `${u.policies} ${u.policies === 1 ? "policy" : "policies"}`, own: true })), ...open.mapped.map((m) => ({ code: m.code, family: m.family, note: m.own ? "yours" : "set by Insurvas", own: m.own }))] : [];
   const field = (key: string, fallback = "") => form[key] ?? fallback;
   const set = (key: string, value: string) => setForm((now) => ({ ...now, [key]: value }));
 
@@ -77,7 +78,7 @@ export function RateCardWorkspace({ carriers, products, readOnly, today }: { car
 
   return (
     <>
-      <TableCard toolbar={<DataToolbar actions={<RefreshButton onClick={() => startRefresh(() => router.refresh())} refreshing={refreshing} />}><span className="text-sm text-muted-foreground">Largest monthly premium first</span></DataToolbar>}>
+      <PagedTableCard total={carriers.length} noun="carriers" toolbar={<DataToolbar actions={<RefreshButton onClick={() => startRefresh(() => router.refresh())} refreshing={refreshing} />}><span className="text-sm text-muted-foreground">Largest monthly premium first</span></DataToolbar>}>
         {carriers.length === 0 ? (
           <EmptyState title="No policies from carrier files yet" hint="The rate card is set up per carrier you hold policies with. Import your book first." />
         ) : (
@@ -94,7 +95,7 @@ export function RateCardWorkspace({ carriers, products, readOnly, today }: { car
                 <th className="w-[96px] text-right"><span className="sr-only">Actions</span></th>
               </tr>
             </thead>
-            <tbody>
+            <PagedBody>
               {carriers.map((c) => {
                 const share = c.monthlyCents ? Math.floor((c.pricedMonthlyCents * 100) / c.monthlyCents) : 0;
                 return (
@@ -115,10 +116,10 @@ export function RateCardWorkspace({ carriers, products, readOnly, today }: { car
                   </tr>
                 );
               })}
-            </tbody>
+            </PagedBody>
           </table>
         )}
-      </TableCard>
+      </PagedTableCard>
 
       <Dialog open={Boolean(open)} onOpenChange={(next) => { if (!next && !busy) setOpenId(null); }}>
         <DialogContent className="max-h-[calc(100vh-4rem)] overflow-y-auto sm:max-w-3xl">
@@ -153,8 +154,9 @@ export function RateCardWorkspace({ carriers, products, readOnly, today }: { car
                 <section className="grid gap-2 border-t border-border pt-4">
                   <h3 className="m-0 text-sm font-semibold text-foreground">Products in your book</h3>
                   {open.unmapped.length === 0 && open.mapped.length === 0 ? <p className="m-0 text-muted-foreground">The carrier&apos;s file names no product.</p> : (
-                    <ul className="m-0 grid list-none gap-2 p-0">
-                      {[...open.unmapped.map((u) => ({ code: u.code, family: "", note: `${u.policies} ${u.policies === 1 ? "policy" : "policies"}`, own: true })), ...open.mapped.map((m) => ({ code: m.code, family: m.family, note: m.own ? "yours" : "set by Insurvas", own: m.own }))].map((row) => (
+                    <PagedProvider>
+                    <PagedBody as="ul" className="m-0 grid list-none gap-2 p-0">
+                      {productRows.map((row) => (
                         <li key={row.code} className="grid items-center gap-2 sm:grid-cols-[1fr_220px_auto]">
                           <span><span className="font-mono text-xs text-foreground">{row.code}</span> <span className="text-xs text-muted-foreground">· {row.note}</span></span>
                           <select aria-label={`Product family for ${row.code}`} className={select} value={field(`fam:${row.code}`, row.family)} onChange={(e) => set(`fam:${row.code}`, e.target.value)}>
@@ -164,16 +166,19 @@ export function RateCardWorkspace({ carriers, products, readOnly, today }: { car
                           <Button type="button" size="sm" variant="outline" disabled={field(`fam:${row.code}`, row.family) === row.family} onClick={() => void post({ action: "map_product", carrier_id: open.carrierId, carrier_product_code: row.code, product_code: field(`fam:${row.code}`) || null }, "Product matched.")}>Save</Button>
                         </li>
                       ))}
-                    </ul>
+                    </PagedBody>
+                    {productRows.length > 10 && <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground"><PagedPager total={productRows.length} noun="products" /></div>}
+                    </PagedProvider>
                   )}
                 </section>
 
                 <section className="grid gap-2 border-t border-border pt-4">
                   <h3 className="m-0 text-sm font-semibold text-foreground">Rates</h3>
                   {open.schedules.length > 0 && (
+                    <PagedProvider>
                     <table className="w-full text-left text-sm">
                       <thead><tr className="text-xs text-muted-foreground"><th className="py-1 font-medium">Product family</th><th className="py-1 font-medium">Level</th><th className="py-1 font-medium">Year</th><th className="py-1 font-medium">Rate</th><th className="py-1 font-medium">From</th><th className="py-1 font-medium">Age bands</th></tr></thead>
-                      <tbody>
+                      <PagedBody>
                         {open.schedules.map((s) => (
                           <tr key={s.id} className="border-t border-border align-top">
                             <td className="py-1.5">{s.familyName}</td>
@@ -194,8 +199,10 @@ export function RateCardWorkspace({ carriers, products, readOnly, today }: { car
                             </td>
                           </tr>
                         ))}
-                      </tbody>
+                      </PagedBody>
                     </table>
+                    {open.schedules.length > 10 && <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground"><PagedPager total={open.schedules.length} noun="rates" /></div>}
+                    </PagedProvider>
                   )}
                   <div className="grid gap-3 sm:grid-cols-6">
                     <div className="grid gap-1 sm:col-span-2">
@@ -221,9 +228,10 @@ export function RateCardWorkspace({ carriers, products, readOnly, today }: { car
                 <section className="grid gap-2 border-t border-border pt-4">
                   <h3 className="m-0 text-sm font-semibold text-foreground">Advance rules</h3>
                   {open.advanceRules.length > 0 ? (
+                    <PagedProvider>
                     <table className="w-full text-left text-sm">
                       <thead><tr className="text-xs text-muted-foreground"><th className="py-1 font-medium">Product family</th><th className="py-1 text-right font-medium">Advanced</th><th className="py-1 text-right font-medium">Of year one</th><th className="py-1 text-right font-medium">Clawback</th><th className="py-1 pl-4 font-medium">Type</th><th className="py-1 font-medium">From</th></tr></thead>
-                      <tbody>
+                      <PagedBody>
                         {open.advanceRules.map((r) => (
                           <tr key={`${r.productCode}|${r.effectiveFrom}`} className="border-t border-border">
                             <td className="py-1.5">{r.familyName}</td>
@@ -234,8 +242,10 @@ export function RateCardWorkspace({ carriers, products, readOnly, today }: { car
                             <td className="py-1.5 tabular-nums">{fileDay(r.effectiveFrom)}</td>
                           </tr>
                         ))}
-                      </tbody>
+                      </PagedBody>
                     </table>
+                    {open.advanceRules.length > 10 && <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground"><PagedPager total={open.advanceRules.length} noun="advance rules" /></div>}
+                    </PagedProvider>
                   ) : <p className="m-0 text-muted-foreground">None yet: nothing is expected up front, and no lapse is counted as inside a clawback window.</p>}
                   <div className="grid gap-3 sm:grid-cols-6 sm:items-end">
                     <div className="grid gap-1 sm:col-span-2">

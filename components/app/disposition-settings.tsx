@@ -23,6 +23,7 @@ import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/com
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { EmptyState, NoMatches, SectionLoading } from "@/components/ui/page-states";
 import { SettingsSaveBar } from "@/components/ui/settings-layout";
+import { PagedBody, PagedTableCard } from "@/components/ui/paged";
 import { TableCard } from "@/components/ui/table-card";
 import {
   Callout,
@@ -730,7 +731,9 @@ export function DispositionSettings() {
       {unmapped > 0 && <Callout tone="error" title={`${unmapped} of ${activeRows.length} active outcomes have no stage. Every outcome must map to a stage before it can be saved.`} />}
       {saveError && <Callout tone="error" title="Some changes were not saved">{saveError}</Callout>}
 
-      <TableCard
+      <PagedTableCard
+        total={visible.length}
+        noun="outcomes"
         toolbar={
           <DataToolbar
             actions={
@@ -779,7 +782,7 @@ export function DispositionSettings() {
                 <th scope="col" className={cn(st.th, st.num, "w-[90px]")}><span className="sr-only">Actions</span></th>
               </tr>
             </thead>
-            <tbody>
+            <PagedBody>
               {visible.map((row) => {
                 const closes = closesAs(row);
                 const next = nextActionText(row);
@@ -806,10 +809,10 @@ export function DispositionSettings() {
                   </tr>
                 );
               })}
-            </tbody>
+            </PagedBody>
           </table>
         )}
-      </TableCard>
+      </PagedTableCard>
 
       <SettingsCard
         title={flow ? `The wizard behind “${flow.stage_name}”` : "The outcome wizard"}

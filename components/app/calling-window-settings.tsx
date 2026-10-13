@@ -10,6 +10,7 @@ import { DataToolbar, RefreshButton, ToolbarSearch } from "@/components/ui/data-
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { EmptyState, NoMatches, SectionLoading } from "@/components/ui/page-states";
 import { SettingsSaveBar } from "@/components/ui/settings-layout";
+import { PagedBody, PagedPager, PagedProvider, PagedTableCard } from "@/components/ui/paged";
 import { TableCard } from "@/components/ui/table-card";
 import {
   Callout,
@@ -305,7 +306,7 @@ export function CallingWindowSettingsPanel() {
           {!loaded.stateRulesAvailable ? (
             <Callout tone="warning" title="State rules could not be read here. The dialer still enforces them." />
           ) : (
-            <>
+            <PagedProvider>
               <div className="overflow-x-auto">
                 <table className={st.table}>
                   <thead>
@@ -315,15 +316,17 @@ export function CallingWindowSettingsPanel() {
                       <th scope="col" className={cn(st.th, st.num, "w-[130px]")}>Dialer uses</th>
                     </tr>
                   </thead>
-                  <tbody>
-                    {listed.length === 0 ? (
+                  {listed.length === 0 ? (
+                    <tbody>
                       <tr>
                         <td colSpan={3} className={cn(st.td, "text-[var(--muted)]")}>
                           No state currently narrows things beyond what you and federal law already do.
                         </td>
                       </tr>
-                    ) : (
-                      listed.map((rule) => {
+                    </tbody>
+                  ) : (
+                    <PagedBody>
+                      {listed.map((rule) => {
                         const law = effectiveMinutes(rule, null, null);
                         const used = effectiveMinutes(rule, tenantWindow, null);
                         const closed = used.start >= used.end;
@@ -344,11 +347,16 @@ export function CallingWindowSettingsPanel() {
                             </td>
                           </tr>
                         );
-                      })
-                    )}
-                  </tbody>
+                      })}
+                    </PagedBody>
+                  )}
                 </table>
               </div>
+              {listed.length > 10 && (
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground">
+                  <PagedPager total={listed.length} noun="states" />
+                </div>
+              )}
               {feed?.stale && (
                 <Callout tone="error" className="mt-3" title={`State rules are stale (last refreshed ${refreshedLabel ?? "at an unknown time"}) — dialing is blocked until they are refreshed.`} />
               )}
@@ -357,12 +365,14 @@ export function CallingWindowSettingsPanel() {
                 {basis === "notable" && " Showing the states whose rule is tighter than yours."}
                 {everyStateBansHolidays && (loaded.stateCheckReadsFederalHolidays ? " State and federal holidays are always blocked." : " State holidays are always blocked.")}
               </p>
-            </>
+            </PagedProvider>
           )}
         </SettingsCard>
       </SettingsGrid>
 
-      <TableCard
+      <PagedTableCard
+        total={shownNarrowing.length}
+        noun="campaigns"
         title="Per-campaign narrowing"
         toolbar={
           <DataToolbar
@@ -400,7 +410,7 @@ export function CallingWindowSettingsPanel() {
                 <th scope="col" className={cn(st.th, st.num, "w-[90px]")}><span className="sr-only">Actions</span></th>
               </tr>
             </thead>
-            <tbody>
+            <PagedBody>
               {shownNarrowing.map((campaign) => {
                 const window = campaignMinutes(campaign);
                 return (
@@ -425,10 +435,10 @@ export function CallingWindowSettingsPanel() {
                   </tr>
                 );
               })}
-            </tbody>
+            </PagedBody>
           </table>
         )}
-      </TableCard>
+      </PagedTableCard>
 
       <Dialog open={campaignEditor !== null} onOpenChange={(next) => { if (!next) setCampaignEditor(null); }}>
         <DialogContent className="border-[var(--border)] bg-[var(--surface)] sm:max-w-lg">

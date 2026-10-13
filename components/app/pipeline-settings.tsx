@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { EmptyState, NoMatches, SectionLoading } from "@/components/ui/page-states";
 import { SettingsSaveBar } from "@/components/ui/settings-layout";
 import { StatStrip, StatTile } from "@/components/ui/stat";
+import { PagedBody, PagedTableCard } from "@/components/ui/paged";
 import { TableCard } from "@/components/ui/table-card";
 import { DispositionLibrary, PipelineCreateDialog, PipelineStageManager } from "@/components/app/pipeline-stage-manager";
 import { Callout, control, Field, Pill, SettingsSectionHeader, SettingsStack, ToggleRow, st } from "@/components/app/settings/primitives";
@@ -343,7 +344,9 @@ export function PipelineSettings() {
       )}
       {!descriptionsReady && <Callout tone="warning" title="Stage descriptions need a database update; every other stage edit saves." />}
 
-      <TableCard
+      <PagedTableCard
+        total={shownPipelines.length}
+        noun="pipelines"
         title="Pipelines"
         toolbar={
           <DataToolbar
@@ -376,7 +379,7 @@ export function PipelineSettings() {
                 <th scope="col" className={cn(st.th, "w-[190px]")}><span className="sr-only">Actions</span></th>
               </tr>
             </thead>
-            <tbody>
+            <PagedBody>
               {shownPipelines.map((pipeline) => {
                 const live = pipeline.stages.filter((stage) => !stage.is_archived).sort((a, b) => a.position - b.position);
                 const draftPipeline = context?.draftPipelineIds.includes(pipeline.id) ?? false;
@@ -415,10 +418,10 @@ export function PipelineSettings() {
                   </tr>
                 );
               })}
-            </tbody>
+            </PagedBody>
           </table>
         )}
-      </TableCard>
+      </PagedTableCard>
 
       <TableCard
         title="Disposition → stage"

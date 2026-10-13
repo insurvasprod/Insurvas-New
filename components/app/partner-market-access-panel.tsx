@@ -7,6 +7,7 @@ import { notify } from "@/lib/notify";
 import { StatusChip } from "@/components/ui/status-chip";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PagedBody, PagedPager, PagedProvider } from "@/components/ui/paged";
 import { cn } from "@/lib/utils";
 
 type Market = { carrier_id: string; carrier_name: string; state: string };
@@ -173,6 +174,7 @@ export function PartnerMarketAccessPanel({
           </p>
         </div>
         {eligible.length ? (
+          <PagedProvider>
           <div className="overflow-x-auto rounded-lg border">
             <table className="min-w-[720px] w-full text-left text-sm">
               <thead className="bg-muted/30 text-xs text-muted-foreground">
@@ -186,7 +188,7 @@ export function PartnerMarketAccessPanel({
                   ))}
                 </tr>
               </thead>
-              <tbody className="divide-y">
+              <PagedBody className="divide-y">
                 {carriers.map((carrier) => (
                   <tr key={carrier.id}>
                     <th className="px-3 py-3 font-medium">{carrier.name}</th>
@@ -231,9 +233,15 @@ export function PartnerMarketAccessPanel({
                     })}
                   </tr>
                 ))}
-              </tbody>
+              </PagedBody>
             </table>
+            {carriers.length > 10 && (
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-4 py-3 text-xs text-muted-foreground">
+                <PagedPager total={carriers.length} noun="carriers" />
+              </div>
+            )}
           </div>
+          </PagedProvider>
         ) : (
           <div className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
             No active carrier appointments are available. Add agency contracts

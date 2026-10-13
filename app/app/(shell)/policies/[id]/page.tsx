@@ -10,7 +10,7 @@ import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip } from "@/components/ui/status-chip";
-import { TableCard } from "@/components/ui/table-card";
+import { PagedBody, PagedTableCard } from "@/components/ui/paged";
 import { EmptyState } from "@/components/ui/page-states";
 import { TabbedSections } from "@/components/app/book-views";
 import { getCarrierLibrary } from "@/lib/carriers/service";
@@ -109,13 +109,13 @@ export default async function PolicyPage({ params }: { params: Promise<{ id: str
   // Each section fills the viewport under the header, strip and tab row (2026-10-06 redesign).
   const fill = "flex min-h-[calc(100dvh-var(--top-bar-h)-380px)] flex-col [&>*:first-child]:flex-1";
   const expectedTable = (
-    <TableCard className={fill} footer={<span>{expected.length.toLocaleString("en-US")} {expected.length === 1 ? "entry" : "entries"}, each from a commission schedule row</span>}>
+    <PagedTableCard total={expected.length} noun="entries" suffix="each from a commission schedule row" className={fill} footer={<span>{expected.length.toLocaleString("en-US")} {expected.length === 1 ? "entry" : "entries"}, each from a commission schedule row</span>}>
       {expected.length === 0 ? (
         <EmptyState title="Nothing expected yet" hint={row.status === "pending" ? "A pending policy has not been issued, so nothing is expected yet." : "Entries appear here as the commission schedule posts them for this policy."} />
       ) : (
         <table className="portal-lead-table w-full min-w-[640px] text-left text-sm">
           <thead><tr><th className="w-[130px]">Date</th><th>Entry</th><th className="w-[120px] text-right">Rate</th><th className="w-[130px] text-right">Amount</th></tr></thead>
-          <tbody>
+          <PagedBody>
             {expected.map((entry) => (
               <tr key={entry.id}>
                 <td className="tabular-nums">{statementDay(entry.postedOn)}</td>
@@ -124,19 +124,19 @@ export default async function PolicyPage({ params }: { params: Promise<{ id: str
                 <td className={`text-right font-semibold tabular-nums ${entry.amountCents < 0 ? "text-[var(--error-ink)]" : "text-foreground"}`}>{statementMoney(entry.amountCents)}</td>
               </tr>
             ))}
-          </tbody>
+          </PagedBody>
         </table>
       )}
-    </TableCard>
+    </PagedTableCard>
   );
   const reportedTable = statements ? (
-    <TableCard className={fill} footer={<span>Accepted lines on statements that are not voided</span>}>
+    <PagedTableCard total={lines.length} noun="lines" suffix="accepted, on statements that are not voided" className={fill} footer={<span>Accepted lines on statements that are not voided</span>}>
       {lines.length === 0 ? (
         <EmptyState title="No statement line yet" hint="No accepted statement line pays this policy yet. Lines appear here once a carrier statement that names it is accepted." />
       ) : (
         <table className="portal-lead-table w-full min-w-[720px] text-left text-sm">
           <thead><tr><th className="w-[130px]">Posted</th><th>Statement</th><th className="w-[80px] text-right">Row</th><th className="w-[130px]">Kind</th><th className="w-[130px] text-right">Amount</th></tr></thead>
-          <tbody>
+          <PagedBody>
             {lines.map((line) => (
               <tr key={line.id}>
                 <td className="tabular-nums">{statementDay(line.postedOn)}</td>
@@ -146,16 +146,16 @@ export default async function PolicyPage({ params }: { params: Promise<{ id: str
                 <td className={`text-right font-semibold tabular-nums ${line.amountCents < 0 ? "text-[var(--error-ink)]" : "text-foreground"}`}>{statementMoney(line.amountCents)}</td>
               </tr>
             ))}
-          </tbody>
+          </PagedBody>
         </table>
       )}
-    </TableCard>
+    </PagedTableCard>
   ) : null;
   const discrepancyTable = (
-    <TableCard className={fill} footer={<Link href="/app/discrepancies" className="font-semibold underline-offset-2 hover:underline">Work them in Discrepancies</Link>}>
+    <PagedTableCard total={open.length} noun="discrepancies" suffix={<Link href="/app/discrepancies" className="font-semibold underline-offset-2 hover:underline">Work them in Discrepancies</Link>} className={fill} footer={<Link href="/app/discrepancies" className="font-semibold underline-offset-2 hover:underline">Work them in Discrepancies</Link>}>
       <table className="portal-lead-table w-full min-w-[600px] text-left text-sm">
         <thead><tr><th className="w-[200px]">Kind</th><th>What happened</th><th className="w-[120px] text-right">Owed</th></tr></thead>
-        <tbody>
+        <PagedBody>
           {open.map((item) => (
             <tr key={item.id}>
               <td className="font-semibold text-foreground">{DISCREPANCY_KIND_LABELS[item.kind].label}</td>
@@ -163,9 +163,9 @@ export default async function PolicyPage({ params }: { params: Promise<{ id: str
               <td className="text-right font-semibold tabular-nums">{statementMoney(item.owedCents)}</td>
             </tr>
           ))}
-        </tbody>
+        </PagedBody>
       </table>
-    </TableCard>
+    </PagedTableCard>
   );
   // Open discrepancies lead when there are any: they are the one thing on this page to act on.
   const sections = [

@@ -18,6 +18,7 @@ import { Callout, Pill, SettingsStack, control, st } from "@/components/app/sett
 import { Button } from "@/components/ui/button";
 import { DataToolbar, RefreshButton, toolbarControl } from "@/components/ui/data-toolbar";
 import { EmptyState } from "@/components/ui/page-states";
+import { PagedBody, PagedTableCard } from "@/components/ui/paged";
 import { SettingsSaveBar } from "@/components/ui/settings-layout";
 import { TableCard } from "@/components/ui/table-card";
 import { fieldMeta, fieldSetEntries, fieldSetFromEntries, type FieldSetEntry } from "@/lib/salesSettings/templateDefinition";
@@ -156,7 +157,9 @@ export function SalesFieldSets() {
           {shownProblem && <Callout tone="error" title={shownProblem} />}
           {!canEdit && <ReadOnlyNotice what="field sets" />}
 
-          <TableCard
+          <PagedTableCard
+            total={rowsShown.length}
+            noun="field sets"
             title="Field sets"
             description="One per carrier and product, with the platform set behind them."
             toolbar={
@@ -187,7 +190,7 @@ export function SalesFieldSets() {
                     <th scope="col" className={cn(st.th, "w-[200px] text-right")}><span className="sr-only">Actions</span></th>
                   </tr>
                 </thead>
-                <tbody className="m-seq">
+                <PagedBody className="m-seq">
                   {rowsShown.map((r) => {
                     const def = (r.own ?? r.inUse)?.definition;
                     const list = fieldSetEntries(def);
@@ -220,10 +223,10 @@ export function SalesFieldSets() {
                       </tr>
                     );
                   })}
-                </tbody>
+                </PagedBody>
               </table>
             )}
-          </TableCard>
+          </PagedTableCard>
 
           {selected && shown && (
             <TableCard

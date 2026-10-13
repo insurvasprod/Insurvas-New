@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageLoading } from "@/components/ui/page-loading";
+import { PagedBody, PagedPager, PagedProvider } from "@/components/ui/paged";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { TableCard } from "@/components/ui/table-card";
 import { Callout, DashedCard, Field, Pill, SettingsCard, control, st } from "@/components/app/settings/primitives";
@@ -549,18 +550,25 @@ export function LeadImportWorkspace() {
           <DialogTitle>Expected fields</DialogTitle>
           <DialogDescription>The {info.product.name} lead record.</DialogDescription>
         </DialogHeader>
+        <PagedProvider>
         <div className="max-h-[60dvh] min-w-0 overflow-y-auto rounded-lg border border-border">
       <table className={st.table}>
         <thead><tr className={st.headRow}><th scope="col" className={st.th}>Field</th><th scope="col" className={st.th}>Type</th><th scope="col" className={st.th}>Required</th></tr></thead>
-        <tbody>
+        <PagedBody>
           {info.fields.map((field) => <tr key={field.key}>
             <td className={st.td}><code className={st.code}>{field.key}</code></td>
             <td className={st.td}>{field.type}</td>
             <td className={st.td}>{field.required ? "Required" : "Optional"}</td>
           </tr>)}
-        </tbody>
+        </PagedBody>
       </table>
+          {info.fields.length > 10 && (
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-4 py-3 text-xs text-muted-foreground">
+              <PagedPager total={info.fields.length} noun="fields" />
+            </div>
+          )}
         </div>
+        </PagedProvider>
       </DialogContent>
     </Dialog>}
   </div>;

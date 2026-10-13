@@ -9,6 +9,7 @@ import { ViewTabs } from "@/components/app/book-of-business-views";
 import { Button } from "@/components/ui/button";
 import { DataToolbar, RefreshButton, toolbarControl } from "@/components/ui/data-toolbar";
 import { EmptyState } from "@/components/ui/page-states";
+import { PagedBody, PagedTableCard } from "@/components/ui/paged";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
@@ -139,18 +140,18 @@ function Overview({ model, Fig, refresh }: Parts) {
         <StatTile label="Chargeback ratio" value={cbAll ? <Fig d={{ kind: "chargeback", dim: "all", key: "all" }}>{chargebackText(cbAll, model.minSample) ?? "Building"}</Fig> : "—"} footnote={cbAll ? `${centsText(cbAll.chargedBackCents)} back of ${centsText(cbAll.advancedCents)} advanced${chargebackText(cbAll, model.minSample) ? "" : ` · a ratio needs ${model.minSample} policies`}` : "no advance on file yet"} />
       </StatStrip>
 
-      <TableCard title="Today" description={readableDay(model.summary.date)}>
+      <PagedTableCard total={model.summary.facts.length} noun="items" title="Today" description={readableDay(model.summary.date)}>
         {model.summary.facts.length === 0 ? <p className="m-0 px-4 pb-4 text-sm text-muted-foreground">{QUIET_DAY}</p> : (
-          <ul className="m-0 grid list-none gap-2 px-4 pb-4 text-sm">
+          <PagedBody as="ul" className="m-0 grid list-none gap-2 px-4 pb-4 text-sm">
             {model.summary.facts.map((f) => <li key={f.id}><Link href={f.href} className="text-foreground underline-offset-2 hover:underline">{f.text}</Link></li>)}
-          </ul>
+          </PagedBody>
         )}
-      </TableCard>
+      </PagedTableCard>
 
-      <TableCard title="Book of business" toolbar={<DataToolbar actions={<><CsvButton name={`book-by-${bookDim}`} header={[DIMENSION_LABELS[bookDim], "Policies", "In force", "Annualised premium", "No premium on file"]} rows={book.map((s) => [bookDim === "status" ? statusLabel(s.key) : s.name, s.policies, s.inForce, dollars(s.annualCents), s.annualUnknown])} />{refresh}</>}><SliceTabs label="Book by" value={bookDim} options={["carrier", "product", "status", "agent", "agency"] as const} onChange={setBookDim} /></DataToolbar>}>
+      <PagedTableCard key={bookDim} total={book.length} noun="rows" title="Book of business" toolbar={<DataToolbar actions={<><CsvButton name={`book-by-${bookDim}`} header={[DIMENSION_LABELS[bookDim], "Policies", "In force", "Annualised premium", "No premium on file"]} rows={book.map((s) => [bookDim === "status" ? statusLabel(s.key) : s.name, s.policies, s.inForce, dollars(s.annualCents), s.annualUnknown])} />{refresh}</>}><SliceTabs label="Book by" value={bookDim} options={["carrier", "product", "status", "agent", "agency"] as const} onChange={setBookDim} /></DataToolbar>}>
         <table className="portal-lead-table w-full min-w-[640px] text-left text-sm">
           <thead><tr><th>{DIMENSION_LABELS[bookDim]}</th><th className="w-[110px] text-right">Policies</th><th className="w-[110px] text-right">In force</th><th className="w-[170px] text-right">Annualised premium</th></tr></thead>
-          <tbody>
+          <PagedBody>
             {book.map((s) => (
               <tr key={s.key}>
                 <td className="font-semibold text-foreground">{bookDim === "status" ? statusLabel(s.key) : s.name}</td>
@@ -159,9 +160,9 @@ function Overview({ model, Fig, refresh }: Parts) {
                 <td className="text-right tabular-nums">{centsText(s.annualCents)}{s.annualUnknown ? <span className="block text-xs text-muted-foreground">{s.annualUnknown} with no premium on file</span> : null}</td>
               </tr>
             ))}
-          </tbody>
+          </PagedBody>
         </table>
-      </TableCard>
+      </PagedTableCard>
 
       <TableCard title="Placement" description={`Issued ${readableDay(model.period.from)} – ${readableDay(model.period.to)}. Agents quote issued; placed is what pays.`} toolbar={<DataToolbar actions={<CsvButton name="placement" header={["Submitted", "Submitted and issued", "Issued", "Placed", "Issued, never paid"]} rows={[[pl.submitted, pl.submittedIssued, pl.issued, pl.placed, pl.notPlaced]]} />}><span className="text-sm text-muted-foreground">Placed = issued and paid at least once</span></DataToolbar>}>
         <table className="portal-lead-table w-full min-w-[640px] text-left text-sm">
@@ -178,11 +179,11 @@ function Overview({ model, Fig, refresh }: Parts) {
         </table>
       </TableCard>
 
-      <TableCard title="Chargeback ratio" toolbar={<DataToolbar actions={<CsvButton name={`chargebacks-by-${cbDim}`} header={[DIMENSION_LABELS[cbDim], "Advanced", "Charged back", "Policies advanced", "Ratio"]} rows={cbRows.map((r) => [r.name, dollars(r.advancedCents), dollars(r.chargedBackCents), r.advancedPolicies, chargebackText(r, model.minSample)])} />}><SliceTabs label="Chargebacks by" value={cbDim} options={["carrier", "product", "agent", "source"] as const} onChange={setCbDim} /></DataToolbar>}>
+      <PagedTableCard key={cbDim} total={cbRows.length} noun="rows" title="Chargeback ratio" toolbar={<DataToolbar actions={<CsvButton name={`chargebacks-by-${cbDim}`} header={[DIMENSION_LABELS[cbDim], "Advanced", "Charged back", "Policies advanced", "Ratio"]} rows={cbRows.map((r) => [r.name, dollars(r.advancedCents), dollars(r.chargedBackCents), r.advancedPolicies, chargebackText(r, model.minSample)])} />}><SliceTabs label="Chargebacks by" value={cbDim} options={["carrier", "product", "agent", "source"] as const} onChange={setCbDim} /></DataToolbar>}>
         {cbRows.length === 0 ? <EmptyState title="No advances on file yet" hint="The ratio appears once a commission file with advances has been read." /> : (
           <table className="portal-lead-table w-full min-w-[640px] text-left text-sm">
             <thead><tr><th>{DIMENSION_LABELS[cbDim]}</th><th className="w-[150px] text-right">Advanced</th><th className="w-[150px] text-right">Charged back</th><th className="w-[120px] text-right">Ratio</th></tr></thead>
-            <tbody>
+            <PagedBody>
               {cbRows.map((r) => (
                 <tr key={r.key}>
                   <td className="font-semibold text-foreground">{r.name}</td>
@@ -191,16 +192,16 @@ function Overview({ model, Fig, refresh }: Parts) {
                   <td className="text-right"><Fig d={{ kind: "chargeback", dim: cbDim, key: r.key }}>{chargebackText(r, model.minSample) ?? <span className="text-muted-foreground" title={`A ratio needs ${model.minSample} advanced policies; ${r.advancedPolicies} so far`}>—<span className="block text-xs">needs {model.minSample} policies</span></span>}</Fig></td>
                 </tr>
               ))}
-            </tbody>
+            </PagedBody>
           </table>
         )}
-      </TableCard>
+      </PagedTableCard>
 
-      <TableCard title="Net commission by week" description="Advances and earned, less chargebacks, fees and advance interest. Held money is shown apart: it hasn't been paid." toolbar={<DataToolbar actions={<CsvButton name="net-commission-by-week" header={["Week of", "Advances", "Earned and overrides", "Chargebacks", "Fees and interest", "Other", "Net", "Held"]} rows={weeks.map((w) => [w.week, dollars(w.parts.advance), dollars(w.parts.earned + w.parts.override), dollars(w.parts.chargeback), dollars(w.parts.fee + w.parts.advance_interest), dollars(w.parts.other), dollars(w.netCents), dollars(w.heldCents)])} />}><span className="text-sm text-muted-foreground">The last 13 weeks</span></DataToolbar>}>
+      <PagedTableCard total={weeks.length} noun="weeks" title="Net commission by week" description="Advances and earned, less chargebacks, fees and advance interest. Held money is shown apart: it hasn't been paid." toolbar={<DataToolbar actions={<CsvButton name="net-commission-by-week" header={["Week of", "Advances", "Earned and overrides", "Chargebacks", "Fees and interest", "Other", "Net", "Held"]} rows={weeks.map((w) => [w.week, dollars(w.parts.advance), dollars(w.parts.earned + w.parts.override), dollars(w.parts.chargeback), dollars(w.parts.fee + w.parts.advance_interest), dollars(w.parts.other), dollars(w.netCents), dollars(w.heldCents)])} />}><span className="text-sm text-muted-foreground">The last 13 weeks</span></DataToolbar>}>
         {model.weeks === null ? <EmptyState title="Not available yet" hint="This needs a database update (20261008270000)." /> : weeks.length === 0 ? <EmptyState title="No commission lines in the last 13 weeks" hint="Weeks appear once a commission file has been read." /> : (
           <table className="portal-lead-table w-full min-w-[820px] text-left text-sm">
             <thead><tr><th>Week of</th><th className="text-right">Advances</th><th className="text-right">Earned</th><th className="text-right">Chargebacks</th><th className="text-right">Fees and interest</th><th className="text-right">Net</th><th className="text-right">Held</th></tr></thead>
-            <tbody>
+            <PagedBody>
               {weeks.map((w) => (
                 <tr key={w.week}>
                   <td className="font-semibold text-foreground">{readableDay(w.week)}</td>
@@ -212,10 +213,10 @@ function Overview({ model, Fig, refresh }: Parts) {
                   <td className="text-right tabular-nums text-muted-foreground">{w.heldCents ? centsText(w.heldCents) : "—"}</td>
                 </tr>
               ))}
-            </tbody>
+            </PagedBody>
           </table>
         )}
-      </TableCard>
+      </PagedTableCard>
     </>
   );
 }
@@ -269,7 +270,11 @@ function Persistency({ model, Fig, refresh }: Parts) {
             footnote={c.building ? cellTitle(c, model.minSample) : c.eligible ? `${persistencyText(c, "premium", model.minSample)} by premium${c.premiumUnknown ? ` · ${c.premiumUnknown} with no premium` : ""}` : "none old enough yet"} />
         ))}
       </StatStrip>
-      <TableCard
+      <PagedTableCard
+        key={dim}
+        total={rows.length}
+        noun="rows"
+        suffix={model.start ? `counted on policies issued since your first carrier file, ${readableDay(model.start)}` : undefined}
         toolbar={
           <DataToolbar actions={<><CsvButton name={`persistency-by-${dim}-${by}`} header={[DIMENSION_LABELS[dim], "Policies", ...model.buckets.map((b) => `Month ${b} (${by})`)]} rows={rows.map((r) => [r.name, r.policies, ...r.cells.map((c) => persistencyText(c, by, model.minSample))])} />{refresh}</>}>
             <SliceTabs label="Persistency by" value={dim} options={["carrier", "product", "agent", "agency", "source"] as const} onChange={setDim} />
@@ -281,7 +286,7 @@ function Persistency({ model, Fig, refresh }: Parts) {
       >
         <table className="portal-lead-table w-full min-w-[760px] text-left text-sm">
           <thead><tr><th>{DIMENSION_LABELS[dim]}</th><th className="w-[96px] text-right">Policies</th>{model.buckets.map((b) => <th key={b} className="w-[120px] text-right">Month {b}</th>)}</tr></thead>
-          <tbody>
+          <PagedBody>
             {rows.map((r) => (
               <tr key={`${r.all}-${r.key}`}>
                 <td className={r.all ? "font-semibold text-foreground" : "text-foreground"}>{r.name}</td>
@@ -289,9 +294,9 @@ function Persistency({ model, Fig, refresh }: Parts) {
                 {r.cells.map((c) => <td key={c.month} className="text-right">{cell(c, r.key, r.all)}</td>)}
               </tr>
             ))}
-          </tbody>
+          </PagedBody>
         </table>
-      </TableCard>
+      </PagedTableCard>
     </>
   );
 }
@@ -321,14 +326,18 @@ function Cards({ model, Fig, refresh }: Parts) {
   const cbCell = (c: CardView) => (c.advancedCents || c.chargedBackCents ? <Fig d={{ kind: "chargeback", dim, key: c.key }}>{chargebackText(c, model.minSample) ?? `${centsText(c.chargedBackCents)} back`}</Fig> : <span className="text-muted-foreground">—</span>);
 
   return (
-    <TableCard
+    <PagedTableCard
+      key={dim}
+      total={rows.length}
+      noun="rows"
+      suffix={source ? (model.scoped ? "spend is the agency's and isn't shown on a producer's own scorecard" : !model.spendAvailable ? "lead spend isn't available right now" : `spend and sales: ${readableDay(model.period.from)} – ${readableDay(model.period.to)}`) : undefined}
       toolbar={<DataToolbar actions={<><CsvButton name={`scorecard-by-${dim}`} header={header} rows={csv} />{refresh}</>}><SliceTabs label="Scorecard by" value={dim} options={["source", "carrier", "product", "agent", "agency"] as const} onChange={setDim} />{source && <span className="text-sm text-muted-foreground">True cost per sale = spend ÷ (sales × month-{CONTRACT_MONTH} persistency)</span>}</DataToolbar>}
       footer={source ? <span>{model.scoped ? "Spend is the agency's and isn't shown on a producer's own scorecard." : !model.spendAvailable ? "Lead spend isn't available right now; refresh to try again." : `Spend and sales: ${readableDay(model.period.from)} – ${readableDay(model.period.to)}.`}</span> : undefined}
     >
       {rows.length === 0 ? <EmptyState title="Nothing to score yet" hint="Rows appear once policies are in your carrier files." /> : (
         <table className="portal-lead-table w-full min-w-[980px] text-left text-sm">
           <thead><tr>{header.map((h, i) => <th key={h} className={i === 0 ? "" : "text-right"}>{h}</th>)}</tr></thead>
-          <tbody>
+          <PagedBody>
             {rows.map((c) => {
               if (source) {
                 const cps = costPerSale(c.spendCents, c.sales);
@@ -360,10 +369,10 @@ function Cards({ model, Fig, refresh }: Parts) {
                 </tr>
               );
             })}
-          </tbody>
+          </PagedBody>
         </table>
       )}
-    </TableCard>
+    </PagedTableCard>
   );
 }
 
@@ -380,7 +389,9 @@ export function ScoreDrill({ back, title, figure, policies, entries }: { back: s
     : (entries ?? []).map((e) => [e.countedOn, e.carrierName, e.policyNumber, e.type, dollars(e.cents)]);
   const total = (entries ?? []).reduce((sum, e) => sum + e.cents, 0);
   return (
-    <TableCard
+    <PagedTableCard
+      total={rows.length}
+      noun="rows"
       title={title}
       description={figure}
       action={<Link href={back} className="text-sm font-semibold text-[var(--accent-ink)] hover:underline">Back to the scorecards</Link>}
@@ -389,7 +400,7 @@ export function ScoreDrill({ back, title, figure, policies, entries }: { back: s
       {rows.length === 0 ? <EmptyState title="No rows behind this figure" hint="It may have changed since the page was opened; go back and open it again." /> : policies ? (
         <table className="portal-lead-table w-full min-w-[980px] text-left text-sm">
           <thead><tr><th>Client</th><th>Carrier · policy</th><th className="w-[120px]">Status</th><th className="w-[120px]">Issued</th><th className="w-[140px] text-right">Annualised premium</th><th>Why it counts</th></tr></thead>
-          <tbody>
+          <PagedBody>
             {policies.map((p) => (
               <tr key={p.key}>
                 <td className="font-semibold text-foreground">{p.clientName ?? <span className="font-normal text-muted-foreground">No client linked</span>}<span className="block text-xs font-normal text-muted-foreground">{p.agentName} · {p.sourceName}</span></td>
@@ -400,12 +411,12 @@ export function ScoreDrill({ back, title, figure, policies, entries }: { back: s
                 <td>{p.tone === "plain" ? p.note : <StatusChip tone={p.tone === "good" ? "good" : "danger"}>{p.note}</StatusChip>}</td>
               </tr>
             ))}
-          </tbody>
+          </PagedBody>
         </table>
       ) : (
         <table className="portal-lead-table w-full min-w-[720px] text-left text-sm">
           <thead><tr><th className="w-[140px]">Counted on</th><th>Carrier · policy</th><th>Type</th><th className="w-[140px] text-right">Amount</th><th className="w-[110px]">Source</th></tr></thead>
-          <tbody>
+          <PagedBody>
             {(entries ?? []).map((e) => (
               <tr key={e.id}>
                 <td className="tabular-nums">{readableDay(e.countedOn)}</td>
@@ -415,9 +426,9 @@ export function ScoreDrill({ back, title, figure, policies, entries }: { back: s
                 <td className="text-xs">{e.rowNumber ? <Link href={rowHref(e.fileId, e.rowNumber)} className="text-[var(--accent-ink)] hover:underline">Row {e.rowNumber}</Link> : <Link href={fileHref(e.fileId)} className="text-[var(--accent-ink)] hover:underline">The file</Link>}</td>
               </tr>
             ))}
-          </tbody>
+          </PagedBody>
         </table>
       )}
-    </TableCard>
+    </PagedTableCard>
   );
 }

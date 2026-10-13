@@ -10,6 +10,7 @@ import { PageLoading } from "@/components/ui/page-loading";
 import { EmptyState, ErrorState, SectionLoading } from "@/components/ui/page-states";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip } from "@/components/ui/status-chip";
+import { PagedBody, PagedTableCard } from "@/components/ui/paged";
 import { TableCard } from "@/components/ui/table-card";
 import { Segmented, ViewTabs } from "@/components/app/view-tabs";
 import { cn } from "@/lib/utils";
@@ -92,10 +93,14 @@ function QueuePreviewCard({ onClose }: { onClose: () => void }) {
 
   const preview = data?.preview ?? null;
   const agentName = data?.agents.find((agent) => agent.userId === agentId)?.name ?? "this agent";
+  const footerText = preview && data?.available ? <>{preview.servableCount.toLocaleString()} {preview.servableCount === 1 ? "lead" : "leads"} servable to {agentName} now · looking claims nothing{list === "held" && preview.heldBackCount > preview.heldBack.length ? ` · the ${preview.heldBack.length} soonest to open are shown` : ""}</> : undefined;
 
   return (
     <div id="queue-preview">
-      <TableCard
+      <PagedTableCard
+        total={preview && data?.available ? (list === "held" ? preview.heldBack.length : preview.rows.length) : 0}
+        noun="leads"
+        suffix={footerText}
         title="Next up, and why"
         className="flex min-h-[calc(100dvh-var(--top-bar-h)-330px)] flex-col [&>*:nth-child(3)]:flex-1"
         toolbar={
@@ -128,7 +133,7 @@ function QueuePreviewCard({ onClose }: { onClose: () => void }) {
             )}
           </DataToolbar>
         }
-        footer={preview && data?.available ? <span>{preview.servableCount.toLocaleString()} {preview.servableCount === 1 ? "lead" : "leads"} servable to {agentName} now · looking claims nothing{list === "held" && preview.heldBackCount > preview.heldBack.length ? ` · the ${preview.heldBack.length} soonest to open are shown` : ""}</span> : undefined}
+        footer={footerText ? <span>{footerText}</span> : undefined}
       >
         {error && data && <p role="alert" className="px-4 pt-3 text-sm leading-normal tracking-[-0.02em] text-[var(--error-ink)]">{error}</p>}
 
@@ -151,14 +156,14 @@ function QueuePreviewCard({ onClose }: { onClose: () => void }) {
               ) : (
                 <table className="w-full min-w-[720px] border-collapse text-left">
                   <thead><tr><th className={th}>Lead</th><th className={th}>Why it waits</th></tr></thead>
-                  <tbody>
+                  <PagedBody>
                     {preview.heldBack.map((row) => (
                       <tr key={row.workItemId} className="m-row">
                         <td className={`${td} max-w-[320px] truncate font-semibold text-foreground`} title={leadLine(row)}>{leadLine(row)}</td>
                         <td className={`${td} max-w-[480px] truncate text-muted-foreground`} title={heldBackSentence(row)}>{heldBackSentence(row)}</td>
                       </tr>
                     ))}
-                  </tbody>
+                  </PagedBody>
                 </table>
               )
             ) : preview.rows.length === 0 ? (
@@ -173,7 +178,7 @@ function QueuePreviewCard({ onClose }: { onClose: () => void }) {
                   <th className={`${th} text-right`}>Score</th>
                   <th className={`${th} text-right`}><span className="sr-only">Breakdown</span></th>
                 </tr></thead>
-                <tbody>
+                <PagedBody>
                   {preview.rows.map((row) => {
                     const share = scoreShare(row.score, preview.totalWeight);
                     const why = [row.tierReason, ...row.reasons.map(sentence)].filter(Boolean).join(" · ");
@@ -225,12 +230,12 @@ function QueuePreviewCard({ onClose }: { onClose: () => void }) {
                       </Fragment>
                     );
                   })}
-                </tbody>
+                </PagedBody>
               </table>
             )}
           </>
         )}
-      </TableCard>
+      </PagedTableCard>
     </div>
   );
 }

@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { DataToolbar, RefreshButton, toolbarControl } from "@/components/ui/data-toolbar";
 import { EmptyState } from "@/components/ui/page-states";
-import { TableCard } from "@/components/ui/table-card";
+import { PagedBody, PagedTableCard } from "@/components/ui/paged";
 import type { CarrierImport } from "@/lib/ingestion/bookImport";
 import { notify } from "@/lib/notify";
 
@@ -87,7 +87,9 @@ export function BookImport({ carriers, others, processing, readOnly }: { carrier
   }
 
   return (
-    <TableCard
+    <PagedTableCard
+      total={rows.length}
+      noun="carriers"
       toolbar={
         <DataToolbar actions={<RefreshButton onClick={() => startRefresh(() => router.refresh())} refreshing={refreshing} />}>
           <select aria-label="Add another carrier" className={`${toolbarControl} w-[240px]`} value="" disabled={readOnly} onChange={(e) => { const pick = others.find((o) => o.id === e.target.value); if (pick) setExtra((all) => [...all, pick]); }}>
@@ -102,7 +104,7 @@ export function BookImport({ carriers, others, processing, readOnly }: { carrier
       ) : (
         <table className="portal-lead-table w-full min-w-[880px] text-left text-sm">
           <thead><tr><th className="w-[180px]">Carrier</th><th>Where to find the file</th><th className="w-[250px]">Result</th><th className="w-[150px]">Date on the file</th><th className="w-[190px] text-right"><span className="sr-only">Actions</span></th></tr></thead>
-          <tbody>
+          <PagedBody>
             {rows.map((c) => {
               const line = resultLine(c);
               const g = c.guidance;
@@ -140,9 +142,9 @@ export function BookImport({ carriers, others, processing, readOnly }: { carrier
                 </tr>
               );
             })}
-          </tbody>
+          </PagedBody>
         </table>
       )}
-    </TableCard>
+    </PagedTableCard>
   );
 }

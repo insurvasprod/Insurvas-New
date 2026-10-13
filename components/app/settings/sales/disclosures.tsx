@@ -21,7 +21,7 @@ import { Button } from "@/components/ui/button";
 import { DataToolbar, RefreshButton } from "@/components/ui/data-toolbar";
 import { EmptyState } from "@/components/ui/page-states";
 import { SettingsSaveBar } from "@/components/ui/settings-layout";
-import { TableCard } from "@/components/ui/table-card";
+import { PagedBody, PagedTableCard } from "@/components/ui/paged";
 import { DISCLOSURES, SALES_CARRIERS } from "@/lib/applications/settingsFixtures";
 import { describeClause, type Clause } from "@/lib/salesSettings/editing";
 import type { DisclosureInput, DisclosureItem, DisclosureLibrary } from "@/lib/salesSettings/disclosures";
@@ -352,7 +352,9 @@ export function SalesDisclosures() {
         <>
           {!canEdit && <ReadOnlyNotice what="disclosures" />}
 
-          <TableCard
+          <PagedTableCard
+            total={docs.length}
+            noun="documents"
             title="The library"
             description="One row per document. A version is superseded, never overwritten."
             toolbar={
@@ -382,7 +384,7 @@ export function SalesDisclosures() {
                     <th scope="col" className={cn(st.th, "w-[210px] text-right")}><span className="sr-only">Actions</span></th>
                   </tr>
                 </thead>
-                <tbody className="m-seq">
+                <PagedBody className="m-seq">
                   {docs.map((d) => (
                     <tr key={d.code} className="m-row">
                       <td className={st.td}>
@@ -403,16 +405,16 @@ export function SalesDisclosures() {
                       </td>
                     </tr>
                   ))}
-                </tbody>
+                </PagedBody>
               </table>
             )}
-          </TableCard>
+          </PagedTableCard>
 
-          <TableCard title="What triggers them" description="Read top to bottom against the case. A document named twice is attached once.">
+          <PagedTableCard total={liveRules.length} noun="rules" title="What triggers them" description="Read top to bottom against the case. A document named twice is attached once.">
             {liveRules.length === 0 ? (
               <EmptyState title="No rules yet" hint="No published document has a rule, so none is required on its own. Open a document to add one." />
             ) : (
-              <ol className="m-0 list-none p-0">
+              <PagedBody as="ol" className="m-0 list-none p-0">
                 {liveRules.map(({ doc, item, rule, i }) => (
                   <li key={`${item.id}-${i}`} className="border-t border-[var(--border)] px-4 py-3 first:border-t-0">
                     <div className="flex flex-wrap items-center justify-between gap-4">
@@ -434,9 +436,9 @@ export function SalesDisclosures() {
                     </div>
                   </li>
                 ))}
-              </ol>
+              </PagedBody>
             )}
-          </TableCard>
+          </PagedTableCard>
         </>
       )}
     </SettingsStack>

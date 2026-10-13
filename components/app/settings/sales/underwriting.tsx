@@ -19,7 +19,7 @@ import { Button } from "@/components/ui/button";
 import { DataToolbar, RefreshButton } from "@/components/ui/data-toolbar";
 import { EmptyState } from "@/components/ui/page-states";
 import { SettingsSaveBar } from "@/components/ui/settings-layout";
-import { TableCard } from "@/components/ui/table-card";
+import { PagedBody, PagedTableCard } from "@/components/ui/paged";
 import { notify } from "@/lib/notify";
 import { definitionFromDraft, draftFromDefinition, knockoutCount, newUnderwritingDefinition, questionCount, type UwDraft } from "@/lib/salesSettings/templateDefinition";
 import { definitionProblem } from "@/lib/salesSettings/templateSchemas";
@@ -146,7 +146,9 @@ export function SalesUnderwritingTemplates() {
           {(saveError ?? (dirty ? problem : null)) && <Callout tone="error" title={(saveError ?? problem)!} />}
           {!canEdit && <ReadOnlyNotice what="underwriting templates" />}
 
-          <TableCard
+          <PagedTableCard
+            total={rowsShown.length}
+            noun="templates"
             title="Templates"
             description="One template per product and audience. Only a live version can be loaded by an interview."
             toolbar={
@@ -176,7 +178,7 @@ export function SalesUnderwritingTemplates() {
                     <th scope="col" className={cn(st.th, "w-[240px] text-right")}><span className="sr-only">Actions</span></th>
                   </tr>
                 </thead>
-                <tbody className="m-seq">
+                <PagedBody className="m-seq">
                   {rowsShown.map((t) => {
                     const isLive = t.tenantOwned && t.status === "published" && liveOf(all, t)?.id === t.id;
                     const isOpen = t.id === selectedId;
@@ -209,10 +211,10 @@ export function SalesUnderwritingTemplates() {
                       </tr>
                     );
                   })}
-                </tbody>
+                </PagedBody>
               </table>
             )}
-          </TableCard>
+          </PagedTableCard>
 
           {selected && draft && (
             <QuestionBuilder

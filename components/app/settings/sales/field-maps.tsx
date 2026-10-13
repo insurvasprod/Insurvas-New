@@ -28,6 +28,7 @@ import { Button } from "@/components/ui/button";
 import { DataToolbar, RefreshButton, toolbarControl } from "@/components/ui/data-toolbar";
 import { EmptyState } from "@/components/ui/page-states";
 import { SettingsSaveBar } from "@/components/ui/settings-layout";
+import { PagedBody, PagedTableCard } from "@/components/ui/paged";
 import { TableCard } from "@/components/ui/table-card";
 import { isSensitiveKey } from "@/lib/applications/constants";
 import { FIELD_MAPS } from "@/lib/applications/settingsFixtures";
@@ -368,7 +369,9 @@ export function SalesFieldMaps() {
           {error && <Callout tone="error" title={error} />}
           {!canEdit && <ReadOnlyNotice what="field maps" />}
 
-          <TableCard
+          <PagedTableCard
+            total={shown.length + unmapped.length}
+            noun="maps"
             title="Maps"
             description="A draft never fills anything. Only a published map is read by the extension."
             toolbar={
@@ -400,7 +403,7 @@ export function SalesFieldMaps() {
                     <th scope="col" className={cn(st.th, "w-[170px] text-right")}><span className="sr-only">Actions</span></th>
                   </tr>
                 </thead>
-                <tbody className="m-seq">
+                <PagedBody className="m-seq">
                   {shown.map((m) => {
                     const pill = STATUS_PILL[m.status];
                     const verified = m.entries.filter((e) => e.verified).length;
@@ -448,10 +451,10 @@ export function SalesFieldMaps() {
                       </td>
                     </tr>
                   ))}
-                </tbody>
+                </PagedBody>
               </table>
             )}
-          </TableCard>
+          </PagedTableCard>
 
           {flagged && <MissDetail map={flagged} now={now} onReview={() => openMap(flagged)} />}
         </>
@@ -477,7 +480,9 @@ function MissDetail({ map, now, onReview }: { map: MapRow; now: number; onReview
   }
   const fields = [...byField.values()].sort((a, b) => b.count - a.count || b.last.localeCompare(a.last));
   return (
-    <TableCard
+    <PagedTableCard
+      total={fields.length}
+      noun="fields"
       title={`Map misses · ${map.carrierName} · ${map.productLabel} · v${map.version}`}
       description={`${recent.length} ${recent.length === 1 ? "miss" : "misses"} in the last 30 days — a field the published map could not find on the carrier's page is left empty.`}
       action={<Button type="button" variant="outline" onClick={onReview}>Review</Button>}
@@ -494,7 +499,7 @@ function MissDetail({ map, now, onReview }: { map: MapRow; now: number; onReview
               <th scope="col" className={st.th}>Page</th>
             </tr>
           </thead>
-          <tbody className="m-seq">
+          <PagedBody className="m-seq">
             {fields.map((f) => (
               <tr key={f.fieldKey} className="m-row">
                 <td className={st.td}>
@@ -506,9 +511,9 @@ function MissDetail({ map, now, onReview }: { map: MapRow; now: number; onReview
                 <td className={cn(st.td, "max-w-[360px] truncate font-mono text-[12px]")} title={f.url}>{f.url.replace(/^https:\/\//, "")}</td>
               </tr>
             ))}
-          </tbody>
+          </PagedBody>
         </table>
       )}
-    </TableCard>
+    </PagedTableCard>
   );
 }

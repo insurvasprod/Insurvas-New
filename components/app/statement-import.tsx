@@ -30,6 +30,7 @@ import { toolbarControl } from "@/components/ui/data-toolbar";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PagedBody, PagedPager, PagedProvider } from "@/components/ui/paged";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { isXlsxFile, readXlsxAsCsv } from "@/lib/agentTemplates/xlsx";
 import { STATEMENT_FILE_ACCEPT, statementFileKind, statementFileProblem } from "@/lib/ledger/statementFile";
@@ -303,6 +304,7 @@ export function StatementImportButton({
                 <StatTile label="No match yet" value={preview.unmatchedLines.toLocaleString("en-US")} />
                 <StatTile label="Could not read" value={preview.errorLines.toLocaleString("en-US")} valueTone={preview.errorLines > 0 ? "warning" : undefined} />
               </StatStrip>
+              <PagedProvider>
               <div className="overflow-x-auto rounded-lg border border-border">
                 <table className="portal-lead-table w-full min-w-[720px] text-left text-sm">
                   <thead>
@@ -315,7 +317,7 @@ export function StatementImportButton({
                       <th>Proposed match</th>
                     </tr>
                   </thead>
-                  <tbody>
+                  <PagedBody>
                     {preview.sample.map((line) => (
                       <tr key={line.lineNumber}>
                         <td className="text-right tabular-nums text-muted-foreground">{line.lineNumber}</td>
@@ -340,9 +342,15 @@ export function StatementImportButton({
                         </td>
                       </tr>
                     ))}
-                  </tbody>
+                  </PagedBody>
                 </table>
+                {preview.sample.length > 10 && (
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-4 py-3 text-xs text-muted-foreground">
+                    <PagedPager total={preview.sample.length} noun="lines" />
+                  </div>
+                )}
               </div>
+              </PagedProvider>
               {preview.sample.length < preview.totalLines && (
                 <p className="text-xs text-muted-foreground">
                   Showing {preview.sample.length} of {preview.totalLines.toLocaleString("en-US")} lines, unreadable ones first.

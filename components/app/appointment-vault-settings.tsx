@@ -7,6 +7,7 @@ import { StatusChip } from "@/components/ui/status-chip";
 import { Button } from "@/components/ui/button";
 import { DataToolbar, RefreshButton, ToolbarSearch } from "@/components/ui/data-toolbar";
 import { PageHeader } from "@/components/ui/page-header";
+import { PagedBody, PagedTableCard } from "@/components/ui/paged";
 import { EmptyState, NoMatches, SectionLoading } from "@/components/ui/page-states";
 import { SettingsSaveBar } from "@/components/ui/settings-layout";
 import { StatStrip, StatTile } from "@/components/ui/stat";
@@ -309,7 +310,9 @@ export function AppointmentVaultSettings({
         </Callout>
       )}
 
-      <TableCard
+      <PagedTableCard
+        total={licenceRows.length + unlicensedAppointedStates.length}
+        noun="licences"
         title="Licences"
         toolbar={
           <DataToolbar
@@ -345,7 +348,7 @@ export function AppointmentVaultSettings({
               <th scope="col" className={cn(st.th, st.num, "w-[130px]")}>Status</th>
             </tr>
           </thead>
-          <tbody>
+          <PagedBody>
             {licenceRows.map((row) => {
               const days = daysUntilExpiry(row.expires_at, today);
               const status: { tone: PillTone; label: string } =
@@ -373,10 +376,10 @@ export function AppointmentVaultSettings({
                 </td>
               </tr>
             ))}
-          </tbody>
+          </PagedBody>
         </table>
         )}
-      </TableCard>
+      </PagedTableCard>
 
       <SettingsGrid cols={2}>
         <SettingsCard

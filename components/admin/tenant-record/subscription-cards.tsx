@@ -8,6 +8,7 @@ import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PagedBody, PagedPager, PagedProvider } from "@/components/ui/paged";
 import { Label } from "@/components/ui/label";
 import {
   Dialog,
@@ -357,6 +358,7 @@ function VersionPinningCard({ pinning, periodEnd }: { pinning: VersionPinning | 
       {!pinning || pinning.rows.length === 0 ? (
         <p className="m-0 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">No plan, so no version to pin.</p>
       ) : (
+        <PagedProvider>
         <div className="min-w-0 overflow-x-auto">
           <table className={st.table}>
             <thead>
@@ -367,7 +369,7 @@ function VersionPinningCard({ pinning, periodEnd }: { pinning: VersionPinning | 
                 <th scope="col" className={st.th}>This tenant</th>
               </tr>
             </thead>
-            <tbody className="m-seq">
+            <PagedBody className="m-seq">
               {pinning.rows.map((row) => (
                 <tr key={row.planId} className="m-row">
                   <td className={st.td}>
@@ -379,9 +381,15 @@ function VersionPinningCard({ pinning, periodEnd }: { pinning: VersionPinning | 
                   <td className={st.td}>{row.isCurrent ? <Pill tone="success">Here</Pill> : "—"}</td>
                 </tr>
               ))}
-            </tbody>
+            </PagedBody>
           </table>
         </div>
+        {pinning.rows.length > 10 && (
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3 text-xs text-muted-foreground">
+            <PagedPager total={pinning.rows.length} noun="versions" />
+          </div>
+        )}
+        </PagedProvider>
       )}
       {pinning?.move && <MoveCallout move={pinning.move} periodEnd={periodEnd} />}
     </BoardCard>
