@@ -23,6 +23,7 @@ import {
   FileCheck,
   FileText,
   FolderInput,
+  Gauge,
   Landmark,
   LayoutDashboard,
   ListChecks,
@@ -295,6 +296,8 @@ const ICONS = {
   "messages-square": MessageSquare,
   route: Route,
   "list-checks": ListChecks,
+  // LA-4.18 · Book scorecards.
+  gauge: Gauge,
   package: Package,
   "panel-left-close": PanelLeftClose,
   // Both LA-2 destinations. `iconFor()` falls back to a featureless Circle for an unknown name, so
