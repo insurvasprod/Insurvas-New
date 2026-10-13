@@ -12,6 +12,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
+import { PagedBody } from "@/components/ui/paged";
 import { StatusChip } from "@/components/ui/status-chip";
 import { Callout, Field, control } from "@/components/app/settings/primitives";
 import { INCOME_TYPES, INCOME_TYPE_LABEL, type IncomeType } from "@/lib/applications/constants";
@@ -304,7 +305,7 @@ export function ArrivalTable({ m, day }: { m: DraftDateModel; day: number | null
           <th scope="col" className="w-[168px]">Recommended draft</th>
         </tr>
       </thead>
-      <tbody className="m-seq">
+      <PagedBody className="m-seq">
         {m.rec.arrivals.map((a) => {
           const gap = day === null ? null : Math.round((Date.UTC(Number(a.month.slice(0, 4)), Number(a.month.slice(5, 7)) - 1, day) - Date.parse(`${a.date}T00:00:00Z`)) / 86_400_000);
           return (
@@ -318,7 +319,7 @@ export function ArrivalTable({ m, day }: { m: DraftDateModel; day: number | null
             </tr>
           );
         })}
-      </tbody>
+      </PagedBody>
     </table>
   );
 }

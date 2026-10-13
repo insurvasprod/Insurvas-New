@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/page-states";
 import { StatTile } from "@/components/ui/stat";
 import { StatusChip } from "@/components/ui/status-chip";
-import { TableCard } from "@/components/ui/table-card";
+import { PagedTableCard } from "@/components/ui/paged";
 import { Field, control } from "@/components/app/settings/primitives";
 import { INCOME_TYPE_LABEL } from "@/lib/applications/constants";
 
@@ -122,7 +122,9 @@ export function DraftDateCalculator() {
           </details>
         </StepCard>
 
-        <TableCard
+        <PagedTableCard
+          total={m.rec?.kind === "recommended" ? m.rec.arrivals.length : 0}
+          noun="months"
           title="Twelve months ahead"
           action={schedule && rec?.kind === "recommended" ? <StatusChip tone="info" dot={false}>{schedule}</StatusChip> : undefined}
           className="w-full shrink-0 xl:w-[462px]"
@@ -132,7 +134,7 @@ export function DraftDateCalculator() {
           ) : (
             <EmptyState title="No schedule yet" hint="Choose how the client gets their money to see the next twelve deposits." />
           )}
-        </TableCard>
+        </PagedTableCard>
       </div>
     </div>
   );

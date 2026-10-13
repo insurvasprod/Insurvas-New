@@ -29,6 +29,7 @@ import { DataToolbar, RefreshButton, toolbarControl } from "@/components/ui/data
 import { EmptyState } from "@/components/ui/page-states";
 import { SettingsSaveBar } from "@/components/ui/settings-layout";
 import { PagedBody, PagedTableCard } from "@/components/ui/paged";
+import { Pager, paginate } from "@/components/ui/pager";
 import { TableCard } from "@/components/ui/table-card";
 import { isSensitiveKey } from "@/lib/applications/constants";
 import { FIELD_MAPS } from "@/lib/applications/settingsFixtures";
@@ -71,6 +72,9 @@ const SAMPLE_MAPS: MapRow[] = FIELD_MAPS.map((m) => ({
 /** The open map's entries, edited in place. */
 function Review({ map, entries, editable, setEntries, action }: { map: MapRow; entries: FieldMapEntryView[]; editable: boolean; setEntries: (fn: (e: FieldMapEntryView[]) => FieldMapEntryView[]) => void; action?: ReactNode }) {
   const [adding, setAdding] = useState("");
+  // 10 entries a page; the draft lives in the parent, so turning the page keeps every edit.
+  const [page, setPage] = useState(1);
+  const shown = paginate(entries, page);
   const patch = (id: string, p: Partial<FieldMapEntryView>) => setEntries((list) => list.map((e) => (e.id === id ? { ...e, ...p } : e)));
   const verified = entries.filter((e) => e.verified).length;
   const unmapped = CANONICAL_OPTIONS.filter((o) => !entries.some((e) => e.fieldKey === o.key));
@@ -80,6 +84,7 @@ function Review({ map, entries, editable, setEntries, action }: { map: MapRow; e
       title={`${map.carrierName} · ${map.productLabel} · v${map.version}`}
       description={map.reviewReason ?? (map.platform ? "Insurvas platform map — copy it to your agency to change it." : `${verified} of ${entries.length} entries verified`)}
       action={action}
+      footer={entries.length > 10 ? <Pager page={shown.current} total={entries.length} noun="fields" onPage={setPage} /> : undefined}
       toolbar={editable ? (
         <DataToolbar>
           <label htmlFor="fm-add" className="sr-only">Field to add</label>
@@ -92,7 +97,7 @@ function Review({ map, entries, editable, setEntries, action }: { map: MapRow; e
             ))}
           </select>
           <WithReason reason={adding ? null : "Choose a field to add first."}>
-            <Button type="button" variant="outline" disabled={!adding} onClick={() => { setEntries((list) => [...list, newEntry(adding)]); setAdding(""); }}>
+            <Button type="button" variant="outline" disabled={!adding} onClick={() => { setEntries((list) => [...list, newEntry(adding)]); setAdding(""); setPage(Math.floor(entries.length / 10) + 1); }}>
               <Plus aria-hidden="true" />Add field
             </Button>
           </WithReason>
@@ -113,7 +118,7 @@ function Review({ map, entries, editable, setEntries, action }: { map: MapRow; e
             </tr>
           </thead>
           <tbody>
-            {entries.map((e) => {
+            {shown.rows.map((e) => {
               const label = fieldLabel(e.fieldKey);
               const sensitive = isSensitiveKey(e.fieldKey);
               const transform = e.transform ?? "none";
@@ -335,7 +340,7 @@ export function SalesFieldMaps() {
         <BackButton onClick={() => (dirty && editable ? warnUnsaved(`${open.carrierName} · ${open.productLabel}`) : openMap(null))}>All field maps</BackButton>
         {!canEdit && <ReadOnlyNotice what="field maps" />}
         {editable && blocked.length > 0 && <Callout tone="warning" title={`Verify ${listOf(blocked)} before publishing.`} />}
-        <Review map={open} entries={entries} editable={editable} action={copyAction} setEntries={(fn) => setEntriesState((e) => (e ? fn(e) : e))} />
+        <Review key={open.id} map={open} entries={entries} editable={editable} action={copyAction} setEntries={(fn) => setEntriesState((e) => (e ? fn(e) : e))} />
         {editable && (dirty || !frozen) && (
           <SettingsSaveBar note={dirty ? (frozen ? `Unsaved changes — saving makes version ${next}, a draft` : "Unsaved changes to this draft") : `Draft v${open.version} is saved — publish it to use it`}>
             {dirty && <Button type="button" variant="outline" disabled={busy} onClick={() => setEntriesState(open.entries.map((e) => ({ ...e })))}>Discard</Button>}
