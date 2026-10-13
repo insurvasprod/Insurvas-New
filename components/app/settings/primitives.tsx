@@ -282,21 +282,42 @@ export function ToggleRow({
         <label htmlFor={id} className="block text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]">{title}</label>
         {help && <span className="mt-1 block max-w-[420px] text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">{help}</span>}
       </span>
-      <button
-        id={id}
-        type="button"
-        role="switch"
-        aria-checked={checked}
-        disabled={disabled}
-        onClick={() => onChange?.(!checked)}
-        className={cn(
-          "inline-flex h-[22px] w-[38px] shrink-0 items-center rounded-full p-0.5 transition-colors disabled:cursor-not-allowed disabled:opacity-60",
-          checked ? "justify-end bg-[var(--success)]" : "justify-start bg-[var(--border-strong)]"
-        )}
-      >
-        <span className="size-[18px] rounded-full bg-[var(--surface)] shadow-[var(--shadow-rest)]" />
-      </button>
+      <Switch id={id} checked={checked} onChange={onChange} disabled={disabled} />
     </div>
+  );
+}
+
+/** The bare 38×22 switch, for a table cell or anywhere the label sits elsewhere. */
+export function Switch({
+  id,
+  checked,
+  onChange,
+  disabled,
+  label,
+}: {
+  id?: string;
+  checked: boolean;
+  onChange?: (next: boolean) => void;
+  disabled?: boolean;
+  /** The accessible name when no <label> points at it. */
+  label?: string;
+}) {
+  return (
+    <button
+      id={id}
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      disabled={disabled}
+      onClick={() => onChange?.(!checked)}
+      className={cn(
+        "inline-flex h-[22px] w-[38px] shrink-0 items-center rounded-full p-0.5 transition-colors disabled:cursor-not-allowed disabled:opacity-60",
+        checked ? "justify-end bg-[var(--success)]" : "justify-start bg-[var(--border-strong)]"
+      )}
+    >
+      <span className="size-[18px] rounded-full bg-[var(--surface)] shadow-[var(--shadow-rest)]" />
+    </button>
   );
 }
 

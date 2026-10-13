@@ -10,7 +10,7 @@ import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/com
 import { TableCard } from "@/components/ui/table-card";
 import { BoardStatGrid, BoardStatTile } from "@/components/admin/board-stat-tile";
 import { BoardTableFooter } from "@/components/admin/board-table-footer";
-import { btn, Pill, st } from "@/components/app/settings/primitives";
+import { btn, Pill, st, Switch } from "@/components/app/settings/primitives";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -256,7 +256,7 @@ export function CarriersTable({
               <tr className={st.headRow}>
                 <th scope="col" className={cn(st.th, "w-[120px]")}>Code</th>
                 <th scope="col" className={st.th}>Carrier</th>
-                <th scope="col" className={cn(st.th, "w-[130px]")}>State</th>
+                <th scope="col" className={cn(st.th, "w-[160px]")}>State</th>
                 <th scope="col" className={cn(st.th, "w-[90px]")}>Sort</th>
                 <th scope="col" className={cn(st.th, "w-[230px]")}>Usage</th>
                 <th scope="col" className={cn(st.th, "w-[140px]")}>Created</th>
@@ -286,9 +286,19 @@ export function CarriersTable({
                     </td>
                     <td className={st.td}>{carrier.name}</td>
                     <td className={st.td}>
-                      <Pill tone={carrier.is_active ? "success" : "neutral"} dot>
-                        {carrier.is_active ? "Active" : "Inactive"}
-                      </Pill>
+                      {/* The switch runs the same checks as the row menu: switching off a carrier in
+                          use is refused and opens the in-use dialog, and the switch stays on. */}
+                      <span className="inline-flex items-center gap-2">
+                        <Switch
+                          checked={carrier.is_active}
+                          disabled={pending === carrier.id}
+                          label={`${carrier.name}: ${carrier.is_active ? "active, switch off" : "inactive, switch on"}`}
+                          onChange={(next) => void (next ? reactivate(carrier) : deactivate(carrier))}
+                        />
+                        <Pill tone={carrier.is_active ? "success" : "neutral"} dot>
+                          {carrier.is_active ? "Active" : "Inactive"}
+                        </Pill>
+                      </span>
                     </td>
                     <td className={cn(st.td, "tabular-nums")}>{carrier.sort_order}</td>
                     <td className={cn(st.td, "tabular-nums")} title={usage.available ? usageTitle(rowUsage) : USAGE_UNKNOWN_TITLE}>
