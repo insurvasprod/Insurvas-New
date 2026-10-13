@@ -42,7 +42,7 @@ export function CarrierFileUploadButton({ carriers, autoOpen = false }: { carrie
     setProblem(null);
     setDone(null);
     if (!next) { setFile(null); return; }
-    if (!carrierFileKind(next)) { setFile(null); setProblem("Choose a CSV, an Excel (.xlsx) or a PDF file."); return; }
+    if (!carrierFileKind(next)) { setFile(null); setProblem("Choose a CSV, an Excel file (.xlsx, or a .xls saved as XML) or a PDF."); return; }
     if (next.size > MAX_UPLOAD_BYTES) { setFile(null); setProblem(`That file is larger than ${MAX_UPLOAD_BYTES / 1_000_000} MB. Have it dropped into the agency's bucket instead, or split it.`); return; }
     setFile(next);
     const filled = prefillFromFilename(next.name, carriers);

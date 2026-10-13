@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
   const file = form.get("file");
   if (!(file instanceof File)) return NextResponse.json({ error: "Choose a file to upload." }, { status: 400 });
   const kind = carrierFileKind(file);
-  if (!kind) return NextResponse.json({ error: "Choose a CSV, an Excel (.xlsx) or a PDF file." }, { status: 400 });
+  if (!kind) return NextResponse.json({ error: "Choose a CSV, an Excel file (.xlsx, or a .xls saved as XML) or a PDF." }, { status: 400 });
   if (file.size <= 0) return NextResponse.json({ error: "That file is empty." }, { status: 400 });
   if (file.size > MAX_UPLOAD_BYTES) return NextResponse.json({ error: `That file is larger than ${MAX_UPLOAD_BYTES / 1_000_000} MB. Have it dropped into the agency's bucket instead, or split it.` }, { status: 400 });
 
