@@ -13,7 +13,8 @@
  */
 
 import { createContext, useContext, type ReactNode } from "react";
-import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
+import { StatusChip } from "@/components/ui/status-chip";
+import { PILL_TONE, type PillTone } from "@/lib/ui/pillTone";
 
 import { cn } from "@/lib/utils";
 
@@ -204,8 +205,9 @@ export const st = {
 
 /* ── pill ───────────────────────────────────────────────────────────────── */
 
-export type PillTone = "success" | "warning" | "error" | "info" | "neutral" | "brand";
-const PILL_TONE: Record<PillTone, StatusTone> = { success: "good", warning: "warning", error: "danger", info: "info", neutral: "neutral", brand: "action" };
+// The tone map lives in lib/ui/pillTone.ts so server components can call it; re-exported for the
+// client call sites that import it from here.
+export { pillTone, type PillTone } from "@/lib/ui/pillTone";
 
 /**
  * @deprecated UX-5: use `StatusChip` from components/ui/status-chip. A thin alias kept while its call
