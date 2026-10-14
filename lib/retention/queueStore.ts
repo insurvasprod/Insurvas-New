@@ -120,13 +120,18 @@ async function candidates(viewer: Viewer, only?: { carrierId: string; policyNumb
   const keys = new Set(scores.map(keyOf));
   if (!keys.size) return { config, rows: [] as SaveCard[], scored: 0, held: 0, computedAt: null as string | null, today: new Date().toISOString().slice(0, 10) };
 
-  const [policies, signals, attempts, holds, board, requests] = await Promise.all([
+  const [policies, signals, attempts, holds, board, requests, noBank] = await Promise.all([
     byPolicy("policy_current", "carrier_id, policy_number, contact_id, agent_user_id, status_normalized, days_past_due, months_paid, product_code, as_of, premium_cents, premium_mode", viewer.tenantId, keys),
     byPolicy("policy_risk_signals", "*", viewer.tenantId, keys),
     byPolicy("save_attempt", "carrier_id, policy_number, attempted_at, risk_score_at_attempt", viewer.tenantId, keys, (q) => q.order("attempted_at", { ascending: false })),
     byPolicy("save_queue_hold", "id, carrier_id, policy_number, kind, until_date, score_at_hold", viewer.tenantId, keys, (q) => q.is("released_at", null).order("created_at", { ascending: false })),
     loadBoard(viewer, only),
     requestsByPolicy(viewer.tenantId, keys),
+    // LA-5.5: the paper-bill campaign found no bank account for these.
+    byPolicy("conversion_attempt", "carrier_id, policy_number", viewer.tenantId, keys, (q) => q.eq("outcome", "unable_no_bank_account")).catch((error) => {
+      if (isSchemaGap(error)) return [] as Loose[];
+      throw error;
+    }),
   ]);
   const policyOf = new Map<string, Loose>(policies.map((p: Loose) => [keyOf(p), p]));
   const visible = viewer.role === "producer" ? scores.filter((s) => policyOf.get(keyOf(s))?.agent_user_id === viewer.userId) : scores.filter((s) => policyOf.has(keyOf(s)));
@@ -142,6 +147,7 @@ async function candidates(viewer: Viewer, only?: { carrierId: string; policyNumb
   for (const a of attempts) if (!attemptOf.has(keyOf(a))) attemptOf.set(keyOf(a), a);
   const holdOf = new Map<string, Loose>();
   for (const h of holds) if (!holdOf.has(keyOf(h))) holdOf.set(keyOf(h), h);
+  const noBankKeys = new Set<string>(noBank.map((r: Loose) => keyOf(r)));
   const reasonOf = new Map<string, string>(board.rows.map((r) => [`${r.carrierId}|${r.policyNumber}`, r.reason]));
   const contactOf = new Map<string, Loose>(contacts.map((c: Loose) => [c.id, c]));
   const userName = new Map<string, string>(users.map((u: Loose) => [u.id, u.name || u.email]));
@@ -167,7 +173,7 @@ async function candidates(viewer: Viewer, only?: { carrierId: string; policyNumb
       confidence: sc.confidence, signalsAvailable: sc.signals_available, missing: sig.missing, explanation: sc.explanation, contributions: score.contributions,
       fixes: recommendFixes(sig, score), weightSetVersion: sc.weight_set_version,
       premiumCents: p.premium_cents === null ? null : Number(p.premium_cents), premiumMode: p.premium_mode, incomeKnown: sig.monthlyIncomeCents !== null,
-      openRequests: requests.get(key)?.open ?? [], failedFix: requests.get(key)?.failed?.reason ?? null,
+      openRequests: requests.get(key)?.open ?? [], failedFix: requests.get(key)?.failed?.reason ?? null, noBankAccount: noBankKeys.has(key),
     };
   });
   const computedAt = scores.map((s) => s.computed_at as string).sort().at(-1) ?? null;

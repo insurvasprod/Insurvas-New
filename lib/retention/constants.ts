@@ -66,6 +66,10 @@ export type RetentionSettings = {
   dangerMonthTo: number;
   affordabilityLowBp: number;
   affordabilityHighBp: number;
+  /** LA-5.5: days a declined paper-bill conversion stays off the campaign. */
+  billDeclineCooloffDays: number;
+  /** LA-5.5: the agency's own talk track; null = the platform's (PLATFORM_TALK_TRACK). */
+  billTalkTrack: string | null;
 };
 
 export const PLATFORM_DEFAULT_SETTINGS: RetentionSettings = {
@@ -81,6 +85,8 @@ export const PLATFORM_DEFAULT_SETTINGS: RetentionSettings = {
   dangerMonthTo: 5,
   affordabilityLowBp: 300,
   affordabilityHighBp: 600,
+  billDeclineCooloffDays: 180,
+  billTalkTrack: null,
 };
 
 /** retention_settings row → settings; a missing row is the platform defaults. */
@@ -100,6 +106,8 @@ export function settingsFromRow(row: any | null | undefined): RetentionSettings 
     dangerMonthTo: row.danger_month_to,
     affordabilityLowBp: row.affordability_low_bp,
     affordabilityHighBp: row.affordability_high_bp,
+    billDeclineCooloffDays: row.bill_decline_cooloff_days ?? PLATFORM_DEFAULT_SETTINGS.billDeclineCooloffDays,
+    billTalkTrack: row.bill_talk_track ?? null,
   };
 }
 

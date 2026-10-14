@@ -173,6 +173,12 @@ export async function createRequest(viewer: Viewer, input: {
     const link = await db().from("save_attempt").update({ servicing_request_id: data.id }).eq("tenant_id", viewer.tenantId).eq("id", saveAttemptId);
     if (link.error) console.error("[servicing] the save attempt could not be linked", link.error);
   }
+  // LA-5.5: from the paper-bill campaign, the client's "yes" is logged with the request it opened.
+  // It counts as converted only when the file verifies that request.
+  if (input.origin === "campaign" && change.type === "bill_to_draft_conversion") {
+    const agreed = await db().from("conversion_attempt").insert({ tenant_id: viewer.tenantId, carrier_id: input.carrierId, policy_number: input.policyNumber, outcome: "converted", servicing_request_id: data.id, attempted_by: viewer.userId, note: input.note?.trim() || null });
+    if (agreed.error) console.error("[servicing] the campaign call could not be logged", agreed.error);
+  }
   return { id: data.id };
 }
 

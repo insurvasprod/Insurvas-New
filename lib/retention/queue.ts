@@ -58,6 +58,8 @@ export type QueueCandidate = {
   monthsSinceIssue: number | null;
   /** LA-5.4: a fix the next file did not show, with its reason. Such a policy is back on the queue, first. */
   failedFix?: string | null;
+  /** LA-5.5: the paper-bill campaign found no bank account. It is on the queue whatever its score, so the risk decides what else to try. */
+  noBankAccount?: boolean;
 };
 
 const IN_FORCE = new Set(["active", "approved_unpaid"]);
@@ -101,9 +103,11 @@ export function buildQueue<T extends QueueCandidate>(all: T[], settings: Retenti
   const open = all.filter((c) => !failedKeys.has(c.key) && !isEmergency(c) && !isHeld(c, today, settings.workedCooldownDays));
   const atBand = (c: T) => bandAtLeast(c.band, settings.queueMinBand);
   // Counted against the queue band, so the number means "would be on the queue if more were known".
-  const lowConfidence = open.filter((c) => atBand(c) && !reachesQueue(c)).length;
+  const lowConfidence = open.filter((c) => atBand(c) && !reachesQueue(c) && !c.noBankAccount).length;
   const known = open.filter(reachesQueue);
-  let cards = known.filter(atBand);
+  // Sent from the paper-bill campaign: on the queue whatever its band or confidence (holds and cooldown still apply).
+  const handedOver = open.filter((c) => c.noBankAccount && !(reachesQueue(c) && atBand(c)));
+  let cards = [...known.filter(atBand), ...handedOver];
   let usedMedium = false;
   if (!cards.length && settings.includeMediumWhenEmpty && settings.queueMinBand !== "medium") {
     cards = known.filter((c) => c.band === "medium");

@@ -137,12 +137,13 @@ export function SaveQueueBoard({ queue, sort, readOnly, canStartFix }: { queue: 
                   </td>
                   <td className="text-foreground">
                     {card.failedFix && <span role="alert" className="mb-1 block font-semibold text-[var(--error-ink)]">Fix not in the file: {card.failedFix}</span>}
+                    {card.noBankAccount && <span className="mb-1 block text-xs text-muted-foreground">No bank account (from the paper-bill campaign): switching to bank payment isn&apos;t an option.</span>}
                     {card.explanation}
                     {card.openRequests.map((r) => <span key={r.type} className="mt-1 block text-xs text-muted-foreground">Fix in progress: {REQUEST_LABELS[r.type]} · {STATUS_LABELS[r.status].toLowerCase()}</span>)}
                   </td>
                   <td>
                     <ul className="m-0 grid list-none gap-1 p-0">
-                      {card.fixes.map((f) => {
+                      {card.fixes.filter((f) => !(card.noBankAccount && f.action === "convert_to_draft")).map((f) => {
                         const type = REQUEST_FOR_FIX[f.action];
                         const busy = type ? card.openRequests.some((r) => r.type === type) : false;
                         return (
