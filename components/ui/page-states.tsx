@@ -43,18 +43,23 @@ export function EmptyState({
 export function NoMatches({
   noun,
   onClear,
+  by = "filters",
 }: {
   /** Plural, lowercase: "tenants", "invoices", "audit entries". */
   noun: string;
   onClear?: () => void;
+  /** What narrowed the list: a search box alone reads "match this search" (2026-10-09). */
+  by?: "filters" | "search";
 }) {
   return (
     <div className="flex flex-col items-center gap-2 px-6 py-12 text-center">
-      <p className="text-sm font-semibold text-foreground">No {noun} match these filters</p>
+      <p className="text-sm font-semibold text-foreground">No {noun} match {by === "search" ? "this search" : "these filters"}</p>
       <p className="max-w-[52ch] text-sm text-muted-foreground">
-        {onClear
-          ? "There may still be some hidden by a filter."
-          : "Try widening the search or changing the filters."}
+        {by === "search"
+          ? "Check the spelling, or try fewer words."
+          : onClear
+            ? "There may still be some hidden by a filter."
+            : "Try widening the search or changing the filters."}
       </p>
       {onClear && (
         <button
@@ -62,7 +67,7 @@ export function NoMatches({
           onClick={onClear}
           className="mt-1 rounded-md px-2 py-1 text-sm font-medium text-[var(--accent-ink)] transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
         >
-          Clear all filters
+          {by === "search" ? "Clear the search" : "Clear all filters"}
         </button>
       )}
     </div>
