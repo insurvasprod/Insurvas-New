@@ -390,6 +390,9 @@ export const AUDIT_ACTIONS = [
   "tenant.carrier_file_received",
   "tenant.carrier_file_skipped",
   "tenant.carrier_file_downloaded",
+  // Owner request 2026-10-14 · the whole file shown in the app, and a carrier confirmed for a file that came without one.
+  "tenant.carrier_file_viewed",
+  "tenant.carrier_file_attributed",
   "tenant.carrier_inbound_address_created",
   "tenant.carrier_inbound_sender_added",
   "tenant.carrier_inbound_sender_removed",
@@ -770,6 +773,8 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   "tenant.carrier_file_received": "Carrier file received",
   "tenant.carrier_file_skipped": "Carrier file skipped (already received)",
   "tenant.carrier_file_downloaded": "Carrier file downloaded",
+  "tenant.carrier_file_viewed": "Carrier file viewed in the app",
+  "tenant.carrier_file_attributed": "Carrier, type and date confirmed for a file that came in without a carrier",
   "tenant.carrier_inbound_address_created": "Inbound email address created for carrier files",
   "tenant.carrier_inbound_sender_added": "Known carrier sender added",
   "tenant.carrier_inbound_sender_removed": "Known carrier sender removed",

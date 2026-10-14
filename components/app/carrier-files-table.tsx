@@ -156,6 +156,11 @@ export function CarrierFilesTable({ files, emptyTitle, emptyHint }: { files: Car
                   <td>
                     {file.waitingForLayout ? (
                       <StatusChip tone="info">Waiting for a layout</StatusChip>
+                    ) : file.status === "failed" && !file.carrierId && file.rowCount === null ? (
+                      // Owner request 2026-10-14: came in without a carrier; its page suggests who sent it, a person confirms.
+                      <Link href={fileHref(file.id)} className="rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]" title="Open the file to say who sent it">
+                        <StatusChip tone="action">Needs a check</StatusChip>
+                      </Link>
                     ) : (
                       <StatusChip tone={STATUS_TONE[file.status]}>{file.status === "parsed" && file.parserVersion ? `${FILE_STATUS_LABELS.parsed} · v${file.parserVersion}` : FILE_STATUS_LABELS[file.status]}</StatusChip>
                     )}

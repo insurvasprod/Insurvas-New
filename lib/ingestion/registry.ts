@@ -408,6 +408,40 @@ export async function carrierFileDownloadUrl(tenantId: string, fileId: string): 
   return carrierFileStorage().signedUrl(data.storage_path, 60, data.original_filename);
 }
 
+export type CarrierFileOriginal = {
+  id: string;
+  originalFilename: string;
+  fileKind: CarrierFileKind | null;
+  contentType: string | null;
+  carrierId: string | null;
+  status: CarrierFileStatus;
+  rawExtractedAt: string | null;
+  bytes: Uint8Array;
+};
+
+/**
+ * One of the agency's originals, its bytes read from storage (Owner request 2026-10-14: the whole
+ * file shown inside the software, and the file checker's confirm). Scoped by tenant_id; 404 otherwise.
+ */
+export async function readCarrierFileOriginal(tenantId: string, fileId: string): Promise<CarrierFileOriginal> {
+  const { data, error } = await db().from("file_registry").select("id, storage_path, original_filename, file_kind, content_type, carrier_id, status, raw_extracted_at").eq("tenant_id", tenantId).eq("id", fileId).maybeSingle();
+  if (error) {
+    if (pending(error)) throw new CarrierFileError(CARRIER_FILES_PENDING_MESSAGE, 503, "schema_pending");
+    throw new Error(`Could not find the file: ${error.message}`);
+  }
+  if (!data || !String(data.storage_path).startsWith(`${tenantId}/`)) throw new CarrierFileError("That file is not in this workspace.", 404, "not_found");
+  return {
+    id: data.id,
+    originalFilename: data.original_filename,
+    fileKind: data.file_kind,
+    contentType: data.content_type ?? null,
+    carrierId: data.carrier_id,
+    status: data.status,
+    rawExtractedAt: data.raw_extracted_at ?? null,
+    bytes: await carrierFileStorage().get(data.storage_path),
+  };
+}
+
 // ─── the agency's inbound address ──────────────────────────────────────────────────────────────
 
 /**

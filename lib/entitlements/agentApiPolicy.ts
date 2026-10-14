@@ -131,6 +131,9 @@ export const AGENT_API_POLICIES: AgentApiPolicy[] = [
   // email door's settings. Same holders as statements.
   { sourceFile: "app/api/app/carrier-files/route.ts", featureKey: "statement_ingestion", allowedRoles: ["owner", "bookkeeper"] },
   { sourceFile: "app/api/app/carrier-files/[id]/file/route.ts", featureKey: "statement_ingestion", allowedRoles: ["owner", "bookkeeper"] },
+  // Owner request 2026-10-14 · the whole file shown in the app, and a carrier confirmed for a file that came without one.
+  { sourceFile: "app/api/app/carrier-files/[id]/view/route.ts", featureKey: "statement_ingestion", allowedRoles: ["owner", "bookkeeper"] },
+  { sourceFile: "app/api/app/carrier-files/[id]/attribute/route.ts", featureKey: "statement_ingestion", allowedRoles: ["owner", "bookkeeper"] },
   { sourceFile: "app/api/app/carrier-files/inbound/route.ts", featureKey: "statement_ingestion", allowedRoles: ["owner", "bookkeeper"] },
   // LA-4.2 · reprocessing from the raw rows.
   { sourceFile: "app/api/app/carrier-files/reprocess/route.ts", featureKey: "statement_ingestion", allowedRoles: ["owner", "bookkeeper"] },
