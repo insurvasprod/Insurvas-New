@@ -14,6 +14,8 @@ import { TableCard } from "@/components/ui/table-card";
 import { fileDay } from "@/lib/ingestion/constants";
 import { ACTION_TAKEN, BANDS, CONTACT_OUTCOME_LABELS, CONTACT_OUTCOMES, MISSING_LABELS, SNOOZE_DAYS, type ActionTaken, type Band, type ContactOutcome, type Signal } from "@/lib/retention/constants";
 import { SORT_LABELS, SORTS, type QueueSort } from "@/lib/retention/queue";
+import { REQUEST_FOR_FIX, REQUEST_LABELS, STATUS_LABELS, type RequestType } from "@/lib/retention/servicing";
+import { ServicingRequestDialog } from "@/components/app/servicing-request-dialog";
 import type { SaveCard, SaveQueue } from "@/lib/retention/queueStore";
 import { notify } from "@/lib/notify";
 
@@ -44,7 +46,7 @@ const labelClass = "grid gap-1.5 text-sm font-medium text-foreground";
  * outline marked "predicted" and always says how many signals it rests on, so it can never be taken
  * for Lapse risk's observed facts. Phone on the row; the reason is the opening line; at most two fixes.
  */
-export function SaveQueueBoard({ queue, sort, readOnly }: { queue: SaveQueue; sort: QueueSort; readOnly: boolean }) {
+export function SaveQueueBoard({ queue, sort, readOnly, canStartFix }: { queue: SaveQueue; sort: QueueSort; readOnly: boolean; canStartFix: boolean }) {
   const router = useRouter();
   const pathname = usePathname();
   const [refreshing, startRefresh] = useTransition();
@@ -53,6 +55,7 @@ export function SaveQueueBoard({ queue, sort, readOnly }: { queue: SaveQueue; so
   const [page, setPage] = useState(1);
   const [logging, setLogging] = useState<SaveCard | null>(null);
   const [holding, setHolding] = useState<SaveCard | null>(null);
+  const [fixing, setFixing] = useState<{ card: SaveCard; type: RequestType } | null>(null);
 
   const cards = queue.cards;
   const carriers = useMemo(() => [...new Map(cards.map((c) => [c.carrierId, c.carrierName])).entries()].sort((a, b) => a[1].localeCompare(b[1])), [cards]);
@@ -132,10 +135,23 @@ export function SaveQueueBoard({ queue, sort, readOnly }: { queue: SaveQueue; so
                       predicted · based on {card.signalsAvailable} of 7 signals
                     </span>
                   </td>
-                  <td className="text-foreground">{card.explanation}</td>
+                  <td className="text-foreground">
+                    {card.failedFix && <span role="alert" className="mb-1 block font-semibold text-[var(--error-ink)]">Fix not in the file: {card.failedFix}</span>}
+                    {card.explanation}
+                    {card.openRequests.map((r) => <span key={r.type} className="mt-1 block text-xs text-muted-foreground">Fix in progress: {REQUEST_LABELS[r.type]} · {STATUS_LABELS[r.status].toLowerCase()}</span>)}
+                  </td>
                   <td>
                     <ul className="m-0 grid list-none gap-1 p-0">
-                      {card.fixes.map((f) => <li key={f.action} title={f.reason}>→ {f.label}</li>)}
+                      {card.fixes.map((f) => {
+                        const type = REQUEST_FOR_FIX[f.action];
+                        const busy = type ? card.openRequests.some((r) => r.type === type) : false;
+                        return (
+                          <li key={f.action} title={f.reason}>
+                            → {f.label}
+                            {type && canStartFix && !readOnly && !busy && <button type="button" className="ml-1 font-semibold text-[var(--accent-ink)] hover:underline" onClick={() => setFixing({ card, type })}>Start the fix</button>}
+                          </li>
+                        );
+                      })}
                     </ul>
                   </td>
                   <td className="text-right tabular-nums">{money(card.atRiskCents) ?? <span className="text-muted-foreground" title="No advance from this carrier on file yet">Unknown</span>}</td>
@@ -158,6 +174,7 @@ export function SaveQueueBoard({ queue, sort, readOnly }: { queue: SaveQueue; so
       </TableCard>
 
       {logging && <LogDialog card={logging} onClose={() => setLogging(null)} onDone={() => { setLogging(null); router.refresh(); }} />}
+      {fixing && <ServicingRequestDialog carrierId={fixing.card.carrierId} policyNumber={fixing.card.policyNumber} type={fixing.type} origin="save_queue" fromQueue onClose={() => setFixing(null)} onDone={() => { setFixing(null); router.refresh(); }} />}
       {holding && <HoldDialog card={holding} onClose={() => setHolding(null)} onDone={() => { setHolding(null); router.refresh(); }} />}
     </>
   );

@@ -83,7 +83,7 @@ export async function loadRadarConfig(tenantId: string): Promise<RadarConfig | n
   return { settings: settingsFromRow(settings.data), weights, weightSetId: set.id, weightSetVersion: set.version };
 }
 
-const POLICY_COLUMNS = "carrier_id, policy_number, status_normalized, payment_method, issue_date, issued_on, effective_date, as_of, in_clawback_window, annualised_premium_cents, contact_id, household_id, application_id, vendor_id, campaign_id, retention_rule_id, first_seen_date, last_snapshot_date";
+const POLICY_COLUMNS = "carrier_id, policy_number, status_normalized, payment_method, snapshot_id, issue_date, issued_on, effective_date, as_of, in_clawback_window, annualised_premium_cents, contact_id, household_id, application_id, vendor_id, campaign_id, retention_rule_id, first_seen_date, last_snapshot_date";
 
 /** The median gap between a carrier's policy files, per carrier, from the last half year. */
 async function cadenceByCarrier(tenantId: string, today: string): Promise<Map<string, number>> {
@@ -151,7 +151,7 @@ export async function computeRadar(tenantId: string, scope: { carrierId?: string
   const today = (policies.map((p) => p.as_of as string).filter(Boolean).sort().at(-1) as string | undefined) ?? new Date().toISOString().slice(0, 10);
 
   const ruleIds = policies.map((p) => p.retention_rule_id);
-  const [apps, payments, contacts, incomes, rules, wobble, cadence, persistencyOf, salesPrefs, household] = await Promise.all([
+  const [apps, payments, contacts, incomes, rules, wobble, cadence, persistencyOf, salesPrefs, household, fileDraftDays, verifiedDays] = await Promise.all([
     byIds("tenant_applications", "id, draft_day", "id", policies.map((p) => p.application_id), tenantId),
     byIds("tenant_application_payment_methods", "application_id, draft_income_type, draft_income_inputs", "application_id", policies.map((p) => p.application_id), tenantId),
     byIds("contacts", "id, dob", "id", policies.map((p) => p.contact_id), tenantId),
@@ -170,6 +170,13 @@ export async function computeRadar(tenantId: string, scope: { carrierId?: string
       if (!ids.length) return [] as Loose[];
       return byIds("policy_current", "household_id, status_normalized, annualised_premium_cents", "household_id", ids, tenantId);
     })(),
+    // The draft day the carrier's own file shows (a layout mapping DRAFTDAY, LA-5.4), on the policy's latest snapshot.
+    byIds("policy_snapshot", "id, draft_day:extra->fields->>draft_day", "id", policies.map((p) => p.snapshot_id), tenantId),
+    // A draft-date change the file has already proven (LA-5.4): newer than the application's day.
+    everyRow(() => db().from("servicing_request").select("carrier_id, policy_number, field_changes_json, verified_at").eq("tenant_id", tenantId).eq("status", "verified_in_file").order("verified_at").order("id")).catch((error) => {
+      if (isSchemaGap(error)) return [] as Loose[];
+      throw error;
+    }),
   ]);
   if (wobble.error) {
     if (isSchemaGap(wobble.error)) return { available: false };
@@ -183,6 +190,21 @@ export async function computeRadar(tenantId: string, scope: { carrierId?: string
   const ruleOf = new Map<string, Loose>(rules.map((r: Loose) => [r.id, r]));
   const wobbleOf = new Map<string, Loose>(((wobble.data ?? []) as Loose[]).map((w) => [`${w.carrier_id}|${w.policy_number}`, w]));
   const buffer = resolveSalesSettings(salesPrefs.data?.settings).draftBufferDays;
+  const dayOf = (v: unknown) => {
+    const n = typeof v === "number" ? v : typeof v === "string" && /^\d+(\.0+)?$/.test(v.trim()) ? Number(v) : NaN;
+    return Number.isInteger(n) && n >= 1 && n <= 31 ? n : null;
+  };
+  const fileDay = new Map<string, number>();
+  for (const s of fileDraftDays as Loose[]) { const d = dayOf(s.draft_day); if (d) fileDay.set(s.id, d); }
+  const provenDay = new Map<string, number>();
+  for (const v of verifiedDays as Loose[]) {
+    const change = ((v.field_changes_json ?? []) as Loose[]).find((c) => c.field === "draft_day");
+    const d = change ? dayOf(change.to) : null;
+    if (d) provenDay.set(`${v.carrier_id}|${v.policy_number}`, d);
+  }
+  /** The draft day, most trustworthy first: the carrier's latest file, a change the file proved, the LA-3 application. */
+  const draftDayFor = (p: Loose, app: Loose | null): number | null =>
+    (p.snapshot_id ? fileDay.get(p.snapshot_id) : undefined) ?? provenDay.get(`${p.carrier_id}|${p.policy_number}`) ?? app?.draft_day ?? null;
   const householdPremium = new Map<string, number>();
   for (const h of household as Loose[]) {
     if (!SCORED_STATUSES.includes(h.status_normalized) || h.annualised_premium_cents === null) continue;
@@ -209,7 +231,7 @@ export async function computeRadar(tenantId: string, scope: { carrierId?: string
       asOf: p.as_of ?? today,
       inClawbackWindow: p.in_clawback_window,
       monthlyPremiumCents: p.annualised_premium_cents === null ? null : Math.round(Number(p.annualised_premium_cents) / 12),
-      draft: app || pay ? { draftDay: app?.draft_day ?? null, incomeType: pay?.draft_income_type ?? null, incomeInputs: pay?.draft_income_inputs ?? null, dob: p.contact_id ? dobOf.get(p.contact_id) ?? null : null, buffer } : null,
+      draft: app || pay || draftDayFor(p, null) ? { draftDay: draftDayFor(p, app), incomeType: pay?.draft_income_type ?? null, incomeInputs: pay?.draft_income_inputs ?? null, dob: p.contact_id ? dobOf.get(p.contact_id) ?? null : null, buffer } : null,
       wobble: w ? { failures: w.failures, lastFailureDate: w.last_failure_date, recovered: w.recovered } : null,
       hasPaymentHistory: Boolean(p.first_seen_date && p.last_snapshot_date && p.last_snapshot_date > p.first_seen_date),
       monthlyCadence: (cadence.get(p.carrier_id) ?? 0) >= MONTHLY_CADENCE_DAYS,

@@ -113,7 +113,8 @@ export const AGENT_MENU: MenuSection[] = [
       // LA-5.3 · predicted, not observed: kept apart from Lapse risk so a guess never sits beside an emergency.
       item("Book", { key: "retention.save-queue", label: "Save queue", path: "/app/save-queue", icon: "shield-check", built: true, required_feature: "chargeback_radar", required_roles: ["owner", "producer"], blurb: "Policies paying fine today that the radar says will stop, and the fix." }),
       item("Book", { key: "insight.book-scorecards", label: "Book scorecards", path: "/app/book-scorecards", icon: "gauge", required_feature: "cohort_persistency", required_roles: ["owner", "producer", "bookkeeper"], built: true, blurb: "Persistency, placement, chargebacks and true cost per sale, from your carrier files." }),
-      item("Book", { key: "retention.payment-repair", label: "Payment repair", path: "/app/payment-repair", icon: "wrench", required_feature: "payment_repair", required_roles: ["owner", "producer"], blurb: "Fix a missed draft before it lapses." }),
+      // LA-5.4 · servicing requests (the `payment_repair` feature): asked of the carrier, proven by the next file.
+      item("Book", { key: "retention.payment-repair", label: "Servicing", path: "/app/servicing", icon: "wrench", built: true, required_feature: "payment_repair", required_roles: ["owner", "producer"], blurb: "Payment date, bank, bill-to-draft and address changes, verified by the next carrier file." }),
       item("Book", { key: "retention.winback", label: "Win-back", path: "/app/winback", icon: "rotate-ccw", required_feature: "winback", required_roles: ["owner", "producer"], blurb: "Bring back a lapsed customer." }),
     ],
   },

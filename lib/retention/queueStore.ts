@@ -10,6 +10,8 @@ import { buildQueue, daysUntilNextDraft, isEmergency, type QueueCandidate, type 
 import { ensureRadarFresh, loadRadarConfig } from "./radarStore";
 import type { Contribution, RiskScore } from "./score";
 import type { SignalRow } from "./signals";
+import type { RequestStatus, RequestType } from "./servicing";
+import { requestsByPolicy } from "./servicingStore";
 
 /**
  * LA-5.3 (Notion sprint) · the save queue, server side: policies paying perfectly well right now that
@@ -88,6 +90,8 @@ export type SaveCard = QueueCandidate & {
   premiumCents: number | null;
   premiumMode: string | null;
   incomeKnown: boolean;
+  /** LA-5.4: fixes asked of the carrier and still open on this policy. */
+  openRequests: Array<{ type: RequestType; status: RequestStatus }>;
 };
 
 export type SaveQueue = {
@@ -116,12 +120,13 @@ async function candidates(viewer: Viewer, only?: { carrierId: string; policyNumb
   const keys = new Set(scores.map(keyOf));
   if (!keys.size) return { config, rows: [] as SaveCard[], scored: 0, held: 0, computedAt: null as string | null, today: new Date().toISOString().slice(0, 10) };
 
-  const [policies, signals, attempts, holds, board] = await Promise.all([
+  const [policies, signals, attempts, holds, board, requests] = await Promise.all([
     byPolicy("policy_current", "carrier_id, policy_number, contact_id, agent_user_id, status_normalized, days_past_due, months_paid, product_code, as_of, premium_cents, premium_mode", viewer.tenantId, keys),
     byPolicy("policy_risk_signals", "*", viewer.tenantId, keys),
     byPolicy("save_attempt", "carrier_id, policy_number, attempted_at, risk_score_at_attempt", viewer.tenantId, keys, (q) => q.order("attempted_at", { ascending: false })),
     byPolicy("save_queue_hold", "id, carrier_id, policy_number, kind, until_date, score_at_hold", viewer.tenantId, keys, (q) => q.is("released_at", null).order("created_at", { ascending: false })),
     loadBoard(viewer, only),
+    requestsByPolicy(viewer.tenantId, keys),
   ]);
   const policyOf = new Map<string, Loose>(policies.map((p: Loose) => [keyOf(p), p]));
   const visible = viewer.role === "producer" ? scores.filter((s) => policyOf.get(keyOf(s))?.agent_user_id === viewer.userId) : scores.filter((s) => policyOf.has(keyOf(s)));
@@ -162,6 +167,7 @@ async function candidates(viewer: Viewer, only?: { carrierId: string; policyNumb
       confidence: sc.confidence, signalsAvailable: sc.signals_available, missing: sig.missing, explanation: sc.explanation, contributions: score.contributions,
       fixes: recommendFixes(sig, score), weightSetVersion: sc.weight_set_version,
       premiumCents: p.premium_cents === null ? null : Number(p.premium_cents), premiumMode: p.premium_mode, incomeKnown: sig.monthlyIncomeCents !== null,
+      openRequests: requests.get(key)?.open ?? [], failedFix: requests.get(key)?.failed?.reason ?? null,
     };
   });
   const computedAt = scores.map((s) => s.computed_at as string).sort().at(-1) ?? null;
@@ -224,18 +230,18 @@ async function cardFor(viewer: Viewer, carrierId: string, policyNumber: string):
 /** Log a worked card, capturing the score, band, weight version and exposure at this moment (LA-5.9 needs them). */
 export async function logSaveAttempt(viewer: Viewer, input: { carrierId: string; policyNumber: string; outcome: ContactOutcome; actionTaken: ActionTaken; note: string | null }) {
   const card = await cardFor(viewer, input.carrierId, input.policyNumber);
-  const { error } = await db().from("save_attempt").insert({
+  const { data: saved, error } = await db().from("save_attempt").insert({
     tenant_id: viewer.tenantId, carrier_id: input.carrierId, policy_number: input.policyNumber,
     risk_score_at_attempt: card.score, band_at_attempt: card.band, weight_set_version: card.weightSetVersion,
     unearned_advance_at_attempt_cents: card.atRiskCents,
     recommended_actions_json: card.fixes.map((f) => ({ action: f.action, label: f.label, target_draft_day: f.targetDraftDay ?? null })),
     action_taken: input.actionTaken, contact_outcome: input.outcome, attempted_by: viewer.userId, note: input.note?.trim() || null,
-  });
+  }).select("id").single();
   if (error) {
     if (isSchemaGap(error)) throw new SaveQueueError(RADAR_PENDING_MESSAGE, 503);
     throw new Error(`Could not log the call: ${error.message}`);
   }
-  return { score: card.score, band: card.band };
+  return { id: saved.id as string, score: card.score, band: card.band };
 }
 
 /** Snooze (until a day) or dismiss (until released), with a reason. A newer hold replaces an open one. */

@@ -53,6 +53,8 @@ const POLICY_FIELDS: TargetField[] = [
   { key: "premium_cents", label: "Premium", dataType: "int_cents" },
   { key: "premium_mode", label: "Premium mode", dataType: "enum", enumValues: ["monthly", "quarterly", "semiannual", "annual"] },
   { key: "payment_method", label: "Payment method", dataType: "enum", enumValues: ["bank_draft", "direct_express", "card", "direct_bill"] },
+  // LA-5.4: what proves a draft-date change happened (Aetna/Aflac/AHL send DRAFTDAY). Kept in the snapshot's extra fields.
+  { key: "draft_day", label: "Draft day (day of the month)", dataType: "integer" },
   { key: "face_amount_cents", label: "Face amount", dataType: "int_cents" },
   { key: "product_code", label: "Product code", dataType: "text" },
   { key: "product_tier", label: "Product tier", dataType: "text" },

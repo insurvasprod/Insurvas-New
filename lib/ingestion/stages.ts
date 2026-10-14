@@ -9,6 +9,7 @@ import { evaluateRetention } from "./retentionStore";
 import { computeExpected } from "./expectedCommissionStore";
 import { rebuildFileSnapshots } from "./snapshotStore";
 import { computeRadar } from "@/lib/retention/radarStore";
+import { runServicingVerification } from "@/lib/retention/servicingStore";
 
 /**
  * LA-4.2+ (Notion sprint) · the stages that rebuild what is derived from a file, in order. A door
@@ -114,7 +115,27 @@ const riskRadar: ReprocessStage = {
   },
 };
 
-export const REPROCESS_STAGES: ReprocessStage[] = [policySnapshots, expectedCommission, retentionResults, riskRadar, commissionEntries, orphanCommission, commissionDiscrepancies];
+/**
+ * servicing_verify (LA-5.4): after a policy file, every open servicing request on that carrier is
+ * checked against the newest file — verified when it shows the change, failed (with an alert) past
+ * the expected date plus grace. The database decides; this only asks. Before the radar, so a proven
+ * draft day is scored at once.
+ */
+const servicingVerify: ReprocessStage = {
+  name: "servicing_verify",
+  async rebuild(tenantId: string, file: ReprocessFile, _rows, parsed: ParsedFile | null) {
+    if (!isPolicyFeed(file.fileType) || !parsed?.typedRows || !file.carrierId) return { changed: 0 };
+    try {
+      const run = await runServicingVerification(tenantId, file.carrierId);
+      return { changed: run ? run.verified + run.failed : 0 };
+    } catch (error) {
+      console.error("[servicing_verify] the servicing requests could not be checked after a file", error);
+      return { changed: 0 };
+    }
+  },
+};
+
+export const REPROCESS_STAGES: ReprocessStage[] = [policySnapshots, expectedCommission, retentionResults, servicingVerify, riskRadar, commissionEntries, orphanCommission, commissionDiscrepancies];
 
 /** After a door's parse: the same stages a reprocess runs, for one file's passed rows. */
 export async function runStages(tenantId: string, file: ReprocessFile, parsed: ParsedFile): Promise<void> {

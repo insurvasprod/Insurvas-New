@@ -28,13 +28,15 @@ export default async function SaveQueuePage({ searchParams }: { searchParams: Pr
 
   const { sort: sortParam } = await searchParams;
   const sort: QueueSort = (SORTS as readonly string[]).includes(sortParam ?? "") ? (sortParam as QueueSort) : "value";
+  // "Start the fix" opens an LA-5.4 servicing request, which is the `payment_repair` feature.
+  const servicing = await guardPage("payment_repair");
   const queue = await loadSaveQueue({ tenantId: guard.context.tenantId, userId: guard.context.userId, role: guard.role }, sort);
 
   return (
     <div className="m-stagger flex min-h-0 flex-grow flex-col gap-6">
       <PageHeader title="Save queue" description="Policies paying fine today that the radar says will stop." />
       {queue.available ? (
-        <SaveQueueBoard queue={queue} sort={sort} readOnly={guard.entitlement.access === "read_only"} />
+        <SaveQueueBoard queue={queue} sort={sort} readOnly={guard.entitlement.access === "read_only"} canStartFix={servicing.entitled && servicing.entitlement.access !== "read_only"} />
       ) : (
         <TableCard>
           <EmptyState title="Not switched on yet" hint={RADAR_PENDING_MESSAGE} />

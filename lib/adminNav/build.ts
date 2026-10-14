@@ -106,6 +106,8 @@ export function buildAdminNav(role: AdminRole): SidebarNode[] {
       section("carriers", "/admin/carrier-rules", "Carrier rules", "carrier-rules"),
       // LA-4.10 · where each carrier's policy file lives in its portal, for the book import.
       section("carriers", "/admin/carrier-guidance", "Portal guidance", "portal-guidance"),
+      // LA-5.4 · how each carrier takes a servicing change (part of the carrier record, as its rules).
+      section("carriers", "/admin/servicing-guides", "Servicing instructions", "carrier-rules"),
       section("templates", "/admin/templates", "Templates", "templates"),
     ]),
 

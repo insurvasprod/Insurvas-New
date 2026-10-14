@@ -56,6 +56,8 @@ export type QueueCandidate = {
   atRiskCents: number | null;
   nextDraftDays: number | null;
   monthsSinceIssue: number | null;
+  /** LA-5.4: a fix the next file did not show, with its reason. Such a policy is back on the queue, first. */
+  failedFix?: string | null;
 };
 
 const IN_FORCE = new Set(["active", "approved_unpaid"]);
@@ -93,7 +95,10 @@ export const reachesQueue = (c: Pick<QueueCandidate, "confidence">) => c.confide
 
 /** The queue: eligible cards in order, capped. With nothing at the queue band, medium fills it when the setting says so. */
 export function buildQueue<T extends QueueCandidate>(all: T[], settings: RetentionSettings, today: string, sort: QueueSort = "value"): { cards: T[]; total: number; usedMedium: boolean; lowConfidence: number } {
-  const open = all.filter((c) => !isEmergency(c) && !isHeld(c, today, settings.workedCooldownDays));
+  // A fix the file did not show is back whatever its band, confidence or hold — never over an emergency.
+  const failed = all.filter((c) => c.failedFix && !isEmergency(c));
+  const failedKeys = new Set(failed.map((c) => c.key));
+  const open = all.filter((c) => !failedKeys.has(c.key) && !isEmergency(c) && !isHeld(c, today, settings.workedCooldownDays));
   const atBand = (c: T) => bandAtLeast(c.band, settings.queueMinBand);
   // Counted against the queue band, so the number means "would be on the queue if more were known".
   const lowConfidence = open.filter((c) => atBand(c) && !reachesQueue(c)).length;
@@ -104,6 +109,6 @@ export function buildQueue<T extends QueueCandidate>(all: T[], settings: Retenti
     cards = known.filter((c) => c.band === "medium");
     usedMedium = cards.length > 0;
   }
-  const sorted = [...cards].sort(compareCards(sort));
+  const sorted = [...failed.sort(compareCards(sort)), ...[...cards].sort(compareCards(sort))];
   return { cards: sorted.slice(0, settings.maxCards), total: sorted.length, usedMedium, lowConfidence };
 }
