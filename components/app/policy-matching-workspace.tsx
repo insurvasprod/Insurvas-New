@@ -7,6 +7,8 @@ import { ViewTabs } from "@/components/app/book-of-business-views";
 import { Button } from "@/components/ui/button";
 import { ClearFiltersButton, DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
 import { TableCard } from "@/components/ui/table-card";
@@ -27,7 +29,7 @@ const nameOf = (p: { firstName?: string | null; lastName?: string | null }) => [
  * LA-4.8 (Notion sprint) · policies to link, the links made, and agent codes to map. A person picks
  * the client for a policy whose number we don't hold; the AI does it once a provider is configured.
  */
-export function PolicyMatchingWorkspace({ reviews, links, unmapped, mapped, members, readOnly, aiNote, initialTab = "review" }: { reviews: ReviewRow[]; links: LinkRow[]; unmapped: UnmappedAgent[]; mapped: MappedAgent[]; members: Array<{ userId: string; name: string; role: string }>; readOnly: boolean; aiNote: string; initialTab?: Tab }) {
+export function PolicyMatchingWorkspace({ reviews, links, unmapped, mapped, members, carriers, readOnly, aiNote, initialTab = "review" }: { reviews: ReviewRow[]; links: LinkRow[]; unmapped: UnmappedAgent[]; mapped: MappedAgent[]; members: Array<{ userId: string; name: string; role: string }>; carriers: Array<{ id: string; name: string }>; readOnly: boolean; aiNote: string; initialTab?: Tab }) {
   const router = useRouter();
   const [refreshing, startRefresh] = useTransition();
   const [tab, setTab] = useState<Tab>(initialTab);
@@ -38,18 +40,25 @@ export function PolicyMatchingWorkspace({ reviews, links, unmapped, mapped, memb
   const [reviewPage, setReviewPage] = useState(1);
   const [linkPage, setLinkPage] = useState(1);
   const [agentPage, setAgentPage] = useState(1);
+  // Owner request 2026-10-14: a code added by hand, before its first file arrives.
+  const [adding, setAdding] = useState(false);
+  const [newCode, setNewCode] = useState({ carrierId: "", code: "", userId: "" });
   const search = (value: string) => { setQuery(value); setReviewPage(1); setLinkPage(1); setAgentPage(1); };
   const open = reviews.find((review) => review.id === openId) ?? null;
   const q = query.trim().toLowerCase();
   const has = (...values: Array<string | null | undefined>) => !q || values.some((value) => (value ?? "").toLowerCase().includes(q));
   const visibleReviews = useMemo(() => reviews.filter((r) => has(r.policyNumber, r.carrierName, nameOf(r.carrierRow ?? {}))), [reviews, q]); // eslint-disable-line react-hooks/exhaustive-deps
   const visibleLinks = useMemo(() => links.filter((l) => has(l.policyNumber, l.carrierName, l.clientName)), [links, q]); // eslint-disable-line react-hooks/exhaustive-deps
-  const visibleAgents = useMemo(() => unmapped.filter((a) => has(a.agentIdentifier, a.carrierName)), [unmapped, q]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Every code in one list, the ones to map first, 10 a page (the mapped ones used to be drawn all at once under the last page).
+  const visibleAgents = useMemo(() => [
+    ...unmapped.map((a) => ({ kind: "unmapped" as const, ...a })),
+    ...mapped.map((m) => ({ kind: "mapped" as const, ...m })),
+  ].filter((a) => has(a.agentIdentifier, a.carrierName, a.kind === "mapped" ? a.userName : null)), [unmapped, mapped, q]); // eslint-disable-line react-hooks/exhaustive-deps
   const shownReviews = paginate(visibleReviews, reviewPage, 10);
   const shownLinks = paginate(visibleLinks, linkPage, 10);
   const shownAgents = paginate(visibleAgents, agentPage, 10);
 
-  async function post(key: string, body: Record<string, unknown>, done: string) {
+  async function post(key: string, body: Record<string, unknown>, done: string): Promise<boolean> {
     setBusy(key);
     try {
       const response = await fetch("/api/app/policy-matching", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -58,8 +67,10 @@ export function PolicyMatchingWorkspace({ reviews, links, unmapped, mapped, memb
       notify.done(done);
       setOpenId(null);
       router.refresh();
+      return true;
     } catch (error) {
       notify.block(error instanceof Error ? error.message : "That did not save.");
+      return false;
     } finally {
       setBusy(null);
     }
@@ -68,6 +79,7 @@ export function PolicyMatchingWorkspace({ reviews, links, unmapped, mapped, memb
   const toolbar = (
     <DataToolbar actions={<>
       {q && <ClearFiltersButton onClick={() => search("")} />}
+      {tab === "agents" && !readOnly && <Button type="button" variant="outline" onClick={() => setAdding(true)}>Add agent code</Button>}
       <RefreshButton onClick={() => startRefresh(() => router.refresh())} refreshing={refreshing} />
     </>}>
       <ToolbarSearch value={query} onChange={search} placeholder={tab === "agents" ? "Search agent codes" : "Search policies or clients"} />
@@ -140,13 +152,23 @@ export function PolicyMatchingWorkspace({ reviews, links, unmapped, mapped, memb
       )}
 
       {tab === "agents" && (
-        <TableCard toolbar={toolbar} footer={visibleAgents.length > 10 ? <Pager page={shownAgents.current} pageSize={10} total={visibleAgents.length} noun="unmapped agent codes" onPage={setAgentPage} /> : undefined}>
-          {unmapped.length === 0 && mapped.length === 0 ? <EmptyState title="No agent codes yet" hint="Each carrier's writing-agent code appears here the first time a file carries it." />
+        <TableCard toolbar={toolbar} footer={visibleAgents.length > 10 ? <Pager page={shownAgents.current} pageSize={10} total={visibleAgents.length} noun="agent codes" onPage={setAgentPage} suffix={unmapped.length ? `${unmapped.length} to map` : "all mapped"} /> : undefined}>
+          {unmapped.length === 0 && mapped.length === 0 ? <EmptyState title="No agent codes yet" hint="Each carrier's writing-agent code appears here the first time a file carries it, or add one yourself." action={!readOnly ? <Button type="button" onClick={() => setAdding(true)}>Add agent code</Button> : undefined} />
+            : visibleAgents.length === 0 ? <NoMatches noun="agent codes" onClear={() => search("")} />
             : (
               <table className="portal-lead-table w-full min-w-[820px] text-left text-sm">
                 <thead><tr><th>Carrier&apos;s agent code</th><th>Carrier</th><th className="w-[90px] text-right">Policies</th><th className="w-[260px]">Agent</th><th className="w-[100px] text-right"><span className="sr-only">Actions</span></th></tr></thead>
                 <tbody>
                   {shownAgents.rows.map((agent) => {
+                    if (agent.kind === "mapped") return (
+                      <tr key={agent.id}>
+                        <td className="font-mono text-xs text-foreground">{agent.agentIdentifier}</td>
+                        <td>{agent.carrierName}</td>
+                        <td className="text-right tabular-nums">{agent.policies ? agent.policies.toLocaleString("en-US") : <span className="text-muted-foreground" title="No file has carried this code yet">0</span>}</td>
+                        <td>{agent.userName}<span className="block text-xs text-muted-foreground">Mapped</span></td>
+                        <td className="text-right">{!readOnly && <Button type="button" variant="outline" size="sm" disabled={busy !== null} onClick={() => void post(`unmap-${agent.id}`, { action: "unmap_agent", map_id: agent.id }, "Mapping removed.")}>Unmap</Button>}</td>
+                      </tr>
+                    );
                     const key = `${agent.carrierId}|${agent.agentIdentifier}`;
                     return (
                       <tr key={key}>
@@ -163,20 +185,45 @@ export function PolicyMatchingWorkspace({ reviews, links, unmapped, mapped, memb
                       </tr>
                     );
                   })}
-                  {shownAgents.current === shownAgents.pages && mapped.filter((m) => has(m.agentIdentifier, m.carrierName, m.userName)).map((m) => (
-                    <tr key={m.id}>
-                      <td className="font-mono text-xs text-foreground">{m.agentIdentifier}</td>
-                      <td>{m.carrierName}</td>
-                      <td className="text-right text-muted-foreground">—</td>
-                      <td>{m.userName}<span className="block text-xs text-muted-foreground">Mapped</span></td>
-                      <td className="text-right">{!readOnly && <Button type="button" variant="outline" size="sm" disabled={busy !== null} onClick={() => void post(`unmap-${m.id}`, { action: "unmap_agent", map_id: m.id }, "Mapping removed.")}>Unmap</Button>}</td>
-                    </tr>
-                  ))}
                 </tbody>
               </table>
             )}
         </TableCard>
       )}
+
+      <Dialog open={adding} onOpenChange={(next) => { if (!busy) setAdding(next); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-base">Add agent code</DialogTitle>
+            <DialogDescription>Every policy a carrier&apos;s file lists under this code is credited to this person, from the first file on.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 text-sm">
+            <div className="grid gap-1.5">
+              <Label htmlFor="agent-code-carrier">Carrier</Label>
+              <select id="agent-code-carrier" className={`${toolbarControl} w-full`} value={newCode.carrierId} onChange={(e) => setNewCode({ ...newCode, carrierId: e.target.value })}>
+                <option value="">Choose the carrier</option>
+                {carriers.map((carrier) => <option key={carrier.id} value={carrier.id}>{carrier.name}</option>)}
+              </select>
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="agent-code-code">Agent code</Label>
+              <Input id="agent-code-code" className="h-9 font-mono" spellCheck={false} autoComplete="off" placeholder="e.g. 7771102512" value={newCode.code} onChange={(e) => setNewCode({ ...newCode, code: e.target.value })} />
+              <p className="m-0 text-xs text-muted-foreground">Exactly as the carrier writes it in its files: same letters, digits and dashes.</p>
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="agent-code-person">Agent</Label>
+              <select id="agent-code-person" className={`${toolbarControl} w-full`} value={newCode.userId} onChange={(e) => setNewCode({ ...newCode, userId: e.target.value })}>
+                <option value="">Choose the person</option>
+                {members.map((member) => <option key={member.userId} value={member.userId}>{member.name}</option>)}
+              </select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" disabled={busy !== null} onClick={() => setAdding(false)}>Cancel</Button>
+            <Button type="button" disabled={busy !== null || !newCode.carrierId || !newCode.code.trim() || !newCode.userId} onClick={() => void post("add-agent", { action: "add_agent", carrier_id: newCode.carrierId, agent_identifier: newCode.code.trim(), user_id: newCode.userId }, "Agent code added.").then((ok) => { if (ok) { setAdding(false); setNewCode({ carrierId: "", code: "", userId: "" }); } })}>{busy === "add-agent" ? "Adding…" : "Add"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={Boolean(open)} onOpenChange={(next) => { if (!next && !busy) setOpenId(null); }}>
         <DialogContent className="max-h-[calc(100vh-4rem)] overflow-y-auto sm:max-w-4xl">

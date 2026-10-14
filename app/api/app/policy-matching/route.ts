@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import { audit } from "@/lib/audit/log";
 import { isRecordUuid } from "@/lib/ingestion/path";
-import { loadMatching, mapAgent, MATCHING_PENDING_MESSAGE, MatchingError, reopenMatch, resolveReview, unmapAgent } from "@/lib/ingestion/policyMatchingStore";
+import { addAgentCode, loadMatching, mapAgent, MATCHING_PENDING_MESSAGE, MatchingError, reopenMatch, resolveReview, unmapAgent } from "@/lib/ingestion/policyMatchingStore";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 
 /**
@@ -20,6 +20,8 @@ const action = z.discriminatedUnion("action", [
   z.object({ action: z.literal("reopen"), match_id: uuid }).strict(),
   z.object({ action: z.literal("map_agent"), carrier_id: uuid, agent_identifier: z.string().min(1).max(200), user_id: uuid }).strict(),
   z.object({ action: z.literal("unmap_agent"), map_id: uuid }).strict(),
+  // Owner request 2026-10-14: a code added by hand, before the first file carries it.
+  z.object({ action: z.literal("add_agent"), carrier_id: uuid, agent_identifier: z.string().trim().min(1, "Type the agent code.").max(200), user_id: uuid }).strict(),
 ]);
 
 function failure(error: unknown) {
@@ -62,6 +64,11 @@ export async function POST(request: NextRequest) {
       await mapAgent(scope, body.carrier_id, body.agent_identifier, body.user_id);
       await audit({ ...base, action: "carrier_agent.mapped", targetType: "carrier", targetId: body.carrier_id, metadata: { tenantId: scope.tenantId, agentIdentifier: body.agent_identifier, userId: body.user_id } });
       return NextResponse.json({ ok: true, id: body.carrier_id });
+    }
+    if (body.action === "add_agent") {
+      const code = await addAgentCode(scope, body.carrier_id, body.agent_identifier, body.user_id);
+      await audit({ ...base, action: "carrier_agent.mapped", targetType: "carrier", targetId: body.carrier_id, metadata: { tenantId: scope.tenantId, agentIdentifier: code, userId: body.user_id, addedByHand: true } });
+      return NextResponse.json({ ok: true, id: body.carrier_id }, { status: 201 });
     }
     const done = await unmapAgent(scope, body.map_id);
     await audit({ ...base, action: "carrier_agent.unmapped", targetType: "carrier", targetId: done.carrierId, metadata: { tenantId: scope.tenantId, agentIdentifier: done.agentIdentifier, mapId: body.map_id } });

@@ -3,6 +3,7 @@ import "server-only";
 import { addressHash, addressSearch, nameSearch, normalizePhone } from "@/lib/contacts/normalization";
 import { findDuplicatesQuietly, queueDuplicateReviews } from "@/lib/contacts/service";
 import type { ContactInput } from "@/lib/contacts/types";
+import { switchedOffCarrierIds } from "@/lib/carriers/service";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isSchemaGap } from "@/lib/supabase/schemaGap";
 
@@ -10,6 +11,7 @@ import { annualisedPremiumCents } from "./policyCurrent";
 import { accuracy, isStrong, ladderShare, shortlist, SHORTLIST_LOOKBACK_DAYS, splitName, WRITING_ROLES, type Candidate, type CarrierSide, type LadderCounts, type Scored } from "./policyMatching";
 import { recordCarrierIssues } from "./applicationIssueStore";
 import { refreshPolicyCurrent } from "./policyCurrentStore";
+import { libraryCarriers } from "./registry";
 import { closeAnsweredItems, noRecordPolicy, openImportSummary, retireProvisional } from "./exceptionQueuesStore";
 import { chooseExistingClient, identityKey } from "./exceptionQueues";
 import { allRows } from "./pages";
@@ -498,6 +500,27 @@ export async function mapAgent(scope: MatchingScope, carrierId: string, agentIde
   await refreshPolicyCurrent({ tenantId: scope.tenantId, carrierId });
 }
 
+/**
+ * Adds a carrier agent code by hand (owner request 2026-10-14): a new agent's writing number, mapped
+ * before the first file that carries it arrives. LA-4.8 maps codes "once by a human" on the carrier's
+ * exact string, so the code is stored exactly as typed (spaces around it removed, as the parser does);
+ * a code already mapped is refused rather than silently moved to someone else.
+ */
+export async function addAgentCode(scope: MatchingScope, carrierId: string, agentIdentifier: string, userId: string): Promise<string> {
+  const code = agentIdentifier.trim();
+  if (!code) throw new MatchingError("Type the agent code exactly as the carrier writes it.", 400);
+  const { data: carrier } = await db().from("carriers").select("id, is_active").eq("id", carrierId).maybeSingle();
+  if (!carrier || carrier.is_active === false) throw new MatchingError("Choose a carrier from the list.", 400);
+  const { data: existing, error } = await db().from("carrier_agent_map").select("user_id").eq("tenant_id", scope.tenantId).eq("carrier_id", carrierId).eq("agent_identifier", code).maybeSingle();
+  if (error) fail(error, "Could not check the agent code");
+  if (existing) {
+    const { data: who } = await db().from("users").select("name, email").eq("id", existing.user_id).maybeSingle();
+    throw new MatchingError(`That code is already mapped to ${who?.name || who?.email || "someone"}. Unmap it first to give it to someone else.`, 409);
+  }
+  await mapAgent(scope, carrierId, code, userId);
+  return code;
+}
+
 export async function unmapAgent(scope: MatchingScope, mapId: string): Promise<{ carrierId: string; agentIdentifier: string }> {
   const { data, error } = await db().from("carrier_agent_map").delete().eq("tenant_id", scope.tenantId).eq("id", mapId).select("carrier_id, agent_identifier");
   if (error) fail(error, "Could not remove the agent mapping");
@@ -509,7 +532,7 @@ export async function unmapAgent(scope: MatchingScope, mapId: string): Promise<{
 export type ReviewRow = { id: string; carrierId: string; carrierName: string; policyNumber: string; carrierRow: Loose; shortlist: Array<ReturnType<typeof storedEntry>>; createdAt: string };
 export type LinkRow = { id: string; carrierName: string; policyNumber: string; method: string; step: number; type: string; clientName: string | null; confidence: number | null; confirmed: boolean; createdAt: string };
 export type UnmappedAgent = { carrierId: string; carrierName: string; agentIdentifier: string; policies: number };
-export type MappedAgent = { id: string; carrierId: string; carrierName: string; agentIdentifier: string; userId: string; userName: string };
+export type MappedAgent = { id: string; carrierId: string; carrierName: string; agentIdentifier: string; userId: string; userName: string; policies: number };
 
 export async function loadMatching(tenantId: string) {
   const since = new Date(Date.now() - 30 * 86_400_000).toISOString();
@@ -518,7 +541,8 @@ export async function loadMatching(tenantId: string) {
     // The whole review queue and every unmapped code, page by page: one request stops at 1,000.
     allRows(() => db().from("policy_match_review").select("id, carrier_id, policy_number, carrier_row, shortlist, created_at").eq("tenant_id", tenantId).eq("status", "open").order("created_at").order("id"), 10_000),
     db().from("policy_match").select("id, carrier_id, policy_number, method, ladder_step, matched_to_type, contact_id, confidence, confirmed_at, created_at").eq("tenant_id", tenantId).is("superseded_by_id", null).order("created_at", { ascending: false }).limit(200),
-    allRows(() => db().from("policy_current").select("carrier_id, agent_identifier").eq("tenant_id", tenantId).not("agent_identifier", "is", null).is("agent_user_id", null).order("carrier_id").order("policy_number"), 200_000),
+    // Every policy with a carrier agent code: the unmapped ones make the queue, and every code (mapped too) gets its count.
+    allRows(() => db().from("policy_current").select("carrier_id, agent_identifier, agent_user_id").eq("tenant_id", tenantId).not("agent_identifier", "is", null).order("carrier_id").order("policy_number"), 200_000),
     db().from("carrier_agent_map").select("id, carrier_id, agent_identifier, user_id").eq("tenant_id", tenantId).order("agent_identifier"),
     db().from("tenant_users").select("user_id, role, accepted_at").eq("tenant_id", tenantId),
     db().from("policy_match_ladder").select("already_linked, exact_linked, to_review").eq("tenant_id", tenantId).gte("created_at", since),
@@ -532,6 +556,8 @@ export async function loadMatching(tenantId: string) {
     }
   }
   const carrierName = new Map<string, string>((carriers.data ?? []).map((row: Loose) => [row.id, row.name]));
+  // The carriers a code can be added for: the library the upload form offers, less the ones this agency switched off.
+  const [library, switchedOff] = await Promise.all([libraryCarriers().catch(() => []), switchedOffCarrierIds(tenantId)]);
   const contactIds = [...new Set((links.data ?? []).map((row: Loose) => row.contact_id).filter(Boolean))];
   const userIds = [...new Set([...(members.data ?? []).map((row: Loose) => row.user_id), ...(maps.data ?? []).map((row: Loose) => row.user_id)])];
   const [contacts, users] = await Promise.all([
@@ -545,8 +571,11 @@ export async function loadMatching(tenantId: string) {
   const userName = new Map<string, string>((users.data ?? []).map((row: Loose) => [row.id, row.name || row.email || row.id]));
 
   const unmapped = new Map<string, UnmappedAgent>();
+  const policiesPerCode = new Map<string, number>();
   for (const row of current.rows) {
     const key = `${row.carrier_id}|${row.agent_identifier}`;
+    policiesPerCode.set(key, (policiesPerCode.get(key) ?? 0) + 1);
+    if (row.agent_user_id) continue;
     const entry = unmapped.get(key) ?? { carrierId: row.carrier_id, carrierName: carrierName.get(row.carrier_id) ?? "", agentIdentifier: row.agent_identifier, policies: 0 };
     entry.policies++;
     unmapped.set(key, entry);
@@ -562,7 +591,9 @@ export async function loadMatching(tenantId: string) {
     reviews: (reviews.rows as Loose[]).map((row: Loose): ReviewRow => ({ id: row.id, carrierId: row.carrier_id, carrierName: carrierName.get(row.carrier_id) ?? "", policyNumber: row.policy_number, carrierRow: row.carrier_row, shortlist: row.shortlist ?? [], createdAt: row.created_at })),
     links: (links.data ?? []).map((row: Loose): LinkRow => ({ id: row.id, carrierName: carrierName.get(row.carrier_id) ?? "", policyNumber: row.policy_number, method: row.method, step: row.ladder_step, type: row.matched_to_type, clientName: row.contact_id ? contactName.get(row.contact_id) ?? null : null, confidence: row.confidence, confirmed: Boolean(row.confirmed_at), createdAt: row.created_at })),
     unmapped: [...unmapped.values()].sort((a, b) => b.policies - a.policies || a.agentIdentifier.localeCompare(b.agentIdentifier)),
-    mapped: (maps.data ?? []).map((row: Loose): MappedAgent => ({ id: row.id, carrierId: row.carrier_id, carrierName: carrierName.get(row.carrier_id) ?? "", agentIdentifier: row.agent_identifier, userId: row.user_id, userName: userName.get(row.user_id) ?? row.user_id })),
+    mapped: (maps.data ?? []).map((row: Loose): MappedAgent => ({ id: row.id, carrierId: row.carrier_id, carrierName: carrierName.get(row.carrier_id) ?? "", agentIdentifier: row.agent_identifier, userId: row.user_id, userName: userName.get(row.user_id) ?? row.user_id, policies: policiesPerCode.get(`${row.carrier_id}|${row.agent_identifier}`) ?? 0 })),
+    // The carriers a code can be added for, before its first file arrives.
+    carriers: library.filter((carrier) => !switchedOff.has(carrier.id)).map((carrier) => ({ id: carrier.id, name: carrier.name })).sort((a, b) => a.name.localeCompare(b.name)),
     members: (members.data ?? []).filter((row: Loose) => row.accepted_at && WRITING_ROLES.includes(row.role)).map((row: Loose) => ({ userId: row.user_id as string, name: userName.get(row.user_id) ?? row.user_id, role: row.role as string })),
     ladder: ladderShare((ladder.data ?? []).map((row: Loose) => ({ alreadyLinked: row.already_linked, exactLinked: row.exact_linked, toReview: row.to_review }))),
     aiAccuracy: accuracy(aiRows.map((row) => ({ confirmed: Boolean(row.confirmed_at), correctedByHuman: Boolean(row.superseded_by_id && humanCorrection.has(row.superseded_by_id)) }))),
