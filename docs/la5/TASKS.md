@@ -15,6 +15,13 @@
 
 **Status of this file:** written from the product docs. The paths are the expected ones; re-verify them against the code at the start of the phase, as was done for LA-4.
 
+> **Superseded (2026-10-14).** The spec is the Notion "Module 5 — Retention" doc and the eleven LA-5.x tasks in the Insurvas Sprint database. Their numbering differs from this file's (Notion: 5.1 signals, 5.2 score, 5.3 save queue, 5.4 servicing requests, 5.5 paper-bill campaign, 5.6 reinstatement, 5.7 win-back, 5.8 retention role, 5.9 holdout, 5.10 income capture, 5.11 settings hub). Build from Notion.
+>
+> **Progress (Notion numbering):**
+> - **5.1–5.3 built 2026-10-14.** `lib/retention/` (signals, score, fixes, queue, radarStore, queueStore), `/app/save-queue`, `POST /api/app/retention/save-queue`, the `risk_radar` pipeline stage, and the LA-3.9 `draftTiming` helper. Migration `20261014100000_la_5_1_3_chargeback_radar.sql` also carries the parts of 5.10 (`contact_income`) and 5.11 (`retention_settings`, versioned `risk_weight_set`) that 5.1–5.3 read. **Not applied yet.**
+> - **Live 2026-10-14** (verified by the catalog check and a direct read). **Owner decision 2026-10-14, beyond the Notion spec:** a low-confidence score (under half the weight known) stays scored but never reaches the save queue; the page counts the ones held back ("Too little known"). Why: a dry run over Isolation Test A's 1,408 imported policies scored every one on 1–2 of 7 signals and put 1,041 at high or critical, nearly all reading "Month 3."
+> - Known gaps: carrier files carry no draft day, so Sign 1 exists only for sales written in the app (an imported book scores without it); the "Start the fix" button waits for 5.4's servicing requests; the settings screens wait for 5.11; nothing schedules the nightly run (the page recomputes when a day has passed).
+
 ---
 
 ## LA-5.1: Lapse-risk score

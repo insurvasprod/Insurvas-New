@@ -116,26 +116,14 @@ export async function loadBoard(viewer: Viewer, only?: { carrierId: string; poli
   const contactIds = [...new Set(candidates.map((c) => c.p.contact_id).filter(Boolean))] as string[];
   const userIds = [...new Set(candidates.map((c) => c.p.agent_user_id).filter(Boolean))] as string[];
   const numbers = [...new Set(candidates.map((c) => c.p.policy_number))] as string[];
-  const [contacts, users, entries, flagged, actions, ruleFor] = await Promise.all([
+  const [contacts, users, atRiskOf, actions] = await Promise.all([
     Promise.all(chunks(contactIds, 200).map((ids) => db().from("contacts").select("id, first_name, last_name, primary_phone").eq("tenant_id", viewer.tenantId).in("id", ids))).then((r) => r.flatMap((x: Loose) => x.data ?? [])),
     userIds.length ? db().from("users").select("id, name, email").in("id", userIds) : { data: [] },
-    Promise.all(chunks(numbers, 200).map((ns) => db().from("commission_entry").select("carrier_id, policy_number, entry_type, corrects_type, amount_cents, months_advanced, file_id").eq("tenant_id", viewer.tenantId).in("policy_number", ns))).then((r) => r.flatMap((x: Loose) => x.data ?? [])).catch(() => []),
-    flaggedFiles(viewer.tenantId),
+    advanceAtRisk(viewer.tenantId, candidates.map((c) => c.p)),
     Promise.all(chunks(numbers, 200).map((ns) => db().from("retention_action").select("carrier_id, policy_number, outcome, acted_at, acted_by, result").eq("tenant_id", viewer.tenantId).in("policy_number", ns).order("acted_at", { ascending: false }))).then((r) => r.flatMap((x: Loose) => x.data ?? [])).catch(() => []),
-    advanceRuleResolver(viewer.tenantId),
   ]);
   const contactOf = new Map<string, Loose>(contacts.map((c: Loose) => [c.id, c]));
   const userName = new Map<string, string>(((users.data ?? []) as Loose[]).map((u) => [u.id, u.name || u.email]));
-  const money = new Map<string, { advanced: number; chargedBack: number; months: number | null }>();
-  for (const e of entries) {
-    if (flagged.has(e.file_id)) continue;
-    const key = `${e.carrier_id}|${e.policy_number}`;
-    const m = money.get(key) ?? { advanced: 0, chargedBack: 0, months: null };
-    const kind = e.corrects_type ?? e.entry_type;
-    if (kind === "advance") { m.advanced += Number(e.amount_cents); if (e.months_advanced !== null) m.months = Math.max(m.months ?? 0, e.months_advanced); }
-    if (kind === "chargeback") m.chargedBack += Number(e.amount_cents);
-    money.set(key, m);
-  }
   const lastAction = new Map<string, Loose>();
   for (const a of actions) { const key = `${a.carrier_id}|${a.policy_number}`; if (!lastAction.has(key)) lastAction.set(key, a); }
   const carrierName = new Map<string, string>(((carriers.data ?? []) as Loose[]).map((c) => [c.id, c.name]));
@@ -143,9 +131,7 @@ export async function loadBoard(viewer: Viewer, only?: { carrierId: string; poli
   const rows: BoardEntry[] = candidates.map(({ p, reason, daysLeft }) => {
     const key = `${p.carrier_id}|${p.policy_number}`;
     const contact = p.contact_id ? contactOf.get(p.contact_id) : null;
-    const m = money.get(key);
-    // Advance at risk from the ledger (LA-4.12): Unknown (null) without an advance on file, never $0.
-    const atRisk = m && m.advanced > 0 ? unearnedAdvance({ advancedCents: m.advanced, chargedBackCents: m.chargedBack, monthsPaid: p.months_paid, rule: ruleFor(p.carrier_id, p.product_code, p.as_of), statementMonths: m.months }).atRiskCents : null;
+    const atRisk = atRiskOf.get(key) ?? null;
     const last = lastAction.get(key);
     return {
       key, carrierId: p.carrier_id, carrierName: carrierName.get(p.carrier_id) ?? "Carrier not known", policyNumber: p.policy_number,
@@ -156,6 +142,37 @@ export async function loadBoard(viewer: Viewer, only?: { carrierId: string; poli
     };
   });
   return { rows: boardOrder(rows), today };
+}
+
+/**
+ * The unearned advance the carrier takes back if each policy dies, from the ledger (LA-4.12) with the
+ * advance rule in force: null ("Unknown") without an advance on file, never $0. Lines from flagged
+ * statements are left out. Shared with the save queue (LA-5.3), so both boards show the same figure.
+ */
+export async function advanceAtRisk(tenantId: string, policies: Array<{ carrier_id: string; policy_number: string; months_paid: number | null; product_code: string | null; as_of: string }>): Promise<Map<string, number | null>> {
+  const numbers = [...new Set(policies.map((p) => p.policy_number))];
+  const [entries, flagged, ruleFor] = await Promise.all([
+    Promise.all(chunks(numbers, 200).map((ns) => db().from("commission_entry").select("carrier_id, policy_number, entry_type, corrects_type, amount_cents, months_advanced, file_id").eq("tenant_id", tenantId).in("policy_number", ns))).then((r) => r.flatMap((x: Loose) => x.data ?? [])).catch(() => []),
+    flaggedFiles(tenantId),
+    advanceRuleResolver(tenantId),
+  ]);
+  const money = new Map<string, { advanced: number; chargedBack: number; months: number | null }>();
+  for (const e of entries) {
+    if (flagged.has(e.file_id)) continue;
+    const key = `${e.carrier_id}|${e.policy_number}`;
+    const m = money.get(key) ?? { advanced: 0, chargedBack: 0, months: null };
+    const kind = e.corrects_type ?? e.entry_type;
+    if (kind === "advance") { m.advanced += Number(e.amount_cents); if (e.months_advanced !== null) m.months = Math.max(m.months ?? 0, e.months_advanced); }
+    if (kind === "chargeback") m.chargedBack += Number(e.amount_cents);
+    money.set(key, m);
+  }
+  const out = new Map<string, number | null>();
+  for (const p of policies) {
+    const key = `${p.carrier_id}|${p.policy_number}`;
+    const m = money.get(key);
+    out.set(key, m && m.advanced > 0 ? unearnedAdvance({ advancedCents: m.advanced, chargedBackCents: m.chargedBack, monthsPaid: p.months_paid, rule: ruleFor(p.carrier_id, p.product_code, p.as_of), statementMonths: m.months }).atRiskCents : null);
+  }
+  return out;
 }
 
 /** Log one call. The board's claim at that moment is recomputed here, never taken from the browser. */

@@ -201,4 +201,38 @@ export function isSafeDraftDay(input: DraftDateInput, day: number) {
   });
 }
 
+/**
+ * Where an existing draft day sits against the money (LA-5.1, Sign 1), over the next three drafted
+ * months, worst month first. `daysDraftBeforeIncome` is the spec's signal:
+ *   · 2–7: the draft lands that many days AFTER the deposit — the money is there (positive = safe);
+ *   · 0 or below: the draft lands that many days BEFORE the next deposit, when the last one has had
+ *     the longest to be spent (a draft 0–1 day after a deposit counts as landing with it: 0).
+ * Null when there is no income schedule to compare with (unknown income, or inputs missing).
+ */
+export type DraftTiming = { daysDraftBeforeIncome: number; incomeDay: number };
+
+export function draftTiming(input: DraftDateInput, day: number): DraftTiming | null {
+  if (!Number.isInteger(day) || day < 1 || day > 31) return null;
+  const rec = recommendDraftDay(input);
+  if (rec.kind !== "recommended") return null;
+  const all = monthsFrom(input.from ?? new Date()).slice(0, 4);
+  const drafted = all.slice(0, 3);
+  const pays = paydays(input, all);
+  let worst: DraftTiming | null = null;
+  for (const { year, month } of drafted) {
+    const last = new Date(Date.UTC(year, month, 0)).getUTCDate();
+    const draft = iso(year, month, Math.min(day, last));
+    const before = pays.filter((p) => p <= draft).pop();
+    const after = pays.find((p) => p > draft);
+    if (!before && !after) continue;
+    const gapAfter = before ? dayDiff(draft, before) : Infinity;
+    let timing: DraftTiming | null = null;
+    if (before && gapAfter <= 7) timing = { daysDraftBeforeIncome: gapAfter >= 2 ? gapAfter : 0, incomeDay: Number(before.slice(8, 10)) };
+    else if (after) timing = { daysDraftBeforeIncome: -dayDiff(after, draft), incomeDay: Number(after.slice(8, 10)) };
+    if (!timing) continue;
+    if (!worst || timing.daysDraftBeforeIncome < worst.daysDraftBeforeIncome) worst = timing;
+  }
+  return worst;
+}
+
 export { federalHolidays, isBusinessDay };

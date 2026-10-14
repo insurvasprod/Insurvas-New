@@ -40,6 +40,7 @@ export const TRACE_SCREENS: Record<string, { label: string; sources: TracedSourc
   "app/app/(shell)/rate-card/page.tsx": { label: "Rate card", sources: ["expected_commission"] },
   "app/app/(shell)/discrepancies/page.tsx": { label: "Discrepancies", sources: ["commission_discrepancy", "commission_entry", "expected_commission"] },
   "app/app/(shell)/lapse-risk/page.tsx": { label: "Lapse risk", sources: ["policy_current", "commission_entry"] },
+  "app/app/(shell)/save-queue/page.tsx": { label: "Save queue", sources: ["policy_current", "commission_entry"] },
   "app/app/(shell)/book-scorecards/page.tsx": { label: "Book scorecards", sources: ["policy_current", "commission_policy_totals", "commission_entry"] },
   "app/app/(shell)/carrier-files/page.tsx": { label: "Carrier files", sources: ["policy_current"] },
   "app/app/(shell)/carrier-files/file/[fileId]/page.tsx": { label: "Carrier file", sources: ["policy_current", "commission_entry"] },

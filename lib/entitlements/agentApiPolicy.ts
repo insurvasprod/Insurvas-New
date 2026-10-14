@@ -150,6 +150,8 @@ export const AGENT_API_POLICIES: AgentApiPolicy[] = [
   { sourceFile: "app/api/app/commission-discrepancies/route.ts", featureKey: "discrepancy_report", allowedRoles: ["owner", "bookkeeper"] },
   { sourceFile: "app/api/app/commission-discrepancies/disputes/[id]/pdf/route.ts", featureKey: "discrepancy_report", allowedRoles: ["owner", "bookkeeper"] },
   { sourceFile: "app/api/app/retention/route.ts", featureKey: "chargeback_radar", allowedRoles: ["owner", "producer"] },
+  // LA-5.3 · the save queue: log a worked card, snooze or dismiss it. A producer reaches their own policies.
+  { sourceFile: "app/api/app/retention/save-queue/route.ts", featureKey: "chargeback_radar", allowedRoles: ["owner", "producer"] },
   { sourceFile: "app/api/app/book-scorecards/route.ts", featureKey: "cohort_persistency", allowedRoles: ["owner"] },
   // LA-4.8 · persistency by carrier and lead source; a producer reads their own book's.
   { sourceFile: "app/api/app/persistency/route.ts", featureKey: "cohort_persistency", allowedRoles: ["owner", "producer", "bookkeeper"] },

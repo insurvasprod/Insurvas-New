@@ -8,6 +8,7 @@ import { runDetection } from "./discrepancyStore";
 import { evaluateRetention } from "./retentionStore";
 import { computeExpected } from "./expectedCommissionStore";
 import { rebuildFileSnapshots } from "./snapshotStore";
+import { computeRadar } from "@/lib/retention/radarStore";
 
 /**
  * LA-4.2+ (Notion sprint) · the stages that rebuild what is derived from a file, in order. A door
@@ -94,7 +95,26 @@ const retentionResults: ReprocessStage = {
   },
 };
 
-export const REPROCESS_STAGES: ReprocessStage[] = [policySnapshots, expectedCommission, retentionResults, commissionEntries, orphanCommission, commissionDiscrepancies];
+/**
+ * risk_radar (LA-5.1 / 5.2): after a policy file, that carrier's in-force policies get their risk
+ * signals and score again. Derived rows only; a failure here never fails the file — the save queue
+ * recomputes on its own once a day has passed, and says when its scores are from.
+ */
+const riskRadar: ReprocessStage = {
+  name: "risk_radar",
+  async rebuild(tenantId: string, file: ReprocessFile, _rows, parsed: ParsedFile | null) {
+    if (!isPolicyFeed(file.fileType) || !parsed?.typedRows || !file.carrierId) return { changed: 0 };
+    try {
+      const run = await computeRadar(tenantId, { carrierId: file.carrierId });
+      return { changed: run.available ? run.scored + run.removed : 0 };
+    } catch (error) {
+      console.error("[risk_radar] the radar could not be refreshed after a file", error);
+      return { changed: 0 };
+    }
+  },
+};
+
+export const REPROCESS_STAGES: ReprocessStage[] = [policySnapshots, expectedCommission, retentionResults, riskRadar, commissionEntries, orphanCommission, commissionDiscrepancies];
 
 /** After a door's parse: the same stages a reprocess runs, for one file's passed rows. */
 export async function runStages(tenantId: string, file: ReprocessFile, parsed: ParsedFile): Promise<void> {
