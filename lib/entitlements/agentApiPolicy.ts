@@ -160,6 +160,9 @@ export const AGENT_API_POLICIES: AgentApiPolicy[] = [
   { sourceFile: "app/api/app/retention/reinstatement/route.ts", featureKey: "winback", allowedRoles: ["owner", "producer"] },
   // LA-5.7 · win-back: mark a possible claim handled. Releases happen at the cooling-off date, never on request.
   { sourceFile: "app/api/app/retention/winback/route.ts", featureKey: "winback", allowedRoles: ["owner", "producer"] },
+  // LA-5.10 · a client's monthly income: owners and producers only (never setters, assistants or bookkeepers).
+  { sourceFile: "app/api/app/retention/income/route.ts", featureKey: "chargeback_radar", allowedRoles: ["owner", "producer"] },
+  { sourceFile: "app/api/app/applications/attempts/[id]/income/route.ts", featureKey: "applications", allowedRoles: ["owner", "producer"] },
   { sourceFile: "app/api/app/book-scorecards/route.ts", featureKey: "cohort_persistency", allowedRoles: ["owner"] },
   // LA-4.8 · persistency by carrier and lead source; a producer reads their own book's.
   { sourceFile: "app/api/app/persistency/route.ts", featureKey: "cohort_persistency", allowedRoles: ["owner", "producer", "bookkeeper"] },

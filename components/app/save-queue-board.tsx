@@ -16,6 +16,8 @@ import { ACTION_TAKEN, BANDS, CONTACT_OUTCOME_LABELS, CONTACT_OUTCOMES, MISSING_
 import { SORT_LABELS, SORTS, type QueueSort } from "@/lib/retention/queue";
 import { REQUEST_FOR_FIX, REQUEST_LABELS, STATUS_LABELS, type RequestType } from "@/lib/retention/servicing";
 import { ServicingRequestDialog } from "@/components/app/servicing-request-dialog";
+import { IncomeCapture } from "@/components/app/retention/income-capture";
+import { coverageText } from "@/lib/retention/income";
 import type { SaveCard, SaveQueue } from "@/lib/retention/queueStore";
 import { notify } from "@/lib/notify";
 
@@ -56,6 +58,7 @@ export function SaveQueueBoard({ queue, sort, readOnly, canStartFix }: { queue: 
   const [logging, setLogging] = useState<SaveCard | null>(null);
   const [holding, setHolding] = useState<SaveCard | null>(null);
   const [fixing, setFixing] = useState<{ card: SaveCard; type: RequestType } | null>(null);
+  const [incomeFor, setIncomeFor] = useState<string | null>(null);
 
   const cards = queue.cards;
   const carriers = useMemo(() => [...new Map(cards.map((c) => [c.carrierId, c.carrierName])).entries()].sort((a, b) => a[1].localeCompare(b[1])), [cards]);
@@ -71,7 +74,7 @@ export function SaveQueueBoard({ queue, sort, readOnly, canStartFix }: { queue: 
         <StatTile label="Critical" value={stats.critical.toLocaleString("en-US")} valueTone={stats.critical ? "danger" : undefined} footnote={`${stats.highOrAbove.toLocaleString("en-US")} high or critical`} />
         <StatTile label="Advance at risk" value={cards.length && stats.atRiskUnknown < cards.length ? money(stats.atRiskCents) : "Unknown"} footnote={stats.atRiskUnknown ? `${stats.atRiskUnknown} with no advance on file yet` : "unearned, on the cards in the queue"} />
         <StatTile label="Too little known" value={queue.lowConfidence.toLocaleString("en-US")} labelTitle="High or critical, but scored on under half the signals. They stay off the queue until more is known: income, the carrier's grace rule, a second carrier file, the draft day." footnote={queue.lowConfidence ? "high risk on a thin score, kept off the queue" : "every high score rests on enough"} />
-        <StatTile label="Income known" value={`${stats.incomeKnown.toLocaleString("en-US")} of ${stats.scored.toLocaleString("en-US")}`} footnote="the rest are scored without it" />
+        <StatTile label="Income known" value={`${stats.incomeKnown.toLocaleString("en-US")} of ${stats.scored.toLocaleString("en-US")}`} labelTitle={coverageText(stats.incomeKnown, stats.scored, stats.affordabilityWeight)} footnote={`the rest are scored without it · worth up to ${stats.affordabilityWeight} points`} />
       </StatStrip>}
 
       <TableCard
@@ -119,7 +122,7 @@ export function SaveQueueBoard({ queue, sort, readOnly, canStartFix }: { queue: 
               </tr>
             </thead>
             <tbody>
-              {shown.rows.map((card) => (
+              {shown.rows.flatMap((card) => [
                 <tr key={card.key}>
                   <td>
                     <span className="block font-semibold text-foreground">{card.clientName ?? "No client linked"}</span>
@@ -140,6 +143,7 @@ export function SaveQueueBoard({ queue, sort, readOnly, canStartFix }: { queue: 
                     {card.noBankAccount && <span className="mb-1 block text-xs text-muted-foreground">No bank account (from the paper-bill campaign): switching to bank payment isn&apos;t an option.</span>}
                     {card.explanation}
                     {card.openRequests.map((r) => <span key={r.type} className="mt-1 block text-xs text-muted-foreground">Fix in progress: {REQUEST_LABELS[r.type]} · {STATUS_LABELS[r.status].toLowerCase()}</span>)}
+                    {!card.incomeKnown && !readOnly && <button type="button" className="mt-1 block text-xs font-semibold text-[var(--accent-ink)] hover:underline" aria-expanded={incomeFor === card.key} onClick={() => setIncomeFor(incomeFor === card.key ? null : card.key)}>{incomeFor === card.key ? "Close income" : "Add income"}</button>}
                   </td>
                   <td>
                     <ul className="m-0 grid list-none gap-1 p-0">
@@ -167,8 +171,22 @@ export function SaveQueueBoard({ queue, sort, readOnly, canStartFix }: { queue: 
                       </span>
                     )}
                   </td>
-                </tr>
-              ))}
+                </tr>,
+                incomeFor === card.key ? (
+                  <tr key={`${card.key}-income`}>
+                    <td colSpan={7}>
+                      <div className="max-w-[520px] py-1">
+                        <IncomeCapture
+                          compact
+                          readUrl={`/api/app/retention/income?carrier_id=${card.carrierId}&policy_number=${encodeURIComponent(card.policyNumber)}`}
+                          save={(income) => fetch("/api/app/retention/income", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ carrier_id: card.carrierId, policy_number: card.policyNumber, income }) })}
+                          onSaved={() => { setIncomeFor(null); router.refresh(); }}
+                        />
+                      </div>
+                    </td>
+                  </tr>
+                ) : null,
+              ])}
             </tbody>
           </table>
         )}

@@ -104,7 +104,7 @@ export type SaveQueue = {
   lowConfidence: number;
   settings: RetentionSettings;
   weightSetVersion: number;
-  stats: { scored: number; highOrAbove: number; critical: number; atRiskCents: number; atRiskUnknown: number; held: number; incomeKnown: number };
+  stats: { scored: number; highOrAbove: number; critical: number; atRiskCents: number; atRiskUnknown: number; held: number; incomeKnown: number; affordabilityWeight: number };
   computedAt: string | null;
 };
 
@@ -215,6 +215,7 @@ export async function loadSaveQueue(viewer: Viewer, sort: QueueSort = "value"): 
       atRiskUnknown: queue.cards.filter((c) => c.atRiskCents === null).length,
       held: loaded.held,
       incomeKnown: rows.filter((r) => r.incomeKnown).length,
+      affordabilityWeight: config.weights.affordability,
     },
     computedAt: loaded.computedAt,
   };

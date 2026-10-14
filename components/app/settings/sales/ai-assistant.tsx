@@ -34,7 +34,8 @@ const SENT = [
   { label: "The product", sub: "The product line being quoted" },
   { label: "The state", sub: "The client's state, for state rules" },
 ];
-const NEVER = ["Name", "Social Security number", "Bank routing and account numbers", "Card numbers", "Home address", "Phone number", "Email address", "Date of birth", "Screenshots of any kind"];
+// Income (LA-5.10) is kept on the client record, never in the interview answers, so no answer payload can carry it.
+const NEVER = ["Name", "Social Security number", "Bank routing and account numbers", "Card numbers", "Home address", "Phone number", "Email address", "Date of birth", "Income", "Screenshots of any kind"];
 
 export function SalesAiAssistant() {
   const sample = useSalesSample();
