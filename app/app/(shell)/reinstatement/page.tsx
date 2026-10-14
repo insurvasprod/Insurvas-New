@@ -1,32 +1,55 @@
 import { guardPage } from "@/lib/entitlements/guardPage";
 import { loadReinstatement, REINSTATEMENT_PENDING_MESSAGE } from "@/lib/retention/reinstatementStore";
+import { loadWinback, WINBACK_PENDING_MESSAGE } from "@/lib/retention/winbackStore";
+import { ViewTabs } from "@/components/app/book-of-business-views";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { ReinstatementBoard } from "@/components/app/reinstatement-board";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
+import { WinbackBoard } from "@/components/app/winback-board";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/page-states";
 import { TableCard } from "@/components/ui/table-card";
 
 /**
- * Book › Reinstatement (LA-5.6, Notion sprint; the `winback` feature). Lapsed policies the carrier
- * will still take back, fewest days first — the one place in retention where a missed deadline is
- * permanent. Opening the page asks the database to open new cases, close reinstated ones from the
- * carrier file, expire closed windows and send the countdown alerts.
+ * Book › Reinstatement (the `winback` feature). Two views:
+ *   · Reinstatement (LA-5.6): lapsed policies the carrier will still take back, fewest days first.
+ *     Opening it asks the database to open, reinstate, expire and alert.
+ *   · Win-back (LA-5.7): clients past reinstatement, classified by why they lapsed, each with its
+ *     cooling-off; at its end a client goes to the agency's Win-back lead list (then the scrub gate).
+ *     Opening it runs the classification and releases what is due.
  */
-export default async function ReinstatementPage() {
+export default async function ReinstatementPage({ searchParams }: { searchParams: Promise<{ view?: string }> }) {
   const guard = await guardPage("winback");
   if (!guard.entitled) {
-    return <FeatureGateNotice guard={guard} featureLabel="Reinstatement" description="Lapsed policies the carrier will still take back, with the days left to do it." />;
+    return <FeatureGateNotice guard={guard} featureLabel="Reinstatement" description="Lapsed policies the carrier will still take back, and former clients worth winning back." />;
   }
   if (!["owner", "producer"].includes(guard.role)) {
-    return <RoleGateNotice featureLabel="Reinstatement" detail="Only owners and producers can work reinstatement cases." />;
+    return <RoleGateNotice featureLabel="Reinstatement" detail="Only owners and producers can work reinstatement and win-back." />;
   }
-  const data = await loadReinstatement({ tenantId: guard.context.tenantId, userId: guard.context.userId, role: guard.role });
+  const { view } = await searchParams;
+  const winbackView = view === "winback";
+  const viewer = { tenantId: guard.context.tenantId, userId: guard.context.userId, role: guard.role };
+  const readOnly = guard.entitlement.access === "read_only";
+  const [cases, winback] = winbackView ? [null, await loadWinback(viewer)] : [await loadReinstatement(viewer), null];
+
   return (
     <div className="m-stagger flex min-h-0 flex-grow flex-col gap-6">
-      <PageHeader title="Reinstatement" description="Lapsed policies the carrier will still take back, fewest days left first." />
-      {data.available ? (
-        <ReinstatementBoard data={data} readOnly={guard.entitlement.access === "read_only"} />
+      <PageHeader
+        title="Reinstatement"
+        description={winbackView ? "Former clients past reinstatement, each back on a call list when their cooling-off ends." : "Lapsed policies the carrier will still take back, fewest days left first."}
+      />
+      <ViewTabs
+        label="Reinstatement views"
+        active={winbackView ? "winback" : "cases"}
+        tabs={[
+          { key: "cases", label: "Reinstatement", href: "/app/reinstatement" },
+          { key: "winback", label: "Win-back", href: "/app/reinstatement?view=winback" },
+        ]}
+      />
+      {winback ? (
+        winback.available ? <WinbackBoard data={winback} readOnly={readOnly} /> : <TableCard><EmptyState title="Not switched on yet" hint={WINBACK_PENDING_MESSAGE} /></TableCard>
+      ) : cases && cases.available ? (
+        <ReinstatementBoard data={cases} readOnly={readOnly} />
       ) : (
         <TableCard>
           <EmptyState title="Not switched on yet" hint={REINSTATEMENT_PENDING_MESSAGE} />

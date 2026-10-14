@@ -11,6 +11,7 @@ import { rebuildFileSnapshots } from "./snapshotStore";
 import { computeRadar } from "@/lib/retention/radarStore";
 import { runServicingVerification } from "@/lib/retention/servicingStore";
 import { runReinstatementSync } from "@/lib/retention/reinstatementStore";
+import { releaseDueWinbacks, runWinbackSync } from "@/lib/retention/winbackStore";
 
 /**
  * LA-4.2+ (Notion sprint) · the stages that rebuild what is derived from a file, in order. A door
@@ -155,7 +156,27 @@ const reinstatementSync: ReprocessStage = {
   },
 };
 
-export const REPROCESS_STAGES: ReprocessStage[] = [policySnapshots, expectedCommission, retentionResults, servicingVerify, reinstatementSync, riskRadar, commissionEntries, orphanCommission, commissionDiscrepancies];
+/**
+ * winback (LA-5.7): after a policy file, lapses past reinstatement become win-back candidates
+ * (classified by the database, which also puts a never-call number on the internal do-not-call list),
+ * and candidates whose cooling-off has ended go to the Win-back lead list, which then needs a scrub.
+ */
+const winback: ReprocessStage = {
+  name: "winback",
+  async rebuild(tenantId: string, file: ReprocessFile, _rows, parsed: ParsedFile | null) {
+    if (!isPolicyFeed(file.fileType) || !parsed?.typedRows) return { changed: 0 };
+    try {
+      const sync = await runWinbackSync(tenantId);
+      const release = await releaseDueWinbacks(tenantId, null);
+      return { changed: (sync ? sync.opened + sync.reclassified : 0) + (release ? release.released : 0) };
+    } catch (error) {
+      console.error("[winback] the win-back check could not run after a file", error);
+      return { changed: 0 };
+    }
+  },
+};
+
+export const REPROCESS_STAGES: ReprocessStage[] = [policySnapshots, expectedCommission, retentionResults, servicingVerify, reinstatementSync, winback, riskRadar, commissionEntries, orphanCommission, commissionDiscrepancies];
 
 /** After a door's parse: the same stages a reprocess runs, for one file's passed rows. */
 export async function runStages(tenantId: string, file: ReprocessFile, parsed: ParsedFile): Promise<void> {
