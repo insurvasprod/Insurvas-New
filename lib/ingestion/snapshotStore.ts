@@ -7,6 +7,7 @@ import { isSchemaGap } from "@/lib/supabase/schemaGap";
 
 import { isPolicyFeed } from "./constants";
 import type { RawColumn } from "./grid";
+import { isKeptField } from "./layout";
 import { recordCarrierIssues } from "./applicationIssueStore";
 import { refreshPolicyCurrent } from "./policyCurrentStore";
 import { matchFilePolicies } from "./policyMatchingStore";
@@ -96,9 +97,10 @@ export async function storeFileSnapshots(tenantId: string, fileId: string, typed
   if (!file || !isPolicyFeed(file.file_type)) return none;
 
   // The columns the map did not read go into each snapshot's `extra`, so no field is ever dropped.
-  const { data: entries } = file.parser_id ? await db().from("carrier_layout_map_entry").select("source_column").eq("map_id", file.parser_id) : { data: [] };
-  // Spaces around a header ignored, as the parser matches them (layout.ts parseWithMap).
-  const read = new Set(((entries ?? []) as Array<{ source_column: string }>).flatMap((entry) => entry.source_column.split(" + ")).map((name) => name.trim()));
+  const { data: entries } = file.parser_id ? await db().from("carrier_layout_map_entry").select("source_column, target_field").eq("map_id", file.parser_id) : { data: [] };
+  // Spaces around a header ignored, as the parser matches them (layout.ts parseWithMap). A column the
+  // layout lists as kept is not read, so it travels in `extra` like any other.
+  const read = new Set(((entries ?? []) as Array<{ source_column: string; target_field: string }>).filter((entry) => !isKeptField(entry.target_field)).flatMap((entry) => entry.source_column.split(" + ")).map((name) => name.trim()));
   const columns = ((file.raw_columns ?? []) as RawColumn[]).filter((column) => column.header.trim() !== "" && !read.has(column.header.trim()));
   const { ids, payloads } = await rawRowIndex(tenantId, fileId);
   const unreadColumnsOf = (rowNumber: number) => Object.fromEntries(columns.map((column) => [column.header, payloads.get(rowNumber)?.[column.key] ?? ""]));

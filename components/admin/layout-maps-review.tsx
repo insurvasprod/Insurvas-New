@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { Plus, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { FileUp, Plus, X } from "lucide-react";
 
 import { AdminPageHeader } from "@/components/admin/page-header";
 import { Button } from "@/components/ui/button";
@@ -14,8 +14,10 @@ import { Pager, paginate } from "@/components/ui/pager";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
-import { FILE_TYPE_LABELS, FILE_TYPES, type CarrierFileType } from "@/lib/ingestion/constants";
-import { guessTargetField, mapProblems, TARGET_FIELDS, TRANSFORMS_FOR, type LayoutEntry, type Transform } from "@/lib/ingestion/layout";
+import { CARRIER_FILE_ACCEPT, FILE_TYPE_LABELS, FILE_TYPES, type CarrierFileType } from "@/lib/ingestion/constants";
+import { guessTargetField, isKeptEntry, mapProblems, TARGET_FIELDS, TRANSFORMS_FOR, type LayoutEntry, type Transform } from "@/lib/ingestion/layout";
+import { keptEntry, nextKeptField } from "@/lib/ingestion/layoutDraft";
+import type { SampleRead } from "@/lib/ingestion/layoutSample";
 import { pdfLayoutProblems } from "@/lib/ingestion/pdfLayout";
 import type { AssignmentView, CarrierOption, LayoutMapView, LayoutStatus, WaitingFile } from "@/lib/ingestion/layoutAdmin";
 import { notify } from "@/lib/notify";
@@ -99,6 +101,48 @@ function draftOf(map: LayoutMapView): Draft {
   };
 }
 
+/** "Kept as sent" in the Becomes list: the column is listed in the layout, read into no field, its value kept with the row. */
+const KEPT = "__kept";
+
+/** Reads a sample file on the server: every column, what each would become, and a few rows. Nothing is stored. */
+async function readSample(file: File, fileType: CarrierFileType, sheet: string | null = null): Promise<SampleRead> {
+  const form = new FormData();
+  form.set("file", file);
+  form.set("file_type", fileType);
+  if (sheet) form.set("sheet", sheet);
+  const response = await fetch("/api/admin/layout-maps/sample", { method: "POST", body: form });
+  const data = (await response.json().catch(() => ({}))) as SampleRead & { error?: string };
+  if (!response.ok) throw new Error(data.error ?? "The file could not be read.");
+  return data;
+}
+
+/** One reading of a sample: a PDF's chosen table, or the spreadsheet itself. */
+function sampleView(sample: SampleRead, table: number) {
+  const chosen = sample.tables[table];
+  return chosen ? { draft: chosen.draft, preview: chosen.preview, pdfLayout: chosen.layout as unknown } : { draft: sample.draft, preview: sample.preview, pdfLayout: null };
+}
+
+/**
+ * A file's columns added to a draft's: a header already listed is left as it is; a row waiting for a
+ * field takes that field's header; a field the draft already reads keeps its column, and the new
+ * one is kept as sent. Nothing a person chose is overwritten.
+ */
+function mergeColumns(entries: Draft["entries"], incoming: LayoutEntry[]): { entries: Draft["entries"]; added: number } {
+  const out = entries.map((entry) => ({ ...entry }));
+  const listed = new Set(out.map((entry) => entry.sourceColumn.trim()));
+  let added = 0;
+  for (const entry of incoming) {
+    if (listed.has(entry.sourceColumn.trim())) continue;
+    listed.add(entry.sourceColumn.trim());
+    added++;
+    const blank = isKeptEntry(entry) ? undefined : out.find((item) => item.targetField === entry.targetField && !item.sourceColumn.trim());
+    if (blank) { Object.assign(blank, { ...entry, enumText: enumText(entry.enumValues) }); continue; }
+    const next = out.some((item) => item.targetField === entry.targetField) ? { ...keptEntry(entry.sourceColumn, "x"), targetField: nextKeptField(out) } : entry;
+    out.push({ ...next, enumText: enumText(next.enumValues) });
+  }
+  return { entries: out, added };
+}
+
 /**
  * LA-4.3 (Notion sprint) · the platform's layout maps: how each carrier's spreadsheets are read.
  * A draft is edited and published; a published version is frozen, and changing it starts the next
@@ -116,7 +160,12 @@ export function LayoutMapsReview({ initialMaps, initialAssignments, carriers, no
   const [newLayout, setNewLayout] = useState({ layoutKey: "", name: "", fileType: "policies" as CarrierFileType });
   const [assign, setAssign] = useState({ carrierId: "", fileType: "policies" as CarrierFileType, layoutKey: "" });
   const [waiting, setWaiting] = useState<WaitingFile[]>([]);
-  const [unmatched, setUnmatched] = useState<string[]>([]);
+  const [entryPage, setEntryPage] = useState(1);
+  const sampleInput = useRef<HTMLInputElement>(null);
+  // The new-layout dialog: start empty, or from a sample file read in full.
+  const [start, setStart] = useState<"sample" | "empty">("sample");
+  const [sample, setSample] = useState<{ file: File; read: SampleRead; table: number } | null>(null);
+  const [samplePage, setSamplePage] = useState(1);
   const [layoutPage, setLayoutPage] = useState(1);
   const [assignmentPage, setAssignmentPage] = useState(1);
 
@@ -147,34 +196,36 @@ export function LayoutMapsReview({ initialMaps, initialAssignments, carriers, no
 
   // The files held back for want of a layout of this type: a real header row to start from.
   useEffect(() => {
-    setUnmatched([]);
     if (!open || !editable) { setWaiting([]); return; }
     let live = true;
     call<{ files: WaitingFile[] }>(`/api/admin/layout-maps/sample-headers?file_type=${open.fileType}`, { method: "GET" }).then((data) => { if (live) setWaiting(data.files); }).catch(() => { if (live) setWaiting([]); });
     return () => { live = false; };
   }, [open?.id, open?.fileType, editable]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Every header of a waiting file goes in: a header that names a field becomes it, every other is kept as sent.
   const fillFrom = (fileId: string) => run("fill", async () => {
     if (!open || !draft) return;
     const { headers } = await call<{ headers: string[] }>(`/api/admin/layout-maps/sample-headers?file_id=${fileId}`, { method: "GET" });
     const fields = TARGET_FIELDS[open.fileType];
-    // A row already chosen for a field but with no header yet takes the header; otherwise a new row.
-    const entries = draft.entries.map((entry) => ({ ...entry }));
-    const present = new Set(entries.map((entry) => entry.sourceColumn));
-    const missed: string[] = [];
-    let filled = 0;
-    for (const header of headers) {
-      if (present.has(header)) continue;
+    const incoming = headers.map((header, index): LayoutEntry => {
       const field = fields.find((item) => item.key === guessTargetField(open.fileType, header));
-      const blank = field ? entries.find((entry) => entry.targetField === field.key && !entry.sourceColumn.trim()) : undefined;
-      if (field && blank) { blank.sourceColumn = header; filled++; continue; }
-      if (!field || entries.some((entry) => entry.targetField === field.key)) { missed.push(header); continue; }
-      entries.push({ sourceColumn: header, targetField: field.key, dataType: field.dataType, transform: "none", required: false, enumValues: null, enumText: "" });
-      filled++;
-    }
+      return field ? { sourceColumn: header, targetField: field.key, dataType: field.dataType, transform: "none", required: false, enumValues: field.dataType === "enum" ? {} : null } : keptEntry(header, String(index + 1));
+    });
+    const { entries, added } = mergeColumns(draft.entries, incoming);
     setDraft({ ...draft, entries });
-    setUnmatched(missed);
-    notify.done(filled ? `${filled} column${filled === 1 ? "" : "s"} filled in. Check each one before saving.` : "No new column could be matched by its header.");
+    setEntryPage(Math.max(1, Math.ceil(entries.length / 10)));
+    notify.done(added ? `${added} column${added === 1 ? "" : "s"} added. Check each one before saving.` : "Every column of that file is already listed.");
+  });
+
+  // A sample file read into the open draft: its columns added (as fillFrom), and a PDF's table layout when the draft has none.
+  const fillFromSample = (file: File) => run("sample", async () => {
+    if (!open || !draft) return;
+    const sample = await readSample(file, open.fileType, draft.sheetName.trim() || null);
+    const view = sampleView(sample, 0);
+    const { entries, added } = mergeColumns(draft.entries, view.draft.entries);
+    setDraft({ ...draft, entries, pdfText: !draft.pdfText.trim() && view.pdfLayout ? JSON.stringify(view.pdfLayout, null, 2) : draft.pdfText });
+    setEntryPage(Math.max(1, Math.ceil(entries.length / 10)));
+    notify.done(added ? `${added} column${added === 1 ? "" : "s"} added from ${file.name}. Check each one before saving.` : `Every column of ${file.name} is already listed.`);
   });
 
   async function reload() {
@@ -187,6 +238,7 @@ export function LayoutMapsReview({ initialMaps, initialAssignments, carriers, no
     setOpenId(map.id);
     setDraft(draftOf(map));
     setProblems([]);
+    setEntryPage(1);
   }
 
   async function run(key: string, action: () => Promise<void>) {
@@ -295,7 +347,7 @@ export function LayoutMapsReview({ initialMaps, initialAssignments, carriers, no
       {open && draft && (
         <TableCard
           title={`${open.name} · v${open.version}`}
-          description={editable ? "Each column's header must be written exactly as the file has it." : "This version is frozen. Start the next version to change it."}
+          description={`${draft.entries.length} ${draft.entries.length === 1 ? "column" : "columns"}: ${draft.entries.filter((entry) => !isKeptEntry(entry)).length} read into fields, ${draft.entries.filter(isKeptEntry).length} kept as sent. ${editable ? "Each header must be written exactly as the file has it." : "This version is frozen; start the next version to change it."}`}
           action={
             <div className="flex flex-wrap items-center gap-2">
               <StatusChip tone={STATUS[open.status].tone}>{STATUS[open.status].label}</StatusChip>
@@ -357,22 +409,32 @@ export function LayoutMapsReview({ initialMaps, initialAssignments, carriers, no
                   </tr>
                 </thead>
                 <tbody>
-                  {draft.entries.map((entry, index) => {
+                  {paginate(draft.entries, entryPage).rows.map((entry, offset) => {
+                    // 10 columns a page; the whole draft is held here, so turning the page keeps every edit.
+                    const index = (paginate(draft.entries, entryPage).current - 1) * 10 + offset;
+                    const kept = isKeptEntry(entry);
                     const update = (change: Partial<Draft["entries"][number]>) => setDraft({ ...draft, entries: draft.entries.map((item, at) => (at === index ? { ...item, ...change } : item)) });
                     return (
                       <tr key={index}>
                         <td><Input aria-label="Column header" className="h-9" value={entry.sourceColumn} onChange={(event) => update({ sourceColumn: event.target.value })} /></td>
                         <td>
-                          <select aria-label="Field" className={select} value={entry.targetField} onChange={(event) => { const field = fields.find((item) => item.key === event.target.value); if (field) update({ targetField: field.key, dataType: field.dataType, transform: "none", enumText: "" }); }}>
+                          <select aria-label="Field" className={select} value={kept ? KEPT : entry.targetField} onChange={(event) => {
+                            if (event.target.value === KEPT) { if (!kept) update({ targetField: nextKeptField(draft.entries), dataType: "text", transform: "none", required: false, enumText: "" }); return; }
+                            const field = fields.find((item) => item.key === event.target.value);
+                            if (field) update({ targetField: field.key, dataType: field.dataType, transform: "none", enumText: "" });
+                          }}>
+                            <option value={KEPT}>Kept as sent (not read)</option>
                             {fields.map((field) => <option key={field.key} value={field.key}>{field.label}</option>)}
                           </select>
                         </td>
                         <td>
-                          <select aria-label="Transform" className={select} value={entry.transform} onChange={(event) => update({ transform: event.target.value as Transform })}>
-                            {TRANSFORMS_FOR[entry.dataType].map((transform) => <option key={transform} value={transform}>{TRANSFORM_LABEL[transform]}</option>)}
-                          </select>
+                          {kept ? <span className="text-muted-foreground">As sent</span> : (
+                            <select aria-label="Transform" className={select} value={entry.transform} onChange={(event) => update({ transform: event.target.value as Transform })}>
+                              {TRANSFORMS_FOR[entry.dataType].map((transform) => <option key={transform} value={transform}>{TRANSFORM_LABEL[transform]}</option>)}
+                            </select>
+                          )}
                         </td>
-                        <td><input aria-label="Required" type="checkbox" className="size-4 accent-[var(--primary)]" checked={entry.required} onChange={(event) => update({ required: event.target.checked })} /></td>
+                        <td><input aria-label="Required" type="checkbox" className="size-4 accent-[var(--primary)]" disabled={kept} checked={entry.required} onChange={(event) => update({ required: event.target.checked })} /></td>
                         <td>{entry.dataType === "enum" ? <Input aria-label="Carrier's words" className="h-9" placeholder={`e.g. M=${fields.find((field) => field.key === entry.targetField)?.enumValues?.[0] ?? "value"}; Q=…`} value={entry.enumText} onChange={(event) => update({ enumText: event.target.value })} /> : <span className="text-muted-foreground">—</span>}</td>
                         <td><Button type="button" variant="ghost" size="icon" aria-label="Remove this column" onClick={() => setDraft({ ...draft, entries: draft.entries.filter((_, at) => at !== index) })}><X className="size-4" /></Button></td>
                       </tr>
@@ -380,19 +442,25 @@ export function LayoutMapsReview({ initialMaps, initialAssignments, carriers, no
                   })}
                 </tbody>
               </table>
+              {draft.entries.length > 10 && (
+                <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border bg-[var(--canvas)] px-4 py-3 text-xs text-muted-foreground">
+                  <Pager page={paginate(draft.entries, entryPage).current} total={draft.entries.length} noun="columns" onPage={setEntryPage} />
+                </div>
+              )}
             </div>
             {editable && (
               <div className="flex flex-wrap items-center gap-2">
+                <input ref={sampleInput} type="file" accept={CARRIER_FILE_ACCEPT} className="sr-only" tabIndex={-1} aria-hidden="true" onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (file) fillFromSample(file); }} />
+                <Button type="button" variant="outline" disabled={busy !== null} onClick={() => sampleInput.current?.click()}><FileUp className="size-4" /> {busy === "sample" ? "Reading…" : "Read a sample file"}</Button>
                 {waiting.length > 0 && (
                   <select aria-label="Fill the columns from a file waiting for a layout" className={`${toolbarControl} max-w-[420px]`} value="" disabled={busy !== null} onChange={(event) => { if (event.target.value) fillFrom(event.target.value); }}>
                     <option value="">Fill from a waiting file…</option>
                     {waiting.map((file) => <option key={file.id} value={file.id}>{file.label}</option>)}
                   </select>
                 )}
-                <Button type="button" variant="outline" onClick={() => { const field = fields.find((item) => !draft.entries.some((entry) => entry.targetField === item.key)) ?? fields[0]; setDraft({ ...draft, entries: [...draft.entries, { sourceColumn: "", targetField: field.key, dataType: field.dataType, transform: "none", required: false, enumValues: null, enumText: "" }] }); }}><Plus className="size-4" /> Add column</Button>
+                <Button type="button" variant="outline" onClick={() => { const field = fields.find((item) => !draft.entries.some((entry) => entry.targetField === item.key)) ?? fields[0]; const entries = [...draft.entries, { sourceColumn: "", targetField: field.key, dataType: field.dataType, transform: "none" as Transform, required: false, enumValues: null, enumText: "" }]; setDraft({ ...draft, entries }); setEntryPage(Math.ceil(entries.length / 10)); }}><Plus className="size-4" /> Add column</Button>
               </div>
             )}
-            {editable && unmatched.length > 0 && <p className="m-0 text-sm text-muted-foreground">Not matched by name: {unmatched.join(", ")}. Add any that matter with Add column.</p>}
             {(problems.length > 0 || (editable && localProblems.length > 0)) && (
               <ul role="alert" className="list-disc space-y-1 pl-5 text-sm text-[var(--error-ink)]">
                 {(problems.length ? problems : localProblems).map((problem) => <li key={problem}>{problem}</li>)}
@@ -444,30 +512,121 @@ export function LayoutMapsReview({ initialMaps, initialAssignments, carriers, no
         )}
       </TableCard>
 
-      <Dialog open={creating} onOpenChange={(next) => { if (!busy) setCreating(next); }}>
-        <DialogContent className="sm:max-w-md">
+      <Dialog open={creating} onOpenChange={(next) => { if (!busy) { setCreating(next); if (!next) setSample(null); } }}>
+        <DialogContent className={start === "sample" && sample ? "sm:max-w-4xl" : "sm:max-w-lg"}>
           <DialogHeader>
             <DialogTitle className="text-base">New layout</DialogTitle>
-            <DialogDescription>Starts version 1 as a draft. Write its columns from a real sample file.</DialogDescription>
+            <DialogDescription>Starts version 1 as a draft. From a sample file, every column of the file is listed: the ones we read become fields, the rest are kept as sent.</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 text-sm">
-            <div className="grid gap-1.5"><Label htmlFor="new-layout-name">Name</Label><Input id="new-layout-name" className="h-9" placeholder="Aetna / Aflac / AHL 46-column" value={newLayout.name} onChange={(event) => setNewLayout({ ...newLayout, name: event.target.value })} /></div>
-            <div className="grid gap-1.5"><Label htmlFor="new-layout-key">Key</Label><Input id="new-layout-key" className="h-9 font-mono" placeholder="aetna_aflac_ahl_policies" value={newLayout.layoutKey} onChange={(event) => setNewLayout({ ...newLayout, layoutKey: event.target.value.toLowerCase().replace(/[^a-z0-9_]/g, "_") })} /></div>
-            <div className="grid gap-1.5">
-              <Label htmlFor="new-layout-type">File type</Label>
-              <select id="new-layout-type" className={select} value={newLayout.fileType} onChange={(event) => setNewLayout({ ...newLayout, fileType: event.target.value as CarrierFileType })}>
-                {FILE_TYPES.map((key) => <option key={key} value={key}>{FILE_TYPE_LABELS[key]}</option>)}
-              </select>
+            <div role="radiogroup" aria-label="How to start" className="grid gap-2 sm:grid-cols-2">
+              {([["sample", "From a sample file", "CSV, Excel or PDF: every column read from it"], ["empty", "Empty", "Type each column yourself"]] as const).map(([key, label, hint]) => (
+                <label key={key} className={`flex cursor-pointer items-start gap-2 rounded-lg border px-3 py-2.5 ${start === key ? "border-[var(--primary)] bg-[var(--surface-alt)]" : "border-border"}`}>
+                  <input type="radio" name="layout-start" className="mt-0.5 accent-[var(--primary)]" checked={start === key} onChange={() => setStart(key)} />
+                  <span><span className="block font-semibold text-foreground">{label}</span><span className="block text-xs text-muted-foreground">{hint}</span></span>
+                </label>
+              ))}
             </div>
+            <div className="grid gap-4 sm:grid-cols-3">
+              <div className="grid gap-1.5">
+                <Label htmlFor="new-layout-type">File type</Label>
+                <select id="new-layout-type" className={select} value={newLayout.fileType} disabled={busy !== null} onChange={(event) => { const fileType = event.target.value as CarrierFileType; setNewLayout({ ...newLayout, fileType }); if (sample) void run("read", async () => { setSample({ ...sample, read: await readSample(sample.file, fileType, sample.read.sheetName), table: 0 }); setSamplePage(1); }); }}>
+                  {FILE_TYPES.map((key) => <option key={key} value={key}>{FILE_TYPE_LABELS[key]}</option>)}
+                </select>
+              </div>
+              <div className="grid gap-1.5"><Label htmlFor="new-layout-name">Name</Label><Input id="new-layout-name" className="h-9" placeholder="Aetna / Aflac / AHL 46-column" value={newLayout.name} onChange={(event) => setNewLayout({ ...newLayout, name: event.target.value })} /></div>
+              <div className="grid gap-1.5"><Label htmlFor="new-layout-key">Key</Label><Input id="new-layout-key" className="h-9 font-mono" placeholder="aetna_aflac_ahl_policies" value={newLayout.layoutKey} onChange={(event) => setNewLayout({ ...newLayout, layoutKey: event.target.value.toLowerCase().replace(/[^a-z0-9_]/g, "_") })} /></div>
+            </div>
+            {start === "sample" && (
+              <div className="grid gap-1.5">
+                <Label htmlFor="new-layout-file">Sample file</Label>
+                <input id="new-layout-file" type="file" accept={CARRIER_FILE_ACCEPT} disabled={busy !== null} className="text-sm file:mr-3 file:h-9 file:rounded-md file:border file:border-border file:bg-[var(--surface)] file:px-3 file:text-sm file:font-semibold file:text-foreground" onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (!file) return;
+                  void run("read", async () => {
+                    const read = await readSample(file, newLayout.fileType);
+                    setSample({ file, read, table: 0 });
+                    setSamplePage(1);
+                    const base = file.name.replace(/\.[^.]+$/, "");
+                    setNewLayout((current) => ({ ...current, name: current.name || base, layoutKey: current.layoutKey || `${base}_${current.fileType}`.toLowerCase().replace(/[^a-z0-9_]/g, "_").replace(/_+/g, "_").replace(/^[^a-z]+/, "").slice(0, 60) }));
+                  });
+                }} />
+                {busy === "read" && <p className="m-0 text-xs text-muted-foreground" role="status">Reading the file…</p>}
+              </div>
+            )}
+            {start === "sample" && sample && (() => {
+              const view = sampleView(sample.read, sample.table);
+              const read = view.draft.columns.filter((column) => column.becomes).length;
+              const shown = paginate(view.draft.columns, samplePage);
+              const label = (key: string | null) => (key ? TARGET_FIELDS[newLayout.fileType].find((field) => field.key === key)?.label ?? key : null);
+              return (
+                <div className="grid gap-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    {sample.read.sheets.length > 1 && (
+                      <select aria-label="Sheet" className={`${toolbarControl} max-w-[260px]`} value={sample.read.sheetName ?? ""} disabled={busy !== null} onChange={(event) => { const sheet = event.target.value; void run("read", async () => { setSample({ ...sample, read: await readSample(sample.file, newLayout.fileType, sheet), table: 0 }); setSamplePage(1); }); }}>
+                        {sample.read.sheets.map((sheet) => <option key={sheet} value={sheet}>Sheet: {sheet}</option>)}
+                      </select>
+                    )}
+                    {sample.read.tables.length > 1 && (
+                      <select aria-label="Table" className={`${toolbarControl} max-w-[420px]`} value={sample.table} onChange={(event) => { setSample({ ...sample, table: Number(event.target.value) }); setSamplePage(1); }}>
+                        {sample.read.tables.map((table, index) => <option key={index} value={index}>Table: {table.title.slice(0, 60)} ({table.rows} {table.rows === 1 ? "row" : "rows"})</option>)}
+                      </select>
+                    )}
+                    <span className="text-muted-foreground tabular-nums">{view.draft.columns.length} columns · {read} read into fields · {view.draft.columns.length - read} kept as sent{sample.read.kind !== "pdf" ? ` · header on line ${view.draft.headerRow}` : ""}</span>
+                  </div>
+                  <div className="overflow-x-auto rounded-lg border border-border">
+                    <table className="portal-lead-table w-full min-w-[640px] text-left text-sm">
+                      <thead><tr><th className="w-[70px]">Column</th><th>Header in the file</th><th>Becomes</th><th>Example values</th></tr></thead>
+                      <tbody>
+                        {shown.rows.map((column) => (
+                          <tr key={`${column.column}-${column.header}`}>
+                            <td className="font-mono text-xs text-muted-foreground">{column.column}</td>
+                            <td className="font-semibold text-foreground">{column.header}</td>
+                            <td>{column.becomes ? label(column.becomes) : <span className="text-muted-foreground">Kept as sent</span>}</td>
+                            <td className="max-w-[280px] truncate text-muted-foreground" title={view.preview.map((row) => row[column.index] ?? "").filter(Boolean).join(" · ")}>{view.preview.map((row) => row[column.index] ?? "").filter(Boolean).slice(0, 3).join(" · ") || "—"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {view.draft.columns.length > 10 && (
+                      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border bg-[var(--canvas)] px-4 py-3 text-xs text-muted-foreground">
+                        <Pager page={shown.current} total={view.draft.columns.length} noun="columns" onPage={setSamplePage} />
+                      </div>
+                    )}
+                  </div>
+                  {view.draft.missingRequired.length > 0 && <p className="m-0 text-xs text-[var(--warning-ink)]">Still to choose before publishing: {view.draft.missingRequired.map((key) => label(key)).join(", ")}. Pick the column for each in the draft.</p>}
+                  {view.draft.unmatchedWords.map((item) => <p key={item.field} className="m-0 text-xs text-[var(--warning-ink)]">{label(item.field)}: the carrier&apos;s words {item.words.slice(0, 8).map((word) => `"${word}"`).join(", ")}{item.words.length > 8 ? ` and ${item.words.length - 8} more` : ""} still need our value.</p>)}
+                  {sample.read.kind === "pdf" && <p className="m-0 text-xs text-muted-foreground">A PDF&apos;s columns are found from where its values sit. Check the rows above, then add the statement&apos;s total and balances in the draft.</p>}
+                </div>
+              );
+            })()}
           </div>
           <DialogFooter>
-            <Button type="button" variant="outline" disabled={busy !== null} onClick={() => setCreating(false)}>Cancel</Button>
-            <Button type="button" disabled={busy !== null || !newLayout.name.trim() || newLayout.layoutKey.length < 3} onClick={() => void run("create", async () => {
+            <Button type="button" variant="outline" disabled={busy !== null} onClick={() => { setCreating(false); setSample(null); }}>Cancel</Button>
+            <Button type="button" disabled={busy !== null || !newLayout.name.trim() || newLayout.layoutKey.length < 3 || (start === "sample" && !sample)} onClick={() => void run("create", async () => {
               const { map } = await call<{ map: LayoutMapView }>("/api/admin/layout-maps", { method: "POST", body: JSON.stringify({ layout_key: newLayout.layoutKey, name: newLayout.name.trim(), file_type: newLayout.fileType }) });
+              let created = map;
+              if (start === "sample" && sample) {
+                const view = sampleView(sample.read, sample.table);
+                const saved = await call<{ map: LayoutMapView }>(`/api/admin/layout-maps/${map.id}`, { method: "PUT", body: JSON.stringify({
+                  name: map.name,
+                  header_row_index: null,
+                  // A workbook with more than one sheet names the sheet it was drafted from.
+                  sheet_name: sample.read.sheets.length > 1 ? sample.read.sheetName : null,
+                  row_count_swing_pct: map.rowCountSwingPct,
+                  total_row_column: null,
+                  total_row_value: null,
+                  pdf_layout: view.pdfLayout,
+                  entries: view.draft.entries.map((entry) => ({ source_column: entry.sourceColumn, target_field: entry.targetField, data_type: entry.dataType, transform: entry.transform, required: entry.required, enum_values: entry.dataType === "enum" ? entry.enumValues ?? {} : null })),
+                }) });
+                created = saved.map;
+              }
               await reload();
-              openMap(map);
+              openMap(created);
               setCreating(false);
+              setSample(null);
               setNewLayout({ layoutKey: "", name: "", fileType: "policies" });
+              notify.done(start === "sample" ? `Draft v1 created with ${created.entries.length} columns. Check it, then publish.` : "Draft v1 created.");
             })}>{busy === "create" ? "Creating…" : "Create draft"}</Button>
           </DialogFooter>
         </DialogContent>

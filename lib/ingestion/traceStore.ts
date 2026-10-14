@@ -3,6 +3,7 @@ import "server-only";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isSchemaGap } from "@/lib/supabase/schemaGap";
 
+import { isKeptField } from "./layout";
 import { columnTrace, unmatchedFields, type ColumnTrace, type MapEntryView, type RawColumnView } from "./trace";
 
 /**
@@ -55,8 +56,9 @@ export async function loadFileTrace(tenantId: string, fileId: string, page = 1):
   const at = Math.min(Math.max(1, page), pages);
   const from = (at - 1) * ROWS_PER_PAGE;
   const columns = ((f.raw_columns ?? []) as RawColumnView[]).filter((c) => c.header.trim() !== "");
-  // Enough columns to recognise a row at a glance; every column is on the row's own page.
-  const preview = columns.slice(0, 8);
+  // Every column of the file, as sent (owner request 2026-10-14: no need to open the carrier's file
+  // to see a column); the table scrolls sideways, and each row's own page traces every value.
+  const preview = columns;
   const [carrier, map, raw] = await Promise.all([
     f.carrier_id ? db().from("carriers").select("name").eq("id", f.carrier_id).maybeSingle() : { data: null },
     f.parser_id ? db().from("carrier_layout_map").select("id, name, version").eq("id", f.parser_id).maybeSingle() : { data: null },
@@ -118,7 +120,8 @@ export async function loadRowTrace(tenantId: string, fileId: string, rowNumber: 
     db().from("raw_rows").select("row_number").eq("tenant_id", tenantId).eq("file_id", fileId).gt("row_number", rowNumber).order("row_number").limit(1),
     db().from("raw_rows").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId).eq("file_id", fileId).lt("row_number", rowNumber),
   ]);
-  const mapEntries: MapEntryView[] = ((entries.data ?? []) as Loose[]).map((e) => ({ sourceColumn: e.source_column, targetField: e.target_field, dataType: e.data_type, transform: e.transform, required: Boolean(e.required) }));
+  // A column the layout lists as kept is read into nothing: it shows with the columns kept, not read.
+  const mapEntries: MapEntryView[] = ((entries.data ?? []) as Loose[]).filter((e) => !isKeptField(e.target_field)).map((e) => ({ sourceColumn: e.source_column, targetField: e.target_field, dataType: e.data_type, transform: e.transform, required: Boolean(e.required) }));
   const columns = ((f.raw_columns ?? []) as RawColumnView[]).filter((c) => c.header.trim() !== "");
   const s = snapshot.data as Loose;
   const line = ((lines.data ?? []) as Loose[])[0];

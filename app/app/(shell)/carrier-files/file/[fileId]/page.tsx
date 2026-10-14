@@ -67,7 +67,7 @@ export default async function CarrierFilePage({ params, searchParams }: { params
 
       <TableCard
         title="Rows"
-        description={file.rowCount ? `As the carrier sent them${file.columnCount > file.headers.length ? `: the first ${file.headers.length} of ${file.columnCount} columns here, every column on a row's own page` : ""}.` : undefined}
+        description={file.rowCount ? `As the carrier sent them: all ${file.columnCount} ${file.columnCount === 1 ? "column" : "columns"}, scroll sideways for more.` : undefined}
         footer={file.rowCount ? <Pager page={file.page} pageSize={file.pageSize} total={file.rowCount} noun="rows" pageHref="?" /> : undefined}
       >
         {file.rows.length === 0 ? <EmptyState title="No rows kept" hint={file.fileKind === "pdf" ? "A PDF is read with its carrier's PDF layout: its rows are kept once one is published." : "The rows are kept once the file is read."} /> : (

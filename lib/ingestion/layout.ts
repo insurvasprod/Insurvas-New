@@ -91,38 +91,38 @@ export const TARGET_FIELDS: Record<CarrierFileType, TargetField[]> = { policies:
 const HEADER_HINTS: Record<"policies" | "commissions", Record<string, string[]>> = {
   policies: {
     policy_number: ["policy", "policynumber", "policyno", "policynum", "policyid", "contract", "contractnumber", "certificate"],
-    carrier_status_raw: ["status", "policystatus", "contractstatus"],
+    carrier_status_raw: ["status", "policystatus", "contractstatus", "statusdisplaytext", "statusdescription"],
     paid_to_date: ["paidto", "paidtodate", "paidthrough", "paidthru", "ptd"],
     effective_date: ["effective", "effectivedate", "effdate", "policydate", "origeffdate"],
-    issue_date: ["issue", "issuedate", "issued"],
+    issue_date: ["issue", "issuedate", "issued", "dateofissue"],
     application_date: ["appdate", "applicationdate", "appreceived", "receiveddate", "apprecddate", "signeddate"],
     termination_date: ["termdate", "terminationdate", "terminateddate", "lapsedate"],
     premium_cents: ["premium", "modalpremium", "modeprem", "currentmodalpremium", "premiumamount"],
-    premium_mode: ["mode", "premiummode", "billingmode", "frequency", "freq"],
-    payment_method: ["paymentmethod", "billingmethod", "billmethod", "billtype"],
-    face_amount_cents: ["face", "faceamount", "coverage", "deathbenefit", "benefitamount"],
+    premium_mode: ["mode", "premiummode", "billingmode", "frequency", "freq", "billingfrequency", "paymentmode", "paymentmodedisplaytext"],
+    payment_method: ["paymentmethod", "billingmethod", "billmethod", "billtype", "paymentmethoddisplaytext"],
+    face_amount_cents: ["face", "faceamount", "facevalue", "coverage", "deathbenefit", "benefitamount"],
     product_code: ["product", "productcode", "plan", "plancode"],
     product_tier: ["tier", "producttier", "rateclass", "underwritingclass"],
     agent_identifier: ["agent", "writingagent", "agentname", "agentnumber", "writingagentnumber", "producer"],
     insured_name: ["insured", "insuredname", "name", "clientname", "ownername"],
     insured_first_name: ["firstname", "first", "insuredfirstname", "fname"],
     insured_last_name: ["lastname", "last", "insuredlastname", "lname", "surname"],
-    insured_dob: ["dob", "dateofbirth", "birthdate", "insureddob"],
-    insured_phone: ["phone", "phonenumber", "insuredphone", "homephone", "cellphone"],
-    insured_address: ["address", "address1", "street", "insuredaddress"],
+    insured_dob: ["dob", "dateofbirth", "birthdate", "insureddob", "insuredbirth", "insuredbirthdate"],
+    insured_phone: ["phone", "phonenumber", "insuredphone", "homephone", "cellphone", "phone1"],
+    insured_address: ["address", "address1", "addressline1", "street", "insuredaddress"],
     insured_state: ["state", "st", "insuredstate"],
     insured_zip: ["zip", "zipcode", "postalcode", "insuredzip"],
   },
   commissions: {
     policy_number: ["policy", "policynumber", "policyno", "contract"],
     entry_type: ["type", "commissiontype", "action", "activitytype", "commtype", "transactiontype"],
-    transaction_date: ["date", "transactiondate", "processdate", "paiddate"],
-    amount_cents: ["amount", "commission", "commissionamount", "paid", "netamount"],
-    rate_bp: ["rate", "commissionrate", "pct", "percent"],
+    transaction_date: ["date", "transactiondate", "processdate", "paiddate", "activitydate"],
+    amount_cents: ["amount", "commission", "commissionamount", "paid", "netamount", "commamt", "amt", "adjustmentamount"],
+    rate_bp: ["rate", "commissionrate", "pct", "percent", "commpct"],
     commissionable_premium_cents: ["commissionablepremium", "targetpremium", "basepremium", "premium"],
-    months_advanced: ["months", "monthsadvanced", "advancemonths"],
-    agent_identifier: ["agent", "writingagent", "agentname", "agentnumber"],
-    insured_name: ["insured", "insuredname", "name", "clientname"],
+    months_advanced: ["months", "monthsadvanced", "advancemonths", "mos"],
+    agent_identifier: ["agent", "writingagent", "agentname", "agentnumber", "writingagentnumber"],
+    insured_name: ["insured", "insuredname", "name", "clientname", "client", "insuredsname"],
     statement_date: ["statementdate", "statement", "payperiod", "period"],
     payee_level: ["payee", "level", "uplineorwriting", "paidto", "writingorupline"],
   },
@@ -137,6 +137,17 @@ export function guessTargetField(fileType: CarrierFileType, header: string): str
   for (const [field, words] of Object.entries(HEADER_HINTS[fileType === "commissions" ? "commissions" : "policies"])) if (words.includes(key)) return field;
   return null;
 }
+
+/**
+ * A KEPT entry lists a column in the layout without reading it into any field (owner request
+ * 2026-10-14: a layout shows every column of the carrier's file). Its target is `kept_` and a name
+ * of its own, unique within the map as the database requires; no field of ours starts with it. The
+ * column's value is kept with the row as the carrier sent it (raw rows, and a policy snapshot's
+ * `extra`), and a file that has it raises no "column this map does not read" finding.
+ */
+export const KEPT_PREFIX = "kept_";
+export const isKeptField = (targetField: string) => targetField.startsWith(KEPT_PREFIX);
+export const isKeptEntry = (entry: Pick<LayoutEntry, "targetField">) => isKeptField(entry.targetField);
 
 /** The fields a file of each type cannot be read without. */
 export const REQUIRED_TARGETS: Record<CarrierFileType, string[]> = {
@@ -188,6 +199,11 @@ export function mapProblems(map: Pick<LayoutMap, "fileType">, entries: LayoutEnt
   const problems: string[] = [];
   const seen = new Set<string>();
   for (const entry of entries) {
+    if (isKeptEntry(entry)) {
+      if (!entry.sourceColumn.length) problems.push("A kept column has no header.");
+      if (entry.required) problems.push(`"${entry.sourceColumn}" is kept, not read, so it cannot be required.`);
+      continue;
+    }
     const field = fields.get(entry.targetField);
     if (!field) { problems.push(`"${entry.targetField}" is not a field of a ${map.fileType} file.`); continue; }
     if (seen.has(entry.targetField)) problems.push(`"${field.label}" is mapped twice.`);
@@ -408,7 +424,9 @@ function money(cents: number): string {
 
 /** Reads one file's raw rows with one map. Pure; the same input always gives the same output. */
 export function parseWithMap(input: ParseInput): ParseResult {
-  const { map, entries } = input;
+  const { map } = input;
+  // Kept entries are read into nothing: they only say the column is known (no unknown-column finding).
+  const entries = input.entries.filter((entry) => !isKeptEntry(entry));
   const verbatimFields = new Set(TARGET_FIELDS[map.fileType].filter((field) => field.verbatim).map((field) => field.key));
   const findings: Finding[] = [];
   const result = (fatal: string | null, rows: TypedRow[] = [], heldBack: RowProblem[] = [], stated: number | null = null, lines: number | null = null): ParseResult =>
@@ -451,7 +469,7 @@ export function parseWithMap(input: ParseInput): ParseResult {
     findings.push({ findingType: "required_column_missing", severity: "blocking", reasoning: `The file has no ${names} column, which this map requires.`, payload: { columns: missingRequired.map((entry) => entry.sourceColumn) } });
     return result(`Required column ${names} is missing, so nothing was read from this file.`);
   }
-  const mapped = new Set(entries.flatMap((entry) => parts(entry) ?? [entry.sourceColumn]).map((name) => name.trim()));
+  const mapped = new Set(input.entries.flatMap((entry) => parts(entry) ?? [entry.sourceColumn]).map((name) => name.trim()));
   const unknown = raw.columns.filter((column) => column.header.trim() !== "" && !mapped.has(column.header.trim())).map((column) => column.header);
   if (unknown.length) findings.push({ findingType: "unknown_column", severity: "warning", reasoning: `${unknown.length === 1 ? "A column" : `${unknown.length} columns`} this map does not read: ${unknown.map((name) => `"${name}"`).join(", ")}. Every value is kept in the raw rows.`, payload: { columns: unknown } });
 
