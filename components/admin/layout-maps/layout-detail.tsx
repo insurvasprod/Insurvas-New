@@ -54,12 +54,16 @@ export function LayoutDetail({ layoutKey, initialVersions, initialAssignments, c
   const [problems, setProblems] = useState<string[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [removing, setRemoving] = useState(false);
   const [waiting, setWaiting] = useState<WaitingFile[]>([]);
   const [assignCarrier, setAssignCarrier] = useState("");
   const sampleInput = useRef<HTMLInputElement>(null);
 
   const editable = open?.status === "draft" || open?.status === "in_review";
   const openDraft = sorted.find((map) => map.status === "draft" || map.status === "in_review") ?? null;
+  const liveVersion = sorted.find((map) => map.status === "published") ?? null;
+  // Removed: no live version and no draft (removeLayout); a new version brings it back.
+  const removed = !openDraft && !liveVersion;
 
   // A different version opened, or the same one saved: the form starts from what is stored.
   useEffect(() => { if (open) { setDraft(draftOf(open)); setProblems([]); } }, [open?.id, open?.updatedAt]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -146,18 +150,21 @@ export function LayoutDetail({ layoutKey, initialVersions, initialAssignments, c
     notify.done(merged.added ? `${merged.added} column${merged.added === 1 ? "" : "s"} added from ${file.name}. Check each one before saving.` : `Every column of ${file.name} is already listed.`);
   });
 
+  const removeButton = !removed ? <Button type="button" variant="outline" className="text-[var(--error-ink)]" disabled={busy !== null} onClick={() => setRemoving(true)}>Delete layout</Button> : null;
   const actions = editable ? (
     <>
+      {removeButton}
       <Button type="button" variant="outline" disabled={busy !== null} onClick={() => setDeleting(true)}>Delete draft</Button>
       <Button type="button" variant="outline" disabled={busy !== null || !dirty} onClick={() => save()}>{busy === "save" ? "Saving…" : "Save draft"}</Button>
       <Button type="button" disabled={busy !== null || localProblems.length > 0} title={localProblems[0]} onClick={publish}>Publish v{open.version}</Button>
     </>
   ) : (
     <>
+      {removeButton}
       {open.status === "published" && <Button type="button" variant="outline" disabled={busy !== null} onClick={() => run("retire", async () => { const { map } = await call<{ map: LayoutMapView }>(`/api/admin/layout-maps/${open.id}/retire`, { method: "POST" }); await reload(map.id); notify.done(`Version ${map.version} retired.`); })}>Retire</Button>}
       {openDraft
         ? <Button type="button" onClick={() => setOpenId(openDraft.id)}>Open draft v{openDraft.version}</Button>
-        : <Button type="button" disabled={busy !== null} onClick={() => run("version", async () => { const { map } = await call<{ map: LayoutMapView }>(`/api/admin/layout-maps/${open.id}/versions`, { method: "POST" }); await reload(map.id); notify.done(`Version ${map.version} started as a draft.`); })}>Change it: start v{(sorted[0]?.version ?? open.version) + 1}</Button>}
+        : <Button type="button" disabled={busy !== null} onClick={() => run("version", async () => { const { map } = await call<{ map: LayoutMapView }>(`/api/admin/layout-maps/${open.id}/versions`, { method: "POST" }); await reload(map.id); notify.done(`Version ${map.version} started as a draft.`); })}>{removed ? "Bring it back" : "Change it"}: start v{(sorted[0]?.version ?? open.version) + 1}</Button>}
     </>
   );
 
@@ -165,7 +172,7 @@ export function LayoutDetail({ layoutKey, initialVersions, initialAssignments, c
 
   return (
     <div className="flex flex-col gap-6">
-      <AdminPageHeader title={open.name} subtitle={`${FILE_TYPE_LABELS[open.fileType]} · ${layoutKey}`} backHref="/admin/layout-maps" backLabel="Layout maps" />
+      <AdminPageHeader title={open.name} subtitle={`${FILE_TYPE_LABELS[open.fileType]} · ${layoutKey}${removed ? " · deleted" : ""}`} backHref="/admin/layout-maps" backLabel="Layout maps" />
 
       <StatStrip label="This layout">
         <StatTile label="Version" value={`v${open.version}`} footnote={STATUS[open.status].label.toLowerCase()} />
@@ -388,6 +395,27 @@ export function LayoutDetail({ layoutKey, initialVersions, initialAssignments, c
           </table>
         </TableCard>
       )}
+
+      <Dialog open={removing} onOpenChange={(next) => { if (!busy) setRemoving(next); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-base">Delete the layout &ldquo;{open.name}&rdquo;?</DialogTitle>
+            <DialogDescription>
+              {[openDraft && `Draft v${openDraft.version} is deleted.`, liveVersion && `Live v${liveVersion.version} is retired.`, assignments.length ? `${assignments.map((row) => row.carrierName).join(", ")} stop${assignments.length === 1 ? "s" : ""} using it, so their ${FILE_TYPE_LABELS[open.fileType].toLowerCase()} wait until another layout is added.` : "No carrier uses it."].filter(Boolean).join(" ")} Files it already read keep their record of the version that read them.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" variant="outline" disabled={busy !== null} onClick={() => setRemoving(false)}>Cancel</Button>
+            <Button type="button" variant="destructive" disabled={busy !== null} onClick={() => run("remove", async () => {
+              await call(`/api/admin/layout-maps/${open.id}/remove`, { method: "POST" });
+              setRemoving(false);
+              notify.done(`"${open.name}" deleted.`);
+              router.push("/admin/layout-maps");
+              router.refresh();
+            })}>{busy === "remove" ? "Deleting…" : "Delete layout"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={deleting} onOpenChange={(next) => { if (!busy) setDeleting(next); }}>
         <DialogContent className="sm:max-w-md">

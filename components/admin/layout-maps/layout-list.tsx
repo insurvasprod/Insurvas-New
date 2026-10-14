@@ -32,7 +32,7 @@ export function LayoutList({ maps, assignments, carriers, notice }: { maps: Layo
   const [view, setView] = useState<View>("layouts");
   const [query, setQuery] = useState("");
   const [type, setType] = useState<"" | CarrierFileType>("");
-  const [state, setState] = useState<"" | "live" | "draft" | "none">("");
+  const [state, setState] = useState<"" | "live" | "draft" | "none" | "deleted">("");
   const [page, setPage] = useState(1);
   const [carrierQuery, setCarrierQuery] = useState("");
   const [carrierPage, setCarrierPage] = useState(1);
@@ -48,6 +48,9 @@ export function LayoutList({ maps, assignments, carriers, notice }: { maps: Layo
     if (state === "live" && !layout.live) return false;
     if (state === "draft" && !layout.draft) return false;
     if (state === "none" && usedBy(layout.key).length > 0) return false;
+    // A deleted layout (no live version, no draft) is shown only when asked for.
+    const deleted = !layout.live && !layout.draft;
+    if ((state === "deleted") !== deleted) return false;
     return true;
   });
   const shown = paginate(filtered, page);
@@ -99,7 +102,7 @@ export function LayoutList({ maps, assignments, carriers, notice }: { maps: Layo
 
       {notice && <div role="status" className="rounded-lg border border-border border-l-[3px] border-l-[var(--warning)] bg-[var(--warning-surface)] px-4 py-3 text-sm text-[var(--warning-ink)]">{notice}</div>}
 
-      <ViewTabs label="Layout map views" value={view} onChange={setView} tabs={[{ key: "layouts", label: "Layouts", count: layouts.length }, { key: "carriers", label: "Carriers", count: carriers.length }]} />
+      <ViewTabs label="Layout map views" value={view} onChange={setView} tabs={[{ key: "layouts", label: "Layouts", count: layouts.filter((layout) => layout.live || layout.draft).length }, { key: "carriers", label: "Carriers", count: carriers.length }]} />
 
       {view === "layouts" ? (
         <TableCard
@@ -115,13 +118,14 @@ export function LayoutList({ maps, assignments, carriers, notice }: { maps: Layo
                 <option value="live">Live</option>
                 <option value="draft">With an open draft</option>
                 <option value="none">Used by no carrier</option>
+                <option value="deleted">Deleted</option>
               </select>
             </DataToolbar>
           }
           footer={filtered.length > 0 ? <Pager page={shown.current} total={filtered.length} noun="layouts" onPage={setPage} /> : undefined}
         >
-          {layouts.length === 0 ? (
-            <EmptyState title="No layout maps yet" hint="Start one from a carrier's sample file." action={<Button asChild><Link href="/admin/layout-maps/new">New layout</Link></Button>} />
+          {layouts.every((layout) => !layout.live && !layout.draft) && !query.trim() && !type && !state ? (
+            <EmptyState title={layouts.length ? "Every layout is deleted" : "No layout maps yet"} hint="Start one from a carrier's sample file, or type its columns one by one." action={<Button asChild><Link href="/admin/layout-maps/new">New layout</Link></Button>} />
           ) : filtered.length === 0 ? (
             <NoMatches noun="layouts" onClear={() => { setQuery(""); setType(""); setState(""); }} />
           ) : (
@@ -150,7 +154,7 @@ export function LayoutList({ maps, assignments, carriers, notice }: { maps: Layo
                         <span className="flex flex-wrap items-center gap-1.5">
                           {layout.live && <StatusChip tone={STATUS.published.tone}>v{layout.live.version} live</StatusChip>}
                           {layout.draft && <StatusChip tone={STATUS.draft.tone}>v{layout.draft.version} draft</StatusChip>}
-                          {!layout.live && !layout.draft && <StatusChip tone="neutral">Retired</StatusChip>}
+                          {!layout.live && !layout.draft && <StatusChip tone="neutral">Deleted</StatusChip>}
                         </span>
                       </td>
                       <td className="max-w-[280px] truncate" title={using.join(", ")}>{using.length ? using.join(", ") : <span className="text-muted-foreground">None</span>}</td>

@@ -228,6 +228,28 @@ export async function deleteLayoutDraft(id: string): Promise<LayoutMapView> {
   return current;
 }
 
+/**
+ * Removes a whole layout (owner request 2026-10-14: "a button to delete a layout"): its open draft is
+ * deleted, its live version retired, and every carrier assignment to it removed, so no file is read
+ * with it any more. Nothing a file was read with is erased: a published or retired version stays,
+ * frozen, because each file records the version that read it (LA-4.3, LA-4.20). A removed layout is
+ * one with no live version and no draft; starting a new version brings it back.
+ */
+export async function removeLayout(id: string): Promise<{ layoutKey: string; deletedDraft: number | null; retired: number | null; unassigned: number }> {
+  const current = await getMap(id);
+  const { data: versions, error } = await db().from("carrier_layout_map").select("id, version, status").is("tenant_id", null).eq("layout_key", current.layoutKey);
+  if (error) fail(error, "Could not read the layout's versions");
+  let deletedDraft: number | null = null;
+  let retired: number | null = null;
+  for (const row of (versions ?? []) as Array<{ id: string; version: number; status: LayoutStatus }>) {
+    if (row.status === "draft" || row.status === "in_review") { await deleteLayoutDraft(row.id).catch((cause) => { if (!(cause instanceof LayoutMapError && cause.status === 404)) throw cause; }); deletedDraft = row.version; }
+    else if (row.status === "published") { await retireLayoutMap(row.id); retired = row.version; }
+  }
+  const { data: removed, error: removeError } = await db().from("carrier_layout_assignment").delete().is("tenant_id", null).eq("layout_key", current.layoutKey).select("id");
+  if (removeError) fail(removeError, "Could not remove the layout's carriers");
+  return { layoutKey: current.layoutKey, deletedDraft, retired, unassigned: (removed ?? []).length };
+}
+
 /** Points a carrier's files of one type at a layout (platform-wide). */
 export async function setLayoutAssignment(adminId: string, input: { carrierId: string; fileType: CarrierFileType; layoutKey: string }): Promise<void> {
   const { data: layout } = await db().from("carrier_layout_map").select("file_type").is("tenant_id", null).eq("layout_key", input.layoutKey).limit(1);
