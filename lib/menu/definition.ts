@@ -116,7 +116,7 @@ export const AGENT_MENU: MenuSection[] = [
       // LA-5.4 · servicing requests (the `payment_repair` feature): asked of the carrier, proven by the next file.
       item("Book", { key: "retention.payment-repair", label: "Servicing", path: "/app/servicing", icon: "wrench", built: true, required_feature: "payment_repair", required_roles: ["owner", "producer"], blurb: "Payment date, bank, bill-to-draft and address changes, verified by the next carrier file." }),
       // LA-5.6 · reinstatement (the `winback` feature): a lapsed policy brought back before the carrier's window shuts.
-      item("Book", { key: "retention.winback", label: "Reinstatement", path: "/app/reinstatement", icon: "heart-handshake", built: true, required_feature: "winback", required_roles: ["owner", "producer"], blurb: "Lapsed policies the carrier will still take back, with the days left." }),
+      item("Book", { key: "retention.winback", label: "Reinstatement", path: "/app/reinstatement", icon: "rotate-ccw", built: true, required_feature: "winback", required_roles: ["owner", "producer"], blurb: "Lapsed policies the carrier will still take back, with the days left." }),
     ],
   },
   {
