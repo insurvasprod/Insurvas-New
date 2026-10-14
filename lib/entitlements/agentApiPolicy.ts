@@ -156,6 +156,8 @@ export const AGENT_API_POLICIES: AgentApiPolicy[] = [
   { sourceFile: "app/api/app/retention/servicing/route.ts", featureKey: "payment_repair", allowedRoles: ["owner", "producer"] },
   // LA-5.5 · the paper-bill campaign: log a call; owners save the talk track.
   { sourceFile: "app/api/app/retention/campaign/route.ts", featureKey: "payment_repair", allowedRoles: ["owner", "producer"] },
+  // LA-5.6 · reinstatement cases: a person's steps; reinstated and expired are the files' and the calendar's.
+  { sourceFile: "app/api/app/retention/reinstatement/route.ts", featureKey: "winback", allowedRoles: ["owner", "producer"] },
   { sourceFile: "app/api/app/book-scorecards/route.ts", featureKey: "cohort_persistency", allowedRoles: ["owner"] },
   // LA-4.8 · persistency by carrier and lead source; a producer reads their own book's.
   { sourceFile: "app/api/app/persistency/route.ts", featureKey: "cohort_persistency", allowedRoles: ["owner", "producer", "bookkeeper"] },

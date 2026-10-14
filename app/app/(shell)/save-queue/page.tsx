@@ -2,6 +2,8 @@ import { guardPage } from "@/lib/entitlements/guardPage";
 import { RADAR_PENDING_MESSAGE } from "@/lib/retention/constants";
 import { SORTS, type QueueSort } from "@/lib/retention/queue";
 import { loadSaveQueue } from "@/lib/retention/queueStore";
+import { closingSoon } from "@/lib/retention/reinstatementStore";
+import Link from "next/link";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { SaveQueueBoard } from "@/components/app/save-queue-board";
@@ -30,11 +32,19 @@ export default async function SaveQueuePage({ searchParams }: { searchParams: Pr
   const sort: QueueSort = (SORTS as readonly string[]).includes(sortParam ?? "") ? (sortParam as QueueSort) : "value";
   // "Start the fix" opens an LA-5.4 servicing request, which is the `payment_repair` feature.
   const servicing = await guardPage("payment_repair");
-  const queue = await loadSaveQueue({ tenantId: guard.context.tenantId, userId: guard.context.userId, role: guard.role }, sort);
+  const viewer = { tenantId: guard.context.tenantId, userId: guard.context.userId, role: guard.role };
+  // LA-5.6: a reinstatement window about to close is pinned above everything else here.
+  const reinstatement = await guardPage("winback");
+  const [queue, closing] = await Promise.all([loadSaveQueue(viewer, sort), reinstatement.entitled ? closingSoon(viewer).catch(() => null) : Promise.resolve(null)]);
 
   return (
     <div className="m-stagger flex min-h-0 flex-grow flex-col gap-6">
       <PageHeader title="Save queue" description="Policies paying fine today that the radar says will stop." />
+      {closing ? (
+        <p role="alert" className="rounded-lg border border-[color-mix(in_srgb,var(--error)_24%,transparent)] bg-[var(--error-surface)] px-3 py-2 text-sm text-[var(--error-ink)]">
+          {closing === 1 ? "1 reinstatement window closes" : `${closing} reinstatement windows close`} within days, and then the policy is gone for good. <Link href="/app/reinstatement" className="font-semibold underline">Work it now</Link>
+        </p>
+      ) : null}
       {queue.available ? (
         <SaveQueueBoard queue={queue} sort={sort} readOnly={guard.entitlement.access === "read_only"} canStartFix={servicing.entitled && servicing.entitlement.access !== "read_only"} />
       ) : (

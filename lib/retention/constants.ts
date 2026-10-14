@@ -70,6 +70,10 @@ export type RetentionSettings = {
   billDeclineCooloffDays: number;
   /** LA-5.5: the agency's own talk track; null = the platform's (PLATFORM_TALK_TRACK). */
   billTalkTrack: string | null;
+  /** LA-5.6: reinstatement countdown — amber, red, and pinned to the top (days before the deadline). */
+  reinstatementAmberDays: number;
+  reinstatementRedDays: number;
+  reinstatementPinDays: number;
 };
 
 export const PLATFORM_DEFAULT_SETTINGS: RetentionSettings = {
@@ -87,6 +91,9 @@ export const PLATFORM_DEFAULT_SETTINGS: RetentionSettings = {
   affordabilityHighBp: 600,
   billDeclineCooloffDays: 180,
   billTalkTrack: null,
+  reinstatementAmberDays: 14,
+  reinstatementRedDays: 7,
+  reinstatementPinDays: 3,
 };
 
 /** retention_settings row → settings; a missing row is the platform defaults. */
@@ -108,6 +115,9 @@ export function settingsFromRow(row: any | null | undefined): RetentionSettings 
     affordabilityHighBp: row.affordability_high_bp,
     billDeclineCooloffDays: row.bill_decline_cooloff_days ?? PLATFORM_DEFAULT_SETTINGS.billDeclineCooloffDays,
     billTalkTrack: row.bill_talk_track ?? null,
+    reinstatementAmberDays: row.reinstatement_amber_days ?? PLATFORM_DEFAULT_SETTINGS.reinstatementAmberDays,
+    reinstatementRedDays: row.reinstatement_red_days ?? PLATFORM_DEFAULT_SETTINGS.reinstatementRedDays,
+    reinstatementPinDays: row.reinstatement_pin_days ?? PLATFORM_DEFAULT_SETTINGS.reinstatementPinDays,
   };
 }
 

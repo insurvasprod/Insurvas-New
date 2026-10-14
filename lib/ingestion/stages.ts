@@ -10,6 +10,7 @@ import { computeExpected } from "./expectedCommissionStore";
 import { rebuildFileSnapshots } from "./snapshotStore";
 import { computeRadar } from "@/lib/retention/radarStore";
 import { runServicingVerification } from "@/lib/retention/servicingStore";
+import { runReinstatementSync } from "@/lib/retention/reinstatementStore";
 
 /**
  * LA-4.2+ (Notion sprint) · the stages that rebuild what is derived from a file, in order. A door
@@ -135,7 +136,26 @@ const servicingVerify: ReprocessStage = {
   },
 };
 
-export const REPROCESS_STAGES: ReprocessStage[] = [policySnapshots, expectedCommission, retentionResults, servicingVerify, riskRadar, commissionEntries, orphanCommission, commissionDiscrepancies];
+/**
+ * reinstatement_sync (LA-5.6): after a policy file, a new lapse inside its carrier window opens a
+ * case, a policy the file shows back in force closes its case as reinstated, and closed windows
+ * expire. The database decides; this only asks.
+ */
+const reinstatementSync: ReprocessStage = {
+  name: "reinstatement_sync",
+  async rebuild(tenantId: string, file: ReprocessFile, _rows, parsed: ParsedFile | null) {
+    if (!isPolicyFeed(file.fileType) || !parsed?.typedRows) return { changed: 0 };
+    try {
+      const run = await runReinstatementSync(tenantId);
+      return { changed: run ? run.opened + run.reinstated + run.expired : 0 };
+    } catch (error) {
+      console.error("[reinstatement_sync] the reinstatement cases could not be checked after a file", error);
+      return { changed: 0 };
+    }
+  },
+};
+
+export const REPROCESS_STAGES: ReprocessStage[] = [policySnapshots, expectedCommission, retentionResults, servicingVerify, reinstatementSync, riskRadar, commissionEntries, orphanCommission, commissionDiscrepancies];
 
 /** After a door's parse: the same stages a reprocess runs, for one file's passed rows. */
 export async function runStages(tenantId: string, file: ReprocessFile, parsed: ParsedFile): Promise<void> {
