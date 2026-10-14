@@ -45,7 +45,7 @@ function reprocessDeps(): ReprocessDeps {
       return data.id as string;
     },
     async finishRun(runId, result) {
-      const { error } = await db().from("reprocess_runs").update({
+      const { data, error } = await db().from("reprocess_runs").update({
         status: result.status,
         parser_version: result.parserVersion,
         file_ids: result.fileIds,
@@ -54,8 +54,15 @@ function reprocessDeps(): ReprocessDeps {
         stages: result.stages,
         error_detail: result.errorDetail,
         finished_at: new Date().toISOString(),
-      }).eq("id", runId);
+      }).eq("id", runId).select("tenant_id").single();
       if (error) throw new Error(`The reprocess result could not be recorded: ${error.message}`);
+      // A re-read that succeeded rebuilt every step after reading (the policy book included), so a
+      // file a failed step had left unfinished is finished now: the next run need not take it up,
+      // and the Carrier files list stops showing it as not finished (2026-10-14).
+      if (result.status === "succeeded" && result.fileIds.length) {
+        const { error: doneError } = await db().from("file_registry").update({ pipeline_completed_at: new Date().toISOString() }).eq("tenant_id", data.tenant_id).in("id", result.fileIds).eq("status", "parsed");
+        if (doneError) throw new Error(`The files could not be marked finished: ${doneError.message}`);
+      }
     },
   };
 }

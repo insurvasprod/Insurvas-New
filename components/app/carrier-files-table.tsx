@@ -161,6 +161,11 @@ export function CarrierFilesTable({ files, emptyTitle, emptyHint }: { files: Car
                       <Link href={fileHref(file.id)} className="rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]" title="Open the file to say who sent it">
                         <StatusChip tone="action">Needs a check</StatusChip>
                       </Link>
+                    ) : file.unfinished ? (
+                      // 2026-10-14: read, but a later step failed (an Aetna file's policies never reached the book).
+                      <Link href={fileHref(file.id)} className="rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]" title={`The ${file.unfinished.stage} step failed. Open the file and press Read again to finish it.`}>
+                        <StatusChip tone="warning">Not finished</StatusChip>
+                      </Link>
                     ) : (
                       <StatusChip tone={STATUS_TONE[file.status]}>{file.status === "parsed" && file.parserVersion ? `${FILE_STATUS_LABELS.parsed} · v${file.parserVersion}` : FILE_STATUS_LABELS[file.status]}</StatusChip>
                     )}

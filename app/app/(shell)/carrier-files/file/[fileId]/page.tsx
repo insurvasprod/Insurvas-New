@@ -6,7 +6,7 @@ import { FILE_STATUS_LABELS, fileDay, type CarrierFileStatus, type CarrierFileTy
 import { clearlyBetter } from "@/lib/ingestion/fileCheck";
 import { checkCarrierFile } from "@/lib/ingestion/fileCheckStore";
 import { isRecordUuid } from "@/lib/ingestion/path";
-import { libraryCarriers } from "@/lib/ingestion/registry";
+import { libraryCarriers, unfinishedSteps } from "@/lib/ingestion/registry";
 import { fileHref, rowHref } from "@/lib/ingestion/trace";
 import { pdfBalanceReview } from "@/lib/ingestion/rawLayer";
 import { loadFileTrace } from "@/lib/ingestion/traceStore";
@@ -55,6 +55,8 @@ export default async function CarrierFilePage({ params, searchParams }: { params
   ]);
   const better = missedColumn && check ? clearlyBetter(check, check.currentLayoutKey) : null;
   const wholeHref = `${fileHref(file.id)}/whole`;
+  // 2026-10-14: read, but a later step failed and nothing has finished it yet.
+  const unfinished = file.status === "parsed" && !file.completed ? (await unfinishedSteps(guard.context.tenantId, [file.id])).get(file.id) ?? null : null;
 
   const facts: Array<[string, string]> = [
     ["Carrier", file.carrierName ?? "Not known"],
@@ -78,6 +80,7 @@ export default async function CarrierFilePage({ params, searchParams }: { params
           ))}
         </dl>
         {file.errorDetail && <p className="m-0 border-t border-border px-4 py-3 text-sm text-[var(--warning-ink)]">{file.errorDetail}</p>}
+        {unfinished && <p role="status" className="m-0 border-t border-border px-4 py-3 text-sm text-[var(--warning-ink)]">Not finished: the {unfinished.stage} step failed{unfinished.error ? ` (${unfinished.error})` : ""}. Read again finishes it.</p>}
         {better && <p className="m-0 border-t border-border px-4 py-3 text-sm text-foreground">These columns match {better.name}{better.carriers.length ? ` (used by ${better.carriers.map((carrier) => carrier.name).join(", ")})` : ""}. Check the file&apos;s carrier and type.</p>}
       </TableCard>
 

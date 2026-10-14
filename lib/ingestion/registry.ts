@@ -338,7 +338,15 @@ export type CarrierFileRow = {
   parserVersion: number | null;
   /** LA-4.5: rows held back because their carrier status is not mapped yet. */
   heldRows: number;
+  /**
+   * Read, but a later step failed (the policy book refresh, matching…) and nothing has finished it
+   * yet: the step and why. Null when every step finished. (2026-10-14: an Aetna file showed "parsed"
+   * while none of its policies were in the book.)
+   */
+  unfinished: UnfinishedStep | null;
 };
+
+export type UnfinishedStep = { stage: string; error: string | null };
 
 export type CarrierFileSkip = { id: string; originalFileId: string; originalFilename: string; source: CarrierFileSource; skippedAt: string };
 
@@ -348,7 +356,7 @@ const FILE_COLUMNS =
   "id, carrier_id, file_type, file_date, path_agency, original_filename, file_bytes, file_kind, status, error_detail, source, email_from, received_at, superseded_by_file_id, content_hash, row_count, carriers(name), users:uploaded_by(name, email)";
 const RAW_COLUMNS = ", raw_extracted_at, raw_error";
 const PARSE_COLUMNS = ", parse_block, parser_version";
-const STATUS_COLUMNS = ", held_row_count";
+const STATUS_COLUMNS = ", held_row_count, pipeline_completed_at";
 
 /** The agency's files, newest first (at most `limit`), and the most recent skipped duplicates. */
 export async function listCarrierFiles(tenantId: string, limit = 500): Promise<CarrierFileList> {
@@ -367,6 +375,8 @@ export async function listCarrierFiles(tenantId: string, limit = 500): Promise<C
     throw new Error(`Could not load carrier files: ${files.error.message}`);
   }
   if (skips.error && !pending(skips.error)) throw new Error(`Could not load skipped files: ${skips.error.message}`);
+  const open = ((files.data ?? []) as Loose[]).filter((row) => row.status === "parsed" && "pipeline_completed_at" in row && !row.pipeline_completed_at).map((row) => row.id as string);
+  const unfinished = await unfinishedSteps(tenantId, open);
   return {
     available: true,
     files: (files.data ?? []).map((row: Loose) => ({
@@ -392,9 +402,32 @@ export async function listCarrierFiles(tenantId: string, limit = 500): Promise<C
       waitingForLayout: row.parse_block === "no_layout_map",
       parserVersion: row.parser_version ?? null,
       heldRows: row.held_row_count ?? 0,
+      unfinished: unfinished.get(row.id) ?? null,
     })),
     skips: (skips.data ?? []).map((row: Loose) => ({ id: row.id, originalFileId: row.original_file_id, originalFilename: row.original_filename, source: row.source, skippedAt: row.skipped_at })),
   };
+}
+
+/**
+ * For read files not marked complete: the step that failed in the file's latest run (the steps after
+ * it are recorded as skipped). A file still running has no failed step yet.
+ */
+export async function unfinishedSteps(tenantId: string, fileIds: string[]): Promise<Map<string, UnfinishedStep>> {
+  const out = new Map<string, UnfinishedStep>();
+  for (let start = 0; start < fileIds.length; start += 100) {
+    const ids = fileIds.slice(start, start + 100);
+    const { data, error } = await db().from("pipeline_stage_run").select("file_id, run_id, stage, status, error_detail, started_at").eq("tenant_id", tenantId).in("file_id", ids).order("started_at", { ascending: false });
+    if (error) {
+      if (pending(error)) return out;
+      throw new Error(`Could not read the files' steps: ${error.message}`);
+    }
+    const latestRun = new Map<string, string>();
+    for (const row of (data ?? []) as Loose[]) {
+      if (!latestRun.has(row.file_id)) latestRun.set(row.file_id, row.run_id);
+      if (row.run_id === latestRun.get(row.file_id) && row.status === "failed" && !out.has(row.file_id)) out.set(row.file_id, { stage: row.stage, error: row.error_detail ?? null });
+    }
+  }
+  return out;
 }
 
 /** A sixty-second link to one of the agency's originals, named as it was received. */

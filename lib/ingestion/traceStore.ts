@@ -35,6 +35,8 @@ export type FileTrace = {
   errorDetail: string | null;
   map: { id: string; name: string; version: number } | null;
   parsedAt: string | null;
+  /** Every step after reading finished (the policy book included); false while one failed or is running. */
+  completed: boolean;
   rowCount: number | null;
   parsedRows: number | null;
   heldRows: number | null;
@@ -49,7 +51,7 @@ export type FileTrace = {
 };
 
 export async function loadFileTrace(tenantId: string, fileId: string, page = 1): Promise<FileTrace | null> {
-  const { data: f, error } = await db().from("file_registry").select("id, original_filename, carrier_id, file_type, file_kind, file_date, source, received_at, content_hash, file_bytes, status, error_detail, parser_id, parser_version, parsed_at, row_count, parsed_row_count, held_row_count, superseded_by_file_id, raw_columns").eq("tenant_id", tenantId).eq("id", fileId).maybeSingle();
+  const { data: f, error } = await db().from("file_registry").select("id, original_filename, carrier_id, file_type, file_kind, file_date, source, received_at, content_hash, file_bytes, status, error_detail, parser_id, parser_version, parsed_at, row_count, parsed_row_count, held_row_count, superseded_by_file_id, raw_columns, pipeline_completed_at").eq("tenant_id", tenantId).eq("id", fileId).maybeSingle();
   if (error) throw new Error(`Could not load the file: ${error.message}`);
   if (!f) return null;
   const pages = Math.max(1, Math.ceil((f.row_count ?? 0) / ROWS_PER_PAGE));
@@ -77,7 +79,7 @@ export async function loadFileTrace(tenantId: string, fileId: string, page = 1):
     id: f.id, name: f.original_filename, carrierId: f.carrier_id, carrierName: carrier.data?.name ?? null, fileType: f.file_type, fileKind: f.file_kind, fileDate: f.file_date,
     source: f.source, receivedAt: f.received_at, contentHash: f.content_hash, bytes: Number(f.file_bytes ?? 0), status: f.status, errorDetail: f.error_detail,
     map: map.data ? { id: map.data.id, name: map.data.name, version: map.data.version } : null,
-    parsedAt: f.parsed_at, rowCount: f.row_count, parsedRows: f.parsed_row_count, heldRows: f.held_row_count, supersededBy: f.superseded_by_file_id,
+    parsedAt: f.parsed_at, completed: Boolean(f.pipeline_completed_at), rowCount: f.row_count, parsedRows: f.parsed_row_count, heldRows: f.held_row_count, supersededBy: f.superseded_by_file_id,
     headers: preview.map((c) => c.header),
     columnCount: columns.length,
     rows: rawRows.map((r) => ({ rowNumber: r.row_number, preview: preview.map((c) => String(r.payload?.[c.key] ?? "")), produced: producedBy.get(r.id) ?? null })),
