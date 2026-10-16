@@ -19,8 +19,8 @@ import { cn } from "@/lib/utils";
 import { ProductDialog } from "./product-dialog";
 
 const PAGE = 10;
-const th = "px-3 py-2 text-left text-[12px] leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]";
-const td = "border-t border-[var(--border)] px-3 py-2 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--body)]";
+const th = "px-3 py-2 text-left text-xs leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]";
+const td = "border-t border-[var(--border)] px-3 py-2 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--body)]";
 
 export type ProductUsage = { templates: number; partners: number };
 
@@ -127,9 +127,9 @@ export function ProductsTable({ products, usage, partnerCount }: { products: Pro
                   <tr key={product.id} className={cn("hover:bg-[color-mix(in_srgb,var(--primary),transparent_95%)]", !product.is_active && "opacity-60")}>
                     <td className={td}>
                       <span className="font-semibold text-[var(--ink)]">{product.name}</span>
-                      <span className="block text-[12px] text-[var(--muted)]">{used.templates || used.partners ? [used.templates ? `${used.templates} ${used.templates === 1 ? "template" : "templates"}` : null, used.partners ? `${used.partners} ${used.partners === 1 ? "partner" : "partners"}` : null].filter(Boolean).join(" · ") : "Not referenced yet"}</span>
+                      <span className="block text-xs text-[var(--muted)]">{used.templates || used.partners ? [used.templates ? `${used.templates} ${used.templates === 1 ? "template" : "templates"}` : null, used.partners ? `${used.partners} ${used.partners === 1 ? "partner" : "partners"}` : null].filter(Boolean).join(" · ") : "Not referenced yet"}</span>
                     </td>
-                    <td className={td}><code className="font-mono text-[14px]">{product.code}</code></td>
+                    <td className={td}><code className="font-mono text-sm">{product.code}</code></td>
                     <td className={td}>{PRODUCT_CATEGORY_LABELS[product.category]}</td>
                     <td className={cn(td, "max-w-[320px]")}><span className="line-clamp-2">{product.description ?? "—"}</span></td>
                     <td className={cn(td, "text-right tabular-nums")}>{product.sort_order}</td>

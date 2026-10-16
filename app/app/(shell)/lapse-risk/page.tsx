@@ -58,7 +58,7 @@ export default async function LapseRiskPage({ searchParams }: { searchParams: Pr
   const [board, rates] = await Promise.all([loadBoard(viewer), loadSaveRates(viewer)]);
   return (
     <div className="m-stagger flex min-h-0 flex-grow flex-col gap-6">
-      <PageHeader title="Lapse risk" description="Who to call today to keep a policy alive, in order: the soonest deadline first, then the most money." />
+      <PageHeader title="Lapse risk" description="Who to call today to keep a policy alive." />
       {tabs(board.rows.length)}
       <RetentionBoard rows={board.rows} rates={rates.available ? { calls: rates.calls, byReason: rates.byReason, byCarrier: rates.byCarrier, byAgent: rates.byAgent } : null} readOnly={readOnly} />
     </div>

@@ -6,6 +6,8 @@
 // field (LA-3.13's "never guess" applies to our own record too).
 
 import { digitsOnly } from "../templates/formats.ts";
+import { US_STATES } from "../appointments/constants.ts";
+import { isPlausibleSsn } from "./formats.ts";
 
 type LeadValues = Record<string, unknown>;
 
@@ -41,6 +43,36 @@ export function applicationKeysForLeadKeys(leadKeys: Iterable<string>): Set<stri
   if (lead.has("full_name") || lead.has("name")) { out.add("insured.first_name"); out.add("insured.last_name"); }
   return out;
 }
+
+const STATE_BY_NAME = new Map<string, string>(US_STATES.flatMap(([code, name]) => [[code.toLowerCase(), code], [name.toLowerCase(), code]] as [string, string][]));
+
+/**
+ * A US state as its two-letter USPS code, from the code ("tx", "TX") or the full name ("Texas",
+ * "new  york"). Anything else is null — never a guess.
+ */
+export function normaliseStateCode(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const key = value.trim().replace(/\s+/g, " ").replace(/\.$/, "").toLowerCase();
+  return key ? STATE_BY_NAME.get(key) ?? null : null;
+}
+
+/**
+ * The state an application is written in, for the appointment check (LA-3.4/3.6): the application's
+ * own address state first — what the agent confirmed — then the lead's state fields (`state`,
+ * `state_code`), each normalised to its two-letter code.
+ */
+export function clientStateOf(applicationState: unknown, leadValues: LeadValues | null | undefined): string | null {
+  const own = normaliseStateCode(applicationState);
+  if (own) return own;
+  for (const key of SYNONYMS["addr.state"]) {
+    const code = normaliseStateCode(leadValues?.[key]);
+    if (code) return code;
+  }
+  return null;
+}
+
+/** The lead keys an SSN arrives under — what is scrubbed from the lead once the application holds it. */
+export const LEAD_SSN_KEYS: readonly string[] = SYNONYMS["insured.ssn"];
 
 function first(values: LeadValues, keys: readonly string[]) {
   for (const k of keys) {
@@ -170,7 +202,9 @@ export function prefillFromLead(values: LeadValues): PrefillValue[] {
   }
 
   const ssn = first(values, SYNONYMS["insured.ssn"]);
-  if (ssn && digitsOnly(String(ssn)).length === 9) put("insured.ssn", digitsOnly(String(ssn)), true);
+  // SSA validity, not just nine digits: an impossible number (000/666/9xx area, 00 group, 0000
+  // serial) is left for the agent to ask for, never encrypted onto the application as if it were real.
+  if (ssn && digitsOnly(String(ssn)).length === 9 && isPlausibleSsn(digitsOnly(String(ssn)))) put("insured.ssn", digitsOnly(String(ssn)), true);
 
   for (const key of ["insured.height_in", "insured.weight_lb"] as const) {
     const v = first(values, SYNONYMS[key]);
@@ -196,8 +230,7 @@ export function prefillFromLead(values: LeadValues): PrefillValue[] {
     const v = first(values, SYNONYMS[key]);
     put(key, v ? String(v).trim() : null);
   }
-  const state = first(values, SYNONYMS["addr.state"]);
-  put("addr.state", state && /^[A-Za-z]{2}$/.test(String(state).trim()) ? String(state).trim().toUpperCase() : null);
+  put("addr.state", clientStateOf(null, values));
   const zip = first(values, SYNONYMS["addr.zip"]);
   if (zip) {
     const z = digitsOnly(String(zip));

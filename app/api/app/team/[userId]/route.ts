@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { requireTenant } from "@/lib/tenantAuth/requireTenant";
+import { memberSnapshot, recordSettingsChanges } from "@/lib/settingsAudit/record";
 import { updateTeamRoleSchema } from "@/lib/tenantTeam/schemas";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { audit } from "@/lib/audit/log";
@@ -30,7 +31,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
   if (error) {
     const limit = error.message?.match(/max_buffer_seats:(\d+):(\d+)/);
-    if (limit) return NextResponse.json({ error: `Your plan has reached max_buffer_seats (${limit[1]} of ${limit[2]}). Upgrade to add another buffer agent.`, code: "limit_reached", limitKey: "max_buffer_seats", usage: Number(limit[1]), limit: Number(limit[2]), upgrade: true }, { status: 403 });
+    if (limit) return NextResponse.json({ error: `Your plan has reached its buffer-agent seat limit (${limit[1]} of ${limit[2]} buffer seats). Upgrade to add another buffer agent.`, code: "limit_reached", limitKey: "max_buffer_seats", usage: Number(limit[1]), limit: Number(limit[2]), upgrade: true }, { status: 403 });
     if (error.message?.includes("last_owner")) {
       return NextResponse.json({ error: "This is the tenant's only owner. Promote another owner before changing this role.", code: "last_owner" }, { status: 409 });
     }
@@ -51,6 +52,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       metadata: { tenantId: auth.context.tenantId, from: result.old_role, to: result.new_role },
       request,
     });
+    const who = await memberSnapshot(auth.context.tenantId, userId);
+    await recordSettingsChanges({ tenantId: auth.context.tenantId, actorId: auth.context.userId, section: "team-access", changes: [{ key: `member:${userId}.role`, label: `${who.name} — role`, from: result.old_role, to: result.new_role }] });
   }
 
   return NextResponse.json({ ok: true, userId, role: result.new_role });

@@ -94,10 +94,13 @@ export async function loadCampaign(viewer: Viewer): Promise<Campaign | { availab
   });
   const newestRequest = new Map<string, Loose>();
   for (const r of requests) newestRequest.set(keyOf(r), r);
-  // Converted policies pay by draft now: read them by their request.
+  // Converted policies pay by draft now: read them by their request — and so do ones whose switch is
+  // still being proven, so a policy never drops off the campaign between the file and the check.
+  const requestedKeys = [...newestRequest.values()].filter((r) => r.status !== "cancelled").map(keyOf);
+  // Only a verified switch counts as converted, for the lapse comparison.
   const convertedKeys = [...newestRequest.values()].filter((r) => r.status === "verified_in_file").map(keyOf);
   const paperKeys = new Set(everPaper.map(keyOf));
-  const missing = convertedKeys.filter((k) => !paperKeys.has(k));
+  const missing = requestedKeys.filter((k) => !paperKeys.has(k));
   const convertedPolicies: Loose[] = [];
   for (let i = 0; i < missing.length; i += CHUNK) {
     const numbers = missing.slice(i, i + CHUNK).map((k) => k.slice(k.indexOf("|") + 1));
@@ -153,7 +156,7 @@ export async function loadCampaign(viewer: Viewer): Promise<Campaign | { availab
 
   // Lapse rate: policies the file shows converted, against those still on (or lapsed on) a mailed bill.
   const convertedSet = new Set(convertedKeys);
-  const convertedCohort = convertedPolicies.concat(everPaper.filter((p) => convertedSet.has(keyOf(p))));
+  const convertedCohort = convertedPolicies.filter((p) => convertedSet.has(keyOf(p))).concat(everPaper.filter((p) => convertedSet.has(keyOf(p))));
   const paperCohort = everPaper.filter((p) => !convertedSet.has(keyOf(p)) && (inForce.has(p.status_normalized) || p.status_normalized === "lapsed"));
   const lapsed = (list: Loose[]) => list.filter((p) => p.status_normalized === "lapsed").length;
   const verifiedRequests = new Set([...newestRequest.values()].filter((r) => r.status === "verified_in_file").map((r) => r.id));

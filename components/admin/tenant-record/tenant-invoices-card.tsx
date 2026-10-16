@@ -1,10 +1,11 @@
 "use client";
 
+import { StatusChip } from "@/components/ui/status-chip";
 import Link from "next/link";
 import { useState } from "react";
 
 import { CustomInvoiceDialog } from "@/components/admin/custom-invoice-dialog";
-import { Pill, btn, st, type PillTone } from "@/components/app/settings/primitives";
+import { btn, st, type PillTone, pillTone } from "@/components/app/settings/primitives";
 import { buttonVariants } from "@/components/ui/button";
 import { TableCard } from "@/components/ui/table-card";
 import { Pager, paginate } from "@/components/ui/pager";
@@ -83,7 +84,7 @@ export function TenantInvoicesCard({
                   <td className={st.td}>{periodRange(row.periodStart, row.periodEnd, now)}</td>
                   <td className={`${st.td} tabular-nums`}>{formatCentsAsCurrency(row.totalCents)}</td>
                   <td className={st.td}>
-                    <Pill tone={state.tone}>{state.label}</Pill>
+                    <StatusChip dot={false} tone={pillTone(state.tone)}>{state.label}</StatusChip>
                   </td>
                   <td className={st.td}>{shortDate(row.paidAt, now)}</td>
                   <td className={st.td}>

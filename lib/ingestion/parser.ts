@@ -11,7 +11,9 @@ import { chooseLayoutMap, parseWithMap, type Finding, type LayoutEntry, type Lay
 import type { RawColumn, RawRow } from "./grid";
 import { extractRawRows, pdfStatementTotal, readRawRows } from "./rawLayer";
 import { runStages } from "./stages";
-import { gateStatuses, shownWord, type NormalizedStatus } from "./statuses";
+import { gateStatuses, shownWord, unmappedStatusEmail, type NormalizedStatus } from "./statuses";
+import { shouldEmail } from "@/lib/notifications/preferences";
+import { configuredAppOrigin } from "@/lib/urls/origin";
 
 /**
  * LA-4.3 (Notion sprint) · parsing registered files with their carrier's layout map, server side.
@@ -204,10 +206,14 @@ async function notifyUnmappedStatuses(tenantId: string, carrierId: string, entri
   ]);
   const name = carrier?.name ?? "A carrier";
   const words = entries.map((entry) => shownWord(entry.raw)).join(", ");
-  const text = `${name} sent ${entries.length === 1 ? "a policy status" : "policy statuses"} Insurvas has not seen before: ${words}.\n\nThe policies with ${entries.length === 1 ? "this status are" : "these statuses are"} kept and held back until the status is mapped, so nothing is guessed. They are read automatically once it is.\n\nCarrier files: /app/carrier-files`;
-  const html = `<p>${name} sent ${entries.length === 1 ? "a policy status" : "policy statuses"} Insurvas has not seen before: <strong>${words.replace(/</g, "&lt;")}</strong>.</p><p>The policies with ${entries.length === 1 ? "this status are" : "these statuses are"} kept and held back until the status is mapped, so nothing is guessed. They are read automatically once it is.</p>`;
+  // An email link is absolute, from configuration (never a request's Host); unconfigured, the email names the page.
+  let origin: string | null = null;
+  try { origin = configuredAppOrigin("agent"); } catch (error) { console.error("[status-gate] no app URL configured for the email link:", error); }
+  const { subject, text, html } = unmappedStatusEmail({ carrierName: name, words, count: entries.length, origin });
   for (const person of (people ?? []) as Array<{ user_id: string; users: { email: string } }>) {
-    await sendEmail({ to: person.users.email, subject: `${name}: a policy status needs mapping`, text, html, templateKey: "carrier_files.unmapped_status", userId: person.user_id, tenantId, dedupeKey: `unmapped_status:${entries.map((entry) => entry.id).join(",")}:${person.user_id}` });
+    // LA-8.4: the person's own choice for "Carrier status needs mapping" (it may go in their digest).
+    if (!(await shouldEmail({ userId: person.user_id, tenantId, eventKey: "carrier_status_unmapped", title: `${name}: a policy status needs mapping`, body: `New status: ${words}.`, link: "/app/carrier-files" }))) continue;
+    await sendEmail({ to: person.users.email, subject, text, html, templateKey: "carrier_files.unmapped_status", userId: person.user_id, tenantId, dedupeKey: `unmapped_status:${entries.map((entry) => entry.id).join(",")}:${person.user_id}` });
   }
   await db().from("unmapped_status_queue").update({ notified_at: new Date().toISOString() }).eq("tenant_id", tenantId).in("id", entries.map((entry) => entry.id));
 }

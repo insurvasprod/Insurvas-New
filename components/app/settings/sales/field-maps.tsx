@@ -19,11 +19,12 @@
  * in the settings save bar, and the only callouts are the blocked / read-only lines.
  */
 
+import { StatusChip } from "@/components/ui/status-chip";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { ArrowRight, Copy, Plus } from "lucide-react";
 import { notify } from "@/lib/notify";
 
-import { Callout, Field, Pill, SettingsStack, control, st, type PillTone } from "@/components/app/settings/primitives";
+import { Callout, Field, SettingsStack, control, st, type PillTone, pillTone } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { DataToolbar, RefreshButton, toolbarControl } from "@/components/ui/data-toolbar";
 import { EmptyState } from "@/components/ui/page-states";
@@ -126,14 +127,14 @@ function Review({ map, entries, editable, setEntries, action }: { map: MapRow; e
                 <tr key={e.id} className={cn(sensitive && !e.verified && "bg-[var(--warning-surface)]")}>
                   <td className={st.td}>
                     <span className="flex flex-wrap items-center gap-2">
-                      <code className="font-mono text-[12px] text-[var(--ink)]">{e.fieldKey}</code>
-                      {sensitive && <Pill tone={e.verified ? "neutral" : "warning"}>Sensitive</Pill>}
+                      <code className="font-mono text-xs text-[var(--ink)]">{e.fieldKey}</code>
+                      {sensitive && <StatusChip dot={false} tone={pillTone(e.verified ? "neutral" : "warning")}>Sensitive</StatusChip>}
                     </span>
                     <span className={st.sub}>{label}</span>
                   </td>
                   <td className={st.td}>
                     {/* A changed selector is a new claim: it has to be checked again. */}
-                    <input className={cn(cell, "font-mono md:text-[12px]")} spellCheck={false} disabled={!editable} aria-label={`Selector for ${label}`} placeholder="#field-id or [name=…]" value={e.selector} onChange={(ev) => patch(e.id, { selector: ev.target.value, verified: false })} />
+                    <input className={cn(cell, "font-mono md:text-xs")} spellCheck={false} disabled={!editable} aria-label={`Selector for ${label}`} placeholder="#field-id or [name=…]" value={e.selector} onChange={(ev) => patch(e.id, { selector: ev.target.value, verified: false })} />
                   </td>
                   <td className={st.td}>
                     <select className={cell} disabled={!editable} aria-label={`Kind for ${label}`} value={e.inputKind} onChange={(ev) => patch(e.id, { inputKind: ev.target.value as FieldMapInputKind, verified: false })}>
@@ -147,7 +148,7 @@ function Review({ map, entries, editable, setEntries, action }: { map: MapRow; e
                     </select>
                   </td>
                   <td className={st.td}>
-                    <label className="inline-flex items-center gap-2 text-[14px] text-[var(--body)]" title={editable && !e.selector.trim() ? "Give it a selector first." : undefined}>
+                    <label className="inline-flex items-center gap-2 text-sm text-[var(--body)]" title={editable && !e.selector.trim() ? "Give it a selector first." : undefined}>
                       <input type="checkbox" className={checkbox} disabled={!editable || !e.selector.trim()} checked={e.verified} onChange={(ev) => patch(e.id, { verified: ev.target.checked })} />
                       {e.verified ? "Verified" : "Not yet"}
                     </label>
@@ -421,7 +422,7 @@ export function SalesFieldMaps() {
                           <span className={cn(st.sub, "font-mono")}>{m.origin.replace(/^https:\/\//, "")}</span>
                         </td>
                         <td className={st.td}>{m.productLabel}</td>
-                        <td className={st.td}><Pill tone={versionTone(m.status)}>v{m.version}</Pill></td>
+                        <td className={st.td}><StatusChip dot={false} tone={pillTone(versionTone(m.status))}>v{m.version}</StatusChip></td>
                         <td className={cn(st.td, "tabular-nums")}>{m.entries.length ? `${verified} of ${m.entries.length}` : "—"}</td>
                         <td className={cn(st.td, "tabular-nums")} title={sensitiveLeft ? `${sensitiveLeft} of them sensitive — publishing is blocked until they are verified` : undefined}>
                           {m.entries.length ? <span className={cn(sensitiveLeft > 0 && "font-semibold text-[var(--warning-ink)]")}>{m.entries.length - verified}</span> : "—"}
@@ -429,7 +430,7 @@ export function SalesFieldMaps() {
                         <td className={st.td} title={lastMiss ? `${fieldLabel(lastMiss.fieldKey)} was not found on ${lastMiss.url.replace(/^https:\/\//, "")}` : undefined}>
                           {lastMiss ? shortDay(lastMiss.at) : EDITABLE_FIELD_MAP_STATUSES.includes(m.status) ? "—" : "None"}
                         </td>
-                        <td className={st.td}><Pill tone={pill.tone} dot={m.status === "needs_review"}>{pill.label}</Pill></td>
+                        <td className={st.td}><StatusChip tone={pillTone(pill.tone)} dot={m.status === "needs_review"}>{pill.label}</StatusChip></td>
                         <td className={cn(st.td, "whitespace-nowrap text-right")}>
                           <RowAction onClick={() => openMap(m)} label={`Review ${m.carrierName} ${m.productLabel} v${m.version}`}>
                             {EDITABLE_FIELD_MAP_STATUSES.includes(m.status) ? "Review the draft" : "Review"}
@@ -447,7 +448,7 @@ export function SalesFieldMaps() {
                       <td className={st.td}>—</td>
                       <td className={st.td}>—</td>
                       <td className={st.td}>—</td>
-                      <td className={st.td}><Pill tone="error">None</Pill></td>
+                      <td className={st.td}><StatusChip dot={false} tone="danger">None</StatusChip></td>
                       <td className={cn(st.td, "whitespace-nowrap text-right")}>
                         <RowAction onClick={() => propose(c.id)} label={`Propose a map for ${c.name}`} disabled={!canEdit} reason={ownerOnly}>
                           Propose a map
@@ -508,12 +509,12 @@ function MissDetail({ map, now, onReview }: { map: MapRow; now: number; onReview
             {fields.map((f) => (
               <tr key={f.fieldKey} className="m-row">
                 <td className={st.td}>
-                  <code className="font-mono text-[12px] text-[var(--ink)]">{f.fieldKey}</code>
+                  <code className="font-mono text-xs text-[var(--ink)]">{f.fieldKey}</code>
                   <span className={st.sub}>{fieldLabel(f.fieldKey)}</span>
                 </td>
                 <td className={cn(st.td, st.num)}>{f.count}</td>
                 <td className={st.td}>{shortDay(f.last)}</td>
-                <td className={cn(st.td, "max-w-[360px] truncate font-mono text-[12px]")} title={f.url}>{f.url.replace(/^https:\/\//, "")}</td>
+                <td className={cn(st.td, "max-w-[360px] truncate font-mono text-xs")} title={f.url}>{f.url.replace(/^https:\/\//, "")}</td>
               </tr>
             ))}
           </PagedBody>

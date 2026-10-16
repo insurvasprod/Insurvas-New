@@ -66,7 +66,7 @@ import { StatStrip, StatTile } from "@/components/ui/stat";
 import { PageLoading } from "@/components/ui/page-loading";
 import { TableCard } from "@/components/ui/table-card";
 import { ClearFiltersButton, DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
-import { NoMatches } from "@/components/ui/page-states";
+import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
 import { FILL_CARD, useFittingRows } from "@/components/app/use-fitting-rows";
 import { productLineLabel } from "@/lib/format/productLine";
@@ -734,7 +734,9 @@ export function PartnersWorkspace({
           }
           footer={<Pager page={listCurrent} total={filteredPartners.length} pageSize={listPageSize} noun="partners" onPage={setListPage} suffix={`${partners.length} partner records in all`} />}
         >
-            {filteredPartners.length === 0 ? (
+            {partners.length === 0 && !listFiltered ? (
+              <EmptyState title="No partners yet" hint="Add the publishers and affiliates who send you leads." action={readOnly ? undefined : <Button type="button" onClick={openCreate}><Plus aria-hidden="true" />Add partner</Button>} />
+            ) : filteredPartners.length === 0 ? (
               <NoMatches noun="partners" onClear={clearListFilters} />
             ) : (
               <table className={cn("portal-lead-table w-full text-left text-sm", selectedPartner ? "min-w-0" : "min-w-[1080px]")}>
@@ -820,9 +822,12 @@ export function PartnersWorkspace({
             )}
         </TableCard>}
         {detailOnly && !selectedPartner && (
-          <div className="rounded-lg border border-border bg-card px-5 py-10 text-center text-sm text-muted-foreground">
-            This partner is not in your workspace.{" "}
-            <Link href="/app/publishers" className="font-semibold text-foreground underline-offset-4 hover:underline">Back to partners</Link>
+          <div className="rounded-lg border border-border bg-card">
+            <EmptyState
+              title="Partner not found"
+              hint="This partner is not in your workspace."
+              action={<Button asChild variant="outline"><Link href="/app/publishers">Back to partners</Link></Button>}
+            />
           </div>
         )}
         {detailOnly && selectedPartner && (
@@ -848,11 +853,14 @@ export function PartnersWorkspace({
 
             <div className="flex min-w-0 flex-col gap-6">
               <section className="min-w-0 overflow-visible rounded-lg border border-border bg-card shadow-[0_1px_2px_rgba(16,20,26,.05)]">
-                <nav className="flex flex-wrap items-center gap-x-6 border-b border-border px-5" aria-label="Partner detail sections">
+                <div role="tablist" className="flex flex-wrap items-center gap-x-6 border-b border-border px-5" aria-label="Partner detail sections">
                   {detailTabs.map((tab) => (
                     <button
                       type="button"
-                      aria-current={detailTab === tab ? "page" : undefined}
+                      role="tab"
+                      id={`partner-detail-tab-${tab}`}
+                      aria-controls="partner-detail-view"
+                      aria-selected={detailTab === tab}
                       key={tab}
                       onClick={() => setDetailTab(tab)}
                       className={cn(
@@ -863,8 +871,9 @@ export function PartnersWorkspace({
                       {detailTabLabel(tab)}
                     </button>
                   ))}
-                </nav>
-            <div className="space-y-5 p-5">
+                </div>
+            {/* The selected section, as the tab panel: it fades in when the tab changes (2026-10-09). */}
+            <div key={detailTab} role="tabpanel" id="partner-detail-view" aria-labelledby={`partner-detail-tab-${detailTab}`} className="space-y-5 p-5">
               {detailTab === "overview" && (
                 <div className="space-y-5">
                   <PartnerOnboarding
@@ -907,9 +916,15 @@ export function PartnersWorkspace({
                         </table>
                       </div>
                     ) : (
-                      <p className="mt-3 text-sm text-muted-foreground">
-                        {canManageProductConfig ? "No products are set up for this workspace yet." : "Product approvals are managed by the account owner."}
-                      </p>
+                      canManageProductConfig ? (
+                        <EmptyState
+                          title="No products set up yet"
+                          hint="Enable the products you sell, then approve them here."
+                          action={readOnly || selectedPartner.status === "offboarded" ? undefined : <Button type="button" variant="outline" onClick={() => setDetailTab("products")}>Set up products</Button>}
+                        />
+                      ) : (
+                        <p className="mt-3 text-sm text-muted-foreground">Product approvals are managed by the account owner.</p>
+                      )
                     )}
                   </section>
                   <div className="grid gap-3 md:grid-cols-2">
@@ -989,9 +1004,11 @@ export function PartnersWorkspace({
                       </table>
                     </div>
                   ) : (
-                    <p className="text-sm text-muted-foreground">
-                      No commercial terms recorded yet.
-                    </p>
+                    <EmptyState
+                      title="No terms yet"
+                      hint="Record what this partner is paid."
+                      action={readOnly || selectedPartner.status === "offboarded" ? undefined : <Button type="button" variant="outline" onClick={() => { setTermDate(new Date().toISOString().slice(0, 10)); setTermFor(selectedPartner.id); }}><Plus aria-hidden="true" />Add terms</Button>}
+                    />
                   )}
                 </section>
               )}
@@ -1002,8 +1019,7 @@ export function PartnersWorkspace({
                       Products you sell
                     </h3>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      Enable a product for the business, then approve the subset
-                      this partner may submit.
+                      Enable for the business, then approve per partner.
                     </p>
                   </div>
                   {canManageProductConfig ? (
@@ -1248,8 +1264,8 @@ export function PartnersWorkspace({
             </DialogTitle>
             <DialogDescription>
               {editing
-                ? "Update the record without changing its preserved history."
-                : "Create one record for a publisher, marketing company, or affiliate."}
+                ? "Its history stays as it was."
+                : "A publisher, marketing company or affiliate."}
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={savePartner} className="grid gap-4 md:grid-cols-2">

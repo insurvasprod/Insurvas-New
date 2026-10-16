@@ -1,12 +1,13 @@
 "use client";
 
+import { StatusChip } from "@/components/ui/status-chip";
 import { Fragment, useEffect, useId, useMemo, useRef, useState, useTransition, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { BoardTableFooter } from "@/components/admin/board-table-footer";
 import { EmptyState, NoMatches } from "@/components/admin/empty-state";
-import { Pill, st } from "@/components/app/settings/primitives";
+import { st, pillTone } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { ErrorState } from "@/components/ui/page-states";
@@ -237,14 +238,14 @@ export function SubscriptionsList({
                       <td className={st.td}>
                         <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
                           {row.planName}
-                          {row.planVersion !== null && <Pill tone="neutral">v{row.planVersion}</Pill>}
+                          {row.planVersion !== null && <StatusChip dot={false} tone="neutral">v{row.planVersion}</StatusChip>}
                         </span>
                       </td>
                       <td className={st.td}>{BILLING_CYCLE_LABELS[row.cycle]}</td>
                       <td className={st.td}>
-                        <Pill tone={state.tone} dot>
+                        <StatusChip tone={pillTone(state.tone)} dot>
                           {state.label}
-                        </Pill>
+                        </StatusChip>
                       </td>
                       <td className={cn(st.td, "whitespace-nowrap tabular-nums")}>
                         <UtcHover full={row.periodFull} isos={[row.periodStart, row.periodEnd]}>
@@ -310,14 +311,14 @@ function SubscriptionDetail({ row }: { row: SubscriptionListRow }) {
       <dl className="m-0 grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2 lg:grid-cols-4">
         {facts.map((fact) => (
           <div key={fact.label} className="min-w-0">
-            <dt className="text-[12px] leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]">{fact.label}</dt>
-            <dd className="m-0 mt-1 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--ink)] tabular-nums">{fact.value}</dd>
+            <dt className="text-xs leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]">{fact.label}</dt>
+            <dd className="m-0 mt-1 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--ink)] tabular-nums">{fact.value}</dd>
           </div>
         ))}
       </dl>
 
       {(row.status === "cancelling" || row.status === "cancelled" || row.cancelReason) && (
-        <p className="m-0 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--body)]">
+        <p className="m-0 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--body)]">
           <span className="font-semibold text-[var(--ink)]">Cancellation reason:</span> {row.cancelReason ?? "None recorded"}
         </p>
       )}
@@ -325,7 +326,7 @@ function SubscriptionDetail({ row }: { row: SubscriptionListRow }) {
       <div className="flex flex-wrap items-center gap-3">
         <Link
           href={`/admin/tenants/${row.tenantId}?tab=subscription`}
-          className="rounded-sm text-[14px] leading-[1.43] font-semibold tracking-[-0.01em] text-[var(--accent-ink)] no-underline hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
+          className="rounded-sm text-sm leading-[1.43] font-semibold tracking-[-0.01em] text-[var(--accent-ink)] no-underline hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
         >
           Open Subscription &amp; billing
         </Link>

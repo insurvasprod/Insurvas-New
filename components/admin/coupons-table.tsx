@@ -1,11 +1,12 @@
 "use client";
 
+import { StatusChip } from "@/components/ui/status-chip";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
 import { BoardTableFooter } from "@/components/admin/board-table-footer";
 import { EmptyState, NoMatches } from "@/components/admin/empty-state";
-import { Pill, st } from "@/components/app/settings/primitives";
+import { st, pillTone } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import {
@@ -239,7 +240,7 @@ export function CouponsTable({
               return (
                 <tr key={coupon.id} className="m-row hover:bg-[var(--brand-50)]">
                   <td className={st.td}>
-                    <code className="font-mono text-[14px] font-semibold text-[var(--ink)]">{coupon.code}</code>
+                    <code className="font-mono text-sm font-semibold text-[var(--ink)]">{coupon.code}</code>
                   </td>
                   <td
                     className={cn(st.td, "whitespace-nowrap")}
@@ -259,9 +260,9 @@ export function CouponsTable({
                     {coupon.expires_at ? <ExpiryDate iso={coupon.expires_at} /> : "—"}
                   </td>
                   <td className={st.td}>
-                    <Pill tone={COUPON_STATUS_TONE[state]} dot>
+                    <StatusChip tone={pillTone(COUPON_STATUS_TONE[state])} dot>
                       {COUPON_STATUS_LABEL[state]}
-                    </Pill>
+                    </StatusChip>
                   </td>
                   <td className={cn(st.td, "text-right")}>
                     {coupon.is_active && (
@@ -307,7 +308,7 @@ export function CouponsTable({
             </DialogDescription>
           </DialogHeader>
           {dialogError && (
-            <p role="alert" className="m-0 text-[14px] leading-[1.5] text-[var(--error-ink)]">
+            <p role="alert" className="m-0 text-sm leading-[1.5] text-[var(--error-ink)]">
               {dialogError}
             </p>
           )}

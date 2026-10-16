@@ -13,7 +13,8 @@ import { ensureWhopPlan } from "@/lib/payments/whop/planMapping";
 import { couponRejectionReason } from "@/lib/coupons/discount";
 import { availableBillingCycles } from "@/lib/money";
 import type { PlanPrices } from "@/lib/money";
-import { TRIAL_DAYS, checkoutReturnUrl } from "./constants";
+import { checkoutReturnUrl } from "./constants";
+import { trialDaysForPlan } from "./trialDays";
 import type { CouponTerms } from "./couponSummary";
 import type { BillingCycle } from "@/lib/money";
 
@@ -146,7 +147,7 @@ export async function startCheckout(tenantId: string, couponCode?: string): Prom
     .maybeSingle<{ id: string; checkout_url: string; provider_config_id: string }>();
 
   if (open && !couponId) {
-    return { checkoutUrl: open.checkout_url, sessionId: open.id, planName: plan.name, trialDays: TRIAL_DAYS };
+    return { checkoutUrl: open.checkout_url, sessionId: open.id, planName: plan.name, trialDays: await trialDaysForPlan(plan.id) };
   }
 
   // Creates the Whop plan on first sale of this (version, cycle) and reuses it forever after. The
@@ -208,5 +209,5 @@ export async function startCheckout(tenantId: string, couponCode?: string): Prom
   // Abandoning leaves the tenant here rather than in a broken half-state, and returning resumes.
   await supabase.from("tenants").update({ onboarding_state: "awaiting_payment" }).eq("id", tenantId);
 
-  return { checkoutUrl: session.url, sessionId: row.id, planName: plan.name, trialDays: TRIAL_DAYS };
+  return { checkoutUrl: session.url, sessionId: row.id, planName: plan.name, trialDays: await trialDaysForPlan(plan.id) };
 }

@@ -9,7 +9,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Pill } from "@/components/app/settings/primitives";
+import { pillTone } from "@/lib/ui/pillTone";
 import { loginFailureLabel, type LoginEventRow } from "@/lib/loginEvents/constants";
 import { loginEventTime, loginOutcomeLabel, summariseUserAgent } from "@/lib/loginEvents/present";
 import { cn } from "@/lib/utils";
@@ -130,8 +130,8 @@ function PagedFooter({ total }: { total: number }) {
   );
 }
 
-const TH = "px-3 py-2 text-left text-[12px] leading-[1.33] font-semibold tracking-[0.02em] uppercase whitespace-nowrap text-[var(--muted)]";
-const TD = "border-t border-[var(--border)] px-3 py-2 text-left align-middle text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--body)]";
+const TH = "px-3 py-2 text-left text-xs leading-[1.33] font-semibold tracking-[0.02em] uppercase whitespace-nowrap text-[var(--muted)]";
+const TD = "border-t border-[var(--border)] px-3 py-2 text-left align-middle text-sm leading-[1.5] tracking-[-0.02em] text-[var(--body)]";
 
 function BoardLoginTable({
   events,
@@ -188,9 +188,9 @@ function BoardLoginTable({
                     </td>
                   )}
                   <td className={cn(TD, "overflow-hidden")} title={event.success ? undefined : loginFailureLabel(event.failure_reason)}>
-                    <Pill tone={event.success ? "success" : "error"} dot>
+                    <StatusChip tone={pillTone(event.success ? "success" : "error")} dot>
                       {loginOutcomeLabel(event)}
-                    </Pill>
+                    </StatusChip>
                   </td>
                   <td className={cn(TD, "tabular-nums")}>{event.ip ?? "—"}</td>
                   <td className={cn(TD, "truncate")} title={event.user_agent ?? undefined}>

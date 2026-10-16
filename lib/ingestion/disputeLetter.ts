@@ -7,7 +7,7 @@
  * Pure; integer cents only.
  */
 
-import { DISCREPANCY_LABELS, type DiscrepancyType } from "./discrepancyEngine.ts";
+import { DISCREPANCY_LABELS, OWED_TYPES, type DiscrepancyType } from "./discrepancyEngine.ts";
 
 /** The types a letter argues. The rest are warnings for the agent alone (held, a debit, a chargeback coming, an overpayment). */
 export const DISPUTABLE: ReadonlySet<DiscrepancyType> = new Set(["missing", "short_paid", "mis_rated", "duplicate_chargeback", "unexpected_chargeback"]);
@@ -44,8 +44,11 @@ const MONTHS = ["January", "February", "March", "April", "May", "June", "July", 
 const longDay = (iso: string) => `${MONTHS[Number(iso.slice(5, 7)) - 1]} ${Number(iso.slice(8, 10))}, ${iso.slice(0, 4)}`;
 const pad = (text: string, width: number, right = false) => (text.length >= width ? text.slice(0, width) : right ? text.padStart(width) : text.padEnd(width));
 
-/** The amount a letter claims for one item: the difference owed to the agent, never a guess. */
-export const claimed = (item: Pick<LetterItem, "differenceCents">) => Math.max(0, item.differenceCents ?? 0);
+/**
+ * The amount a letter claims for one item: the difference owed to the agent, never a guess. An
+ * unexpected chargeback is a question (please confirm the policy's status), not a claim: nothing.
+ */
+export const claimed = (item: Pick<LetterItem, "type" | "differenceCents">) => (OWED_TYPES.has(item.type) ? Math.max(0, item.differenceCents ?? 0) : 0);
 
 /** How the expected figure was reached, from its record. */
 function basis(item: LetterItem): string {

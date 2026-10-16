@@ -428,7 +428,7 @@ export function DraftDatePanel({ initial, dob, buffer, onCommit, readOnly = fals
       ) : (
         <>
           <div id={choosing ? undefined : draftDayId} tabIndex={-1} className="flex items-baseline gap-3.5 outline-none">
-            <span className="text-[32px] font-semibold leading-none tracking-[-0.025em] tabular-nums text-[var(--ink)]">{shown === null ? "—" : ordinal(shown)}</span>
+            <span className="text-title-lg font-semibold leading-none tracking-[-0.025em] tabular-nums text-[var(--ink)]">{shown === null ? "—" : ordinal(shown)}</span>
             <span className="text-sm text-[var(--muted)]">of each month</span>
           </div>
 

@@ -3,7 +3,7 @@ import "server-only";
 import { startApplicationFromLead } from "@/lib/outboundApplication/service";
 import { appointmentIsActiveAt } from "@/lib/appointments/eligibility";
 import { maskFromLast4, normaliseProse } from "./formats";
-import { applicationKeysForLeadKeys, prefillFromLead } from "./prefill";
+import { applicationKeysForLeadKeys, clientStateOf, prefillFromLead } from "./prefill";
 import { encryptSensitive } from "./crypto";
 import { fieldSetRequired, interviewQuestions, type StoredDefinition } from "./templates";
 import { ApplicationError, db, isMissingSchema, rows, SchemaPendingError } from "./db";
@@ -104,8 +104,21 @@ export async function ensurePrimaryAttempt(input: { tenantId: string; userId: st
       const ins = await client.from("tenant_application_values").upsert(prefill, { onConflict: "application_id,field_key", ignoreDuplicates: true });
       if (ins.error) throw new ApplicationError("APPLICATION_UNAVAILABLE", ins.error.message, 500);
     }
+    // The SSN now lives encrypted on the application, so its plaintext leaves the lead: the lead keeps
+    // only a masked last four ("***-**-1234"). The RPC re-checks that the ciphertext is there first.
+    if (prefill.some((p) => p.field_key === "insured.ssn")) await scrubLeadSsn(input.tenantId, kase.data.lead_id, applicationId);
   }
   return applicationId;
+}
+
+/**
+ * Mask the SSN a lead arrived with, once the application holds it encrypted (LA-3.7). Before the
+ * migration that adds the RPC this is a no-op; any other failure is logged, never thrown — the
+ * application has already started and the agent is on the call.
+ */
+export async function scrubLeadSsn(tenantId: string, leadId: string, applicationId: string) {
+  const { error } = await db().rpc("scrub_lead_ssn", { p_tenant_id: tenantId, p_lead_id: leadId, p_application_id: applicationId });
+  if (error && !isMissingSchema(error)) console.error("[applications] could not scrub the lead's SSN", leadId, error.message);
 }
 
 // ── the case ───────────────────────────────────────────────────────────────
@@ -149,7 +162,6 @@ export async function getCaseView(tenantId: string, caseId: string): Promise<Cas
   ]);
 
   const leadValues = ((lead as { data: { values?: Record<string, unknown> } | null }).data?.values ?? {}) as Record<string, unknown>;
-  const clientState = typeof leadValues.state === "string" ? leadValues.state.toUpperCase() : null;
 
   // Carriers, products, appointments, disclosure library, portal accounts, field sets, templates.
   const carrierIds = [...new Set([...attempts.map((a) => a.carrier_id), ...quotes.map((q) => q.carrier_id)].filter((x): x is string => Boolean(x)))];
@@ -203,7 +215,9 @@ export async function getCaseView(tenantId: string, caseId: string): Promise<Cas
   const libraryById = new Map(library.map((x) => [x.id, x]));
   const t = today();
 
-  const appointed = (carrierId: string | null): { ok: boolean; reason: string | null } => {
+  // The appointment is checked in the state the application is written in: its own address first,
+  // then the lead's state fields, each normalised ("Texas", "tx" → TX).
+  const appointed = (carrierId: string | null, clientState: string | null): { ok: boolean; reason: string | null } => {
     if (!carrierId) return { ok: false, reason: "No carrier chosen." };
     const name = carrierById.get(carrierId)?.name ?? "this carrier";
     if (!clientState) return { ok: false, reason: `No state on file to check the ${name} appointment against.` };
@@ -249,6 +263,7 @@ export async function getCaseView(tenantId: string, caseId: string): Promise<Cas
         ? { value: null, source: v.source, reviewed: Boolean(v.reviewed_at) || v.source === "manual", masked: maskFromLast4(v.value_last4), hasValue: true, linked: v.linked_to_primary }
         : { value: (v.value as FieldValue["value"]) ?? null, source: v.source, reviewed: Boolean(v.reviewed_at) || v.source === "manual", linked: v.linked_to_primary };
     }
+    const clientState = clientStateOf(vals["addr.state"]?.value, leadValues);
     const p = payments.find((x) => x.application_id === a.id);
     const payment: PaymentView | null = p ? {
       method: p.method, draftDay: a.draft_day, draftDayRecommended: p.draft_day_recommended, draftOverrideReason: p.draft_day_override_reason,
@@ -267,7 +282,7 @@ export async function getCaseView(tenantId: string, caseId: string): Promise<Cas
       id: q.id, carrierId: q.carrier_id, carrierName: carrierById.get(q.carrier_id)?.name ?? "Carrier", productLabel: (q.carrier_product_id && productById.get(q.carrier_product_id)?.name) || PRODUCT_LABEL[q.product_code] || q.product_code,
       tier: q.tier, termLength: q.term_length, healthClass: q.assumed_health_class, faceAmountCents: q.face_amount_cents, monthlyPremiumCents: q.monthly_premium_cents,
       annualPremiumCents: q.annual_premium_cents, riders: (q.riders ?? []).map((r) => ({ name: r.name, monthlyPremiumCents: r.monthly_premium_cents })), ageUsed: q.age_used, status: q.status,
-      appointed: appointed(q.carrier_id), acceptsPaymentMethod: p && q.carrier_product_id && productById.get(q.carrier_product_id)?.accepted_payment_methods?.length ? productById.get(q.carrier_product_id)!.accepted_payment_methods!.includes(p.method) : null,
+      appointed: appointed(q.carrier_id, clientState), acceptsPaymentMethod: p && q.carrier_product_id && productById.get(q.carrier_product_id)?.accepted_payment_methods?.length ? productById.get(q.carrier_product_id)!.accepted_payment_methods!.includes(p.method) : null,
       // The selected quote pays on the attempt's effective premium: after an accepted counteroffer
       // (LA-3.26) that is the carrier's figure, not the one quoted.
       warnings: q.warnings ?? [], payout: payoutFor(q.carrier_id, q.product_code, q.id === a.quote_id ? effectivePremium ?? q.monthly_premium_cents : q.monthly_premium_cents), createdAt: q.created_at,
@@ -300,7 +315,7 @@ export async function getCaseView(tenantId: string, caseId: string): Promise<Cas
       }),
       submissions: submissions.filter((s) => s.application_id === a.id).map((s) => ({ id: s.id, attemptNo: s.attempt_no, carrierReference: s.carrier_reference, referenceKind: s.reference_kind, policyNumber: s.policy_number, submittedAt: s.submitted_at, submittedVia: s.submitted_via, hasConfirmation: Boolean(s.confirmation_path), qaVerdict: s.qa_verdict?.verdict ?? "pass" })),
       welcomePack: (() => { const w = packs.find((x) => x.application_id === a.id); return w ? { status: w.email_status, recipient: w.recipient_email, sentAt: w.sent_at } : null; })(),
-      appointment: appointed(a.carrier_id),
+      appointment: appointed(a.carrier_id, clientState),
       product: product ? {
         issueAgeMin: product.issue_age_min, issueAgeMax: product.issue_age_max, faceMinCents: product.face_min_cents, faceMaxCents: product.face_max_cents, acceptedPaymentMethods: product.accepted_payment_methods ?? [],
         band: product.premium_per_1000_band_min != null && product.premium_per_1000_band_max != null ? { min: Number(product.premium_per_1000_band_min), max: Number(product.premium_per_1000_band_max) } : null,
@@ -323,7 +338,7 @@ export async function getCaseView(tenantId: string, caseId: string): Promise<Cas
 
   return {
     caseId: c.id, leadId: c.lead_id, status: (["open", "won", "lost"].includes(c.status) ? c.status : "open") as CaseView["status"], source: c.source,
-    clientName: leadName(leadValues), clientState, clientPhone: typeof leadValues.phone === "string" ? leadValues.phone : null,
+    clientName: leadName(leadValues), clientState: clientStateOf(attemptViews.find((x) => x.insuredRole === "primary" && x.status !== "closed")?.values["addr.state"]?.value ?? attemptViews.find((x) => x.insuredRole === "primary")?.values["addr.state"]?.value, leadValues), clientPhone: typeof leadValues.phone === "string" ? leadValues.phone : null,
     campaignName: (campaign as { data: { name?: string } | null }).data?.name ?? null, openedAt: c.opened_at,
     interviews: interviewViews, attempts: attemptViews, verification: { workItemId: c.work_item_id, complete: verificationComplete, confirmedKeys },
     qaSettings: { appointmentBlocks: qa.appointmentBlocks, per1000Band: qa.per1000Band },

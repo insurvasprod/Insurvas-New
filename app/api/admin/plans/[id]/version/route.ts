@@ -6,12 +6,23 @@ import { CAN_MANAGE_PLANS } from "@/lib/plans/permissions";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { audit } from "@/lib/audit/log";
 import { fetchPlanFeatureKeys } from "@/lib/plans/versionEditor";
-import { rebuildEntitlementsForPlan } from "@/lib/entitlements/rebuild";
+import { diffPlanMeters, planSaveErrorResponse, type PlanMeterInput } from "@/lib/plans/planSave";
 
 // Cents arrive as integers already — the browser does the dollars→cents conversion with the
 // shared helper, so nothing here ever sees a decimal.
 const centsField = z.number().int().min(0).max(100_000_000).nullable();
 const capacityField = z.number().int().min(0).max(1_000_000).nullable();
+
+const LIMIT_KEYS = [
+  "max_publishers",
+  "max_marketing_partners",
+  "max_affiliates",
+  "max_buffer_seats",
+  "max_partner_users",
+  "max_setter_seats",
+  "max_active_campaigns",
+  "max_carriers",
+] as const;
 
 const savePlanVersionSchema = z.object({
   feature_keys: z.array(z.string().trim().min(1)).min(1, "A plan must grant at least one feature"),
@@ -28,10 +39,31 @@ const savePlanVersionSchema = z.object({
     max_partner_users: capacityField,
     max_setter_seats: capacityField,
     max_active_campaigns: capacityField,
+    // Optional so an older editor tab that does not send it leaves the plan's value alone.
+    max_carriers: capacityField.optional(),
   }),
+  /**
+   * SA-2.5 · the plan's own meter allowances, the full list for this version. Absent = leave them
+   * as they are; a meter left out of a list takes the platform default again.
+   */
+  meters: z
+    .array(
+      z.object({
+        meter_key: z.string().trim().min(1).max(80),
+        included_qty: z.number().int().min(0).max(1_000_000_000).nullable(),
+        hard_cap: z.boolean(),
+      }),
+    )
+    .max(100)
+    .optional(),
 });
 
-/** Saves features AND pricing together, so one logical edit produces at most one new version. */
+/**
+ * Saves features, pricing, limits and meters together, so one logical edit produces at most one new
+ * version — and in ONE database transaction (admin_save_plan_version_complete), with the subscribers'
+ * entitlement rebuild inside it. It used to be three calls, and a failure after the first left a
+ * published version carrying the old limits.
+ */
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireAdminRole(CAN_MANAGE_PLANS);
   if (auth instanceof NextResponse) return auth;
@@ -45,17 +77,31 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   }
 
   const supabase = getSupabaseServiceClient();
+  const loose = supabase as unknown as {
+    from(table: string): { select(columns: string): { eq(column: string, value: string): { maybeSingle(): Promise<{ data: Record<string, unknown> | null }> } & Promise<{ data: Record<string, unknown>[] | null }> } };
+    rpc(name: string, args: Record<string, unknown>): Promise<{ data: unknown; error: { message: string; code?: string } | null }>;
+  };
 
   // Captured before the write so the audit row can name what actually changed.
   const featuresBefore = await fetchPlanFeatureKeys(id);
-  const { data: pricesBefore } = await supabase
-    .from("plan_prices")
-    .select("price_monthly_cents, price_quarterly_cents, price_yearly_cents, setup_fee_cents, trial_days")
-    .eq("plan_id", id)
-    .maybeSingle();
-  const { data: limitsBefore } = await (supabase as unknown as { from(table: string): { select(columns: string): { eq(column: string, value: string): { maybeSingle(): Promise<{ data: Record<string, unknown> | null }> } } } }).from("plan_limits").select("max_publishers, max_marketing_partners, max_affiliates, max_buffer_seats, max_partner_users, max_setter_seats, max_active_campaigns").eq("plan_id", id).maybeSingle();
+  const [{ data: pricesBefore }, { data: limitsBefore }, metersBefore] = await Promise.all([
+    supabase
+      .from("plan_prices")
+      .select("price_monthly_cents, price_quarterly_cents, price_yearly_cents, setup_fee_cents, trial_days")
+      .eq("plan_id", id)
+      .maybeSingle(),
+    loose.from("plan_limits").select(LIMIT_KEYS.join(", ")).eq("plan_id", id).maybeSingle(),
+    parsed.data.meters ? loose.from("plan_meters").select("meter_key, included_qty, hard_cap").eq("plan_id", id) : Promise.resolve({ data: null }),
+  ]);
 
-  const { data, error } = await supabase.rpc("admin_save_plan_version", {
+  // Only the keys sent are written; max_carriers is left alone when the editor did not send it.
+  const limits: Record<string, number | null> = {};
+  for (const key of LIMIT_KEYS) {
+    const value = parsed.data.limits[key];
+    if (value !== undefined) limits[key] = value;
+  }
+
+  const { data, error } = await loose.rpc("admin_save_plan_version_complete", {
     p_plan_id: id,
     p_feature_keys: parsed.data.feature_keys,
     p_price_monthly: parsed.data.price_monthly_cents,
@@ -63,39 +109,24 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     p_price_yearly: parsed.data.price_yearly_cents,
     p_setup_fee: parsed.data.setup_fee_cents,
     p_trial_days: parsed.data.trial_days,
+    p_limits: limits,
+    p_meters: parsed.data.meters ?? null,
   });
 
   if (error) {
-    if (error.message?.includes("no_features")) {
-      return NextResponse.json({ error: "A plan must grant at least one feature" }, { status: 400 });
-    }
-    if (error.message?.includes("plan_not_found")) {
-      return NextResponse.json({ error: "Plan not found" }, { status: 404 });
-    }
-    if (error.code === "23503") {
-      return NextResponse.json({ error: "One of those features doesn't exist" }, { status: 400 });
-    }
-    return NextResponse.json({ error: "Could not save the plan" }, { status: 500 });
+    const mapped = planSaveErrorResponse(error);
+    if (mapped.status === 500) console.error("[plans] save failed", error);
+    return NextResponse.json({ error: mapped.error }, { status: mapped.status });
   }
 
-  const result = Array.isArray(data) ? data[0] : data;
-  const { error: limitsError } = await supabase.rpc("admin_save_plan_limits", {
-    p_plan_id: result.target_plan_id,
-    p_max_publishers: parsed.data.limits.max_publishers,
-    p_max_marketing_partners: parsed.data.limits.max_marketing_partners,
-    p_max_affiliates: parsed.data.limits.max_affiliates,
-    p_max_buffer_seats: parsed.data.limits.max_buffer_seats,
-    p_max_partner_users: parsed.data.limits.max_partner_users,
-  });
-  if (limitsError) return NextResponse.json({ error: "Could not save plan capacity limits" }, { status: 500 });
-  const { error: outboundLimitsError } = await (supabase as unknown as { from(table: string): { update(values: Record<string, unknown>): { eq(column: string, value: string): Promise<{ error: { message: string } | null }> } } }).from("plan_limits").update({ max_setter_seats: parsed.data.limits.max_setter_seats, max_active_campaigns: parsed.data.limits.max_active_campaigns }).eq("plan_id", result.target_plan_id);
-  if (outboundLimitsError) return NextResponse.json({ error: "Could not save outbound capacity limits" }, { status: 500 });
-  if (!result.created_new_version) await rebuildEntitlementsForPlan(result.target_plan_id);
+  const result = (Array.isArray(data) ? data[0] : data) as {
+    target_plan_id: string;
+    target_version: number;
+    created_new_version: boolean;
+    refreshed_tenants: number;
+  };
   const featuresAfter = await fetchPlanFeatureKeys(result.target_plan_id);
 
-  // Editing a plan in place changes what its existing subscribers get, so their cached
-  // entitlements must be rebuilt. (A new version has no subscribers yet — theirs are untouched,
-  // which is the whole point of versioning.)
   const added = featuresAfter.filter((k) => !featuresBefore.includes(k));
   const removed = featuresBefore.filter((k) => !featuresAfter.includes(k));
 
@@ -114,17 +145,25 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     if (previous !== next) priceChanges[field] = { from: previous, to: next };
   }
 
-  const somethingChanged =
-    added.length > 0 || removed.length > 0 || Object.keys(priceChanges).length > 0 || result.created_new_version;
-
   const limitChanges: Record<string, { from: unknown; to: unknown }> = {};
-  for (const key of ["max_publishers", "max_marketing_partners", "max_affiliates", "max_buffer_seats", "max_partner_users", "max_setter_seats", "max_active_campaigns"] as const) {
+  for (const [key, next] of Object.entries(limits)) {
     const previous = (limitsBefore as Record<string, unknown> | null)?.[key] ?? null;
-    const next = parsed.data.limits[key];
     if (previous !== next) limitChanges[key] = { from: previous, to: next };
   }
 
-  if (somethingChanged || Object.keys(limitChanges).length > 0) {
+  const meterChanges = parsed.data.meters
+    ? diffPlanMeters(((metersBefore as { data: PlanMeterInput[] | null }).data ?? []) as PlanMeterInput[], parsed.data.meters)
+    : {};
+
+  const somethingChanged =
+    added.length > 0 ||
+    removed.length > 0 ||
+    Object.keys(priceChanges).length > 0 ||
+    Object.keys(limitChanges).length > 0 ||
+    Object.keys(meterChanges).length > 0 ||
+    result.created_new_version;
+
+  if (somethingChanged) {
     await audit({
       actorId: auth.session.sub,
       action: result.created_new_version ? "plan.version_created" : "plan.updated",
@@ -134,8 +173,10 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         features: { added, removed },
         prices: priceChanges,
         limits: limitChanges,
+        meters: meterChanges,
         version: result.target_version,
         createdNewVersion: result.created_new_version,
+        refreshedTenants: result.refreshed_tenants,
         ...(result.created_new_version ? { supersededPlanId: id } : {}),
       },
       request,

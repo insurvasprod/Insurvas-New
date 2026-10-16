@@ -10,6 +10,7 @@ import { getSupabaseServiceClient } from "@/lib/supabase/service";
 // the point at which a login has actually succeeded.
 import {
   ADMIN_PENDING_2FA_COOKIE,
+  isTotpEnrolled,
   pending2faCookieOptions,
   signPending2faToken,
 } from "@/lib/adminAuth/session";
@@ -46,9 +47,9 @@ export async function POST(request: NextRequest) {
 
   const { data: admin } = await supabase
     .from("admin_users")
-    .select("id, email, password_hash, role, is_active")
+    .select("id, email, password_hash, role, is_active, totp_secret")
     .eq("email", email)
-    .maybeSingle<{ id: string; email: string; password_hash: string; role: string; is_active: boolean }>();
+    .maybeSingle<{ id: string; email: string; password_hash: string; role: string; is_active: boolean; totp_secret: string | null }>();
 
   const passwordOk = await verifyPassword(password, admin?.password_hash ?? DUMMY_HASH);
 
@@ -89,7 +90,10 @@ export async function POST(request: NextRequest) {
   // `verifyAdminSessionToken` rejects it, so it cannot open a single admin route on its own.
   const pendingToken = await signPending2faToken(admin.id);
 
-  const response = NextResponse.json({ requires2fa: true });
+  // An account that has never enrolled an authenticator (created by POST /api/admin/admins, which
+  // no longer hands its secret to the creator) enrols now: the page asks enroll-2fa for a secret and
+  // verify-2fa confirms it with a code. Only said after the password has passed.
+  const response = NextResponse.json({ requires2fa: true, enrol2fa: !isTotpEnrolled(admin.totp_secret) });
   response.cookies.set(ADMIN_PENDING_2FA_COOKIE, pendingToken, pending2faCookieOptions);
   return response;
 }

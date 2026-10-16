@@ -1,12 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { Download } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { ClearFiltersButton, DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageLoading } from "@/components/ui/page-loading";
+import { InfoTip } from "@/components/ui/info-tip";
 import { EmptyState, NoMatches, SectionLoading } from "@/components/ui/page-states";
 import { StatStrip, StatTile, type MeterTone } from "@/components/ui/stat";
 import { StatusChip } from "@/components/ui/status-chip";
@@ -24,6 +26,7 @@ import {
 } from "@/lib/activityLog/types";
 import { AppointmentCloseOutStrip } from "@/components/app/appointment-close-out-strip";
 import { Pager, paginate } from "@/components/ui/pager";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 
 /**
  * Activity & scorecard, laid out to the UI consistency standard (docs/design/UI-CONSISTENCY.md): one
@@ -112,17 +115,6 @@ function totals(report: ActivityReport | null) {
   return { served, dials, appointments, contactRate, zeroClick, neverDialed: Math.max(0, served - dials), blocked: report.blocked_total };
 }
 
-/** Rows per page that fit the window under the page's chrome (the Inbound list's rule). */
-function useFittingPageSize(reserved: number, rowHeight: number) {
-  const [size, setSize] = useState(10);
-  useEffect(() => {
-    const fit = () => setSize(Math.min(10, Math.max(5, Math.floor((window.innerHeight - reserved) / rowHeight))));
-    fit();
-    window.addEventListener("resize", fit);
-    return () => window.removeEventListener("resize", fit);
-  }, [reserved, rowHeight]);
-  return size;
-}
 
 /**
  * A served card, one even row: the outcome, what it led to (each from its own record), how long
@@ -428,6 +420,7 @@ export function ActivityLogWorkspace({ initialView = "activity", role = "" }: { 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <ViewTabs
           label="Activity views"
+          idPrefix="activity-view"
           value={tab}
           onChange={choose}
           tabs={[
@@ -442,6 +435,7 @@ export function ActivityLogWorkspace({ initialView = "activity", role = "" }: { 
         <Button asChild variant="outline"><a href={`/api/app/activity?${exportQuery}`}><Download aria-hidden="true" />Export</a></Button>
       </div>
 
+      <div role="tabpanel" aria-labelledby={`activity-view-${tab}`} className="flex min-w-0 flex-col">
       {tab === "closeout" ? <AppointmentCloseOutStrip /> : (
       <TableCard
         className={FILL}
@@ -575,14 +569,14 @@ export function ActivityLogWorkspace({ initialView = "activity", role = "" }: { 
                 </tbody>
               </table>
             ) : (
-              <EmptyState title="No setter outcomes in this window" hint="Setters' dials, bookings and shows appear here day by day." />
+              <EmptyState title="No setter outcomes in this window" hint="Dials, bookings and shows, day by day." />
             )}
           </>
         ) : loading ? <SectionLoading rows={6} columns={6} />
           : tab === "scorecard" ? (
             report?.scorecard.length ? (
               <table className="portal-activity-table w-full min-w-[1050px] text-left text-sm">
-                <thead><tr><th>Agent</th><th className="text-right">Served</th><th className="text-right">Dialled</th><th className="text-right">Logged</th><th className="text-right">Worked</th><th className="text-right">Contact rate</th><th className="text-right">Callbacks booked / kept</th><th className="text-right">Appointments booked / showed</th><th className="text-right">Applications started / submitted</th></tr></thead>
+                <thead><tr><th>Agent</th><th className="text-right">Served</th><th className="text-right">Dialled</th><th className="text-right">Logged</th><th className="text-right"><span className="inline-flex items-center gap-1">Worked<InfoTip label="About worked">Logged outcomes that count as work, set in Settings → Dispositions.</InfoTip></span></th><th className="text-right">Contact rate</th><th className="text-right">Callbacks booked / kept</th><th className="text-right">Appointments booked / showed</th><th className="text-right">Applications started / submitted</th></tr></thead>
                 <tbody>
                   {report.scorecard.map((row) => (
                     <tr key={row.agent_user_id ?? "unknown"}>
@@ -599,7 +593,7 @@ export function ActivityLogWorkspace({ initialView = "activity", role = "" }: { 
                   ))}
                 </tbody>
               </table>
-            ) : filtered ? <NoMatches noun="agents" onClear={clearAll} /> : <EmptyState title="No activity in this window" hint="Each agent's served leads, dials and outcomes appear here." />
+            ) : filtered ? <NoMatches noun="agents" onClear={clearAll} /> : <EmptyState title="No activity in this window" hint="Each agent's dials and outcomes show up here." action={<Button variant="outline" asChild><Link href="/app/dialer">Open the dialer</Link></Button>} />
           ) : tab === "recycle" ? (
             report?.recycle_performance.length ? (
               <table className="portal-activity-table w-full min-w-[640px] text-left text-sm">
@@ -616,13 +610,13 @@ export function ActivityLogWorkspace({ initialView = "activity", role = "" }: { 
                   ))}
                 </tbody>
               </table>
-            ) : filtered ? <NoMatches noun="sources" onClear={clearAll} /> : <EmptyState title="No fresh or recycled activity in this window" hint="Dials on fresh and recycled leads are compared here." />
+            ) : filtered ? <NoMatches noun="sources" onClear={clearAll} /> : <EmptyState title="No fresh or recycled activity in this window" hint="Fresh and recycled dials are compared here." />
           ) : entries.length === 0 ? (
             filtered
               ? <NoMatches noun={view === "integrity" ? "flagged events" : "served leads"} onClear={clearAll} />
               : view === "integrity"
                 ? <EmptyState title="Nothing to review" hint="Every event in this window is consistent." />
-                : <EmptyState title="No activity in this window" hint="Each lead served to an agent appears here, newest first." />
+                : <EmptyState title="No activity in this window" hint="Served leads show up here, newest first." action={<Button variant="outline" asChild><Link href="/app/dialer">Open the dialer</Link></Button>} />
           ) : (
             <table className="portal-activity-table w-full min-w-[1180px] text-left text-sm">
               <thead>
@@ -631,7 +625,7 @@ export function ActivityLogWorkspace({ initialView = "activity", role = "" }: { 
                   <th scope="col">Campaign</th>
                   <th scope="col">Disposition</th>
                   <th scope="col">Led to</th>
-                  <th scope="col" title="How long after the card opened the outcome was logged">Logged after</th>
+                  <th scope="col"><span className="inline-flex items-center gap-1">Logged after<InfoTip label="About logged after">How long after the card opened the outcome was logged.</InfoTip></span></th>
                   <th scope="col">Lead</th>
                   <th scope="col">State</th>
                   {view === "integrity" && <th scope="col">Flag</th>}
@@ -651,6 +645,7 @@ export function ActivityLogWorkspace({ initialView = "activity", role = "" }: { 
           )}
       </TableCard>
       )}
+      </div>
     </div>
   );
 }

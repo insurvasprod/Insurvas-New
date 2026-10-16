@@ -6,6 +6,8 @@ import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { ViewTabs } from "@/components/app/book-of-business-views";
 import { CarrierDiscrepancies, DisputeLetters, type HandDiscrepancyRow } from "@/components/app/carrier-discrepancies";
 import { DISCREPANCIES_PENDING_MESSAGE, loadDiscrepancies } from "@/lib/ingestion/discrepancyStore";
+import { payTimingGapText } from "@/lib/ingestion/carrierRules";
+import { loadPayTimingGaps } from "@/lib/ingestion/carrierRulesStore";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
 import { DISCREPANCY_SCHEMA_PENDING_MESSAGE, listDiscrepancies } from "@/lib/discrepancies/service";
@@ -37,7 +39,12 @@ export default async function DiscrepanciesPage({ searchParams }: { searchParams
   const tenantId = guard.context.tenantId;
   const { view, source } = await searchParams;
   const readOnly = guard.entitlement.access === "read_only";
-  const [found, list] = await Promise.all([loadDiscrepancies(tenantId), view === "letters" ? null : listDiscrepancies(tenantId)]);
+  const [found, list, untimed] = await Promise.all([
+    loadDiscrepancies(tenantId),
+    view === "letters" ? null : listDiscrepancies(tenantId),
+    // Carriers missing commission is not checked for (no pay trigger or lag): said, never assumed.
+    view === "letters" ? null : loadPayTimingGaps(tenantId).catch((error) => { console.error("[discrepancies] pay timing could not be read", error); return null; }),
+  ]);
   const hand: HandDiscrepancyRow[] = (list?.available ? list.items : []).map((item) => ({
     id: item.id, kind: item.kind, status: item.status, owedCents: item.owedCents, policyNumber: item.policyNumber, insuredName: item.insuredName,
     carrierId: item.carrierId, carrierName: item.carrierName, periodStart: item.periodStart, periodEnd: item.periodEnd,
@@ -64,6 +71,7 @@ export default async function DiscrepanciesPage({ searchParams }: { searchParams
       />
       {!found.available && <div role="status" className={pending}>{DISCREPANCIES_PENDING_MESSAGE}</div>}
       {list && !list.available && <div role="status" className={pending}>{DISCREPANCY_SCHEMA_PENDING_MESSAGE}</div>}
+      {untimed && untimed.length > 0 && <div role="status" className={pending}>Missing commission is not checked for {untimed.length === 1 ? "1 carrier" : `${untimed.length} carriers`} with no pay trigger or lag set: {payTimingGapText(untimed)}. <Link href="/app/carrier-rules" className="font-medium underline">Set them in Carrier rules</Link>.</div>}
       {found.available && found.truncated && <div role="status" className={pending}>Showing the first {found.items.length.toLocaleString("en-US")} findings, most serious first; the rest are not listed here.</div>}
       {view === "letters" ? (
         found.available && <DisputeLetters disputes={found.disputes} readOnly={readOnly} />

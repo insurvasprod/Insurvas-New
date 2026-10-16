@@ -206,7 +206,7 @@ export function QueueSlaSettings() {
             const help = field.key === "expire" && nurtureReady ? "It leaves the active queue and becomes a nurture lead" : field.help;
             return (
               <label key={field.key} htmlFor={`sla-${field.key}`} className="block min-w-0">
-                <span className="text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]">{field.label}</span>
+                <span className="text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]">{field.label}</span>
                 <input
                   id={`sla-${field.key}`}
                   type="text"
@@ -224,11 +224,11 @@ export function QueueSlaSettings() {
                     if (seconds) setTexts((current) => (current ? { ...current, [field.key]: formatDuration(seconds) } : current));
                   }}
                   className={cn(
-                    "mt-1.5 box-border h-9 w-full rounded-[8px] border bg-[var(--surface)] px-3 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--ink)] outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)] disabled:cursor-not-allowed disabled:opacity-60",
+                    "mt-1.5 box-border h-9 w-full rounded-[8px] border bg-[var(--surface)] px-3 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--ink)] outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)] disabled:cursor-not-allowed disabled:opacity-60",
                     invalid ? "border-[var(--error)]" : "border-[var(--border-strong)]",
                   )}
                 />
-                <span id={`sla-${field.key}-help`} className={cn("mt-1.5 block text-[12px] leading-[1.5] tracking-[-0.01em]", invalid ? "text-[var(--error-ink)]" : "text-[var(--muted)]")}>
+                <span id={`sla-${field.key}-help`} className={cn("mt-1.5 block text-xs leading-[1.5] tracking-[-0.01em]", invalid ? "text-[var(--error-ink)]" : "text-[var(--muted)]")}>
                   {invalid ? "Not a duration — try “45 seconds” or “4 hours”." : help}
                 </span>
               </label>
@@ -236,7 +236,7 @@ export function QueueSlaSettings() {
           })}
         </div>
         {problem && complete && (
-          <p role="alert" className="mt-3 mb-0 text-[12px] leading-[1.5] text-[var(--error-ink)]">{problem}</p>
+          <p role="alert" className="mt-3 mb-0 text-xs leading-[1.5] text-[var(--error-ink)]">{problem}</p>
         )}
 
         <div className="mt-5 border-t border-[var(--border)] pt-4">
@@ -253,7 +253,7 @@ export function QueueSlaSettings() {
                     <span
                       aria-hidden
                       className={cn(
-                        "inline-flex size-6 shrink-0 items-center justify-center rounded-full text-[12px] leading-[1.5] font-semibold tracking-[-0.01em]",
+                        "inline-flex size-6 shrink-0 items-center justify-center rounded-full text-xs leading-[1.5] font-semibold tracking-[-0.01em]",
                         state === "done" && "bg-[var(--success)] text-[var(--on-primary)]",
                         state === "current" && "bg-[var(--primary)] text-[var(--ink)]",
                         state === "upcoming" && "bg-[var(--surface-alt)] text-[var(--muted)]",
@@ -261,7 +261,7 @@ export function QueueSlaSettings() {
                     >
                       {state === "done" ? <CheckIcon /> : index + 1}
                     </span>
-                    <span className={cn("text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] whitespace-nowrap", state === "upcoming" ? "text-[var(--muted)]" : "text-[var(--ink)]")}>
+                    <span className={cn("text-sm leading-[1.5] font-semibold tracking-[-0.02em] whitespace-nowrap", state === "upcoming" ? "text-[var(--muted)]" : "text-[var(--ink)]")}>
                       {step.label}
                       <span className="sr-only">{state === "done" ? ", passed" : state === "current" ? ", next" : ""}</span>
                     </span>

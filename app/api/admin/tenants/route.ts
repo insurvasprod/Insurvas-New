@@ -8,6 +8,7 @@ import { CAN_VIEW_TENANTS } from "@/lib/tenants/permissions";
 import { generateInviteToken, hashInviteToken, inviteExpiryFromNow, buildInviteUrl } from "@/lib/users/invitations";
 import { sendInvitationEmail } from "@/lib/email/sendInvitationEmail";
 import { configuredAppOrigin } from "@/lib/urls/origin";
+import { billingModeFor } from "@/lib/tenants/createOptions";
 
 export async function GET() {
   const auth = await requireAdminRole(CAN_VIEW_TENANTS);
@@ -73,6 +74,12 @@ export async function GET() {
  *                               nothing subsequently cleared. `admin_attach_user_to_tenant` opens
  *                               it `active` with `onboarding_state = 'pending'`, which is the
  *                               shape the rest of the platform reads.
+ *
+ * Plan, billing and trial (doc 2 §5.3). `admin_create_tenant_with_billing` (20261015530000) wraps
+ * that same attach with `admin_assign_subscription_with_trial` — the plan guards of
+ * admin_assign_subscription, plus an optional trial length (0 = start billing now) — and records
+ * the billing choice: card → billing_mode automatic, manual → manual, comped → manual plus a
+ * `tenant_comps` row carrying the mandatory reason, which GET /api/admin/tenants/comped reports.
  */
 export async function POST(request: NextRequest) {
   const auth = await requireAdminRole(["super_admin"]);
@@ -84,7 +91,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid input" }, { status: 400 });
   }
 
-  const { tenantName, ownerName, ownerEmail } = parsed.data;
+  const { tenantName, ownerName, ownerEmail, planId, billing, compReason, trialDays } = parsed.data;
   const supabase = getSupabaseServiceClient();
 
   const token = generateInviteToken();
@@ -112,14 +119,19 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { data, error } = await supabase.rpc("admin_attach_user_to_tenant", {
+  // database.types.ts predates 20261015530000, hence the untyped call.
+  const { data, error } = await (supabase.rpc as unknown as (
+    fn: string,
+    args: Record<string, unknown>,
+  ) => Promise<{ data: unknown; error: { code?: string; message?: string } | null }>)("admin_create_tenant_with_billing", {
     p_user_id: authUser.user.id,
-    p_name: ownerName,
-    p_email: ownerEmail,
-    p_phone: null,
-    p_tenant_id: null,
-    p_new_tenant_name: tenantName,
-    p_role: "owner",
+    p_owner_name: ownerName,
+    p_owner_email: ownerEmail,
+    p_tenant_name: tenantName,
+    p_plan_id: planId,
+    p_billing: billing,
+    p_comp_reason: billing === "comped" ? compReason : null,
+    p_trial_days: billing === "comped" ? 0 : (trialDays ?? null),
     p_token_hash: hashInviteToken(token),
     p_expires_at: expiresAt.toISOString(),
     p_created_by: auth.session.sub,
@@ -135,10 +147,27 @@ export async function POST(request: NextRequest) {
     if (error.code === "23505") {
       return NextResponse.json({ error: "A user with this email already exists" }, { status: 409 });
     }
+    const planProblem = /plan_not_found|plan_archived|cycle_not_offered/.exec(error.message ?? "")?.[0];
+    if (planProblem) {
+      const message =
+        planProblem === "cycle_not_offered"
+          ? "That plan has no monthly price"
+          : planProblem === "plan_archived"
+            ? "That plan is archived — choose a current one"
+            : "That plan no longer exists";
+      return NextResponse.json({ error: message }, { status: 409 });
+    }
+    if (/PGRST202|42883/.test(error.code ?? "")) {
+      // 20261015530000 not applied yet. Say so rather than creating a tenant without its billing.
+      return NextResponse.json(
+        { error: "Creating a tenant with a plan needs migration 20261015530000", code: "tenant_provisioning_failed" },
+        { status: 503 },
+      );
+    }
     return NextResponse.json({ error: "Could not create tenant", code: "tenant_provisioning_failed" }, { status: 500 });
   }
 
-  const result = Array.isArray(data) ? data[0] : data;
+  const result = (Array.isArray(data) ? data[0] : data) as { user_id: string; tenant_id: string; subscription_id: string };
   const inviteUrl = buildInviteUrl(token, origin);
   const { delivered } = await sendInvitationEmail({
     to: ownerEmail,
@@ -154,13 +183,24 @@ export async function POST(request: NextRequest) {
     action: "tenant.created",
     targetType: "tenant",
     targetId: result.tenant_id,
-    metadata: { name: tenantName, ownerEmail, inviteDelivered: delivered },
+    metadata: {
+      name: tenantName,
+      ownerEmail,
+      inviteDelivered: delivered,
+      planId,
+      subscriptionId: result.subscription_id,
+      billing,
+      billingMode: billingModeFor(billing),
+      // null = the plan's own trial.
+      trialDays: billing === "comped" ? 0 : (trialDays ?? null),
+      ...(billing === "comped" ? { compReason } : {}),
+    },
     request,
   });
 
   return NextResponse.json(
     {
-      tenant: { id: result.tenant_id, name: tenantName },
+      tenant: { id: result.tenant_id, name: tenantName, billing, subscriptionId: result.subscription_id },
       owner: { id: result.user_id, email: ownerEmail },
       // The link is returned whether or not the mail was delivered, for the same reason
       // POST /api/admin/users returns it: a link the admin can pass on by hand is the right

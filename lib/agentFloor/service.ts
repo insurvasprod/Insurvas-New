@@ -374,7 +374,7 @@ export async function getAgentFloor(tenantId: string, currentUserId: string, cur
 
   return {
     waiting: waitingItems.map(toLead),
-    // More than 500 open transfers: the newest 500 are shown and the floor says so.
+    // More than 500 open transfers: the 500 longest-waiting are shown and the floor says so.
     truncated: inbox.truncated,
     onCalls,
     available: members.filter((member) => member.availability !== "on_call"),

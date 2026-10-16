@@ -1,12 +1,13 @@
 "use client";
 
+import { StatusChip } from "@/components/ui/status-chip";
 import { useEffect, useMemo, useRef, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { SlidersHorizontal } from "lucide-react";
 
 import { EmptyState, NoMatches } from "@/components/admin/empty-state";
 import { BoardTableFooter } from "@/components/admin/board-table-footer";
-import { Pill, st, type PillTone } from "@/components/app/settings/primitives";
+import { st, type PillTone, pillTone } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { PageHeader } from "@/components/ui/page-header";
@@ -275,15 +276,15 @@ export function TemplatesTable({
                     </td>
                     <td className={st.td}>{templateTypeLabel(template)}</td>
                     <td className={st.td}>
-                      <Pill tone="neutral">v{template.version}</Pill>
+                      <StatusChip dot={false} tone="neutral">v{template.version}</StatusChip>
                     </td>
                     <td className={cn(st.td, "whitespace-nowrap tabular-nums")}>
                       <span title={templateSizeDetail(template)}>{templateSizeLabel(template)}</span>
                     </td>
                     <td className={st.td}>
-                      <Pill tone={STATE_TONE[template.state]} dot>
+                      <StatusChip tone={pillTone(STATE_TONE[template.state])} dot>
                         {TEMPLATE_STATE_LABELS[template.state]}
-                      </Pill>
+                      </StatusChip>
                     </td>
                     <td className={st.td}>
                       <UpdatedDate iso={template.updated_at} />

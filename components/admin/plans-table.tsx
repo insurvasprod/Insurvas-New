@@ -22,8 +22,8 @@ import { PlanDialog } from "./plan-dialog";
 
 const PAGE = 10;
 const CYCLE_SHORT = { monthly: "mo", quarterly: "qtr", yearly: "yr" } as const;
-const th = "px-3 py-2 text-left text-[12px] leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]";
-const td = "border-t border-[var(--border)] px-3 py-2 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--body)]";
+const th = "px-3 py-2 text-left text-xs leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]";
+const td = "border-t border-[var(--border)] px-3 py-2 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--body)]";
 
 /** The cheapest offered cycle, with the others on hover. A plan with no price on any cycle cannot be sold. */
 function PriceCell({ prices }: { prices: PlanPrices | null }) {
@@ -33,7 +33,7 @@ function PriceCell({ prices }: { prices: PlanPrices | null }) {
   return (
     <span className="whitespace-nowrap" title={cycles.map((c) => `${c}: ${formatCentsAsCurrency(priceForCycle(prices, c) ?? 0)}`).join(" · ")}>
       {formatCentsAsCurrency(priceForCycle(prices, first) ?? 0)} / {CYCLE_SHORT[first]}
-      {cycles.length > 1 && <span className="text-[12px] text-[var(--muted)]"> +{cycles.length - 1} {cycles.length === 2 ? "cycle" : "cycles"}</span>}
+      {cycles.length > 1 && <span className="text-xs text-[var(--muted)]"> +{cycles.length - 1} {cycles.length === 2 ? "cycle" : "cycles"}</span>}
     </span>
   );
 }
@@ -168,11 +168,11 @@ export function PlansTable({
                     <td className={td}>
                       <span className="flex flex-wrap items-center gap-2">
                         <Link href={`/admin/plans/${plan.id}/edit`} className="font-semibold text-[var(--ink)] hover:underline">{plan.name}</Link>
-                        <span className="rounded-full bg-[var(--surface-alt)] px-2 py-[1px] text-[12px] font-semibold tabular-nums text-[var(--body)]" title={`${plan.version_count} ${plan.version_count === 1 ? "version" : "versions"}`}>v{plan.version}</span>
+                        <span className="rounded-full bg-[var(--surface-alt)] px-2 py-[1px] text-xs font-semibold tabular-nums text-[var(--body)]" title={`${plan.version_count} ${plan.version_count === 1 ? "version" : "versions"}`}>v{plan.version}</span>
                         {plan.is_default && <StatusChip tone="info">Default</StatusChip>}
                       </span>
                     </td>
-                    <td className={td}><code className="font-mono text-[14px]">{plan.code}</code></td>
+                    <td className={td}><code className="font-mono text-sm">{plan.code}</code></td>
                     <td className={td}>{PLAN_TYPE_LABELS[plan.plan_type]}</td>
                     <td className={cn(td, "tabular-nums")}><PriceCell prices={prices[plan.id] ?? null} /></td>
                     <td className={td}>
@@ -180,7 +180,7 @@ export function PlansTable({
                     </td>
                     <td className={cn(td, "text-right tabular-nums")}>
                       {plan.subscriber_count.toLocaleString()} {plan.subscriber_count === 1 ? "subscriber" : "subscribers"}
-                      {older > 0 && <span className="block text-[12px] text-[var(--muted)]">{older.toLocaleString()} on older versions</span>}
+                      {older > 0 && <span className="block text-xs text-[var(--muted)]">{older.toLocaleString()} on older versions</span>}
                     </td>
                     <td className={cn(td, "text-right")}>
                       <DropdownMenu>

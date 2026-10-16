@@ -9,13 +9,14 @@
  * panels call their routes through `salesApi`.
  */
 
+import { StatusChip } from "@/components/ui/status-chip";
 import type { ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
 import { Copy } from "lucide-react";
 import { notify } from "@/lib/notify";
 
 import { SampleDataNotice } from "@/components/app/applications/parts";
-import { Callout, Pill, SettingsSectionHeader, type PillTone } from "@/components/app/settings/primitives";
+import { Callout, SettingsSectionHeader, type PillTone, pillTone } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { SectionLoading } from "@/components/ui/page-states";
@@ -135,7 +136,7 @@ export function DiscardSave({ saving, problem, onDiscard, onSave, saveLabel = "S
 /* ── pills ──────────────────────────────────────────────────────────────── */
 
 export function PlatformPill() {
-  return <Pill tone="neutral">Platform default</Pill>;
+  return <StatusChip dot={false} tone="neutral">Platform default</StatusChip>;
 }
 
 /** The one lifecycle vocabulary for every versioned thing in these panels. */
@@ -147,12 +148,12 @@ const LIFECYCLE: Record<Lifecycle, { tone: PillTone; label: string }> = {
   platform: { tone: "neutral", label: "Platform default" },
 };
 export function LifecyclePill({ state }: { state: Lifecycle }) {
-  return <Pill tone={LIFECYCLE[state].tone}>{LIFECYCLE[state].label}</Pill>;
+  return <StatusChip dot={false} tone={pillTone(LIFECYCLE[state].tone)}>{LIFECYCLE[state].label}</StatusChip>;
 }
 
 /** A row's version chip: brand when it is the live one, neutral otherwise (board). */
 export function VersionPill({ version, live }: { version: number; live: boolean }) {
-  return <Pill tone={live ? "brand" : "neutral"}>v{version}</Pill>;
+  return <StatusChip dot={false} tone={pillTone(live ? "brand" : "neutral")}>v{version}</StatusChip>;
 }
 
 /* ── words ──────────────────────────────────────────────────────────────── */
@@ -180,7 +181,7 @@ export function changedLine(updatedAt: string | null, updatedBy: string | null, 
 
 /** A muted one-line fact in a card's action slot (e.g. who last changed it). */
 export function CardFact({ children }: { children: ReactNode }) {
-  return <span className="shrink-0 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">{children}</span>;
+  return <span className="shrink-0 text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">{children}</span>;
 }
 
 /* ── dialogs ────────────────────────────────────────────────────────────── */
@@ -202,8 +203,8 @@ export function SalesDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[88vh] overflow-y-auto border-[var(--border)] bg-[var(--surface)] text-[var(--body)] sm:max-w-xl">
         <DialogHeader>
-          <DialogTitle className="text-[18px] text-[var(--ink)]">{title}</DialogTitle>
-          {description && <DialogDescription className="text-[14px] leading-[1.5] text-[var(--muted)]">{description}</DialogDescription>}
+          <DialogTitle className="text-title-sm text-[var(--ink)]">{title}</DialogTitle>
+          {description && <DialogDescription className="text-sm leading-[1.5] text-[var(--muted)]">{description}</DialogDescription>}
         </DialogHeader>
         {children}
       </DialogContent>

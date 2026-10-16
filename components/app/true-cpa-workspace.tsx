@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ClearFiltersButton, DataToolbar, FilterButton, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
+import { DetailPanel } from "@/components/ui/detail-panel";
+import { InfoTip } from "@/components/ui/info-tip";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageLoading } from "@/components/ui/page-loading";
 import { Pager } from "@/components/ui/pager";
@@ -314,7 +316,7 @@ export function TrueCpaWorkspace({ initialReport = null }: { initialReport?: Ven
   const appliedFilters = filterCount + (applied.persist ? 1 : 0);
 
   return <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
-    <PageHeader title="True CPA" description="What each vendor and campaign actually costs through an issued policy." />
+    <PageHeader title="True CPA" description="Cost per issued policy, by vendor and campaign." />
 
     {/* Four figures (2026-10-06 redesign): applications ride on Issued's footnote and open from the
         funnel's Applied step. */}
@@ -325,15 +327,15 @@ export function TrueCpaWorkspace({ initialReport = null }: { initialReport?: Ven
       <StatTile label="True CPA" value={loading ? "…" : dollars(totals?.effective_cost_per_issued_policy_cents)} valueTone={totals?.effective_cost_per_issued_policy_cents != null ? "primary" : undefined} footnote={persistOn ? "per persisting policy" : "per issued policy"} action={<RowsLink label="the policies behind it" onClick={() => openDrill(totalDrill("issued"))} />} />
     </StatStrip>
 
-    {report && !upgraded && <p className={notice} role="status">A database update is pending: net spend is lifetime spend, and the vendor view, test batches, persistency filter, speed and consent are unavailable until it is applied.</p>}
-    {report && upgraded && (totals?.unallocated_spend_campaigns ?? 0) > 0 && <p className={notice} role="status">{plural(totals?.unallocated_spend_campaigns ?? 0, "campaign")} with spend but no records purchased {totals?.unallocated_spend_campaigns === 1 ? "is" : "are"} left out of Net spend and True CPA. Enter the records purchased on the campaign.</p>}
+    {report && !upgraded && <p className={notice} role="status">Some views wait on a pending database update. <InfoTip label="About the pending update">Until it is applied, net spend is lifetime spend, and the vendor view, test batches, persistency filter, speed and consent are unavailable.</InfoTip></p>}
+    {report && upgraded && (totals?.unallocated_spend_campaigns ?? 0) > 0 && <p className={notice} role="status">Enter records purchased on {plural(totals?.unallocated_spend_campaigns ?? 0, "campaign")} to count {totals?.unallocated_spend_campaigns === 1 ? "its" : "their"} spend. <InfoTip label="About uncounted spend">Spend without a records-purchased figure cannot be split across leads, so it is left out of Net spend and True CPA.</InfoTip> <Link className="font-semibold underline" href="/app/campaigns">Open campaigns</Link></p>}
 
     {/* Views on the left; the report's scope (period and filters), which every view reads, on the
         right. The scope is a draft that Apply commits, so a change of vendor does not fire three reloads. */}
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div role="tablist" aria-label="True CPA views" className="inline-flex h-9 w-fit flex-wrap gap-0.5 rounded-md bg-[var(--canvas)] p-0.5">
         {tabs.map((item) => (
-          <button key={item.key} type="button" role="tab" aria-selected={view === item.key} onClick={() => setView(item.key)} className={cn("inline-flex h-8 items-center rounded-md border px-3 text-sm font-semibold tracking-[-0.01em]", view === item.key ? "border-border bg-card text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}>{item.label}</button>
+          <button key={item.key} type="button" role="tab" id={`true-cpa-tab-${item.key}`} aria-controls="true-cpa-view" aria-selected={view === item.key} onClick={() => setView(item.key)} className={cn("inline-flex h-8 items-center rounded-md border px-3 text-sm font-semibold tracking-[-0.01em]", view === item.key ? "border-border bg-card text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}>{item.label}</button>
         ))}
       </div>
       <div className="flex flex-wrap items-center gap-2">
@@ -360,6 +362,8 @@ export function TrueCpaWorkspace({ initialReport = null }: { initialReport?: Ven
       </div>
     </div>
 
+    {/* The selected view, as the tab panel: it fades in when the tab changes (2026-10-09). */}
+    <div key={view} role="tabpanel" id="true-cpa-view" aria-labelledby={`true-cpa-tab-${view}`} className="flex min-w-0 flex-col gap-6">
     {view === "scorecard" && <TableCard
       className={`${FILL_CARD} min-h-[calc(100dvh-var(--top-bar-h)-330px)]`}
       toolbar={
@@ -392,7 +396,7 @@ export function TrueCpaWorkspace({ initialReport = null }: { initialReport?: Ven
     >
       {error && !report ? <ErrorState title="The scorecard did not load" detail={error} action={<Button variant="outline" onClick={refresh}>Try again</Button>} />
         : loading ? <SectionLoading rows={6} columns={8} />
-        : lines.length === 0 ? (search ? <NoMatches noun={`${noun}s`} onClear={() => { setSearch(""); setPage(0); }} /> : <EmptyState title="Nothing in this period" hint="No campaign has spend or leads in this period." />)
+        : lines.length === 0 ? (search || appliedFilters > 0 ? <NoMatches noun={`${noun}s`} onClear={clearAndApply} /> : <EmptyState title="No spend or leads in this period" hint="Widen the dates, or add a campaign with its spend." action={<Button asChild variant="outline"><Link href="/app/campaigns">Open campaigns</Link></Button>} />)
         : <table className="w-full min-w-[1560px] border-collapse text-left">
           <thead><tr>
             <th scope="col" className={th}>{effectiveGrain === "vendor" ? "Vendor" : <>Vendor &amp; campaign</>}</th>
@@ -409,7 +413,7 @@ export function TrueCpaWorkspace({ initialReport = null }: { initialReport?: Ven
             <th scope="col" className={`${th} text-right`}>Apps</th>
             <th scope="col" className={`${th} text-right`}>Issued</th>
             <th scope="col" className={`${th} text-right`}>Net spend</th>
-            <th scope="col" className={`${th} text-right`} title="A dash means no issued policy is attributed yet. It is never $0.00.">True CPA</th>
+            <th scope="col" className={`${th} text-right`}><span className="inline-flex items-center gap-1">True CPA<InfoTip label="About True CPA" side="bottom">Net spend divided by issued policies. A dash means no issued policy is attributed yet. It is never $0.00.</InfoTip></span></th>
             <th scope="col" className={`${th} text-right`} title={METRICS_APART}>Claim acceptance<span className="block text-xs font-normal normal-case tracking-normal">High is good</span></th>
             <th scope="col" className={th}>Lineage</th>
           </tr></thead>
@@ -462,7 +466,7 @@ export function TrueCpaWorkspace({ initialReport = null }: { initialReport?: Ven
     {/* The funnel (LA-2.17-2): bought, dialable, dialled, contacted, quoted, applied, issued, each
         with its cost where the spec asks for one (a dash with none, never $0), and each opening
         its rows. Dialled and quoted need 20260925709800; until then they say so. */}
-    {view === "funnel" && (totals ? <TableCard title="Funnel" description="Leads received in the period, and what became of them in it.">
+    {view === "funnel" && (totals ? <TableCard title="Funnel" description="What became of this period's leads.">
       <table className="w-full min-w-[860px] border-collapse text-left">
         <thead><tr>{funnel.map((step) => <th key={step.key} scope="col" className={th}>{step.label}</th>)}</tr></thead>
         <tbody><tr>
@@ -492,12 +496,12 @@ export function TrueCpaWorkspace({ initialReport = null }: { initialReport?: Ven
             : <span className="w-[120px] shrink-0 capitalize text-[var(--body)]">{item.label}</span>}
           <span className="h-1.5 flex-grow overflow-hidden rounded-full bg-[var(--surface-alt)]"><span className="block h-full rounded-full bg-[var(--primary)]" style={{ width: `${Math.min(100, item.rate ?? 0)}%` }} /></span>
           <span className="w-[200px] shrink-0 text-right tabular-nums"><strong className="font-semibold text-foreground">{percent(item.rate)}</strong> <span className="text-xs text-muted-foreground">({item.contacts}/{item.attempts}){item.share != null ? ` · ${item.share}% of contacts` : ""}</span></span>
-        </div>) : <p className="border-t border-border px-4 py-6 text-sm text-muted-foreground">No completed dispositions in this period.</p>}
+        </div>) : <div className="border-t border-border"><EmptyState title="No dispositions in this period" hint="Rates appear once calls are dispositioned." /></div>}
       </TableCard>)}
     </div>}
 
     {view === "speed" && report && <div className="grid items-start gap-6 xl:grid-cols-2">
-      <TableCard title="Speed to lead" description="Arrival to first dial, median · real-time posted leads · all time">
+      <TableCard title="Speed to lead" description="Median arrival to first dial · real-time leads · all time">
         {!upgraded ? <p className="border-t border-border px-4 py-6 text-sm text-muted-foreground">Needs a database update that has not been applied yet.</p>
           : speedRows.length ? speedRows.map((row) => <div key={row.vendor_id} className="border-t border-border px-4 py-2.5">
             <div className="flex items-baseline justify-between gap-3 text-sm">
@@ -507,7 +511,7 @@ export function TrueCpaWorkspace({ initialReport = null }: { initialReport?: Ven
             <span className="mt-1.5 block h-1.5 overflow-hidden rounded-full bg-[var(--surface-alt)]"><span className="block h-full rounded-full bg-[var(--primary)]" style={{ width: `${Math.min(100, (100 * (row.speed_median_seconds ?? 0)) / slowest)}%` }} /></span>
             {/* LA-2.5-5: the vendor's campaigns, one line each, under its row (builder S's component). */}
             <CampaignSpeedToLead vendorId={row.vendor_id} />
-          </div>) : <p className="border-t border-border px-4 py-6 text-sm text-muted-foreground">No real-time posted leads yet.</p>}
+          </div>) : <div className="border-t border-border"><EmptyState title="No real-time leads yet" hint="Leads posted by a vendor in real time show here." /></div>}
       </TableCard>
 
       <TableCard title="Consent certificates" description="Leads with a stored TrustedForm or Jornaya certificate · all time">
@@ -515,63 +519,64 @@ export function TrueCpaWorkspace({ initialReport = null }: { initialReport?: Ven
           : consentRows.length ? consentRows.map((row) => <div key={row.vendor_id} className="flex items-center justify-between gap-3 border-t border-border px-4 py-2.5 text-sm">
             <span className="font-semibold text-foreground">{row.vendor_name}</span>
             <span className="tabular-nums"><strong className={`font-semibold ${row.consent_claimed_pct != null && row.consent_claimed_pct < 50 ? "text-[var(--error-ink)]" : "text-foreground"}`}>{percent(row.consent_claimed_pct)}</strong> <span className="text-xs text-muted-foreground">of {number(row.consent_leads)} · {percent(row.consent_any_pct)} arrived with one</span></span>
-          </div>) : <p className="border-t border-border px-4 py-6 text-sm text-muted-foreground">No vendor in scope has leads yet.</p>}
+          </div>) : <div className="border-t border-border"><EmptyState title="No vendor leads yet" hint="Coverage shows once a vendor has sent leads." /></div>}
       </TableCard>
     </div>}
 
     {(view === "curves" || view === "speed") && !report && <TableCard>{loading ? <SectionLoading rows={4} columns={3} /> : <ErrorState title="The scorecard did not load" detail={error ?? "No figures for this period."} action={<Button variant="outline" onClick={refresh}>Try again</Button>} />}</TableCard>}
 
     {view === "compare" && <CampaignComparisonWorkspace rows={report?.rows ?? []} defaultFrom={applied.from} defaultTo={applied.to} />}
+    </div>
 
-    {/* The leads behind a figure (LA-2.17-7), in a side panel opened on demand: X or Esc closes it,
-        and a second click on the same figure does too. */}
-    <Dialog open={drillSpec !== null} onOpenChange={(next) => { if (!next) closeDrill(); }}>
-      <DialogContent className="top-0 right-0 left-auto flex h-full max-h-none w-full max-w-[min(100%,980px)] translate-x-0 translate-y-0 flex-col gap-0 rounded-none border-y-0 border-r-0 p-0 sm:max-w-[min(100%,980px)]">
-        {drillSpec && <>
-          <div className="border-b border-border px-5 py-4 pr-12">
-            <DialogTitle>{`${drillSpec.title.charAt(0).toUpperCase()}${drillSpec.title.slice(1)}${drillResult?.total != null ? ` · ${plural(drillResult.total, "lead")}` : ""}`}</DialogTitle>
-            {/* The whole selection's sums, so the rows reconcile with the figure that was clicked. */}
-            <DialogDescription className="mt-1">{drillResult?.sums ? `All ${plural(drillResult.sums.leads, "lead")} here: ${plural(drillResult.sums.attempts, "attempt")} in the period · ${number(drillResult.sums.dialed_leads)} dialled · ${number(drillResult.sums.contacted_leads)} contacted · ${number(drillResult.sums.quoted_leads)} quoted · ${plural(drillResult.sums.applications, "application")} · ${plural(drillResult.sums.issued_policies, "issued policy", "issued policies")}` : "The leads behind this figure, in the report's period and filters."}</DialogDescription>
-          </div>
-          {drillResult && !drillResult.drillReady && <p className="border-b border-border bg-[var(--warning-surface)] px-5 py-2.5 text-xs leading-normal text-[var(--warning-ink)]">
-            {drillResult.has_more ? "Only the newest 500 leads are listed. " : ""}Attempts and contacts are all time until a pending database update is applied.
-          </p>}
-          <div className="min-h-0 flex-1 overflow-auto">
-            {detailLoading ? <SectionLoading rows={6} columns={6} />
-              : drillError ? <p className="px-5 py-6 text-sm text-[var(--error-ink)]" role="alert">{drillError}</p>
-              : !drillResult || drillResult.rows.length === 0 ? <p className="px-5 py-6 text-sm text-muted-foreground">No leads match this figure in the selected period.</p>
-              : <table className="w-full min-w-[860px] border-collapse text-left">
-                <thead><tr><th scope="col" className={th}>Lead</th><th scope="col" className={th}>Dialable</th><th scope="col" className={th}>Campaign</th><th scope="col" className={th}>Product</th><th scope="col" className={`${th} text-right`}>Attempts</th><th scope="col" className={`${th} text-right`}>Contacts</th>{drillResult.drillReady && <th scope="col" className={th}>Quoted</th>}<th scope="col" className={`${th} text-right`}>Applications</th><th scope="col" className={`${th} text-right`}>Issued</th><th scope="col" className={th}>Attribution</th><th scope="col" className={`${th} text-right`}><span className="sr-only">Open</span></th></tr></thead>
-                <tbody>{drillResult.rows.map((lead) => <tr key={lead.lead_id} className="m-row">
-                  <td className={`${td} whitespace-nowrap tabular-nums`}>{lead.lead_date}</td>
-                  <td className={`${td} whitespace-nowrap`}>{drillResult.drillReady && lead.dialable === false ? <StatusChip tone="neutral" dot={false}>Undialable</StatusChip> : <span className="text-muted-foreground">—</span>}</td>
-                  <td className={`${td} max-w-[220px] truncate`} title={lead.campaign_name}>{lead.campaign_name}</td>
-                  <td className={`${td} whitespace-nowrap`}>{lead.product_line.replaceAll("_", " ")}</td>
-                  <td className={`${td} text-right tabular-nums`}>{lead.attempts}</td>
-                  <td className={`${td} text-right tabular-nums`}>{lead.contacts}</td>
-                  {drillResult.drillReady && <td className={td}>{lead.quoted ? "Yes" : "—"}</td>}
-                  <td className={`${td} text-right tabular-nums`}>{lead.applications}</td>
-                  <td className={`${td} text-right tabular-nums`}>{lead.issued_policies}</td>
-                  <td className={td}>{lead.attribution_status === "linked" ? <StatusChip tone="good">Linked</StatusChip> : <StatusChip tone="warning">Review</StatusChip>}</td>
-                  <td className={`${td} text-right`}><Button asChild variant="outline" size="sm"><a href={`/app/leads/${lead.lead_id}`}>View</a></Button></td>
-                </tr>)}</tbody>
-              </table>}
-          </div>
-          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border bg-[var(--canvas)] px-5 py-2.5 text-xs text-muted-foreground">
-            {/* Server-side pages of the drill: the shared Pager, page n is offset (n-1) x limit. */}
-            <span className="flex flex-wrap items-center gap-3">{drillResult && drillResult.drillReady && drillResult.total != null ? <Pager
-              page={Math.floor(drillResult.offset / drillResult.limit) + 1}
-              total={drillResult.total}
-              noun="leads"
-              pageSize={drillResult.limit}
-              disabled={detailLoading}
-              onPage={(next) => { if (!detailLoading) void loadDrill(drillSpec, (next - 1) * drillResult.limit); }}
-            /> : null}</span>
-            <Button type="button" variant="outline" onClick={closeDrill}>Close</Button>
-          </div>
-        </>}
-      </DialogContent>
-    </Dialog>
+    {/* The leads behind a figure (LA-2.17-7), in a side panel opened on demand (DetailPanel overlay,
+        wide for the table): X, Esc or a click beside it closes it, and a second click on the same
+        figure does too. */}
+    {drillSpec && <DetailPanel
+      mode="overlay"
+      className="lg:w-[min(100%,980px)]"
+      title={`${drillSpec.title.charAt(0).toUpperCase()}${drillSpec.title.slice(1)}${drillResult?.total != null ? ` · ${plural(drillResult.total, "lead")}` : ""}`}
+      onClose={closeDrill}
+      bodyClassName="flex flex-col"
+      // The whole selection's sums, so the rows reconcile with the figure that was clicked.
+      subtitle={drillResult?.sums ? `All ${plural(drillResult.sums.leads, "lead")} here: ${plural(drillResult.sums.attempts, "attempt")} in the period · ${number(drillResult.sums.dialed_leads)} dialled · ${number(drillResult.sums.contacted_leads)} contacted · ${number(drillResult.sums.quoted_leads)} quoted · ${plural(drillResult.sums.applications, "application")} · ${plural(drillResult.sums.issued_policies, "issued policy", "issued policies")}` : "In this report's period and filters."}
+      footer={<div className="flex w-full flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground">
+        {/* Server-side pages of the drill: the shared Pager, page n is offset (n-1) x limit. */}
+        <span className="flex flex-wrap items-center gap-3">{drillResult && drillResult.drillReady && drillResult.total != null ? <Pager
+          page={Math.floor(drillResult.offset / drillResult.limit) + 1}
+          total={drillResult.total}
+          noun="leads"
+          pageSize={drillResult.limit}
+          disabled={detailLoading}
+          onPage={(next) => { if (!detailLoading) void loadDrill(drillSpec, (next - 1) * drillResult.limit); }}
+        /> : null}</span>
+        <Button type="button" variant="outline" onClick={closeDrill}>Close</Button>
+      </div>}
+    >
+      {drillResult && !drillResult.drillReady && <p className="border-b border-border bg-[var(--warning-surface)] px-5 py-2.5 text-xs leading-normal text-[var(--warning-ink)]">
+        {drillResult.has_more ? "Only the newest 500 leads are listed. " : ""}Attempts and contacts are all time until a pending database update is applied.
+      </p>}
+      <div className="min-h-0 flex-1 overflow-x-auto">
+        {detailLoading ? <SectionLoading rows={6} columns={6} />
+          : drillError ? <p className="px-5 py-6 text-sm text-[var(--error-ink)]" role="alert">{drillError}</p>
+          : !drillResult || drillResult.rows.length === 0 ? <EmptyState title="No leads behind this figure" hint="Widen the period to see more." />
+          : <table className="w-full min-w-[860px] border-collapse text-left">
+            <thead><tr><th scope="col" className={th}>Lead</th><th scope="col" className={th}>Dialable</th><th scope="col" className={th}>Campaign</th><th scope="col" className={th}>Product</th><th scope="col" className={`${th} text-right`}>Attempts</th><th scope="col" className={`${th} text-right`}>Contacts</th>{drillResult.drillReady && <th scope="col" className={th}>Quoted</th>}<th scope="col" className={`${th} text-right`}>Applications</th><th scope="col" className={`${th} text-right`}>Issued</th><th scope="col" className={th}>Attribution</th><th scope="col" className={`${th} text-right`}><span className="sr-only">Open</span></th></tr></thead>
+            <tbody>{drillResult.rows.map((lead) => <tr key={lead.lead_id} className="m-row">
+              <td className={`${td} whitespace-nowrap tabular-nums`}>{lead.lead_date}</td>
+              <td className={`${td} whitespace-nowrap`}>{drillResult.drillReady && lead.dialable === false ? <StatusChip tone="neutral" dot={false}>Undialable</StatusChip> : <span className="text-muted-foreground">—</span>}</td>
+              <td className={`${td} max-w-[220px] truncate`} title={lead.campaign_name}>{lead.campaign_name}</td>
+              <td className={`${td} whitespace-nowrap`}>{lead.product_line.replaceAll("_", " ")}</td>
+              <td className={`${td} text-right tabular-nums`}>{lead.attempts}</td>
+              <td className={`${td} text-right tabular-nums`}>{lead.contacts}</td>
+              {drillResult.drillReady && <td className={td}>{lead.quoted ? "Yes" : "—"}</td>}
+              <td className={`${td} text-right tabular-nums`}>{lead.applications}</td>
+              <td className={`${td} text-right tabular-nums`}>{lead.issued_policies}</td>
+              <td className={td}>{lead.attribution_status === "linked" ? <StatusChip tone="good">Linked</StatusChip> : <StatusChip tone="warning">Review</StatusChip>}</td>
+              <td className={`${td} text-right`}><Button asChild variant="outline" size="sm"><a href={`/app/leads/${lead.lead_id}`}>View</a></Button></td>
+            </tr>)}</tbody>
+          </table>}
+      </div>
+    </DetailPanel>}
   </div>;
 }
 

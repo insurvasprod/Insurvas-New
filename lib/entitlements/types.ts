@@ -37,6 +37,8 @@ export type Entitlement = {
     max_partner_users: number | null;
     max_setter_seats?: number | null;
     max_active_campaigns?: number | null;
+    /** plans.max_carriers (20261015601000); enforced in the database where an agency adds one. Absent on older snapshots = unlimited. */
+    max_carriers?: number | null;
     /** Kept for old seeded snapshots until they are rebuilt. */
     max_partners?: number | null;
   };
@@ -50,7 +52,22 @@ export type Entitlement = {
   disabled_features?: string[];
   /** Set by the 20260924344000 engine: meter allowances already include the period's credit grants. */
   credit_grants_included?: boolean;
+  /**
+   * LA-8.5: a cancelled agency's read-only access ends here (cancelled_at + the retention window).
+   * Null or absent for every other status.
+   */
+  retention_until?: string | null;
 };
+
+/**
+ * LA-8.5: the snapshot is computed when something changes, and nothing changes on the day a cancelled
+ * agency's retention window ends — so the end is applied on read, here, as well as by the engine.
+ */
+export function applyRetentionWindow(entitlement: Entitlement, now = new Date()): Entitlement {
+  if (entitlement.status !== "cancelled" || !entitlement.retention_until) return entitlement;
+  if (Date.parse(entitlement.retention_until) > now.getTime()) return entitlement;
+  return { ...entitlement, access: "none", features: [], meters: {} };
+}
 
 export function hasFeature(entitlement: Entitlement, featureKey: string): boolean {
   return entitlement.features.includes(featureKey);
@@ -87,5 +104,6 @@ export const EMPTY_ENTITLEMENT: Omit<Entitlement, "tenant_id"> = {
     max_partner_users: null,
     max_setter_seats: null,
     max_active_campaigns: null,
+    max_carriers: null,
   },
 };

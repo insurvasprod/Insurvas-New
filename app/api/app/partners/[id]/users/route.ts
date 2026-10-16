@@ -4,6 +4,7 @@ import { audit } from "@/lib/audit/log";
 import { buildExistingPartnerInviteUrl, buildPartnerInviteUrl, generateInviteToken, hashInviteToken, inviteExpiryFromNow } from "@/lib/users/invitations";
 import { sendExistingPartnerInvitationEmail, sendInvitationEmail } from "@/lib/email/sendInvitationEmail";
 import { configuredAppOrigin } from "@/lib/urls/origin";
+import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import { partnerUserInviteSchema } from "@/lib/partnerAuth/schemas";
 import { invitePartnerUser, listPartnerUsers } from "@/lib/partnerUsers/service";
@@ -40,6 +41,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const parsed = partnerUserInviteSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Enter valid partner user details" }, { status: 400 });
 
+  // An offboarded partner takes no new users: the invite could never be redeemed (set-password
+  // refuses offboarded partners), yet it would still create the account and send the email.
+  const partner = await getSupabaseServiceClient().from("partners").select("status").eq("tenant_id", auth.context.tenantId).eq("id", partnerId).maybeSingle<{ status: string }>();
+  if (!partner.data) return NextResponse.json({ error: "Partner not found" }, { status: 404 });
+  if (partner.data.status === "offboarded") return NextResponse.json({ error: "This partner has been offboarded, so it can't take new users.", code: "partner_offboarded" }, { status: 409 });
+
   const token = generateInviteToken();
   const expiresAt = await inviteExpiryFromNow();
   const origin = configuredAppOrigin("partner");
@@ -58,6 +65,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (message.includes("agency_account")) return NextResponse.json({ error: "This email belongs to an agency account. Partner access needs a separate email." }, { status: 409 });
     if (message.includes("account_not_active")) return NextResponse.json({ error: "This account is not active and cannot be invited" }, { status: 409 });
     if (message.includes("partner_not_found")) return NextResponse.json({ error: "Partner not found" }, { status: 404 });
+    if (message.includes("partner_offboarded")) return NextResponse.json({ error: "This partner has been offboarded, so it can't take new users.", code: "partner_offboarded" }, { status: 409 });
     const limit = message.match(/max_partner_users:(\d+):(\d+)/);
     if (limit) return NextResponse.json(partnerLimitBody("max_partner_users", Number(limit[1]), Number(limit[2]), "invite"), { status: 403 });
     // The caller gets a generic message; the server log keeps the real cause (an Auth or RPC error).

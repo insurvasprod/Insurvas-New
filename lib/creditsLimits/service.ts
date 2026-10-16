@@ -135,7 +135,10 @@ export async function listMeterPricing(): Promise<MeterPricing[]> {
     const fromVendor = meter.meter_key === "dnc_lookups" && vendorCosts.length > 0;
     return {
       meter_key: meter.meter_key as CreditMeterKey,
-      cost_cents: fromVendor ? Math.min(...vendorCosts) : row?.cost_cents ?? 0,
+      // The worst case, not the best: a DNC lookup can be served by ANY enabled vendor (fallback order
+      // follows priority and availability, not price), so pricing against the cheapest one let a
+      // sell price look profitable while the expensive vendor was answering (audit, 2026-10-15).
+      cost_cents: fromVendor ? Math.max(...vendorCosts) : row?.cost_cents ?? 0,
       sell_cents: row?.sell_cents ?? 0,
       default_included: row?.default_included ?? null,
       cost_source: fromVendor ? "compliance_vendor" : "configured",

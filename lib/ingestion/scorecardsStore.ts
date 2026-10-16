@@ -111,7 +111,7 @@ export async function loadScorecards(viewer: Viewer, period: { from: string; to:
       if (scoped) query = query.eq("created_by", viewer.userId);
       return query.order("submitted_at").order("id");
     }),
-    everyRow(() => db().from("policy_change").select("carrier_id, policy_number, old_value, new_value, to_snapshot_date").eq("tenant_id", t).eq("field_name", "status_normalized").gte("to_snapshot_date", addDays(today, -LATEST_FILE_DAYS)).order("to_snapshot_date").order("policy_number")),
+    everyRow(() => db().from("policy_change").select("carrier_id, policy_number, old_value, new_value, to_snapshot_date").eq("tenant_id", t).eq("field_name", "status_normalized").gte("to_snapshot_date", addDays(today, -LATEST_FILE_DAYS)).order("to_snapshot_date").order("policy_number").order("id")),
     everyRow(() => {
       let query = db().from("commission_entry").select("amount_cents").eq("tenant_id", t).eq("entry_type", "chargeback").gte("created_at", `${since}T00:00:00Z`);
       if (scoped) query = query.eq("agent_user_id", viewer.userId);

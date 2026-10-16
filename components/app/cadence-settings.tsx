@@ -1,5 +1,6 @@
 "use client";
 
+import { StatusChip } from "@/components/ui/status-chip";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { notify } from "@/lib/notify";
 
@@ -11,16 +12,7 @@ import { SectionLoading } from "@/components/ui/page-states";
 import { SettingsSaveBar } from "@/components/ui/settings-layout";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { TableCard } from "@/components/ui/table-card";
-import {
-  Callout,
-  Field,
-  LockIcon,
-  Pill,
-  SettingsSectionHeader,
-  SettingsStack,
-  control,
-  st,
-} from "@/components/app/settings/primitives";
+import { Callout, Field, LockIcon, SettingsSectionHeader, SettingsStack, control, st } from "@/components/app/settings/primitives";
 import { DAY_PARTS, MAX_ATTEMPTS_RANGE, SLOTS, parseInterval, type CadenceRow } from "@/lib/cadence/engine";
 import { LAST_DIALLED_ATTEMPT, builtInRule, effectiveLadder, ladderSummary } from "@/lib/cadence/ladder";
 import { cn } from "@/lib/utils";
@@ -319,7 +311,7 @@ export function CadenceSettings() {
                 <option key={campaign.id} value={campaign.id}>{campaign.name}</option>
               ))}
             </select>
-            <label htmlFor="cadence-max-attempts" className="text-[13px] text-[var(--muted)]">Max attempts</label>
+            <label htmlFor="cadence-max-attempts" className="text-sm text-[var(--muted)]">Max attempts</label>
             <input
               id="cadence-max-attempts"
               type="number"
@@ -340,7 +332,7 @@ export function CadenceSettings() {
               }
               onChange={(event) => setMaxDraft(event.target.value)}
             />
-            {dirty && <Pill tone="warning">Unsaved changes</Pill>}
+            {dirty && <StatusChip dot={false} tone="warning">Unsaved changes</StatusChip>}
           </DataToolbar>
         }
       >
@@ -361,7 +353,7 @@ export function CadenceSettings() {
               <td className={st.td}>Any time that is legal</td>
               <td className={st.td}>Any outcome</td>
               <td className={cn(st.td, st.num)}>
-                <span className="inline-flex items-center gap-1.5 text-[12px] text-[var(--muted)]" title="The first dial has no wait, so there is no rule to edit.">
+                <span className="inline-flex items-center gap-1.5 text-xs text-[var(--muted)]" title="The first dial has no wait, so there is no rule to edit.">
                   <LockIcon />
                   <span className="sr-only">The first dial has no wait, so there is no rule to edit.</span>
                 </span>
@@ -419,7 +411,7 @@ export function CadenceSettings() {
         {(problems.gap !== null || (!readOnly && draft.length > 0)) && (
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] px-4 py-3">
             {problems.gap !== null ? (
-              <p role="alert" className="m-0 text-[14px] text-[var(--error-ink)]">
+              <p role="alert" className="m-0 text-sm text-[var(--error-ink)]">
                 Attempt {problems.gap} is missing — add it, or the dialer uses the built-in delay there.
               </p>
             ) : (
@@ -477,7 +469,7 @@ function RuleRows({
         <td className={st.td}>{row.attemptNumber}</td>
         <td className={st.td}>
           {row.delayInterval || "—"}
-          {problem && <span role="alert" className="block text-[12px] leading-[1.5] text-[var(--error-ink)]">{problem}</span>}
+          {problem && <span role="alert" className="block text-xs leading-[1.5] text-[var(--error-ink)]">{problem}</span>}
           {!problem && unread && <span className={cn(st.sub, "text-[var(--warning-ink)]")}>{unread}</span>}
         </td>
         <td className={st.td}>{row.preferredSlot ? SLOT_LABELS[row.preferredSlot] ?? row.preferredSlot : "Any time that is legal"}</td>
@@ -566,7 +558,7 @@ function RuleRows({
                 Delete
               </Button>
             </div>
-            <p className="mt-2 mb-0 text-[12px] leading-[1.5] text-[var(--muted)]">A number and a unit: minutes, hours, days or weeks. The dialer always stays inside the legal calling window.</p>
+            <p className="mt-2 mb-0 text-xs leading-[1.5] text-[var(--muted)]">A number and a unit: minutes, hours, days or weeks. The dialer always stays inside the legal calling window.</p>
           </td>
         </tr>
       )}

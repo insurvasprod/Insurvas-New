@@ -55,6 +55,8 @@ export function PartnerTeamWorkspace({ role }: { role: PartnerRole; partnerStatu
   const [invite, setInvite] = useState<PartnerInviteResult | null>(null);
   const [search, setSearch] = useState("");
   const [seatLimit, setSeatLimit] = useState<number | null>(null);
+  // Agency-wide (every partner's members), the count the invite path enforces.
+  const [agencySeatsUsed, setAgencySeatsUsed] = useState<number | null>(null);
   // "12 min ago" and "expires in 2 days" keep moving while the page is open.
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -75,6 +77,7 @@ export function PartnerTeamWorkspace({ role }: { role: PartnerRole; partnerStatu
       }
       setUsers((body?.users ?? []) as PartnerUser[]);
       setSeatLimit(typeof body?.seatLimit === "number" ? body.seatLimit : null);
+      setAgencySeatsUsed(typeof body?.seatsUsed === "number" ? body.seatsUsed : null);
       setError(null);
     } catch {
       setError("Could not load team members. Check your connection and try again.");
@@ -218,7 +221,7 @@ export function PartnerTeamWorkspace({ role }: { role: PartnerRole; partnerStatu
       {error &&<p role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-[var(--error)] bg-[var(--error-surface)] px-4 py-2 text-sm text-[var(--error-ink)]">Team access could not be refreshed: {error}<Button type="button" variant="outline" onClick={() => void load()}>Try again</Button></p>}
 
       <StatStrip label="Team totals">
-        <StatTile label="Active members" value={active} valueTone="good" footnote={seatLimit ? `${seatsUsed} of ${seatLimit} seats used` : "no seat limit"} />
+        <StatTile label="Active members" value={active} valueTone="good" footnote={seatLimit ? `${agencySeatsUsed ?? seatsUsed} of ${seatLimit} agency seats used` : "no seat limit"} />
         <StatTile label="Pending invitations" value={pending} valueTone={pending ? "warning" : undefined} footnote={soonestExpiry ? expiresInLabel(soonestExpiry, now) : "none waiting"} />
         <StatTile label="Deactivated" value={deactivated} valueTone={deactivated ? "danger" : undefined} footnote="history retained" />
       </StatStrip>

@@ -1,11 +1,12 @@
 "use client";
 
+import { StatusChip } from "@/components/ui/status-chip";
 import { notify } from "@/lib/notify";
 import { Button } from "@/components/ui/button";
 import { toolbarControl } from "@/components/ui/data-toolbar";
 import { PageHeader } from "@/components/ui/page-header";
-import { SectionLoading } from "@/components/ui/page-states";
-import { Callout, Pill } from "@/components/app/settings/primitives";
+import { NoMatches, SectionLoading } from "@/components/ui/page-states";
+import { Callout, pillTone } from "@/components/app/settings/primitives";
 import { DialerPreflightDialog } from "@/components/app/dialer-preflight";
 import { DispositionWizardDialog } from "@/components/app/disposition-wizard-dialog";
 import { windowSummary } from "@/lib/callbacks/windowFacts";
@@ -42,7 +43,7 @@ export function DialerWorkspace({ readOnly = false, role = "producer", canCheckN
       />
       {canCheckNumber && <DialerPreflightDialog open={checkOpen} onOpenChange={setCheckOpen} readOnly={readOnly} />}
 
-      {readOnly && <Callout tone="info" title="Read-only access: review guidance and compliance evidence without starting or changing a call." />}
+      {readOnly && <Callout tone="info" title="Read-only access — review only, no calls." />}
 
       {/* LA-2.23-5 · the phone number and the outcome buttons stay on screen. From 1024px the three
           columns sit side by side and the outcome column is sticky, with the number at its head.
@@ -93,20 +94,20 @@ export function DialerWorkspace({ readOnly = false, role = "producer", canCheckN
                   const selected = selectedId === lead.id;
                   return (
                     <button key={lead.id} type="button" onClick={() => selectLead(lead.id)} aria-pressed={selected} className={cn("block w-full border-t border-[var(--border)] px-3.5 py-2.5 text-left first:border-t-0", selected ? "bg-[var(--brand-50)] shadow-[inset_2px_0_0_var(--primary)]" : "bg-transparent hover:bg-[var(--canvas)]")}>
-                      <span className="block text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">{leadName(lead.values)}</span>
+                      <span className="block text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">{leadName(lead.values)}</span>
                       <span className={cn(small, "mt-0.5 block")}>{product} · {state} · {formatUsPhone(String(lead.values.phone ?? lead.values.phone_number ?? "")) || "No phone"}</span>
                     </button>
                   );
                 })}
-                {visibleLeads.length === 0 && <p className={cn(small, "px-3.5 py-6 text-center")}>No leads match that identity search.</p>}
+                {visibleLeads.length === 0 && <NoMatches noun="leads" by="search" onClear={clearLeadSearch} />}
               </>
             ) : (
               <>
                 {served && panel && panel.lead.id === served.leadId && (
                   <div aria-current="true" className="border-t border-[var(--border)] bg-[var(--brand-50)] px-3.5 py-2.5 shadow-[inset_2px_0_0_var(--primary)] first:border-t-0">
                     <span className="flex items-center justify-between gap-2">
-                      <span className="min-w-0 truncate text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">{panel.lead.fullName ?? panel.lead.firstName}</span>
-                      {served.tierName && <Pill tone={PRIORITY_TONE[priorityForTier(served.tierName)]} dot>{priorityForTier(served.tierName)}</Pill>}
+                      <span className="min-w-0 truncate text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">{panel.lead.fullName ?? panel.lead.firstName}</span>
+                      {served.tierName && <StatusChip tone={pillTone(PRIORITY_TONE[priorityForTier(served.tierName)])} dot>{priorityForTier(served.tierName)}</StatusChip>}
                     </span>
                     <span className={cn(small, "mt-0.5 block tabular-nums")}>
                       {attemptOfCeiling(panel.lead.attemptsMade ?? 0, panel.lead.attemptCeiling)}{eligibility?.timezone ? ` · ${localClock(eligibility.checkedAt, eligibility.timezone)} local` : ""} · on your screen
@@ -114,7 +115,7 @@ export function DialerWorkspace({ readOnly = false, role = "producer", canCheckN
                   </div>
                 )}
                 {(attempt || readOnly) && queue?.available && queue.rows.length > 0 && (
-                  <p className={cn(small, "border-t border-[var(--border)] px-3.5 py-2")}>{readOnly ? "Read-only access: picking a lead claims it, so the list is for looking only." : "Finish this call before picking another lead."}</p>
+                  <p className={cn(small, "border-t border-[var(--border)] px-3.5 py-2")}>{readOnly ? "Read-only access — the list is for looking only." : "Finish this call before picking another lead."}</p>
                 )}
                 {!queue && !queueError && <SectionLoading rows={4} columns={2} label="Loading the queue" />}
                 {queue?.available && queue.rows.map((row) => {
@@ -130,20 +131,22 @@ export function DialerWorkspace({ readOnly = false, role = "producer", canCheckN
                       className="block w-full border-t border-[var(--border)] bg-transparent px-3.5 py-2.5 text-left first:border-t-0 hover:bg-[var(--canvas)] disabled:cursor-not-allowed disabled:hover:bg-transparent"
                     >
                       <span className="flex items-center justify-between gap-2">
-                        <span className="min-w-0 truncate text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">{row.name ?? "Unnamed lead"}</span>
-                        <Pill tone={PRIORITY_TONE[priority]} dot>{priority}</Pill>
+                        <span className="min-w-0 truncate text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">{row.name ?? "Unnamed lead"}</span>
+                        <StatusChip tone={pillTone(PRIORITY_TONE[priority])} dot>{priority}</StatusChip>
                       </span>
                       <span className={cn(small, "mt-0.5 block tabular-nums")}>
                         {picking === row.workItemId ? "Serving…" : `Attempt ${row.attemptsMade + 1}${row.localTime ? ` · ${row.localTime} local` : ""} · in window${row.assignedToYou ? " · assigned to you" : ""}`}
                       </span>
-                      {refusal && <span id={`pick-${row.workItemId}`} role="alert" className="mt-1 block text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--error-ink)]">{refusal}</span>}
+                      {refusal && <span id={`pick-${row.workItemId}`} role="alert" className="mt-1 block text-xs leading-[1.5] tracking-[-0.01em] text-[var(--error-ink)]">{refusal}</span>}
                     </button>
                   );
                 })}
                 {queue && !queue.available && <p className={cn(small, "border-t border-[var(--border)] px-3.5 py-3")} role="status">{queue.message}</p>}
-                {queueError && <p className="border-t border-[var(--border)] px-3.5 py-3 text-[12px] leading-[1.5] text-[var(--error-ink)]" role="alert">{queueError}</p>}
+                {queueError && <p className="border-t border-[var(--border)] px-3.5 py-3 text-xs leading-[1.5] text-[var(--error-ink)]" role="alert">{queueError}</p>}
                 {queue?.available && queue.rows.length === 0 && !(served && panel) && (
-                  <p className={cn(small, "px-3.5 py-6 text-center")} role="status">{queueFilter === "all" ? queue.emptyReason ?? "Nothing else is servable to you right now." : "Nothing in this priority is servable to you right now."}</p>
+                  queueFilter === "all"
+                    ? <p className={cn(small, "px-3.5 py-6 text-center")} role="status">{queue.emptyReason ?? "Nothing else is servable to you right now."}</p>
+                    : <div className="flex flex-col items-center gap-2 px-3.5 py-6 text-center" role="status"><p className={cn(small, "m-0")}>Nothing in this priority is servable to you right now.</p><Button type="button" variant="outline" onClick={() => setQueueFilter("all")}>Show every priority</Button></div>
                 )}
               </>
             )}
@@ -164,20 +167,20 @@ export function DialerWorkspace({ readOnly = false, role = "producer", canCheckN
             <section id="dialer-disposition" className={cn(card, "flex flex-col overflow-hidden max-lg:order-2 lg:min-h-0 lg:flex-1")} aria-label="Disposition">
               <div className={barHead}>
                 <span className={barTitle}>Disposition</span>
-                {phoneLabel && <a href={`tel:${panel.lead.phone}`} className="text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)] tabular-nums no-underline" aria-label={`Customer's number ${phoneLabel}`}>{phoneLabel}</a>}
+                {phoneLabel && <span className="text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)] tabular-nums" aria-label={`Customer's number ${phoneLabel}`}>{phoneLabel}</span>}
               </div>
               <div className="flex flex-col gap-4 p-4 lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
               {/* Where the call is, in one line: the buttons stay disabled until the call starts. */}
               <p className={cn("m-0 flex items-center gap-2 rounded-md px-3 py-2 text-xs leading-[1.5] font-semibold", dialled ? "bg-[var(--success-surface)] text-[var(--success-ink)]" : "bg-[var(--surface-alt)] text-[var(--muted)]")} role="status">
                 <span className={cn("size-1.5 shrink-0 rounded-full", dialled ? "bg-[var(--success)]" : "bg-[var(--muted)]")} aria-hidden="true" />
-                {!attempt ? (searchMode ? "Log the return call to record its outcome." : "Click to call first; the outcome is recorded once the call starts.") : !dialled ? "Start the call, then record what happened here." : "Call in progress · choose the outcome."}
+                {!attempt ? (searchMode ? "Log the return call to record its outcome." : "Click to call to begin.") : !dialled ? "Start the call, then record what happened here." : "Call in progress · choose the outcome."}
               </p>
               <div role="group" aria-label="Outcome" className="flex flex-col gap-1.5">
                 <p className={cn(label, "m-0 mb-0.5")}>Outcome</p>
                 {outcomes.slice(0, searchMode ? outcomes.length : primaryCount).map((item, index) => (
                   <OutcomeButton key={item.key} label={outcomeButtonLabel(item)} hotkey={searchMode ? null : outcomeHotkey(index)} tone={item.key === APPLICATION_OUTCOME ? "primary" : "default"} pressed={pendingCallback && item.key === CALLBACK_OUTCOME} disabled={!dialled || working} onClick={() => choose(item.key)} />
                 ))}
-                {searchMode && outcomes.length === 0 && <p className={small}>The inbound return call is archived in Settings › Dispositions, so it cannot be logged here.</p>}
+                {searchMode && outcomes.length === 0 && <p className={small}>Restore the inbound return call in Settings › Dispositions to log it here.</p>}
               </div>
               {!searchMode && outcomes.length > primaryCount && (
                 <div role="group" aria-label="More outcomes" className="flex flex-col gap-1.5">
@@ -215,10 +218,10 @@ export function DialerWorkspace({ readOnly = false, role = "producer", canCheckN
                     <div className="flex flex-col gap-1.5">
                       <span className="flex flex-wrap items-center gap-2">
                         {callbackInWindow === null
-                          ? <Pill tone="neutral">{callbackWindow ? "Choose a time" : "Window not loaded"}</Pill>
-                          : callbackInWindow ? <Pill tone="success" dot>Inside the {stateName ?? "customer's"} calling window</Pill>
-                          : <Pill tone="error" dot>Outside the {stateName ?? "customer's"} calling window</Pill>}
-                        {callbackInFuture === null ? null : callbackInFuture ? <Pill tone="success" dot>In the future</Pill> : <Pill tone="error" dot>In the past</Pill>}
+                          ? <StatusChip dot={false} tone="neutral">{callbackWindow ? "Choose a time" : "Window not loaded"}</StatusChip>
+                          : callbackInWindow ? <StatusChip tone="good" dot>Inside the {stateName ?? "customer's"} calling window</StatusChip>
+                          : <StatusChip tone="danger" dot>Outside the {stateName ?? "customer's"} calling window</StatusChip>}
+                        {callbackInFuture === null ? null : callbackInFuture ? <StatusChip tone="good" dot>In the future</StatusChip> : <StatusChip tone="danger" dot>In the past</StatusChip>}
                       </span>
                       {callbackWindow && <span className={small}>{windowSummary(callbackWindow)}{callbackWindow.noSunday ? " · no Sunday calls" : ""}</span>}
                     </div>
@@ -235,13 +238,13 @@ export function DialerWorkspace({ readOnly = false, role = "producer", canCheckN
                     <Button type="button" disabled={!callbackAt || !eligibility?.timezone || working || callbackInWindow === false || callbackInFuture === false} title={callbackInWindow === false ? "Outside the customer's calling window" : callbackInFuture === false ? "That time has passed for the customer" : undefined} onClick={() => void disposition(CALLBACK_OUTCOME, { callback_local: callbackAt, customer_timezone: eligibility?.timezone, ...(callbackNote.trim() ? { callback_note: callbackNote.trim() } : {}) })}>Book the callback</Button>
                     <Button type="button" variant="ghost" disabled={working} onClick={() => { setPendingCallback(false); setCallbackAt(""); setCallbackNote(""); }}>Cancel</Button>
                   </div>
-                  {!eligibility?.timezone && <p className="text-[12px] leading-[1.5] text-[var(--error-ink)]">This lead has no state on it, so there is no timezone to book against. Add one on the lead first.</p>}
+                  {!eligibility?.timezone && <p className="text-xs leading-[1.5] text-[var(--error-ink)]">Add a state to this lead to book a callback — it sets the timezone.</p>}
                 </div>
               )}
 
               {pendingDnc && (
                 <div className="rounded-[8px] border border-[var(--border)] border-l-[3px] border-l-[var(--error)] bg-[var(--error-surface)] p-3" role="alertdialog" aria-label="Confirm do not call">
-                  <p className="text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--error-ink)]">Add this number to the do-not-call list?</p>
+                  <p className="text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--error-ink)]">Add this number to the do-not-call list?</p>
                   <p className={cn(body14, "mt-1")}>It goes on your agency&rsquo;s internal list permanently and this lead is closed.</p>
                   <div className="mt-2 flex gap-2">
                     {/* Focused on open: Enter confirms, Escape cancels (LA-2.9-9). */}
@@ -253,7 +256,7 @@ export function DialerWorkspace({ readOnly = false, role = "producer", canCheckN
 
               {pendingReturn && (
                 <div className="rounded-[8px] border border-[var(--border)] p-3" role="alertdialog" aria-label={`Confirm ${outcomeLabel(pendingReturn).toLowerCase()}`}>
-                  <p className="text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">Record {outcomeLabel(pendingReturn).toLowerCase()}?</p>
+                  <p className="text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">Record {outcomeLabel(pendingReturn).toLowerCase()}?</p>
                   <p className={cn(body14, "mt-1")}>Closes this lead; it is not dialed again.</p>
                   <p className={cn(small, "mt-1", panel.returnWindow?.claimable ? "text-[var(--success-ink)]" : undefined)}>{returnWindowLine(panel.returnWindow)}</p>
                   <div className="mt-2 flex gap-2">
@@ -263,7 +266,7 @@ export function DialerWorkspace({ readOnly = false, role = "producer", canCheckN
                 </div>
               )}
 
-              {dispositionError && <p role="alert" className="m-0 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--error-ink)]">{dispositionError}</p>}
+              {dispositionError && <p role="alert" className="m-0 text-xs leading-[1.5] tracking-[-0.01em] text-[var(--error-ink)]">{dispositionError}</p>}
               <p className={cn(small, "m-0")}>
                 {!dialled ? "Keys: C calls, R records the disclosure, D starts the call." : searchMode ? "Record the result of this call." : `Keys 1–${Math.min(9, dispositions.length)}${dispositions.length >= 10 ? " and 0" : ""} choose a disposition; N serves the next lead.`}
                 {searchMode && " An inbound return call does not use one of this lead’s outbound attempts."}
@@ -309,7 +312,7 @@ export function DialerWorkspace({ readOnly = false, role = "producer", canCheckN
         {panel && !readOnly && nextStep && (
           <div className="sticky bottom-0 z-10 order-last -mx-4 flex items-center gap-3 border-t border-[var(--border)] bg-[var(--surface)] px-4 py-2 sm:-mx-6 sm:px-6 lg:hidden" role="region" aria-label="Call bar">
             {phoneLabel
-              ? <a href={`tel:${panel.lead.phone}`} className="shrink-0 text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)] tabular-nums no-underline">{phoneLabel}</a>
+              ? <span className="shrink-0 text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)] tabular-nums">{phoneLabel}</span>
               : <span className={small}>No phone number</span>}
             <span className="min-w-0 flex-1" />
             {nextStep === "call" && <Button type="button" onClick={() => void prepareAttempt(searchMode)} disabled={working || !callReady} title={!callReady ? blockers[0] : undefined}>{searchMode ? "Log return call" : "Click to call"}</Button>}

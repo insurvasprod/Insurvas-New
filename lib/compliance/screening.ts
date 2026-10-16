@@ -2,7 +2,7 @@ import "server-only";
 
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { recordProviderCall } from "@/lib/payments/logging";
-import { recordUsage, checkMeterCapacity, consumeMeterCapacity } from "@/lib/metering/enforce";
+import { checkMeterCapacity, consumeMeterCapacity } from "@/lib/metering/enforce";
 import { decryptVendorCredentials } from "./crypto";
 import { getUsPhone10Digits, maskDialPhone } from "./scrub";
 import type { ComplianceVendorType } from "./constants";
@@ -228,10 +228,11 @@ function screeningDeps(input: { tenantId: string; partnerId: string | null; user
       await db.rpc("release_screening_cache", { p_tenant_id: tenantId, p_phone_digits: phoneDigits, p_version: SCREENING_RESULT_VERSION, p_claim_token: claimToken });
     },
     checkTcpaCapacity: () => checkMeterCapacity(tenantId, "tcpa_checks"),
+    checkDncCapacity: () => checkMeterCapacity(tenantId, "dnc_lookups"),
+    // The locked path (consume_meter_capacity), as the dial preflight uses: concurrent screens cannot
+    // pass the cap between the check above and the charge.
+    consumeTcpaCapacity: (idempotencyKey, ref) => consumeMeterCapacity({ tenantId, meterKey: "tcpa_checks", qty: 1, idempotencyKey, ref }),
     consumeDncCapacity: (idempotencyKey, ref) => consumeMeterCapacity({ tenantId, meterKey: "dnc_lookups", qty: 1, idempotencyKey, ref }),
-    async recordTcpaUsage(idempotencyKey, ref) {
-      await recordUsage({ tenantId, meterKey: "tcpa_checks", qty: 1, idempotencyKey, ref });
-    },
     async hasExistingLead(phoneDigits) {
       const { data, error } = await db.rpc("has_existing_lead_phone", { p_tenant_id: tenantId, p_phone_digits: phoneDigits });
       if (error) throw new Error(`Could not complete internal duplicate screening: ${error.message}`);
@@ -374,10 +375,17 @@ export async function checkLitigatorForDialPreflight(input: {
     return { result: "unavailable", vendorName: null, checkedAt: null, cached: false, message: none ? "No litigator feed is enabled." : "No litigator feed answered." };
   }
   // One charge per number per UTC day: a second check of the same number in the dialog asks the
-  // vendor again (the answer is live) but does not bill again.
+  // vendor again (the answer is live) but does not bill again. Still charged only for an answer
+  // received, but the charge IS the capacity check — one locked statement (consume_meter_capacity,
+  // the path DNC lookups use) — so parallel checks cannot all pass the early check above before any
+  // of them records. That early check only spares a vendor call when the allowance is plainly gone.
   const ref = `dial-preflight:${input.tenantId}:${input.phoneDigits}:${now.toISOString().slice(0, 10)}`;
   try {
-    await recordUsage({ tenantId: input.tenantId, meterKey: "tcpa_checks", qty: 1, idempotencyKey: `${ref}:tcpa`, ref });
+    const charged = await consumeMeterCapacity({ tenantId: input.tenantId, meterKey: "tcpa_checks", qty: 1, idempotencyKey: `${ref}:tcpa`, ref });
+    if (!charged.allowed) {
+      await auditQuietly({ ...audit, outcome: "unavailable", vendor: null, rawResponse: { source: PREFLIGHT_SOURCE, error: "screening_meter_cap" }, resultId: null, cached: false });
+      return { result: "unavailable", vendorName: null, checkedAt: null, cached: false, message: "The plan's screening allowance is used up." };
+    }
   } catch (error) {
     console.error(`[dial-preflight] could not bill the litigator lookup: ${error instanceof Error ? error.message : "unknown"}`);
   }

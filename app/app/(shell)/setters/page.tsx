@@ -4,10 +4,12 @@ import { RebookButton } from "@/components/app/appointment-rebook";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { Button } from "@/components/ui/button";
+import { InfoTip } from "@/components/ui/info-tip";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/page-states";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
+import { PagedBody, PagedTableCard } from "@/components/ui/paged";
 import { TableCard } from "@/components/ui/table-card";
 import { ViewTabs } from "@/components/app/view-tabs";
 import { guardPage } from "@/lib/entitlements/guardPage";
@@ -78,15 +80,17 @@ const KIND_LABEL: Record<DayRowKind, string> = {
 
 export default async function SettersPage({ searchParams }: { searchParams: Promise<{ view?: string }> }) {
   const guard = await guardPage("outbound_dialing");
-  if (!guard.entitled) return <FeatureGateNotice guard={guard} featureLabel="Appointments & setters" description="Your setters book into your real availability. You arrive to people expecting your call." />;
+  if (!guard.entitled) return <FeatureGateNotice guard={guard} featureLabel="Appointments & setters" description="Setters book into your real availability." />;
   if (!["owner", "producer"].includes(guard.role))
-    return <RoleGateNotice featureLabel="Appointments & setters" detail="This is the licensed agent's view of their own calendar. Setters book from the dialer and see their numbers on Activity & scorecard." />;
+    return <RoleGateNotice featureLabel="Appointments & setters" detail="Setters book from the dialer and see their numbers on Activity & scorecard." />;
 
   const view = await getSettersOverview({ tenantId: guard.context.tenantId, userId: guard.context.userId, role: guard.role });
   const t = view.tiles;
   const showRate = t.closedThisMonth ? (t.showedThisMonth / t.closedThisMonth) * 100 : null;
   const noisy = view.setters.filter((row) => row.verdict === "noise").length;
   const tab = (await searchParams).view === "scorecard" ? "scorecard" : "today";
+  const dayNote = <span>All times your local · {view.day.filter((row) => row.kind === "booked").length} booked · {view.day.filter((row) => row.kind === "open").length} open</span>;
+  const scorecardNote = <span className="inline-flex flex-wrap items-center gap-2">{noisy > 0 && <StatusChip tone="danger">{noisy} setter{noisy === 1 ? "" : "s"} booking noise</StatusChip>}Last 30 days · ranked by shown · {view.scorecardScope === "calendar" ? "setters who booked into your calendar" : "every setter in the agency"}</span>;
 
   return (
     <div className="m-stagger flex flex-col gap-6">
@@ -109,27 +113,32 @@ export default async function SettersPage({ searchParams }: { searchParams: Prom
 
       {!view.bookable && (
         <p role="status" className="rounded-lg border border-[var(--warning)]/30 bg-[var(--warning-surface)] px-4 py-2.5 text-sm text-[var(--warning-ink)]">
-          <strong className="font-semibold">You have no working hours yet, so nobody can book you.</strong>{" "}
-          <Link className="font-semibold underline underline-offset-2" href="/app/settings#calendar">Add your hours in Settings › Calendar</Link>
+          <strong className="font-semibold">Add your working hours so setters can book you.</strong>{" "}
+          <Link className="font-semibold underline underline-offset-2" href="/app/settings#calendar">Open Settings › Calendar</Link>
         </p>
       )}
 
       <ViewTabs
         label="Appointments & setters views"
         value={tab}
+        controls="setters-panel"
         tabs={[
           { key: "today", label: `${view.dateLabel} — your calendar`, count: t.bookedToday, href: "/app/setters" },
           { key: "scorecard", label: "Setter scorecard", count: noisy || null, tone: "danger", href: "/app/setters?view=scorecard" },
         ]}
       />
 
+      <div id="setters-panel" role="tabpanel" aria-labelledby={`setters-panel-tab-${tab}`}>
       {tab === "today" ? (
         <div className="flex flex-col gap-4 lg:flex-row lg:items-stretch">
-          <TableCard
+          <PagedTableCard
+            total={view.day.length}
+            noun="slots"
+            suffix={dayNote}
             className="flex min-h-[calc(100dvh-var(--top-bar-h)-330px)] min-w-0 flex-1 flex-col [&>*:nth-child(1)]:flex-1"
-            footer={view.day.length ? <span>All times your local · {view.day.filter((row) => row.kind === "booked").length} booked · {view.day.filter((row) => row.kind === "open").length} open</span> : undefined}
+            footer={view.day.length ? dayNote : undefined}
           >
-            {view.day.length === 0 ? <EmptyState title="Nothing today" hint="No working hours today and nothing booked." /> : (
+            {view.day.length === 0 ? <EmptyState title="Nothing today" hint="No hours set and nothing booked." action={<Button asChild variant="outline"><Link href="/app/settings#calendar">Set availability</Link></Button>} /> : (
               <table className="portal-lead-table w-full min-w-[920px] text-left">
                 <thead><tr>
                   <th scope="col">Time</th>
@@ -139,7 +148,7 @@ export default async function SettersPage({ searchParams }: { searchParams: Prom
                   <th scope="col">Status</th>
                   <th scope="col" className="!text-right"><span className="sr-only">Actions</span></th>
                 </tr></thead>
-                <tbody>
+                <PagedBody>
                   {view.day.map((row) => {
                     const facts = row.detail ? bookedFacts(row.detail) : "";
                     return (
@@ -157,10 +166,10 @@ export default async function SettersPage({ searchParams }: { searchParams: Prom
                       </tr>
                     );
                   })}
-                </tbody>
+                </PagedBody>
               </table>
             )}
-          </TableCard>
+          </PagedTableCard>
 
           {/* The availability the calendar is computed from: real content beside it, not notes. */}
           <TableCard title="Your availability" className="lg:w-[30%] lg:shrink-0">
@@ -180,11 +189,14 @@ export default async function SettersPage({ searchParams }: { searchParams: Prom
           </TableCard>
         </div>
       ) : (
-        <TableCard
+        <PagedTableCard
+          total={view.setters.length}
+          noun="setters"
+          suffix={scorecardNote}
           className="flex min-h-[calc(100dvh-var(--top-bar-h)-330px)] flex-col [&>*:nth-child(1)]:flex-1"
-          footer={view.setters.length ? <span className="flex flex-wrap items-center gap-2">{noisy > 0 && <StatusChip tone="danger">{noisy} setter{noisy === 1 ? "" : "s"} booking noise</StatusChip>}Last 30 days · ranked by shown · {view.scorecardScope === "calendar" ? "setters who booked into your calendar" : "every setter in the agency until a pending database update is applied"}</span> : undefined}
+          footer={view.setters.length ? scorecardNote : undefined}
         >
-          {view.setters.length === 0 ? <EmptyState title="No setter activity" hint="No setter has dialled or booked in the last 30 days." /> : (
+          {view.setters.length === 0 ? <EmptyState title="No setter activity" hint="No dials or bookings in the last 30 days." /> : (
             <table className="portal-lead-table w-full min-w-[900px] text-left">
               <thead><tr>
                 <th scope="col">Setter</th>
@@ -195,9 +207,9 @@ export default async function SettersPage({ searchParams }: { searchParams: Prom
                 <th scope="col" className="!text-right">Shown</th>
                 <th scope="col" className="!text-right">Show rate</th>
                 <th scope="col" className="!text-right">Sold</th>
-                <th scope="col" className="!text-right" title={`Booking noise: a show rate under ${NOISE_BELOW_PCT}% over at least ${VERDICT_MIN_CLOSED} closed-out appointments. Appointments waiting to be closed out never count against a setter.`}>Verdict</th>
+                <th scope="col" className="!text-right"><span className="inline-flex items-center gap-1">Verdict<InfoTip label="About the verdict" side="left">Booking noise: a show rate under {NOISE_BELOW_PCT}% over at least {VERDICT_MIN_CLOSED} closed-out appointments. Appointments waiting to be closed out never count against a setter.</InfoTip></span></th>
               </tr></thead>
-              <tbody>
+              <PagedBody>
                 {view.setters.map((row) => (
                   <tr key={row.userId}>
                     <td className="max-w-[200px] truncate font-semibold text-foreground" title={row.name}>{row.name}</td>
@@ -211,11 +223,12 @@ export default async function SettersPage({ searchParams }: { searchParams: Prom
                     <td className="text-right"><StatusChip tone={row.verdict === "solid" ? "good" : row.verdict === "noise" ? "danger" : "neutral"} dot>{VERDICT_LABEL[row.verdict]}</StatusChip></td>
                   </tr>
                 ))}
-              </tbody>
+              </PagedBody>
             </table>
           )}
-        </TableCard>
+        </PagedTableCard>
       )}
+      </div>
     </div>
   );
 }

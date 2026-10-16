@@ -14,7 +14,7 @@ export default async function PublisherDetailPage({
       <FeatureGateNotice
         guard={guard}
         featureLabel="Partners"
-        description="Manage publishers, marketing companies and affiliates without losing their history."
+        description="Manage publishers, marketing companies and affiliates."
       />
     );
   }

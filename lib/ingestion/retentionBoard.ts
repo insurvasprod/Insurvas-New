@@ -55,6 +55,12 @@ export type BoardPolicy = {
    */
   noticeWindowDays?: number | null;
   noticeSince?: string | null;
+  /**
+   * The carrier's first-payment window (LA-4.17), when the policy's rule is one. A first payment
+   * missed counts down on it from the effective date even where policy_current has no countdown yet
+   * (an approved policy before 20261015520000 gave it one).
+   */
+  firstPaymentWindowDays?: number | null;
 };
 
 const dayNumber = (iso: string) => Math.floor(Date.UTC(+iso.slice(0, 4), +iso.slice(5, 7) - 1, +iso.slice(8, 10)) / 86_400_000);
@@ -96,7 +102,9 @@ export function daysLeftFor(p: BoardPolicy, reason: Reason, today: string): numb
   if (reason === "direct_bill") return null;
   if (reason === "recently_lapsed") return p.lapsedOn && p.reinstatementDays !== null ? Math.max(0, p.reinstatementDays - daysSince(p.lapsedOn, today)) : null;
   if ((reason === "cancellation_request" || reason === "conservation") && p.noticeWindowDays != null && p.noticeSince) return Math.max(0, p.noticeWindowDays - daysSince(p.noticeSince, today));
-  return p.daysUntilClose === null ? null : Math.max(0, p.daysUntilClose);
+  if (p.daysUntilClose !== null) return Math.max(0, p.daysUntilClose);
+  if (reason === "first_payment_missed" && p.firstPaymentWindowDays != null && p.effectiveDate) return Math.max(0, p.firstPaymentWindowDays - (p.daysPastDue ?? Math.max(0, daysSince(p.effectiveDate, today))));
+  return null;
 }
 
 export type Group = "deadline" | "no_window" | "prevention";

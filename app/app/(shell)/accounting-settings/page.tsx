@@ -1,0 +1,50 @@
+import { guardPage } from "@/lib/entitlements/guardPage";
+import { listAccounts } from "@/lib/accounting/bankStore";
+import { LOCKED, loadAccountingSettings, recentChanges, SettingsError } from "@/lib/accounting/settingsStore";
+import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
+import { RoleGateNotice } from "@/components/app/role-gate-notice";
+import { AccountingSettingsBoard } from "@/components/app/accounting/accounting-settings-board";
+import { PageHeader } from "@/components/ui/page-header";
+import { SettingsTrail } from "@/components/app/settings/settings-trail";
+import { SectionLastChanged } from "@/components/app/settings/last-changed";
+import { EmptyState } from "@/components/ui/page-states";
+import { TableCard } from "@/components/ui/table-card";
+
+/**
+ * Money › Accounting settings (LA-7.9, Notion sprint). Everything LA-7 reads, in one place.
+ * Owners change it; bookkeepers can read it.
+ */
+export default async function AccountingSettingsPage() {
+  const guard = await guardPage("profit_and_loss");
+  if (!guard.entitled) {
+    return <FeatureGateNotice guard={guard} featureLabel="Accounting settings" description="Thresholds, categories, periods and split rules." />;
+  }
+  if (!["owner", "bookkeeper"].includes(guard.role)) {
+    return <RoleGateNotice featureLabel="Accounting settings" detail="Only owners and bookkeepers can see the agency's accounting settings." />;
+  }
+  const tenantId = guard.context.tenantId;
+  let loaded: { settings: Awaited<ReturnType<typeof loadAccountingSettings>>; changes: Awaited<ReturnType<typeof recentChanges>>; accounts: Awaited<ReturnType<typeof listAccounts>> } | null = null;
+  let problem: string | null = null;
+  try {
+    const [settings, changes, accounts] = await Promise.all([loadAccountingSettings(tenantId), recentChanges(tenantId), listAccounts(tenantId).catch(() => [])]);
+    loaded = { settings, changes, accounts };
+  } catch (error) {
+    if (!(error instanceof SettingsError)) throw error;
+    problem = error.message;
+  }
+  return (
+    <div className="m-stagger flex min-h-0 flex-grow flex-col gap-6">
+      <SettingsTrail label="Accounting" />
+      {/* LA-8.8: who last changed a setting here, beside the values — the owner reads the log it links into. */}
+      <div>
+        <PageHeader title="Accounting settings" description="Thresholds, categories, periods and split rules." />
+        {guard.role === "owner" && <SectionLastChanged sectionKey="accounting" />}
+      </div>
+      {loaded ? (
+        <AccountingSettingsBoard initial={loaded.settings} locked={LOCKED} changes={loaded.changes} accounts={loaded.accounts} canEdit={guard.role === "owner" && guard.entitlement.access !== "read_only"} />
+      ) : (
+        <TableCard><EmptyState title="Not switched on yet" hint={problem ?? ""} /></TableCard>
+      )}
+    </div>
+  );
+}

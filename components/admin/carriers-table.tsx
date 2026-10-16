@@ -1,5 +1,6 @@
 "use client";
 
+import { StatusChip } from "@/components/ui/status-chip";
 import { useCallback, useMemo, useState } from "react";
 import { MoreHorizontal } from "lucide-react";
 
@@ -10,7 +11,7 @@ import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/com
 import { TableCard } from "@/components/ui/table-card";
 import { BoardStatGrid, BoardStatTile } from "@/components/admin/board-stat-tile";
 import { BoardTableFooter } from "@/components/admin/board-table-footer";
-import { btn, Pill, st, Switch } from "@/components/app/settings/primitives";
+import { btn, st, pillTone, Switch } from "@/components/app/settings/primitives";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -33,7 +34,7 @@ import { CarrierDialog } from "./carrier-dialog";
 import { CarrierDeactivateDialog } from "./carrier-deactivate-dialog";
 
 const PAGE_SIZE = 10;
-const MENU_ITEM = "text-[14px] tracking-[-0.02em] text-[var(--ink)]";
+const MENU_ITEM = "text-sm tracking-[-0.02em] text-[var(--ink)]";
 
 type StateFilter = "all" | "active" | "inactive";
 type UsageFilter = "any" | "in_use" | "unused";
@@ -282,7 +283,7 @@ export function CarriersTable({
                 return (
                   <tr key={carrier.id} className="m-row hover:bg-[var(--brand-50)]">
                     <td className={st.td}>
-                      <code className="font-mono text-[14px]">{carrier.code}</code>
+                      <code className="font-mono text-sm">{carrier.code}</code>
                     </td>
                     <td className={st.td}>{carrier.name}</td>
                     <td className={st.td}>
@@ -295,9 +296,9 @@ export function CarriersTable({
                           label={`${carrier.name}: ${carrier.is_active ? "active, switch off" : "inactive, switch on"}`}
                           onChange={(next) => void (next ? reactivate(carrier) : deactivate(carrier))}
                         />
-                        <Pill tone={carrier.is_active ? "success" : "neutral"} dot>
+                        <StatusChip tone={pillTone(carrier.is_active ? "success" : "neutral")}>
                           {carrier.is_active ? "Active" : "Inactive"}
-                        </Pill>
+                        </StatusChip>
                       </span>
                     </td>
                     <td className={cn(st.td, "tabular-nums")}>{carrier.sort_order}</td>
@@ -324,7 +325,7 @@ export function CarriersTable({
                             Edit
                           </DropdownMenuItem>
                           {carrier.is_active ? (
-                            <DropdownMenuItem variant="destructive" className="text-[14px] tracking-[-0.02em]" onSelect={() => deactivate(carrier)}>
+                            <DropdownMenuItem variant="destructive" className="text-sm tracking-[-0.02em]" onSelect={() => deactivate(carrier)}>
                               Deactivate
                             </DropdownMenuItem>
                           ) : (

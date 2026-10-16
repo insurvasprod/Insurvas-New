@@ -1,5 +1,6 @@
 "use client";
 
+import { StatusChip } from "@/components/ui/status-chip";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { BookOpen, Plus } from "lucide-react";
 
@@ -13,7 +14,7 @@ import { StatStrip, StatTile } from "@/components/ui/stat";
 import { PagedBody, PagedTableCard } from "@/components/ui/paged";
 import { TableCard } from "@/components/ui/table-card";
 import { DispositionLibrary, PipelineCreateDialog, PipelineStageManager } from "@/components/app/pipeline-stage-manager";
-import { Callout, control, Field, Pill, SettingsSectionHeader, SettingsStack, ToggleRow, st } from "@/components/app/settings/primitives";
+import { Callout, control, Field, SettingsSectionHeader, SettingsStack, ToggleRow, st } from "@/components/app/settings/primitives";
 import { cn } from "@/lib/utils";
 import type { PipelineViewContext } from "@/lib/pipelines/views";
 import type {
@@ -47,7 +48,7 @@ const fmt = (n: number | undefined) => (n ?? 0).toLocaleString();
 const stageLabel = (stage: Pick<PipelineStage, "name" | "stage_type">) => (stage.stage_type === "open" ? stage.name : `${stage.name} · closes`);
 
 const smallControl =
-  "box-border h-8 w-full min-w-0 rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] px-2 text-[14px] tracking-[-0.02em] text-[var(--ink)] outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)] disabled:cursor-not-allowed disabled:opacity-60";
+  "box-border h-8 w-full min-w-0 rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] px-2 text-sm tracking-[-0.02em] text-[var(--ink)] outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)] disabled:cursor-not-allowed disabled:opacity-60";
 
 async function request(url: string, method: string, payload: unknown) {
   const response = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
@@ -388,8 +389,8 @@ export function PipelineSettings() {
                     <td className={st.td}>
                       <span className="inline-flex flex-wrap items-center gap-2">
                         <span className={st.strong}>{pipeline.name}</span>
-                        {pipeline.is_default && <Pill tone="brand">Default</Pill>}
-                        {draftPipeline && <Pill tone="warning">Draft</Pill>}
+                        {pipeline.is_default && <StatusChip dot={false} tone="action">Default</StatusChip>}
+                        {draftPipeline && <StatusChip dot={false} tone="warning">Draft</StatusChip>}
                       </span>
                       <span className={cn(st.sub, "flex flex-wrap items-center gap-x-2 gap-y-0.5")}>
                         {live.length === 0
@@ -457,7 +458,7 @@ export function PipelineSettings() {
           </form>
         }
       >
-        {mappingError && <p role="alert" className="m-0 border-b border-[var(--border)] bg-[var(--error-surface)] px-4 py-2.5 text-[14px] text-[var(--error-ink)]">{mappingError}</p>}
+        {mappingError && <p role="alert" className="m-0 border-b border-[var(--border)] bg-[var(--error-surface)] px-4 py-2.5 text-sm text-[var(--error-ink)]">{mappingError}</p>}
         {rows.length === 0 ? (
           <EmptyState title="No dispositions yet" hint="Add them under Dispositions, or map a key below." />
         ) : shownRows.length === 0 ? (
@@ -478,9 +479,9 @@ export function PipelineSettings() {
                   <tr key={key}>
                     <td className={st.td}>
                       <label htmlFor={id} className="text-[var(--body)]">{entry?.label ?? key}</label>
-                      {(draft[key] ?? "") !== (savedMap[key] ?? "") && <Pill tone="warning" className="ml-2">Unsaved</Pill>}
+                      {(draft[key] ?? "") !== (savedMap[key] ?? "") && <StatusChip dot={false} tone="warning" className="ml-2">Unsaved</StatusChip>}
                       <span className={st.sub}>
-                        <code className="font-mono text-[12px]">{key}</code>
+                        <code className="font-mono text-xs">{key}</code>
                         {entry && !entry.isActive ? " · inactive" : ""}
                         {!entry ? " · not in your dispositions" : ""}
                       </span>
@@ -552,7 +553,7 @@ export function PipelineSettings() {
               checked={pipelineForm.is_default}
               onChange={(next) => setPipelineForm({ ...pipelineForm, is_default: next })}
             />
-            {dialogError && <span role="alert" className="text-[12px] text-[var(--error-ink)]">{dialogError}</span>}
+            {dialogError && <span role="alert" className="text-xs text-[var(--error-ink)]">{dialogError}</span>}
             <DialogFooter className="sm:justify-between">
               <Button type="button" variant="ghost" className="text-[var(--error-ink)]" disabled={busy} onClick={() => void deletePipeline()}>Delete pipeline</Button>
               <span className="flex gap-2">

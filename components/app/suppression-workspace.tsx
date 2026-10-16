@@ -32,6 +32,7 @@ import type { PhoneListRow, SuppressionOverview } from "@/lib/suppression/overvi
 import { DNC_EXEMPTION_BASIS_LABELS, type DncExemption } from "@/lib/suppression/exemptionConstants";
 import { TcpaDncExemptions } from "@/components/app/tcpa-dnc-exemptions";
 import { TcpaScreeningAudit } from "@/components/app/tcpa-screening-audit";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 
 type Loaded = {
   entries: SuppressionEntry[];
@@ -62,17 +63,6 @@ const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "
 const dayMonthYear = (iso: string) => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? "—" : `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`; };
 const stamp = (iso: string) => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? "—" : `${d.getDate()} ${MONTHS[d.getMonth()]} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
 
-/** Rows per page that fit the window under the page's chrome (the Inbound list's rule). */
-function useFittingPageSize(reserved: number, rowHeight: number) {
-  const [size, setSize] = useState(10);
-  useEffect(() => {
-    const fit = () => setSize(Math.min(10, Math.max(5, Math.floor((window.innerHeight - reserved) / rowHeight))));
-    fit();
-    window.addEventListener("resize", fit);
-    return () => window.removeEventListener("resize", fit);
-  }, [reserved, rowHeight]);
-  return size;
-}
 
 /**
  * TCPA / DNC (p-app-tcpa): whether a number can be called right now, why, and the lists that
@@ -227,6 +217,7 @@ export function SuppressionWorkspace() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <ViewTabs
           label="TCPA views"
+          idPrefix="tcpa-view"
           value={tab}
           onChange={setTab}
           tabs={[
@@ -271,6 +262,7 @@ export function SuppressionWorkspace() {
         </section>
       )}
 
+      <div role="tabpanel" aria-labelledby={`tcpa-view-${tab}`} className="flex min-w-0 flex-col">
       {tab === "list" && (
         <TableCard
           className={FILL}
@@ -293,7 +285,7 @@ export function SuppressionWorkspace() {
             : entries.length === 0 ? (
               filtered
                 ? <NoMatches noun="suppressed numbers" onClear={clearFilters} />
-                : <EmptyState title="Nothing is suppressed yet" hint="Numbers land here from a do-not-call disposition, a screening hit, or one you add after a complaint." />
+                : <EmptyState title="Nothing is suppressed yet" hint="DNC dispositions, screening hits and complaints land here." action={loaded.canEdit ? <Button onClick={() => setOpen(true)}><PhoneOff aria-hidden="true" />Suppress a number</Button> : undefined} />
             ) : (
               <table className="w-full min-w-[1040px] border-collapse text-left">
                 <thead><tr>
@@ -347,6 +339,7 @@ export function SuppressionWorkspace() {
           )}
         </TableCard>
       )}
+      </div>
 
       <Dialog open={open} onOpenChange={(next) => { setOpen(next); if (!next) setConfirmed(false); }}>
         <DialogContent>

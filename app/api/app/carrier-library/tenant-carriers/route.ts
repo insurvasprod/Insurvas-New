@@ -6,6 +6,7 @@ import { z } from "zod";
 
 import { saveCarrierRequirement, saveTenantCarrier } from "@/lib/carriers/service";
 import { SchemaPendingError } from "@/lib/carriers/schemaGap";
+import { CarrierLimitError } from "@/lib/carriers/limit";
 import { tenantCarrierSchema } from "@/lib/carriers/schemas";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 
@@ -22,6 +23,7 @@ export async function POST(request: NextRequest) {
     after(() => refreshDiscrepanciesQuietly(tenantId));
     return NextResponse.json({ tenantCarrier: row }, { status: 201 });
   } catch (error) {
+    if (error instanceof CarrierLimitError) return NextResponse.json({ error: error.message, code: error.code, limit: error.limit }, { status: 403 });
     return NextResponse.json({ error: error instanceof Error ? error.message : "Could not save carrier contract" }, { status: 400 });
   }
 }

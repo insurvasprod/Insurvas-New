@@ -1,10 +1,7 @@
 import type { VendorScorecardRow } from "./types";
+import { csvCell } from "../csv/cell.ts";
 
-export function csvCell(value: unknown): string {
-  const text = value === null || value === undefined ? "" : String(value);
-  const safe = /^[=+\-@]/.test(text) ? `'${text}` : text;
-  return `"${safe.replaceAll('"', '""')}"`;
-}
+export { csvCell };
 
 const dollars = (cents: number | null | undefined) => (cents === null || cents === undefined ? null : cents / 100);
 

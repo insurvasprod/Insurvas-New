@@ -4,6 +4,7 @@ import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { AGENT_ALERT_EVENTS, DEFAULT_AGENT_ALERT_SETTINGS, WORKSPACE_ALERT_EVENTS, WORKSPACE_ALERT_WINDOW_MS, eventTypeForKind, leadIdFromAlertLink, partitionAlertRows, type AgentAlertEvent, type AgentAlertSettings, type AudibleTreatment } from "./presentation";
 import { AUDIBLE } from "@/lib/notify/treatments";
 import { ALERT_CENTRE_WINDOW_MS, WORKSPACE_ALERT_KINDS, buildAlertCentre, type CentreNotificationRow, type CentreQueueRow } from "./centre";
+import { deliveryByKind } from "@/lib/notifications/preferences";
 
 // The generated database types are refreshed from the live project separately; this service keeps
 // the JSON preference boundary narrow while the migration is being promoted.
@@ -134,11 +135,15 @@ export async function listAgentAlerts(tenantId: string, userId: string) {
   // Polled every few seconds by every open agent tab, so the two reads go out together.
   const since = new Date(Date.now() - WORKSPACE_ALERT_WINDOW_MS).toISOString();
   // Newest first so a backlog of old rows can never crowd today's out of the limit; flipped below.
-  const [settings, result] = await Promise.all([getAgentAlertSettings(tenantId, userId), db().from("agent_notifications").select("id, kind, title, body, link, source_key, created_at, read_at").eq("tenant_id", tenantId).eq("recipient_user_id", userId).is("read_at", null).gte("created_at", since).order("created_at", { ascending: false }).limit(200)]);
+  // LA-8.4: which alerts reach this person in the app is Settings › Notifications' to say (per event,
+  // registry default when untouched); the bell keeps only its sounds and do-not-disturb.
+  const [settings, delivery, result] = await Promise.all([getAgentAlertSettings(tenantId, userId), deliveryByKind(userId, tenantId), db().from("agent_notifications").select("id, kind, title, body, link, source_key, created_at, read_at").eq("tenant_id", tenantId).eq("recipient_user_id", userId).is("read_at", null).gte("created_at", since).order("created_at", { ascending: false }).limit(200)]);
   if (result.error) throw new Error(`Could not load alerts: ${result.error.message}`);
   const rows = ((result.data ?? []) as AlertRow[]).reverse().flatMap((row) => {
     const eventType = eventTypeForKind(row.kind);
-    return eventType && settings.enabled_events[eventType] ? [{ ...row, event_type: eventType }] : [];
+    const choice = delivery.get(row.kind) ?? { in_app: true, push: true };
+    // `push`: whether the bell may raise a browser notification for it (the person's choice, quiet hours).
+    return eventType && choice.in_app ? [{ ...row, event_type: eventType, push: choice.push }] : [];
   });
 
   const leadIds = [...new Set(rows.flatMap((row) => (WORKSPACE_ALERT_EVENTS.includes(row.event_type) ? [leadIdFromAlertLink(row.link)] : [])).filter((id): id is string => Boolean(id)))];

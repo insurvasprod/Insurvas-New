@@ -1,0 +1,1031 @@
+<?xml version="1.0"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:o="urn:schemas-microsoft-com:office:office"
+ xmlns:x="urn:schemas-microsoft-com:office:excel"
+ xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:html="http://www.w3.org/TR/REC-html40">
+ <Styles>
+  <Style ss:ID="Default" ss:Name="Normal">
+   <Alignment ss:Vertical="Bottom"/>
+   <Font ss:FontName="Calibri" x:Family="Swiss" ss:Size="11" ss:Color="#000000"/>
+  </Style>
+  <Style ss:ID="h"><Font ss:Bold="1"/></Style>
+ </Styles>
+ <Worksheet ss:Name="PolicyList">
+  <Table>
+   <Row>
+    <Cell ss:StyleID="h"><Data ss:Type="String">Policy Number</Data></Cell>
+    <Cell ss:StyleID="h"><Data ss:Type="String">Client Name</Data></Cell>
+    <Cell ss:StyleID="h"><Data ss:Type="String">Joint Client Name</Data></Cell>
+    <Cell ss:StyleID="h"><Data ss:Type="String">Line Of Business</Data></Cell>
+    <Cell ss:StyleID="h"><Data ss:Type="String">Product Description</Data></Cell>
+    <Cell ss:StyleID="h"><Data ss:Type="String">Issue Date</Data></Cell>
+    <Cell ss:StyleID="h"><Data ss:Type="String">Purchase Premium $</Data></Cell>
+    <Cell ss:StyleID="h"><Data ss:Type="String">Balance $</Data></Cell>
+    <Cell ss:StyleID="h"><Data ss:Type="String">Surrender $</Data></Cell>
+    <Cell ss:StyleID="h"><Data ss:Type="String">Annual Premium $</Data></Cell>
+    <Cell ss:StyleID="h"><Data ss:Type="String">Tax Qualified</Data></Cell>
+    <Cell ss:StyleID="h"><Data ss:Type="String">Tax Account Type</Data></Cell>
+    <Cell ss:StyleID="h"><Data ss:Type="String">Status</Data></Cell>
+    <Cell ss:StyleID="h"><Data ss:Type="String">Reason</Data></Cell>
+    <Cell ss:StyleID="h"><Data ss:Type="String">Writing Agent</Data></Cell>
+    <Cell ss:StyleID="h"><Data ss:Type="String">Writing Agent Name</Data></Cell>
+    <Cell ss:StyleID="h"><Data ss:Type="String">Split Agent</Data></Cell>
+    <Cell ss:StyleID="h"><Data ss:Type="String">Split Agent Name</Data></Cell>
+    <Cell ss:StyleID="h"><Data ss:Type="String">Servicing Agent</Data></Cell>
+    <Cell ss:StyleID="h"><Data ss:Type="String">Servicing Agent Name</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">0973996</Data></Cell>
+    <Cell><Data ss:Type="String">JULIE TRAN</Data></Cell>
+    <Cell/>
+    <Cell><Data ss:Type="String">Life</Data></Cell>
+    <Cell><Data ss:Type="String">New Vantage III</Data></Cell>
+    <Cell><Data ss:Type="DateTime">2026-06-29T00:00:00.000</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell><Data ss:Type="Number">1099.68</Data></Cell>
+    <Cell><Data ss:Type="String">               </Data></Cell>
+    <Cell><Data ss:Type="String">                              </Data></Cell>
+    <Cell><Data ss:Type="String">Lapsed</Data></Cell>
+    <Cell><Data ss:Type="String">[CA] Cancelled</Data></Cell>
+    <Cell><Data ss:Type="String">K099581428</Data></Cell>
+    <Cell><Data ss:Type="String">HUNTER, ALISHA</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">0982382</Data></Cell>
+    <Cell><Data ss:Type="String">KENNETH MCKAY</Data></Cell>
+    <Cell/>
+    <Cell><Data ss:Type="String">Life</Data></Cell>
+    <Cell><Data ss:Type="String">New Vantage III</Data></Cell>
+    <Cell><Data ss:Type="DateTime">2026-04-29T00:00:00.000</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell><Data ss:Type="Number">1008.12</Data></Cell>
+    <Cell><Data ss:Type="String">               </Data></Cell>
+    <Cell><Data ss:Type="String">                              </Data></Cell>
+    <Cell><Data ss:Type="String">Active</Data></Cell>
+    <Cell/>
+    <Cell><Data ss:Type="String">K773161015</Data></Cell>
+    <Cell><Data ss:Type="String">LARSON, ELLEN</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">0949841</Data></Cell>
+    <Cell><Data ss:Type="String">COURTNEY FLOWERS</Data></Cell>
+    <Cell/>
+    <Cell><Data ss:Type="String">Life</Data></Cell>
+    <Cell><Data ss:Type="String">New Vantage III</Data></Cell>
+    <Cell><Data ss:Type="DateTime">2026-05-24T00:00:00.000</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell><Data ss:Type="Number">365.76</Data></Cell>
+    <Cell><Data ss:Type="String">               </Data></Cell>
+    <Cell><Data ss:Type="String">                              </Data></Cell>
+    <Cell><Data ss:Type="String">Active</Data></Cell>
+    <Cell/>
+    <Cell><Data ss:Type="String">K773161015</Data></Cell>
+    <Cell><Data ss:Type="String">LARSON, ELLEN</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">0969638</Data></Cell>
+    <Cell><Data ss:Type="String">RONALD HERNANDEZ</Data></Cell>
+    <Cell/>
+    <Cell><Data ss:Type="String">Life</Data></Cell>
+    <Cell><Data ss:Type="String">New Vantage III</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell><Data ss:Type="Number">594.72</Data></Cell>
+    <Cell><Data ss:Type="String">               </Data></Cell>
+    <Cell><Data ss:Type="String">                              </Data></Cell>
+    <Cell><Data ss:Type="String">Declined</Data></Cell>
+    <Cell><Data ss:Type="String">[DC] Medical History</Data></Cell>
+    <Cell><Data ss:Type="String">K773161015</Data></Cell>
+    <Cell><Data ss:Type="String">LARSON, ELLEN</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">0924843</Data></Cell>
+    <Cell><Data ss:Type="String">LAURA DONALDSON</Data></Cell>
+    <Cell/>
+    <Cell><Data ss:Type="String">Life</Data></Cell>
+    <Cell><Data ss:Type="String">New Vantage I</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell><Data ss:Type="Number">276.72</Data></Cell>
+    <Cell><Data ss:Type="String">               </Data></Cell>
+    <Cell><Data ss:Type="String">                              </Data></Cell>
+    <Cell><Data ss:Type="String">Declined</Data></Cell>
+    <Cell><Data ss:Type="String">[DC] Medical History</Data></Cell>
+    <Cell><Data ss:Type="String">K773161015</Data></Cell>
+    <Cell><Data ss:Type="String">LARSON, ELLEN</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">0997503</Data></Cell>
+    <Cell><Data ss:Type="String">ANTHONY MILLER</Data></Cell>
+    <Cell/>
+    <Cell><Data ss:Type="String">Life</Data></Cell>
+    <Cell><Data ss:Type="String">New Vantage II</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell><Data ss:Type="Number">1248.24</Data></Cell>
+    <Cell><Data ss:Type="String">               </Data></Cell>
+    <Cell><Data ss:Type="String">                              </Data></Cell>
+    <Cell><Data ss:Type="String">Declined</Data></Cell>
+    <Cell><Data ss:Type="String">[DC] Medical History</Data></Cell>
+    <Cell><Data ss:Type="String">K099581428</Data></Cell>
+    <Cell><Data ss:Type="String">HUNTER, ALISHA</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">0947862</Data></Cell>
+    <Cell><Data ss:Type="String">JENNIFER BISHOP</Data></Cell>
+    <Cell/>
+    <Cell><Data ss:Type="String">Life</Data></Cell>
+    <Cell><Data ss:Type="String">New Vantage III</Data></Cell>
+    <Cell><Data ss:Type="DateTime">2026-07-09T00:00:00.000</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell><Data ss:Type="Number">843.72</Data></Cell>
+    <Cell><Data ss:Type="String">               </Data></Cell>
+    <Cell><Data ss:Type="String">                              </Data></Cell>
+    <Cell><Data ss:Type="String">Active</Data></Cell>
+    <Cell/>
+    <Cell><Data ss:Type="String">K773161015</Data></Cell>
+    <Cell><Data ss:Type="String">LARSON, ELLEN</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">0944888</Data></Cell>
+    <Cell><Data ss:Type="String">CHRISTOPHER BRYANT</Data></Cell>
+    <Cell/>
+    <Cell><Data ss:Type="String">Life</Data></Cell>
+    <Cell><Data ss:Type="String">New Vantage III</Data></Cell>
+    <Cell><Data ss:Type="DateTime">2026-04-23T00:00:00.000</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell><Data ss:Type="Number">509.88</Data></Cell>
+    <Cell><Data ss:Type="String">               </Data></Cell>
+    <Cell><Data ss:Type="String">                              </Data></Cell>
+    <Cell><Data ss:Type="String">Lapsed</Data></Cell>
+    <Cell><Data ss:Type="String">[CV] Lapsed without Cash Value</Data></Cell>
+    <Cell><Data ss:Type="String">K773161015</Data></Cell>
+    <Cell><Data ss:Type="String">LARSON, ELLEN</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">0973503</Data></Cell>
+    <Cell><Data ss:Type="String">SAMUEL DAVIS</Data></Cell>
+    <Cell/>
+    <Cell><Data ss:Type="String">Life</Data></Cell>
+    <Cell><Data ss:Type="String">New Vantage III</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell><Data ss:Type="Number">707.52</Data></Cell>
+    <Cell><Data ss:Type="String">               </Data></Cell>
+    <Cell><Data ss:Type="String">                              </Data></Cell>
+    <Cell><Data ss:Type="String">Pending</Data></Cell>
+    <Cell><Data ss:Type="String">[70] Approved - Awaiting Issue</Data></Cell>
+    <Cell><Data ss:Type="String">K099581428</Data></Cell>
+    <Cell><Data ss:Type="String">HUNTER, ALISHA</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">0952093</Data></Cell>
+    <Cell><Data ss:Type="String">MARK WAGNER</Data></Cell>
+    <Cell/>
+    <Cell><Data ss:Type="String">Life</Data></Cell>
+    <Cell><Data ss:Type="String">New Vantage I</Data></Cell>
+    <Cell><Data ss:Type="DateTime">2026-04-20T00:00:00.000</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell><Data ss:Type="Number">600.96</Data></Cell>
+    <Cell><Data ss:Type="String">               </Data></Cell>
+    <Cell><Data ss:Type="String">                              </Data></Cell>
+    <Cell><Data ss:Type="String">Active</Data></Cell>
+    <Cell/>
+    <Cell><Data ss:Type="String">K099581428</Data></Cell>
+    <Cell><Data ss:Type="String">HUNTER, ALISHA</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">0971575</Data></Cell>
+    <Cell><Data ss:Type="String">ROBERT CASTILLO</Data></Cell>
+    <Cell/>
+    <Cell><Data ss:Type="String">Life</Data></Cell>
+    <Cell><Data ss:Type="String">New Vantage III</Data></Cell>
+    <Cell><Data ss:Type="DateTime">2026-06-10T00:00:00.000</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell><Data ss:Type="Number">1236.00</Data></Cell>
+    <Cell><Data ss:Type="String">               </Data></Cell>
+    <Cell><Data ss:Type="String">                              </Data></Cell>
+    <Cell><Data ss:Type="String">Active</Data></Cell>
+    <Cell/>
+    <Cell><Data ss:Type="String">K099581428</Data></Cell>
+    <Cell><Data ss:Type="String">HUNTER, ALISHA</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">0965087</Data></Cell>
+    <Cell><Data ss:Type="String">LORI SIMON</Data></Cell>
+    <Cell/>
+    <Cell><Data ss:Type="String">Life</Data></Cell>
+    <Cell><Data ss:Type="String">New Vantage I</Data></Cell>
+    <Cell><Data ss:Type="DateTime">2026-07-07T00:00:00.000</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell><Data ss:Type="Number">361.08</Data></Cell>
+    <Cell><Data ss:Type="String">               </Data></Cell>
+    <Cell><Data ss:Type="String">                              </Data></Cell>
+    <Cell><Data ss:Type="String">Lapsed</Data></Cell>
+    <Cell><Data ss:Type="String">[CA] Cancelled</Data></Cell>
+    <Cell><Data ss:Type="String">K773161015</Data></Cell>
+    <Cell><Data ss:Type="String">LARSON, ELLEN</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">0979012</Data></Cell>
+    <Cell><Data ss:Type="String">TAMMY KING</Data></Cell>
+    <Cell/>
+    <Cell><Data ss:Type="String">Life</Data></Cell>
+    <Cell><Data ss:Type="String">New Vantage III</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell><Data ss:Type="Number">331.44</Data></Cell>
+    <Cell><Data ss:Type="String">               </Data></Cell>
+    <Cell><Data ss:Type="String">                              </Data></Cell>
+    <Cell><Data ss:Type="String">Declined</Data></Cell>
+    <Cell><Data ss:Type="String">[DC] Medical History</Data></Cell>
+    <Cell><Data ss:Type="String">K099581428</Data></Cell>
+    <Cell><Data ss:Type="String">HUNTER, ALISHA</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">0984228</Data></Cell>
+    <Cell><Data ss:Type="String">KELLY WATTS</Data></Cell>
+    <Cell/>
+    <Cell><Data ss:Type="String">Life</Data></Cell>
+    <Cell><Data ss:Type="String">New Vantage III</Data></Cell>
+    <Cell><Data ss:Type="DateTime">2026-08-02T00:00:00.000</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell><Data ss:Type="Number">639.60</Data></Cell>
+    <Cell><Data ss:Type="String">               </Data></Cell>
+    <Cell><Data ss:Type="String">                              </Data></Cell>
+    <Cell><Data ss:Type="String">Cancelled</Data></Cell>
+    <Cell><Data ss:Type="String">[NP] Non Payment of Premium</Data></Cell>
+    <Cell><Data ss:Type="String">K099581428</Data></Cell>
+    <Cell><Data ss:Type="String">HUNTER, ALISHA</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">0983655</Data></Cell>
+    <Cell><Data ss:Type="String">CHLOE MCCORMICK</Data></Cell>
+    <Cell/>
+    <Cell><Data ss:Type="String">Life</Data></Cell>
+    <Cell><Data ss:Type="String">New Vantage III</Data></Cell>
+    <Cell><Data ss:Type="DateTime">2026-07-24T00:00:00.000</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell><Data ss:Type="Number">688.56</Data></Cell>
+    <Cell><Data ss:Type="String">               </Data></Cell>
+    <Cell><Data ss:Type="String">                              </Data></Cell>
+    <Cell><Data ss:Type="String">Cancelled</Data></Cell>
+    <Cell><Data ss:Type="String">[NT] Not Taken (Cancelled during Free Look)</Data></Cell>
+    <Cell><Data ss:Type="String">K099581428</Data></Cell>
+    <Cell><Data ss:Type="String">HUNTER, ALISHA</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">0973730</Data></Cell>
+    <Cell><Data ss:Type="String">TERESA HOGAN</Data></Cell>
+    <Cell/>
+    <Cell><Data ss:Type="String">Life</Data></Cell>
+    <Cell><Data ss:Type="String">New Vantage III</Data></Cell>
+    <Cell><Data ss:Type="DateTime">2026-06-17T00:00:00.000</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell><Data ss:Type="Number">1276.08</Data></Cell>
+    <Cell><Data ss:Type="String">               </Data></Cell>
+    <Cell><Data ss:Type="String">                              </Data></Cell>
+    <Cell><Data ss:Type="String">Lapsed</Data></Cell>
+    <Cell><Data ss:Type="String">[CA] Cancelled</Data></Cell>
+    <Cell><Data ss:Type="String">K773161015</Data></Cell>
+    <Cell><Data ss:Type="String">LARSON, ELLEN</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">0983129</Data></Cell>
+    <Cell><Data ss:Type="String">JENNIFER CARDENAS</Data></Cell>
+    <Cell/>
+    <Cell><Data ss:Type="String">Life</Data></Cell>
+    <Cell><Data ss:Type="String">New Vantage III</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell><Data ss:Type="Number">930.00</Data></Cell>
+    <Cell><Data ss:Type="String">               </Data></Cell>
+    <Cell><Data ss:Type="String">                              </Data></Cell>
+    <Cell><Data ss:Type="String">Pending</Data></Cell>
+    <Cell><Data ss:Type="String">[UC] Underwriting Review - Call to Client</Data></Cell>
+    <Cell><Data ss:Type="String">K099581428</Data></Cell>
+    <Cell><Data ss:Type="String">HUNTER, ALISHA</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">0904585</Data></Cell>
+    <Cell><Data ss:Type="String">AARON SINGLETON</Data></Cell>
+    <Cell/>
+    <Cell><Data ss:Type="String">Life</Data></Cell>
+    <Cell><Data ss:Type="String">New Vantage III</Data></Cell>
+    <Cell><Data ss:Type="DateTime">2026-06-14T00:00:00.000</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell><Data ss:Type="Number">1228.80</Data></Cell>
+    <Cell><Data ss:Type="String">               </Data></Cell>
+    <Cell><Data ss:Type="String">                              </Data></Cell>
+    <Cell><Data ss:Type="String">Lapsed</Data></Cell>
+    <Cell><Data ss:Type="String">[CA] Cancelled</Data></Cell>
+    <Cell><Data ss:Type="String">K099581428</Data></Cell>
+    <Cell><Data ss:Type="String">HUNTER, ALISHA</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">0973354</Data></Cell>
+    <Cell><Data ss:Type="String">DERRICK HOLLAND</Data></Cell>
+    <Cell/>
+    <Cell><Data ss:Type="String">Life</Data></Cell>
+    <Cell><Data ss:Type="String">New Vantage III</Data></Cell>
+    <Cell><Data ss:Type="DateTime">2026-05-09T00:00:00.000</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell><Data ss:Type="Number">1150.92</Data></Cell>
+    <Cell><Data ss:Type="String">               </Data></Cell>
+    <Cell><Data ss:Type="String">                              </Data></Cell>
+    <Cell><Data ss:Type="String">Active</Data></Cell>
+    <Cell/>
+    <Cell><Data ss:Type="String">K099581428</Data></Cell>
+    <Cell><Data ss:Type="String">HUNTER, ALISHA</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">0927393</Data></Cell>
+    <Cell><Data ss:Type="String">MARY BELL</Data></Cell>
+    <Cell/>
+    <Cell><Data ss:Type="String">Life</Data></Cell>
+    <Cell><Data ss:Type="String">New Vantage I</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell><Data ss:Type="Number">849.72</Data></Cell>
+    <Cell><Data ss:Type="String">               </Data></Cell>
+    <Cell><Data ss:Type="String">                              </Data></Cell>
+    <Cell><Data ss:Type="String">Declined</Data></Cell>
+    <Cell><Data ss:Type="String">[DC] Medical History</Data></Cell>
+    <Cell><Data ss:Type="String">K773161015</Data></Cell>
+    <Cell><Data ss:Type="String">LARSON, ELLEN</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">0910878</Data></Cell>
+    <Cell><Data ss:Type="String">JESSICA HALL</Data></Cell>
+    <Cell/>
+    <Cell><Data ss:Type="String">Life</Data></Cell>
+    <Cell><Data ss:Type="String">New Vantage I</Data></Cell>
+    <Cell><Data ss:Type="DateTime">2026-05-19T00:00:00.000</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell><Data ss:Type="Number">1083.60</Data></Cell>
+    <Cell><Data ss:Type="String">               </Data></Cell>
+    <Cell><Data ss:Type="String">                              </Data></Cell>
+    <Cell><Data ss:Type="String">Active</Data></Cell>
+    <Cell/>
+    <Cell><Data ss:Type="String">K099581428</Data></Cell>
+    <Cell><Data ss:Type="String">HUNTER, ALISHA</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">0924905</Data></Cell>
+    <Cell><Data ss:Type="String">MELANIE SMITH</Data></Cell>
+    <Cell/>
+    <Cell><Data ss:Type="String">Life</Data></Cell>
+    <Cell><Data ss:Type="String">New Vantage II</Data></Cell>
+    <Cell><Data ss:Type="DateTime">2026-07-30T00:00:00.000</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell><Data ss:Type="Number">1194.36</Data></Cell>
+    <Cell><Data ss:Type="String">               </Data></Cell>
+    <Cell><Data ss:Type="String">                              </Data></Cell>
+    <Cell><Data ss:Type="String">Active</Data></Cell>
+    <Cell/>
+    <Cell><Data ss:Type="String">K099581428</Data></Cell>
+    <Cell><Data ss:Type="String">HUNTER, ALISHA</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">0985494</Data></Cell>
+    <Cell><Data ss:Type="String">RANDALL BRYANT</Data></Cell>
+    <Cell/>
+    <Cell><Data ss:Type="String">Life</Data></Cell>
+    <Cell><Data ss:Type="String">New Vantage I</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell><Data ss:Type="Number">557.16</Data></Cell>
+    <Cell><Data ss:Type="String">               </Data></Cell>
+    <Cell><Data ss:Type="String">                              </Data></Cell>
+    <Cell><Data ss:Type="String">Pending</Data></Cell>
+    <Cell><Data ss:Type="String">[PH] Waiting for PHI</Data></Cell>
+    <Cell><Data ss:Type="String">K099581428</Data></Cell>
+    <Cell><Data ss:Type="String">HUNTER, ALISHA</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">0907384</Data></Cell>
+    <Cell><Data ss:Type="String">PHYLLIS JOHNSON</Data></Cell>
+    <Cell/>
+    <Cell><Data ss:Type="String">Life</Data></Cell>
+    <Cell><Data ss:Type="String">New Vantage I</Data></Cell>
+    <Cell><Data ss:Type="DateTime">2026-08-06T00:00:00.000</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell><Data ss:Type="Number">542.16</Data></Cell>
+    <Cell><Data ss:Type="String">               </Data></Cell>
+    <Cell><Data ss:Type="String">                              </Data></Cell>
+    <Cell><Data ss:Type="String">Active</Data></Cell>
+    <Cell/>
+    <Cell><Data ss:Type="String">K773161015</Data></Cell>
+    <Cell><Data ss:Type="String">LARSON, ELLEN</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">0932858</Data></Cell>
+    <Cell><Data ss:Type="String">MICHAEL WILLIAMS</Data></Cell>
+    <Cell/>
+    <Cell><Data ss:Type="String">Life</Data></Cell>
+    <Cell><Data ss:Type="String">New Vantage III</Data></Cell>
+    <Cell><Data ss:Type="DateTime">2026-08-07T00:00:00.000</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell><Data ss:Type="Number">678.00</Data></Cell>
+    <Cell><Data ss:Type="String">               </Data></Cell>
+    <Cell><Data ss:Type="String">                              </Data></Cell>
+    <Cell><Data ss:Type="String">Active</Data></Cell>
+    <Cell/>
+    <Cell><Data ss:Type="String">K773161015</Data></Cell>
+    <Cell><Data ss:Type="String">LARSON, ELLEN</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">0989971</Data></Cell>
+    <Cell><Data ss:Type="String">KATIE ROBERTS</Data></Cell>
+    <Cell/>
+    <Cell><Data ss:Type="String">Life</Data></Cell>
+    <Cell><Data ss:Type="String">New Vantage III</Data></Cell>
+    <Cell><Data ss:Type="DateTime">2026-08-10T00:00:00.000</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell><Data ss:Type="Number">272.76</Data></Cell>
+    <Cell><Data ss:Type="String">               </Data></Cell>
+    <Cell><Data ss:Type="String">                              </Data></Cell>
+    <Cell><Data ss:Type="String">Active</Data></Cell>
+    <Cell/>
+    <Cell><Data ss:Type="String">K773161015</Data></Cell>
+    <Cell><Data ss:Type="String">LARSON, ELLEN</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">0922536</Data></Cell>
+    <Cell><Data ss:Type="String">EVAN SHELTON</Data></Cell>
+    <Cell/>
+    <Cell><Data ss:Type="String">Life</Data></Cell>
+    <Cell><Data ss:Type="String">New Vantage III</Data></Cell>
+    <Cell><Data ss:Type="DateTime">2026-07-09T00:00:00.000</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell><Data ss:Type="Number">702.60</Data></Cell>
+    <Cell><Data ss:Type="String">               </Data></Cell>
+    <Cell><Data ss:Type="String">                              </Data></Cell>
+    <Cell><Data ss:Type="String">Active</Data></Cell>
+    <Cell/>
+    <Cell><Data ss:Type="String">K099581428</Data></Cell>
+    <Cell><Data ss:Type="String">HUNTER, ALISHA</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">0919398</Data></Cell>
+    <Cell><Data ss:Type="String">DEBORAH HARDING</Data></Cell>
+    <Cell/>
+    <Cell><Data ss:Type="String">Life</Data></Cell>
+    <Cell><Data ss:Type="String">New Vantage III</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell><Data ss:Type="Number">316.92</Data></Cell>
+    <Cell><Data ss:Type="String">               </Data></Cell>
+    <Cell><Data ss:Type="String">                              </Data></Cell>
+    <Cell><Data ss:Type="String">Declined</Data></Cell>
+    <Cell><Data ss:Type="String">[DC] Medical History</Data></Cell>
+    <Cell><Data ss:Type="String">K773161015</Data></Cell>
+    <Cell><Data ss:Type="String">LARSON, ELLEN</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">0950063</Data></Cell>
+    <Cell><Data ss:Type="String">TAMMY CHAPMAN</Data></Cell>
+    <Cell/>
+    <Cell><Data ss:Type="String">Life</Data></Cell>
+    <Cell><Data ss:Type="String">New Vantage III</Data></Cell>
+    <Cell><Data ss:Type="DateTime">2026-06-10T00:00:00.000</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell><Data ss:Type="Number">576.60</Data></Cell>
+    <Cell><Data ss:Type="String">               </Data></Cell>
+    <Cell><Data ss:Type="String">                              </Data></Cell>
+    <Cell><Data ss:Type="String">Active</Data></Cell>
+    <Cell/>
+    <Cell><Data ss:Type="String">K773161015</Data></Cell>
+    <Cell><Data ss:Type="String">LARSON, ELLEN</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">0997714</Data></Cell>
+    <Cell><Data ss:Type="String">REGINA RODRIGUEZ</Data></Cell>
+    <Cell/>
+    <Cell><Data ss:Type="String">Life</Data></Cell>
+    <Cell><Data ss:Type="String">New Vantage II</Data></Cell>
+    <Cell><Data ss:Type="DateTime">2026-06-12T00:00:00.000</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell><Data ss:Type="Number">1101.12</Data></Cell>
+    <Cell><Data ss:Type="String">               </Data></Cell>
+    <Cell><Data ss:Type="String">                              </Data></Cell>
+    <Cell><Data ss:Type="String">Active</Data></Cell>
+    <Cell/>
+    <Cell><Data ss:Type="String">K773161015</Data></Cell>
+    <Cell><Data ss:Type="String">LARSON, ELLEN</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">0958575</Data></Cell>
+    <Cell><Data ss:Type="String">GARY JONES</Data></Cell>
+    <Cell/>
+    <Cell><Data ss:Type="String">Life</Data></Cell>
+    <Cell><Data ss:Type="String">New Vantage III</Data></Cell>
+    <Cell><Data ss:Type="DateTime">2026-08-06T00:00:00.000</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell><Data ss:Type="Number">1090.20</Data></Cell>
+    <Cell><Data ss:Type="String">               </Data></Cell>
+    <Cell><Data ss:Type="String">                              </Data></Cell>
+    <Cell><Data ss:Type="String">Cancelled</Data></Cell>
+    <Cell><Data ss:Type="String">[NP] Non Payment of Premium</Data></Cell>
+    <Cell><Data ss:Type="String">K099581428</Data></Cell>
+    <Cell><Data ss:Type="String">HUNTER, ALISHA</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">0909083</Data></Cell>
+    <Cell><Data ss:Type="String">AMBER WILSON</Data></Cell>
+    <Cell/>
+    <Cell><Data ss:Type="String">Life</Data></Cell>
+    <Cell><Data ss:Type="String">New Vantage I</Data></Cell>
+    <Cell><Data ss:Type="DateTime">2026-05-07T00:00:00.000</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell><Data ss:Type="Number">450.96</Data></Cell>
+    <Cell><Data ss:Type="String">               </Data></Cell>
+    <Cell><Data ss:Type="String">                              </Data></Cell>
+    <Cell><Data ss:Type="String">Lapsed</Data></Cell>
+    <Cell><Data ss:Type="String">[CA] Cancelled</Data></Cell>
+    <Cell><Data ss:Type="String">K773161015</Data></Cell>
+    <Cell><Data ss:Type="String">LARSON, ELLEN</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">0951786</Data></Cell>
+    <Cell><Data ss:Type="String">SARAH ATKINSON</Data></Cell>
+    <Cell/>
+    <Cell><Data ss:Type="String">Life</Data></Cell>
+    <Cell><Data ss:Type="String">New Vantage III</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell><Data ss:Type="Number">718.20</Data></Cell>
+    <Cell><Data ss:Type="String">               </Data></Cell>
+    <Cell><Data ss:Type="String">                              </Data></Cell>
+    <Cell><Data ss:Type="String">Pending</Data></Cell>
+    <Cell><Data ss:Type="String">[72] Awaiting Signed Amendment</Data></Cell>
+    <Cell><Data ss:Type="String">K773161015</Data></Cell>
+    <Cell><Data ss:Type="String">LARSON, ELLEN</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">0987368</Data></Cell>
+    <Cell><Data ss:Type="String">BEVERLY ANDERSON</Data></Cell>
+    <Cell/>
+    <Cell><Data ss:Type="String">Life</Data></Cell>
+    <Cell><Data ss:Type="String">New Vantage III</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell><Data ss:Type="Number">1073.16</Data></Cell>
+    <Cell><Data ss:Type="String">               </Data></Cell>
+    <Cell><Data ss:Type="String">                              </Data></Cell>
+    <Cell><Data ss:Type="String">Pending</Data></Cell>
+    <Cell><Data ss:Type="String">[70] Approved - Awaiting Issue</Data></Cell>
+    <Cell><Data ss:Type="String">K099581428</Data></Cell>
+    <Cell><Data ss:Type="String">HUNTER, ALISHA</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">0929680</Data></Cell>
+    <Cell><Data ss:Type="String">MARIA SMITH</Data></Cell>
+    <Cell/>
+    <Cell><Data ss:Type="String">Life</Data></Cell>
+    <Cell><Data ss:Type="String">New Vantage III</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell><Data ss:Type="Number">663.24</Data></Cell>
+    <Cell><Data ss:Type="String">               </Data></Cell>
+    <Cell><Data ss:Type="String">                              </Data></Cell>
+    <Cell><Data ss:Type="String">Declined</Data></Cell>
+    <Cell><Data ss:Type="String">[DC] Medical History</Data></Cell>
+    <Cell><Data ss:Type="String">K773161015</Data></Cell>
+    <Cell><Data ss:Type="String">LARSON, ELLEN</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">0986488</Data></Cell>
+    <Cell><Data ss:Type="String">RYAN FLORES</Data></Cell>
+    <Cell/>
+    <Cell><Data ss:Type="String">Life</Data></Cell>
+    <Cell><Data ss:Type="String">New Vantage III</Data></Cell>
+    <Cell><Data ss:Type="DateTime">2026-04-28T00:00:00.000</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell><Data ss:Type="Number">983.04</Data></Cell>
+    <Cell><Data ss:Type="String">               </Data></Cell>
+    <Cell><Data ss:Type="String">                              </Data></Cell>
+    <Cell><Data ss:Type="String">Active</Data></Cell>
+    <Cell/>
+    <Cell><Data ss:Type="String">K099581428</Data></Cell>
+    <Cell><Data ss:Type="String">HUNTER, ALISHA</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">0933380</Data></Cell>
+    <Cell><Data ss:Type="String">MARK KENNEDY</Data></Cell>
+    <Cell/>
+    <Cell><Data ss:Type="String">Life</Data></Cell>
+    <Cell><Data ss:Type="String">New Vantage III</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell><Data ss:Type="Number">1313.16</Data></Cell>
+    <Cell><Data ss:Type="String">               </Data></Cell>
+    <Cell><Data ss:Type="String">                              </Data></Cell>
+    <Cell><Data ss:Type="String">Pending</Data></Cell>
+    <Cell><Data ss:Type="String">[PH] Waiting for PHI</Data></Cell>
+    <Cell><Data ss:Type="String">K099581428</Data></Cell>
+    <Cell><Data ss:Type="String">HUNTER, ALISHA</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">0998951</Data></Cell>
+    <Cell><Data ss:Type="String">MICHAEL RAY</Data></Cell>
+    <Cell/>
+    <Cell><Data ss:Type="String">Life</Data></Cell>
+    <Cell><Data ss:Type="String">New Vantage II</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell><Data ss:Type="Number">1136.64</Data></Cell>
+    <Cell><Data ss:Type="String">               </Data></Cell>
+    <Cell><Data ss:Type="String">                              </Data></Cell>
+    <Cell><Data ss:Type="String">Cancelled</Data></Cell>
+    <Cell><Data ss:Type="String">[UW] Unable to Underwrite</Data></Cell>
+    <Cell><Data ss:Type="String">K773161015</Data></Cell>
+    <Cell><Data ss:Type="String">LARSON, ELLEN</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">0996145</Data></Cell>
+    <Cell><Data ss:Type="String">PATRICIA CRANE</Data></Cell>
+    <Cell/>
+    <Cell><Data ss:Type="String">Life</Data></Cell>
+    <Cell><Data ss:Type="String">New Vantage III</Data></Cell>
+    <Cell><Data ss:Type="DateTime">2026-04-23T00:00:00.000</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell><Data ss:Type="Number">356.40</Data></Cell>
+    <Cell><Data ss:Type="String">               </Data></Cell>
+    <Cell><Data ss:Type="String">                              </Data></Cell>
+    <Cell><Data ss:Type="String">Lapsed</Data></Cell>
+    <Cell><Data ss:Type="String">[CV] Lapsed without Cash Value</Data></Cell>
+    <Cell><Data ss:Type="String">K099581428</Data></Cell>
+    <Cell><Data ss:Type="String">HUNTER, ALISHA</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">0997238</Data></Cell>
+    <Cell><Data ss:Type="String">VERNON BOYD</Data></Cell>
+    <Cell/>
+    <Cell><Data ss:Type="String">Life</Data></Cell>
+    <Cell><Data ss:Type="String">New Vantage I</Data></Cell>
+    <Cell><Data ss:Type="DateTime">2026-02-21T00:00:00.000</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell><Data ss:Type="Number">1233.12</Data></Cell>
+    <Cell><Data ss:Type="String">               </Data></Cell>
+    <Cell><Data ss:Type="String">                              </Data></Cell>
+    <Cell><Data ss:Type="String">Lapsed</Data></Cell>
+    <Cell><Data ss:Type="String">[CV] Lapsed without Cash Value</Data></Cell>
+    <Cell><Data ss:Type="String">K099581428</Data></Cell>
+    <Cell><Data ss:Type="String">HUNTER, ALISHA</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">0931291</Data></Cell>
+    <Cell><Data ss:Type="String">SAMUEL FLORES</Data></Cell>
+    <Cell/>
+    <Cell><Data ss:Type="String">Life</Data></Cell>
+    <Cell><Data ss:Type="String">New Vantage III</Data></Cell>
+    <Cell><Data ss:Type="DateTime">2026-07-31T00:00:00.000</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell><Data ss:Type="Number">671.76</Data></Cell>
+    <Cell><Data ss:Type="String">               </Data></Cell>
+    <Cell><Data ss:Type="String">                              </Data></Cell>
+    <Cell><Data ss:Type="String">Cancelled</Data></Cell>
+    <Cell><Data ss:Type="String">[NP] Non Payment of Premium</Data></Cell>
+    <Cell><Data ss:Type="String">K773161015</Data></Cell>
+    <Cell><Data ss:Type="String">LARSON, ELLEN</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">0945677</Data></Cell>
+    <Cell><Data ss:Type="String">ANGELA HICKS</Data></Cell>
+    <Cell/>
+    <Cell><Data ss:Type="String">Life</Data></Cell>
+    <Cell><Data ss:Type="String">New Vantage I</Data></Cell>
+    <Cell><Data ss:Type="DateTime">2026-07-26T00:00:00.000</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell><Data ss:Type="Number">898.20</Data></Cell>
+    <Cell><Data ss:Type="String">               </Data></Cell>
+    <Cell><Data ss:Type="String">                              </Data></Cell>
+    <Cell><Data ss:Type="String">Active</Data></Cell>
+    <Cell/>
+    <Cell><Data ss:Type="String">K773161015</Data></Cell>
+    <Cell><Data ss:Type="String">LARSON, ELLEN</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">0940786</Data></Cell>
+    <Cell><Data ss:Type="String">DIANE CORTEZ</Data></Cell>
+    <Cell/>
+    <Cell><Data ss:Type="String">Life</Data></Cell>
+    <Cell><Data ss:Type="String">New Vantage III</Data></Cell>
+    <Cell><Data ss:Type="DateTime">2026-07-15T00:00:00.000</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell><Data ss:Type="Number">882.72</Data></Cell>
+    <Cell><Data ss:Type="String">               </Data></Cell>
+    <Cell><Data ss:Type="String">                              </Data></Cell>
+    <Cell><Data ss:Type="String">Cancelled</Data></Cell>
+    <Cell><Data ss:Type="String">[NP] Non Payment of Premium</Data></Cell>
+    <Cell><Data ss:Type="String">K773161015</Data></Cell>
+    <Cell><Data ss:Type="String">LARSON, ELLEN</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">0970038</Data></Cell>
+    <Cell><Data ss:Type="String">LISA DALTON</Data></Cell>
+    <Cell/>
+    <Cell><Data ss:Type="String">Life</Data></Cell>
+    <Cell><Data ss:Type="String">New Vantage I</Data></Cell>
+    <Cell><Data ss:Type="DateTime">2026-06-18T00:00:00.000</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell><Data ss:Type="Number">1133.04</Data></Cell>
+    <Cell><Data ss:Type="String">               </Data></Cell>
+    <Cell><Data ss:Type="String">                              </Data></Cell>
+    <Cell><Data ss:Type="String">Cancelled</Data></Cell>
+    <Cell><Data ss:Type="String">[NT] Not Taken (Cancelled during Free Look)</Data></Cell>
+    <Cell><Data ss:Type="String">K773161015</Data></Cell>
+    <Cell><Data ss:Type="String">LARSON, ELLEN</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">0964687</Data></Cell>
+    <Cell><Data ss:Type="String">JEREMY BARNETT</Data></Cell>
+    <Cell/>
+    <Cell><Data ss:Type="String">Life</Data></Cell>
+    <Cell><Data ss:Type="String">New Vantage III</Data></Cell>
+    <Cell><Data ss:Type="DateTime">2026-07-30T00:00:00.000</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell><Data ss:Type="Number">1142.16</Data></Cell>
+    <Cell><Data ss:Type="String">               </Data></Cell>
+    <Cell><Data ss:Type="String">                              </Data></Cell>
+    <Cell><Data ss:Type="String">Cancelled</Data></Cell>
+    <Cell><Data ss:Type="String">[NP] Non Payment of Premium</Data></Cell>
+    <Cell><Data ss:Type="String">K773161015</Data></Cell>
+    <Cell><Data ss:Type="String">LARSON, ELLEN</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+   </Row>
+  </Table>
+ </Worksheet>
+</Workbook>

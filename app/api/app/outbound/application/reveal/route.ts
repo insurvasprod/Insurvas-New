@@ -2,8 +2,12 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { audit } from "@/lib/audit/log";
+import { ApplicationError, db } from "@/lib/applications/db";
+import { revealField } from "@/lib/applications/mutations";
+import { LEAD_SSN_KEYS } from "@/lib/applications/prefill";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import { isSensitiveFieldKey } from "@/lib/verification/sensitive";
+import { secondFactorBlock } from "@/lib/tenantAuth/twoFactor";
 import { getVerificationPanel, VerificationError } from "@/lib/verification/service";
 
 const bodySchema = z.object({
@@ -28,6 +32,9 @@ const APPLICATION_ROLES = ["owner", "producer"] as const;
 export async function POST(request: Request) {
   const auth = await requireFeatureRole("outbound_dialing", APPLICATION_ROLES);
   if (auth instanceof NextResponse) return auth;
+  // LA-8.2: an SSN or bank detail is revealed only by someone with two-factor on, in a session that passed it.
+  const blocked = await secondFactorBlock(auth.context);
+  if (blocked) return blocked;
   const parsed = bodySchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Choose a valid field to reveal" }, { status: 400 });
   if (!isSensitiveFieldKey(parsed.data.field_key)) return NextResponse.json({ error: "That field is not masked." }, { status: 400 });
@@ -36,6 +43,15 @@ export async function POST(request: Request) {
     const panel = await getVerificationPanel(auth.context.tenantId, auth.context.userId, parsed.data.work_item_id);
     const onForm = panel.sections.some((section) => section.fields.some((field) => field.field_key === parsed.data.field_key));
     if (!onForm) return NextResponse.json({ error: "That field is not on this application." }, { status: 404 });
+    // An SSN is read back from the application's encrypted copy once there is one (that read writes
+    // the sensitive-access log and its own audit row) — never from the lead, whose plaintext is
+    // masked as soon as the application holds it. Before an application exists, the lead's value.
+    if (LEAD_SSN_KEYS.includes(parsed.data.field_key)) {
+      const fromApplication = await applicationSsn(auth.context.tenantId, auth.context.userId, parsed.data.work_item_id, request);
+      if (fromApplication !== null) return NextResponse.json({ field_key: parsed.data.field_key, value: fromApplication });
+      const onLead = panel.lead.values[parsed.data.field_key];
+      if (typeof onLead === "string" && /^\*{3}-\*{2}-\d{4}$/.test(onLead)) return NextResponse.json({ error: "The full number is kept on the application. Open it to read the number back." }, { status: 404 });
+    }
     const value = panel.lead.values[parsed.data.field_key] ?? null;
     await audit({
       actorType: "tenant",
@@ -48,10 +64,24 @@ export async function POST(request: Request) {
     });
     return NextResponse.json({ field_key: parsed.data.field_key, value });
   } catch (error) {
+    if (error instanceof ApplicationError) return NextResponse.json({ error: error.message, code: error.code }, { status: error.status });
     if (error instanceof VerificationError) {
       const status = error.code === "verification_owner_required" ? 403 : ["work_item_not_found", "lead_not_found"].includes(error.code) ? 404 : 500;
       return NextResponse.json({ error: error.message, code: error.code }, { status });
     }
     return NextResponse.json({ error: "Could not reveal this field. Nothing was shown." }, { status: 500 });
   }
+}
+
+/** The primary insured's encrypted SSN on the case this work item opened, revealed; null when none is stored. */
+async function applicationSsn(tenantId: string, userId: string, workItemId: string, request: Request): Promise<string | null> {
+  const kase = await db().from("tenant_application_cases").select("id").eq("tenant_id", tenantId).eq("work_item_id", workItemId).order("opened_at", { ascending: false }).limit(1);
+  const caseId = (kase.data as { id: string }[] | null)?.[0]?.id;
+  if (!caseId) return null;
+  const attempts = await db().from("tenant_applications").select("id").eq("tenant_id", tenantId).eq("case_id", caseId).eq("insured_role", "primary").order("attempt_no", { ascending: false });
+  for (const attempt of (attempts.data as { id: string }[] | null) ?? []) {
+    const stored = await db().from("tenant_application_values").select("application_id").eq("tenant_id", tenantId).eq("application_id", attempt.id).eq("field_key", "insured.ssn").not("value_ciphertext", "is", null).maybeSingle();
+    if (stored.data) return (await revealField({ tenantId, userId, request }, attempt.id, "insured.ssn", "web")).value;
+  }
+  return null;
 }

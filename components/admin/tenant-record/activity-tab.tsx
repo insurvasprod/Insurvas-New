@@ -11,9 +11,9 @@ import { TableCard } from "@/components/ui/table-card";
 
 // The boards' table vocabulary (settings primitives' `st`), restated here because a server
 // component cannot read values out of a "use client" module.
-const TH = "px-3 py-2 text-left text-[12px] leading-[1.33] font-semibold tracking-[0.02em] uppercase whitespace-nowrap text-[var(--muted)]";
-const TD = "border-t border-[var(--border)] px-3 py-2 align-top text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--body)]";
-const SUB = "block text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]";
+const TH = "px-3 py-2 text-left text-xs leading-[1.33] font-semibold tracking-[0.02em] uppercase whitespace-nowrap text-[var(--muted)]";
+const TD = "border-t border-[var(--border)] px-3 py-2 align-top text-sm leading-[1.5] tracking-[-0.02em] text-[var(--body)]";
+const SUB = "block text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]";
 
 const TARGET_LABELS: Record<string, string> = {
   tenant: "Agency",
@@ -63,10 +63,10 @@ export async function TenantActivityTab({ tenantId, page }: TenantTabProps & { p
     >
       {rows.length === 0 ? (
         <div className="px-4 py-10 text-center">
-          <p className="m-0 text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">
+          <p className="m-0 text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">
             {page > 1 ? "Nothing on this page" : "No recorded actions yet"}
           </p>
-          <p className="m-0 mt-1 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">
+          <p className="m-0 mt-1 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">
             {page > 1
               ? "The history is shorter than this."
               : "Staff and system actions on this agency appear here."}

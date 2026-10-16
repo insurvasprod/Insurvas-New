@@ -6,7 +6,7 @@ import {
   fetchLoginActivityPage,
   fetchLoginActivityStats,
 } from "@/lib/loginEvents/queries";
-import { DEFAULT_ACTIVITY_FILTERS, weekOverWeek } from "@/lib/loginEvents/present";
+import { DEFAULT_ACTIVITY_FILTERS, staffLoginsVisibleTo, weekOverWeek } from "@/lib/loginEvents/present";
 import { PageHeader } from "@/components/ui/page-header";
 import { BoardStatGrid, BoardStatTile } from "@/components/admin/board-stat-tile";
 import { ActivityFeed } from "@/components/admin/activity-feed";
@@ -30,7 +30,7 @@ export default async function ActivityPage() {
 
   const [stats, initial, lockouts] = await Promise.all([
     fetchLoginActivityStats(),
-    fetchLoginActivityPage({ page: 1, filters: DEFAULT_ACTIVITY_FILTERS }),
+    fetchLoginActivityPage({ page: 1, filters: DEFAULT_ACTIVITY_FILTERS, includeStaff: staffLoginsVisibleTo(admin.role) }),
     lockoutFootnote(admin.role === "super_admin"),
   ]);
 
@@ -65,7 +65,7 @@ export default async function ActivityPage() {
         />
       </BoardStatGrid>
 
-      <ActivityFeed initial={initial} />
+      <ActivityFeed initial={initial} viewerRole={admin.role} />
     </div>
   );
 }

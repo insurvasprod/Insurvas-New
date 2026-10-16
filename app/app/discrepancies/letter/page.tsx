@@ -6,6 +6,9 @@ import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { DisputeLetterPrint, DisputeLetterRecipient } from "@/components/app/dispute-letter-actions";
 import { DISCREPANCY_KIND_LABELS } from "@/lib/discrepancies/compute";
 import { getDisputeLetter, letterBody } from "@/lib/discrepancies/letter";
+import { BusinessIdentityMissingError } from "@/lib/agencyProfile/identity";
+import { BUSINESS_FIELD_ANCHORS } from "@/lib/agencyProfile/requirements";
+import Link from "next/link";
 import { statementDay, statementMoney, statementPeriod } from "@/lib/ledger/statementConstants";
 import { hasTenantPermission } from "@/lib/tenantAuth/permissions";
 
@@ -31,7 +34,19 @@ export default async function DisputeLetterPage({ searchParams }: { searchParams
   if (!hasTenantPermission(guard.role, "statements.view")) return <RoleGateNotice featureLabel="Discrepancies" detail="Dispute letters are prepared by the account owner or a bookkeeper." />;
 
   const { carrier = "", ids = "" } = await searchParams;
-  const letter = await getDisputeLetter(guard.context.tenantId, guard.context.userId, carrier, ids.split(",").map((id) => id.trim()));
+  let letter: Awaited<ReturnType<typeof getDisputeLetter>>;
+  try {
+    letter = await getDisputeLetter(guard.context.tenantId, guard.context.userId, carrier, ids.split(",").map((id) => id.trim()));
+  } catch (error) {
+    if (!(error instanceof BusinessIdentityMissingError)) throw error;
+    // LA-8.3: the field and the document, both named, and a way straight to the field.
+    return (
+      <main className="mx-auto flex max-w-2xl flex-col items-center gap-3 px-6 py-16 text-center text-sm">
+        <p className="m-0">{error.message}</p>
+        <Link className="font-semibold underline" href={`/app/settings#business-identity/${BUSINESS_FIELD_ANCHORS[error.missing[0]]}`}>Open Business identity</Link>
+      </main>
+    );
+  }
 
   if (!letter) {
     return (

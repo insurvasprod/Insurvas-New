@@ -5,18 +5,21 @@ import { assertApplicationOutcomeVerified, verificationStatus } from "@/lib/disp
 import { isApplicationOutcome, outcomeDescription } from "@/lib/dispositions/applicationOutcome";
 import { answerDisposition, completeDisposition, DispositionError, getDispositionWizard, listMappedOutcomes } from "@/lib/dispositions/service";
 import { DO_NOT_CALL_DISPOSITION_KEY, type DispositionWizard } from "@/lib/dispositions/types";
+import { ensureDefaultPublisherDispositionMappings } from "@/lib/pipelines/service";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 
 const uuid = z.string().uuid();
 const bodySchema = z.discriminatedUnion("action", [
+  // Opening the wizard starts (or resumes) the walk, a write — so it is a POST, never a GET.
+  z.object({ action: z.literal("start"), work_item_id: uuid }).strict(),
   z.object({ action: z.literal("answer"), work_item_id: uuid, walk_id: uuid, node_id: uuid, sequence: z.number().int().min(0).max(100), answer: z.unknown().optional(), option_key: z.string().optional() }).strict(),
-  z.object({ action: z.literal("complete"), work_item_id: uuid, walk_id: uuid, disposition_key: z.string().regex(/^[a-z][a-z0-9_]*$/), callback_subtype: z.string().max(120).optional(), callback_local: z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/).optional(), callback_assigned_to: uuid.nullable().optional(), callback_idempotency_key: z.string().max(120).optional() }).strict(),
+  z.object({ action: z.literal("complete"), work_item_id: uuid, walk_id: uuid, disposition_key: z.string().regex(/^[a-z][a-z0-9_]*$/), callback_subtype: z.string().max(120).optional(), callback_local: z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/).optional(), callback_assigned_to: uuid.nullable().optional(), callback_idempotency_key: z.string().max(120).optional(), callback_timezone: z.string().max(64).optional() }).strict(),
 ]);
 
 function errorResponse(error: unknown) {
   if (!(error instanceof DispositionError)) return NextResponse.json({ error: "The disposition service is unavailable." }, { status: 500 });
-  const status = ["owner_required"].includes(error.code) ? 403 : ["work_item_not_found", "walk_not_found", "flow_not_found", "node_not_found", "option_not_found"].includes(error.code) ? 404 : ["walk_incomplete", "flow_changed", "verification_incomplete"].includes(error.code) ? 409 : ["invalid_input", "callback_date_required", "callback_outside_window", "option_required", "disposition_not_found", "phone_required"].includes(error.code) ? 400 : 500;
+  const status = ["owner_required"].includes(error.code) ? 403 : ["work_item_not_found", "walk_not_found", "flow_not_found", "node_not_found", "option_not_found"].includes(error.code) ? 404 : ["walk_incomplete", "flow_changed", "verification_incomplete"].includes(error.code) ? 409 : ["invalid_input", "callback_date_required", "callback_outside_window", "option_required", "disposition_not_found", "phone_required", "customer_timezone_unknown", "customer_timezone_ambiguous"].includes(error.code) ? 400 : 500;
   return NextResponse.json({ error: error.message, code: error.code }, { status });
 }
 
@@ -29,6 +32,13 @@ function errorResponse(error: unknown) {
  */
 async function withOutcomeContext(tenantId: string, userId: string, wizard: DispositionWizard) {
   const supabase = getSupabaseServiceClient();
+  // The default outcome mappings are seeded here too, not only when an outcome is completed:
+  // otherwise an agency's very first call offers no outcome, so none can ever be completed. An
+  // outcome maps to one stage per agency (stage_dispositions is unique per tenant and key), and the
+  // defaults live on the agency's publisher pipeline — so that pipeline is seeded whichever pipeline
+  // this lead is in (a marketing or affiliate lead's first call used to offer nothing).
+  const publisher = await supabase.from("tenant_pipelines").select("id").eq("tenant_id", tenantId).eq("partner_type", "publisher").order("is_default", { ascending: false }).limit(1).maybeSingle();
+  if (publisher.data?.id) await ensureDefaultPublisherDispositionMappings(tenantId, publisher.data.id).catch((error) => console.error("[disposition] default outcomes could not be seeded", error));
   const [outcomes, verification, flowStage] = await Promise.all([
     listMappedOutcomes(tenantId).catch(() => null),
     verificationStatus(tenantId, wizard.workItem.id).catch(() => null),
@@ -55,13 +65,14 @@ async function withOutcomeContext(tenantId: string, userId: string, wizard: Disp
   };
 }
 
-export async function GET(request: Request) {
+/**
+ * Loading the wizard starts a walk (getDispositionWizard writes one), and a GET must be free of side
+ * effects — prefetchers, link scanners and retries replay it. Opening it is POST { action: "start" }.
+ */
+export async function GET() {
   const auth = await requireFeatureRole("inbound_transfers", ["owner", "producer"]);
   if (auth instanceof NextResponse) return auth;
-  const parsed = uuid.safeParse(new URL(request.url).searchParams.get("work_item_id"));
-  if (!parsed.success) return NextResponse.json({ error: "Choose a valid transfer." }, { status: 400 });
-  try { return NextResponse.json(await withOutcomeContext(auth.context.tenantId, auth.context.userId, await getDispositionWizard(auth.context.tenantId, auth.context.userId, parsed.data))); }
-  catch (error) { return errorResponse(error); }
+  return NextResponse.json({ error: "Open the call outcome wizard with POST { action: \"start\", work_item_id }.", code: "method_not_allowed" }, { status: 405, headers: { Allow: "POST" } });
 }
 
 export async function POST(request: Request) {
@@ -70,6 +81,7 @@ export async function POST(request: Request) {
   const parsed = bodySchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Choose a valid disposition action." }, { status: 400 });
   try {
+    if (parsed.data.action === "start") return NextResponse.json(await withOutcomeContext(auth.context.tenantId, auth.context.userId, await getDispositionWizard(auth.context.tenantId, auth.context.userId, parsed.data.work_item_id)));
     if (parsed.data.action === "answer") {
       const result = await answerDisposition(auth.context.tenantId, auth.context.userId, parsed.data);
       return NextResponse.json({ result, wizard: await withOutcomeContext(auth.context.tenantId, auth.context.userId, await getDispositionWizard(auth.context.tenantId, auth.context.userId, parsed.data.work_item_id)) });

@@ -17,7 +17,7 @@ export default async function ConsentPage() {
       <FeatureGateNotice
         guard={guard}
         featureLabel="Consent locker"
-        description="Every consent certificate captured with a posted lead, searchable by name or number, with the copy we hold ourselves."
+        description="Every consent certificate, searchable, with our stored copy."
       />
     );
   if (!["owner", "producer", "assistant"].includes(guard.role))

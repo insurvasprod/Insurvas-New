@@ -10,6 +10,7 @@ import { ClearFiltersButton, DataToolbar, RefreshButton, ToolbarSearch, toolbarC
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageLoading } from "@/components/ui/page-loading";
+import { InfoTip } from "@/components/ui/info-tip";
 import { EmptyState, ErrorState, NoMatches, SectionLoading } from "@/components/ui/page-states";
 import { Meter, StatStrip, StatTile, type MeterTone } from "@/components/ui/stat";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
@@ -139,6 +140,7 @@ export function ConsentLockerWorkspace() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <ViewTabs
           label="Consent locker views"
+          idPrefix="consent-view"
           value={tab}
           onChange={setTab}
           tabs={[
@@ -150,6 +152,7 @@ export function ConsentLockerWorkspace() {
         <Button variant="outline" asChild><a href={`/api/app/consent?${query({ format: "csv" })}`}><Download aria-hidden="true" />Export</a></Button>
       </div>
 
+      <div role="tabpanel" aria-labelledby={`consent-view-${tab === "leads" || !loaded?.coverageAvailable ? "leads" : "coverage"}`} className="flex min-w-0 flex-col">
       {tab === "leads" || !loaded?.coverageAvailable ? (
         <TableCard
           className={LEADS_FILL}
@@ -189,7 +192,7 @@ export function ConsentLockerWorkspace() {
             : !loaded ? <SectionLoading rows={5} columns={5} label="Loading consent evidence" />
             : loaded.rows.length === 0 ? (filtered
               ? <NoMatches noun="leads" onClear={clearFilters} />
-              : <EmptyState title="No leads yet" hint="Evidence arrives with each posted or imported lead." />)
+              : <EmptyState title="No leads yet" hint="Evidence arrives with each posted or imported lead." action={<Button variant="outline" asChild><Link href="/app/import">Import leads</Link></Button>} />)
             : <Table className="min-w-[1000px]">
                 <TableHeader><TableRow>
                   <TableHead>Lead</TableHead>
@@ -223,14 +226,13 @@ export function ConsentLockerWorkspace() {
         <TableCard
           className={FILL}
           toolbar={<DataToolbar actions={<RefreshButton onClick={() => void refresh()} refreshing={refreshing} />} />}
-          footer={loaded.coverage.length > 0 ? <span>Share of each vendor&rsquo;s leads with a stored copy of the certificate</span> : undefined}
         >
           {loaded.coverage.length === 0 ? <EmptyState title="No vendor coverage yet" hint="No vendor has supplied leads yet." />
             : <Table className="min-w-[640px]">
                 <TableHeader><TableRow>
                   <TableHead>Vendor</TableHead>
                   <TableHead className="text-right">Leads</TableHead>
-                  <TableHead className="text-right">Stored copy</TableHead>
+                  <TableHead className="text-right"><span className="inline-flex items-center gap-1">Stored copy<InfoTip label="About stored copy">The share of each vendor&rsquo;s leads with a stored copy of the certificate.</InfoTip></span></TableHead>
                   <TableHead className="w-[40%]"><span className="sr-only">Coverage</span></TableHead>
                 </TableRow></TableHeader>
                 <TableBody>
@@ -248,6 +250,7 @@ export function ConsentLockerWorkspace() {
               </Table>}
         </TableCard>
       )}
+      </div>
 
       <Dialog open={open !== null} onOpenChange={(next) => !next && setOpen(null)}>
         <DialogContent className="max-w-2xl">

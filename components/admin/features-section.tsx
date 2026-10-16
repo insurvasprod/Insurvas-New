@@ -114,7 +114,7 @@ export function FeaturesSection({
                 document.getElementById(`${baseId}-tab-${next.id}`)?.focus();
               }}
               className={cn(
-                "-mb-px h-10 cursor-pointer border-0 border-b-2 bg-transparent px-1 text-[14px] leading-[1.43] font-semibold tracking-[-0.01em] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]",
+                "-mb-px h-10 cursor-pointer border-0 border-b-2 bg-transparent px-1 text-sm leading-[1.43] font-semibold tracking-[-0.01em] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]",
                 active
                   ? "border-[var(--primary)] text-[var(--ink)]"
                   : "border-transparent text-[var(--muted)] hover:text-[var(--ink)]",

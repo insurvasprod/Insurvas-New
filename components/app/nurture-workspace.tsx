@@ -236,14 +236,14 @@ const SLOT_LOOK: Record<RotationSlot["state"], string> = {
   untried: "border-border bg-card [&>div:first-child]:text-[var(--body)]",
 };
 
-function PastBatches({ batches, baseline }: { batches: RecycleBatch[]; baseline: number | null }) {
+function PastBatches({ batches, baseline, onOpenRules }: { batches: RecycleBatch[]; baseline: number | null; onOpenRules?: () => void }) {
   const [page, setPage] = useState(1);
   const pageSize = useFittingPageSize(400, 45);
   const { current, rows } = paginate(batches, page, pageSize);
   return (
     <TableCard
       className={fullHeightCard(300)}
-      description={`Contact rate against the ${percent(baseline)} fresh leads got over the same span`}
+      description={`Rate vs ${percent(baseline)} for fresh leads over the same span`}
       footer={batches.length ? <Pager page={current} total={batches.length} noun="batches" pageSize={pageSize} onPage={setPage} /> : undefined}
     >
       {batches.length ? (
@@ -294,7 +294,11 @@ function PastBatches({ batches, baseline }: { batches: RecycleBatch[]; baseline:
           </tbody>
         </table>
       ) : (
-        <EmptyState title="No batch has run yet" hint="Build a recycle batch from a campaign's rule; its dials, contacts and policies are counted here." />
+        <EmptyState
+          title="No batch has run yet"
+          hint="Build one from a campaign's recycle rule."
+          action={onOpenRules ? <Button type="button" variant="outline" onClick={onOpenRules}>Open recycle rules</Button> : undefined}
+        />
       )}
     </TableCard>
   );
@@ -455,6 +459,7 @@ export function NurtureWorkspace() {
 
       <ViewTabs
         label="Recycling views"
+        controls="recycle-panel"
         value={tab}
         onChange={setTab}
         tabs={[
@@ -469,6 +474,7 @@ export function NurtureWorkspace() {
           run and any batch in flight — instead of a full card each (twelve cards ran ~5,000px). "Open rule"
           shows the full rule card (every control, the never-included line, Build a recycle batch) in a
           pop-up. Campaigns with work come first. */}
+      <div key={tab} role="tabpanel" id="recycle-panel" aria-labelledby={`recycle-panel-tab-${tab}`} className="min-w-0">
       {tab === "rules" && (
         campaigns.length ? (
           <TableCard className="flex flex-col lg:h-[calc(100dvh-var(--top-bar-h)-347px)] [&>*:nth-child(1)]:min-h-0 [&>*:nth-child(1)]:flex-1 [&>*:nth-child(1)]:overflow-auto [&_thead_th]:sticky [&_thead_th]:top-0 [&_thead_th]:z-[1] [&_thead_th]:bg-card">
@@ -513,23 +519,16 @@ export function NurtureWorkspace() {
           </TableCard>
         ) : (
           <TableCard>
-            <EmptyState title="No campaigns are configured yet" hint="Create a campaign under Vendors & campaigns before setting a recycle rule." />
+            <EmptyState
+              title="No campaigns yet"
+              hint="Create one to set a recycle rule."
+              action={<Button asChild type="button" variant="outline"><Link href="/app/campaigns">Vendors &amp; campaigns</Link></Button>}
+            />
           </TableCard>
         )
       )}
-      {(() => {
-        const opened = campaigns.find((campaign) => campaign.campaign_id === openIdle);
-        return (
-          <Dialog open={Boolean(opened)} onOpenChange={(open) => { if (!open) setOpenIdle(null); }}>
-            <DialogContent className="max-h-[90dvh] overflow-y-auto p-0 sm:max-w-[960px] [&>section]:border-0 [&>section]:shadow-none">
-              <DialogTitle className="sr-only">Recycle rule{opened ? ` · ${opened.campaign_name}` : ""}</DialogTitle>
-              {opened && card(opened)}
-            </DialogContent>
-          </Dialog>
-        );
-      })()}
 
-      {tab === "batches" && <PastBatches batches={batches} baseline={batchBaseline} />}
+      {tab === "batches" && <PastBatches batches={batches} baseline={batchBaseline} onOpenRules={() => setTab("rules")} />}
 
       {tab === "cadence" && (
         <div className="flex flex-col gap-6 xl:flex-row xl:items-start">
@@ -589,6 +588,20 @@ export function NurtureWorkspace() {
           </TableCard>
         </div>
       )}
+      </div>
+
+      {(() => {
+        const opened = campaigns.find((campaign) => campaign.campaign_id === openIdle);
+        return (
+          <Dialog open={Boolean(opened)} onOpenChange={(open) => { if (!open) setOpenIdle(null); }}>
+            <DialogContent className="max-h-[90dvh] overflow-y-auto p-0 sm:max-w-[960px] [&>section]:border-0 [&>section]:shadow-none">
+              <DialogTitle className="sr-only">Recycle rule{opened ? ` · ${opened.campaign_name}` : ""}</DialogTitle>
+              {opened && card(opened)}
+            </DialogContent>
+          </Dialog>
+        );
+      })()}
     </div>
   );
 }
+

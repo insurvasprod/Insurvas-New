@@ -66,9 +66,10 @@ export async function setUserStatus(
     // Name the state rather than saying "not allowed". The generic message the database raises
     // ("that user cannot move to this state from their current state") tells the admin neither
     // where the user is nor what would work.
+    const states = options.requireCurrentStatus.join(" or ");
     return NextResponse.json(
       {
-        error: `Only a ${options.requireCurrentStatus.join(" or ")} user can be ${options.actionLabel ?? target}. This user is ${user.status}.`,
+        error: `Only ${/^[aeiou]/i.test(states) ? "an" : "a"} ${states} user can be ${options.actionLabel ?? target}. This user is ${user.status}.`,
       },
       { status: 409 },
     );

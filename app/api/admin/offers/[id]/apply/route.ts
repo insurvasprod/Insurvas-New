@@ -29,7 +29,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({ code: "confirmation_required", warning: result.warning }, { status: 409 });
   }
   if (result.status === "rejected") {
-    return NextResponse.json({ error: applyFailureMessage(result.result) }, { status: 409 });
+    return NextResponse.json({ error: result.message ?? applyFailureMessage(result.result) }, { status: 409 });
   }
 
   await audit({

@@ -4,6 +4,7 @@ import { z } from "zod";
 import { audit } from "@/lib/audit/log";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import { isSensitiveFieldKey } from "@/lib/verification/sensitive";
+import { secondFactorBlock } from "@/lib/tenantAuth/twoFactor";
 import { getVerificationPanel, VerificationError } from "@/lib/verification/service";
 
 const bodySchema = z.object({
@@ -23,6 +24,9 @@ const bodySchema = z.object({
 export async function POST(request: Request) {
   const auth = await requireFeatureRole("inbound_transfers", ["owner", "producer", "assistant"]);
   if (auth instanceof NextResponse) return auth;
+  // LA-8.2: an SSN or bank detail is revealed only by someone with two-factor on, in a session that passed it.
+  const blocked = await secondFactorBlock(auth.context);
+  if (blocked) return blocked;
   const parsed = bodySchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Choose a valid field to reveal" }, { status: 400 });
   if (!isSensitiveFieldKey(parsed.data.field_key)) return NextResponse.json({ error: "That field is not masked." }, { status: 400 });

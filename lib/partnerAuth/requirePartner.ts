@@ -8,6 +8,15 @@ import { holdsAgencyMembership } from "@/lib/auth/planeSeparation";
 import { PARTNER_SESSION_COOKIE, verifyPartnerSessionToken, type PartnerSessionPayload } from "./session";
 import { isPartnerRole, type PartnerRole } from "./roles";
 import { isTenantSuspended } from "@/lib/tenants/suspension";
+import { getEntitlement } from "@/lib/entitlements/get";
+import { hasFeature } from "@/lib/entitlements/types";
+
+/**
+ * Partner logins are part of `publisher_records`, the feature that lets an agency have partners at
+ * all (LA-1 audit, 2026-10-15; the separate `partner_portal` key is archived). An agency whose plan
+ * no longer carries it closes the partner portal, the same way a suspended agency does.
+ */
+export const PARTNER_PORTAL_FEATURE = "publisher_records";
 
 export type PartnerContext = {
   userId: string;
@@ -41,7 +50,7 @@ const readPartnerContext = cache(async (): Promise<PartnerContext | null> => {
   // workspace, so a suspended agency closes the partner portal too (decision 4).
   // An agency account never opens the partner portal, whatever partner_users says
   // (lib/auth/planeSeparation.ts) — read in the same round trip.
-  const [{ data: membership }, { data: tenant }, isAgencyAccount] = await Promise.all([
+  const [{ data: membership }, { data: tenant }, isAgencyAccount, agencyHasPartners] = await Promise.all([
     supabase
       .from("partner_users")
       .select("tenant_id, partner_id, role, status, accepted_at, users!partner_users_user_id_fkey!inner(status, session_version), partners!inner(name, status, timezone)")
@@ -51,9 +60,12 @@ const readPartnerContext = cache(async (): Promise<PartnerContext | null> => {
       .maybeSingle(),
     supabase.from("tenants").select("status").eq("id", session.tenantId).maybeSingle<{ status: string }>(),
     holdsAgencyMembership(session.sub),
+    // Fails closed: an entitlement that cannot be read opens nothing.
+    getEntitlement(session.tenantId).then((entitlement) => hasFeature(entitlement, PARTNER_PORTAL_FEATURE), () => false),
   ]);
   if (isAgencyAccount) return null;
   if (!tenant || isTenantSuspended(tenant.status)) return null;
+  if (!agencyHasPartners) return null;
 
   type PartnerMembershipRow = {
     tenant_id: string;

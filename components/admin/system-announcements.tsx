@@ -1,5 +1,6 @@
 "use client";
 
+import { StatusChip } from "@/components/ui/status-chip";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 
 import {
@@ -11,7 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { BoardTableFooter } from "@/components/admin/board-table-footer";
-import { btn, control, Field, Pill, st, type PillTone } from "@/components/app/settings/primitives";
+import { btn, control, Field, st, type PillTone, pillTone } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { TableCard } from "@/components/ui/table-card";
 import { notify } from "@/lib/notify";
@@ -257,9 +258,9 @@ export function SystemAnnouncements({
                       <WindowCell start={item.starts_at} end={item.ends_at} />
                     </td>
                     <td className={st.td}>
-                      <Pill tone={pill.tone} dot>
+                      <StatusChip tone={pillTone(pill.tone)} dot>
                         {pill.label}
-                      </Pill>
+                      </StatusChip>
                     </td>
                     <td className={cn(st.td, "text-right whitespace-nowrap")}>
                       <button type="button" className={btn("row")} onClick={() => openEdit(item)} disabled={busy}>
@@ -298,7 +299,7 @@ export function SystemAnnouncements({
           <form onSubmit={save} className="flex flex-col gap-4">
             <DialogHeader>
               <DialogTitle>{editing?.id ? "Edit announcement" : "New announcement"}</DialogTitle>
-              <DialogDescription className="text-[14px] leading-[1.5] tracking-[-0.02em]">
+              <DialogDescription className="text-sm leading-[1.5] tracking-[-0.02em]">
                 Shown in the app to the chosen audience between the start and end. Times are UTC.
               </DialogDescription>
             </DialogHeader>
@@ -359,7 +360,7 @@ export function SystemAnnouncements({
                 />
               </Field>
             </div>
-            <label htmlFor="announcement-dismissible" className="flex items-center gap-2 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--body)]">
+            <label htmlFor="announcement-dismissible" className="flex items-center gap-2 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--body)]">
               <input
                 id="announcement-dismissible"
                 type="checkbox"
@@ -369,7 +370,7 @@ export function SystemAnnouncements({
               Users can dismiss this announcement
             </label>
             {formError && (
-              <p role="alert" className="m-0 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--error-ink)]">
+              <p role="alert" className="m-0 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--error-ink)]">
                 {formError}
               </p>
             )}
@@ -390,13 +391,13 @@ export function SystemAnnouncements({
         <DialogContent className="sm:max-w-[520px]">
           <DialogHeader>
             <DialogTitle>Delete this announcement?</DialogTitle>
-            <DialogDescription className="text-[14px] leading-[1.5] tracking-[-0.02em]">
+            <DialogDescription className="text-sm leading-[1.5] tracking-[-0.02em]">
               It disappears for every customer straight away and cannot be restored. To stop it showing but keep the record,
               use End now instead.
             </DialogDescription>
           </DialogHeader>
           {deleting && (
-            <p className="m-0 rounded-[8px] border border-[var(--border)] bg-[var(--surface-alt)] px-3 py-2 text-[14px] leading-[1.5] tracking-[-0.02em] break-words text-[var(--body)]">
+            <p className="m-0 rounded-[8px] border border-[var(--border)] bg-[var(--surface-alt)] px-3 py-2 text-sm leading-[1.5] tracking-[-0.02em] break-words text-[var(--body)]">
               {deleting.message}
             </p>
           )}

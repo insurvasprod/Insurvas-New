@@ -1,54 +1,203 @@
+import type { TenantRole } from "@/lib/tenantAuth/roles";
+
 /**
- * The settings page's sections, in rail order.
+ * The settings registry (LA-8.1, Notion sprint): every settings section, wherever it lives.
  *
- * Its own module because two things read it: the settings page draws the rail from it, and search
- * offers each section as a destination. One list means search can never name a section the page
- * does not have, or miss one it does.
+ * A registry, not settings storage. Each entry says what a section is called, which of the six
+ * fixed groups it sits in, who may open it and where it actually lives — LA-8 owns no setting in
+ * here and reads no value from one. A module adds a section by adding an entry; the shell
+ * (components/app/agent-settings-tabs.tsx), its gating and search (lib/settings/registry.ts) do not
+ * change. lib/settings/registry.test.mjs registers a made-up section and proves that.
  *
- * Groups must stay contiguous. AgentSettingsTabs starts a new run every time `group` changes,
- * deliberately, so the rail's order always matches the page's — which means an interleaved list
- * renders the same heading twice. `lead-posting` and `queue-sla` were on each other's side of the
- * boundary, so the rail showed "How you call" and "How leads arrive and move" as two sections each.
+ * Two kinds of entry:
+ *   · `route` absent — a panel drawn inside /app/settings, from components/app/settings/panels.tsx.
+ *   · `route` set — another module's own screen. The shell links to it; it never copies its
+ *     controls, because two screens claiming one setting drift and the wrong one gets believed.
+ *
+ * Gating is the menu's: `required_feature` AND `required_roles`, and a section that fails either is
+ * absent, never greyed out. Each in-page section carries the gate its own API already enforces, so
+ * the rail never offers a door that answers 403.
+ *
+ * `items` exist only so search can land on one setting rather than the top of its page. `anchor` is
+ * the element id on the section's screen (an in-page panel's control id, or a hub's own section id);
+ * lib/settings/registry.test.mjs checks every anchor is present in the source.
+ *
+ * Keep each group's entries together: components/app/settingsGroupsAreContiguous.test.mjs reads
+ * this file as text. (The rail itself orders by group, then `sort_order`.)
  */
+// Seven short groups (owner decision 2026-10-15, after the LA-8 walk: Selling had nineteen entries and
+// pushed the last sections off the screen). None holds more than eight.
+export type SettingsGroup = "Your account" | "Agency" | "Carriers" | "Sales process" | "Leads & dialing" | "Money & compliance" | "Platform";
+
+export type SettingsItem = {
+  label: string;
+  /** Element id on the section's screen. */
+  anchor: string;
+  keywords?: readonly string[];
+};
+
 export type SettingsSection = {
+  /** The registry key; also the #hash of an in-page panel. */
   id: string;
   label: string;
   description: string;
-  group?: string;
+  group: SettingsGroup;
+  /** Another module's screen. Absent: a panel inside /app/settings. */
+  route?: string;
+  required_feature?: string;
+  required_roles?: readonly TenantRole[];
+  search_keywords?: readonly string[];
+  items?: readonly SettingsItem[];
+  sort_order: number;
+  /** The Notion task that owns the setting — LA-8 only for the sections LA-8 builds. */
+  owned_by_module: string;
   /**
    * One short line under the tab's title (2026-09-28 review: no explanatory copy). Search keeps the
    * long `description`; the tab shows this when it is set.
    */
   short?: string;
-  /** Shown, selectable and locked: the page explains where this is managed instead. Never searchable. */
+  /** Shown, selectable and locked: the page explains where this is managed instead. */
   managed?: string;
   disabled?: string;
 };
 
+const OWNER: readonly TenantRole[] = ["owner"];
+
 export const SETTINGS_SECTIONS: SettingsSection[] = [
-  { group: "Agency", id: "agency-profile", label: "Agency profile", description: "Who the agency is on a carrier application, and the health of what it is contracted to sell.", short: "The agency's legal identity and what it is contracted to sell." },
-  { group: "Agency", id: "carrier-library", label: "Carrier library", description: "The carriers you are contracted with: contract level, writing number and E&O requirement. Rates and advance rules are on the Rate card.", short: "Carriers, contract levels, writing numbers and E&O." },
-  { group: "Agency", id: "states-licences", label: "States & licences", description: "Appointments, resident and non-resident licences, E&O cover and continuing education, in one place.", short: "Licences, carrier appointments, E&O cover and continuing education." },
-  { group: "Agency", id: "team-access", label: "Team & access", description: "Owners, licensed agents, setters, assistants and bookkeepers — and the boundary each one works inside.", short: "Who is on the workspace, their role and where they are licensed." },
-  { group: "How you call", id: "calendar", label: "Calendar & availability", description: "Working hours, blocked time and how many appointments fit in a day. Every booking rule reads these." },
-  { group: "How you call", id: "cadence", label: "Dialing cadence", description: "How long the dialer waits before each retry, and which part of the day it prefers." },
-  { group: "How you call", id: "calling-windows", label: "Calling windows", description: "The hours your agency will dial in, on top of the federal and state limits. Narrowing only." },
-  { group: "How you call", id: "queue-sla", label: "Queue & SLA", description: "The unclaimed-lead response ladder. These thresholds drive Agent Floor, alerts, partner notice and expiry.", short: "How long a claimable lead may wait before each step of the response ladder." },
-  { group: "How leads arrive and move", id: "lead-posting", label: "Lead posting", description: "The keys your vendors post with, the URL they post to, and how their field names map onto yours.", short: "Vendor posting keys, the URL they post to and their field maps." },
-  { group: "How leads arrive and move", id: "pipelines", label: "Pipelines", description: "Stages for inbound, outbound and partner work — and which disposition moves a lead into each one.", short: "Pipelines, their stages, and the stage each disposition moves a lead to." },
-  { group: "How leads arrive and move", id: "dispositions", label: "Dispositions", description: "Call outcomes, what each one counts as, and what happens next." },
-  { group: "How leads arrive and move", id: "form-templates", label: "Form templates", description: "The partner and agent forms that capture a complete lead, before anybody calls it." },
-  { group: "Sales", id: "sales-carriers", label: "Carriers and products", description: "The carrier library, plus the four things an application needs from a carrier that a contract does not carry: a portal, a reference shape, a descriptor and a payment method." },
-  { group: "Sales", id: "sales-underwriting", label: "Underwriting templates", description: "The health questions an agent reads on the Interview step, and which answers put a carrier out of reach." },
-  { group: "Sales", id: "sales-quotation", label: "Quotation templates", description: "What the Quote step asks for before an agent can record a premium against a carrier and product." },
-  { group: "Sales", id: "sales-field-sets", label: "Application field sets", description: "The list of things a carrier asks for on paper, named once so the workspace, the QA checks and the extension all mean the same field." },
-  { group: "Sales", id: "sales-field-maps", label: "Carrier field maps", description: "Where each application field goes on a carrier's site, verified before the extension fills it." },
-  { group: "Sales", id: "sales-disclosures", label: "Disclosures", description: "The disclosures an application may need, and the rules that make each one required." },
-  { group: "Sales", id: "sales-preferences", label: "Quote & QA rules", description: "Quote plausibility, appointment checks, draft-day buffer, requirement ageing and when the welcome pack goes." },
-  { group: "Sales", id: "sales-welcome-pack", label: "Welcome pack", description: "The email a client gets after submit, so their first draft is never a surprise." },
-  { group: "Sales", id: "sales-pipeline-sync", label: "Pipeline sync", description: "Which pipeline stage a lead's card moves to as its application progresses." },
-  { group: "Sales", id: "sales-ai", label: "AI assistant", description: "The underwriting assistant, and exactly what it would be sent." },
-  { group: "Sales", id: "sales-extension", label: "Browser extension", description: "The extension's install state, the carrier sites it may work on, and its recent access grants." },
-  { group: "Managed elsewhere", id: "alerts", label: "Alerts", description: "Alert preferences are not set here, and the page says where they are instead of showing empty controls.", managed: "Set per person from the bell in the top bar, not per workspace.", short: "Alert preferences are personal — open them from the bell in the top bar." },
-  { group: "Managed elsewhere", id: "billing", label: "Billing", description: "Billing is not changed here, and the page says who does it instead of showing empty controls.", managed: "This workspace is billed by Insurvas staff, so invoices and plan changes are not editable here.", short: "Billing is handled by Insurvas — contact support to change your plan." },
+  // ── Your account ────────────────────────────────────────────────────────────────────────────────
+  {
+    group: "Your account", id: "my-profile", label: "My profile", sort_order: 10, owned_by_module: "LA-8.2", route: "/app/profile",
+    description: "Your own name, phone, photo and licence numbers, and how you sign in: email, password, two-factor and sessions.", search_keywords: ["profile", "my name", "phone number", "avatar", "photo", "licence number", "npn", "security"],
+    items: [
+      { label: "Display timezone", anchor: "profile-timezone", keywords: ["my timezone", "time zone", "display time"] },
+      { label: "Sign-in email", anchor: "security-email", keywords: ["change email", "email address", "login email"] },
+      { label: "Password", anchor: "security-password", keywords: ["change password", "reset password"] },
+      { label: "Two-factor authentication", anchor: "security-two-factor", keywords: ["2fa", "two factor", "authenticator", "mfa", "recovery codes"] },
+      { label: "Sessions", anchor: "security-sessions", keywords: ["sign out", "log out", "devices", "lost laptop", "stolen phone", "end session"] },
+      { label: "Security log", anchor: "security-log", keywords: ["login history", "failed logins", "security events"] },
+    ],
+  },
+  {
+    group: "Your account", id: "alerts", label: "Notifications", sort_order: 20, owned_by_module: "LA-8.4",
+    description: "Which alerts reach you, in the app, by email or in the browser — with digests, quiet hours, and the four that cannot be switched off.",
+    short: "Which alerts reach you, and how.",
+    search_keywords: ["alerts", "notifications", "email alerts", "browser alerts", "push", "digest", "daily email", "weekly email", "too many emails"],
+    items: [
+      { label: "Quiet hours", anchor: "notify-quiet-hours", keywords: ["quiet hours", "do not disturb at night", "mute at night"] },
+      { label: "Alerts that cannot be switched off", anchor: "notify-protected", keywords: ["doi deadline", "reinstatement", "licence expiring", "payment failed", "cannot switch off"] },
+    ],
+  },
+
+  // ── Agency ──────────────────────────────────────────────────────────────────────────────────────
+  {
+    group: "Agency", id: "business-identity", label: "Business identity", sort_order: 10, owned_by_module: "LA-8.3", required_roles: OWNER,
+    description: "Who the business is on every document: trading and legal name, NPN, tax ID, address, phone, logo and timezone — plus the support contact partners see, and who owns the workspace.", short: "Who the business is, on every document it produces.",
+    search_keywords: ["business", "agency name", "company name", "doing business as", "dba", "ein", "agency profile", "support contact", "partner support", "owner", "ownership", "workspace id"],
+    items: [
+      { label: "Trading name", anchor: "identity-trading-name", keywords: ["trading name", "dba", "doing business as", "brand name"] },
+      { label: "Legal name", anchor: "identity-legal-name", keywords: ["legal name", "llc", "entity name"] },
+      { label: "National Producer Number", anchor: "identity-npn", keywords: ["npn", "producer number"] },
+      { label: "Tax ID", anchor: "identity-tax-id", keywords: ["tax id", "ein", "tin", "federal tax"] },
+      { label: "Business address", anchor: "identity-address-line1", keywords: ["address", "mailing address", "office"] },
+      { label: "Business phone", anchor: "identity-phone", keywords: ["phone", "business phone"] },
+      { label: "Logo", anchor: "identity-logo", keywords: ["logo", "branding", "brand"] },
+      { label: "Business timezone", anchor: "identity-timezone", keywords: ["timezone", "time zone", "daily summary time"] },
+      { label: "Partner support contact", anchor: "identity-partner-support", keywords: ["support contact", "partner support", "support email", "support phone"] },
+      { label: "Ownership", anchor: "identity-ownership", keywords: ["owner", "workspace owner", "workspace id"] },
+    ],
+  },
+  { group: "Agency", id: "team-access", label: "Team & access", sort_order: 20, owned_by_module: "LA-0.2", required_roles: OWNER, description: "Owners, licensed agents, setters, assistants and bookkeepers — and the boundary each one works inside.", short: "Who is on the workspace, their role and where they are licensed.", search_keywords: ["team", "users", "staff", "invite", "seats", "roles", "members", "deactivate"] },
+  { group: "Agency", id: "states-licences", label: "States & licences", sort_order: 30, owned_by_module: "LA-0.5", required_feature: "appointment_vault", required_roles: OWNER, description: "Appointments, resident and non-resident licences, E&O cover and continuing education, in one place.", short: "Licences, carrier appointments, E&O cover and continuing education.", search_keywords: ["appointments", "licence", "license", "e&o", "errors and omissions", "continuing education", "ce", "states"] },
+  {
+    group: "Agency", id: "billing", label: "Plan & billing", sort_order: 40, owned_by_module: "LA-8.5", required_roles: OWNER,
+    description: "Your plan, what it costs and when it renews, every limit with what you use of it, invoices, the card, and changing, pausing or cancelling.",
+    short: "Your plan, limits, invoices and card — and changing, pausing or cancelling.",
+    search_keywords: ["billing", "plan", "subscription", "invoice", "receipt", "upgrade", "downgrade", "cancel", "pause", "card", "payment method", "usage", "limits", "seats", "renewal"],
+    items: [
+      { label: "Usage and limits", anchor: "billing-limits", keywords: ["usage", "limits", "seats used", "minutes left", "quota"] },
+      { label: "Invoices", anchor: "billing-invoices", keywords: ["invoices", "receipts", "download invoice", "pdf"] },
+      { label: "Update card", anchor: "billing-card", keywords: ["card", "payment method", "update card", "failed payment"] },
+      { label: "Change plan", anchor: "billing-plan", keywords: ["upgrade", "downgrade", "change plan"] },
+      { label: "Pause or cancel", anchor: "billing-cancel", keywords: ["cancel", "pause", "close account", "export my data"] },
+    ],
+  },
+
+  // ── Carriers ────────────────────────────────────────────────────────────────────────────────────
+  { group: "Carriers", id: "carrier-library", label: "Carrier library", sort_order: 10, owned_by_module: "LA-0.4", required_feature: "appointment_vault", required_roles: OWNER, description: "The carriers you are contracted with: contract level, writing number and E&O requirement. Rates and advance rules are on the Rate card.", short: "Carriers, contract levels, writing numbers and E&O.", search_keywords: ["carriers", "contract level", "writing number"] },
+  { group: "Carriers", id: "sales-carriers", label: "Carriers and products", sort_order: 20, owned_by_module: "LA-3.17", required_feature: "applications", required_roles: OWNER, description: "The carrier library, plus the four things an application needs from a carrier that a contract does not carry: a portal, a reference shape, a descriptor and a payment method.", search_keywords: ["products", "carrier portal", "bank descriptor", "payment method"] },
+  { group: "Carriers", id: "carrier-rules", label: "Carrier rules", sort_order: 30, owned_by_module: "LA-4.17", route: "/app/carrier-rules", required_feature: "statement_ingestion", required_roles: ["owner", "bookkeeper"], description: "Each carrier's retention windows, chargeback rules and statement lag, with where each figure came from.", search_keywords: ["retention window", "first payment window", "chargeback", "advance", "statement lag", "carrier rule"] },
+  { group: "Carriers", id: "sales-field-maps", label: "Carrier field maps", sort_order: 40, owned_by_module: "LA-3.17", required_feature: "applications", required_roles: OWNER, description: "Where each application field goes on a carrier's site, verified before the extension fills it.", search_keywords: ["field map", "autofill"] },
+  { group: "Carriers", id: "sales-extension", label: "Browser extension", sort_order: 50, owned_by_module: "LA-3.12", required_feature: "applications", required_roles: OWNER, description: "The extension's install state, the carrier sites it may work on, and its recent access grants.", search_keywords: ["extension", "chrome"] },
+
+  // ── Sales process ───────────────────────────────────────────────────────────────────────────────
+  { group: "Sales process", id: "sales-underwriting", label: "Underwriting templates", sort_order: 10, owned_by_module: "LA-3.17", required_feature: "applications", required_roles: OWNER, description: "The health questions an agent reads on the Interview step, and which answers put a carrier out of reach.", search_keywords: ["underwriting", "health questions", "knockout"] },
+  { group: "Sales process", id: "sales-quotation", label: "Quotation templates", sort_order: 20, owned_by_module: "LA-3.17", required_feature: "applications", required_roles: OWNER, description: "What the Quote step asks for before an agent can record a premium against a carrier and product.", search_keywords: ["quote", "quotation", "premium"] },
+  { group: "Sales process", id: "sales-field-sets", label: "Application field sets", sort_order: 30, owned_by_module: "LA-3.17", required_feature: "applications", required_roles: OWNER, description: "The list of things a carrier asks for on paper, named once so the workspace, the QA checks and the extension all mean the same field.", search_keywords: ["application fields", "field set"] },
+  { group: "Sales process", id: "sales-disclosures", label: "Disclosures", sort_order: 40, owned_by_module: "LA-3.17", required_feature: "applications", required_roles: OWNER, description: "The disclosures an application may need, and the rules that make each one required.", search_keywords: ["disclosure", "script", "replacement"] },
+  {
+    group: "Sales process", id: "sales-preferences", label: "Quote & QA rules", sort_order: 50, owned_by_module: "LA-3.17", required_feature: "applications", required_roles: OWNER,
+    description: "Quote plausibility, appointment checks, draft-day buffer, requirement ageing and when the welcome pack goes.", search_keywords: ["qa", "quality"],
+    items: [
+      { label: "Quote plausibility band", anchor: "qa-band-min", keywords: ["premium per thousand", "plausibility", "quote check"] },
+      { label: "A carrier we are not appointed with", anchor: "qa-appointment", keywords: ["not appointed", "appointment check"] },
+      { label: "Draft-date buffer", anchor: "qa-buffer", keywords: ["draft date", "draft day", "first draft", "deposit"] },
+      { label: "Requirement ageing", anchor: "qa-ageing", keywords: ["pending requirements", "ageing", "aging"] },
+      { label: "Welcome pack sending", anchor: "qa-welcome", keywords: ["welcome pack", "auto send"] },
+    ],
+  },
+  { group: "Sales process", id: "sales-welcome-pack", label: "Welcome pack", sort_order: 60, owned_by_module: "LA-3.20", required_feature: "applications", required_roles: OWNER, description: "The email a client gets after submit, so their first draft is never a surprise.", search_keywords: ["welcome email", "client email"] },
+  { group: "Sales process", id: "sales-ai", label: "AI assistant", sort_order: 70, owned_by_module: "LA-3.17", required_feature: "applications", required_roles: OWNER, description: "The underwriting assistant, and exactly what it would be sent.", search_keywords: ["ai", "assistant"] },
+  { group: "Sales process", id: "sales-pipeline-sync", label: "Pipeline sync", sort_order: 80, owned_by_module: "LA-3.17", required_feature: "applications", required_roles: OWNER, description: "Which pipeline stage a lead's card moves to as its application progresses.", search_keywords: ["stage sync"] },
+
+  // ── Leads & dialing ─────────────────────────────────────────────────────────────────────────────
+  { group: "Leads & dialing", id: "pipelines", label: "Pipelines", sort_order: 10, owned_by_module: "LA-1.9", required_feature: "book_of_business", required_roles: OWNER, description: "Stages for inbound, outbound and partner work — and which disposition moves a lead into each one.", short: "Pipelines, their stages, and the stage each disposition moves a lead to.", search_keywords: ["stages", "pipeline"] },
+  { group: "Leads & dialing", id: "dispositions", label: "Dispositions", sort_order: 20, owned_by_module: "LA-1.12", required_feature: "book_of_business", required_roles: OWNER, description: "Call outcomes, what each one counts as, and what happens next.", search_keywords: ["call outcome", "disposition"] },
+  { group: "Leads & dialing", id: "form-templates", label: "Form templates", sort_order: 30, owned_by_module: "LA-1.4", required_feature: "book_of_business", required_roles: OWNER, description: "The partner and agent forms that capture a complete lead, before anybody calls it.", search_keywords: ["lead fields", "forms", "application forms", "custom fields"] },
+  { group: "Leads & dialing", id: "lead-posting", label: "Lead posting", sort_order: 40, owned_by_module: "LA-2.5", required_feature: "lead_import", required_roles: OWNER, description: "The keys your vendors post with, the URL they post to, and how their field names map onto yours.", short: "Vendor posting keys, the URL they post to and their field maps.", search_keywords: ["post key", "vendor key", "lead post", "posting url", "field map"] },
+  { group: "Leads & dialing", id: "calendar", label: "Calendar & availability", sort_order: 50, owned_by_module: "LA-2.11", required_feature: "outbound_dialing", required_roles: OWNER, description: "Working hours, blocked time and how many appointments fit in a day. Every booking rule reads these.", search_keywords: ["working hours", "availability", "appointments per day", "blocked time"] },
+  { group: "Leads & dialing", id: "cadence", label: "Dialing cadence", sort_order: 60, owned_by_module: "LA-2.7", required_feature: "outbound_dialing", required_roles: OWNER, description: "How long the dialer waits before each retry, and which part of the day it prefers.", search_keywords: ["retry", "redial", "cadence"] },
+  { group: "Leads & dialing", id: "queue-sla", label: "Queue & SLA", sort_order: 70, owned_by_module: "LA-1.23", required_feature: "book_of_business", required_roles: OWNER, description: "The unclaimed-lead response ladder. These thresholds drive Agent Floor, alerts, partner notice and expiry.", short: "How long a claimable lead may wait before each step of the response ladder.", search_keywords: ["sla", "unclaimed", "response time", "escalation ladder"] },
+  { group: "Leads & dialing", id: "calling-windows", label: "Calling windows", sort_order: 80, owned_by_module: "LA-2.4", required_feature: "outbound_dialing", required_roles: OWNER, description: "The hours your agency will dial in, on top of the federal and state limits. Narrowing only.", search_keywords: ["calling hours", "dialing hours", "tcpa hours", "holidays", "quiet hours"] },
+
+  // ── Money & compliance ──────────────────────────────────────────────────────────────────────────
+  {
+    group: "Money & compliance", id: "accounting", label: "Accounting", sort_order: 10, owned_by_module: "LA-7.9", route: "/app/accounting-settings", required_feature: "profit_and_loss", required_roles: ["owner", "bookkeeper"],
+    description: "Reporting basis, acquisition or overhead, partner payouts, producer splits, bank matching and tax.", search_keywords: ["accounting", "p&l", "profit and loss"],
+    items: [
+      { label: "Reporting basis and fiscal year", anchor: "reporting", keywords: ["cash", "accrual", "basis", "fiscal year", "persistency month"] },
+      { label: "Acquisition or overhead", anchor: "acquisition-or-overhead", keywords: ["cost per policy", "expense category", "overhead", "acquisition cost"] },
+      { label: "Partner payout cadence", anchor: "partner-payouts", keywords: ["owe", "payout", "pay partner", "partner statement", "cadence", "statement footer"] },
+      { label: "Producer splits", anchor: "producer-splits", keywords: ["split", "producer share", "negative balance", "carry forward"] },
+      { label: "Bank matching tolerance", anchor: "bank-matching", keywords: ["bank", "deposit", "tolerance", "reconcile"] },
+      { label: "Tax and 1099 threshold", anchor: "tax", keywords: ["1099", "tax id", "threshold"] },
+    ],
+  },
+  {
+    group: "Money & compliance", id: "compliance", label: "Compliance", sort_order: 20, owned_by_module: "LA-6.8", route: "/app/compliance/settings", required_feature: "tcpa_checker", required_roles: OWNER,
+    description: "Complaint deadlines, record retention, legal holds, deletion requests and the transfer gate.", search_keywords: ["compliance"],
+    items: [
+      { label: "Complaint response deadlines", anchor: "deadlines", keywords: ["doi", "complaint", "regulator", "response days", "escalation"] },
+      { label: "Record retention rules", anchor: "retention", keywords: ["record retention", "keep records", "purge rule"] },
+      { label: "Purge job", anchor: "purge", keywords: ["purge", "dry run"] },
+      { label: "Legal holds", anchor: "holds", keywords: ["legal hold", "litigation"] },
+      { label: "Deletion requests", anchor: "deletion", keywords: ["delete my data", "ccpa", "data subject"] },
+      { label: "Transfer gate", anchor: "gate", keywords: ["dnc", "do not call", "consent", "transfer check", "scrub"] },
+      { label: "Evidence report", anchor: "report", keywords: ["evidence", "audit report"] },
+      { label: "Compliance dashboard and monthly email", anchor: "dashboard", keywords: ["monthly email", "dashboard"] },
+    ],
+  },
+
+  // ── Platform ────────────────────────────────────────────────────────────────────────────────────
+  {
+    group: "Platform", id: "integrations", label: "API keys & webhooks", sort_order: 10, owned_by_module: "LA-8.7", required_roles: OWNER,
+    description: "Keys that let another system post leads in or read your book, and webhooks that send policy and commission events out.",
+    short: "Integration keys, their scopes and last use, and signed webhooks.",
+    search_keywords: ["api", "api key", "integration", "webhook", "zapier", "developer", "token", "signing secret"],
+  },
+  {
+    group: "Platform", id: "settings-history", label: "Settings history", sort_order: 20, owned_by_module: "LA-8.8", required_roles: OWNER,
+    description: "Who changed which setting, from what to what, and when. Read only, and kept for good.",
+    short: "Every settings change: who, what, from, to, when.",
+    search_keywords: ["audit", "audit log", "history", "who changed", "settings changes", "change log"],
+  },
 ];

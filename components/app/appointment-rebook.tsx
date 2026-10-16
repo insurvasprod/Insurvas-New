@@ -58,7 +58,7 @@ function RebookDialog({ appointmentId, agentUserId, customerName, onClose, onReb
       if (!response.ok) { setLoadError(body?.error ?? "Could not load the calendar"); return; }
       setContext(body as Context);
       setNowAt(Date.now());
-    }).catch(() => { if (active) setLoadError("Could not reach Insurvas. Check your connection and try again."); });
+    }).catch(() => { if (active) setLoadError("Check your connection and try again."); });
     return () => { active = false; };
   }, []);
 
@@ -80,7 +80,7 @@ function RebookDialog({ appointmentId, agentUserId, customerName, onClose, onReb
       body: JSON.stringify({ action: "rebook", appointment_id: appointmentId, starts_at_utc: slot, agent_user_id: agent }),
     }).catch(() => null);
     setBusy(false);
-    if (!response) { setError("Could not reach Insurvas. Check your connection and try again."); return; }
+    if (!response) { setError("Check your connection and try again."); return; }
     const body = await response.json().catch(() => null);
     if (!response.ok) { setError(body?.error ?? "That slot could not be booked"); return; }
     router.refresh();

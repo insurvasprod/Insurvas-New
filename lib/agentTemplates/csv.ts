@@ -280,15 +280,17 @@ export class LeadImportPhoneError extends Error {}
  * timezone column the template has no field for, and whether the template has a timezone field to
  * fill at all.
  */
-export type ImportRowContext = { zip?: unknown; timezoneLabel?: unknown; hasTimezoneField?: boolean };
+export type ImportRowContext = { zip?: unknown; timezoneLabel?: unknown; hasTimezoneField?: boolean; keepInvalidPhone?: boolean };
 
 export function normalizeImportValues(values: Record<string, unknown>, rowNumber: number, dateOrder?: ImportDateOrder | null, context?: ImportRowContext): Record<string, unknown> {
   const normalized = { ...values };
   const phoneKey = ["phone", "phone_number", "primary_phone"].find((key) => key in normalized);
   if (phoneKey && normalized[phoneKey] !== undefined && normalized[phoneKey] !== "") {
     const phone = normalizeImportPhone(normalized[phoneKey]);
-    if (!phone) throw new LeadImportPhoneError(`Row ${rowNumber}: phone must be a valid US phone number`);
-    normalized[phoneKey] = phone;
+    // The import's write path keeps an unreadable number as typed: screening then rejects that ROW as
+    // invalid_phone (with its own message) and the rest of the file imports. Everywhere else it stops.
+    if (!phone && !context?.keepInvalidPhone) throw new LeadImportPhoneError(`Row ${rowNumber}: phone must be a valid US phone number`);
+    if (phone) normalized[phoneKey] = phone;
   }
   const dobKey = ["date_of_birth", "dob"].find((key) => key in normalized);
   if (dobKey && normalized[dobKey] !== undefined && normalized[dobKey] !== "") {
@@ -482,7 +484,7 @@ export function isImportDateField(field: Pick<TemplateField, "field_key" | "type
   return field.type === "date" || DATE_OF_BIRTH_KEYS.includes(field.field_key);
 }
 
-function leadCsvPlan(rows: string[][], fields: TemplateField[], stages: ImportStage[], columnMapping?: Record<string, string | null>, dateOrder?: ImportDateOrder | null) {
+function leadCsvPlan(rows: string[][], fields: TemplateField[], stages: ImportStage[], columnMapping?: Record<string, string | null>, dateOrder?: ImportDateOrder | null, options: { keepInvalidPhone?: boolean } = {}) {
   if (rows.length < 2) throw new Error("CSV needs a header and at least one lead");
   if (rows.length - 1 > MAX_LEAD_IMPORT_ROWS) throw new Error(`CSV cannot contain more than ${MAX_LEAD_IMPORT_ROWS.toLocaleString()} leads`);
 
@@ -558,7 +560,7 @@ function leadCsvPlan(rows: string[][], fields: TemplateField[], stages: ImportSt
     const rawZip = cell(values, rawZipIndex);
     const rawLabel = cell(values, rawTimezoneIndex);
     const label = typeof leadValues.timezone === "string" ? leadValues.timezone : rawLabel;
-    const normalized = normalizeImportValues(leadValues, rowNumber, dateOrder, { zip: rawZip, timezoneLabel: rawLabel, hasTimezoneField });
+    const normalized = normalizeImportValues(leadValues, rowNumber, dateOrder, { zip: rawZip, timezoneLabel: rawLabel, hasTimezoneField, keepInvalidPhone: options.keepInvalidPhone });
     const zip = normalized.zip ?? normalized.postal_code ?? rawZip;
     const consent = captureConsent({
       trustedformUrl: cell(values, consentIndex.trustedform_url),
@@ -620,8 +622,8 @@ export function parseLeadCsvRows(text: string, fields: TemplateField[], stages: 
 
 export function parseLeadCsv(text: string, fields: TemplateField[], stages: ImportStage[], columnMapping?: Record<string, string | null>, dateOrder?: ImportDateOrder | null): LeadImportRow[] {
   const rows = parseCsv(text);
-  const { mapRow } = leadCsvPlan(rows, fields, stages, columnMapping, dateOrder);
-  // Fail-fast on the write path. A row this parser cannot read must stop the import, because
+  const { mapRow } = leadCsvPlan(rows, fields, stages, columnMapping, dateOrder, { keepInvalidPhone: true });
+  // Fail-fast on the write path (an unreadable phone is the exception: that row is rejected, not the file). A row this parser cannot read must stop the import, because
   // criterion 3 is that a failure at any step leaves zero rows imported.
   return rows.slice(1).map((values, rowIndex) => mapRow(values, rowIndex + 2));
 }

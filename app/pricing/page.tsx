@@ -8,7 +8,7 @@ import { fetchPublicPlans } from "@/lib/publicPlans/queries";
 
 export const metadata: Metadata = {
   title: "Pricing · Insurvas",
-  description: "Choose an Insurvas plan and start your trial.",
+  description: "Insurvas is priced per workspace, not per lead. See what each plan includes, module by module, and start your trial.",
 };
 
 /** Read on every request: a price published in the admin catalog shows here at once. */

@@ -12,17 +12,7 @@ import { EmptyState, NoMatches, SectionLoading } from "@/components/ui/page-stat
 import { SettingsSaveBar } from "@/components/ui/settings-layout";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { TableCard } from "@/components/ui/table-card";
-import {
-  Callout,
-  KeyValues,
-  Pill,
-  SettingsCard,
-  SettingsGrid,
-  SettingsSectionHeader,
-  SettingsStack,
-  st,
-  type PillTone,
-} from "@/components/app/settings/primitives";
+import { Callout, KeyValues, SettingsCard, SettingsGrid, SettingsSectionHeader, SettingsStack, st, type PillTone, pillTone } from "@/components/app/settings/primitives";
 import {
   AppointmentGrid,
   CeDialog,
@@ -301,7 +291,7 @@ export function AppointmentVaultSettings({
           <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
             {warnings.map((warning) => (
               <li key={`${warning.source}-${warning.sourceId}`} className="flex flex-wrap items-center gap-2">
-                <Pill tone={warning.days === 90 ? "warning" : "error"}>{plural(warning.daysLeft, "day")}</Pill>
+                <StatusChip dot={false} tone={pillTone(warning.days === 90 ? "warning" : "error")}>{plural(warning.daysLeft, "day")}</StatusChip>
                 <span className="font-semibold text-[var(--ink)]">{warning.label}</span>
                 <span className="text-[var(--muted)]">expires {shortDate(warning.expiresAt)}</span>
               </li>
@@ -360,7 +350,7 @@ export function AppointmentVaultSettings({
                   <td className={st.td}>{row.license_number}</td>
                   <td className={st.td}>{row.lines_of_authority?.length ? row.lines_of_authority.join(", ") : <span className="text-[var(--muted)]">Not recorded</span>}</td>
                   <td className={cn(st.td, st.num)}>{shortDate(row.expires_at)}</td>
-                  <td className={cn(st.td, st.num)}><Pill tone={status.tone}>{status.label}</Pill></td>
+                  <td className={cn(st.td, st.num)}><StatusChip dot={false} tone={pillTone(status.tone)}>{status.label}</StatusChip></td>
                 </tr>
               );
             })}
@@ -372,7 +362,7 @@ export function AppointmentVaultSettings({
                 <td className={st.td}>&mdash;</td>
                 <td className={cn(st.td, st.num)}>&mdash;</td>
                 <td className={cn(st.td, st.num)} title="The agency holds an active carrier appointment here but no licence, so no lead in this state can be assigned.">
-                  <Pill tone="error">Not licensed</Pill>
+                  <StatusChip dot={false} tone="danger">Not licensed</StatusChip>
                 </td>
               </tr>
             ))}
@@ -402,7 +392,7 @@ export function AppointmentVaultSettings({
               ]}
             />
           ) : (
-            <p className="text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">No E&amp;O policy on file.</p>
+            <p className="text-sm leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">No E&amp;O policy on file.</p>
           )}
           {eoAlert && (
             <Callout className="mt-4" tone={eoLapsed || (eoDays !== null && eoDays <= 60) ? "error" : "warning"} title={`${eoLapsed ? "E&O cover has lapsed" : `E&O expires in ${plural(eoDays ?? 0, "day")}`}${eoRequiredText}`} />
@@ -414,7 +404,7 @@ export function AppointmentVaultSettings({
           sub={ceRecord ? `${stateName(ceRecord.state)}, ${ceRecord.deadline >= today ? "current cycle" : "last recorded cycle"}` : undefined}
           action={canEdit ? <Button type="button" variant="outline" onClick={() => setDialog("ce")}>{ceRecord ? "Edit" : <><Plus aria-hidden="true" />Add a cycle</>}</Button> : undefined}
         >
-          {ceRecord ? <CeSummary record={ceRecord} /> : <p className="text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">No continuing-education cycle recorded.</p>}
+          {ceRecord ? <CeSummary record={ceRecord} /> : <p className="text-sm leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">No continuing-education cycle recorded.</p>}
         </SettingsCard>
       </SettingsGrid>
 

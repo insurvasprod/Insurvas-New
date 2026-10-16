@@ -1,5 +1,6 @@
 "use client";
 
+import { StatusChip } from "@/components/ui/status-chip";
 import { ProvisionalBadge } from "@/components/app/provisional-badge";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 
@@ -13,7 +14,7 @@ import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { TableCard } from "@/components/ui/table-card";
-import { Callout, Field, Pill, control } from "@/components/app/settings/primitives";
+import { Callout, Field, control, pillTone } from "@/components/app/settings/primitives";
 import { ViewTabs, fullHeightCard, useFittingPageSize } from "@/components/app/lead-ops-view-tabs";
 import { cn } from "@/lib/utils";
 import { dobConflict, matchedOnLabel } from "@/lib/contacts/matchPolicy";
@@ -454,6 +455,7 @@ export function ContactWorkspace({ readOnly = false }: { readOnly?: boolean }) {
           sections; they are tabs now, with the page's actions on the same row. */}
       <ViewTabs
         label="Duplicate check views"
+        controls="duplicates-panel"
         value={tab}
         onChange={setTab}
         tabs={[
@@ -474,6 +476,7 @@ export function ContactWorkspace({ readOnly = false }: { readOnly?: boolean }) {
         }
       />
 
+      <div key={tab} role="tabpanel" id="duplicates-panel" aria-labelledby={`duplicates-panel-tab-${tab}`} className="min-w-0">
       {tab === "review" && (
         <div className="flex min-w-0 flex-col gap-3">
           {pair ? (
@@ -489,8 +492,8 @@ export function ContactWorkspace({ readOnly = false }: { readOnly?: boolean }) {
                   onSelect={(key, side) => setSelection((value) => ({ ...value, [key]: side }))}
                   disabled={writeBlocked}
                   headerSlot={<>
-                    <Pill tone={pair.review.confidence === "high" ? "warning" : "neutral"}>{Math.min(100, Math.round(pair.review.score * 100))}% · {pair.review.confidence === "high" ? "High" : "Medium"}</Pill>
-                    {conflict && <Pill tone="error">DOB differs</Pill>}
+                    <StatusChip dot={false} tone={pillTone(pair.review.confidence === "high" ? "warning" : "neutral")}>{Math.min(100, Math.round(pair.review.score * 100))}% · {pair.review.confidence === "high" ? "High" : "Medium"}</StatusChip>
+                    {conflict && <StatusChip dot={false} tone="danger">DOB differs</StatusChip>}
                     <span className="text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">on {matchedOnLabel(pair.review.matched_on)}</span>
                   </>}
                   action={<Button type="button" variant="outline" className="w-full" disabled={writeBlocked} onClick={() => void merge("existing")}>{busy === "merge" ? "Merging…" : "Keep existing"}</Button>}
@@ -524,8 +527,9 @@ export function ContactWorkspace({ readOnly = false }: { readOnly?: boolean }) {
               <EmptyState
                 title="No pairs waiting"
                 hint={queue.ready
-                  ? "Possible duplicates from Add contact and Import contacts wait here side by side."
-                  : "Matches found by Add contact appear here. Imported matches are not kept until a database update is applied."}
+                  ? "Possible duplicates land here to compare side by side."
+                  : "Matches from Add contact appear here; imported ones need a database update."}
+                action={readOnly ? undefined : <Button type="button" variant="outline" onClick={() => { setFormError(null); setAddOpen(true); }}>Add contact</Button>}
               />
             </TableCard>
           )}
@@ -545,7 +549,7 @@ export function ContactWorkspace({ readOnly = false }: { readOnly?: boolean }) {
               }
             >
               <ToolbarSearch value={search} onChange={onSearch} placeholder="Search name, phone, email, city" label="Search contacts" className="sm:w-72" />
-              {stats.flaggedContacts ? <Pill tone="warning">{stats.flaggedContacts.toLocaleString()} duplicate-suspected</Pill> : null}
+              {stats.flaggedContacts ? <StatusChip dot={false} tone="warning">{stats.flaggedContacts.toLocaleString()} duplicate-suspected</StatusChip> : null}
             </DataToolbar>
           }
           footer={<Pager page={directory.page + 1} total={directory.total} noun={directory.total === 1 ? "contact" : "contacts"} pageSize={directory.pageSize} disabled={directoryLoading} onPage={(next) => void loadDirectory(directory.query, next - 1)} />}
@@ -577,7 +581,7 @@ export function ContactWorkspace({ readOnly = false }: { readOnly?: boolean }) {
                         <td className="max-w-[220px] truncate" title={row.household_label ?? undefined}>{row.household_label ?? "—"}</td>
                         <td className="whitespace-nowrap tabular-nums">{formatDob(row.dob)}</td>
                         <td className="text-right tabular-nums">{row.lead_count ? row.lead_count.toLocaleString() : "—"}</td>
-                        <td>{row.open_review === null ? "—" : row.open_review ? <Pill tone="warning" dot>Duplicate suspected</Pill> : <Pill tone="neutral" dot>No open match</Pill>}</td>
+                        <td>{row.open_review === null ? "—" : row.open_review ? <StatusChip tone="warning" dot>Duplicate suspected</StatusChip> : <StatusChip tone="neutral" dot>No open match</StatusChip>}</td>
                       </tr>,
                       open ? (
                         <tr key={`${row.id}-detail`} id={`contact-detail-${row.id}`}>
@@ -605,7 +609,11 @@ export function ContactWorkspace({ readOnly = false }: { readOnly?: boolean }) {
             ) : directory.query ? (
               <NoMatches noun="contacts" onClear={clearSearch} />
             ) : (
-              <EmptyState title="No contacts yet" hint="Add a contact or import a CSV; each one is checked for duplicates first." />
+              <EmptyState
+                title="No contacts yet"
+                hint="Each one is checked for duplicates first."
+                action={readOnly ? undefined : <Button type="button" onClick={() => { setFormError(null); setAddOpen(true); }}>Add contact</Button>}
+              />
             )}
           </div>
         </TableCard>
@@ -632,10 +640,10 @@ export function ContactWorkspace({ readOnly = false }: { readOnly?: boolean }) {
                 {shownMerges.map((row: RecentMerge) => (
                   <tr key={row.id} className="m-row">
                     <td className="max-w-[280px] truncate font-semibold text-foreground" title={row.keptName}>{row.keptName}</td>
-                    <td>{row.source === "auto" ? <Pill tone="neutral">Auto</Pill> : <span className="text-muted-foreground">Manual</span>}</td>
+                    <td>{row.source === "auto" ? <StatusChip dot={false} tone="neutral">Auto</StatusChip> : <span className="text-muted-foreground">Manual</span>}</td>
                     <td className="whitespace-nowrap text-muted-foreground">{ago(row.mergedAt)}</td>
                     <td className="max-w-[160px] truncate" title={row.actorName ?? undefined}>{shortName(row.actorName) ?? "—"}</td>
-                    <td className="text-muted-foreground">{row.reversedAt ? <Pill tone="neutral">Undone</Pill> : row.undoable ? "Can be undone" : "Undo the later merge first"}</td>
+                    <td className="text-muted-foreground">{row.reversedAt ? <StatusChip dot={false} tone="neutral">Undone</StatusChip> : row.undoable ? "Can be undone" : "Undo the later merge first"}</td>
                     <td className="text-right">
                       {!row.reversedAt && (
                         <Button type="button" size="sm" variant="outline" aria-label={`Undo merge into ${row.keptName}`} disabled={writeBlocked || !row.undoable} onClick={() => void undo(row.id)}>{busy === `undo:${row.id}` ? "Undoing…" : "Undo"}</Button>
@@ -646,10 +654,16 @@ export function ContactWorkspace({ readOnly = false }: { readOnly?: boolean }) {
               </tbody>
             </table>
           ) : (
-            <EmptyState title="No merges yet" hint="Every merge from the review queue, an import or Add contact lands here, and can be undone." />
+            <EmptyState
+              title="No merges yet"
+              hint="Merges land here and can be undone."
+              action={current.total > 0 ? <Button type="button" variant="outline" onClick={() => setTab("review")}>Review pairs</Button> : undefined}
+            />
           )}
         </TableCard>
       )}
+      </div>
+
 
       <Dialog open={fieldsOpen} onOpenChange={(open) => { if (busy !== "field") setFieldsOpen(open); }}>
         <DialogContent className="sm:max-w-[640px]">
@@ -669,7 +683,7 @@ export function ContactWorkspace({ readOnly = false }: { readOnly?: boolean }) {
           </form>
           {fieldError && <p role="alert" className="m-0 text-xs leading-[1.5] text-[var(--error-ink)]">{fieldError}</p>}
           <div className="flex flex-wrap gap-2">
-            {contactFields.map((item) => <Pill key={`${item.entity}-${item.field_key}`} tone="neutral">{item.label} · {item.type}</Pill>)}
+            {contactFields.map((item) => <StatusChip dot={false} key={`${item.entity}-${item.field_key}`} tone="neutral">{item.label} · {item.type}</StatusChip>)}
             {!contactFields.length && <span className="text-sm leading-[1.5] text-[var(--muted)]">No custom fields yet.</span>}
           </div>
         </DialogContent>

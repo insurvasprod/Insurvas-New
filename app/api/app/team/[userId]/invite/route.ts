@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { audit } from "@/lib/audit/log";
 import { requireTenant } from "@/lib/tenantAuth/requireTenant";
+import { recordSettingsChanges } from "@/lib/settingsAudit/record";
 import { revokeTenantInvite } from "@/lib/tenantTeam/service";
 
 /** Revokes an invitation nobody has accepted, freeing the seat it holds. */
@@ -26,6 +27,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
       metadata: { tenantId: auth.context.tenantId, email: result.email, accountRemoved: result.accountRemoved },
       request,
     });
+    await recordSettingsChanges({ tenantId: auth.context.tenantId, actorId: auth.context.userId, section: "team-access", changes: [{ key: `member:${userId}`, label: `Invitation for ${result.email ?? "a teammate"}`, from: "invited", to: null, changeType: "delete" }] });
     return NextResponse.json({ ok: true, userId, accountRemoved: result.accountRemoved });
   } catch (error) {
     const message = error instanceof Error ? error.message : "";

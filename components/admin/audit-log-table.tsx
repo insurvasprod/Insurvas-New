@@ -351,7 +351,7 @@ export function AuditLogTable({
                       <td className={cn(st.td, "align-top tabular-nums")} title={hydrated ? localTime(entry.ts) : undefined}>
                         {entry.whenUtc}
                         <br />
-                        <span className="text-[12px] text-[var(--muted)]">{relativeTime(entry.ts, now)}</span>
+                        <span className="text-xs text-[var(--muted)]">{relativeTime(entry.ts, now)}</span>
                       </td>
                       <td className={cn(st.td, "align-top", WRAP)} title={entry.actorDetail ?? undefined}>
                         {entry.actorLabel}
@@ -400,7 +400,7 @@ export function AuditLogTable({
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <p className="text-muted-foreground">Action</p>
-                  <p className="font-mono text-[13px] font-medium break-all">{selected.action}</p>
+                  <p className="font-mono text-sm font-medium break-all">{selected.action}</p>
                 </div>
                 <div>
                   <p className="text-muted-foreground">Your local time</p>

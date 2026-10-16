@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { withFrom } from "@/lib/applications/backLink";
 import { notify, setCallInProgress } from "@/lib/notify";
+import { withFrom } from "@/lib/applications/backLink";
 
 import { openSlots, type PickerContext } from "@/lib/appointments/calendarMath";
 import { insideWindow, STATE_NAMES } from "@/lib/callbacks/windowFacts";
@@ -113,9 +113,9 @@ export function useDialer({ readOnly = false, role = "producer", requestedLeadId
         const body = await response.json().catch(() => null);
         if (!active) return;
         if (response.ok && body?.served) { setServed(body.served); setSelectedId(body.served.leadId); }
-        else setEmptyReason(`That lead could not be opened: ${errorText(body, "the server refused it.")} Press Serve next lead for the next one in the queue.`);
+        else setEmptyReason(`Serve the next lead — that one could not be opened: ${errorText(body, "the server refused it.")}`);
         setQueueReload((n) => n + 1);
-      }).catch(() => { if (active) setEmptyReason("That lead could not be opened. Press Serve next lead for the next one in the queue."); }).finally(() => { if (active) setLoading(false); });
+      }).catch(() => { if (active) setEmptyReason("Serve the next lead — that one could not be opened."); }).finally(() => { if (active) setLoading(false); });
       return () => { active = false; };
     }
     void fetch("/api/app/dialer/next", { method: "POST" }).then(async (response) => {

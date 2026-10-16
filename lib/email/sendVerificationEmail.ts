@@ -2,6 +2,7 @@ import "server-only";
 
 import { sendEmail, type EmailDelivery } from "./transport.ts";
 import { emailVerificationEmail } from "./templates.ts";
+import { devEmailLinkLine, devEmailLinksEnabled } from "./devLinks.ts";
 
 type VerificationEmailInput = {
   email: string;
@@ -29,10 +30,17 @@ export async function sendVerificationEmail(input: VerificationEmailInput): Prom
     verificationUrl: input.verificationUrl,
   });
 
-  return sendEmail({
+  const delivery = await sendEmail({
     to: input.email,
     ...rendered,
     templateKey: "user.email_verification",
     dedupeKey: `signup-verification-${input.verificationId}`,
   });
+
+  // Local testing only (devLinks.ts): delivery is off, so print the link instead. Never in production.
+  if (!delivery.delivered && devEmailLinksEnabled()) {
+    console.info(devEmailLinkLine("email verification", input.email, input.verificationUrl));
+    return { delivered: true, providerId: "dev-console-link" };
+  }
+  return delivery;
 }

@@ -127,8 +127,8 @@ function overlaps(a: OfferRow, b: OfferRow): boolean {
 }
 
 const PAGE = 10;
-const th = "px-3 py-2 text-left text-[12px] leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]";
-const td = "border-t border-[var(--border)] px-3 py-2 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--body)]";
+const th = "px-3 py-2 text-left text-xs leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]";
+const td = "border-t border-[var(--border)] px-3 py-2 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--body)]";
 
 /**
  * The offers board (p-adm-offers): the campaign layer over coupons. Figures, filters and table all
@@ -386,15 +386,15 @@ export function OffersTable({
                   <tr key={offer.id} className={cn("align-top hover:bg-[color-mix(in_srgb,var(--primary),transparent_95%)]", (state === "ended" || state === "inactive") && "opacity-70")}>
                     <td className={td}>
                       <span className="font-semibold text-[var(--ink)]">{offer.name}</span>
-                      <span className="block text-[12px] text-[var(--muted)]">{offer.coupon ? <code className="font-mono">{offer.coupon.code}</code> : "No coupon"} · {offer.auto_apply ? "applied automatically" : "manual only"}</span>
-                      {clash && <span className="mt-0.5 block text-[12px] font-semibold text-[var(--warning-ink)]">Overlaps {clash.with.map((o) => o.name).join(", ")}</span>}
+                      <span className="block text-xs text-[var(--muted)]">{offer.coupon ? <code className="font-mono">{offer.coupon.code}</code> : "No coupon"} · {offer.auto_apply ? "applied automatically" : "manual only"}</span>
+                      {clash && <span className="mt-0.5 block text-xs font-semibold text-[var(--warning-ink)]">Overlaps {clash.with.map((o) => o.name).join(", ")}</span>}
                     </td>
                     <td className={td}>{ruleOf(offer)}</td>
                     <td className={td}>{targetOf(offer)}</td>
                     <td className={cn(td, "whitespace-nowrap tabular-nums")}>{offer.starts_at ? fullDate(offer.starts_at) : "Now"} – {offer.ends_at ? fullDate(offer.ends_at) : "no end"}</td>
                     <td className={cn(td, "text-right tabular-nums")}>
                       {offer.redeemed_count.toLocaleString()}{offer.max_redemptions === null ? "" : ` / ${offer.max_redemptions.toLocaleString()}`}
-                      <span className="block text-[12px] text-[var(--muted)]">{formatCentsAsCurrency(offer.discount_given_cents)} given</span>
+                      <span className="block text-xs text-[var(--muted)]">{formatCentsAsCurrency(offer.discount_given_cents)} given</span>
                     </td>
                     <td className={td}><StatusChip tone={STATE[state].tone} dot>{STATE[state].label}</StatusChip></td>
                     <td className={cn(td, "text-right")}>
@@ -452,7 +452,7 @@ export function OffersTable({
           {/* User decision (25 Sep): applying to an existing subscription stays allowed, with the gap said
               plainly. Whop cannot attach a promo code to an existing membership through its API, so only
               our invoice changes — and the two then disagree, which the Invoices page reports as Mismatched. */}
-          <div role="note" className="rounded-[8px] border-l-[3px] border-l-[var(--warning)] bg-[var(--warning-surface)] px-3 py-2.5 text-[14px] leading-normal text-[var(--body)]">
+          <div role="note" className="rounded-[8px] border-l-[3px] border-l-[var(--warning)] bg-[var(--warning-surface)] px-3 py-2.5 text-sm leading-normal text-[var(--body)]">
             <strong className="font-semibold text-[var(--warning-ink)]">Our invoice gets the discount; Whop&rsquo;s charge does not change by itself.</strong>{" "}
             The customer is still charged full price unless the same code{applyOffer?.coupon?.code ? <> (<code className="font-mono">{applyOffer.coupon.code}</code>)</> : null} is applied to their membership in Whop&rsquo;s dashboard. Until then this invoice will show as Mismatched.
           </div>

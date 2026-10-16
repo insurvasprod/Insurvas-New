@@ -89,7 +89,7 @@ export function DialerMock({ scanClass = "" }: { scanClass?: string }) {
       <div className={`mt-3 overflow-hidden rounded-lg border border-border ${scanClass}`}>
         {checks.map(([label, value], index) => (
           <div key={label} className={`flex items-center gap-2.5 px-3 py-2 text-xs ${index ? "border-t border-border" : ""}`}>
-            <span className="inline-flex size-4 items-center justify-center rounded-full bg-[var(--success)] text-white"><Check className="size-3" strokeWidth={3} aria-hidden="true" /></span>
+            <span className="inline-flex size-4 items-center justify-center rounded-full bg-[var(--success)] text-[var(--on-success)]"><Check className="size-3" strokeWidth={3} aria-hidden="true" /></span>
             <span className="flex-1 font-semibold text-foreground">{label}</span>
             <span className="text-muted-foreground">{value}</span>
           </div>

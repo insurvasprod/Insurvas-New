@@ -4,7 +4,7 @@ import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { customerName, formatInTimezone, stateFromLeadValues, STATE_TIMEZONES } from "@/lib/callbacks/timezone";
 import { productLineLabel } from "@/lib/format/productLine";
 import { describeEmptyQueue, EMPTY_QUEUE_NORMAL, explainEmptyQueue, pickRefusalMessage, returnWindowLine, suppressionRefusal, windowOpeningCandidates, type EmptyQueueFacts, type ReturnWindow, type StateWindowRow } from "./display";
-import { getDncDialingStatus, performDncDialPreflight } from "@/lib/compliance/service";
+import { campaignDialRefusal, storedLitigatorRefusal } from "./dialGate";
 import { normalizeDialPhone } from "@/lib/compliance/scrub";
 import { getCallingWindows, staleRulesReason } from "@/lib/callingWindow/service";
 import { callbackWindowFacts, type CallbackWindowFacts } from "@/lib/callbacks/windowFacts";
@@ -41,16 +41,17 @@ type Db = { from(table: string): Query; rpc(name: string, args: Record<string, u
 export type DialerEligibility = {
   allowed: boolean;
   // "list_suppressed" (20260925700200): a stored scrub hit — litigator, federal or state DNC, invalid.
-  reason: "ready" | "no_state" | "invalid_phone" | "not_licensed" | "internal_suppressed" | "list_suppressed" | "outside_window" | "dnc_unavailable" | "policy_unavailable";
+  // "campaign_not_servable": the lead's campaign is paused or not scrubbed (campaigns_servable's rule).
+  // "litigator_listed": the import's stored screening answer named a TCPA litigator.
+  reason: "ready" | "no_state" | "invalid_phone" | "not_licensed" | "internal_suppressed" | "list_suppressed" | "campaign_not_servable" | "litigator_listed" | "outside_window" | "policy_unavailable";
   message: string;
   checkedAt: string;
   timezone: string | null;
   customerLocalTime: string | null;
   /**
-   * Whether a DNC VENDOR is configured and answering — not whether this number was looked up. The
-   * number is looked up only at the click (markDialClicked), and that result is logged in
-   * tenant_dial_dnc_checks. "clear" here used to be rendered as "DNC status: clear", which claimed a
-   * lookup that had not happened.
+   * The stored-list answer for this number (owner decision 3: our own tables only, never a vendor).
+   * "unavailable" means our own lists could not be read. The click re-reads the same lists and logs
+   * the answer in tenant_dial_dnc_checks.
    */
   dncCheck: "pending" | "clear" | "suppressed" | "unavailable";
   /** The agency's own suppression list, checked for this number on every read — its own result. */
@@ -220,7 +221,37 @@ function licenceFor(context: LicenceContext, state: string | null): LicenceDecis
  * prepared. The final click still performs a fresh provider DNC lookup; this function must never
  * turn a cached/diagnostic result into permission to dial.
  */
-async function getDialerEligibility(db: Db, tenantId: string, values: Row, campaignId: string | null, agentId?: string): Promise<DialerEligibility> {
+/** 503 for "we could not tell", 422 for "we checked and the answer is no". */
+function dialGateStatus(reason: DialerEligibility["reason"]) {
+  return reason === "policy_unavailable" ? 503 : 422;
+}
+
+/** The lead's campaign, for the campaigns_servable rule at the dial. */
+async function readGateCampaign(db: Db, tenantId: string, campaignId: string | null) {
+  if (!campaignId) return { campaign: null, readFailed: false };
+  const row = await db.from("tenant_campaigns").select("status, scrub_status").eq("tenant_id", tenantId).eq("id", campaignId).maybeSingle<Row>();
+  if (row.error) return { campaign: null, readFailed: true };
+  return { campaign: row.data ? { status: text(row.data.status) || null, scrubStatus: text(row.data.scrub_status) || null } : null, readFailed: false };
+}
+
+/**
+ * The import's stored litigator evidence: the lead's own screening answer, and a litigator row in
+ * any of the tenant's scrub ledgers. `ledgerListed` is null when the ledger could not be read (a
+ * table not there yet counts as no rows, as it did before the ledger existed).
+ */
+async function readStoredLitigator(db: Db, tenantId: string, leadId: string | null, normalizedPhone: string) {
+  const raw = normalizedPhone.replace(/\D/g, "");
+  const digits = raw.length === 11 && raw.startsWith("1") ? raw.slice(1) : raw;
+  const [lead, ledger] = await Promise.all([
+    leadId ? db.from("agent_leads").select("screening_outcome").eq("tenant_id", tenantId).eq("id", leadId).maybeSingle<Row>() : null,
+    db.from("tenant_campaign_scrub_rejections").select("phone_digits").eq("tenant_id", tenantId).eq("phone_digits", digits).eq("outcome", "tcpa_litigator").limit(1),
+  ]);
+  const leadScreeningOutcome = lead && !lead.error ? text(lead.data?.screening_outcome) || null : null;
+  const ledgerListed = ledger.error ? (isPendingSchema(ledger.error) ? false : null) : Array.isArray(ledger.data) && ledger.data.length > 0;
+  return { leadScreeningOutcome, ledgerListed };
+}
+
+async function getDialerEligibility(db: Db, tenantId: string, values: Row, campaignId: string | null, agentId?: string, leadId?: string | null): Promise<DialerEligibility> {
   const checkedAt = new Date().toISOString();
   const { state, timezone, customerLocalTime } = localTime(checkedAt, values);
   const phone = leadPhone(values);
@@ -260,9 +291,9 @@ async function getDialerEligibility(db: Db, tenantId: string, values: Row, campa
     return blocked("invalid_phone", "Dialing is blocked because this lead does not have a valid phone number.");
   }
 
-  // The three reads are independent and side-effect free, so they are fetched together; the
-  // decisions below still run in the original order, so the first blocking reason is unchanged.
-  const [licence, window, suppressed, dncResult, exemption] = await Promise.all([
+  // The reads are independent, so they are fetched together; the decisions below still run in order.
+  // Every one reads our own tables (owner decision 3): no vendor is asked at the dial.
+  const [licence, window, suppressed, gateCampaign, storedLitigator, exemption] = await Promise.all([
     // "Refused by the dialer": the agent must be licensed in the lead's state (Settings › States &
     // licences, and their own states on Team & access). Only known for a named agent.
     agentId
@@ -278,8 +309,8 @@ async function getDialerEligibility(db: Db, tenantId: string, values: Row, campa
       p_at: checkedAt,
     }),
     suppressedRead,
-    // Settled here so a DNC failure is evaluated in its own turn below, never short-circuiting the earlier checks.
-    getDncDialingStatus().then((status) => ({ ok: true as const, status }), () => ({ ok: false as const })),
+    readGateCampaign(db, tenantId, campaignId),
+    readStoredLitigator(db, tenantId, leadId ?? null, normalizedPhone),
     exemptionRead,
   ]);
   dncExemption = exemption;
@@ -300,19 +331,24 @@ async function getDialerEligibility(db: Db, tenantId: string, values: Row, campa
     return blocked("outside_window", `Dialing is blocked by the server calling-window policy. Customer local time: ${customerLocalTime ?? "unknown"}.`);
   }
 
-  if (suppressed.internal === "unavailable") return blocked("policy_unavailable", "Dialing is blocked because the tenant suppression policy could not be verified.");
+  // The campaign half of campaigns_servable: paused, unscrubbed, mid-scrub or failed refuses the dial,
+  // a return call included — skipping the queue never skips the scrub.
+  const campaignRefusal = campaignDialRefusal({ campaignId, campaign: gateCampaign.campaign, readFailed: gateCampaign.readFailed });
+  if (campaignRefusal) return blocked(campaignRefusal.reason, campaignRefusal.message);
+
+  if (suppressed.internal === "unavailable") return blocked("policy_unavailable", "Dialing is blocked because the tenant suppression policy could not be verified.", "unavailable");
   // A stored scrub hit refuses the dial with the list named — the litigator list first.
   const scrubHits = (suppressionHits ?? []).filter((hit) => hit.listType !== "internal");
   if (scrubHits.length) return blocked("list_suppressed", suppressionRefusal(scrubHits.map((hit) => hit.listType)), "suppressed");
   if (suppressed.internal === "suppressed") return blocked("internal_suppressed", "Dialing is blocked because this number is on the tenant do-not-call list.", "suppressed");
-
-  if (!dncResult.ok) return blocked("dnc_unavailable", "Dialing is blocked because DNC availability could not be verified.", "unavailable");
-  if (dncResult.status.blocked) return blocked("dnc_unavailable", dncResult.status.reason ?? "Dialing is blocked until an enabled DNC vendor is available.", "unavailable");
+  // The import's stored litigator answers (the suppression list's litigator rows were read above).
+  const litigatorRefusal = storedLitigatorRefusal(storedLitigator);
+  if (litigatorRefusal) return blocked(litigatorRefusal.reason, litigatorRefusal.message, litigatorRefusal.reason === "litigator_listed" ? "suppressed" : "unavailable");
 
   return {
     allowed: true,
     reason: "ready",
-    message: "The calling window and tenant suppression checks passed. A fresh DNC lookup is required immediately before dialing.",
+    message: "The calling window, campaign scrub and stored suppression checks passed. They are read again immediately before dialing.",
     checkedAt,
     timezone,
     customerLocalTime,
@@ -536,7 +572,7 @@ export async function getDialerPanel(input: { tenantId: string; agentId?: string
       : null,
     db.from("tenant_scripts").select("id, campaign_id, product_code, version, sections").eq("tenant_id", input.tenantId).is("campaign_id", null).eq("product_code", productCode).eq("is_active", true).order("version", { ascending: false }).limit(1).maybeSingle<Row>(),
     db.from("state_disclosures").select("id, state, product_code, required_text, effective_from").eq("state", state).eq("product_code", productCode).lte("effective_from", new Date().toISOString().slice(0, 10)).order("effective_from", { ascending: false }).limit(1).maybeSingle<Row>(),
-    getDialerEligibility(db, input.tenantId, values, campaignId, input.agentId),
+    getDialerEligibility(db, input.tenantId, values, campaignId, input.agentId, input.leadId),
     // The board's Campaign / Vendor / Source row. Most leads carry no campaign today; they read "—".
     campaignId ? readPanelCampaign(db, input.tenantId, campaignId) : null,
     // "Open until 8:00 PM CT": the explainer beside tenant_can_dial_now (migration 20260924323200).
@@ -698,16 +734,18 @@ export async function startDialAttempt(input: { tenantId: string; agentId: strin
   // All four are reads (current_slot_for_state is a pure STABLE function), so they are fetched
   // together; the throws below keep their original order, eligibility first.
   const [eligibility, queue, latest, slot] = await Promise.all([
-    getDialerEligibility(db, input.tenantId, (lead.data.values ?? {}) as Row, text(lead.data.campaign_id) || null, input.agentId),
+    getDialerEligibility(db, input.tenantId, (lead.data.values ?? {}) as Row, text(lead.data.campaign_id) || null, input.agentId, input.leadId),
     db.from("lead_queue").select("id, status, claimed_by").eq("tenant_id", input.tenantId).eq("lead_id", input.leadId).eq("status", "claimed").eq("claimed_by", input.agentId).order("claimed_at", { ascending: false }).limit(1).maybeSingle<Row>(),
     db.from("tenant_call_attempts").select("attempt_number").eq("tenant_id", input.tenantId).eq("lead_id", input.leadId).order("attempt_number", { ascending: false }).limit(1).maybeSingle<Row>(),
     resolveAttemptSlot(db, (lead.data.values ?? {}) as Row),
   ]);
-  if (!eligibility.allowed) throw new DialGateError(eligibility.reason, eligibility.reason === "dnc_unavailable" || eligibility.reason === "policy_unavailable" ? 503 : 422, eligibility.message);
+  if (!eligibility.allowed) throw new DialGateError(eligibility.reason, dialGateStatus(eligibility.reason), eligibility.message);
   if (queue.error) throw new DialerWorkflowError(503, `Could not verify lead assignment: ${queue.error.message}`);
   // An inbound return call has no claim to check. Decision 1: the customer rang Ray, so nothing was
   // served and nothing was claimed — requiring a claim here is what made the disposition
-  // unreachable from the search screen. Every outbound attempt still requires one.
+  // unreachable from the search screen. Every outbound attempt still requires one. The flag waives
+  // the CLAIM only: every compliance gate above (window, licence, campaign scrub/paused, stored
+  // lists, litigator) has already run for it exactly as for an outbound dial.
   if (!queue.data && !input.inbound) throw new DialerWorkflowError(409, "Claim this lead before preparing a dial attempt.");
   if (latest.error) throw new Error(`Could not load call history: ${latest.error.message}`);
   const attemptNumber = Number(latest.data?.attempt_number ?? 0) + 1;
@@ -757,21 +795,15 @@ export async function markDialClicked(input: { tenantId: string; agentId: string
   if (!lead || text(lead.tenant_id) !== input.tenantId) throw new Error("Lead not found for this tenant");
   const values = (lead.values ?? {}) as Row;
   const refuse = (error: DialGateError) => refuseAtClick(input, text(lead.id), !text(attempt.data?.work_item_id), error);
-  const eligibility = await getDialerEligibility(db, input.tenantId, values, text(lead.campaign_id) || null, input.agentId);
-  if (!eligibility.allowed) await refuse(new DialGateError(eligibility.reason, eligibility.reason === "dnc_unavailable" || eligibility.reason === "policy_unavailable" ? 503 : 422, eligibility.message));
-  const phone = leadPhone(values);
-  let dncResult: "clear" | "listed" | "unavailable";
-  try {
-    // The exemption's audited use (LA-2.3-3) names this dial: its lead, attempt and agent.
-    const dnc = await performDncDialPreflight(phone, input.tenantId, undefined, { leadId: text(lead.id), attemptId: input.attemptId, agentId: input.agentId });
-    dncResult = dnc.allowed ? "clear" : "listed";
-  } catch {
-    dncResult = "unavailable";
-  }
-  // Written whatever the answer, so the panel can say what the last real lookup found.
+  // Every gate re-read at the click, from our own tables only (owner decision 3, LA-2.3: no vendor).
+  const eligibility = await getDialerEligibility(db, input.tenantId, values, text(lead.campaign_id) || null, input.agentId, text(lead.id));
+  // The lists' own answer, whichever gate refused first; never "clear" for lists not read.
+  const listed = eligibility.dncCheck === "suppressed" || eligibility.suppression === "suppressed" || (eligibility.suppressionHits ?? []).length > 0;
+  const unread = eligibility.dncCheck === "unavailable" || eligibility.suppression === "unavailable" || eligibility.suppression === "not_checked";
+  const dncResult: "clear" | "listed" | "unavailable" = listed ? "listed" : unread ? "unavailable" : "clear";
+  // Written whatever the answer, so the panel can say what the last real check found.
   await logDncCheck(db, { tenantId: input.tenantId, leadId: text(lead.id), attemptId: input.attemptId, agentId: input.agentId, result: dncResult });
-  if (dncResult === "listed") await refuse(new DialGateError("internal_suppressed", 422, "Dialing is blocked because this number is on a DNC list."));
-  if (dncResult === "unavailable") await refuse(new DialGateError("dnc_unavailable", 503, "Dialing is blocked because the number could not be verified by the DNC vendors."));
+  if (!eligibility.allowed) await refuse(new DialGateError(eligibility.reason, dialGateStatus(eligibility.reason), eligibility.message));
   const result = await db.from("tenant_call_attempts").update({ dial_clicked_at: new Date().toISOString() }).eq("id", input.attemptId).eq("tenant_id", input.tenantId).eq("agent_id", input.agentId).select("id, dial_clicked_at").single<Row>();
   if (result.error || !result.data) throw new Error(result.error?.message ?? "Call attempt not found");
   return result.data;

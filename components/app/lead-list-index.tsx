@@ -1,8 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
+import { InfoTip } from "@/components/ui/info-tip";
 import { ClearFiltersButton, DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
@@ -179,7 +181,11 @@ export function LeadListIndex({ lists, licensedStates, onOpen, nowAt, onRefresh 
         footer={<Pager page={current} total={shown.length} noun="lists" pageSize={PAGE_SIZE} onPage={setPage} suffix={shown.length < lists.length ? `${lists.length} in all · newest upload first` : "newest upload first"} />}
       >
         {lists.length === 0 ? (
-          <EmptyState title="No lead lists yet" hint="A list is a campaign. Create one under Vendors & campaigns, then import a CSV against it." />
+          <EmptyState
+            title="No lead lists yet"
+            hint="Import a CSV against a campaign to start one."
+            action={<Button asChild type="button"><Link href="/app/import">Import a list</Link></Button>}
+          />
         ) : shown.length === 0 ? (
           <NoMatches noun="lists" onClear={clearFilters} />
         ) : (
@@ -191,11 +197,15 @@ export function LeadListIndex({ lists, licensedStates, onOpen, nowAt, onRefresh 
                 <th className="w-[84px] text-right">Bought</th>
                 <th className="w-[78px]">Uploaded</th>
                 <th className="w-[78px] text-right">Usable</th>
-                <th className="w-[104px] text-right">Cost / usable</th>
+                <th className="w-[120px] text-right">
+                  <span className="inline-flex items-center gap-0.5">Cost / usable<InfoTip label="About cost per usable lead">What you paid for the list, divided by the leads that arrived after the scrub.</InfoTip></span>
+                </th>
                 <th className="w-[150px]">Territory</th>
                 <th className="w-[170px]">Health</th>
                 <th className="w-[158px]">State</th>
-                <th className="w-[140px]">Worked through</th>
+                <th className="w-[150px]">
+                  <span className="inline-flex items-center gap-0.5">Worked through<InfoTip label="About worked through">The bar fills with closed, then in cadence, then exhausted leads. The empty rest has never been dialed. Hover a bar for the counts.</InfoTip></span>
+                </th>
                 <th className="w-[84px] text-right"><span className="sr-only">Actions</span></th>
               </tr>
             </thead>

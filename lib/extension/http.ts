@@ -12,7 +12,8 @@ import type { MapScope } from "./maps";
  * feature-key checker sees the guard in the route file) and turns the result into an actor here.
  */
 export function actorOf(auth: EntitledContext, request: Request) {
-  return { tenantId: auth.context.tenantId, userId: auth.context.userId, role: auth.context.role, request };
+  // The session is carried so a grant can be bound to the sign-in that opened it (LA-3.12).
+  return { tenantId: auth.context.tenantId, userId: auth.context.userId, role: auth.context.role, sessionId: auth.context.sessionId ?? null, request };
 }
 
 export function tenantScope(auth: EntitledContext, request: Request): MapScope {

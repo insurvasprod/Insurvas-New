@@ -18,7 +18,7 @@ export default async function TcpaPage() {
       <FeatureGateNotice
         guard={guard}
         featureLabel="TCPA / DNC"
-        description="The numbers your agency must never call, why each one is on the list, and a check you can run before dialling."
+        description="Numbers you must never call, and a check before dialling."
       />
     );
   // A setter needs to be able to answer "are we allowed to call this person" mid-shift, so reading

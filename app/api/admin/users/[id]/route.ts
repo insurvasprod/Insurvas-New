@@ -14,6 +14,13 @@ import {
 } from "@/lib/users/invitations";
 import { sendEmailChangeConfirmation } from "@/lib/email/sendInvitationEmail";
 import { configuredAppOrigin } from "@/lib/urls/origin";
+import { resolveEditTenant, tenantsLeftWithoutOwner, type OwnerRow } from "@/lib/users/ownerGuard";
+
+/** A function this code expects but the database does not have yet (migration not applied). */
+function isMissingFunction(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false;
+  return ["42883", "PGRST202"].includes(error.code ?? "") || /could not find the function/i.test(error.message ?? "");
+}
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireAdminRole(["super_admin"]);
@@ -27,7 +34,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid input" }, { status: 400 });
   }
 
-  const { name, phone, role, email } = parsed.data;
+  const { name, phone, role, email, tenantId: requestedTenantId } = parsed.data;
   const supabase = getSupabaseServiceClient();
 
   const { data: existing } = await supabase
@@ -40,11 +47,31 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
 
+  // The role is per tenant, and a user can belong to several. The database function used to take
+  // `tenant_users ... limit 1` with no order, so editing a two-workspace user changed the role in
+  // whichever tenant Postgres happened to return. The edit now names its tenant (the dialog sends
+  // the row's), and a request that does not, for a user with more than one, is refused.
+  const { data: memberships, error: membershipError } = await supabase
+    .from("tenant_users")
+    .select("tenant_id")
+    .eq("user_id", id);
+  if (membershipError) return NextResponse.json({ error: "Could not load this user's tenants" }, { status: 500 });
+
+  const target = resolveEditTenant((memberships ?? []).map((row) => row.tenant_id), requestedTenantId);
+  if ("error" in target) {
+    return target.error === "ambiguous"
+      ? NextResponse.json(
+          { error: "This user belongs to more than one tenant — edit them from the tenant whose role you mean to change" },
+          { status: 409 },
+        )
+      : NextResponse.json({ error: "This user is not a member of that tenant" }, { status: 400 });
+  }
+
   const emailChangeRequested = email !== existing.email;
   const origin = emailChangeRequested ? configuredAppOrigin("agent") : null;
   const token = generateInviteToken();
   const expiresAt = await inviteExpiryFromNow();
-  const { data, error } = await supabase.rpc("admin_update_user_with_email_change", {
+  const args = {
     p_user_id: id,
     p_name: name,
     p_phone: phone || null,
@@ -53,9 +80,25 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     p_token_hash: hashInviteToken(token),
     p_expires_at: expiresAt.toISOString(),
     p_created_by: auth.session.sub,
-  });
+  };
+  // p_tenant_id arrives with 20261015530000; database.types.ts predates it, hence the cast.
+  let { data, error } = await supabase.rpc(
+    "admin_update_user_with_email_change",
+    { ...args, p_tenant_id: target.tenantId } as typeof args,
+  );
+  if (isMissingFunction(error)) {
+    // Until 20261015530000 is applied: the old function picks the user's only tenant, and the
+    // check above has already proved there is at most one, so it is the same tenant.
+    ({ data, error } = await supabase.rpc("admin_update_user_with_email_change", args));
+  }
 
   if (error) {
+    if (/TENANT_AMBIGUOUS|TENANT_MEMBERSHIP_NOT_FOUND/i.test(error.message ?? "")) {
+      return NextResponse.json(
+        { error: "This user's tenant memberships changed — reload and try again" },
+        { status: 409 },
+      );
+    }
     if (/LAST_OWNER|last_owner/i.test(error.message ?? "")) {
       return NextResponse.json(
         { error: "This is the tenant's only owner — promote someone else before changing this role" },
@@ -69,23 +112,13 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   }
 
   const result = Array.isArray(data) ? data[0] : data;
+  if (!result) return NextResponse.json({ error: "Could not update user" }, { status: 500 });
 
   // Only record what actually changed, so the audit row reads as a diff rather than a dump.
   const changes: Record<string, { from: unknown; to: unknown }> = {};
   if (result.old_name !== result.new_name) changes.name = { from: result.old_name, to: result.new_name };
   if (result.old_phone !== result.new_phone) changes.phone = { from: result.old_phone, to: result.new_phone };
   if (result.old_role !== result.new_role) changes.role = { from: result.old_role, to: result.new_role };
-
-  if (Object.keys(changes).length > 0) {
-    await audit({
-      actorId: auth.session.sub,
-      action: "user.updated",
-      targetType: "user",
-      targetId: id,
-      metadata: { changes },
-      request,
-    });
-  }
 
   // The email is never changed outright — the new address has to be confirmed first, so a typo
   // can't lock the user out of their own account.
@@ -94,17 +127,23 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   if (result.email_change_created) {
     const url = buildEmailChangeUrl(token, origin!);
     await sendEmailChangeConfirmation({ to: email, name, confirmUrl: url, expiresAt });
+    changes.email = { from: existing.email, to: email };
+    emailChange = { url, expiresAt: expiresAt.toISOString(), newEmail: email };
+  }
 
+  // Exactly one audit row per edit. It used to write two when the email changed alongside another
+  // field (user.updated + user.email_change_requested). An edit that only requests a new address
+  // keeps that specific action; anything else is user.updated, with the email request in its diff.
+  if (Object.keys(changes).length > 0) {
+    const onlyEmail = Object.keys(changes).length === 1 && "email" in changes;
     await audit({
       actorId: auth.session.sub,
-      action: "user.email_change_requested",
+      action: onlyEmail ? "user.email_change_requested" : "user.updated",
       targetType: "user",
       targetId: id,
-      metadata: { changes: { email: { from: existing.email, to: email } } },
+      metadata: { changes, tenant_id: target.tenantId, email_change_requested: Boolean(result.email_change_created) },
       request,
     });
-
-    emailChange = { url, expiresAt: expiresAt.toISOString(), newEmail: email };
   }
 
   return NextResponse.json({ ok: true, emailChange });
@@ -162,6 +201,10 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
   // read-then-write and two concurrent deletes of two different owners could in principle both
   // pass. Deliberate: the alternative is a new database function, and this environment cannot
   // apply DDL. Recorded in the audit doc as the one caveat on this criterion.
+  //
+  // Owners are counted as the database guard counts them (`u.status <> 'deleted'`): a soft-deleted
+  // owner is not an owner. This used to count every owner row, so a tenant whose other "owner" had
+  // been removed passed and was left with nobody (lib/users/ownerGuard.ts).
   const { data: ownerships, error: ownershipError } = await supabase
     .from("tenant_users")
     .select("tenant_id")
@@ -176,16 +219,14 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
   if (ownedTenantIds.length) {
     const { data: coOwners, error: countError } = await supabase
       .from("tenant_users")
-      .select("tenant_id")
+      .select("tenant_id, users!inner(status)")
       .in("tenant_id", ownedTenantIds)
-      .eq("role", "owner");
+      .eq("role", "owner")
+      .returns<{ tenant_id: string; users: { status: string | null } | null }[]>();
     if (countError) return NextResponse.json({ error: "Could not check tenant ownership" }, { status: 500 });
 
-    const ownersByTenant = new Map<string, number>();
-    for (const { tenant_id } of coOwners ?? []) {
-      ownersByTenant.set(tenant_id, (ownersByTenant.get(tenant_id) ?? 0) + 1);
-    }
-    if (ownedTenantIds.some((tenantId) => (ownersByTenant.get(tenantId) ?? 0) <= 1)) {
+    const rows: OwnerRow[] = (coOwners ?? []).map((row) => ({ tenant_id: row.tenant_id, status: row.users?.status ?? null }));
+    if (tenantsLeftWithoutOwner(ownedTenantIds, rows).length > 0) {
       return NextResponse.json(
         { error: "This is the tenant's only owner — promote someone else before deleting them" },
         { status: 409 },
@@ -216,19 +257,10 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     .from("users")
     .update({ deleted_at: now.toISOString(), deletion_scheduled_until: scheduled.toISOString() })
     .eq("id", id);
-  if (stampError) {
-    // The user IS deleted at this point; failing the request would be a lie. Report the partial
-    // outcome instead of pretending either way.
-    return NextResponse.json(
-      {
-        ok: true,
-        warning: "Deleted, but the recovery window could not be recorded. Note the date manually.",
-        deletionScheduledUntil: null,
-      },
-      { status: 200 },
-    );
-  }
 
+  // Exactly one audit row per delete, whether or not the window could be stamped. The user IS
+  // deleted once admin_set_user_status returned; a stamp failure used to return before this and
+  // leave the deletion with no audit row at all.
   await audit({
     actorId: auth.session.sub,
     action: "user.deleted",
@@ -239,10 +271,23 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
       email: user.email,
       status: { from: user.status, to: "deleted" },
       soft_delete_days: days,
-      deletion_scheduled_until: scheduled.toISOString(),
+      deletion_scheduled_until: stampError ? null : scheduled.toISOString(),
+      ...(stampError ? { recovery_window_recorded: false } : {}),
     },
     request,
   });
+
+  if (stampError) {
+    // Failing the request would be a lie. Report the partial outcome instead of pretending either way.
+    return NextResponse.json(
+      {
+        ok: true,
+        warning: "Deleted, but the recovery window could not be recorded. Note the date manually.",
+        deletionScheduledUntil: null,
+      },
+      { status: 200 },
+    );
+  }
 
   return NextResponse.json({ ok: true, deletionScheduledUntil: scheduled.toISOString(), softDeleteDays: days });
 }

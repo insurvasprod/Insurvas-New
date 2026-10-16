@@ -6,7 +6,7 @@ import { getVendorScorecard } from "@/lib/vendorScorecard/service";
 
 export default async function TrueCpaPage() {
   const guard = await guardPage("true_cpa");
-  if (!guard.entitled) return <FeatureGateNotice guard={guard} featureLabel="True CPA" description="See what each vendor and campaign actually costs through an issued policy." />;
+  if (!guard.entitled) return <FeatureGateNotice guard={guard} featureLabel="True CPA" description="See what each vendor costs per issued policy." />;
   if (!["owner", "producer", "bookkeeper"].includes(guard.role)) return <RoleGateNotice featureLabel="True CPA" detail="Owners, producers, and bookkeepers can review vendor economics." />;
   // LA-2.17-8: the default period's report is rendered with the page, so the figures arrive with the
   // first paint instead of after the shell, hydration and a second request. A failure here is not a

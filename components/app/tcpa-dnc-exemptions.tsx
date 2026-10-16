@@ -195,7 +195,7 @@ export function TcpaDncExemptions({ onChanged, className, pageSize = 10 }: { onC
         : !loaded ? <SectionLoading rows={2} columns={6} label="Loading DNC exemptions" />
         : !loaded.schemaReady ? <p className="px-4 py-3 text-sm text-[var(--warning-ink)]" role="note">DNC exemptions need a database update — until it is applied, federal and state DNC numbers cannot be cleared.</p>
         : view === "uses" ? (
-          loaded.uses.length === 0 ? <EmptyState title="No exemption has been used yet" hint="Each time an exemption clears a dial or a check, it is listed here." />
+          loaded.uses.length === 0 ? <EmptyState title="No exemption has been used yet" hint="Listed each time an exemption clears a dial or check." />
           : matchingUses.length === 0 ? <NoMatches noun="uses" onClear={() => { setSearch(""); setPage(1); }} />
           : <table className="w-full min-w-[900px] border-collapse text-left">
             <thead><tr>
@@ -216,7 +216,7 @@ export function TcpaDncExemptions({ onChanged, className, pageSize = 10 }: { onC
             </tr>)}</tbody>
           </table>
         )
-        : exemptions.length === 0 ? <EmptyState title="No exemptions recorded" hint="Federal and state DNC numbers are refused until an owner records consent or a business relationship." />
+        : exemptions.length === 0 ? <EmptyState title="No exemptions recorded" hint="Federal and state DNC numbers are refused until an owner records consent or a business relationship." action={loaded.canEdit ? <Button variant="outline" onClick={() => setOpen(true)}><ShieldCheck aria-hidden="true" />Record an exemption</Button> : undefined} />
         : matching.length === 0 ? <NoMatches noun="exemptions" onClear={() => { setSearch(""); setPage(1); }} />
         : <table className="w-full min-w-[1280px] border-collapse text-left">
             <thead><tr>

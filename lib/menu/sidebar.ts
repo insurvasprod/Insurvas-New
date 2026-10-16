@@ -15,15 +15,18 @@ import type { MenuItem, MenuSection } from "./definition";
 export type ModuleAccess = { inbound: boolean; outbound: boolean };
 
 /** The rail's job groups, in order, by menu section label. Unlisted sections follow, briefcased. */
+// 2026-10-15 (owner decision): eleven short groups instead of eight long ones — no dropdown past eight.
 export const NAV_GROUPS: readonly { section: string; icon: string }[] = [
   { section: "Today", icon: "calendar-check" },
   { section: "Leads", icon: "contact-round" },
   { section: "Sales", icon: "file-check" },
   { section: "Book", icon: "book-open" },
-  { section: "Money", icon: "landmark" },
+  { section: "Commissions", icon: "receipt" },
   { section: "Data in", icon: "folder-input" },
+  { section: "Accounting", icon: "landmark" },
   { section: "Partners", icon: "users" },
-  { section: "Setup", icon: "shield-check" },
+  { section: "Compliance", icon: "shield-check" },
+  { section: "Reports", icon: "chart-column" },
 ];
 
 /** Sections shown as single links rather than groups. */
@@ -41,7 +44,8 @@ export type SidebarTree = {
 /** The rail for this person: the server-filtered menu, arranged. Nothing here grants anything. */
 export function buildSidebarTree(menu: MenuSection[], moduleAccess?: ModuleAccess): SidebarTree {
   void moduleAccess; // Kept in the signature: the shell still passes it, and module headings may return.
-  const all = menu.flatMap((section) => section.items).filter((item) => item.built);
+  // `sidebar: false` — a settings page (Accounting settings, Carrier rules): reached from Settings.
+  const all = menu.flatMap((section) => section.items).filter((item) => item.built && item.sidebar !== false);
   const standalone = new Set<string>(Object.values(NAV_STANDALONE));
   const grouped = all.filter((item) => !standalone.has(item.section));
   const listed = NAV_GROUPS.map((group) => group.section);

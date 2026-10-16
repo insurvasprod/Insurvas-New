@@ -138,7 +138,7 @@ export function RatingInputs({ fields, value, onChange, onExtra, prefill, prefil
             const options = product?.riders.length ? product.riders : f.options;
             return (
               <fieldset key={f.key} className="min-w-0 sm:col-span-2 lg:col-span-3">
-                <legend className="text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]">{f.label}</legend>
+                <legend className="text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]">{f.label}</legend>
                 {options.length === 0 ? (
                   <p className="mt-1.5 flex h-9 items-center text-sm text-muted-foreground">None on this product</p>
                 ) : (

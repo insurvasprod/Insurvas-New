@@ -79,3 +79,22 @@ export function effectiveStatus(input: { normalized: NormalizedStatus; paidToDat
 export function shownWord(raw: string): string {
   return `“${raw.replace(/ /g, "·")}”`;
 }
+
+const escapeHtml = (text: string) => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+/**
+ * The "a status needs mapping" email (LA-4.5). An email is read outside the app, so its link is
+ * absolute, built from the configured app origin (lib/urls/origin); with none configured the email
+ * names the page instead of printing a path that goes nowhere.
+ */
+export function unmappedStatusEmail(input: { carrierName: string; words: string; count: number; origin: string | null }) {
+  const one = input.count === 1;
+  const link = input.origin ? `${input.origin.replace(/\/$/, "")}/app/carrier-files` : null;
+  const lead = `${input.carrierName} sent ${one ? "a policy status" : "policy statuses"} Insurvas has not seen before:`;
+  const held = `The policies with ${one ? "this status are" : "these statuses are"} kept and held back until the status is mapped, so nothing is guessed. They are read automatically once it is.`;
+  return {
+    subject: `${input.carrierName}: a policy status needs mapping`,
+    text: `${lead} ${input.words}.\n\n${held}\n\n${link ? `Carrier files: ${link}` : "Open Carrier files in Insurvas to map it."}`,
+    html: `<p>${escapeHtml(lead)} <strong>${escapeHtml(input.words)}</strong>.</p><p>${escapeHtml(held)}</p><p>${link ? `<a href="${escapeHtml(link)}">Open Carrier files</a>` : "Open Carrier files in Insurvas to map it."}</p>`,
+  };
+}

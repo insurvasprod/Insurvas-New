@@ -12,7 +12,7 @@
 import { accountTrend, type StatementCheck } from "./carrierAccounts.ts";
 import { unearnedAdvance } from "./commissionLedger.ts";
 
-export const DISCREPANCY_TYPES = ["missing", "short_paid", "over_paid", "mis_rated", "duplicate_chargeback", "unexpected_chargeback", "missing_chargeback", "held_building_up", "debit_balance_growing"] as const;
+export const DISCREPANCY_TYPES = ["missing", "short_paid", "over_paid", "mis_rated", "duplicate_chargeback", "unexpected_chargeback", "missing_chargeback", "held_building_up", "debit_balance_growing", "not_received"] as const;
 export type DiscrepancyType = (typeof DISCREPANCY_TYPES)[number];
 export type Severity = "info" | "warning" | "action";
 
@@ -26,6 +26,8 @@ export const DISCREPANCY_LABELS: Record<DiscrepancyType, { label: string; plural
   missing_chargeback: { label: "Chargeback coming", plural: "Chargebacks coming", needsRates: false },
   held_building_up: { label: "Held, building up", plural: "Held, building up", needsRates: false },
   debit_balance_growing: { label: "Debit balance growing", plural: "Debit balances growing", needsRates: false },
+  // LA-7.6: the carrier says it paid; the bank shows nothing past the carrier's usual lag.
+  not_received: { label: "Paid but not received", plural: "Paid but not received", needsRates: false },
 };
 
 /** The default when a carrier has no tolerance of its own (LA-4.17 settings): a dollar. */
@@ -40,6 +42,8 @@ export type EngineEntry = {
   id: string; carrierId: string; policyNumber: string; type: string; correctsType: string | null; reversesEntryId: string | null; amountCents: number;
   transactionDate: string | null; statementDate: string | null; rateBp: number | null; commissionablePremiumCents: number | null; monthsAdvanced: number | null;
 };
+
+export type UnreceivedStatement = { statementId: string; carrierId: string; statementDate: string; paidCents: number; receivedCents: number; lagDays: number; dueBy: string };
 
 export type Finding = {
   carrier_id: string;
@@ -66,13 +70,44 @@ const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "
 const day = (iso: string | null) => (iso ? `${MONTHS[Number(iso.slice(5, 7)) - 1]} ${Number(iso.slice(8, 10))}, ${iso.slice(0, 4)}` : "an unknown date");
 const daysBetween = (a: string, b: string) => Math.abs(Math.round((Date.UTC(+a.slice(0, 4), +a.slice(5, 7) - 1, +a.slice(8, 10)) - Date.UTC(+b.slice(0, 4), +b.slice(5, 7) - 1, +b.slice(8, 10))) / 86_400_000));
 const kind = (e: EngineEntry) => e.correctsType ?? e.type;
-/** A line dated within 12 months of the trigger (or undated, so it is not silently dropped). */
-const inFirstYear = (e: EngineEntry, triggerOn: string | null) => {
+/**
+ * A line dated inside policy year `year`, counted in whole years from the trigger: year 1 is the
+ * 12 months from the trigger, year 2 the 12 after. An undated line (or no trigger day) belongs to
+ * year 1, so it is not silently dropped — and is not counted again against every later year.
+ */
+export const inPolicyYear = (e: Pick<EngineEntry, "transactionDate" | "statementDate">, triggerOn: string | null, year: number) => {
   const on = e.transactionDate ?? e.statementDate;
-  if (!on || !triggerOn) return true;
-  const end = `${Number(triggerOn.slice(0, 4)) + 1}${triggerOn.slice(4)}`;
-  return on < end;
+  if (!on || !triggerOn) return year === 1;
+  const shift = (n: number) => `${Number(triggerOn.slice(0, 4)) + n}${triggerOn.slice(4)}`;
+  return (year === 1 || on >= shift(year - 1)) && on < shift(year);
 };
+
+/**
+ * "Charged back twice for one lapse" (Module 4 §9: same policy, same lapse event). Two equal
+ * chargebacks are not enough: carriers take an unearned advance back in equal monthly instalments.
+ * A pair of equal chargebacks (within tolerance, within 90 days, so one lapse) is the same lapse
+ * taken twice only when
+ *   · both carry the same date — one event recorded twice; or
+ *   · together with the chargebacks before them in that lapse, they take back more than the policy
+ *     was advanced (beyond tolerance) — instalments never exceed the advance.
+ * With no advance on the ledger only the same-day rule applies. Returns the pair and what was taken
+ * twice (positive cents: owed back to the agent), or null. `chargebacks` are dated-sorted, negative.
+ */
+export function duplicateChargeback(chargebacks: EngineEntry[], advancedCents: number, tol: number): { first: EngineEntry; second: EngineEntry; excessCents: number; sameDay: boolean; advancedCents: number | null } | null {
+  const on = (e: EngineEntry) => e.transactionDate ?? e.statementDate;
+  for (let i = 1; i < chargebacks.length; i++) {
+    const a = chargebacks[i - 1], b = chargebacks[i];
+    const da = on(a), db = on(b);
+    if (!da || !db || Math.abs(a.amountCents - b.amountCents) > tol || daysBetween(da, db) > 90) continue;
+    if (da === db) return { first: a, second: b, excessCents: -b.amountCents, sameDay: true, advancedCents: advancedCents > 0 ? advancedCents : null };
+    if (advancedCents <= 0) continue;
+    // Everything taken back in this lapse so far: the chargebacks within 90 days before b.
+    const taken = -chargebacks.slice(0, i + 1).filter((e) => on(e) && daysBetween(on(e)!, db) <= 90).reduce((s, e) => s + e.amountCents, 0);
+    const excess = taken - advancedCents;
+    if (excess > tol) return { first: a, second: b, excessCents: Math.min(excess, -b.amountCents), sameDay: false, advancedCents };
+  }
+  return null;
+}
 
 /** The entries still standing: an entry a reprocess reversed, and that reversal, cancel out. */
 function standing(entries: EngineEntry[]) {
@@ -88,6 +123,8 @@ export function detect(input: {
   statements: StatementCheck[];
   carrierNames: Map<string, string>;
   tolerance: (carrierId: string) => number;
+  /** LA-7.6: statements whose payment the imported bank data does not show, past the expected lag. */
+  unreceived?: UnreceivedStatement[];
 }): Finding[] {
   const findings: Finding[] = [];
   const byPolicy = new Map<string, EngineEntry[]>();
@@ -105,7 +142,8 @@ export function detect(input: {
     // A policy that lapsed before a single payment was never really in force: nothing is owed on it.
     if (policy.status === "lapsed" && !(policy.monthsPaid ?? 0)) continue;
     // Lines a reprocess or a corrected reissue reversed, and those reversals, cancel out.
-    const rows = standing(byPolicy.get(key) ?? []);
+    // Each expected row is one policy year's figure: only that year's lines are compared with it.
+    const rows = standing(byPolicy.get(key) ?? []).filter((e) => inPolicyYear(e, x.triggerOn, x.policyYear));
     const tol = input.tolerance(x.carrierId);
     const source = x.scheduleId ? { schedule_id: x.scheduleId, schedule_version: x.scheduleVersion, rate_bp: x.rateBp, commissionable_premium_cents: x.premiumCents, confidence: x.confidence } : { confidence: x.confidence, reason: x.reason };
     const paidLines = rows.filter((e) => ["advance", "earned", "held"].includes(kind(e)));
@@ -127,11 +165,9 @@ export function detect(input: {
     const earned = sum(rows, "earned");
     let compare: { expected: number; reported: number; what: string; entryIds: string[] } | null = null;
     if (advanced > 0 && x.expectedAdvanceCents !== null) compare = { expected: x.expectedAdvanceCents, reported: advanced, what: "the advance", entryIds: ids(rows, ["advance"]) };
-    else if (advanced === 0 && earned > 0 && (policy.monthsPaid ?? 0) >= 12) {
-      // The first year only: renewals paid after it are not part of the first-year figure.
-      const yearOne = rows.filter((e) => kind(e) === "earned" && inFirstYear(e, x.triggerOn));
-      const firstYear = yearOne.reduce((s, e) => s + e.amountCents, 0);
-      if (firstYear > 0) compare = { expected: x.expectedAmountCents, reported: firstYear, what: "the first year's commission", entryIds: yearOne.map((e) => e.id) };
+    else if (advanced === 0 && earned > 0 && (policy.monthsPaid ?? 0) >= 12 * x.policyYear) {
+      // This policy year only (rows above): renewals paid after it are not part of its figure.
+      compare = { expected: x.expectedAmountCents, reported: earned, what: x.policyYear === 1 ? "the first year's commission" : `policy year ${x.policyYear}'s commission`, entryIds: ids(rows, ["earned"]) };
     }
     if (compare) {
       const diff = compare.expected - compare.reported;
@@ -171,20 +207,19 @@ export function detect(input: {
     const policy = policyOf.get(key);
     const tol = input.tolerance(carrierId);
     const chargebacks = rows.filter((e) => e.type === "chargeback").sort((a, b) => (a.transactionDate ?? a.statementDate ?? "").localeCompare(b.transactionDate ?? b.statementDate ?? ""));
-    // Two chargebacks of the same size within one lapse (90 days): the second is the suspect.
-    for (let i = 1; i < chargebacks.length; i++) {
-      const a = chargebacks[i - 1], b = chargebacks[i];
+    const duplicate = duplicateChargeback(chargebacks, rows.filter((e) => kind(e) === "advance").reduce((s, e) => s + e.amountCents, 0), tol);
+    if (duplicate) {
+      const { first: a, second: b, excessCents } = duplicate;
       const da = a.transactionDate ?? a.statementDate, db = b.transactionDate ?? b.statementDate;
-      if (Math.abs(a.amountCents - b.amountCents) <= tol && da && db && daysBetween(da, db) <= 90) {
-        findings.push({
-          carrier_id: carrierId, discrepancy_type: "duplicate_chargeback", subject_key: policyNumber, policy_number: policyNumber, policy_year: 1, severity: "action",
-          expected_amount_cents: a.amountCents, expected_source: null, reported_amount_cents: a.amountCents + b.amountCents, reported_entry_ids: [a.id, b.id],
-          difference_cents: -b.amountCents, tolerance_applied_cents: tol,
-          explanation: `Two chargebacks of ${money(a.amountCents)} and ${money(b.amountCents)} on ${day(da)} and ${day(db)}, within one lapse. A policy is charged back once per lapse; the second looks like a duplicate.`,
-          evidence: { first_entry: a.id, second_entry: b.id },
-        });
-        break;
-      }
+      findings.push({
+        carrier_id: carrierId, discrepancy_type: "duplicate_chargeback", subject_key: policyNumber, policy_number: policyNumber, policy_year: 1, severity: "action",
+        expected_amount_cents: a.amountCents, expected_source: null, reported_amount_cents: a.amountCents + b.amountCents, reported_entry_ids: [a.id, b.id],
+        difference_cents: excessCents, tolerance_applied_cents: tol,
+        explanation: duplicate.sameDay
+          ? `Two chargebacks of ${money(a.amountCents)} and ${money(b.amountCents)}, both dated ${day(da)}: the same lapse taken back twice. The second looks like a duplicate.`
+          : `Two chargebacks of ${money(a.amountCents)} and ${money(b.amountCents)} on ${day(da)} and ${day(db)}, within one lapse, take back ${money(excessCents)} more than was advanced on this policy. A policy is charged back once per lapse; the second looks like a duplicate.`,
+        evidence: { first_entry: a.id, second_entry: b.id, same_day: duplicate.sameDay, advanced_cents: duplicate.advancedCents },
+      });
     }
     const chargedBack = rows.filter((e) => kind(e) === "chargeback").reduce((s, e) => s + e.amountCents, 0);
     if (policy?.status === "active" && chargedBack < 0) {
@@ -239,13 +274,40 @@ export function detect(input: {
       });
     }
   }
+  // ── LA-7.6: reported paid, never received (bank data covers the date it should have landed by) ──
+  // An account-level finding, like the two above: one per carrier (subject "*"), its statements in the evidence.
+  const unreceived = new Map<string, UnreceivedStatement[]>();
+  for (const u of input.unreceived ?? []) unreceived.set(u.carrierId, [...(unreceived.get(u.carrierId) ?? []), u]);
+  for (const [carrierId, list] of unreceived) {
+    const sorted = [...list].sort((a, b) => a.statementDate.localeCompare(b.statementDate));
+    const paid = sorted.reduce((s, u) => s + u.paidCents, 0);
+    const received = sorted.reduce((s, u) => s + u.receivedCents, 0);
+    const first = sorted[0];
+    const explanation = sorted.length === 1
+      ? `${name(carrierId)}'s statement of ${day(first.statementDate)} says it paid ${money(first.paidCents)}. ${first.receivedCents ? `Only ${money(first.receivedCents)} has been matched to a deposit` : "No deposit has been matched to it"}, and it normally lands within ${first.lagDays} days (by ${day(first.dueBy)}). ${money(paid - received)} is unaccounted for.`
+      : `${name(carrierId)}'s statements of ${sorted.map((u) => day(u.statementDate)).join(", ")} say it paid ${money(paid)}; ${received ? `only ${money(received)} has been matched to deposits` : "no deposit has been matched to them"}, past its usual ${first.lagDays}-day lag. ${money(paid - received)} is unaccounted for.`;
+    findings.push({
+      carrier_id: carrierId, discrepancy_type: "not_received", subject_key: "*", policy_number: null, policy_year: 1, severity: "action",
+      expected_amount_cents: paid, expected_source: { source: "carrier_account_statement", statement_ids: sorted.map((u) => u.statementId) }, reported_amount_cents: received, reported_entry_ids: [],
+      difference_cents: paid - received, tolerance_applied_cents: null,
+      explanation,
+      evidence: { statements: sorted.map((u) => ({ id: u.statementId, statement_date: u.statementDate, paid_cents: u.paidCents, received_cents: u.receivedCents, due_by: u.dueBy })), lag_days: first.lagDays },
+    });
+  }
   return findings;
 }
+
+/**
+ * The kinds that say the carrier owes the agent money. An unexpected chargeback is not one of them:
+ * it asserts no cause (the policy file may be out of date, or the line matched to the wrong policy),
+ * so it is a question for the carrier, never money counted as owed.
+ */
+export const OWED_TYPES: ReadonlySet<DiscrepancyType> = new Set(["missing", "short_paid", "duplicate_chargeback"]);
 
 /** What the agent is owed, what will be taken back, and what is held, from open findings. */
 export function moneySummary(rows: Array<{ discrepancy_type: string; difference_cents: number | null; expected_amount_cents: number | null; reported_amount_cents: number | null; status: string }>) {
   const open = rows.filter((r) => r.status === "open" || r.status === "disputed");
-  const owed = open.filter((r) => ["missing", "short_paid", "duplicate_chargeback", "unexpected_chargeback"].includes(r.discrepancy_type) && (r.difference_cents ?? 0) > 0).reduce((s, r) => s + (r.difference_cents ?? 0), 0);
+  const owed = open.filter((r) => OWED_TYPES.has(r.discrepancy_type as DiscrepancyType) && (r.difference_cents ?? 0) > 0).reduce((s, r) => s + (r.difference_cents ?? 0), 0);
   const coming = open.filter((r) => r.discrepancy_type === "missing_chargeback").reduce((s, r) => s + Math.abs(r.expected_amount_cents ?? 0), 0);
   const held = open.filter((r) => r.discrepancy_type === "held_building_up").reduce((s, r) => s + (r.reported_amount_cents ?? 0), 0);
   const unpriced = open.filter((r) => r.discrepancy_type === "missing" && r.difference_cents === null).length;

@@ -4,7 +4,9 @@ import { useCallback, useEffect, useState } from "react";
 import { Send } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { DashboardStage } from "@/components/ui/dashboard-stage";
 import { LinkArrow } from "@/components/ui/link-arrow";
+import { LiveStamp } from "@/components/ui/live-stamp";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { EmptyState, SectionLoading } from "@/components/ui/page-states";
@@ -15,51 +17,61 @@ import { productLineLabel } from "@/lib/format/productLine";
 import { oldestOpenLabel } from "@/lib/format/age";
 import { dayMonth, viewerTimeZone } from "@/lib/format/dates";
 import type { PartnerRole } from "@/lib/partnerAuth/roles";
+import { PARTNER_LANES, type PartnerLaneCounts } from "@/lib/partnerLeads/lanes";
 import type { PartnerLeadRow } from "@/lib/partnerLeads/types";
+import { durationLabel } from "@/lib/partnerTeamReview/pulse";
 
 type PipelineSummary = {
   rows: PartnerLeadRow[];
+  laneCounts?: PartnerLaneCounts | null;
   counters: { submittedToday: number; claimed: number; converted: number; stillOpen: number };
   oldestOpenAt?: string | null;
   total: number;
 };
-type PartnerUser = { id: string; name: string; role: PartnerRole; status: "active" | "revoked"; accepted_at: string | null };
+/** /api/partner/overview: counts only, partner-scoped on the server; team and pulse for admins. */
+type OverviewExtras = {
+  rejectedCompliance: number | null;
+  alerts: Array<{ id: string; title: string; body: string; link: string; actionLabel: string }>;
+  team?: { active: number; pending: number } | null;
+  pulse?: { averageResponseMinutes: number | null; responses: number; pendingFollowUps: number } | null;
+};
 
-/** "just now", "2m ago" — how fresh the figures on screen are. */
-function freshness(at: number, now: number) {
-  const seconds = Math.max(0, Math.round((now - at) / 1000));
-  if (seconds < 45) return "just now";
-  if (seconds < 3600) return `${Math.round(seconds / 60)}m ago`;
-  return `${Math.round(seconds / 3600)}h ago`;
-}
+const RECENT_ROWS = 8;
+const PIPELINE = "/partner/pipeline";
 
 function formatDate(value: string) {
   return dayMonth(value, viewerTimeZone()); // leads load in an effect, after mount
 }
 
+/** Today as YYYY-MM-DD in the viewer's calendar, for the pipeline's "From" filter. */
+function todayIso() {
+  return new Date().toLocaleDateString("en-CA");
+}
+
 export function PartnerPortalOverview({ role, partnerStatus, partnerName }: { role: PartnerRole; partnerStatus: "draft" | "active" | "paused" | "offboarded"; partnerName?: string | null }) {
+  const isAdmin = role === "partner_admin";
+  const canSubmit = partnerStatus === "active";
   const [pipeline, setPipeline] = useState<PipelineSummary | null>(null);
-  const [users, setUsers] = useState<PartnerUser[]>([]);
+  const [extras, setExtras] = useState<OverviewExtras | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  // "Live · updated just now" is earned: the figures refresh on the same visible-tab poll the
-  // pipeline page uses, and the pill says when they last did, or that they stopped.
+  // The LiveStamp is fed by the last good poll; a failed one turns it amber at once.
   const [updatedAt, setUpdatedAt] = useState<number | null>(null);
   const [stale, setStale] = useState(false);
   const [now, setNow] = useState(() => Date.now());
 
   const load = useCallback(async () => {
-    const usersRequest = role === "partner_admin" ? fetch("/api/partner/users", { cache: "no-store" }) : Promise.resolve(null);
     try {
-      const [pipelineResponse, usersResponse] = await Promise.all([
-        fetch("/api/partner/leads/pipeline?limit=3&offset=0", { cache: "no-store" }),
-        usersRequest,
+      // One round of parallel reads per poll: the pipeline read model, and the counts beside it.
+      const [pipelineResponse, extrasResponse] = await Promise.all([
+        fetch(`/api/partner/leads/pipeline?limit=${RECENT_ROWS}&offset=0`, { cache: "no-store" }),
+        fetch("/api/partner/overview", { cache: "no-store" }),
       ]);
       const nextPipeline = await pipelineResponse.json().catch(() => null);
-      const nextUsers = usersResponse ? await usersResponse.json().catch(() => null) : null;
-      if (!pipelineResponse.ok || (role === "partner_admin" && !usersResponse?.ok)) throw new Error("load failed");
+      const nextExtras = await extrasResponse.json().catch(() => null);
+      if (!pipelineResponse.ok || !extrasResponse.ok) throw new Error("load failed");
       setPipeline(nextPipeline as PipelineSummary);
-      setUsers(role === "partner_admin" ? (nextUsers?.users ?? []) as PartnerUser[] : []);
+      setExtras(nextExtras as OverviewExtras);
       setError(null);
       setStale(false);
       setUpdatedAt(Date.now());
@@ -74,7 +86,7 @@ export function PartnerPortalOverview({ role, partnerStatus, partnerName }: { ro
     } finally {
       setLoading(false);
     }
-  }, [role]);
+  }, []);
 
   useEffect(() => {
     let polling = false;
@@ -95,40 +107,93 @@ export function PartnerPortalOverview({ role, partnerStatus, partnerName }: { ro
     };
   }, [load]);
 
-  const activeUsers = users.filter((user) => user.status === "active").length;
-  const pendingUsers = users.filter((user) => user.status === "active" && !user.accepted_at).length;
+  const counters = pipeline?.counters;
+  const figure = (value: number | null | undefined) => (loading || value == null ? "—" : value);
   const recentRows = pipeline?.rows ?? [];
+  // The partner's stages are the board's lanes (lib/partnerLeads/lanes.ts), not the agency's own
+  // pipeline stages: those are the agency's configuration, and partnerStageLabel folds most of them
+  // into "Submitted" anyway. Closed is everything the board no longer shows.
+  const lanes = pipeline?.laneCounts ?? null;
+  const onBoard = lanes ? PARTNER_LANES.reduce((sum, lane) => sum + lanes[lane.key], 0) : null;
+  const stages = [
+    ...PARTNER_LANES.map((lane) => ({ key: lane.key, label: lane.label, footnote: lane.footnote, count: lanes ? lanes[lane.key] : null, href: PIPELINE })),
+    { key: "closed", label: "Closed", footnote: "finished, expired or older sales", count: onBoard == null || !pipeline ? null : Math.max(0, pipeline.total - onBoard), href: `${PIPELINE}?view=table` },
+  ];
+  const pulse = extras?.pulse;
+  const team = extras?.team;
+  const nextAction = canSubmit
+    ? <Button asChild variant="outline"><a href="/partner/submit-lead">Submit your first lead</a></Button>
+    : <Button asChild variant="outline"><a href="/partner/messages">Message your agent</a></Button>;
 
-  return <div className="m-stagger space-y-6">
-    <PageHeader
-      title="Overview"
-      actions={partnerStatus === "active" ? <Button asChild><a href="/partner/submit-lead"><Send aria-hidden="true" />Submit a new lead</a></Button> : undefined}
-    />
-    {error && <p role="alert" className="rounded-md border border-[var(--error)] bg-[var(--error-surface)] px-4 py-2.5 text-sm text-[var(--error-ink)]">{error}</p>}
-    {!error && stale && updatedAt !== null && <p role="status" className="text-xs text-muted-foreground">Updates paused · last updated {freshness(updatedAt, now)}</p>}
-    <StatStrip label={`${partnerName ?? "Your organization"} at a glance`}>
-      <StatTile label="Submitted today" value={pipeline?.counters.submittedToday ?? 0} footnote="since 00:00 your time" />
-      <StatTile label="Claimed" value={pipeline?.counters.claimed ?? 0} footnote="with a closer or on a call" />
-      <StatTile label="Converted" value={pipeline?.counters.converted ?? 0} footnote="last 30 days" />
-      <StatTile label="Still open" value={pipeline?.counters.stillOpen ?? 0} footnote={oldestOpenLabel(pipeline?.counters.stillOpen ?? 0, pipeline?.oldestOpenAt, now)} />
-      {role === "partner_admin" && <StatTile label="Team" value={loading ? "—" : activeUsers} footnote={loading ? "" : `${pendingUsers} pending invitation${pendingUsers === 1 ? "" : "s"}`} />}
-    </StatStrip>
-    <TableCard
-      title="Recent submissions"
-      action={<LinkArrow href="/partner/pipeline">View all</LinkArrow>}
-    >
-      {loading ? <SectionLoading rows={3} columns={5} /> : recentRows.length === 0 ? <EmptyState title="No submissions yet" hint="Submit a lead and its progress appears here." action={<Button asChild variant="outline" size="sm"><a href="/partner/submit-lead">Submit a lead</a></Button>} /> : <Table>
-        <TableHeader><TableRow><TableHead>Customer</TableHead><TableHead>Product</TableHead><TableHead>Stage</TableHead><TableHead>Submitted by</TableHead><TableHead>When</TableHead></TableRow></TableHeader>
-        <TableBody>
-          {recentRows.map((row) => <TableRow key={row.id}>
-            <TableCell className="font-medium"><a className="underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" href="/partner/pipeline">{row.customer}</a></TableCell>
-            <TableCell className="text-muted-foreground">{productLineLabel(row.product)}</TableCell>
-            <TableCell><StatusChip tone={row.outcome ? "good" : "info"}>{row.stageName}</StatusChip>{row.outcome && row.outcome !== row.stageName && <span className="ml-2 text-xs text-muted-foreground">{row.outcome}</span>}</TableCell>
-            <TableCell className="text-muted-foreground">{row.submittedBy.name}</TableCell>
-            <TableCell className="text-muted-foreground tabular-nums">{formatDate(row.submittedAt)}</TableCell>
-          </TableRow>)}
-        </TableBody>
-      </Table>}
-    </TableCard>
-  </div>;
+  return <DashboardStage>
+    <div className="m-stagger space-y-6">
+      <PageHeader
+        title="Overview"
+        actions={<>
+          {updatedAt !== null && <LiveStamp updatedAt={updatedAt} staleAfterSeconds={stale ? 0 : 45} />}
+          {canSubmit && <Button asChild><a href="/partner/submit-lead"><Send aria-hidden="true" />Submit a new lead</a></Button>}
+        </>}
+      />
+      {error && <p role="alert" className="rounded-md border border-[var(--error)] bg-[var(--error-surface)] px-4 py-2.5 text-sm text-[var(--error-ink)]">{error}</p>}
+      {(extras?.alerts ?? []).map((alert) => <p key={alert.id} role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-[var(--warning)] bg-[var(--warning-surface)] px-4 py-2.5 text-sm text-[var(--warning-ink)]">
+        <span><strong className="font-semibold">{alert.title}.</strong> {alert.body}</span>
+        <LinkArrow href={alert.link} className="shrink-0">{alert.actionLabel}</LinkArrow>
+      </p>)}
+      <StatStrip label={`${partnerName ?? "Your organization"} at a glance`}>
+        <StatTile label="Submitted today" value={figure(counters?.submittedToday)} footnote="since 00:00 your time" action={pipeline ? <LinkArrow href={`${PIPELINE}?date_from=${todayIso()}&view=table`} className="text-xs">View</LinkArrow> : undefined} />
+        <StatTile label="Claimed" value={figure(counters?.claimed)} footnote="with a closer or on a call" action={<LinkArrow href={PIPELINE} className="text-xs">Board</LinkArrow>} />
+        <StatTile label="Converted" value={figure(counters?.converted)} footnote="last 30 days" action={<LinkArrow href={PIPELINE} className="text-xs">Board</LinkArrow>} />
+        <StatTile label="Still open" value={figure(counters?.stillOpen)} footnote={oldestOpenLabel(counters?.stillOpen ?? 0, pipeline?.oldestOpenAt, now)} action={<LinkArrow href={PIPELINE} className="text-xs">Board</LinkArrow>} />
+        {/* Sixteen Open Questions #9: a coded reason and a running total, never which numbers. */}
+        <StatTile label="Rejected · compliance" labelTitle="Rejected: compliance screening. Submissions stopped before they reached the agency. Only the count is shown." value={figure(extras?.rejectedCompliance)} footnote={isAdmin ? "all time, your organization" : "all time, your submissions"} />
+        {isAdmin && <StatTile label="Team" value={figure(team?.active)} footnote={team ? `${team.pending} pending invitation${team.pending === 1 ? "" : "s"}` : undefined} reserveFootnote action={<LinkArrow href="/partner/team" className="text-xs">Team</LinkArrow>} />}
+      </StatStrip>
+      <div className={isAdmin ? "grid items-start gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]" : undefined}>
+        <TableCard title="Your pipeline by stage" action={<LinkArrow href={PIPELINE}>Open pipeline</LinkArrow>}>
+          {loading ? <SectionLoading rows={5} columns={3} /> : !pipeline?.total ? <EmptyState title="No submissions yet" hint={canSubmit ? "Your leads are counted here by stage as the agency works them." : "Leads your organization sent are counted here by stage."} action={nextAction} /> : <Table>
+            <TableHeader><TableRow><TableHead>Stage</TableHead><TableHead className="text-right">Leads</TableHead><TableHead className="text-right"><span className="sr-only">Action</span></TableHead></TableRow></TableHeader>
+            <TableBody>
+              {stages.map((stage) => <TableRow key={stage.key}>
+                <TableCell><span className="font-medium">{stage.label}</span> <span className="text-xs text-muted-foreground">{stage.footnote}</span></TableCell>
+                <TableCell className="text-right tabular-nums">{stage.count == null ? "—" : stage.count.toLocaleString()}</TableCell>
+                <TableCell className="text-right">{Boolean(stage.count) && <Button asChild variant="outline" size="sm"><a href={stage.href} aria-label={`View ${stage.label} leads`}>View</a></Button>}</TableCell>
+              </TableRow>)}
+            </TableBody>
+          </Table>}
+        </TableCard>
+        {isAdmin && <TableCard title="Team pulse" action={<LinkArrow href="/partner/team-review">Team review</LinkArrow>}>
+          {loading ? <SectionLoading rows={2} columns={2} /> : <Table>
+            <TableBody>
+              <TableRow>
+                <TableCell className="text-muted-foreground">Average reply to your agent</TableCell>
+                <TableCell className="text-right font-medium tabular-nums">{pulse ? (pulse.averageResponseMinutes != null ? durationLabel(pulse.averageResponseMinutes) : "No replies yet") : "—"}</TableCell>
+              </TableRow>
+              <TableRow>
+                <TableCell className="text-muted-foreground">Conversations waiting on your team</TableCell>
+                <TableCell className="text-right font-medium tabular-nums">{pulse ? <a className="underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" href="/partner/messages">{pulse.pendingFollowUps}</a> : "—"}</TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>}
+        </TableCard>}
+      </div>
+      <TableCard
+        title="Recent submissions"
+        action={<LinkArrow href={PIPELINE}>View all</LinkArrow>}
+      >
+        {loading ? <SectionLoading rows={RECENT_ROWS} columns={5} /> : recentRows.length === 0 ? <EmptyState title="No submissions yet" hint={canSubmit ? "Submit a lead and its progress appears here." : "Leads your organization sent appear here."} action={nextAction} /> : <Table>
+          <TableHeader><TableRow><TableHead>Customer</TableHead><TableHead>Product</TableHead><TableHead>Stage</TableHead>{isAdmin && <TableHead>Submitted by</TableHead>}<TableHead>When</TableHead><TableHead className="text-right"><span className="sr-only">Action</span></TableHead></TableRow></TableHeader>
+          <TableBody>
+            {recentRows.map((row) => <TableRow key={row.id}>
+              <TableCell className="font-medium">{row.customer}</TableCell>
+              <TableCell className="text-muted-foreground">{productLineLabel(row.product)}</TableCell>
+              <TableCell><StatusChip tone={row.outcome ? "good" : "info"}>{row.stageName}</StatusChip>{row.outcome && row.outcome !== row.stageName && <span className="ml-2 text-xs text-muted-foreground">{row.outcome}</span>}</TableCell>
+              {isAdmin && <TableCell className="text-muted-foreground">{row.submittedBy.name}</TableCell>}
+              <TableCell className="text-muted-foreground tabular-nums">{formatDate(row.submittedAt)}</TableCell>
+              <TableCell className="text-right"><Button asChild variant="outline" size="sm"><a href={`${PIPELINE}?lead=${encodeURIComponent(row.id)}&view=table`} aria-label={`View ${row.customer}`}>View</a></Button></TableCell>
+            </TableRow>)}
+          </TableBody>
+        </Table>}
+      </TableCard>
+    </div>
+  </DashboardStage>;
 }

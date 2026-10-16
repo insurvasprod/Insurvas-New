@@ -11,6 +11,7 @@ import { EmptyState, SectionLoading } from "@/components/ui/page-states";
 import { PARTNER_TYPE_LABELS, type PartnerType } from "@/lib/partners/constants";
 import { productLineLabel } from "@/lib/format/productLine";
 import { cn } from "@/lib/utils";
+import { csvCellMinimal } from "@/lib/csv/cell";
 import { validPartnerQualityPeriod } from "@/lib/partnerQuality/metrics";
 import type { PartnerQualityLeadResult, PartnerQualityMetric } from "@/lib/partnerQuality/types";
 
@@ -85,7 +86,8 @@ export function paginate<T>(rows: T[], page: number, pageSize = PAGE_SIZE) {
 
 /** Download rows as a CSV file, built in the browser from what the table already holds. */
 export function downloadCsv(filename: string, header: string[], rows: (string | number | null)[][]) {
-  const cell = (value: string | number | null) => { const text = value == null ? "" : String(value); return /[",\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text; };
+  // csvCell neutralises text a spreadsheet would run as a formula (CSV injection); numbers pass as is.
+  const cell = (value: string | number | null) => csvCellMinimal(value);
   const csv = [header, ...rows].map((row) => row.map(cell).join(",")).join("\n");
   const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
   const link = document.createElement("a");

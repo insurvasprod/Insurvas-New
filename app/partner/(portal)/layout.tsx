@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-import { PartnerSidebar, PartnerSidebarFooter } from "@/components/partner/partner-sidebar";
+import { PartnerSidebar } from "@/components/partner/partner-sidebar";
 import { PartnerTopBar } from "@/components/partner/partner-top-bar";
 import { PortalPageTransition } from "@/components/portal/portal-page-transition";
 import { getPartnerSession, resolvePartnerContext } from "@/lib/partnerAuth/requirePartner";
@@ -29,7 +29,6 @@ export default async function PartnerPortalLayout({ children }: { children: Reac
         role={context.role}
         partnerStatus={context.partnerStatus}
         partnerName={context.partnerName}
-        footer={<PartnerSidebarFooter />}
       />
       {/* overflow-x-clip, not hidden — `hidden` turns <main> into a scroll container and the sticky
           top bar scrolls away with the page. See the agent shell. */}

@@ -1,6 +1,8 @@
 import "server-only";
 
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
+import { gateStatsByPartner } from "@/lib/compliance/partnerCompliance";
+import { complaintsByPartner } from "@/lib/compliance/complaintStore";
 import { assertPartnerQualityDate, assertPartnerQualityUuid } from "./service";
 import { partnerQualityEvidence } from "./evidence";
 import { dailyVolume, defaultPartnerQualityPeriod, dispositionBreakdown, percentOf, periodMetrics, previousPartnerQualityPeriod, screeningLabel } from "./metrics";
@@ -82,11 +84,15 @@ export async function getPartnerQualityDetail(tenantId: string, partnerIdValue: 
   if (partner.error) throw new Error(`Could not load the partner: ${partner.error.message}`);
   if (!partner.data) throw new PartnerQualityNotFoundError("This partner is not in your workspace");
 
-  const [current, previous, memberships, dispositionRows] = await Promise.all([
+  const [current, previous, memberships, dispositionRows, gateNow, gateBefore, complaintsNow, complaintsBefore] = await Promise.all([
     partnerEvidence(db, tenantId, partnerId, from, to),
     partnerEvidence(db, tenantId, partnerId, previousPeriod.from, previousPeriod.to),
     db.from("partner_users").select("id, user_id, partner_id, role, status, invited_at, accepted_at, deactivated_at, partner_admin_user_id").eq("tenant_id", tenantId).eq("partner_id", partnerId).order("invited_at", { ascending: true }),
     db.from("dispositions").select("disposition_key, label").eq("tenant_id", tenantId),
+    gateStatsByPartner(tenantId, from, to, partnerId),
+    gateStatsByPartner(tenantId, previousPeriod.from, previousPeriod.to, partnerId),
+    complaintsByPartner(tenantId, from, to, partnerId),
+    complaintsByPartner(tenantId, previousPeriod.from, previousPeriod.to, partnerId),
   ]);
   if (memberships.error) throw new Error(`Could not load the partner's users: ${memberships.error.message}`);
 
@@ -207,5 +213,11 @@ export async function getPartnerQualityDetail(tenantId: string, partnerIdValue: 
     team,
     unattributed,
     agents,
+    gate: {
+      current: { ...(gateNow.get(partnerId) ?? NO_GATE), complaints: complaintsNow.get(partnerId) ?? 0 },
+      previous: { ...(gateBefore.get(partnerId) ?? NO_GATE), complaints: complaintsBefore.get(partnerId) ?? 0 },
+    },
   };
 }
+
+const NO_GATE = { rejected: 0, screenedLate: 0, accepted: 0 };

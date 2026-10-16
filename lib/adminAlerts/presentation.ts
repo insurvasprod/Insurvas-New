@@ -22,6 +22,8 @@ export type StaffNotification = { id: string; title: string; body: string; link:
 export const BILLING_ROLES: readonly StaffRole[] = ["super_admin", "billing_admin"];
 export const PAYMENTS_ROLES: readonly StaffRole[] = ["super_admin"];
 export const PLATFORM_ROLES: readonly StaffRole[] = ["super_admin", "platform_config"];
+/** Who can open /admin/tenants (canViewTenants): a seat-limit alert links there, so only they get it. */
+export const TENANT_ROLES: readonly StaffRole[] = ["super_admin", "support_agent", "billing_admin"];
 
 /** A webhook still unprocessed this long after it arrived is failing, not queued. */
 export const WEBHOOK_STUCK_MINUTES = 10;
@@ -51,7 +53,24 @@ export type StaffAlertInput = {
   billingRun: { healthy: boolean; description: string } | null;
   pastDueCount: number | null;
   seatLimited: Array<{ tenantId: string; tenantName: string; used: number; max: number; pendingInvites: number }> | null;
+  /**
+   * SA-4.9: credit meters (TCPA checks, DNC lookups, …) at or past the warn threshold
+   * (usage.warn_percent, 80% by default) of their allowance — plan + grants + packs. Optional so a
+   * caller that does not read usage still builds the rest of the bar.
+   */
+  creditUsage?: Array<{ tenantId: string; tenantName: string; meterLabel: string; used: number; limit: number }> | null;
 };
+
+/** More than this many tenant meters past a threshold becomes one summary alert per threshold. */
+export const CREDIT_ALERT_MAX_ROWS = 3;
+
+/**
+ * The two SA-4.9 thresholds: crossing the warn threshold, and again at 100%. At the limit counts as
+ * used up (a hard-capped meter at 12 / 12 has stopped working), which is why this is not limitState.
+ */
+export function creditAlertLevel(used: number, limit: number): "used_up" | "running_low" {
+  return limit <= 0 || used >= limit ? "used_up" : "running_low";
+}
 
 /** Most severe first; within a severity, in the order the checks are listed above. */
 export function buildStaffAlerts(input: StaffAlertInput): StaffAlert[] {
@@ -113,7 +132,7 @@ export function buildStaffAlerts(input: StaffAlertInput): StaffAlert[] {
     });
   }
 
-  const seats = input.seatLimited ?? [];
+  const seats = can(TENANT_ROLES) ? input.seatLimited ?? [] : [];
   if (seats.length > SEAT_ALERT_MAX_ROWS) {
     alerts.push({ id: "seats-many", title: "Seat limits reached", body: `${seats.length} customers are at or over their plan's seat limit.`, link: "/admin/tenants", actionLabel: "Open tenants", severity: "warning" });
   } else {
@@ -126,6 +145,29 @@ export function buildStaffAlerts(input: StaffAlertInput): StaffAlert[] {
         link: `/admin/tenants/${tenant.tenantId}`,
         actionLabel: "Open tenant",
         severity: "warning",
+      });
+    }
+  }
+
+  const credits = can(PLATFORM_ROLES) ? input.creditUsage ?? [] : [];
+  for (const level of ["used_up", "running_low"] as const) {
+    const rows = credits.filter((row) => creditAlertLevel(row.used, row.limit) === level);
+    const title = level === "used_up" ? "Credits used up" : "Credits running low";
+    const severity = level === "used_up" ? "critical" : "warning";
+    if (rows.length > CREDIT_ALERT_MAX_ROWS) {
+      const what = level === "used_up" ? "have used their whole allowance on a credit meter" : "are past the warning threshold on a credit meter";
+      alerts.push({ id: `credits-${level}-many`, title, body: `${rows.length} customer meters ${what}.`, link: "/admin/credits-limits", actionLabel: "Open credits & limits", severity });
+      continue;
+    }
+    for (const row of rows) {
+      const percent = row.limit > 0 ? Math.round((row.used / row.limit) * 100) : 100;
+      alerts.push({
+        id: `credits-${level}-${row.tenantId}-${row.meterLabel}`,
+        title,
+        body: `${row.tenantName} has used ${row.used.toLocaleString("en-US")} of ${row.limit.toLocaleString("en-US")} ${row.meterLabel} (${percent}%).`,
+        link: "/admin/credits-limits",
+        actionLabel: "Open credits & limits",
+        severity,
       });
     }
   }

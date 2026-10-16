@@ -12,7 +12,7 @@ import { Pager, paginate } from "@/components/ui/pager";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { TableCard } from "@/components/ui/table-card";
 import { fileDay } from "@/lib/ingestion/constants";
-import { ACTION_TAKEN, BANDS, CONTACT_OUTCOME_LABELS, CONTACT_OUTCOMES, MISSING_LABELS, SNOOZE_DAYS, type ActionTaken, type Band, type ContactOutcome, type Signal } from "@/lib/retention/constants";
+import { ACTION_TAKEN, BANDS, CONTACT_OUTCOME_LABELS, CONTACT_OUTCOMES, MISSING_LABELS, SIGNAL_LABELS, SNOOZE_DAYS, type ActionTaken, type Band, type ContactOutcome, type Signal } from "@/lib/retention/constants";
 import { SORT_LABELS, SORTS, type QueueSort } from "@/lib/retention/queue";
 import { REQUEST_FOR_FIX, REQUEST_LABELS, STATUS_LABELS, type RequestType } from "@/lib/retention/servicing";
 import { ServicingRequestDialog } from "@/components/app/servicing-request-dialog";
@@ -30,6 +30,10 @@ const phoneText = (raw: string) => {
   const d = raw.replace(/\D/g, "").replace(/^1(?=\d{10}$)/, "");
   return d.length === 10 ? `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}` : raw;
 };
+/** LA-5.2's audit trail: what each known sign added, which sums to the score. */
+const breakdownText = (card: SaveCard) =>
+  ["A prediction from the chargeback radar, not something the carrier reported.", ...card.contributions.map((c) => `${SIGNAL_LABELS[c.signal]}: +${c.contribution}`), `Score ${card.score}`].join("\n");
+
 const BAND_INK: Record<Band, string> = { critical: "text-[var(--error-ink)]", high: "text-[var(--warning-ink)]", medium: "text-[var(--info-ink)]", low: "text-muted-foreground" };
 const ACTION_LABELS: Record<ActionTaken, string> = {
   none: "Nothing changed",
@@ -126,16 +130,16 @@ export function SaveQueueBoard({ queue, sort, readOnly, canStartFix }: { queue: 
                 <tr key={card.key}>
                   <td>
                     <span className="block font-semibold text-foreground">{card.clientName ?? "No client linked"}</span>
-                    {card.phone ? <a href={`tel:${card.phone.replace(/[^\d+]/g, "")}`} className="block font-medium tabular-nums text-[var(--accent-ink)] hover:underline">{phoneText(card.phone)}</a> : <span className="block text-xs text-muted-foreground">No phone on file</span>}
+                    {card.phone ? <span className="block select-all font-medium tabular-nums text-foreground" title="Check the calling window and do-not-call list before dialling">{phoneText(card.phone)}</span> : <span className="block text-xs text-muted-foreground">No phone on file</span>}
                     <Link href={`/app/policies/carrier/${card.carrierId}/${encodeURIComponent(card.policyNumber)}`} className="block text-xs text-muted-foreground hover:underline">{card.carrierName} · {card.policyNumber}</Link>
                     {card.agentName && <span className="block text-xs text-muted-foreground">{card.agentName}</span>}
                   </td>
                   <td>
-                    <span className={`inline-flex items-baseline gap-1 rounded-full border border-dashed border-current px-2.5 py-0.5 font-semibold tabular-nums ${BAND_INK[card.band]}`} title="A prediction from the chargeback radar, not something the carrier reported">
+                    <span className={`inline-flex items-baseline gap-1 rounded-full border border-dashed border-current px-2.5 py-0.5 font-semibold tabular-nums ${BAND_INK[card.band]}`} title={breakdownText(card)}>
                       {card.score} · {card.band}
                     </span>
                     <span className="mt-1 block text-xs text-muted-foreground" title={card.missing.length ? `Not known: ${card.missing.map((m) => MISSING_LABELS[m as Signal] ?? m).join(", ")}` : "Every signal is known"}>
-                      predicted · based on {card.signalsAvailable} of 7 signals
+                      predicted · {card.confidence} confidence · based on {card.signalsAvailable} of 7 signals
                     </span>
                   </td>
                   <td className="text-foreground">

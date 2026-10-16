@@ -1,10 +1,11 @@
 "use client";
 
+import { StatusChip } from "@/components/ui/status-chip";
 import { useEffect, useState } from "react";
 import { Unlock } from "lucide-react";
 import { notify } from "@/lib/notify";
 
-import { Pill, btn, st } from "@/components/app/settings/primitives";
+import { btn, st, pillTone } from "@/components/app/settings/primitives";
 import { DataToolbar, RefreshButton } from "@/components/ui/data-toolbar";
 import { SectionLoading } from "@/components/ui/page-states";
 import { TableCard } from "@/components/ui/table-card";
@@ -89,14 +90,14 @@ export function LoginProtectionPanel() {
             />
           }
         >
-          {!loading && <Pill tone={locked > 0 ? "error" : "neutral"}>{locked} locked</Pill>}
+          {!loading && <StatusChip dot={false} tone={pillTone(locked > 0 ? "error" : "neutral")}>{locked} locked</StatusChip>}
         </DataToolbar>
       }
     >
       {loading ? (
         <SectionLoading rows={3} columns={5} label="Loading current lockouts" />
       ) : lockouts.length === 0 ? (
-        <p className="m-0 px-4 py-3 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">No recorded login lockouts.</p>
+        <p className="m-0 px-4 py-3 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">No recorded login lockouts.</p>
       ) : (
         <table className={`${st.table} min-w-[640px]`}>
           <caption className="sr-only">Current login lockouts</caption>

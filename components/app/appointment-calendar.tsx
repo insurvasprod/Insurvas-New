@@ -9,7 +9,7 @@ import { ClearFiltersButton, DataToolbar, RefreshButton, ToolbarSearch, toolbarC
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageLoading } from "@/components/ui/page-loading";
-import { EmptyState, NoMatches, SectionLoading } from "@/components/ui/page-states";
+import { EmptyState, ErrorState, NoMatches, SectionLoading } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
@@ -18,6 +18,7 @@ import { RebookButton } from "@/components/app/appointment-rebook";
 import { ViewTabs } from "@/components/app/view-tabs";
 import { faceLabel } from "@/lib/appointments/appointmentFacts";
 import { clockLabel, intervalsFor, openSlots, wallClock, zonedInstant, type BlockRepeat, type PickerContext } from "@/lib/appointments/calendarMath";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 
 /**
  * LA-2.11's calendar, as the board draws it: the diary as a grid of slots, not a list of bookings.
@@ -66,17 +67,6 @@ const STATUS_TONE: Record<string, StatusTone> = { booked: "action", confirmed: "
 const FILL = "flex h-[calc(100dvh-var(--top-bar-h)-330px)] min-h-[420px] flex-col [&>*:nth-child(2)]:min-h-0 [&>*:nth-child(2)]:flex-1 [&>*:nth-child(2)]:overflow-y-auto";
 const REPEAT_LABEL: Record<string, string> = { daily: "Blocked every day", weekdays: "Blocked every weekday", weekly: "Blocked every week", yearly: "Blocked every year" };
 
-/** Rows per page that fit the window under the page's chrome (the Inbound list's rule). */
-function useFittingPageSize(reserved: number, rowHeight: number) {
-  const [size, setSize] = useState(10);
-  useEffect(() => {
-    const fit = () => setSize(Math.min(10, Math.max(5, Math.floor((window.innerHeight - reserved) / rowHeight))));
-    fit();
-    window.addEventListener("resize", fit);
-    return () => window.removeEventListener("resize", fit);
-  }, [reserved, rowHeight]);
-  return size;
-}
 
 /** Read outside render, so a paint never moves "now". */
 function nowMs() {
@@ -399,6 +389,7 @@ export function AppointmentCalendar({ highlightId }: { highlightId?: string }) {
         <ViewTabs
           label="View"
           value={view}
+          controls="calendar-panel"
           onChange={(next) => { setView(next); setListPage(1); }}
           tabs={[
             { key: "week", label: "Week" },
@@ -448,14 +439,16 @@ export function AppointmentCalendar({ highlightId }: { highlightId?: string }) {
           ? <Pager page={listCurrent} total={listRows.length} pageSize={pageSize} noun={listRows.length === 1 ? "appointment" : "appointments"} suffix={`this ${range ? "week" : "range"} · times in ${zone}`} onPage={setListPage} />
           : <span>Times in {zone}{context && !noHours ? ` · ${agentName}` : ""}</span>}
       >
+        {/* The views fade in on switch, like every tab panel (2026-10-09). */}
+        <div key={view} id="calendar-panel" role="tabpanel" aria-labelledby={`calendar-panel-tab-${view}`}>
         {view !== "list" && (
           <div className="p-4">
             {context == null ? (
-              <p className="py-8 text-center text-sm text-muted-foreground">Availability could not be loaded.</p>
+              <ErrorState title="Availability did not load" detail="Try again in a moment." action={<Button type="button" variant="outline" onClick={refresh}>Try again</Button>} />
             ) : noHours ? (
               <EmptyState
-                title={`No working hours are set for ${agentName}`}
-                hint="There are no slots to show until working hours are set."
+                title={`No working hours for ${agentName}`}
+                hint="Set hours to open bookable slots."
                 action={<Button asChild variant="outline"><Link href="/app/settings#calendar">Set calendar &amp; availability</Link></Button>}
               />
             ) : (
@@ -533,7 +526,7 @@ export function AppointmentCalendar({ highlightId }: { highlightId?: string }) {
           : listRows.length === 0 ? (
             filtered
               ? <NoMatches noun="appointments" onClear={clearFilters} />
-              : <EmptyState title="Nothing booked this week" hint="Book an appointment, or press a Free slot in the week view." />
+              : <EmptyState title="Nothing booked this week" hint="Book one, or pick a free slot in Week." action={<Button type="button" variant="outline" disabled={!context} onClick={() => setBooking({ agentUserId: selected, startIso: null })}>Book an appointment</Button>} />
           ) : (
             <table className="portal-callback-table w-full min-w-[1180px] text-left text-sm">
               <thead><tr><th>When</th><th>Customer</th><th>Product</th><th>Their time</th><th>Agent</th><th>Status</th><th>Reminder</th><th>Notes</th><th className="text-right"><span className="sr-only">Actions</span></th></tr></thead>
@@ -582,6 +575,7 @@ export function AppointmentCalendar({ highlightId }: { highlightId?: string }) {
             </table>
           )
         )}
+        </div>
       </TableCard>
 
       {booking && context && (
@@ -659,7 +653,7 @@ function BookingDialog({ context, initial, agents, nowAt, onClose, onBooked }: {
       body: JSON.stringify({ lead_id: lead.id, agent_user_id: agent, starts_at_utc: slot, notes: notes.trim() || null }),
     }).catch(() => null);
     setBusy(false);
-    if (!response) { setError("Could not reach Insurvas. Check your connection and try again."); return; }
+    if (!response) { setError("Check your connection and try again."); return; }
     const body = await response.json().catch(() => null);
     if (!response.ok) { setError(body?.error ?? "That slot could not be booked"); return; }
     onBooked();
@@ -673,7 +667,7 @@ function BookingDialog({ context, initial, agents, nowAt, onClose, onBooked }: {
       <DialogContent className="sm:max-w-[520px]">
         <DialogHeader>
           <DialogTitle>Book an appointment</DialogTitle>
-          <DialogDescription>Only slots the calendar offers are listed. Times are in {zone}.</DialogDescription>
+          <DialogDescription>Open slots only. Times are in {zone}.</DialogDescription>
         </DialogHeader>
         <div className="grid gap-4">
           <div className={labelClass}>
@@ -698,7 +692,7 @@ function BookingDialog({ context, initial, agents, nowAt, onClose, onBooked }: {
                     ))}
                   </ul>
                 )}
-                {query.trim().length >= 2 && hits.length === 0 && <p className="mt-1 text-xs normal-case tracking-normal text-muted-foreground">No lead you can open matches that.</p>}
+                {query.trim().length >= 2 && hits.length === 0 && <p className="mt-1 text-xs normal-case tracking-normal text-muted-foreground">No matching leads.</p>}
               </>
             )}
           </div>

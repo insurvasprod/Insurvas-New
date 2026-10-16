@@ -90,8 +90,8 @@ export function StateDisclosuresImport({
     <Dialog open onOpenChange={(next) => !next && !saving && onClose()}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[640px]">
         <DialogHeader>
-          <DialogTitle className="text-[18px] leading-[1.28] font-semibold tracking-[-0.015em]">Import a pack</DialogTitle>
-          <DialogDescription className="text-[14px] leading-[1.5] tracking-[-0.02em]">
+          <DialogTitle className="text-title-sm leading-[1.28] font-semibold tracking-[-0.015em]">Import a pack</DialogTitle>
+          <DialogDescription className="text-sm leading-[1.5] tracking-[-0.02em]">
             A CSV of approved wording from your compliance source. Every version in it waits for a second admin before
             the dialer reads it.
           </DialogDescription>
@@ -115,7 +115,7 @@ export function StateDisclosuresImport({
         </Field>
 
         {readError && (
-          <p role="alert" className="m-0 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--error-ink)]">
+          <p role="alert" className="m-0 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--error-ink)]">
             {readError}
           </p>
         )}
@@ -146,11 +146,11 @@ export function StateDisclosuresImport({
         )}
 
         {error && (
-          <p role="alert" className="m-0 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--error-ink)]">
+          <p role="alert" className="m-0 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--error-ink)]">
             {error}
           </p>
         )}
-        {!error && blocker && pack && <p className="m-0 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">{blocker}</p>}
+        {!error && blocker && pack && <p className="m-0 text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">{blocker}</p>}
 
         <DialogFooter>
           <button type="button" className={btn("ghost")} onClick={onClose} disabled={saving}>

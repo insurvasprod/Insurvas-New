@@ -1,5 +1,6 @@
 "use client";
 
+import { StatusChip } from "@/components/ui/status-chip";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { notify } from "@/lib/notify";
 
@@ -12,18 +13,7 @@ import { EmptyState, NoMatches, SectionLoading } from "@/components/ui/page-stat
 import { SettingsSaveBar } from "@/components/ui/settings-layout";
 import { PagedBody, PagedPager, PagedProvider, PagedTableCard } from "@/components/ui/paged";
 import { TableCard } from "@/components/ui/table-card";
-import {
-  Callout,
-  Field,
-  Pill,
-  SettingsCard,
-  SettingsGrid,
-  SettingsSectionHeader,
-  SettingsStack,
-  ToggleRow,
-  control,
-  st,
-} from "@/components/app/settings/primitives";
+import { Callout, Field, SettingsCard, SettingsGrid, SettingsSectionHeader, SettingsStack, ToggleRow, control, st } from "@/components/app/settings/primitives";
 import {
   FEDERAL_MINUTES,
   campaignMinutes,
@@ -260,9 +250,9 @@ export function CallingWindowSettingsPanel() {
             </Field>
           </div>
           {check.problem ? (
-            <p role="alert" className="mt-3 mb-0 text-[12px] leading-[1.5] text-[var(--error-ink)]">{check.problem}</p>
+            <p role="alert" className="mt-3 mb-0 text-xs leading-[1.5] text-[var(--error-ink)]">{check.problem}</p>
           ) : (
-            <p className="mt-3 mb-0 text-[12px] leading-[1.5] text-[var(--muted)]">
+            <p className="mt-3 mb-0 text-xs leading-[1.5] text-[var(--muted)]">
               Set both hours, or neither.
               {tenantWindow
                 ? ` In force now: ${minuteLabel(tenantWindow.start)}–${minuteLabel(tenantWindow.end)}.`
@@ -335,14 +325,14 @@ export function CallingWindowSettingsPanel() {
                             <td className={st.td}>{stateName(rule.state)}</td>
                             <td className={st.td}>
                               <span className="mr-2">{minuteLabel(law.start)} &ndash; {minuteLabel(law.end)}</span>
-                              {rule.noSunday && <Pill className="mr-1">No Sunday</Pill>}
-                              {rule.noHolidays && !everyStateBansHolidays && <Pill>No holidays</Pill>}
+                              {rule.noSunday && <StatusChip dot={false} className="mr-1">No Sunday</StatusChip>}
+                              {rule.noHolidays && !everyStateBansHolidays && <StatusChip dot={false}>No holidays</StatusChip>}
                             </td>
                             <td className={cn(st.td, st.num)}>
                               {closed ? (
-                                <Pill tone="error">Closed</Pill>
+                                <StatusChip dot={false} tone="danger">Closed</StatusChip>
                               ) : (
-                                <Pill tone="success">{minuteLabel(used.start, true)} &ndash; {minuteLabel(used.end, true)}</Pill>
+                                <StatusChip dot={false} tone="good">{minuteLabel(used.start, true)} &ndash; {minuteLabel(used.end, true)}</StatusChip>
                               )}
                             </td>
                           </tr>
@@ -360,7 +350,7 @@ export function CallingWindowSettingsPanel() {
               {feed?.stale && (
                 <Callout tone="error" className="mt-3" title={`State rules are stale (last refreshed ${refreshedLabel ?? "at an unknown time"}) — dialing is blocked until they are refreshed.`} />
               )}
-              <p className="mt-3 mb-0 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">
+              <p className="mt-3 mb-0 text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">
                 {feed && refreshedLabel ? `Last refreshed ${refreshedLabel}.` : "Refresh time not recorded yet."}
                 {basis === "notable" && " Showing the states whose rule is tighter than yours."}
                 {everyStateBansHolidays && (loaded.stateCheckReadsFederalHolidays ? " State and federal holidays are always blocked." : " State holidays are always blocked.")}
@@ -389,7 +379,7 @@ export function CallingWindowSettingsPanel() {
             }
           >
             <ToolbarSearch value={campaignQuery} onChange={setCampaignQuery} placeholder="Search campaigns" />
-            {!loaded.options.campaignOverrides && <Pill tone="warning">Overrides off &mdash; none applied</Pill>}
+            {!loaded.options.campaignOverrides && <StatusChip dot={false} tone="warning">Overrides off &mdash; none applied</StatusChip>}
           </DataToolbar>
         }
       >
@@ -555,7 +545,7 @@ function CampaignForm({
         />
       </Field>
       {(problem || check.problem) && (
-        <p role="alert" className="m-0 text-[12px] leading-[1.5] text-[var(--error-ink)]">{problem || check.problem}</p>
+        <p role="alert" className="m-0 text-xs leading-[1.5] text-[var(--error-ink)]">{problem || check.problem}</p>
       )}
       <div className="flex flex-wrap justify-end gap-2">
         {campaign && (

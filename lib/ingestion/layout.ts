@@ -244,9 +244,12 @@ function cents(text: string, strip: boolean): number | null {
   // Binary noise from a spreadsheet save: Excel writes 276.72 as 276.72000000000003 and 1083.60 as
   // 1083.5999999999999. Ten or more decimals within a millionth of a cent are that cent; a real
   // third decimal (12.345) is still not an amount.
-  if (/^\d+\.\d{10,}$/.test(value)) {
-    const hundredths = Number(value) * 100;
-    if (Math.abs(hundredths - Math.round(hundredths)) < 1e-6) value = (Math.round(hundredths) / 100).toFixed(2);
+  // Read from the digits, never through a float: after the cent, six zeros (just over) or six nines
+  // (just under) are the noise; anything else is a real third decimal and is refused below.
+  const noise = /^(\d+)\.(\d{2})(\d{8,})$/.exec(value);
+  if (noise) {
+    if (/^0{6}/.test(noise[3])) value = `${noise[1]}.${noise[2]}`;
+    else if (/^9{6}/.test(noise[3])) value = centsText(Number(noise[1]) * 100 + Number(noise[2]) + 1) ?? value;
   }
   const match = /^(\d+)(?:\.(\d{1,2}))?$/.exec(value);
   if (!match) return null;
@@ -331,9 +334,17 @@ export const ROUNDED_TO_CENT = new Set(["premium_cents", "face_amount_cents"]);
 export function roundToCent(raw: string): string {
   const match = /^(\s*\(?)(-?)(\$?)([\d,]*)\.(\d{3,})(\)?-?\s*)$/.exec(raw);
   if (!match) return raw;
-  const value = Number(`${match[4].replaceAll(",", "") || "0"}.${match[5]}`);
-  if (!Number.isFinite(value)) return raw;
-  return `${match[1]}${match[2]}${match[3]}${(Math.round(value * 100) / 100).toFixed(2)}${match[6]}`;
+  // Half up on the digits themselves: "1.005" is 1.01. Through a float it was 1.00 (1.005 is stored
+  // as 1.00499999…), so the cent depended on binary noise.
+  const whole = match[4].replaceAll(",", "") || "0";
+  const text = centsText(Number(whole) * 100 + Number(match[5].slice(0, 2)) + (match[5][2] >= "5" ? 1 : 0));
+  return text === null ? raw : `${match[1]}${match[2]}${match[3]}${text}${match[6]}`;
+}
+
+/** Whole cents as "d.dd", from integers only; null past the safe-integer range. */
+function centsText(cents: number): string | null {
+  if (!Number.isSafeInteger(cents) || cents < 0) return null;
+  return `${Math.floor(cents / 100)}.${String(cents % 100).padStart(2, "0")}`;
 }
 
 /** One cell through one map entry. An empty (or all-space) cell is null, and an error only if required. */

@@ -10,16 +10,20 @@
  * shows what it can and says what it cannot.
  */
 
+import { StatusChip } from "@/components/ui/status-chip";
 import { Fragment, useState } from "react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageLoading } from "@/components/ui/page-loading";
-import { ErrorState, SectionLoading } from "@/components/ui/page-states";
+import { InfoTip } from "@/components/ui/info-tip";
+import { EmptyState, ErrorState, SectionLoading } from "@/components/ui/page-states";
 import { StatStrip, StatTile } from "@/components/ui/stat";
+import { PagedBody, PagedTableCard } from "@/components/ui/paged";
 import { TableCard } from "@/components/ui/table-card";
 import { RefreshButton } from "@/components/ui/data-toolbar";
-import { Field, KeyValues, LockIcon, Pill, PlusIcon, SettingsCard, SettingsMeter, control, st } from "@/components/app/settings/primitives";
+import { Field, KeyValues, LockIcon, PlusIcon, SettingsCard, SettingsMeter, control, st, pillTone } from "@/components/app/settings/primitives";
 import { MATCH_LABEL, MATCH_OPERATOR, SCHEMA_PENDING_MESSAGE, WEEKDAYS, WEEKDAY_NAMES, daysUntil, lapseDay, nobodySentence, shortDate, shortName, stateName } from "@/lib/assignment/constants";
 import { cn } from "@/lib/utils";
 import { draftFromRule, pinFallbacks, roleLabel, serialise, titleCase } from "@/components/app/assignment/model";
@@ -77,6 +81,7 @@ export function AssignmentWorkspace({ canManage }: { canManage: boolean }) {
 
       <ViewTabs
         label="Assignment views"
+        controls="assignment-panel"
         value={tab}
         onChange={setTab}
         tabs={[
@@ -94,10 +99,11 @@ export function AssignmentWorkspace({ canManage }: { canManage: boolean }) {
         )}
       />
 
+      <div key={tab} role="tabpanel" id="assignment-panel" aria-labelledby={`assignment-panel-tab-${tab}`} className="min-w-0">
       {tab === "rules" && (
           <TableCard
             className={fullHeightCard(340)}
-            description="Evaluated top to bottom; they apply to the next assignment."
+            description="Checked top to bottom, from the next assignment."
             footer={canManage ? (
               <span className="ml-auto flex items-center gap-2">
                 {dirty && <Button type="button" variant="ghost" disabled={busy === "publish"} onClick={() => { adopt(workspace); setOpenKey(null); }}>Discard</Button>}
@@ -113,7 +119,7 @@ export function AssignmentWorkspace({ canManage }: { canManage: boolean }) {
                 <span className="inline-flex size-[22px] shrink-0 items-center justify-center rounded-full bg-[var(--surface-alt)] text-xs font-semibold text-[var(--muted)]" aria-hidden><LockIcon /></span>
                 <span className="w-[130px] shrink-0 text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">Agent capacity</span>
                 <span className="w-[110px] shrink-0 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">ceilings below</span>
-                <span className="min-w-0 flex-1"><Pill>{ceilingChip}</Pill></span>
+                <span className="min-w-0 flex-1"><StatusChip dot={false}>{ceilingChip}</StatusChip></span>
                 <span className="w-[120px] shrink-0 text-right text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">
                   {topCapacitySkip ? <>skipped {shortName(memberById.get(topCapacitySkip.user_id)?.name ?? "someone")} {topCapacitySkip.leads}&times; this week</> : workspace.insights ? "always enforced" : ""}
                 </span>
@@ -164,7 +170,7 @@ export function AssignmentWorkspace({ canManage }: { canManage: boolean }) {
                         <span className="w-[130px] shrink-0 text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">{MATCH_LABEL[draft.matchType]}</span>
                         <span className="w-[110px] shrink-0 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">{operator}</span>
                         <span className="min-w-0 flex-1" title={draft.matchType === "fallback" ? undefined : goesTo}>
-                          <Pill tone={problem ? "warning" : "neutral"} className="max-w-full overflow-hidden text-ellipsis">{valueChip(draft)}</Pill>
+                          <StatusChip dot={false} tone={pillTone(problem ? "warning" : "neutral")} className="max-w-full overflow-hidden text-ellipsis">{valueChip(draft)}</StatusChip>
                         </span>
                         <span className="w-[120px] shrink-0 text-right text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]" title={workspace.insights ? `Since ${sinceLabel}, 00:00 UTC` : undefined}>
                           {!draft.id ? "not published" : routed === null ? "" : `${routed.toLocaleString()} routed this week`}
@@ -201,8 +207,16 @@ export function AssignmentWorkspace({ canManage }: { canManage: boolean }) {
                 );
               })}
             </ol>
-            {!drafts.length && <p className="border-t border-[var(--border)] px-4 py-3 text-sm text-[var(--muted)]">No rules. Every lead goes round-robin across the whole roster, licence and capacity permitting.</p>}
-            {canManage && (
+            {!drafts.length && (
+              <div className="border-t border-[var(--border)]">
+                <EmptyState
+                  title="No rules yet"
+                  hint="Leads go round-robin to agents licensed for them, with room."
+                  action={canManage ? <Button type="button" variant="outline" onClick={addCondition}><PlusIcon />Add condition</Button> : undefined}
+                />
+              </div>
+            )}
+            {canManage && drafts.length > 0 && (
               <div className="border-t border-dashed border-[var(--border-strong)] px-4 py-3">
                 <Button type="button" variant="ghost" onClick={addCondition}><PlusIcon />Add condition</Button>
               </div>
@@ -221,8 +235,9 @@ export function AssignmentWorkspace({ canManage }: { canManage: boolean }) {
               </details>
             )}
             {fallbackMoved && canManage && (
-              <p className="m-0 border-t border-[var(--border)] px-4 py-2.5 text-xs leading-[1.5] tracking-[-0.01em] text-[var(--warning-ink)]">
-                The published fallback sits above other rules, so they only see the leads it cannot place. It is shown last here; publish to apply.
+              <p className="m-0 flex items-center gap-0.5 border-t border-[var(--border)] px-4 py-2.5 text-xs leading-[1.5] tracking-[-0.01em] text-[var(--warning-ink)]">
+                Publish to move the fallback rule last.
+                <InfoTip label="About the fallback rule">The published fallback sits above other rules, so they only see the leads it cannot place. It is shown last here.</InfoTip>
               </p>
             )}
             {publishError && <p role="alert" className="border-t border-[var(--border)] px-4 py-2.5 text-xs leading-[1.5] text-[var(--error-ink)]">{publishError}</p>}
@@ -230,9 +245,11 @@ export function AssignmentWorkspace({ canManage }: { canManage: boolean }) {
       )}
 
       {tab === "capacity" && (
-          <TableCard
+          <PagedTableCard
+            total={members.length}
+            noun="agents"
             className={fullHeightCard(340)}
-            action={atCeiling.length ? <Pill tone="error" dot>{atCeiling.length} agent{atCeiling.length === 1 ? "" : "s"} at the ceiling</Pill> : <Pill tone="success" dot>Nobody at the ceiling</Pill>}
+            action={atCeiling.length ? <StatusChip tone="danger" dot>{atCeiling.length} agent{atCeiling.length === 1 ? "" : "s"} at the ceiling</StatusChip> : <StatusChip tone="good" dot>Nobody at the ceiling</StatusChip>}
           >
             <table className={cn(st.table, "border-t border-[var(--border)]")}>
               <thead>
@@ -245,7 +262,7 @@ export function AssignmentWorkspace({ canManage }: { canManage: boolean }) {
                   <th className={cn(st.th, "w-[84px]")}>Rest day</th>
                 </tr>
               </thead>
-              <tbody className="m-seq">
+              <PagedBody className="m-seq">
                 {members.map((member) => {
                   const pct = member.capacity > 0 ? member.currentOpen / member.capacity : 1;
                   const full = member.currentOpen >= member.capacity;
@@ -276,7 +293,7 @@ export function AssignmentWorkspace({ canManage }: { canManage: boolean }) {
                             )}
                           </span>
                         </td>
-                        <td className={st.td}><Pill tone={member.role === "setter" ? "info" : "neutral"}>{roleLabel(member.role)}</Pill></td>
+                        <td className={st.td}><StatusChip dot={false} tone={pillTone(member.role === "setter" ? "info" : "neutral")}>{roleLabel(member.role)}</StatusChip></td>
                         <td className={cn(st.td, "tabular-nums")} title={member.eligibleStates?.length ? member.eligibleStates.join(", ") : undefined}>{member.role === "setter" || member.eligibleStates === null ? "—" : member.eligibleStates.length}</td>
                         <td className={cn(st.td, "tabular-nums")}>{member.currentOpen}</td>
                         <td className={st.td}>
@@ -297,10 +314,10 @@ export function AssignmentWorkspace({ canManage }: { canManage: boolean }) {
                               <Field label="Capacity" htmlFor={`cap-${member.id}`} hint="Most open leads at once.">
                                 <input id={`cap-${member.id}`} className={control} type="number" min={0} max={100000} value={memberForm.capacity} onChange={(event) => setMemberForm({ ...memberForm, capacity: event.target.value })} />
                               </Field>
-                              <Field label="Languages" htmlFor={`lang-${member.id}`} hint="Comma-separated, as leads carry them: spanish, es. Used by language rules.">
+                              <Field label="Languages" htmlFor={`lang-${member.id}`} hint="Comma-separated, e.g. spanish, es.">
                                 <input id={`lang-${member.id}`} className={control} value={memberForm.languages} disabled={!workspace.boardSchema} onChange={(event) => setMemberForm({ ...memberForm, languages: event.target.value })} placeholder="spanish, english" />
                               </Field>
-                              <Field label="Rest day" htmlFor={`off-${member.id}`} hint="Skipped by automatic assignment that day, in your agency's timezone.">
+                              <Field label="Rest day" htmlFor={`off-${member.id}`} hint="No automatic assignment that day (agency time).">
                                 <select id={`off-${member.id}`} className={control} value={memberForm.weekdayOff} disabled={!workspace.boardSchema} onChange={(event) => setMemberForm({ ...memberForm, weekdayOff: event.target.value })}>
                                   <option value="">Works every day</option>
                                   {WEEKDAY_NAMES.map((day, value) => <option key={day} value={value}>{day}</option>)}
@@ -319,17 +336,19 @@ export function AssignmentWorkspace({ canManage }: { canManage: boolean }) {
                     </Fragment>
                   );
                 })}
-                {!members.length && <tr><td colSpan={6} className={cn(st.td, "text-[var(--muted)]")}>Nobody on this workspace can be handed leads yet.</td></tr>}
-              </tbody>
+              </PagedBody>
+              {!members.length && <tbody><tr><td colSpan={6}><EmptyState title="Nobody can take leads yet" hint="Agents and setters appear here once they join." /></td></tr></tbody>}
             </table>
-          </TableCard>
+          </PagedTableCard>
       )}
       {tab === "preview" && (
-          <TableCard
+          <PagedTableCard
+            total={canManage && !preview.error && !preview.pending ? previewRows.length : 0}
+            noun="leads"
             className={fullHeightCard(340)}
             action={(
               <>
-                {preview.rows && preview.rows.length > 0 && <Pill tone={routedCount === preview.rows.length ? "success" : "warning"} dot>{routedCount} of {preview.rows.length} routed</Pill>}
+                {preview.rows && preview.rows.length > 0 && <StatusChip tone={pillTone(routedCount === preview.rows.length ? "success" : "warning")} dot>{routedCount} of {preview.rows.length} routed</StatusChip>}
                 {canManage && <RefreshButton onClick={() => void loadPreview()} refreshing={preview.loading} />}
               </>
             )}
@@ -343,7 +362,13 @@ export function AssignmentWorkspace({ canManage }: { canManage: boolean }) {
             ) : preview.pending ? (
               <p className="m-0 border-t border-[var(--border)] px-4 py-3 text-sm text-[var(--muted)]">{SCHEMA_PENDING_MESSAGE}</p>
             ) : !previewRows.length ? (
-              <p className="m-0 border-t border-[var(--border)] px-4 py-3 text-sm text-[var(--muted)]">Nothing is waiting in the pool.</p>
+              <div className="border-t border-[var(--border)]">
+                <EmptyState
+                  title="Nothing waiting in the pool"
+                  hint="Import a list to fill it."
+                  action={<Button asChild type="button" variant="outline"><Link href="/app/import">Import a list</Link></Button>}
+                />
+              </div>
             ) : (
               <table className={cn(st.table, "border-t border-[var(--border)]")}>
                 <thead>
@@ -354,7 +379,7 @@ export function AssignmentWorkspace({ canManage }: { canManage: boolean }) {
                     <th className={cn(st.th, "w-[150px]")}>Why</th>
                   </tr>
                 </thead>
-                <tbody className="m-seq">
+                <PagedBody className="m-seq">
                   {previewRows.map((row) => {
                     const owner = row.owner_user_id ? memberById.get(row.owner_user_id) : undefined;
                     const unrouted = row.outcome !== "routed" && row.outcome !== "taken";
@@ -363,17 +388,17 @@ export function AssignmentWorkspace({ canManage }: { canManage: boolean }) {
                         <td className={st.td}>{row.name}</td>
                         <td className={st.td}>{row.state ?? "—"}</td>
                         <td className={st.td}>
-                          {row.outcome === "routed" || row.outcome === "taken" ? (owner ? shortName(owner.name) : "Someone") : <Pill tone="error" dot>Nobody</Pill>}
+                          {row.outcome === "routed" || row.outcome === "taken" ? (owner ? shortName(owner.name) : "Someone") : <StatusChip tone="danger" dot>Nobody</StatusChip>}
                         </td>
                         <td className={st.td}><PreviewWhy row={row} ruleNumber={row.rule_id ? publishedOrder.get(row.rule_id) ?? null : null} memberName={(id) => shortName(memberById.get(id)?.name ?? "someone")} /></td>
                       </tr>
                     );
                   })}
-                </tbody>
+                </PagedBody>
               </table>
             )}
             {canManage && dirty && previewRows.length > 0 && <p className="m-0 border-t border-[var(--border)] px-4 py-2.5 text-xs text-[var(--muted)]">The preview uses the published rules, not your unpublished changes.</p>}
-          </TableCard>
+          </PagedTableCard>
       )}
       {tab === "settings" && (
         <div className="grid min-w-0 gap-4 lg:grid-cols-2 lg:items-start">
@@ -385,10 +410,18 @@ export function AssignmentWorkspace({ canManage }: { canManage: boolean }) {
             >
               {editingRest ? (
                 <div className="flex flex-col gap-4">
-                  <Field label="Rest between owners" htmlFor="rest-days" hint="Days after a household is given to someone before anyone else may be given it — by the rules, a rotation or a manager's reassignment. 0 is off.">
+                  <Field
+                    label="Rest between owners"
+                    htmlFor="rest-days"
+                    hint={<span className="inline-flex items-center gap-0.5">Days before another agent may take the household. 0 is off.<InfoTip label="About rest between owners">Counts from the day a household is given to someone, whether by the rules, a rotation or a manager&apos;s reassignment.</InfoTip></span>}
+                  >
                     <input ref={restInputRef} id="rest-days" className={control} type="number" min={0} max={3650} value={restForm.restDays} onChange={(event) => setRestForm({ ...restForm, restDays: event.target.value })} />
                   </Field>
-                  <Field label="Attempts before rotate" htmlFor="rotate-attempts" hint="After this many unanswered calls by the same owner (no answer, voicemail, busy, dropped) since anyone last reached the household, the lead is offered to another eligible agent. Checked every 5 minutes, never during a call or a booked callback. Empty or 0 is off.">
+                  <Field
+                    label="Attempts before rotate"
+                    htmlFor="rotate-attempts"
+                    hint={<span className="inline-flex items-center gap-0.5">Unanswered calls before the lead moves on. Empty or 0 is off.<InfoTip label="About attempts before rotate">Counts no answer, voicemail, busy and dropped calls by the same owner since anyone last reached the household; the lead then goes to another eligible agent. Checked every 5 minutes, never during a call or a booked callback.</InfoTip></span>}
+                  >
                     <input id="rotate-attempts" className={control} type="number" min={0} max={50} value={restForm.attempts} disabled={!workspace.boardSchema} onChange={(event) => setRestForm({ ...restForm, attempts: event.target.value })} placeholder="Off" />
                   </Field>
                   {!workspace.boardSchema && <p className="m-0 text-xs text-[var(--muted)]">{SCHEMA_PENDING_MESSAGE} Rest between owners can still be changed.</p>}
@@ -439,6 +472,8 @@ export function AssignmentWorkspace({ canManage }: { canManage: boolean }) {
           </SettingsCard>
         </div>
       )}
+      </div>
+
 
       {/* ── pool actions: a dialog opened from the tab row (2026-10-06 redesign) ── */}
       <Dialog open={poolOpen} onOpenChange={setPoolOpen}>

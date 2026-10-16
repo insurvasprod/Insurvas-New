@@ -83,6 +83,9 @@ async function noteAuthor(tenantId: string, userId: string | null): Promise<stri
  * Win-back list, or records why it could not (no client linked, no phone, no state, on a do-not-call
  * list, no form for the product). After any release the list is sent back through the scrub gate.
  */
+/** The claim a release run puts on a candidate while it creates the lead (see releaseDueWinbacks). */
+const RELEASING = "Releasing since ";
+
 export async function releaseDueWinbacks(tenantId: string, userId: string | null): Promise<{ released: number; blocked: number } | null> {
   const today = new Date().toISOString().slice(0, 10);
   let due: Loose[];
@@ -116,6 +119,17 @@ export async function releaseDueWinbacks(tenantId: string, userId: string | null
     await db().from("winback_candidate").update({ release_blocked_reason: reason.slice(0, 300) }).eq("tenant_id", tenantId).eq("id", id);
   };
   for (const c of due) {
+    // Claim it first, so two runs at once (a file stage and a page open) never both create a lead: the
+    // second one's conditional update finds the claim and moves on. A claim older than ten minutes is a
+    // run that died, and is taken over.
+    const claimedAt = new Date().toISOString();
+    const staleBefore = new Date(Date.now() - 10 * 60_000).toISOString();
+    const claim = await db().from("winback_candidate").update({ release_blocked_reason: `${RELEASING}${claimedAt}` })
+      .eq("tenant_id", tenantId).eq("id", c.id).is("released_to_nurture_at", null)
+      .or(`release_blocked_reason.is.null,release_blocked_reason.not.like."${RELEASING}*",release_blocked_reason.lt."${RELEASING}${staleBefore}"`)
+      .select("id");
+    if (claim.error) { console.error("[winback] the release could not be claimed", claim.error); continue; }
+    if (!claim.data?.length) continue;
     const contact = c.contact_id ? contactOf.get(c.contact_id) : null;
     if (!contact) { await block(c.id, "No client is linked to this policy."); continue; }
     const phone = phoneDigits(contact.primary_phone);
@@ -136,7 +150,7 @@ export async function releaseDueWinbacks(tenantId: string, userId: string | null
       tenant_id: tenantId, tenant_template_id: template.tenant_template_id, template_id: template.assignment.template_id,
       template_version: template.assignment.template_version, definition_version: template.assignment.definition_version,
       product_line: product, pipeline_id: stage.pipelineId, stage_id: stage.stage.id, campaign_id: campaignId, contact_id: c.contact_id,
-      lead_state: "nurture", next_dial_after: new Date().toISOString(), created_by: userId ?? author,
+      lead_state: "nurture", next_dial_after: new Date().toISOString(), created_by: author,
       values: {
         first_name: contact.first_name ?? null, last_name: contact.last_name ?? null, full_name: [contact.first_name, contact.last_name].filter(Boolean).join(" ") || null,
         phone, state, dob: contact.dob ?? null,
@@ -155,7 +169,7 @@ export async function releaseDueWinbacks(tenantId: string, userId: string | null
       });
       if (note.error) console.error("[winback] the history note could not be written", note.error);
     }
-    const mark = await db().from("winback_candidate").update({ released_to_nurture_at: new Date().toISOString(), released_lead_id: leadId, campaign_id: campaignId, release_blocked_reason: null }).eq("tenant_id", tenantId).eq("id", c.id);
+    const mark = await db().from("winback_candidate").update({ released_to_nurture_at: new Date().toISOString(), released_lead_id: leadId, campaign_id: campaignId, release_blocked_reason: null }).eq("tenant_id", tenantId).eq("id", c.id).eq("release_blocked_reason", `${RELEASING}${claimedAt}`);
     if (mark.error) { console.error("[winback] the release could not be recorded", mark.error); continue; }
     released++;
   }
@@ -200,11 +214,13 @@ export type Winback = {
   lastRun: { released: number; blocked: number } | null;
 };
 
-export async function loadWinback(viewer: Viewer): Promise<Winback | { available: false }> {
+export async function loadWinback(viewer: Viewer, options: { release: boolean } = { release: true }): Promise<Winback | { available: false }> {
   let lastRun: { released: number; blocked: number } | null = null;
   try {
     await runWinbackSync(viewer.tenantId);
-    lastRun = await releaseDueWinbacks(viewer.tenantId, viewer.userId);
+    // Released on the agency's behalf (its first owner is the lead's creator), never as whoever opened
+    // the page; and a read-only plan only looks.
+    if (options.release) lastRun = await releaseDueWinbacks(viewer.tenantId, null);
   } catch (error) {
     console.error("[winback] the sync or release could not run", error);
   }
@@ -246,7 +262,7 @@ export async function loadWinback(viewer: Viewer): Promise<Winback | { available
       clientName: r.contact_id ? nameOf.get(r.contact_id) || null : null, lapsedOn: r.lapsed_on, monthsPaid: r.months_paid,
       premiumCents: r.premium_cents === null ? null : Number(r.premium_cents), faceCents: r.face_amount_cents === null ? null : Number(r.face_amount_cents),
       category: r.lapse_reason_category, source: r.reason_source, inferred: r.reason_inferred, detail: r.reason_detail, band: r.winback_band,
-      eligibleFrom: r.eligible_from, releasedAt: r.released_to_nurture_at, leadId: r.released_lead_id, blockedReason: r.release_blocked_reason,
+      eligibleFrom: r.eligible_from, releasedAt: r.released_to_nurture_at, leadId: r.released_lead_id, blockedReason: r.release_blocked_reason?.startsWith(RELEASING) ? null : r.release_blocked_reason,
     })),
     claims: claims.map((c) => ({ id: c.id, carrierName: carrierName.get(c.carrier_id) ?? "Carrier not known", policyNumber: c.policy_number, clientName: c.contact_id ? nameOf.get(c.contact_id) || null : null, reason: c.reason, createdAt: c.created_at })),
   };

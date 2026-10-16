@@ -1,8 +1,10 @@
 "use client";
 
+import { StatusChip } from "@/components/ui/status-chip";
 import { Button } from "@/components/ui/button";
 import { EmptyState, SectionLoading } from "@/components/ui/page-states";
-import { Callout, Pill, st } from "@/components/app/settings/primitives";
+import { PagedBody, PagedPager, PagedProvider } from "@/components/ui/paged";
+import { Callout, st, pillTone } from "@/components/app/settings/primitives";
 import { productLineLabel } from "@/lib/format/productLine";
 import { agoLabel } from "@/lib/format/ago";
 import { cn } from "@/lib/utils";
@@ -20,7 +22,7 @@ export function DialerLeadColumn({ d, readOnly }: { d: ReturnType<typeof useDial
   const now = useNow();
   const [complianceOpen, setComplianceOpen] = useState(false);
   const [bookOpen, setBookOpen] = useState(false);
-  const { searchMode, panel, panelError, attempt, loading, working, confirmed, dialled, served, emptyReason, outcomeLabel, prepareAttempt, confirmRead, dial, loadingPanel, eligibility, blockers, callReady, customerZone, slotFacts, reasonParts, stateName, stackHits, campaignLine, phoneLabel, cityState, disclosureUnapproved, calendar } = d;
+  const { searchMode, panel, panelError, attempt, loading, working, confirmed, dialled, served, serving, serveNext, emptyReason, outcomeLabel, prepareAttempt, confirmRead, dial, loadingPanel, eligibility, blockers, callReady, customerZone, slotFacts, reasonParts, stateName, stackHits, campaignLine, phoneLabel, cityState, disclosureUnapproved, calendar } = d;
   const canBook = !readOnly && Boolean(calendar && calendar.agents.length > 0);
   return (
     <>
@@ -36,7 +38,8 @@ export function DialerLeadColumn({ d, readOnly }: { d: ReturnType<typeof useDial
         <section className={cn(card, "max-lg:order-1")}>
           <EmptyState
             title={searchMode ? "Open a search result" : "No lead on your screen"}
-            hint={searchMode ? "Choose a lead from the results to see its compliance checks and script." : emptyReason ?? (readOnly ? "Read-only access does not serve leads." : "Serve the next lead, or pick one from the queue.")}
+            hint={searchMode ? "Pick a lead from the results." : emptyReason ?? (readOnly ? "Read-only access does not serve leads." : "Serve the next lead, or pick one from the queue.")}
+            action={!searchMode && !readOnly ? <Button type="button" onClick={() => void serveNext()} disabled={serving}>{serving ? "Serving…" : "Serve next lead"}</Button> : undefined}
           />
         </section>
       )}
@@ -45,8 +48,8 @@ export function DialerLeadColumn({ d, readOnly }: { d: ReturnType<typeof useDial
         <section className={cn(card, "p-5 max-lg:order-1")} aria-label="Lead">
           <div className="flex flex-wrap items-start justify-between gap-5">
             <div className="min-w-0">
-              <h2 className="m-0 text-[24px] leading-[1.21] font-semibold tracking-[-0.02em] text-[var(--ink)]">{panel.lead.fullName ?? panel.lead.firstName}</h2>
-              <p className="mt-1.5 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)] tabular-nums">
+              <h2 className="m-0 text-title-md leading-[1.21] font-semibold tracking-[-0.02em] text-[var(--ink)]">{panel.lead.fullName ?? panel.lead.firstName}</h2>
+              <p className="mt-1.5 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--muted)] tabular-nums">
                 {[
                   phoneLabel ?? "No phone number",
                   panel.lead.age ? `age ${panel.lead.age}` : null,
@@ -105,7 +108,7 @@ export function DialerLeadColumn({ d, readOnly }: { d: ReturnType<typeof useDial
           {!panel.disclosure.configured && (
             <div className="mt-4 border-t border-[var(--border)] pt-4">
               <p className={label}>Required disclosure · {panel.disclosure.state || "unknown state"}</p>
-              <p className="mt-1.5 text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--error-ink)]">{panel.disclosure.requiredText}</p>
+              <p className="mt-1.5 text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--error-ink)]">{panel.disclosure.requiredText}</p>
             </div>
           )}
           {/* The state's wording appears once a call is being prepared, with the read-and-record step
@@ -114,7 +117,7 @@ export function DialerLeadColumn({ d, readOnly }: { d: ReturnType<typeof useDial
           {attempt && (
             <div className="mt-4 border-t border-[var(--border)] pt-4">
               <p className={label}>{panel.disclosure.configured ? `${stateName ?? panel.disclosure.state} requires this wording · cannot be hidden` : `Required disclosure · ${panel.disclosure.state || "unknown state"}`}</p>
-              <p className="mt-1.5 text-[16px] leading-[1.5] tracking-[-0.02em] whitespace-pre-line text-[var(--body)]">{panel.disclosure.requiredText}</p>
+              <p className="mt-1.5 text-base leading-[1.5] tracking-[-0.02em] whitespace-pre-line text-[var(--body)]">{panel.disclosure.requiredText}</p>
               <div className="mt-3 flex flex-wrap items-center gap-3">
                 <Button type="button" variant="outline" onClick={() => void confirmRead()} disabled={readOnly || working || confirmed || panel.disclosure.blocking} aria-keyshortcuts={confirmed ? undefined : "R"}>
                   {confirmed ? "Read and recorded" : "I read this disclosure"}{!confirmed && <Kbd>R</Kbd>}
@@ -141,7 +144,7 @@ export function DialerLeadColumn({ d, readOnly }: { d: ReturnType<typeof useDial
             <button type="button" onClick={() => setComplianceOpen((open) => !open)} aria-expanded={complianceOpen} aria-controls="dialer-compliance-detail" className="flex w-full items-center gap-3 text-left">
               <ChevronDown aria-hidden="true" className={cn("size-4 shrink-0 text-[var(--muted)] transition-transform", !complianceOpen && "-rotate-90")} />
               <span className="flex-1">Eligibility &amp; compliance</span>
-              <Pill tone={callReady ? "success" : "error"} dot>{callReady ? "Allowed" : "Blocked"}</Pill>
+              <StatusChip tone={pillTone(callReady ? "success" : "error")} dot>{callReady ? "Allowed" : "Blocked"}</StatusChip>
             </button>
           </h2>
           {!complianceOpen && (
@@ -158,7 +161,7 @@ export function DialerLeadColumn({ d, readOnly }: { d: ReturnType<typeof useDial
               call cannot be placed. */}
           {blockers.length > 0 && (
             <ul className="m-0 mt-3 list-none space-y-1 p-0">
-              {blockers.map((line) => <li key={line} className="text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--error-ink)]">{line}</li>)}
+              {blockers.map((line) => <li key={line} className="text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--error-ink)]">{line}</li>)}
             </ul>
           )}
           {complianceOpen && <div id="dialer-compliance-detail">
@@ -174,8 +177,8 @@ export function DialerLeadColumn({ d, readOnly }: { d: ReturnType<typeof useDial
             <div className="min-w-0">
               <dt className={label}>DNC</dt>
               <dd className={cn(value, "m-0", eligibility?.dncCheck === "unavailable" && "text-[var(--error-ink)]")}>
-                {eligibility?.dncCheck === "unavailable" ? "No DNC vendor is answering · dialing refused" : "Checked when you call"}
-                {panel.lastDncCheck && <span className="block font-normal text-[var(--muted)] text-[12px]">Last: {panel.lastDncCheck.result === "clear" ? "clear" : panel.lastDncCheck.result === "listed" ? "listed, dial refused" : "no vendor answered"} · {agoLabel(Date.parse(panel.lastDncCheck.checkedAt), now)}</span>}
+                {eligibility?.dncCheck === "unavailable" ? "Your stored lists could not be read · dialing refused" : "Checked when you call"}
+                {panel.lastDncCheck && <span className="block font-normal text-[var(--muted)] text-xs">Last: {panel.lastDncCheck.result === "clear" ? "clear" : panel.lastDncCheck.result === "listed" ? "listed, dial refused" : "lists could not be read"} · {agoLabel(Date.parse(panel.lastDncCheck.checkedAt), now)}</span>}
               </dd>
             </div>
             <div className="min-w-0">
@@ -207,7 +210,7 @@ export function DialerLeadColumn({ d, readOnly }: { d: ReturnType<typeof useDial
             {/* LA-2.3-3: every use of an exemption is audited; the agent sees it on the dial. */}
             {eligibility?.dncExemption && (
               <p className="mt-2 flex flex-wrap items-center gap-2">
-                <Pill tone="warning" dot>{dncExemptionLine(eligibility.dncExemption)}</Pill>
+                <StatusChip tone="warning" dot>{dncExemptionLine(eligibility.dncExemption)}</StatusChip>
                 {eligibility.dncExemption.certificateUrl && <a href={eligibility.dncExemption.certificateUrl} target="_blank" rel="noreferrer" className={cn(small, "font-semibold text-[var(--ink)] underline underline-offset-2")}>Consent certificate</a>}
               </p>
             )}
@@ -221,8 +224,8 @@ export function DialerLeadColumn({ d, readOnly }: { d: ReturnType<typeof useDial
                 return (
                   <div key={list.key} className="contents">
                     <dt className={body14}>{list.label}</dt>
-                    <dd className={cn("m-0 text-right text-[14px] leading-[1.5] font-semibold tracking-[-0.02em]", bad ? "text-[var(--error-ink)]" : result === "Clear" ? "text-[var(--success-ink)]" : "text-[var(--muted)]")}>
-                      {result}{hit?.addedAt && <span className="block text-[12px] font-normal text-[var(--muted)]">since {shortDate(hit.addedAt)}</span>}
+                    <dd className={cn("m-0 text-right text-sm leading-[1.5] font-semibold tracking-[-0.02em]", bad ? "text-[var(--error-ink)]" : result === "Clear" ? "text-[var(--success-ink)]" : "text-[var(--muted)]")}>
+                      {result}{hit?.addedAt && <span className="block text-xs font-normal text-[var(--muted)]">since {shortDate(hit.addedAt)}</span>}
                     </dd>
                   </div>
                 );
@@ -258,10 +261,11 @@ export function DialerLeadColumn({ d, readOnly }: { d: ReturnType<typeof useDial
             </div>
           )}
           {panel.attemptHistory.length === 0 ? <p className={cn(small, "px-4 py-4")}>No previous call attempts.</p> : (
+            <PagedProvider>
             <div className="min-w-0 overflow-x-auto">
               <table className={st.table}>
                 <thead><tr className={st.headRow}>{["Date / time", "Attempt", "Slot", "Result", "Evidence"].map((head) => <th key={head} scope="col" className={st.th}>{head}</th>)}</tr></thead>
-                <tbody>
+                <PagedBody>
                   {panel.attemptHistory.map((item) => (
                     <tr key={item.id}>
                       <td className={cn(st.td, "whitespace-nowrap tabular-nums")}>{dateTime(item.attemptedAt, viewerTimeZone(), { clock: "12h" })}</td>
@@ -271,9 +275,15 @@ export function DialerLeadColumn({ d, readOnly }: { d: ReturnType<typeof useDial
                       <td className={st.td}>{item.dialClicked ? "Dial recorded" : "Not dialed"}<span className={st.sub}>{item.disclosureConfirmed ? "Disclosure confirmed" : "Disclosure pending"}</span></td>
                     </tr>
                   ))}
-                </tbody>
+                </PagedBody>
               </table>
             </div>
+            {panel.attemptHistory.length > 10 && (
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-4 py-3 text-xs text-muted-foreground">
+                <PagedPager total={panel.attemptHistory.length} noun="attempts" />
+              </div>
+            )}
+            </PagedProvider>
           )}
         </section>
       </>}

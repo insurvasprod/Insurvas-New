@@ -15,7 +15,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const { id, submissionId } = await params;
   if (!isUuid(id) || !isUuid(submissionId)) return NextResponse.json(NOT_FOUND, { status: 404 });
   try {
-    return NextResponse.json(await confirmationUrl(actor.tenantId, id, submissionId), { headers: { "Cache-Control": "no-store" } });
+    return NextResponse.json(await confirmationUrl(actor, id, submissionId), { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     return failure(error);
   }

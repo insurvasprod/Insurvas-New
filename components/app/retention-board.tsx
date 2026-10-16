@@ -67,7 +67,6 @@ export function RetentionBoard({ rows, rates, readOnly }: { rows: BoardEntry[]; 
     }
   }
 
-  let lastGroup: Group | null = null;
   return (
     <>
       {rows.length > 0 && (
@@ -118,10 +117,10 @@ export function RetentionBoard({ rows, rates, readOnly }: { rows: BoardEntry[]; 
               </tr>
             </thead>
             <tbody>
-              {shown.rows.flatMap((row) => {
+              {shown.rows.flatMap((row, index) => {
                 const out = [];
-                if (row.group !== lastGroup) {
-                  lastGroup = row.group;
+                // A group heading before the first row of each group (the rows arrive grouped).
+                if (index === 0 || shown.rows[index - 1].group !== row.group) {
                   if (row.group !== "deadline") {
                     out.push(<tr key={`group-${row.group}`}><td colSpan={7} className="bg-[var(--surface-muted,transparent)] text-xs font-semibold uppercase tracking-wide text-muted-foreground">{GROUP_LABELS[row.group]}{row.group === "no_window" && <> · <Link href="/app/carrier-rules" className="normal-case underline">set the windows in Carrier rules</Link></>}</td></tr>);
                   }
@@ -131,7 +130,7 @@ export function RetentionBoard({ rows, rates, readOnly }: { rows: BoardEntry[]; 
                   <tr key={row.key}>
                     <td>
                       <span className="block font-semibold text-foreground">{row.clientName ?? "No client linked"}</span>
-                      {row.phone ? <a href={`tel:${row.phone.replace(/[^\d+]/g, "")}`} className="block font-medium tabular-nums text-[var(--accent-ink)] hover:underline">{phoneText(row.phone)}</a> : <span className="block text-xs text-muted-foreground">No phone on file</span>}
+                      {row.phone ? <span className="block select-all font-medium tabular-nums text-foreground" title="Check the calling window and do-not-call list before dialling">{phoneText(row.phone)}</span> : <span className="block text-xs text-muted-foreground">No phone on file</span>}
                       <Link href={`/app/policies/carrier/${row.carrierId}/${encodeURIComponent(row.policyNumber)}`} className="block text-xs text-muted-foreground hover:underline">{row.carrierName} · {row.policyNumber}</Link>
                     </td>
                     <td>

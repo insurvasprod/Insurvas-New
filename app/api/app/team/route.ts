@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { requireTenant } from "@/lib/tenantAuth/requireTenant";
+import { recordSettingsChanges } from "@/lib/settingsAudit/record";
 import { getEntitlement } from "@/lib/entitlements/get";
 import { getTeamSnapshot } from "@/lib/tenantTeam/service";
 import { inviteTeamMemberSchema } from "@/lib/tenantTeam/schemas";
@@ -83,9 +84,9 @@ export async function POST(request: NextRequest) {
     // as the same shape of message, and both have to reach the user as an upgrade prompt rather
     // than as "Could not invite this teammate".
     const seats = error.message?.match(/seat_limit_reached:(\d+):(\d+)/);
-    if (seats) return NextResponse.json({ error: `Your plan has reached max_seats (${seats[1]} of ${seats[2]}). Upgrade to add another teammate.`, code: "limit_reached", limitKey: "max_seats", usage: Number(seats[1]), limit: Number(seats[2]), upgrade: true }, { status: 403 });
+    if (seats) return NextResponse.json({ error: `Your plan has reached its seat limit (${seats[1]} of ${seats[2]} seats). Upgrade to add another teammate.`, code: "limit_reached", limitKey: "max_seats", usage: Number(seats[1]), limit: Number(seats[2]), upgrade: true }, { status: 403 });
     const limit = error.message?.match(/max_buffer_seats:(\d+):(\d+)/);
-    if (limit) return NextResponse.json({ error: `Your plan has reached max_buffer_seats (${limit[1]} of ${limit[2]}). Upgrade to invite another buffer agent.`, code: "limit_reached", limitKey: "max_buffer_seats", usage: Number(limit[1]), limit: Number(limit[2]), upgrade: true }, { status: 403 });
+    if (limit) return NextResponse.json({ error: `Your plan has reached its buffer-agent seat limit (${limit[1]} of ${limit[2]} buffer seats). Upgrade to invite another buffer agent.`, code: "limit_reached", limitKey: "max_buffer_seats", usage: Number(limit[1]), limit: Number(limit[2]), upgrade: true }, { status: 403 });
     const setters = error.message?.match(/max_setter_seats:(\d+):(\d+)/);
     if (setters) return NextResponse.json({ error: `Your plan has reached setter seats (${setters[1]} of ${setters[2]}). Upgrade to invite another setter.`, code: "limit_reached", limitKey: "max_setter_seats", usage: Number(setters[1]), limit: Number(setters[2]), upgrade: true }, { status: 403 });
     if (error.code === "23505" || error.message?.includes("email_exists")) return NextResponse.json({ error: "This email is already registered" }, { status: 409 });
@@ -106,5 +107,6 @@ export async function POST(request: NextRequest) {
     request,
   });
 
+  await recordSettingsChanges({ tenantId: auth.context.tenantId, actorId: auth.context.userId, section: "team-access", changes: [{ key: `member:${result.user_id}`, label: `${name} (${email})`, from: null, to: `invited as ${role}` }] });
   return NextResponse.json({ ok: true, member: { id: result.user_id, name, email, role }, invite: { url: inviteUrl, expiresAt: expiresAt.toISOString(), delivered } }, { status: 201 });
 }

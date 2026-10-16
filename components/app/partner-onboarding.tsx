@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import { InfoTip } from "@/components/ui/info-tip";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 
 /**
@@ -71,13 +72,12 @@ export function PartnerOnboarding({ partnerId, termText, hasTerm, approved, last
     <section aria-labelledby={`onboarding-${partnerId}`}>
       <div className="flex flex-wrap items-baseline justify-between gap-3">
         <div>
-          <h2 id={`onboarding-${partnerId}`} className="text-lg font-semibold leading-[1.28] tracking-[-0.015em]">Onboarding</h2>
-          <p className="mt-1 text-sm text-muted-foreground">Create → onboard → active → paused → offboarded. Nothing skips a step.</p>
+          <div className="flex items-center gap-1"><h2 id={`onboarding-${partnerId}`} className="text-lg font-semibold leading-[1.28] tracking-[-0.015em]">Onboarding</h2><InfoTip label="About onboarding">A partner moves from created to onboarded, active, paused and offboarded. Nothing skips a step.</InfoTip></div>
         </div>
         <StatusChip tone={done === steps.length ? "good" : "neutral"}>{done} of {steps.length} done</StatusChip>
       </div>
       <div className="mt-3.5 overflow-x-auto rounded-lg border border-border">
-        <table className="w-full min-w-[520px] table-fixed border-collapse text-left">
+        <table className="w-full min-w-[520px] border-collapse text-left">
           <thead><tr><th className={th}>Step</th><th className={`${th} w-[190px]`}>State</th><th className={th}>Detail</th></tr></thead>
           <tbody>{steps.map((step) => <tr key={step.step} className="m-row">
             <td className={`${td} font-semibold text-foreground`}>{step.step}</td>

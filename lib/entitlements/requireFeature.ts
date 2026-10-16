@@ -7,6 +7,14 @@ import { DISABLED_FOR_TENANT_MESSAGE, canWrite, hasFeature, isDisabledForTenant,
 import { featureKillState } from "@/lib/features/killSwitch";
 import { getMaintenanceStatus } from "@/lib/system/service";
 
+/** Why a write was refused, in the words of the account's state (LA-8.5 adds cancelled). */
+function readOnlyMessage(status: Entitlement["status"]): string {
+  if (status === "suspended") return "Your account is suspended. You can still view your book of business, but not make changes.";
+  if (status === "paused") return "Your account is paused. You can still view your book of business, but not make changes.";
+  if (status === "cancelled") return "Your subscription has ended. You can still view and export your book of business, but not make changes.";
+  return "Your account is read-only right now.";
+}
+
 export type EntitledContext = {
   context: TenantContext;
   entitlement: Entitlement;
@@ -22,7 +30,7 @@ export type EntitledContext = {
  *   if (auth instanceof NextResponse) return auth;
  *   const { context, entitlement } = auth;
  *
- * `write: true` additionally refuses when the subscription is suspended or paused — those keep
+ * `write: true` additionally refuses when the subscription is suspended, paused or cancelled — those keep
  * READ access to the book of business but must not permit new work.
  */
 export async function requireFeature(
@@ -137,10 +145,7 @@ export async function requireFeature(
   if (options.write && !canWrite(entitlement)) {
     return NextResponse.json(
       {
-        error:
-          entitlement.status === "suspended"
-            ? "Your account is suspended. You can still view your book of business, but not make changes."
-            : "Your account is paused. You can still view your book of business, but not make changes.",
+        error: readOnlyMessage(entitlement.status),
         code: "read_only",
         status: entitlement.status,
       },
@@ -190,7 +195,7 @@ export async function requireWriteAccess(): Promise<EntitledContext | NextRespon
 
   if (!canWrite(entitlement)) {
     return NextResponse.json(
-      { error: "Your account is read-only right now.", code: "read_only", status: entitlement.status },
+      { error: readOnlyMessage(entitlement.status), code: "read_only", status: entitlement.status },
       { status: 403 },
     );
   }

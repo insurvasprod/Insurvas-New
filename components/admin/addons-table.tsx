@@ -1,11 +1,12 @@
 "use client";
 
+import { StatusChip } from "@/components/ui/status-chip";
 import { useMemo, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 
 import { EmptyState, NoMatches } from "@/components/admin/empty-state";
 import { BoardTableFooter } from "@/components/admin/board-table-footer";
-import { Pill, st } from "@/components/app/settings/primitives";
+import { st, pillTone } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { PageHeader } from "@/components/ui/page-header";
@@ -256,11 +257,11 @@ export function AddonsCatalog({
                     <td className={st.td}>
                       <div className="flex flex-wrap gap-1">
                         {addon.feature_keys.length === 0 ? (
-                          <Pill tone="neutral">—</Pill>
+                          <StatusChip dot={false} tone="neutral">—</StatusChip>
                         ) : (
                           addon.feature_keys.map((key) => (
                             <span key={key} title={archived.has(key) ? `${featureLabels[key] ?? key} — archived since this add-on was written` : featureLabels[key] ?? key}>
-                              <Pill tone={archived.has(key) ? "warning" : "success"}>{key}</Pill>
+                              <StatusChip dot={false} tone={pillTone(archived.has(key) ? "warning" : "success")}>{key}</StatusChip>
                             </span>
                           ))
                         )}
@@ -289,7 +290,7 @@ export function AddonsCatalog({
                       )}
                     </td>
                     <td className={st.td}>
-                      <Pill tone={addon.is_active ? "success" : "neutral"}>{addon.is_active ? "Active" : "Retired"}</Pill>
+                      <StatusChip dot={false} tone={pillTone(addon.is_active ? "success" : "neutral")}>{addon.is_active ? "Active" : "Retired"}</StatusChip>
                     </td>
                   </tr>
                 );

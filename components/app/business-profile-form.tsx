@@ -41,15 +41,26 @@ function Stepper() {
  * right is that checklist, computed by the same function the server saves it with — so what the
  * reader sees here is exactly what they will get, not an illustration of it.
  */
-export function BusinessProfileForm() {
+export type BusinessProfileInitial = {
+  businessName: string;
+  npn: string;
+  primaryState: string;
+  productsSold: string[];
+  monthlyVolumeRange: string;
+  leadSources: string[];
+  leadSourceOther: string | null;
+};
+
+/** `initial`: the saved profile, when the owner comes back to correct it while checkout is pending. */
+export function BusinessProfileForm({ initial = null }: { initial?: BusinessProfileInitial | null }) {
   const router = useRouter();
-  const [businessName, setBusinessName] = useState("");
-  const [npn, setNpn] = useState("");
-  const [primaryState, setPrimaryState] = useState("");
-  const [products, setProducts] = useState<string[]>([]);
-  const [volume, setVolume] = useState("");
-  const [leadSources, setLeadSources] = useState<string[]>([]);
-  const [leadSourceOther, setLeadSourceOther] = useState("");
+  const [businessName, setBusinessName] = useState(initial?.businessName ?? "");
+  const [npn, setNpn] = useState(initial?.npn ?? "");
+  const [primaryState, setPrimaryState] = useState(initial?.primaryState ?? "");
+  const [products, setProducts] = useState<string[]>(initial?.productsSold ?? []);
+  const [volume, setVolume] = useState(initial?.monthlyVolumeRange ?? "");
+  const [leadSources, setLeadSources] = useState<string[]>(initial?.leadSources ?? []);
+  const [leadSourceOther, setLeadSourceOther] = useState(initial?.leadSourceOther ?? "");
   const [submitting, setSubmitting] = useState<"continue" | "exit" | null>(null);
   const [error, setError] = useState<string | null>(null);
 

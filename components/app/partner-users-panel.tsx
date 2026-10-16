@@ -471,7 +471,7 @@ export function PartnerUsersPanel({
         ) : members.length === 0 ? (
           <EmptyState
             title="No team members yet"
-            hint={canWrite ? "Invite this partner's first partner admin. They can then add their own partner users from the partner portal." : "Nobody has been invited to this partner's portal."}
+            hint={canWrite ? "Invite a partner admin; they can add the rest." : "Nobody has been invited to this portal yet."}
             action={canWrite ? <Button type="button" variant="outline" onClick={openInvite}>Invite user</Button> : undefined}
           />
         ) : filtered.length === 0 ? (
@@ -779,6 +779,8 @@ function PartnerUserWorkspace({
             key={value}
             type="button"
             role="tab"
+            id={`member-config-tab-${value}`}
+            aria-controls="member-config-view"
             aria-selected={tab === value}
             onClick={() => setTab(value)}
           >
@@ -787,7 +789,7 @@ function PartnerUserWorkspace({
         ))}
       </nav>
 
-      <div className="portal-team-config-body">
+      <div key={tab} role="tabpanel" id="member-config-view" aria-labelledby={`member-config-tab-${tab}`} className="portal-team-config-body">
         {tab === "overview" ? (
           <div className="portal-team-config-overview">
             <div className="portal-team-config-summary-grid">
@@ -800,7 +802,6 @@ function PartnerUserWorkspace({
               <div className="portal-team-next-step-icon"><Settings2 aria-hidden="true" /></div>
               <div>
                 <strong>Choose what to configure next</strong>
-                <p>Keep member identity here, then use one focused workspace for lead intake or market access.</p>
               </div>
               <div className="portal-team-next-step-actions">
                 <Button type="button" variant="outline" onClick={() => setTab("lead")}>Open lead form</Button>

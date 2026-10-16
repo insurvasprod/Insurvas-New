@@ -15,7 +15,7 @@ export default async function LeadListsPage() {
       <FeatureGateNotice
         guard={guard}
         featureLabel="Lead lists"
-        description="What you bought from each vendor, how much of it arrived, and how much of it nobody has touched."
+        description="What each bought list delivered, and what is still untouched."
       />
     );
   // A setter works the queue they are given; deciding which list to work through, and who gets it,

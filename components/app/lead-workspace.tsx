@@ -6,12 +6,13 @@ import { ExternalLink, X } from "lucide-react";
 import { notify } from "@/lib/notify";
 
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { DetailPanel } from "@/components/ui/detail-panel";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageLoading } from "@/components/ui/page-loading";
-import { ErrorState, SectionLoading } from "@/components/ui/page-states";
+import { EmptyState, ErrorState, SectionLoading } from "@/components/ui/page-states";
 import { TableCard } from "@/components/ui/table-card";
 import { ClearFiltersButton, DataToolbar, FilterButton, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import type { TemplateField, TemplateRow } from "@/lib/templates/constants";
@@ -19,7 +20,8 @@ import type { PipelineStage } from "@/lib/pipelines/types";
 import { pruneHiddenTemplateValues, templateFormFieldVisible } from "@/lib/templates/visibility";
 import { cn } from "@/lib/utils";
 import { LeadStageHint } from "@/components/app/applications/lead-stage-hint";
-import { DispositionPicker, ListView, StagesView, TableView, dispositionGroups, durationLabel, inStageMs, isOverdue, type ViewContext } from "@/components/app/pipeline-views";
+import { DispositionPicker, ListView, StagesView, TABLE_SCOPES, TableView, dispositionGroups, durationLabel, inStageMs, isOverdue, tableScopeCounts, type TableScope, type ViewContext } from "@/components/app/pipeline-views";
+import { SavedViews, type BuiltInView, type ViewState } from "@/components/ui/saved-views";
 
 type Lead = { id: string; pipeline_id: string; stage_id: string; values: Record<string, unknown>; screening_outcome?: string | null; screening_warning?: string | null; created_at: string; updated_at: string; submitter_name?: string | null; owner_user_id?: string | null; owner_name?: string | null; disposition?: string | null; disposition_at?: string | null; stage_entered_at?: string | null; monthly_premium_cents?: number | null };
 type Pipeline = { id: string; name: string; partner_type: string; stages: PipelineStage[] };
@@ -146,7 +148,7 @@ function PipelineBoard({ stages, leads, selectedId, readOnly, now, money, contex
             className={cn("flex min-h-0 min-w-[264px] flex-1 basis-0 flex-col overflow-hidden rounded-lg border border-border bg-[var(--surface-alt)]", dragOver === column.id && "border-[var(--primary)] bg-[var(--primary-soft)]")}
             onDragOver={(event) => { if (column.id === UNMAPPED || readOnly) return; event.preventDefault(); setDragOver(column.id); }}
             onDragLeave={() => setDragOver(null)}
-            onDrop={(event) => { event.preventDefault(); setDragOver(null); const lead = leads.find((item) => item.id === draggedId); setDraggedId(null); if (!lead || lead.stage_id === column.id) return; if (!dropTarget) { notify.block(`No disposition lands on ${column.name}, so a lead cannot be moved there. An owner maps one under Settings › Dispositions.`); return; } onStageChange(lead, column.id); }}
+            onDrop={(event) => { event.preventDefault(); setDragOver(null); const lead = leads.find((item) => item.id === draggedId); setDraggedId(null); if (!lead || lead.stage_id === column.id) return; if (!dropTarget) { notify.block(`Map a disposition to ${column.name} in Settings › Dispositions to move leads there.`); return; } onStageChange(lead, column.id); }}
           >
             <header className="border-b-2 bg-card p-3" style={{ borderBottomColor: column.color }}>
               <div className="flex items-center justify-between gap-2">
@@ -182,13 +184,22 @@ function LeadPreviewPanel({ lead, stages, readOnly, onMove, onClose, onReconcile
   useEffect(() => { let cancelled = false; setData(null); setError(""); void fetch(`/api/app/leads/${encodeURIComponent(lead.id)}`, { cache: "no-store" }).then(async (response) => ({ response, body: await response.json().catch(() => null) })).then(({ response, body }) => { if (cancelled) return; if (!response.ok) { setError(body?.error ?? "Could not load this lead"); return; } setData(body); }).catch(() => { if (!cancelled) setError("Could not load this lead"); }); return () => { cancelled = true; }; }, [lead.id, lead.stage_id]);
   const fieldEntries = data ? Object.entries(data.lead.values) : [];
   const liveStages = stages.filter((item) => !item.is_archived).sort((a, b) => a.position - b.position);
-  return <aside className="lead-preview-panel"><div className="lead-preview-header"><div className="min-w-0"><h2>{leadName(lead)}</h2><p>{data?.lead.product_line ?? productOf(lead)} · {data?.partner?.name ?? "Partner submission"}</p></div><button type="button" className="lead-preview-close" aria-label="Close lead preview" onClick={onClose}><X className="size-5" /></button></div>
+  // Split beside the board or table (DetailPanel), kept in view while the board scrolls.
+  return <DetailPanel
+    mode="split"
+    title={leadName(lead)}
+    subtitle={<>{data?.lead.product_line ?? productOf(lead)} · {data?.partner?.name ?? "Partner submission"}</>}
+    onClose={onClose}
+    bodyClassName="flex flex-col"
+    className="lg:sticky lg:top-[calc(var(--top-bar-h)+1rem)] lg:max-h-[calc(100dvh-var(--top-bar-h)-2rem)] lg:min-h-[32rem] lg:self-start"
+    footer={<Link href={`/app/leads/${lead.id}`} className="lead-full-link">Open full lead workspace <ExternalLink className="size-4" /></Link>}
+  >
     {/* Moving a lead from the keyboard: the board's cards are drag-only, so the move lives here too —
         as a disposition, the same as a drop. */}
     <div className="flex items-center gap-2 border-b border-border px-4 py-2.5"><span className="text-xs text-muted-foreground">Stage</span><span className="flex-1 truncate text-sm font-semibold">{liveStages.find((item) => item.id === lead.stage_id)?.name ?? "Unmapped"}</span><Button type="button" variant="outline" size="sm" aria-label={`Move ${leadName(lead)} to stage`} disabled={readOnly} onClick={onMove}>Move</Button></div>
       {/* LA-3.23 · when the application has moved on but the card was held back by hand. */}
       <LeadStageHint leadId={lead.id} boardStageId={lead.stage_id} readOnly={readOnly} onReconciled={onReconciled} />
-    <div className="lead-preview-tabs"><button type="button" className={tab === "submission" ? "is-active" : ""} onClick={() => setTab("submission")}>Submission</button><button type="button" className={tab === "timeline" ? "is-active" : ""} onClick={() => setTab("timeline")}>Timeline</button></div>{error ? <div className="lead-preview-state text-destructive">{error}</div> : !data ? <div className="flex-1"><SectionLoading rows={6} columns={2} label="Loading lead" /></div> : tab === "submission" ? <div className="lead-preview-scroll"><div className="lead-preview-banner"><span className={`lead-stage-pill ${stageTone(data.stage ?? undefined)}`}>{data.stage?.name ?? "Open"}</span><span>{data.screening.outcome ?? "Screening pending"}</span></div><div className="lead-preview-section"><div className="lead-section-heading"><h3>Form as submitted</h3><span>Version {data.lead.definition_version}</span></div><div className="lead-form-snapshot">{fieldEntries.map(([key, value]) => <div key={key} className="lead-snapshot-row"><span>{data.template.fields.find((field) => field.field_key === key)?.label ?? key}</span><strong>{display(value)}</strong></div>)}</div></div><div className="lead-preview-section"><div className="lead-section-heading"><h3>Submission details</h3></div><dl className="lead-detail-list"><div><dt>Submitted</dt><dd>{when(data.lead.created_at)}</dd></div><div><dt>Submitted by</dt><dd>{data.submitter?.name ?? lead.submitter_name ?? "Workspace"}</dd></div><div><dt>Owner</dt><dd>{data.owner?.name ?? "Unclaimed"}</dd></div><div><dt>Queue status</dt><dd>{data.queue?.status ?? "Not queued"}</dd></div></dl></div></div> : <div className="lead-preview-scroll"><div className="lead-preview-section"><div className="lead-section-heading"><h3>Submission timeline</h3></div><div className="lead-timeline">{data.timeline.length ? data.timeline.map((event) => <div key={event.id} className="lead-timeline-item"><span className="lead-timeline-dot" /><div><strong>{event.label}</strong><p>{event.detail ?? event.actor}</p><time>{when(event.at)}</time></div></div>) : <p className="text-sm text-muted-foreground">No timeline events yet.</p>}</div></div></div>}<div className="lead-preview-footer"><Link href={`/app/leads/${lead.id}`} className="lead-full-link">Open full lead workspace <ExternalLink className="size-4" /></Link></div></aside>;
+    <div className="lead-preview-tabs" role="tablist" aria-label="Lead preview"><button type="button" role="tab" id="lead-preview-tab-submission" aria-selected={tab === "submission"} aria-controls="lead-preview-tabpanel" className={tab === "submission" ? "is-active" : ""} onClick={() => setTab("submission")}>Submission</button><button type="button" role="tab" id="lead-preview-tab-timeline" aria-selected={tab === "timeline"} aria-controls="lead-preview-tabpanel" className={tab === "timeline" ? "is-active" : ""} onClick={() => setTab("timeline")}>Timeline</button></div>{error ? <div className="lead-preview-state text-destructive">{error}</div> : !data ? <div className="flex-1"><SectionLoading rows={6} columns={2} label="Loading lead" /></div> : tab === "submission" ? <div key="submission" id="lead-preview-tabpanel" role="tabpanel" aria-labelledby="lead-preview-tab-submission" className="lead-preview-scroll"><div className="lead-preview-banner"><span className={`lead-stage-pill ${stageTone(data.stage ?? undefined)}`}>{data.stage?.name ?? "Open"}</span><span>{data.screening.outcome ?? "Screening pending"}</span></div><div className="lead-preview-section"><div className="lead-section-heading"><h3>Form as submitted</h3><span>Version {data.lead.definition_version}</span></div><div className="lead-form-snapshot">{fieldEntries.map(([key, value]) => <div key={key} className="lead-snapshot-row"><span>{data.template.fields.find((field) => field.field_key === key)?.label ?? key}</span><strong>{display(value)}</strong></div>)}</div></div><div className="lead-preview-section"><div className="lead-section-heading"><h3>Submission details</h3></div><dl className="lead-detail-list"><div><dt>Submitted</dt><dd>{when(data.lead.created_at)}</dd></div><div><dt>Submitted by</dt><dd>{data.submitter?.name ?? lead.submitter_name ?? "Workspace"}</dd></div><div><dt>Owner</dt><dd>{data.owner?.name ?? "Unclaimed"}</dd></div><div><dt>Queue status</dt><dd>{data.queue?.status ?? "Not queued"}</dd></div></dl></div></div> : <div key="timeline" id="lead-preview-tabpanel" role="tabpanel" aria-labelledby="lead-preview-tab-timeline" className="lead-preview-scroll"><div className="lead-preview-section"><div className="lead-section-heading"><h3>Submission timeline</h3></div><div className="lead-timeline">{data.timeline.length ? data.timeline.map((event) => <div key={event.id} className="lead-timeline-item"><span className="lead-timeline-dot" /><div><strong>{event.label}</strong><p>{event.detail ?? event.actor}</p><time>{when(event.at)}</time></div></div>) : <p className="text-sm text-muted-foreground">No timeline events yet.</p>}</div></div></div>}</DetailPanel>;
 }
 
 const VIEW_LABEL = { stages: "Stages", board: "Board", table: "Table", list: "List" } as const;
@@ -204,6 +215,10 @@ export function LeadWorkspace() {
   // The disposition picker: which leads are moving, and to which stage when a drop named one.
   const [picker, setPicker] = useState<{ leads: Lead[]; stageId: string | null; source: "board" | "table" | "list" } | null>(null);
   const [moving, setMoving] = useState(false);
+  // A bulk move from the Table waits here, after the disposition is picked, until it is confirmed.
+  const [confirmMove, setConfirmMove] = useState<{ leadIds: string[]; key: string; label: string; where: string } | null>(null);
+  // The Table's scope (All, Assigned to me, Unassigned, Overdue in stage), set from Saved views.
+  const [tableScope, setTableScope] = useState<TableScope>("all");
   const loadContext = useCallback(async () => { const response = await fetch("/api/app/leads/pipeline-context", { cache: "no-store" }); const body = await response.json().catch(() => null); if (response.ok) setContext(body); }, []);
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { void loadContext(); }, [loadContext]);
@@ -244,6 +259,25 @@ export function LeadWorkspace() {
   function applySearch(event: React.FormEvent) { event.preventDefault(); const params = new URLSearchParams(); if (search.trim()) params.set("q", search.trim()); const next = params.toString(); setQuery(next); void load(next); }
   function resetFilters() { setSearch(""); setQuery(""); setProduct(""); setStageFilter(""); setSubmitter(""); setOutcome(""); setFromDate(""); setToDate(""); void load(""); }
   async function refresh() { setRefreshing(true); try { await Promise.all([load(query), loadContext()]); } finally { setRefreshing(false); } }
+  // Saved views (2026-10-09 saved views): the Table's scope plus every workspace filter, the search
+  // and the pipeline tab, as one state the Saved views control can name, save and hand back.
+  const viewState: ViewState = { pipeline: activePipeline?.id ?? "", scope: tableScope === "all" ? "" : tableScope, product, stage: stageFilter, submitter, outcome, from: fromDate, to: toDate, q: new URLSearchParams(query).get("q") ?? "" };
+  function applyView(state: ViewState) {
+    const text = (key: string) => (typeof state[key] === "string" ? (state[key] as string) : "");
+    const nextPipeline = pipelines.find((item) => item.id === text("pipeline")) ?? activePipeline;
+    if (nextPipeline && nextPipeline.id !== activePipeline?.id) { setPipelineId(nextPipeline.id); setSelected(null); }
+    // A stage belongs to one pipeline: a saved stage that is not on this board is dropped, not shown as an empty board.
+    const stage = text("stage");
+    setStageFilter(stage && nextPipeline?.stages.some((item) => item.id === stage) ? stage : "");
+    const scope = text("scope");
+    setTableScope(TABLE_SCOPES.includes(scope as TableScope) ? (scope as TableScope) : "all");
+    setProduct(text("product")); setSubmitter(text("submitter")); setOutcome(text("outcome")); setFromDate(text("from")); setToDate(text("to"));
+    const q = text("q").trim();
+    const params = new URLSearchParams(); if (q) params.set("q", q);
+    const next = params.toString();
+    setSearch(q);
+    if (next !== query) { setQuery(next); void load(next); }
+  }
   // Switching pipeline clears the stage filter and any open preview. A stage id belongs to exactly
   // one pipeline, so carrying the filter across would silently show an empty board, and the
   // previewed lead is not on the new board at all.
@@ -277,6 +311,15 @@ export function LeadWorkspace() {
   const selectedStages = selected ? pipelines.find((item) => item.id === selected.pipeline_id)?.stages ?? [] : [];
 
   const stageLabel = (stageId: string) => stageIndex.get(stageId)?.stage.name ?? "Unknown stage";
+  // An empty Table or List: "no matches" while a search or filter narrows it, otherwise the way to fill it.
+  const filtersOn = activeFilters > 0 || Boolean(query);
+  const canImport = data.role === "owner" || data.role === "producer" || data.role === "assistant";
+  const emptyAction = data.readOnly ? undefined : (
+    <span className="flex flex-wrap justify-center gap-2">
+      {canImport && <Button asChild variant="outline"><Link href="/app/import">Import a list</Link></Button>}
+      {formStages.length > 0 && <Button type="button" onClick={() => setAdding(true)}>Add lead</Button>}
+    </span>
+  );
   const filterChips: Array<{ key: string; label: string; clear: () => void }> = [
     ...(product ? [{ key: "product", label: product, clear: () => setProduct("") }] : []),
     ...(stageFilter ? [{ key: "stage", label: stageLabel(stageFilter), clear: () => setStageFilter("") }] : []),
@@ -285,9 +328,19 @@ export function LeadWorkspace() {
     ...(fromDate ? [{ key: "from", label: `From ${fromDate}`, clear: () => setFromDate("") }] : []),
     ...(toDate ? [{ key: "to", label: `To ${toDate}`, clear: () => setToDate("") }] : []),
   ];
+  // Built-in views: only what the workspace's filters can already say. Counted over the whole
+  // pipeline, because applying a view replaces the filters rather than adding to them.
+  const scopeCounts = tableScopeCounts(leadsInPipeline, context, now, data.currentUserId ?? null);
+  const pipelineKey = activePipeline?.id ?? "";
+  const builtInViews: BuiltInView[] = [
+    { id: "all", name: "All", state: { pipeline: pipelineKey }, count: scopeCounts.all },
+    { id: "mine", name: "Assigned to me", state: { pipeline: pipelineKey, scope: "mine" }, count: scopeCounts.mine, disabled: !data.currentUserId },
+    { id: "unassigned", name: "Unassigned", state: { pipeline: pipelineKey, scope: "unassigned" }, count: scopeCounts.unassigned },
+    { id: "overdue", name: "Overdue in stage", state: { pipeline: pipelineKey, scope: "overdue" }, count: scopeCounts.overdue, disabled: !context?.schemaReady, title: !context?.schemaReady ? "Needs time allowed per stage (database update 20260925100000)" : undefined },
+  ];
 
   return (
-    <div className={cn("m-stagger lead-workspace-page flex flex-col gap-6", selected && "has-preview")}>
+    <div className="m-stagger lead-workspace-page flex flex-col gap-6">
       <PageHeader
         title="Lead workspace"
         actions={
@@ -301,10 +354,11 @@ export function LeadWorkspace() {
 
       {error && <p role="alert" className="rounded-lg border border-[var(--error)]/30 bg-[var(--error-surface)] px-4 py-2.5 text-sm text-[var(--error-ink)]">{error}</p>}
 
-      <div className="lead-workspace-grid">
+      {/* The board or table, with the lead preview split beside it from lg (DetailPanel). */}
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
         <TableCard
           // Full height in every view: the card reaches the bottom of the window even when a view is short.
-          className="min-w-0 min-h-[calc(100dvh-var(--top-bar-h)-121px)]"
+          className="min-w-0 flex-1 min-h-[calc(100dvh-var(--top-bar-h)-121px)]"
           toolbar={
             <div className="flex w-full flex-col gap-3">
               {/* One pipeline per page: each is a tab with its lead count. */}
@@ -338,6 +392,8 @@ export function LeadWorkspace() {
               >
                 <ToolbarSearch value={search} onChange={setSearch} placeholder="Search name, phone, policy" />
                 <FilterButton open={moreFilters} onClick={() => setMoreFilters((value) => !value)} count={activeFilters} />
+                {/* Saved views name the Table's scope too, so they sit on the Table. Per-browser for now. */}
+                {view === "table" && <SavedViews storageKey="leads.table" current={viewState} builtIns={builtInViews} onApply={applyView} />}
                 {moreFilters && (
                   <>
                     <select aria-label="Product" className={toolbarControl} value={product} onChange={(event) => setProduct(event.target.value)}><option value="">All products</option>{products.map((item) => <option key={item} value={item}>{item}</option>)}</select>
@@ -379,12 +435,21 @@ export function LeadWorkspace() {
                 now={now}
                 readOnly={data.readOnly}
                 onMove={(lead, key) => moveLeads([lead.id], key, "list")}
+                filtered={filtersOn}
+                onClearFilters={resetFilters}
+                emptyAction={emptyAction}
               />
             )}
-            {view === "board" ? (
+            {view === "board" && !activePipeline ? (
+              <EmptyState title="No pipelines yet" hint={isOwner ? "Set up a pipeline to start sorting leads." : "Ask an owner to set up a pipeline."} action={isOwner ? <Button asChild variant="outline"><Link href="/app/settings#pipelines">Open Settings › Pipelines</Link></Button> : undefined} />
+            ) : view === "board" ? (
               <PipelineBoard stages={allStages} leads={visibleLeads} selectedId={selected?.id ?? null} readOnly={data.readOnly} now={now} money={money} context={context} onSelect={toggle} onStageChange={updateStage} />
             ) : view === "table" ? (
               <TableView
+                // Keyed by scope, so a new scope starts on page 1 with nothing ticked.
+                key={tableScope}
+                scope={tableScope}
+                onScopeChange={setTableScope}
                 leads={visibleLeads}
                 // Resolved through the cross-pipeline stage index: in the All view there is no active
                 // board, and a lead's stage belongs to whichever pipeline it is in.
@@ -396,6 +461,9 @@ export function LeadWorkspace() {
                 readOnly={data.readOnly}
                 onOpen={(lead) => setSelected(lead as Lead)}
                 onBulkMove={(leadIds) => setPicker({ leads: visibleLeads.filter((lead) => leadIds.includes(lead.id)), stageId: null, source: "table" })}
+                filtered={filtersOn}
+                onClearFilters={resetFilters}
+                emptyAction={emptyAction}
               />
             ) : null}
           </div>
@@ -415,14 +483,42 @@ export function LeadWorkspace() {
             open
             onOpenChange={(open) => { if (!open) setPicker(null); }}
             title={picker.leads.length === 1 ? `Move ${leadName(first)}` : `Move ${picker.leads.length} leads`}
-            description={picker.stageId ? `Which disposition sends ${picker.leads.length === 1 ? "this lead" : "them"} to ${target?.name ?? "that stage"}?` : "Pick the outcome. Each lead goes to the stage that outcome belongs to."}
+            description={picker.stageId ? `Which disposition sends ${picker.leads.length === 1 ? "this lead" : "them"} to ${target?.name ?? "that stage"}?` : "Pick an outcome — it sets the stage."}
             groups={groups}
             busy={moving}
-            emptyText={picker.stageId ? undefined : "No disposition is mapped to any stage of this pipeline yet, so its leads cannot be moved from here. An owner maps them under Settings › Pipelines."}
-            onPick={async (key) => { const ok = await moveLeads(picker.leads.map((lead) => lead.id), key, picker.source); if (ok) setPicker(null); }}
+            emptyText={picker.stageId ? undefined : "Map dispositions to this pipeline's stages in Settings › Pipelines to move its leads."}
+            onPick={async (key) => {
+              // Several leads from the Table: say how many and where they go before anything moves.
+              if (picker.source === "table" && picker.leads.length > 1) {
+                const group = groups.find((item) => item.options.some((option) => option.key === key));
+                const option = group?.options.find((item) => item.key === key);
+                setConfirmMove({ leadIds: picker.leads.map((lead) => lead.id), key, label: option?.label ?? key.replaceAll("_", " "), where: group ? group.label.charAt(0).toLowerCase() + group.label.slice(1) : "moves to the stage it maps to" });
+                setPicker(null);
+                return;
+              }
+              const ok = await moveLeads(picker.leads.map((lead) => lead.id), key, picker.source); if (ok) setPicker(null);
+            }}
           />
         );
       })()}
+
+      {/* The bulk move's confirmation (2026-10-09 saved views): one POST /api/app/leads/move with every ticked lead. */}
+      <Dialog open={confirmMove !== null} onOpenChange={(open) => { if (!open && !moving) setConfirmMove(null); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Move {confirmMove?.leadIds.length ?? 0} leads?</DialogTitle>
+            <DialogDescription>
+              Each of the {confirmMove?.leadIds.length ?? 0} leads gets the disposition “{confirmMove?.label}” and {confirmMove?.where}. Every move is written to the lead&rsquo;s stage history and the audit log. A lead that cannot move is skipped, and you will see how many moved.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" variant="outline" disabled={moving} onClick={() => setConfirmMove(null)}>Cancel</Button>
+            <Button type="button" disabled={moving || data.readOnly || !confirmMove} onClick={async () => { if (!confirmMove) return; const ok = await moveLeads(confirmMove.leadIds, confirmMove.key, "table"); if (ok) setConfirmMove(null); }}>
+              {moving ? "Moving…" : `Move ${confirmMove?.leadIds.length ?? 0} leads`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <LeadFormDialog open={adding} onOpenChange={setAdding} template={template} stages={formStages} readOnly={data.readOnly} onCreated={() => void load(query)} />
     </div>

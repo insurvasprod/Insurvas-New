@@ -1,25 +1,18 @@
 "use client";
 
-import { useMemo, useState, type FormEvent } from "react";
+import { StatusChip } from "@/components/ui/status-chip";
+import { useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { notify } from "@/lib/notify";
 import { UserPlus } from "lucide-react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { SettingsSaveBar } from "@/components/ui/settings-layout";
 import { StatStrip, StatTile } from "@/components/ui/stat";
-import { TableCard } from "@/components/ui/table-card";
-import {
-  Callout,
-  Field,
-  Pill,
-  SettingsSectionHeader,
-  SettingsStack,
-  control,
-  st,
-  type PillTone,
-} from "@/components/app/settings/primitives";
+import { PagedBody, PagedTableCard } from "@/components/ui/paged";
+import { Callout, Field, SettingsSectionHeader, SettingsStack, control, st, type PillTone, pillTone } from "@/components/app/settings/primitives";
 import { cn } from "@/lib/utils";
 import { TENANT_ROLE_LABELS, TENANT_ROLES, type TenantRole } from "@/lib/tenantAuth/roles";
 import { US_STATES } from "@/lib/appointments/constants";
@@ -29,12 +22,14 @@ import type { TeamMember, TeamSnapshot } from "@/lib/tenantTeam/service";
 import { lastSeenCell } from "@/lib/tenantTeam/lastSeen";
 import { dayMonth } from "@/lib/format/dates";
 import { useViewerTimeZone } from "@/components/app/use-viewer-time-zone";
+import { MemberAccountPanel } from "@/components/app/team-member-account";
 
-type MemberStatus = "active" | "invited" | "expired" | "suspended" | "other";
+type MemberStatus = "active" | "invited" | "expired" | "suspended" | "deactivated" | "other";
 const STATUS_FILTERS: { key: Exclude<MemberStatus, "other" | "expired">; label: string }[] = [
   { key: "active", label: "Active" },
   { key: "invited", label: "Invited" },
   { key: "suspended", label: "Suspended" },
+  { key: "deactivated", label: "Deactivated" },
 ];
 /** Roles whose leads are gated on licences; a setter books only, and the others do not sell. */
 const LICENSED_ROLES: readonly TenantRole[] = ["owner", "producer"];
@@ -48,8 +43,9 @@ function roleReach(role: TenantRole) {
 /**
  * What each role can reach, read off the real guards rather than the board's sample copy:
  * lib/tenantAuth/permissions.ts (ROLE_PERMISSIONS) and the required_roles in lib/menu/definition.ts.
- * Settings is owner-only (settings.root, and /app/settings refuses every other role); a producer can
- * read Carrier appointments but not change it.
+ * Settings opens for every role since LA-8.1, but each section inside is gated: a producer, setter or
+ * assistant finds only their own profile and notifications there. A producer can read Carrier
+ * appointments but not change it.
  */
 const ROLE_REACH: { role: TenantRole; leads: string; money: string; settings: string }[] = [
   { role: "owner", leads: "Everything", money: "Everything", settings: "Everything" },
@@ -67,6 +63,8 @@ function statusOf(member: TeamMember, now: number): MemberStatus {
   }
   if (member.status === "active") return "active";
   if (member.status === "suspended") return "suspended";
+  // LA-8.6: two spellings of one state (20260912340000).
+  if (member.status === "inactive" || member.status === "deactivated") return "deactivated";
   return "other";
 }
 
@@ -75,6 +73,7 @@ const STATUS_PILL: Record<MemberStatus, { tone: PillTone; label: string }> = {
   invited: { tone: "warning", label: "Invited" },
   expired: { tone: "error", label: "Invite expired" },
   suspended: { tone: "neutral", label: "Suspended" },
+  deactivated: { tone: "neutral", label: "Deactivated" },
   other: { tone: "neutral", label: "" },
 };
 
@@ -246,7 +245,7 @@ export function TeamSettings({ initial, workspace }: { initial: TeamSnapshot; wo
         ))}
       </StatStrip>
 
-      {atSeatLimit && <Callout tone="warning" title="Every seat is in use — revoke a pending invite or upgrade the plan before inviting anyone else." />}
+      {atSeatLimit && <Callout tone="warning" title={<>Every seat is in use — revoke a pending invite, deactivate someone, or <Link className="underline" href="/app/settings#billing">upgrade the plan</Link> before inviting anyone else.</>} />}
       {setterSeats && (setterAtLimit || setterNearLimit) && (
         <Callout
           tone="warning"
@@ -257,12 +256,16 @@ export function TeamSettings({ initial, workspace }: { initial: TeamSnapshot; wo
       )}
       {error && <Callout tone="error" title={error} />}
 
-      <TableCard
+      <PagedTableCard
+        total={filtered.length}
+        noun="people"
+        suffix={<span className="tabular-nums">{TENANT_ROLES.map((role) => `${TENANT_ROLE_LABELS[role]} ${seats.byRole[role]}`).join(" · ")}</span>}
         toolbar={
           <DataToolbar
             actions={
               <>
-                <Button type="button" onClick={() => setInviteOpen(true)}>
+                {/* LA-8.6: at the limit the button is off with its reason, never a refusal on submit. */}
+                <Button type="button" onClick={() => setInviteOpen(true)} disabled={atSeatLimit} title={atSeatLimit ? `All ${seats.max} seats are in use, pending invitations included. Free one or upgrade.` : undefined}>
                   <UserPlus aria-hidden="true" />
                   Invite someone
                 </Button>
@@ -305,7 +308,7 @@ export function TeamSettings({ initial, workspace }: { initial: TeamSnapshot; wo
               <th scope="col" className={cn(st.th, st.num, "w-[150px]")}><span className="sr-only">Actions</span></th>
             </tr>
           </thead>
-          <tbody>
+          <PagedBody>
             {filtered.map((member) => {
               const status = statusOf(member, now);
               const role = effectiveRole(member);
@@ -325,11 +328,11 @@ export function TeamSettings({ initial, workspace }: { initial: TeamSnapshot; wo
                     >
                       {member.name}
                     </button>
-                    {changed && <Pill tone="info" className="ml-2">Unsaved</Pill>}
+                    {changed && <StatusChip dot={false} tone="info" className="ml-2">Unsaved</StatusChip>}
                     <span className={cn(st.sub, "break-all")}>{member.email}</span>
                   </td>
                   <td className={st.td}>
-                    <Pill tone={role === "owner" ? "brand" : "neutral"}>{TENANT_ROLE_LABELS[role]}</Pill>
+                    <StatusChip dot={false} tone={pillTone(role === "owner" ? "brand" : "neutral")}>{TENANT_ROLE_LABELS[role]}</StatusChip>
                   </td>
                   <td className={st.td}>
                     {role === "setter" ? (
@@ -347,7 +350,7 @@ export function TeamSettings({ initial, workspace }: { initial: TeamSnapshot; wo
                     )}
                   </td>
                   <td className={st.td}>
-                    <Pill tone={pill.tone}>{pill.label}</Pill>
+                    <StatusChip dot={false} tone={pillTone(pill.tone)}>{pill.label}</StatusChip>
                   </td>
                   <td className={cn(st.td, st.num)}>
                     {status === "invited" || status === "expired"
@@ -372,10 +375,10 @@ export function TeamSettings({ initial, workspace }: { initial: TeamSnapshot; wo
                 </tr>
               );
             })}
-          </tbody>
+          </PagedBody>
         </table>
         )}
-      </TableCard>
+      </PagedTableCard>
 
       <SettingsSaveBar visible={dirty} note={`${Object.keys(pending).length} ${Object.keys(pending).length === 1 ? "teammate" : "teammates"} changed`}>
         <Button type="button" variant="outline" onClick={() => { setPending({}); setError(""); }} disabled={saving}>Discard</Button>
@@ -404,6 +407,7 @@ export function TeamSettings({ initial, workspace }: { initial: TeamSnapshot; wo
           statesAvailable={snapshot.licensedStatesAvailable !== false}
           revoking={rowBusy === managing.id}
           onRevoke={() => void revoke(managing)}
+          account={managing.acceptedAt && managing.id !== viewerId ? <MemberAccountPanel member={managing} members={snapshot.members} onChanged={async () => { setManaging(null); await refresh(); }} /> : null}
           onClose={() => setManaging(null)}
           onApply={(change) => {
             setPending((current) => {
@@ -432,7 +436,7 @@ function TeamDialog({ title, description, onClose, children }: { title: string; 
       <DialogContent className="max-h-[90vh] overflow-y-auto border-[var(--border)] bg-[var(--surface)] sm:max-w-xl">
         <DialogHeader>
           <DialogTitle className="text-[var(--ink)]">{title}</DialogTitle>
-          <DialogDescription className="text-[14px] text-[var(--muted)]">{description}</DialogDescription>
+          <DialogDescription className="text-sm text-[var(--muted)]">{description}</DialogDescription>
         </DialogHeader>
         {children}
       </DialogContent>
@@ -495,17 +499,17 @@ function InviteDialog({
           </select>
         </Field>
         {role === "assistant" && bufferAtLimit && (
-          <p className="text-[14px] text-[var(--error-ink)] sm:col-span-2" role="alert">
+          <p className="text-sm text-[var(--error-ink)] sm:col-span-2" role="alert">
             Your plan has reached <code>max_buffer_seats</code> ({bufferSeats.used} of {bufferSeats.max}). Upgrade to invite another buffer agent.
           </p>
         )}
         {role === "setter" && setterSeats && (
-          <p className="text-[14px] text-[var(--error-ink)] sm:col-span-2" role="alert">
+          <p className="text-sm text-[var(--error-ink)] sm:col-span-2" role="alert">
             Your plan has reached its setter-seat limit ({setterSeats.used} of {setterSeats.max} setter seats). Upgrade the plan to invite another setter.
           </p>
         )}
         {error && (
-          <p role="alert" className="text-[14px] text-[var(--error-ink)] sm:col-span-2">
+          <p role="alert" className="text-sm text-[var(--error-ink)] sm:col-span-2">
             {error}
           </p>
         )}
@@ -528,6 +532,7 @@ function ManageDialog({
   statesAvailable,
   revoking,
   onRevoke,
+  account,
   onClose,
   onApply,
 }: {
@@ -538,6 +543,8 @@ function ManageDialog({
   statesAvailable: boolean;
   revoking: boolean;
   onRevoke: () => void;
+  /** LA-8.6: time zone, deactivate or reactivate — acted on at once, not held for the section's save. */
+  account?: ReactNode;
   onClose: () => void;
   onApply: (change: { role: TenantRole; states: string[]; expiries: Record<string, string | null> }) => void;
 }) {
@@ -561,8 +568,8 @@ function ManageDialog({
           </select>
         </Field>
         <fieldset disabled={!licensed || !statesAvailable} className="min-w-0">
-          <legend className="text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]">Licensed in</legend>
-          <span className="mt-1 block text-[12px] leading-[1.5] text-[var(--muted)]">
+          <legend className="text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]">Licensed in</legend>
+          <span className="mt-1 block text-xs leading-[1.5] text-[var(--muted)]">
             {!statesAvailable
               ? SCHEMA_PENDING_MESSAGE
               : !licensed
@@ -575,14 +582,14 @@ function ManageDialog({
             <>
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 <ToolbarSearch value={stateQuery} onChange={setStateQuery} placeholder="Find a state" />
-                <span className="text-[12px] text-[var(--muted)] tabular-nums">{states.size} selected</span>
+                <span className="text-xs text-[var(--muted)] tabular-nums">{states.size} selected</span>
                 {states.size > 0 && (
                   <Button type="button" variant="ghost" onClick={() => setStates(new Set())}>Clear</Button>
                 )}
               </div>
               <div className="mt-2 grid max-h-56 grid-cols-2 gap-1.5 overflow-y-auto sm:grid-cols-3">
                 {visibleStates.map(([code, name]) => (
-                  <label key={code} className="flex min-w-0 items-center gap-2 rounded-[8px] border border-[var(--border)] px-2.5 py-1.5 text-[14px] text-[var(--body)]">
+                  <label key={code} className="flex min-w-0 items-center gap-2 rounded-[8px] border border-[var(--border)] px-2.5 py-1.5 text-sm text-[var(--body)]">
                     <input
                       type="checkbox"
                       className="size-4 shrink-0 accent-[var(--brand-500)]"
@@ -602,18 +609,18 @@ function ManageDialog({
               </div>
               {states.size > 0 && (
                 <div className="mt-3">
-                  <span className="block text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]">Licence valid through</span>
-                  <span className="block text-[12px] leading-[1.5] text-[var(--muted)]">
+                  <span className="block text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]">Licence valid through</span>
+                  <span className="block text-xs leading-[1.5] text-[var(--muted)]">
                     Optional. After this date they get no leads in that state.
                   </span>
                   <div className="mt-2 grid max-h-44 grid-cols-1 gap-1.5 overflow-y-auto sm:grid-cols-2">
                     {[...states].sort().map((code) => (
-                      <label key={code} htmlFor={`manage-expiry-${code}`} className="flex min-w-0 items-center justify-between gap-2 rounded-[8px] border border-[var(--border)] px-2.5 py-1.5 text-[14px] text-[var(--body)]">
+                      <label key={code} htmlFor={`manage-expiry-${code}`} className="flex min-w-0 items-center justify-between gap-2 rounded-[8px] border border-[var(--border)] px-2.5 py-1.5 text-sm text-[var(--body)]">
                         <span className="truncate" title={stateNames.get(code) ?? code}>{code}</span>
                         <input
                           id={`manage-expiry-${code}`}
                           type="date"
-                          className="h-8 rounded-[6px] border border-[var(--border-strong)] bg-[var(--surface)] px-2 text-[14px] text-[var(--body)]"
+                          className="h-8 rounded-[6px] border border-[var(--border-strong)] bg-[var(--surface)] px-2 text-sm text-[var(--body)]"
                           value={expiries[code] ?? ""}
                           aria-label={`${stateNames.get(code) ?? code} licence valid through`}
                           onChange={(event) => setExpiries((current) => ({ ...current, [code]: event.target.value || null }))}
@@ -626,9 +633,10 @@ function ManageDialog({
             </>
           )}
         </fieldset>
+        {account}
         {invited && (
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-[12px] border border-[var(--border)] px-4 py-3">
-            <span className="min-w-0 text-[14px] leading-[1.5] text-[var(--body)]">
+            <span className="min-w-0 text-sm leading-[1.5] text-[var(--body)]">
               <span className="block font-semibold text-[var(--ink)]">Revoke the invitation</span>
               Frees the seat immediately.
             </span>

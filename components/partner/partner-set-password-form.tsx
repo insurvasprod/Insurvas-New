@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { isPartnerRole, partnerRoleLabel, type PartnerRole } from "@/lib/partnerAuth/roles";
-import { InsurvasLogo } from "@/components/shared/insurvas-logo";
+import { PARTNER_FLAT_CARD } from "@/components/partner/partner-auth-frame";
 
 type TokenState =
   | { status: "checking" }
@@ -93,15 +93,11 @@ export function PartnerSetPasswordForm({
     }
   }
 
-  return <div className="portal-partner portal-partner-set-password-page">
-    <header className="portal-partner-auth-header">
-      <Link href={loginPath} className="portal-partner-auth-brand inline-flex items-center gap-2.5" aria-label="Insurvas partner portal"><InsurvasLogo size="auth" /></Link>
-      <nav aria-label="Partner setup links"><Link href={loginPath}>Partner portal</Link><a href="mailto:support@insurvas.com">Help</a></nav>
-    </header>
-    <main className="portal-partner-set-password-main">
-      {tokenState.status === "checking" && <Card className="portal-partner-set-password-card"><CardContent className="portal-set-password-status"><span className="portal-set-password-spinner" aria-hidden="true" /><p>Checking your secure invitation…</p><span>We’ll confirm the link before you create a password.</span></CardContent></Card>}
-      {tokenState.status === "invalid" && <Card className="portal-partner-set-password-card"><CardHeader className="portal-set-password-status"><span className="portal-set-password-status-icon portal-set-password-status-icon-danger"><TriangleAlert className="size-5" aria-hidden="true" /></span><CardTitle role="heading" aria-level={1}>Link no longer valid</CardTitle><CardDescription>This invitation has expired or has already been used. Ask your partner administrator to send a new one.</CardDescription></CardHeader><CardContent><Button asChild className="w-full"><Link href={loginPath}>Return to partner sign in</Link></Button></CardContent></Card>}
-      {tokenState.status === "valid" && !done && <Card className="portal-partner-set-password-card">
+  // The logo, the legal links and the brand panel come from PartnerAuthFrame (app/partner/set-password).
+  return <>
+      {tokenState.status === "checking" && <Card className={PARTNER_FLAT_CARD}><CardContent className="flex flex-col items-start gap-2 text-sm text-muted-foreground"><span className="portal-set-password-spinner" aria-hidden="true" /><p>Checking your secure invitation…</p><span>We’ll confirm the link before you create a password.</span></CardContent></Card>}
+      {tokenState.status === "invalid" && <Card className={PARTNER_FLAT_CARD}><CardHeader className="flex flex-col items-start gap-3"><span className="portal-set-password-status-icon portal-set-password-status-icon-danger"><TriangleAlert className="size-5" aria-hidden="true" /></span><CardTitle role="heading" aria-level={1}>Link no longer valid</CardTitle><CardDescription>This invitation has expired or has already been used. Ask your partner administrator to send a new one.</CardDescription></CardHeader><CardContent><Button asChild className="w-full"><Link href={loginPath}>Return to partner sign in</Link></Button></CardContent></Card>}
+      {tokenState.status === "valid" && !done && <Card className={PARTNER_FLAT_CARD}>
         <CardHeader className="portal-set-password-heading"><p className="portal-partner-auth-eyebrow">Secure account setup</p><CardTitle role="heading" aria-level={1}>Choose your password</CardTitle><CardDescription>After setup, you&rsquo;ll enter {tokenState.partnerName}&rsquo;s isolated partner workspace.</CardDescription></CardHeader>
         <CardContent>
           <dl className="portal-set-password-meta"><div><dt>Organization</dt><dd>{tokenState.partnerName}</dd></div><div><dt>Role</dt><dd>{tokenState.role ? partnerRoleLabel(tokenState.role) : "—"}</dd></div><div><dt>Invite expires</dt><dd>{tokenState.expiresAt ? formatExpiry(tokenState.expiresAt) : "See your invitation email"}</dd></div></dl>
@@ -118,8 +114,6 @@ export function PartnerSetPasswordForm({
           <div className="portal-set-password-boundary"><LockKeyhole className="size-4 shrink-0" aria-hidden="true" /><p>This invitation is single-use. After setup, you’ll enter your isolated partner workspace.</p></div>
         </CardContent>
       </Card>}
-      {tokenState.status === "valid" && done && <Card className="portal-partner-set-password-card"><CardHeader className="portal-set-password-status"><span className="portal-set-password-status-icon portal-set-password-status-icon-success"><CircleCheck className="size-5" aria-hidden="true" /></span><CardTitle role="heading" aria-level={1}>Password set</CardTitle><CardDescription>Your partner account is ready. Taking you to sign in…</CardDescription></CardHeader></Card>}
-    </main>
-    <footer className="portal-partner-auth-footer"><Link href="/legal/privacy">Privacy</Link><Link href="/legal/tos">Terms</Link><a href="mailto:support@insurvas.com">Support</a></footer>
-  </div>;
+      {tokenState.status === "valid" && done && <Card className={PARTNER_FLAT_CARD}><CardHeader className="flex flex-col items-start gap-3"><span className="portal-set-password-status-icon portal-set-password-status-icon-success"><CircleCheck className="size-5" aria-hidden="true" /></span><CardTitle role="heading" aria-level={1}>Password set</CardTitle><CardDescription>Your partner account is ready. Taking you to sign in…</CardDescription></CardHeader></Card>}
+  </>;
 }

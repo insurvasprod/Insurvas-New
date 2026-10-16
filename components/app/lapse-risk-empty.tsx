@@ -26,7 +26,7 @@ export function LapseRiskEmpty({ notice, tabs }: { notice?: string; tabs?: React
       <TableCard>
         <EmptyState
           title="Nothing at risk right now"
-          hint="Policies appear here most urgent first, each with the signal that put it there — a missed draft, a returned payment, a service call."
+          hint="Missed drafts, returned payments and service calls land here."
           action={<Button asChild variant="outline"><Link href="/app/policies">Review policies</Link></Button>}
         />
       </TableCard>

@@ -1,7 +1,7 @@
 import "server-only";
 
 import { syncLeadStageForApplication } from "@/lib/applications/stageSyncService";
-import { markDealPolicyIssued } from "@/lib/issuedPolicies/service";
+import { markApplicationPolicyIssued } from "@/lib/issuedPolicies/service";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isSchemaGap } from "@/lib/supabase/schemaGap";
 
@@ -54,9 +54,10 @@ export async function recordCarrierIssues(tenantId: string, carrierId: string, p
         // The policy number joins the submission it was sent under, without overwriting the application number.
         const sub = await db().from("tenant_application_submissions").select("id, policy_number").eq("tenant_id", tenantId).eq("application_id", app.id).order("submitted_at", { ascending: false }).limit(1).maybeSingle();
         if (sub.data && !sub.data.policy_number) await db().from("tenant_application_submissions").update({ policy_number: row.policy_number }).eq("tenant_id", tenantId).eq("id", sub.data.id);
+        // Per application, so a household's spouse gets its own policy row beside the primary's.
         const deal = await db().from("deal_flow").select("id").eq("tenant_id", tenantId).eq("lead_id", app.lead_id).maybeSingle();
-        if (deal.data && carrier.data?.name) {
-          await markDealPolicyIssued(tenantId, { dealId: deal.data.id, carrier: carrier.data.name, policyNumber: row.policy_number, issuedOn: decision.issuedOn }).catch((error) => console.error("[carrier-issue] deal", app.id, error instanceof Error ? error.message : error));
+        if (carrier.data?.name) {
+          await markApplicationPolicyIssued(tenantId, { applicationId: app.id, dealId: deal.data?.id ?? null, carrier: carrier.data.name, policyNumber: row.policy_number, issuedOn: decision.issuedOn }).catch((error) => console.error("[carrier-issue] policy", app.id, error instanceof Error ? error.message : error));
         }
         // A system row with no request behind it, written the way the counteroffer expiry job writes its own.
         await db().from("audit_log").insert({ actor_type: "system", actor_id: null, action: "tenant.application_transitioned", target_type: "tenant_application", target_id: app.id, metadata: { tenantId, to: "closed", outcome: "issued", source: "carrier_file", carrierId, policyNumber: row.policy_number, carrierStatus: row.status_normalized, issuedOn: decision.issuedOn } });

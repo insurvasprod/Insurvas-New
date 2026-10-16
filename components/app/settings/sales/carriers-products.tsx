@@ -7,7 +7,8 @@
  * is read-only until it is copied to the agency; the copy replaces it for this agency only.
  */
 
-import { Field, Pill, ToggleRow, control } from "@/components/app/settings/primitives";
+import { StatusChip } from "@/components/ui/status-chip";
+import { Field, ToggleRow, control } from "@/components/app/settings/primitives";
 import { FE_TIERS, PAYMENT_METHODS, PAYMENT_METHOD_LABEL, TIER_LABEL, type PaymentMethod } from "@/lib/applications/constants";
 import { formatCents, parseDollarsToCents } from "@/lib/money";
 import { updateProductSchema, type ProductBody } from "@/lib/salesSettings/carrierSchemas";
@@ -110,9 +111,9 @@ export function ProductEditor({
     <div className="min-w-0 border-t border-[var(--border)] pt-4 first:border-t-0 first:pt-0">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="flex flex-wrap items-center gap-2">
-          <span className="text-[14px] leading-[1.5] font-semibold text-[var(--ink)]">{draft.name || "New product"}</span>
-          {!draft.tenantOwned && <Pill tone="neutral">Platform default</Pill>}
-          {!draft.isActive && <Pill tone="neutral">Not offered</Pill>}
+          <span className="text-sm leading-[1.5] font-semibold text-[var(--ink)]">{draft.name || "New product"}</span>
+          {!draft.tenantOwned && <StatusChip dot={false} tone="neutral">Platform default</StatusChip>}
+          {!draft.isActive && <StatusChip dot={false} tone="neutral">Not offered</StatusChip>}
         </span>
         {!draft.tenantOwned && (
           <CopyToAgencyButton label={draft.name} onClick={onCopy} disabled={!canCopy} reason="Only an owner can copy a product." />
@@ -131,21 +132,21 @@ export function ProductEditor({
         <Field label="Issue ages" htmlFor={id("age-min")}>
           <div className={pair}>
             <input id={id("age-min")} inputMode="numeric" className={pairInput} value={draft.ageMin} disabled={ro} onChange={(e) => onChange({ ageMin: e.target.value })} />
-            <span className="text-[14px] text-[var(--muted)]">to</span>
+            <span className="text-sm text-[var(--muted)]">to</span>
             <input aria-label={`${draft.name || "Product"} oldest issue age`} inputMode="numeric" className={pairInput} value={draft.ageMax} disabled={ro} onChange={(e) => onChange({ ageMax: e.target.value })} />
           </div>
         </Field>
         <Field label="Face amount ($)" htmlFor={id("face-min")}>
           <div className={pair}>
             <input id={id("face-min")} inputMode="decimal" className={pairInput} value={draft.faceMin} disabled={ro} onChange={(e) => onChange({ faceMin: e.target.value })} />
-            <span className="text-[14px] text-[var(--muted)]">to</span>
+            <span className="text-sm text-[var(--muted)]">to</span>
             <input aria-label={`${draft.name || "Product"} largest face amount`} inputMode="decimal" className={pairInput} value={draft.faceMax} disabled={ro} onChange={(e) => onChange({ faceMax: e.target.value })} />
           </div>
         </Field>
         <Field label="Plausible $ per $1,000" htmlFor={id("band-min")} hint="A monthly premium outside this band gets an amber check-the-quote warning and still saves.">
           <div className={pair}>
             <input id={id("band-min")} inputMode="decimal" className={pairInput} value={draft.bandMin} disabled={ro} onChange={(e) => onChange({ bandMin: e.target.value })} />
-            <span className="text-[14px] text-[var(--muted)]">to</span>
+            <span className="text-sm text-[var(--muted)]">to</span>
             <input aria-label={`${draft.name || "Product"} highest plausible premium per $1,000`} inputMode="decimal" className={pairInput} value={draft.bandMax} disabled={ro} onChange={(e) => onChange({ bandMax: e.target.value })} />
           </div>
         </Field>
@@ -182,10 +183,10 @@ export function ProductEditor({
 
       {!term && (
         <fieldset className="m-0 mt-4 min-w-0 border-0 p-0">
-          <legend className="p-0 text-[14px] leading-[1.5] font-semibold text-[var(--body)]">Tiers</legend>
+          <legend className="p-0 text-sm leading-[1.5] font-semibold text-[var(--body)]">Tiers</legend>
           <div className="mt-1.5 flex flex-wrap gap-x-5 gap-y-2">
             {FE_TIERS.map((tier) => (
-              <label key={tier} htmlFor={id(`tier-${tier}`)} className="inline-flex items-center gap-2 text-[14px] text-[var(--body)]">
+              <label key={tier} htmlFor={id(`tier-${tier}`)} className="inline-flex items-center gap-2 text-sm text-[var(--body)]">
                 <input id={id(`tier-${tier}`)} type="checkbox" className={checkbox} checked={draft.tiers.includes(tier)} disabled={ro} onChange={(e) => onChange({ tiers: toggle(draft.tiers, tier, e.target.checked, FE_TIERS as readonly string[]) })} />
                 {TIER_LABEL[tier]}
               </label>
@@ -195,10 +196,10 @@ export function ProductEditor({
       )}
 
       <fieldset className="m-0 mt-4 min-w-0 border-0 p-0">
-        <legend className="p-0 text-[14px] leading-[1.5] font-semibold text-[var(--body)]">Accepted payment methods</legend>
+        <legend className="p-0 text-sm leading-[1.5] font-semibold text-[var(--body)]">Accepted payment methods</legend>
         <div className="mt-1.5 flex flex-wrap gap-x-5 gap-y-2">
           {PAYMENT_METHODS.map((method) => (
-            <label key={method} htmlFor={id(`pm-${method}`)} className="inline-flex items-center gap-2 text-[14px] text-[var(--body)]">
+            <label key={method} htmlFor={id(`pm-${method}`)} className="inline-flex items-center gap-2 text-sm text-[var(--body)]">
               <input id={id(`pm-${method}`)} type="checkbox" className={checkbox} checked={draft.methods.includes(method)} disabled={ro} onChange={(e) => onChange({ methods: toggle(draft.methods, method, e.target.checked, PAYMENT_METHODS) })} />
               {PAYMENT_METHOD_LABEL[method]}
             </label>

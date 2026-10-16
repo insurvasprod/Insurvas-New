@@ -1,6 +1,7 @@
 import "server-only";
 
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
+import { csvCellMinimal } from "@/lib/csv/cell";
 
 import { bestEvidence, consentGivenAt, type EvidenceArtefact, type EvidenceFilter, type EvidenceLevel } from "./evidence";
 
@@ -202,9 +203,7 @@ export async function getConsentEvidence(input: {
 const CSV_HEADER = ["Lead", "Phone", "Provider", "Captured", "Consent given (UTC)", "Evidence", "Certificate id", "IP address"];
 function csvCell(value: string | null) {
   // A cell a spreadsheet would run as a formula is neutralised: lead values arrive from vendors.
-  const raw = value ?? "";
-  const v = /^[=+\-@\t\r]/.test(raw) ? "'" + raw : raw;
-  return /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
+  return csvCellMinimal(value);
 }
 export function evidenceCsv(rows: EvidenceRow[], label: (level: EvidenceLevel) => string): string {
   return [CSV_HEADER.join(","), ...rows.map((row) => [row.name, row.phone, row.providerName, row.captured, row.consentGivenAt, label(row.level), row.certificateId, row.ip].map(csvCell).join(","))].join("\n");

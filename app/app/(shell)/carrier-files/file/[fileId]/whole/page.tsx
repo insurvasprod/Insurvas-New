@@ -63,8 +63,11 @@ export default async function WholeCarrierFilePage({ params, searchParams }: { p
     const pages = Math.max(1, Math.ceil(lines.length / LINES_PER_PAGE));
     const at = Math.min(Math.max(1, Number(page) || 1), pages);
     // Line numbers count from the top of each page of the PDF.
-    let count = 0;
-    const numbered = lines.map((line, index) => ({ ...line, number: (count = index > 0 && lines[index - 1].page === line.page ? count + 1 : 1) }));
+    const numbered = lines.reduce<Array<(typeof lines)[number] & { number: number }>>((out, line, index) => {
+      const previous = out[index - 1];
+      out.push({ ...line, number: previous && lines[index - 1].page === line.page ? previous.number + 1 : 1 });
+      return out;
+    }, []);
     const shown = numbered.slice((at - 1) * LINES_PER_PAGE, at * LINES_PER_PAGE);
     return (
       <div className="m-stagger flex flex-col gap-6">

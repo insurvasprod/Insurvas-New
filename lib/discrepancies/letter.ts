@@ -2,11 +2,12 @@ import "server-only";
 
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
 
-import { DISCREPANCY_KIND_LABELS } from "@/lib/discrepancies/compute";
+import { DISCREPANCY_KIND_LABELS, OWED_KINDS } from "@/lib/discrepancies/compute";
 import { getCarrierCommissionContact } from "@/lib/discrepancies/carrierContacts";
 import { letterItems, listDiscrepancies, type DiscrepancyView } from "@/lib/discrepancies/service";
 import { isRecordId, statementDay, statementMoney, statementPeriod } from "@/lib/ledger/statementConstants";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
+import { requireBusinessIdentity } from "@/lib/agencyProfile/identity";
 
 /**
  * LA-4.5 · one dispute letter: what it says, gathered once, for the printed page
@@ -31,10 +32,11 @@ export type DisputeLetter = {
   today: string;
 };
 
-type Row<T> = PromiseLike<{ data: T | null; error: { message: string } | null }>;
-type Loose = { from(table: string): { select(columns: string): { eq(column: string, value: unknown): { maybeSingle(): Row<Record<string, string | null>> } } } };
-
-/** The letter for one carrier and the chosen findings, or null when nothing can go on it. */
+/**
+ * The letter for one carrier and the chosen findings, or null when nothing can go on it. The agency's
+ * name, address and NPN come from the business identity (LA-8.3); without them it throws
+ * BusinessIdentityMissingError, whose message names the missing field and this letter.
+ */
 export async function getDisputeLetter(tenantId: string, userId: string, carrier: string, ids: string[]): Promise<DisputeLetter | null> {
   const wanted = [...new Set(ids.filter(isRecordId))].slice(0, 200);
   if (!isRecordId(carrier) || !wanted.length) return null;
@@ -42,12 +44,9 @@ export async function getDisputeLetter(tenantId: string, userId: string, carrier
   const items = letterItems(list.items, carrier, wanted);
   if (!items.length) return null;
 
-  // agency_profiles is newer than the generated types; read through a plain query shape.
   const db = getSupabaseServiceClient();
-  const loose = db as unknown as Loose;
-  const [profile, tenant, user, contract, contact] = await Promise.all([
-    loose.from("agency_profiles").select("legal_name, dba, npn, principal_address").eq("tenant_id", tenantId).maybeSingle(),
-    db.from("tenants").select("name").eq("id", tenantId).maybeSingle(),
+  const [identity, user, contract, contact] = await Promise.all([
+    requireBusinessIdentity(tenantId, "dispute_letter"),
     db.from("users").select("name, email, phone").eq("id", userId).maybeSingle(),
     db.from("tenant_carriers").select("writing_number").eq("tenant_id", tenantId).eq("carrier_id", carrier).eq("is_active", true).order("effective_from", { ascending: false }).limit(1).maybeSingle(),
     // Where this agency's letters to the carrier go; a failed read only means typing it on this letter.
@@ -57,10 +56,11 @@ export async function getDisputeLetter(tenantId: string, userId: string, carrier
     carrierId: carrier,
     carrierName: items[0].carrierName,
     items,
-    totalCents: items.reduce((sum, item) => sum + item.owedCents, 0),
-    agencyName: profile.data?.dba?.trim() || profile.data?.legal_name?.trim() || tenant.data?.name?.trim() || "Our agency",
-    agencyAddress: profile.data?.principal_address ?? null,
-    npn: profile.data?.npn ?? null,
+    // An unexpected chargeback is a question for the carrier, not money claimed (OWED_KINDS).
+    totalCents: items.filter((item) => OWED_KINDS.has(item.kind)).reduce((sum, item) => sum + item.owedCents, 0),
+    agencyName: identity.tradingName ?? "",
+    agencyAddress: identity.addressLines.join("\n"),
+    npn: identity.npn,
     writingNumber: contract.data?.writing_number ?? null,
     savedRecipient: contact.contact?.address ?? null,
     contactsAvailable: contact.available,

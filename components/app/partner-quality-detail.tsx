@@ -134,6 +134,12 @@ export function PartnerQualityDetailWorkspace({ partnerId, initialPeriod }: { pa
     { label: "Invalid phone", value: now.screening.invalid, prior: prev.screening.invalid, metric: "invalid" },
     { label: "Disqualified", value: now.disqualified, prior: prev.disqualified, metric: "disqualified" },
     { label: "Duplicates", value: now.duplicates, prior: prev.duplicates, metric: "duplicate" },
+    // LA-6.2: transfers the gate rejected (never billable, never in deal flow), and accepts whose
+    // checks only ran at submit, with a closer already on the line.
+    { label: "Rejected at transfer", value: data.gate.current.rejected, prior: data.gate.previous.rejected },
+    { label: "Screened only at submit", value: data.gate.current.screenedLate, prior: data.gate.previous.screenedLate },
+    // LA-6.4: a partner generating complaints is a partner about to cost the agent a licence.
+    { label: "Complaints", value: data.gate.current.complaints, prior: data.gate.previous.complaints },
   ];
   const tabs: { key: DetailTab; label: string; count?: number }[] = [
     { key: "leads", label: "Leads sent", count: data.leads.length },
@@ -161,7 +167,7 @@ export function PartnerQualityDetailWorkspace({ partnerId, initialPeriod }: { pa
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div role="tablist" aria-label="Partner sections" className="inline-flex h-9 w-fit flex-wrap gap-0.5 rounded-md bg-[var(--canvas)] p-0.5">
         {tabs.map((item) => (
-          <button key={item.key} type="button" role="tab" aria-selected={tab === item.key} onClick={() => setTab(item.key)} className={cn("inline-flex h-8 items-center gap-1.5 rounded-md border px-3 text-sm font-semibold tracking-[-0.01em]", tab === item.key ? "border-border bg-card text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}>
+          <button key={item.key} type="button" role="tab" id={`partner-tab-${item.key}`} aria-controls="partner-view" aria-selected={tab === item.key} onClick={() => setTab(item.key)} className={cn("inline-flex h-8 items-center gap-1.5 rounded-md border px-3 text-sm font-semibold tracking-[-0.01em]", tab === item.key ? "border-border bg-card text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}>
             {item.label}
             {item.count !== undefined && <span className="rounded-full bg-[var(--surface-alt)] px-1.5 text-xs tabular-nums text-muted-foreground">{count(item.count)}</span>}
           </button>
@@ -174,6 +180,8 @@ export function PartnerQualityDetailWorkspace({ partnerId, initialPeriod }: { pa
     </div>
     {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
 
+    {/* The selected section, as the tab panel: it fades in when the tab changes (2026-10-09). */}
+    <div key={tab} role="tabpanel" id="partner-view" aria-labelledby={`partner-tab-${tab}`} className="flex min-w-0 flex-col gap-6">
     {tab === "leads" && <TableCard
       className={fill}
       toolbar={
@@ -253,7 +261,7 @@ export function PartnerQualityDetailWorkspace({ partnerId, initialPeriod }: { pa
 
     {tab === "team" && <TableCard className={fill}>
       {section(data.team.length === 0 && data.unattributed.sent === 0
-        ? <EmptyState title="No partner users" hint="This partner has no portal accounts." />
+        ? <EmptyState title="No partner users" hint="Invite them from the partner's record." action={<Button asChild variant="outline"><Link href={`/app/publishers/${data.partner.id}`}>Open partner</Link></Button>} />
         : <table className="portal-lead-table w-full min-w-[1180px] text-left text-sm">
             <thead><tr><th>Member</th><th>Email</th><th>Role</th><th>Access</th><th>Reports to</th><th className="text-right">Sent</th><th className="text-right">Claimed</th><th className="text-right">Worked</th><th className="text-right">Submitted</th><th className="text-right">Conversion</th></tr></thead>
             <tbody>
@@ -313,6 +321,7 @@ export function PartnerQualityDetailWorkspace({ partnerId, initialPeriod }: { pa
         </tbody>
       </table>, 7)}
     </TableCard>}
+    </div>
     {drilldown.drawer}
   </div>;
 }

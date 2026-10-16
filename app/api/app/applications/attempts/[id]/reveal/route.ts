@@ -4,6 +4,7 @@ import { actorOf, body, failure, isUuid } from "@/lib/applications/http";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import { revealField } from "@/lib/applications/mutations";
 import { revealSchema } from "@/lib/applications/schemas";
+import { secondFactorBlock } from "@/lib/tenantAuth/twoFactor";
 
 /**
  * LA-3.7 · reveal ONE sensitive value. Owner and producer only (decision 5 — the menu is a
@@ -13,6 +14,9 @@ import { revealSchema } from "@/lib/applications/schemas";
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireFeatureRole("applications", ["owner", "producer"]);
   if (auth instanceof NextResponse) return auth;
+  // LA-8.2: an SSN or bank detail is revealed only by someone with two-factor on, in a session that passed it.
+  const blocked = await secondFactorBlock(auth.context);
+  if (blocked) return blocked;
   const actor = actorOf(auth, request);
   const { id } = await params;
   if (!isUuid(id)) return NextResponse.json({ error: "That application could not be found." }, { status: 404 });

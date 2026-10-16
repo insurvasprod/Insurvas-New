@@ -10,17 +10,18 @@
  * list still reads and a write answers with the "needs a database update" sentence, shown inline.
  */
 
+import { StatusChip } from "@/components/ui/status-chip";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 
-import { Field, Pill, btn } from "@/components/app/settings/primitives";
+import { Field, btn } from "@/components/app/settings/primitives";
 import type { IssuedPoliciesResponse, IssuedPolicy } from "@/lib/issuedPolicies/types";
 import { notify } from "@/lib/notify";
 import { SectionLoading } from "@/components/ui/page-states";
 
 const input40 =
-  "mt-1.5 box-border h-10 w-full rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] px-3 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--ink)] outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]";
-const label12 = "text-[12px] leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]";
-const small = "text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]";
+  "mt-1.5 box-border h-10 w-full rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] px-3 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--ink)] outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]";
+const label12 = "text-xs leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]";
+const small = "text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]";
 
 /** Today in the browser's calendar, as YYYY-MM-DD. */
 function localToday() {
@@ -89,14 +90,14 @@ export function IssuedPolicyPanel({ dealId, defaultCarrier, readOnly, onChanged 
   return (
     <div className="mt-4 border-t border-[var(--border)] pt-4" aria-labelledby={`deal-policies-${dealId}`}>
       <div id={`deal-policies-${dealId}`} className={label12}>Issued policy</div>
-      {loadError ? <p role="alert" className="mt-1 mb-0 text-[14px] leading-[1.5] text-[var(--error-ink)]">{loadError}</p>
+      {loadError ? <p role="alert" className="mt-1 mb-0 text-sm leading-[1.5] text-[var(--error-ink)]">{loadError}</p>
         : !data ? <SectionLoading rows={1} columns={3} label="Loading issued policy" />
-        : policies.length === 0 ? <p className="mt-1 mb-0 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--body)]">No policy recorded on this deal.</p>
+        : policies.length === 0 ? <p className="mt-1 mb-0 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--body)]">No policy recorded on this deal.</p>
         : <ul className="mt-1.5 flex list-none flex-col gap-2 p-0">
           {policies.map((policy) => <li key={policy.id} className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">{policy.carrier}</span>
-              {policy.status === "issued" ? <Pill tone="success" dot>In force</Pill> : <Pill tone="error" dot>{policy.status === "lapsed" ? "Lapsed" : "Cancelled"}</Pill>}
+              <span className="text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">{policy.carrier}</span>
+              {policy.status === "issued" ? <StatusChip tone="good" dot>In force</StatusChip> : <StatusChip tone="danger" dot>{policy.status === "lapsed" ? "Lapsed" : "Cancelled"}</StatusChip>}
             </div>
             <span className={`block ${small}`}>
               {policy.policy_number ? `No. ${policy.policy_number} · ` : ""}Issued {day(policy.issued_at)}{policy.lapsed_at ? ` · lapsed ${day(policy.lapsed_at)}` : ""}
@@ -128,8 +129,8 @@ export function IssuedPolicyPanel({ dealId, defaultCarrier, readOnly, onChanged 
           </div>
         </form>
       )}
-      {formError && <p role="alert" className="mt-1.5 mb-0 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--error-ink)]">{formError}</p>}
-      {data && !data.writable && canWrite && <span className={`mt-1.5 block ${small}`}>Recording a lapse date needs a database update that has not been applied yet.</span>}
+      {formError && <p role="alert" className="mt-1.5 mb-0 text-xs leading-[1.5] tracking-[-0.01em] text-[var(--error-ink)]">{formError}</p>}
+      {data && !data.writable && canWrite && <span className={`mt-1.5 block ${small}`}>Lapse dates cannot be recorded yet.</span>}
     </div>
   );
 }

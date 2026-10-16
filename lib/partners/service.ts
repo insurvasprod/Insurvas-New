@@ -62,6 +62,60 @@ function partnerLocalDate(timezone: string | null | undefined, now = new Date())
   }
 }
 
+type MonthFigure = { leadVolume: number; lastSubmission: string | null; transfers: number; completed: number; dropped: number };
+
+/**
+ * This month's per-partner counts, counted in SQL (partner_month_figures, 20261015592000): the
+ * hosted API returns at most 1,000 rows per read, so counting fetched rows undercounted a busy
+ * agency. Before that migration, falls back to the row reads, paged so no cap applies.
+ */
+async function partnerMonthFigures(tenantId: string, ids: string[], since: string): Promise<Map<string, MonthFigure>> {
+  const supabase = getSupabaseServiceClient();
+  const untyped = supabase as unknown as { rpc(name: string, args: Record<string, unknown>): Promise<{ data: unknown; error: { message: string } | null }> };
+  const { data, error } = await untyped.rpc("partner_month_figures", { p_tenant_id: tenantId, p_since: since });
+  const figures = new Map<string, MonthFigure>();
+  if (!error) {
+    for (const row of (data ?? []) as Array<{ partner_id: string; lead_volume: number; last_submission: string | null; transfers: number; completed: number; dropped: number }>) {
+      figures.set(row.partner_id, { leadVolume: row.lead_volume, lastSubmission: row.last_submission, transfers: row.transfers, completed: row.completed, dropped: row.dropped });
+    }
+    return figures;
+  }
+  if (!/partner_month_figures|schema cache|does not exist|Could not find the function/i.test(error.message)) throw new Error(`Could not load partner figures: ${error.message}`);
+
+  const PAGE = 1000;
+  async function all<T>(read: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>): Promise<T[]> {
+    const rows: T[] = [];
+    for (let from = 0; ; from += PAGE) {
+      const page = await read(from, from + PAGE - 1);
+      if (page.error) throw new Error(`Could not load partner figures: ${page.error.message}`);
+      rows.push(...(page.data ?? []));
+      if ((page.data ?? []).length < PAGE) return rows;
+    }
+  }
+  const [leads, sent, closed, flags] = await Promise.all([
+    all<{ id: string; partner_id: string | null; created_at: string }>((from, to) => supabase.from("agent_leads").select("id, partner_id, created_at").eq("tenant_id", tenantId).in("partner_id", ids).gte("created_at", since).order("created_at", { ascending: false }).order("id").range(from, to)),
+    all<{ id: string; partner_id: string | null }>((from, to) => supabase.from("lead_queue").select("id, partner_id").eq("tenant_id", tenantId).in("partner_id", ids).gte("created_at", since).order("created_at").order("id").range(from, to)),
+    all<{ id: string; partner_id: string | null; disposition: string | null }>((from, to) => supabase.from("lead_queue").select("id, partner_id, disposition").eq("tenant_id", tenantId).in("partner_id", ids).not("disposition", "is", null).gte("disposition_at", since).order("disposition_at").order("id").range(from, to)),
+    supabase.from("dispositions").select("disposition_key, counts_as_work_completed, closes_as").eq("tenant_id", tenantId),
+  ]);
+  if (flags.error) throw new Error(`Could not load partner figures: ${flags.error.message}`);
+  const figure = (id: string) => {
+    let row = figures.get(id);
+    if (!row) { row = { leadVolume: 0, lastSubmission: null, transfers: 0, completed: 0, dropped: 0 }; figures.set(id, row); }
+    return row;
+  };
+  for (const lead of leads) if (lead.partner_id) { const row = figure(lead.partner_id); row.leadVolume += 1; if (!row.lastSubmission || lead.created_at > row.lastSubmission) row.lastSubmission = lead.created_at; }
+  for (const row of sent) if (row.partner_id) figure(row.partner_id).transfers += 1;
+  const flagByKey = new Map((flags.data ?? []).map((row) => [row.disposition_key, row]));
+  for (const row of closed) {
+    if (!row.partner_id) continue;
+    const flag = row.disposition ? flagByKey.get(row.disposition) : undefined;
+    if (flag?.counts_as_work_completed) figure(row.partner_id).completed += 1;
+    if (flag?.closes_as === "dropped") figure(row.partner_id).dropped += 1;
+  }
+  return figures;
+}
+
 export async function listPartners(tenantId: string): Promise<PartnerRow[]> {
   const supabase = getSupabaseServiceClient();
   const { data: partners, error } = await supabase.from("partners").select("*").eq("tenant_id", tenantId).order("created_at", { ascending: false });
@@ -70,39 +124,23 @@ export async function listPartners(tenantId: string): Promise<PartnerRow[]> {
   if (ids.length === 0) return [];
 
   const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
-  const [terms, users, leads, sent, closed, flags, products] = await Promise.all([
+  const [terms, users, figures, products] = await Promise.all([
     supabase.from("partner_terms").select("*").in("partner_id", ids).order("effective_from", { ascending: false }),
     supabase.from("partner_users").select("partner_id, status").in("partner_id", ids),
-    supabase.from("agent_leads").select("partner_id, created_at").eq("tenant_id", tenantId).in("partner_id", ids).gte("created_at", monthStart).order("created_at", { ascending: false }),
-    supabase.from("lead_queue").select("partner_id").eq("tenant_id", tenantId).in("partner_id", ids).gte("created_at", monthStart).limit(50000),
-    supabase.from("lead_queue").select("partner_id, disposition").eq("tenant_id", tenantId).in("partner_id", ids).not("disposition", "is", null).gte("disposition_at", monthStart).limit(50000),
-    supabase.from("dispositions").select("disposition_key, counts_as_work_completed, closes_as").eq("tenant_id", tenantId),
+    partnerMonthFigures(tenantId, ids, monthStart),
     supabase.from("partner_products").select("partner_id, product_code").in("partner_id", ids).order("product_code"),
   ]);
-  const relatedError = [terms, users, leads, sent, closed, flags, products].find((result) => result.error)?.error;
+  const relatedError = [terms, users, products].find((result) => result.error)?.error;
   if (relatedError) throw new Error(`Could not load partner details: ${relatedError.message}`);
   const termMap = new Map<string, PartnerTermRow[]>();
   for (const term of (terms.data ?? []) as PartnerTermRow[]) termMap.set(term.partner_id, [...(termMap.get(term.partner_id) ?? []), term]);
-  const leadMap = new Map<string, string[]>();
-  for (const lead of leads.data ?? []) if (lead.partner_id) leadMap.set(lead.partner_id, [...(leadMap.get(lead.partner_id) ?? []), lead.created_at]);
   const activeUsers = new Map<string, number>();
   for (const user of users.data ?? []) if (user.status === "active") activeUsers.set(user.partner_id, (activeUsers.get(user.partner_id) ?? 0) + 1);
-  const bump = (map: Map<string, number>, key: string | null) => { if (key) map.set(key, (map.get(key) ?? 0) + 1); };
-  const flagByKey = new Map((flags.data ?? []).map((row) => [row.disposition_key, row]));
-  const transfers = new Map<string, number>();
-  const completed = new Map<string, number>();
-  const dropped = new Map<string, number>();
-  for (const row of sent.data ?? []) bump(transfers, row.partner_id);
-  for (const row of closed.data ?? []) {
-    const flag = row.disposition ? flagByKey.get(row.disposition) : undefined;
-    if (flag?.counts_as_work_completed) bump(completed, row.partner_id);
-    if (flag?.closes_as === "dropped") bump(dropped, row.partner_id);
-  }
   const approved = new Map<string, string[]>();
   for (const row of products.data ?? []) if (row.product_code) approved.set(row.partner_id, [...(approved.get(row.partner_id) ?? []), row.product_code]);
   return (partners ?? []).map((partner) => {
     const partnerTerms = termMap.get(partner.id) ?? [];
-    const leadDates = leadMap.get(partner.id) ?? [];
+    const figure = figures.get(partner.id);
     // Terms are newest-first by effective date. A future-dated rate change is scheduled, not active:
     // the term in force is the newest one whose date has arrived in the partner's own timezone.
     const today = partnerLocalDate(partner.timezone);
@@ -110,12 +148,12 @@ export async function listPartners(tenantId: string): Promise<PartnerRow[]> {
       ...partner,
       terms: partnerTerms,
       active_term: partnerTerms.find((term) => term.effective_from <= today) ?? null,
-      lead_volume_this_month: leadDates.length,
-      last_submission: leadDates[0] ?? null,
+      lead_volume_this_month: figure?.leadVolume ?? 0,
+      last_submission: figure?.lastSubmission ?? null,
       active_user_count: activeUsers.get(partner.id) ?? 0,
-      transfers_this_month: transfers.get(partner.id) ?? 0,
-      completed_this_month: completed.get(partner.id) ?? 0,
-      dropped_this_month: dropped.get(partner.id) ?? 0,
+      transfers_this_month: figure?.transfers ?? 0,
+      completed_this_month: figure?.completed ?? 0,
+      dropped_this_month: figure?.dropped ?? 0,
       approved_products: approved.get(partner.id) ?? [],
     } as PartnerRow;
   });

@@ -86,7 +86,7 @@ function TableHead({ className, ...props }: React.ComponentProps<"th">) {
       // The system's `label` style: 12px, 600, 0.02em, uppercase. The board draws 10.5px, but 12px
       // is the smallest text the type scale allows, and a column name is read on every row below it.
       className={cn(
-        "h-8 px-2.5 text-left align-middle text-[12px] font-semibold uppercase tracking-[0.02em] whitespace-nowrap text-muted-foreground [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
+        "h-8 px-2.5 text-left align-middle text-xs font-semibold uppercase tracking-[0.02em] whitespace-nowrap text-muted-foreground [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
         className
       )}
       {...props}

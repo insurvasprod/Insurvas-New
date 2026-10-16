@@ -8,6 +8,7 @@ import { TenantsTable } from "@/components/admin/tenants-table";
 import { canViewTenants } from "@/lib/tenants/permissions";
 import { tenantListStats } from "@/lib/tenantsList/present";
 import { fetchTenantList } from "@/lib/tenantsList/queries";
+import { fetchPlansForPicker } from "@/lib/plans/queries";
 
 /** A server render reads the clock once per request, which is the point. */
 function readClock() {
@@ -25,7 +26,12 @@ export default async function TenantsPage() {
 
   // Throws on a failed read rather than rendering an empty table: a query that failed and a platform
   // with no customers must never look the same. The route's error boundary offers Try again.
-  const rows = await fetchTenantList();
+  const isSuperAdmin = admin.role === "super_admin";
+  const [rows, plans] = await Promise.all([
+    fetchTenantList(),
+    // The Create tenant dialog picks a plan (doc 2 §5.3); only super_admin is offered it.
+    isSuperAdmin ? fetchPlansForPicker() : Promise.resolve([]),
+  ]);
   const stats = tenantListStats(rows, readClock());
 
   const beyond = [
@@ -48,7 +54,7 @@ export default async function TenantsPage() {
       <PageHeader
         title="Tenants"
         // POST /api/admin/tenants is super_admin only; nobody else is offered a button it would refuse.
-        actions={admin.role === "super_admin" ? <TenantsListCreate /> : undefined}
+        actions={isSuperAdmin ? <TenantsListCreate plans={plans} /> : undefined}
       />
 
       <BoardStatGrid>

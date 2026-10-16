@@ -26,7 +26,8 @@ export const SUBSCRIPTION_STATUS_LABELS: Record<SubscriptionStatus, string> = {
 /**
  * `full`      — everything the plan grants.
  * `read_only` — can SEE their book of business, cannot DO anything that creates or dials.
- * `none`      — no access (only after the retention window, which SA-6.3 owns).
+ * `none`      — no access: a cancelled agency once its retention window has ended (LA-8.5). No status
+ *               maps here by itself; `retention_until` on the entitlement decides it.
  */
 export type AccessLevel = "full" | "read_only" | "none";
 
@@ -46,9 +47,10 @@ export function accessLevelForStatus(status: SubscriptionStatus): AccessLevel {
       return "full";
     case "suspended":
     case "paused":
-      return "read_only";
+    // LA-8.5 (owner decision 2026-10-15): read-only like paused, for the retention window — the
+    // agency can still read its book, statements and commission history, and export them.
     case "cancelled":
-      return "none";
+      return "read_only";
   }
 }
 

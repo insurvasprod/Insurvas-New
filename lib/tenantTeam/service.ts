@@ -6,6 +6,7 @@ import type { TenantRole } from "@/lib/tenantAuth/roles";
 import { isPendingSchema, SchemaPendingError } from "@/lib/appointments/pendingSchema";
 import { newestStamp } from "./lastSeen";
 import { heldSeat } from "./seats";
+import { memberTimezones } from "./membership";
 
 export type TeamMember = {
   id: string;
@@ -29,6 +30,8 @@ export type TeamMember = {
   licensedStates?: string[];
   /** The day each of those licences lapses, by state (migration 20260925702000). Absent = none recorded. */
   licensedStateExpiries?: Record<string, string>;
+  /** LA-8.6: the member's own zone (roster, scorecards). Null = not set; never used for calling windows. */
+  timezone?: string | null;
 };
 
 export type TeamSnapshot = {
@@ -49,7 +52,7 @@ export async function getTeamSnapshot(tenantId: string, entitlement: Entitlement
   // One trip for the members: the user row is embedded through tenant_users_user_id_fkey (the only
   // foreign key from tenant_users to users, checked live 2026-09-23). The licensed states go out
   // alongside it; the pending invitations need the member list, so they follow.
-  const [membershipResult, statesResult, activityResult, floorResult] = await Promise.all([
+  const [membershipResult, statesResult, activityResult, floorResult, zones] = await Promise.all([
     supabase
       .from("tenant_users")
       .select("user_id, role, invited_at, accepted_at, users!tenant_users_user_id_fkey(id, name, email, status, last_login_at)")
@@ -60,6 +63,8 @@ export async function getTeamSnapshot(tenantId: string, entitlement: Entitlement
     // Floor heartbeat. Both are garnish; a failed read falls back to the last sign-in.
     supabase.from("tenant_member_activity" as never).select("user_id, last_seen_at").eq("tenant_id", tenantId),
     supabase.from("agent_presence").select("user_id, last_seen_at").eq("tenant_id", tenantId),
+    // LA-8.6: garnish too — an empty map before 20261015350000.
+    memberTimezones(tenantId),
   ]);
 
   const { data: rows, error: membershipError } = membershipResult;
@@ -124,6 +129,7 @@ export async function getTeamSnapshot(tenantId: string, entitlement: Entitlement
       inviteExpiresAt: membership.accepted_at ? null : inviteExpiry.get(user.id) ?? null,
       licensedStates: statesByUser.get(user.id) ?? [],
       licensedStateExpiries: expiriesByUser.get(user.id) ?? {},
+      timezone: zones.get(user.id) ?? null,
     }];
   });
 

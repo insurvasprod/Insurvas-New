@@ -15,7 +15,7 @@ import { Pager, paginate } from "@/components/ui/pager";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
-import { DISCREPANCY_KIND_LABELS, type DiscrepancyKind } from "@/lib/discrepancies/compute";
+import { DISCREPANCY_KIND_LABELS, OWED_KINDS, type DiscrepancyKind } from "@/lib/discrepancies/compute";
 import { fileDay } from "@/lib/ingestion/constants";
 import { DISCREPANCY_LABELS, DISCREPANCY_TYPES, moneySummary, type DiscrepancyType } from "@/lib/ingestion/discrepancyEngine";
 import { DISPUTABLE } from "@/lib/ingestion/disputeLetter";
@@ -118,7 +118,8 @@ export function CarrierDiscrepancies({ items, readOnly, handItems = [], handCanW
   // The tiles follow the source filter, as the list does (Policies and the ledger do the same).
   const sum = useMemo(() => moneySummary((source === "hand" ? [] : items).map((i) => ({ discrepancy_type: i.type, difference_cents: i.differenceCents, expected_amount_cents: i.expectedCents, reported_amount_cents: i.reportedCents, status: i.status }))), [items, source]);
   const handWorking = source === "carrier" ? [] : handItems.filter((i) => i.status === "open" || i.status === "disputed");
-  const handOwedCents = handWorking.reduce((total, i) => total + Math.max(0, i.owedCents), 0);
+  // An unexpected chargeback asserts no cause, so it is listed but never counted as owed (OWED_KINDS).
+  const handOwedCents = handWorking.filter((i) => OWED_KINDS.has(i.kind)).reduce((total, i) => total + Math.max(0, i.owedCents), 0);
   const carriers = useMemo(() => [...new Map(all.map((i) => [carrierKey(i), i.row.carrierName])).entries()].sort((a, b) => a[1].localeCompare(b[1])), [all]);
   const visible = useMemo(() => all.filter((i) =>
     (!source || i.source === source) &&
@@ -295,7 +296,7 @@ export function CarrierDiscrepancies({ items, readOnly, handItems = [], handCanW
     <>
       {/* Nothing found yet is not "$0 owed": the totals appear with the first finding. */}
       {all.length > 0 && <StatStrip label="Discrepancies">
-        <StatTile label="You appear to be owed" value={money(sum.owedCents + handOwedCents)} valueTone={sum.owedCents + handOwedCents ? "warning" : undefined} footnote={sum.unpricedMissing ? `plus ${sum.unpricedMissing} missing without a rate to price them` : handOwedCents ? `incl. ${money(handOwedCents)} from statements imported by hand` : "missing, short-paid and wrong chargebacks"} />
+        <StatTile label="You appear to be owed" value={money(sum.owedCents + handOwedCents)} valueTone={sum.owedCents + handOwedCents ? "warning" : undefined} footnote={sum.unpricedMissing ? `plus ${sum.unpricedMissing} missing without a rate to price them` : handOwedCents ? `incl. ${money(handOwedCents)} from statements imported by hand` : "missing, short-paid and charged back twice"} />
         <StatTile label="Coming back" value={money(sum.comingBackCents)} footnote="chargebacks not taken yet; don't spend it" />
         <StatTile label="Held by carriers" value={money(sum.heldCents)} footnote="withheld, not missing" />
         <StatTile label="Open" value={(sum.open + handWorking.length).toLocaleString("en-US")} footnote="including items in a letter" />

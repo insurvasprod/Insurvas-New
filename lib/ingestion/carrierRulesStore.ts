@@ -3,7 +3,7 @@ import "server-only";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isSchemaGap } from "@/lib/supabase/schemaGap";
 
-import { coverageGaps, resolveRule, resolveSettings, RULE_TYPES, type Gap, type ResolvedRule, type RuleRow, type RuleSource, type RuleType, type SettingField, type SettingsRow } from "./carrierRules";
+import { coverageGaps, payTimingGaps, resolveRule, resolveSettings, RULE_TYPES, type Gap, type PayTimingGap, type ResolvedRule, type RuleRow, type RuleSource, type RuleType, type SettingField, type SettingsRow } from "./carrierRules";
 import { refreshPolicyCurrent } from "./policyCurrentStore";
 
 /**
@@ -218,4 +218,28 @@ export async function saveCarrierSettings(scope: RulesScope, carrierId: string, 
       console.error("[carrier-rules] expected commission could not be recomputed after a settings change:", failure);
     }
   }
+}
+
+/**
+ * For the Discrepancies page: the agency's carriers with policies in force whose pay trigger or lag
+ * is not set (agency or platform), so missing commission is not checked for them.
+ */
+export async function loadPayTimingGaps(tenantId: string): Promise<PayTimingGap[] | null> {
+  const [counts, settings, carriers] = await Promise.all([
+    db().rpc("in_force_policy_counts", { p_tenant_id: tenantId }),
+    db().from("carrier_operating_settings").select("tenant_id, carrier_id, commission_trigger, expected_lag_days").or(`tenant_id.eq.${tenantId},tenant_id.is.null`).limit(2000),
+    db().from("carriers").select("id, name"),
+  ]);
+  for (const read of [counts, settings, carriers]) {
+    if (read.error) {
+      if (isSchemaGap(read.error)) return null;
+      fail(read.error, "Could not load the carriers' pay timing");
+    }
+  }
+  const rows: SettingsRow[] = ((settings.data ?? []) as Loose[]).map(toSettings);
+  const name = new Map<string, string>(((carriers.data ?? []) as Loose[]).map((c) => [c.id, c.name]));
+  return payTimingGaps(((counts.data ?? []) as Loose[]).map((row) => {
+    const resolved = resolveSettings(rows.find((r) => r.carrierId === row.carrier_id && r.tenantId === null) ?? null, rows.find((r) => r.carrierId === row.carrier_id && r.tenantId === tenantId) ?? null);
+    return { carrierId: row.carrier_id, carrierName: name.get(row.carrier_id) ?? "Carrier not known", inForce: Number(row.policies), trigger: resolved.commissionTrigger.value, lagDays: resolved.expectedLagDays.value };
+  }));
 }

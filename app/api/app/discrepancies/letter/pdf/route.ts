@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 
 import { audit } from "@/lib/audit/log";
+import { BusinessIdentityMissingError } from "@/lib/agencyProfile/identity";
 import { buildDisputeLetterPdf, getDisputeLetter } from "@/lib/discrepancies/letter";
 import { isRecordId } from "@/lib/ledger/statementConstants";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
@@ -46,6 +47,8 @@ export async function POST(request: NextRequest) {
       headers: { "Content-Type": "application/pdf", "Content-Disposition": `attachment; filename="${name}"`, "Cache-Control": "no-store" },
     });
   } catch (error) {
+    // LA-8.3: the letter names the agency; the message says which field is missing.
+    if (error instanceof BusinessIdentityMissingError) return NextResponse.json({ error: error.message, code: error.code }, { status: error.status });
     console.error("[discrepancies] letter pdf", error);
     return NextResponse.json({ error: "Could not build the letter PDF" }, { status: 500 });
   }

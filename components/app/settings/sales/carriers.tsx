@@ -12,10 +12,11 @@
  * written), and its products. There is no password field anywhere.
  */
 
+import { StatusChip } from "@/components/ui/status-chip";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Plus } from "lucide-react";
 
-import { Callout, Field, Pill, SettingsCard, SettingsStack, control, st, type PillTone } from "@/components/app/settings/primitives";
+import { Callout, Field, SettingsCard, SettingsStack, control, st, type PillTone, pillTone } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { DataToolbar, RefreshButton } from "@/components/ui/data-toolbar";
 import { EmptyState } from "@/components/ui/page-states";
@@ -289,20 +290,20 @@ export function SalesCarriersSettings() {
                         <td className={st.td}>
                           {url ? (
                             <span className="flex flex-col items-start gap-1">
-                              <button type="button" className="text-[14px] text-[var(--ink)] underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]" onClick={() => { void openPortal(url, c.portal?.username ?? null); }} aria-label={`Open the ${c.name} portal${c.portal?.username ? " and copy the username" : ""}`}>
+                              <button type="button" className="text-sm text-[var(--ink)] underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]" onClick={() => { void openPortal(url, c.portal?.username ?? null); }} aria-label={`Open the ${c.name} portal${c.portal?.username ? " and copy the username" : ""}`}>
                                 Open
                               </button>
-                              {c.portal?.needsCheck && <Pill tone="warning">{c.portal.lastVerifiedAt ? "Check it still works" : "Not verified yet"}</Pill>}
+                              {c.portal?.needsCheck && <StatusChip dot={false} tone="warning">{c.portal.lastVerifiedAt ? "Check it still works" : "Not verified yet"}</StatusChip>}
                             </span>
                           ) : <span className="text-[var(--muted)]">—</span>}
                         </td>
-                        <td className={st.td}>{c.effective.referencePattern ? <code className="font-mono text-[12px] text-[var(--ink)]">{c.effective.referencePattern}</code> : <span className="text-[var(--muted)]">—</span>}</td>
+                        <td className={st.td}>{c.effective.referencePattern ? <code className="font-mono text-xs text-[var(--ink)]">{c.effective.referencePattern}</code> : <span className="text-[var(--muted)]">—</span>}</td>
                         <td className={st.td}>{c.effective.billingDescriptor ?? <span className="text-[var(--muted)]">—</span>}</td>
                         <td className={st.td}>{methodsSummary(c)}</td>
                         <td className={st.td}>
-                          {c.fieldSet === "tenant" ? <Pill tone="success">Your agency</Pill> : c.fieldSet === "tenant_draft" ? <Pill tone="info">Draft</Pill> : <Pill tone="neutral">Platform</Pill>}
+                          {c.fieldSet === "tenant" ? <StatusChip dot={false} tone="good">Your agency</StatusChip> : c.fieldSet === "tenant_draft" ? <StatusChip dot={false} tone="info">Draft</StatusChip> : <StatusChip dot={false} tone="neutral">Platform</StatusChip>}
                         </td>
-                        <td className={st.td}><Pill tone={MAP_PILL[c.fieldMap.status]}>{mapLabel(c.fieldMap)}</Pill></td>
+                        <td className={st.td}><StatusChip dot={false} tone={pillTone(MAP_PILL[c.fieldMap.status])}>{mapLabel(c.fieldMap)}</StatusChip></td>
                         <td className={cn(st.td, "whitespace-nowrap text-right")}>
                           <RowAction onClick={() => toggle(c)} label={`${verb} ${c.name}`}>{verb}</RowAction>
                         </td>
@@ -355,7 +356,7 @@ export function SalesCarriersSettings() {
               action={!readOnly ? <Button type="button" variant="outline" onClick={() => setProducts((list) => [...list, newProductDraft(payload.productLines[0]?.code ?? "final_expense")])}><Plus aria-hidden="true" />Add a product</Button> : undefined}
             >
               {products.length === 0 ? (
-                <p className="m-0 text-[14px] text-[var(--muted)]">No products yet. Add one to quote it.</p>
+                <p className="m-0 text-sm text-[var(--muted)]">No products yet. Add one to quote it.</p>
               ) : (
                 <div className="flex flex-col gap-4">
                   {products.map((d) => (
@@ -444,7 +445,7 @@ function AddCarrierDialog({ payload, onClose, onAdded, sample }: { payload: Carr
         <Field label="Billing descriptor" htmlFor="add-descriptor" hint="Optional. What the client's bank statement shows.">
           <input id="add-descriptor" className={cn(control, "uppercase")} maxLength={60} value={descriptor} onChange={(e) => setDescriptor(e.target.value.toUpperCase())} />
         </Field>
-        {error && <p role="alert" className="m-0 text-[12px] text-[var(--error-ink)]">{error}</p>}
+        {error && <p role="alert" className="m-0 text-xs text-[var(--error-ink)]">{error}</p>}
         <DialogActions>
           <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
           <WithReason reason={payload.addable.length === 0 ? "Every carrier in the library is already on your list." : problem}>

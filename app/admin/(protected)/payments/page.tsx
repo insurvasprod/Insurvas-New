@@ -1,3 +1,4 @@
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { getCurrentAdmin } from "@/lib/adminAuth/getCurrentAdmin";
@@ -5,6 +6,8 @@ import { canAccessConfigurationSection } from "@/lib/configuration/sections";
 import { PaymentStatusPanel } from "@/components/admin/payment-status-panel";
 import { getProviderStatus } from "@/lib/payments/status";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
+import { audit } from "@/lib/audit/log";
+import { deriveMode } from "@/lib/payments/statusRules";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 
@@ -14,6 +17,19 @@ export default async function PaymentsPage() {
   // The per-section role map from SA-4.3 is still the authority on who may open this screen; only
   // the hub that used to wrap it is gone.
   if (!canAccessConfigurationSection(admin.role, "payments")) redirect("/admin");
+
+  // SA-4.2: opening payment setup is recorded, like testing it. The keys cannot be changed here
+  // (they are environment variables), so the trail of who looked at which mode, and when, is the
+  // configuration history this screen has. Presence and mode only — never a value. A failed write
+  // is logged, not shown: the page is read-only and still renders.
+  await audit({
+    actorId: admin.id,
+    action: "payment_provider.config_viewed",
+    targetType: "payment_provider",
+    targetId: "whop",
+    metadata: { mode: deriveMode(process.env.WHOP_API_BASE_URL) },
+    request: new Request("https://admin.invalid/admin/payments", { headers: await headers() }),
+  }).catch((error) => console.error("[payments] could not audit the page view", error));
 
   const db = getSupabaseServiceClient();
   const [status, lastReceived, lastProcessed, stuck] = await Promise.all([

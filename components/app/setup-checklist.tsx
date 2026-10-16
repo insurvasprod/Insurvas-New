@@ -6,7 +6,7 @@ import { Check } from "lucide-react";
 
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Meter } from "@/components/ui/stat";
+import { Ring } from "@/components/ui/ring";
 import type { SetupChecklist as SetupChecklistData } from "@/lib/dashboard/checklist";
 
 /**
@@ -67,28 +67,21 @@ export function SetupChecklist({ checklist }: { checklist: SetupChecklistData })
     <Card className="portal-dashboard-setup m-card" data-setup-checklist="">
       <CardContent className="space-y-4 p-6">
         <div className="flex items-center justify-between gap-4">
-          <h2 className="min-w-0 text-title-sm font-semibold tracking-[-0.015em]">Finish setting up</h2>
-          <span className="flex shrink-0 items-center gap-2">
-            <span className="text-title-md font-semibold tracking-[-0.02em] tabular-nums">
+          {/* LA-0.3: the progress ring. The fraction sits inside it, so the answer to "how much is
+              left" is read before the arc has finished drawing. */}
+          <div className="flex min-w-0 items-center gap-3">
+            <Ring value={checklist.completed} max={checklist.total} size={48} tone="primary" label={`${checklist.completed} of ${checklist.total} done`}>
               {checklist.completed}/{checklist.total}
-            </span>
-            <Button type="button" variant="ghost" onClick={hide} aria-label="Hide setup checklist for now">
-              Hide
-            </Button>
-          </span>
+            </Ring>
+            <div className="min-w-0">
+              <h2 className="truncate text-title-sm font-semibold tracking-[-0.015em]">Finish setting up</h2>
+              <p className="text-xs tabular-nums text-muted-foreground">{checklist.completed} of {checklist.total} done</p>
+            </div>
+          </div>
+          <Button type="button" variant="ghost" onClick={hide} aria-label="Hide setup checklist for now">
+            Hide
+          </Button>
         </div>
-
-        <span className="block w-full">
-          <Meter
-            value={checklist.completed}
-            max={checklist.total}
-            tone="primary"
-            label={`${checklist.completed} of ${checklist.total} done`}
-          />
-          <span className="mt-1 block text-xs tabular-nums text-muted-foreground">
-            {checklist.completed} of {checklist.total} done
-          </span>
-        </span>
 
         <ol className="block">
           {checklist.steps.map((step) => {

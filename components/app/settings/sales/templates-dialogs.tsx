@@ -69,7 +69,7 @@ export function PairDialog({
             {carriers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
         </Field>
-        {issue && <p role="alert" className="m-0 text-[12px] leading-[1.5] text-[var(--error-ink)]">{issue}</p>}
+        {issue && <p role="alert" className="m-0 text-xs leading-[1.5] text-[var(--error-ink)]">{issue}</p>}
         <DialogActions>
           <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
           <WithReason reason={issue}>
@@ -92,9 +92,9 @@ export function PublishDialog({ name, version, liveVersion, onConfirm, onClose }
     >
       <div className="flex flex-col gap-4">
         {liveVersion !== null && (
-          <p className="m-0 text-[14px] leading-[1.5] text-[var(--body)]">
+          <p className="m-0 text-sm leading-[1.5] text-[var(--body)]">
             Version {liveVersion} is retired at the same time.
-            <span className="block text-[12px] text-[var(--muted)]">Interviews and quotes already started on it keep it.</span>
+            <span className="block text-xs text-[var(--muted)]">Interviews and quotes already started on it keep it.</span>
           </p>
         )}
         <DialogActions>

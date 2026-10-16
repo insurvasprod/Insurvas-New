@@ -1,12 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { ChevronDown, Download } from "lucide-react";
 import { notify } from "@/lib/notify";
 import { dayMonthYear, viewerTimeZone } from "@/lib/format/dates";
 import { Button } from "@/components/ui/button";
 import { ClearFiltersButton, DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { InfoTip } from "@/components/ui/info-tip";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageLoading } from "@/components/ui/page-loading";
 import { EmptyState, ErrorState, NoMatches, SectionLoading } from "@/components/ui/page-states";
@@ -53,6 +55,8 @@ const STATUS: Record<VendorReturnClaim["status"], { label: string; tone: StatusT
   accepted: { label: "Reconciled", tone: "good" },
   rejected: { label: "Rejected", tone: "danger" },
 };
+/** What makes a row claimable, said where a list of them is empty. */
+const CLAIMABLE_HINT = "Scrub hits and wrong-number or disconnected calls land here.";
 const unreconciled = (claim: VendorReturnClaim) => claim.status === "draft" || claim.status === "submitted";
 // Calendar days in the tenant's zone, counted by the service (LA-2.19-2): 1 is "Closes tomorrow".
 const daysText = (days: number | null) => closesLabel(days);
@@ -111,7 +115,7 @@ function ClaimOutcome({ claim, onSaved }: { claim: VendorReturnClaim; onSaved: (
   async function save() {
     const cents = status === "rejected" ? 0 : Math.round(Number(amount) * 100);
     if (status !== "rejected" && (!Number.isFinite(cents) || cents < 0 || cents > claim.amount_claimed_cents)) { setError(`The credit is a dollar amount from $0.00 to ${dollars(claim.amount_claimed_cents)}.`); return; }
-    if (status === "rejected" && !reason.trim()) { setError("Say why the vendor rejected it — the reason is what the next claim argues against."); return; }
+    if (status === "rejected" && !reason.trim()) { setError("Add why the vendor rejected it."); return; }
     setBusy(true); setError(null);
     try {
       const response = await fetch(`/api/app/vendor-returns/claims/${claim.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "resolve", status, amount_credited_cents: cents, replacement_leads_count: Math.max(0, Math.round(Number(replacements) || 0)), rejection_reason: reason, notes }) });
@@ -158,7 +162,7 @@ function ClaimPreview({ entry, cost, busy, fallback, onCreate, onCancel }: {
   return <div className="grid gap-3">
     <p className="max-w-[80ch] text-sm leading-normal text-[var(--body)]">
       {entry.unit_cost_cents == null
-        ? "This campaign has no cost per record yet. Enter its spend and records purchased on Vendors & campaigns first."
+        ? <>Enter this campaign&rsquo;s spend and records purchased first. <Link className="font-semibold text-[var(--accent-ink)] hover:underline" href="/app/campaigns">Open campaigns</Link></>
         : <>Each row is priced at <strong className="tabular-nums text-foreground">{perRecord(entry.unit_cost_cents)}</strong>.</>}
     </p>
     <div className="overflow-x-auto rounded-lg border border-border bg-card">
@@ -204,7 +208,7 @@ function ClaimPreview({ entry, cost, busy, fallback, onCreate, onCancel }: {
 function CandidateRows({ state }: { state: { rows: ReturnCandidateRow[]; limit: number } | "loading" | { error: string } | undefined }) {
   if (state === undefined || state === "loading") return <SectionLoading rows={3} columns={4} />;
   if ("error" in state) return <p role="alert" className="text-sm text-[var(--error-ink)]">{state.error}</p>;
-  if (!state.rows.length) return <p className="text-sm text-muted-foreground">No row is waiting on this campaign any more.</p>;
+  if (!state.rows.length) return <p className="text-sm text-muted-foreground">Nothing left to claim on this campaign.</p>;
   return <div className="overflow-x-auto rounded-lg border border-border">
     <table className="w-full min-w-[620px] border-collapse text-left">
       <thead><tr><th scope="col" className={th}>Row</th><th scope="col" className={th}>Reason</th><th scope="col" className={th}>Evidence</th><th scope="col" className={th}>Window</th></tr></thead>
@@ -415,7 +419,7 @@ export function VendorReturnsWorkspace({ initialVendorId }: { initialVendorId?: 
   const fill = `${FILL_CARD} min-h-[calc(100dvh-var(--top-bar-h)-330px)]`;
 
   return <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
-    <PageHeader title="Vendor returns" description="Evidence-backed return claims, and what the vendor actually credited." />
+    <PageHeader title="Vendor returns" description="Return claims, and what each vendor credited." />
 
     <StatStrip label="Vendor return totals">
       <StatTile label="Open claims" value={openClaims} footnote={`${draftCount} draft`} />
@@ -428,7 +432,7 @@ export function VendorReturnsWorkspace({ initialVendorId }: { initialVendorId?: 
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div role="tablist" aria-label="Vendor return views" className="inline-flex h-9 w-fit gap-0.5 rounded-md bg-[var(--canvas)] p-0.5">
         {tabs.map((item) => (
-          <button key={item.key} type="button" role="tab" aria-selected={view === item.key} onClick={() => setView(item.key)} className={cn("inline-flex h-8 items-center gap-1.5 rounded-md border px-3 text-sm font-semibold tracking-[-0.01em]", view === item.key ? "border-border bg-card text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}>
+          <button key={item.key} type="button" role="tab" id={`returns-tab-${item.key}`} aria-controls="returns-view" aria-selected={view === item.key} onClick={() => setView(item.key)} className={cn("inline-flex h-8 items-center gap-1.5 rounded-md border px-3 text-sm font-semibold tracking-[-0.01em]", view === item.key ? "border-border bg-card text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}>
             {item.label}
             {item.count !== null && <span className="rounded-full bg-[var(--surface-alt)] px-1.5 text-xs tabular-nums text-muted-foreground">{count(item.count)}</span>}
           </button>
@@ -447,6 +451,8 @@ export function VendorReturnsWorkspace({ initialVendorId }: { initialVendorId?: 
       </div>
     </div>
 
+    {/* The selected view, as the tab panel: it fades in when the tab changes (2026-10-09). */}
+    <div key={view} role="tabpanel" id="returns-view" aria-labelledby={`returns-tab-${view}`} className="flex min-w-0 flex-col gap-6">
     {view === "claims" && <TableCard
       className={fill}
       toolbar={
@@ -468,7 +474,9 @@ export function VendorReturnsWorkspace({ initialVendorId }: { initialVendorId?: 
       {error && !report ? <ErrorState title="Vendor returns did not load" detail={error} action={<Button variant="outline" onClick={() => void refresh()}>Try again</Button>} />
         : rows.length === 0 ? (claims.length
           ? <NoMatches noun="claims" onClear={clearFilters} />
-          : <EmptyState title="No claims yet" hint={draftable.length ? "Review one from the Claimable rows tab, or with New claim." : "A row becomes claimable when a scrub flags it or a call is dispositioned wrong number or disconnected."} />)
+          : draftable.length
+            ? <EmptyState title="No claims yet" hint="Some rows are ready to claim." action={<Button type="button" variant="outline" onClick={() => setView("claimable")}>Review claimable rows</Button>} />
+            : <EmptyState title="No claims yet" hint={CLAIMABLE_HINT} action={<Button asChild variant="outline"><Link href="/app/campaigns">Open campaigns</Link></Button>} />)
         : <table className="w-full min-w-[1180px] border-collapse text-left">
           <thead><tr>
             <th scope="col" className={th}>Vendor</th>
@@ -520,9 +528,9 @@ export function VendorReturnsWorkspace({ initialVendorId }: { initialVendorId?: 
         </DataToolbar>
       }
     >
-      {report?.summaryFallback && <p className="border-b border-border px-4 py-2.5 text-xs leading-normal text-muted-foreground">Rows removed at import are not listed until a pending database update is applied; claim them from the lead list.</p>}
+      {report?.summaryFallback && <p className="flex items-center gap-1 border-b border-border px-4 py-2.5 text-xs leading-normal text-muted-foreground">Claim rows removed at import from the lead list for now.<InfoTip label="Why they are missing">They are listed here once a pending database update is applied.</InfoTip></p>}
       {campaigns.length === 0
-        ? <EmptyState title="Nothing claimable" hint={`A row becomes claimable when a scrub flags it or a call is dispositioned wrong number or disconnected${vendorId ? ", for this vendor" : ""}.`} />
+        ? (vendorId ? <NoMatches noun="claimable campaigns" onClear={() => chooseVendor("")} /> : <EmptyState title="Nothing claimable" hint={CLAIMABLE_HINT} action={<Button asChild variant="outline"><Link href="/app/campaigns">Open campaigns</Link></Button>} />)
         : <table className="w-full min-w-[1240px] border-collapse text-left">
           <thead><tr>
             <th scope="col" className={th}>Campaign</th>
@@ -561,7 +569,7 @@ export function VendorReturnsWorkspace({ initialVendorId }: { initialVendorId?: 
     </TableCard>}
 
     {view === "undialable" && (undialable === null
-      ? <TableCard><EmptyState title="Not available yet" hint="The undialable share per vendor appears here once a pending database update is applied." /></TableCard>
+      ? <TableCard><EmptyState title="Not available yet" hint="Waits on a pending database update." /></TableCard>
       : <TableCard
         className={fill}
         toolbar={<DataToolbar actions={<>{vendorId && <ClearFiltersButton onClick={() => chooseVendor("")} />}<RefreshButton onClick={() => void refresh()} refreshing={refreshing} /></>}>{vendorSelect}</DataToolbar>}
@@ -574,7 +582,7 @@ export function VendorReturnsWorkspace({ initialVendorId }: { initialVendorId?: 
             <th scope="col" className={`${th} text-right`}>Removed at import</th>
             <th scope="col" className={`${th} text-right`}>Found later</th>
             <th scope="col" className={`${th} text-right`}>Undialable rows</th>
-            <th scope="col" className={`${th} text-right`} title="Share of every record bought that could never be dialed.">Undialable</th>
+            <th scope="col" className={`${th} text-right`}><span className="inline-flex items-center gap-1">Undialable<InfoTip label="About undialable share" side="bottom">Share of every record bought that could never be dialed.</InfoTip></span></th>
             <th scope="col" className={`${th} text-right`}>Undialable spend</th>
           </tr></thead>
           <tbody>{undialable.map((row) => <tr key={row.vendor_id} className="m-row">
@@ -588,6 +596,7 @@ export function VendorReturnsWorkspace({ initialVendorId }: { initialVendorId?: 
           </tr>)}</tbody>
         </table>}
       </TableCard>)}
+    </div>
 
     {/* A claim's next step, in a dialog rather than a row that pushes the table down. */}
     <Dialog open={detail !== null} onOpenChange={(next) => { if (!next) setOpenClaim(null); }}>

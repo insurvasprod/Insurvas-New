@@ -11,7 +11,7 @@ function single(value: string | string[] | undefined) { return Array.isArray(val
 
 export default async function PartnerQualityDetailPage({ params, searchParams }: { params: Promise<{ partnerId: string }>; searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const guard = await guardPage("partner_quality");
-  if (!guard.entitled) return <FeatureGateNotice guard={guard} featureLabel="Partner quality" description="Compare the quality and conversion of every partner's leads without cost data." />;
+  if (!guard.entitled) return <FeatureGateNotice guard={guard} featureLabel="Partner quality" description="Compare lead quality and conversion across partners." />;
   if (!["owner", "producer", "bookkeeper"].includes(guard.role)) return <RoleGateNotice featureLabel="Partner quality" detail="Owners, producers, and bookkeepers can review partner lead quality." />;
   const [{ partnerId }, query] = await Promise.all([params, searchParams]);
   if (!UUID.test(partnerId)) notFound();

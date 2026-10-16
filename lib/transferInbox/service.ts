@@ -121,7 +121,7 @@ export async function getTransferInbox(tenantId: string, filters: InboxFilters, 
 
   return {
     items,
-    // The RPC keeps the newest 500 matching rows; true when it reached that cap, so older ones may be missing.
+    // The RPC keeps 500 matching rows (the longest-waiting for waiting views, 20261015593000); true when it reached that cap.
     truncated: payload.truncated === true,
     // The KPI tiles over the whole open set (20260924335200). Null until that migration is applied;
     // the inbox route then computes it with getInboxSummaryFallback.
@@ -269,6 +269,9 @@ export async function announceTransferClaim(params: { tenantId: string; userId: 
     console.error("Partner claim message failed after claim", chatError);
     await audit({ actorType: "tenant", actorId: params.userId, action: "tenant.transfer_claim_chat_failed", targetType: "lead_queue", targetId: params.workItemId, reason: chatError instanceof Error ? chatError.message : "Unknown chat error", request: params.request }).catch(() => undefined);
   }
-  await audit({ actorType: "tenant", actorId: params.userId, action: "tenant.transfer_claimed", targetType: "lead_queue", targetId: params.workItemId, metadata: { activeCallId: claim.active_call_id ?? null, verificationSessionId: claim.verification_session_id ?? null, chatPosted, ...(claimWasResumed(claim) ? { resumedVerification: true, requeueCount: claim.requeue_count ?? null } : {}), ...(params.via === "claim_next" ? { via: "claim_next" } : {}) }, request: params.request });
+  // The claim has committed: the agent owns the lead. An audit row that cannot be written is logged,
+  // never turned into a 500 that tells the agent the claim failed (LA-1 audit).
+  await audit({ actorType: "tenant", actorId: params.userId, action: "tenant.transfer_claimed", targetType: "lead_queue", targetId: params.workItemId, metadata: { activeCallId: claim.active_call_id ?? null, verificationSessionId: claim.verification_session_id ?? null, chatPosted, ...(claimWasResumed(claim) ? { resumedVerification: true, requeueCount: claim.requeue_count ?? null } : {}), ...(params.via === "claim_next" ? { via: "claim_next" } : {}) }, request: params.request })
+    .catch((auditError) => console.error("Transfer claim audit failed after the claim committed", params.workItemId, auditError));
   return { chatPosted };
 }

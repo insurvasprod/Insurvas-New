@@ -69,6 +69,8 @@ export async function contactForApplication(viewer: Viewer, applicationId: strin
   const { data: app, error } = await db().from("tenant_applications").select("lead_id, insured_role, created_by").eq("tenant_id", viewer.tenantId).eq("id", applicationId).maybeSingle();
   if (error) throw new Error(error.message);
   if (!app) throw new IncomeError("That application isn't here.", 404);
+  // The writing agent only (LA-5.10): a producer reaches income on the applications they wrote.
+  if (viewer.role === "producer" && app.created_by !== viewer.userId) throw new IncomeError("Only the agent writing this application, or an owner, can see the client's income.", 403);
   if (app.insured_role === "spouse") return { contactId: null, leadId: null, unavailable: "Recorded on the primary insured's interview." };
   const { data: lead } = await db().from("agent_leads").select("id, contact_id").eq("tenant_id", viewer.tenantId).eq("id", app.lead_id).maybeSingle();
   if (!lead) return { contactId: null, leadId: null, unavailable: "This application's lead is gone, so there is nowhere to keep it." };

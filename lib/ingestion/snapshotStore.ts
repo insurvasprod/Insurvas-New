@@ -148,7 +148,7 @@ export async function filePolicyNumbers(tenantId: string, fileId: string): Promi
   const policies = new Set<string>();
   let carrierId: string | null = null;
   for (let from = 0; ; from += 1000) {
-    const { data, error } = await db().from("policy_snapshot").select("carrier_id, policy_number").eq("tenant_id", tenantId).eq("file_id", fileId).order("policy_number").range(from, from + 999);
+    const { data, error } = await db().from("policy_snapshot").select("carrier_id, policy_number").eq("tenant_id", tenantId).eq("file_id", fileId).order("policy_number").order("id").range(from, from + 999);
     if (error) throw new Error(`Could not read the file's policies: ${error.message}`);
     for (const row of (data ?? []) as Loose[]) { carrierId = row.carrier_id; policies.add(row.policy_number); }
     if ((data ?? []).length < 1000) break;

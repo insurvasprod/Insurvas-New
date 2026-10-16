@@ -89,7 +89,7 @@ export function TenantSuspensionControl({
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
             <DialogHeader>
               <DialogTitle>{suspended ? `Unsuspend ${tenantName}` : `Suspend ${tenantName}`}</DialogTitle>
-              <DialogDescription className="text-[14px] leading-[1.5] tracking-[-0.02em]">
+              <DialogDescription className="text-sm leading-[1.5] tracking-[-0.02em]">
                 {suspended
                   ? "Everyone in the agency can sign in again straight away, with the access they had before."
                   : "Everyone in this agency loses access until you unsuspend it."}
@@ -153,7 +153,7 @@ export function TenantSuspensionControl({
             )}
 
             {error && (
-              <p role="alert" className="m-0 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--error-ink)]">
+              <p role="alert" className="m-0 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--error-ink)]">
                 {error}
               </p>
             )}

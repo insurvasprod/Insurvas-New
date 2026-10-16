@@ -19,11 +19,12 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import Link from "next/link";
-import { Copy, Download, Plus, X } from "lucide-react";
+import { Copy, Download, Plus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { ClearFiltersButton, DataToolbar, FilterButton, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { DetailPanel } from "@/components/ui/detail-panel";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageLoading } from "@/components/ui/page-loading";
 import { EmptyState, NoMatches, SectionLoading } from "@/components/ui/page-states";
@@ -58,7 +59,7 @@ type Draft = { local_date: string; carrier: string; product_type: string; monthl
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const DEAL_RECORD_LABEL: Record<DealFlowStatus, string> = { partial: "Partial", completed: "Completed", dropped: "Dropped" };
 const STAGE_TONE: Record<DealFlowStageType, StatusTone> = { open: "info", won: "good", lost: "danger" };
-const MONEY_HINT = "Money values must use dollars and cents, for example 71.40";
+const MONEY_HINT = "Enter money as dollars and cents, like 71.40";
 
 const label12 = "text-xs leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]";
 type View = "deals" | "funnel" | "partners";
@@ -353,7 +354,8 @@ export function DealFlowWorkspace({ focusLeadId, timeZone = null }: { focusLeadI
     void load(query);
   }
 
-  // The Filters popover closes on Escape and on a click outside it; the deal panel closes on Escape.
+  // The Filters popover closes on Escape and on a click outside it; the deal panel closes on Escape
+  // through DetailPanel, which leaves the key to an open dialog first (2026-10-09 detail panel).
   useEffect(() => {
     if (!showFilters) return;
     const onDown = (event: MouseEvent) => { if (filtersRef.current && !filtersRef.current.contains(event.target as Node)) setShowFilters(false); };
@@ -362,12 +364,6 @@ export function DealFlowWorkspace({ focusLeadId, timeZone = null }: { focusLeadI
     document.addEventListener("keydown", onKey);
     return () => { document.removeEventListener("mousedown", onDown); document.removeEventListener("keydown", onKey); };
   }, [showFilters]);
-  useEffect(() => {
-    if (!panelOpen) return;
-    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape" && !document.querySelector("[role=dialog][data-state=open]")) setPanelOpen(false); };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [panelOpen]);
 
   const header = <PageHeader title="Daily deal flow" />;
   const pageActions = (
@@ -417,6 +413,7 @@ export function DealFlowWorkspace({ focusLeadId, timeZone = null }: { focusLeadI
           label="Deal flow views"
           active={tab}
           onChange={setTab}
+          controls="deal-flow-panel"
           tabs={[
             { key: "deals", label: "Deals", count: data.total },
             { key: "funnel", label: "Dial funnel" },
@@ -426,10 +423,10 @@ export function DealFlowWorkspace({ focusLeadId, timeZone = null }: { focusLeadI
         <div className="flex flex-wrap items-center gap-2">{pageActions}</div>
       </div>
 
-      {data.readOnly && <Alert tone="warning">Your account is read-only. You can review and export the deal flow, but cannot add or edit deals.</Alert>}
-      {data.schemaPending && <Alert tone="warning">Disposition history and issued policies need a database update that has not been applied yet.</Alert>}
+      {data.readOnly && <Alert tone="warning">Read-only: you can review and export, not add or edit deals.</Alert>}
+      {data.schemaPending && <Alert tone="warning">Disposition history and issued policies are not available yet.</Alert>}
       {data.focus && !data.focus.inFilter && !data.focus.row && <Alert tone="info">The lead you came from has no deal-flow row yet.</Alert>}
-      {data.capped && <Alert tone="warning">Only the first 10,000 deals are shown. Narrow the date range to see the rest.</Alert>}
+      {data.capped && <Alert tone="warning">Narrow the date range to see every deal — showing the first 10,000.</Alert>}
       {error && (
         <Alert tone="error">
           The latest refresh failed: {error}{" "}
@@ -444,6 +441,8 @@ export function DealFlowWorkspace({ focusLeadId, timeZone = null }: { focusLeadI
         <StatTile label="Lost" value={kpis.lost} valueTone={kpis.lost ? "danger" : undefined} footnote="no longer active" />
       </StatStrip>
 
+      {/* One tab panel for the three views, so a switch fades like every other tab (2026-10-09). */}
+      <div key={tab} id="deal-flow-panel" role="tabpanel" aria-labelledby={`deal-flow-panel-tab-${tab}`}>
       {tab === "deals" && (
         <div className="flex flex-col gap-4 lg:flex-row lg:items-stretch">
           <TableCard
@@ -546,7 +545,7 @@ export function DealFlowWorkspace({ focusLeadId, timeZone = null }: { focusLeadI
                         {hasNarrowing ? (
                           <NoMatches noun="deals" onClear={clearFilters} />
                         ) : (
-                          <EmptyState title={isToday ? "No deals worked yet today" : "No deals worked in this range"} hint="A deal appears here when a partner submits one, an agent starts an application from the dialer, or someone adds a deal update." />
+                          <EmptyState title={isToday ? "No deals worked yet today" : "No deals worked in this range"} hint="Deals land here as they are worked." action={data.readOnly ? undefined : <Button type="button" variant="outline" onClick={() => setShowManual(true)}><Plus aria-hidden="true" />Add deal update</Button>} />
                         )}
                       </td>
                     </tr>
@@ -557,60 +556,57 @@ export function DealFlowWorkspace({ focusLeadId, timeZone = null }: { focusLeadI
           </TableCard>
 
           {showPanel && selectedRow && (
-            <aside aria-label={`Deal: ${customerName(selectedRow)}`} className="flex min-w-0 flex-col overflow-y-auto rounded-lg border border-border bg-card shadow-[0_1px_2px_rgba(16,20,26,.05)] lg:max-h-[calc(100dvh-var(--top-bar-h)-360px)] lg:min-h-[calc(100dvh-var(--top-bar-h)-360px)] lg:w-[30%] lg:shrink-0">
-              <div className="flex items-start justify-between gap-3 border-b border-border px-4 py-3">
-                <div className="min-w-0">
-                  <h2 className="m-0 truncate text-base font-semibold text-foreground" title={customerName(selectedRow)}>{customerName(selectedRow)}</h2>
-                  <div className="mt-0.5 flex flex-wrap items-center gap-2"><StagePill row={selectedRow} /><CopyId leadId={selectedRow.lead_id} /></div>
+            <DetailPanel
+              mode="split"
+              title={customerName(selectedRow)}
+              status={<><StagePill row={selectedRow} /><CopyId leadId={selectedRow.lead_id} /></>}
+              onClose={() => setPanelOpen(false)}
+              className="lg:max-h-[calc(100dvh-var(--top-bar-h)-360px)] lg:min-h-[calc(100dvh-var(--top-bar-h)-360px)]"
+              footer={<>
+                <Button type="button" variant="outline" disabled={data.readOnly || editing === selectedRow.id} onClick={() => startEdit(selectedRow)}>Edit record</Button>
+                {/* LA-1.20-5: every lead list links to the lead workspace. */}
+                <Button asChild variant="outline"><Link href={`/app/leads/${selectedRow.lead_id}`}>Open lead</Link></Button>
+              </>}
+            >
+              <KeyValues
+                items={[
+                  { label: "Carrier", value: selectedRow.carrier ?? "—" },
+                  { label: "Annualised", value: annualised(selectedRow.monthly_premium_cents) },
+                  { label: "Written", value: formatStamp(selectedRow.created_at, timeZone) ?? "—" },
+                  { label: "Owner", value: shortPerson(selectedRow.agent_name) },
+                  // LA-1.13-2: the buffer who took the call first, when one did.
+                  { label: "Buffer", value: selectedRow.buffer_agent_name ? shortPerson(selectedRow.buffer_agent_name) : "—" },
+                  { label: "Campaign", value: selectedRow.campaign_name ?? "—" },
+                ]}
+              />
+              <details className="group border-t border-border pt-3" open>
+                <summary className="cursor-pointer list-none text-xs font-semibold tracking-[0.02em] text-[var(--muted)] uppercase">Policy details</summary>
+                <div className="mt-3">
+                  <KeyValues
+                    items={[
+                      { label: "Product", value: selectedRow.product_type ? `${selectedRow.product_line} · ${selectedRow.product_type}` : selectedRow.product_line || "—" },
+                      { label: "Face amount", value: money(selectedRow.face_amount_cents) },
+                      { label: "Monthly premium", value: money(selectedRow.monthly_premium_cents) },
+                      { label: "Draft date", value: formatDay(selectedRow.draft_date) },
+                      { label: "Phone", value: selectedRow.phone ?? "—" },
+                      { label: "Partner", value: selectedRow.partner_name },
+                      { label: "Vendor", value: selectedRow.vendor_name ?? "—" },
+                      { label: "Initial quote", value: selectedRow.initial_quote ?? "—" },
+                    ]}
+                  />
                 </div>
-                <button type="button" aria-label="Close deal details" onClick={() => setPanelOpen(false)} className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-[var(--surface-alt)] hover:text-foreground focus-visible:outline-2 focus-visible:outline-[var(--ring-color)]"><X aria-hidden className="size-4" /></button>
+              </details>
+              <div className="border-t border-border pt-3">
+                <div className={label12}>Next action</div>
+                <div className="mt-1 text-sm font-semibold text-[var(--ink)]">{dispositionLabel(selectedRow) ?? "No call outcome recorded yet"}</div>
+                {selectedRow.notes && <p className="mt-1 mb-0 text-sm break-words text-[var(--body)]">{selectedRow.notes}</p>}
               </div>
-              <div className="flex flex-col gap-4 px-4 py-4">
-                <KeyValues
-                  items={[
-                    { label: "Carrier", value: selectedRow.carrier ?? "—" },
-                    { label: "Annualised", value: annualised(selectedRow.monthly_premium_cents) },
-                    { label: "Written", value: formatStamp(selectedRow.created_at, timeZone) ?? "—" },
-                    { label: "Owner", value: shortPerson(selectedRow.agent_name) },
-                    // LA-1.13-2: the buffer who took the call first, when one did.
-                    { label: "Buffer", value: selectedRow.buffer_agent_name ? shortPerson(selectedRow.buffer_agent_name) : "—" },
-                    { label: "Campaign", value: selectedRow.campaign_name ?? "—" },
-                  ]}
-                />
-                <details className="group border-t border-border pt-3" open>
-                  <summary className="cursor-pointer list-none text-xs font-semibold tracking-[0.02em] text-[var(--muted)] uppercase">Policy details</summary>
-                  <div className="mt-3">
-                    <KeyValues
-                      items={[
-                        { label: "Product", value: selectedRow.product_type ? `${selectedRow.product_line} · ${selectedRow.product_type}` : selectedRow.product_line || "—" },
-                        { label: "Face amount", value: money(selectedRow.face_amount_cents) },
-                        { label: "Monthly premium", value: money(selectedRow.monthly_premium_cents) },
-                        { label: "Draft date", value: formatDay(selectedRow.draft_date) },
-                        { label: "Phone", value: selectedRow.phone ?? "—" },
-                        { label: "Partner", value: selectedRow.partner_name },
-                        { label: "Vendor", value: selectedRow.vendor_name ?? "—" },
-                        { label: "Initial quote", value: selectedRow.initial_quote ?? "—" },
-                      ]}
-                    />
-                  </div>
-                </details>
-                <div className="border-t border-border pt-3">
-                  <div className={label12}>Next action</div>
-                  <div className="mt-1 text-sm font-semibold text-[var(--ink)]">{dispositionLabel(selectedRow) ?? "No call outcome recorded yet"}</div>
-                  {selectedRow.notes && <p className="mt-1 mb-0 text-sm break-words text-[var(--body)]">{selectedRow.notes}</p>}
-                </div>
-                <IssuedPolicyPanel dealId={selectedRow.id} defaultCarrier={selectedRow.carrier} readOnly={data.readOnly} onChanged={() => void load(query)} />
-                <details className="group border-t border-border pt-3">
-                  <summary className="cursor-pointer list-none text-xs font-semibold tracking-[0.02em] text-[var(--muted)] uppercase">Submission timeline</summary>
-                  <div className="mt-3"><Timeline items={timelineFor(selectedRow, timeZone)} /></div>
-                </details>
-                <div className="flex flex-wrap gap-2 border-t border-border pt-3">
-                  <Button type="button" variant="outline" disabled={data.readOnly || editing === selectedRow.id} onClick={() => startEdit(selectedRow)}>Edit record</Button>
-                  {/* LA-1.20-5: every lead list links to the lead workspace. */}
-                  <Button asChild variant="outline"><Link href={`/app/leads/${selectedRow.lead_id}`}>Open lead</Link></Button>
-                </div>
-              </div>
-            </aside>
+              <IssuedPolicyPanel dealId={selectedRow.id} defaultCarrier={selectedRow.carrier} readOnly={data.readOnly} onChanged={() => void load(query)} />
+              <details className="group border-t border-border pt-3">
+                <summary className="cursor-pointer list-none text-xs font-semibold tracking-[0.02em] text-[var(--muted)] uppercase">Submission timeline</summary>
+                <div className="mt-3"><Timeline items={timelineFor(selectedRow, timeZone)} /></div>
+              </details>
+            </DetailPanel>
           )}
         </div>
       )}
@@ -624,7 +620,7 @@ export function DealFlowWorkspace({ focusLeadId, timeZone = null }: { focusLeadI
           footer={<span>{data.summary.length.toLocaleString("en-US")} {data.summary.length === 1 ? "partner" : "partners"} · the deals in the Deals tab&rsquo;s range and filters</span>}
         >
           {data.summary.length === 0 ? (
-            <EmptyState title="No partner production in this range" hint="A partner appears here once one of its deals is worked in the range." />
+            <EmptyState title="No partner production in this range" hint="Try a wider date range on Deals." />
           ) : (
             <table id="deal-flow-partner-summary" className={cn(st.table, "min-w-[560px]")}>
               <thead>
@@ -651,6 +647,7 @@ export function DealFlowWorkspace({ focusLeadId, timeZone = null }: { focusLeadI
           )}
         </TableCard>
       )}
+      </div>
 
       <Dialog open={showManual && !data.readOnly} onOpenChange={(next) => { if (!saving) setShowManual(next); }}>
         <DialogContent className="max-h-[calc(100vh-4rem)] overflow-y-auto sm:max-w-3xl">

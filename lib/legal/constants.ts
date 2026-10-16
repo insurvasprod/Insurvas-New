@@ -1,12 +1,17 @@
 // SA-5.4 · The document types, and what to call them.
 
-export const LEGAL_DOC_TYPES = ["tos", "privacy", "dpa"] as const;
+// refund, cookies and subprocessors need 20261015500100 (legal_doc_type values) before they can be
+// saved or published; until then the admin screen lists them and the database refuses the write.
+export const LEGAL_DOC_TYPES = ["tos", "privacy", "dpa", "refund", "cookies", "subprocessors"] as const;
 export type LegalDocType = (typeof LEGAL_DOC_TYPES)[number];
 
 export const LEGAL_DOC_LABELS: Record<LegalDocType, string> = {
   tos: "Terms of Service",
   privacy: "Privacy Policy",
   dpa: "Data Processing Agreement",
+  refund: "Refund Policy",
+  cookies: "Cookie Notice",
+  subprocessors: "Subprocessors",
 };
 
 /**

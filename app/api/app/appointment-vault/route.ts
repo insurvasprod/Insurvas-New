@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { getAppointmentVault } from "@/lib/appointments/service";
+import { eoGraceDays, getAppointmentVault } from "@/lib/appointments/service";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 
 export async function GET() {
@@ -10,7 +10,9 @@ export async function GET() {
   ]);
   if (auth instanceof NextResponse) return auth;
   try {
-    return NextResponse.json(await getAppointmentVault(auth.context.tenantId), {
+    // eoGraceDays: Sixteen #4 — the page shows the E&O grace banner from the same number canWrite uses.
+    const [vault, graceDays] = await Promise.all([getAppointmentVault(auth.context.tenantId), eoGraceDays()]);
+    return NextResponse.json({ ...vault, eoGraceDays: graceDays }, {
       headers: { "Cache-Control": "no-store" },
     });
   } catch {

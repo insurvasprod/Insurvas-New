@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { DataToolbar, RefreshButton, toolbarControl } from "@/components/ui/data-toolbar";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageLoading } from "@/components/ui/page-loading";
+import { InfoTip } from "@/components/ui/info-tip";
 import { EmptyState, ErrorState, SectionLoading } from "@/components/ui/page-states";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip } from "@/components/ui/status-chip";
@@ -148,7 +149,7 @@ function QueuePreviewCard({ onClose }: { onClose: () => void }) {
         ) : (
           <>
             {preview.capacityGate && !preview.poolOpen && (
-              <p className="px-4 pt-3 text-sm leading-normal tracking-[-0.02em] text-[var(--warning-ink)]">{agentName} is at their open-lead ceiling, so Serve next hands them only leads already assigned to them.</p>
+              <p className="px-4 pt-3 text-sm leading-normal tracking-[-0.02em] text-[var(--warning-ink)]">{agentName} is at their open-lead ceiling: only leads already assigned to them are served.</p>
             )}
             {list === "held" ? (
               preview.heldBack.length === 0 ? (
@@ -352,6 +353,7 @@ export function ScoringWorkspace() {
         {/* "Preview the queue" is the second tab: the leads Serve next would hand an agent, and why. */}
         <ViewTabs
           label="Queue scoring views"
+          idPrefix="scoring-view"
           value={tab}
           onChange={setTab}
           tabs={[
@@ -372,6 +374,7 @@ export function ScoringWorkspace() {
         </select>
       </div>
 
+      <div role="tabpanel" aria-labelledby={`scoring-view-${tab}`} className="flex min-w-0 flex-col">
       {tab === "preview" ? <QueuePreviewCard onClose={() => setTab("weights")} /> : (
       <TableCard
         className={FILL}
@@ -380,7 +383,10 @@ export function ScoringWorkspace() {
             actions={<>
               {/* User decision: learned mode is a label only. The weights are the rules below; nothing
                   refits them from observed contacts. */}
-              <StatusChip tone="neutral" dot={false} title="The score is the weighted sum of the signals below, with the weights you set. Nothing refits them from observed contacts.">Rules mode · not learned yet</StatusChip>
+              <span className="inline-flex items-center gap-1">
+                <StatusChip tone="neutral" dot={false}>Rules mode · not learned yet</StatusChip>
+                <InfoTip label="About rules mode">The score is the weighted sum of the signals below, with the weights you set. Nothing refits them from observed contacts.</InfoTip>
+              </span>
               <StatusChip tone="neutral">{atDefault} of {weightList.length} at default</StatusChip>
             </>}
           >
@@ -398,13 +404,13 @@ export function ScoringWorkspace() {
             </span>
           </DataToolbar>
         }
-        footer={<span>{typedTotal > 0 ? "Each signal's share of the score follows the weights as typed; Save applies them to the next lead served." : "No weight set on any signal"}</span>}
+        footer={<span>{typedTotal > 0 ? "Save applies the weights to the next lead served." : "No weight set on any signal"}</span>}
       >
         <table className="w-full min-w-[1000px] border-collapse text-left">
           <thead><tr>
             <th className={th}>Signal</th>
             <th className={th}>What it measures</th>
-            <th className={`${th} text-right`}>Share</th>
+            <th className={`${th} text-right`}><span className="inline-flex items-center gap-1">Share<InfoTip label="About share">Each signal&rsquo;s share of the score follows the weights as typed, before you save.</InfoTip></span></th>
             <th className={`${th} text-right`}>Weight</th>
             <th className={th}>State</th>
             <th className={`${th} text-right`}><span className="sr-only">Reset</span></th>
@@ -442,6 +448,7 @@ export function ScoringWorkspace() {
         </table>
       </TableCard>
       )}
+      </div>
     </div>
   );
 }

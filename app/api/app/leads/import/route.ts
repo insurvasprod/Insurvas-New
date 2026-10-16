@@ -18,8 +18,10 @@ type MappingOption = { id: string; vendor_id: string; product_code: string; mapp
 const isMissingColumn = (error: { message: string; code?: string }) => ["42703", "PGRST204"].includes(error.code ?? "") || /date_order/.test(error.message);
 type LooseQuery = PromiseLike<{ data: unknown; error: { message: string; code?: string } | null }> & { select(columns: string): LooseQuery; eq(column: string, value: unknown): LooseQuery; in(column: string, values: string[]): LooseQuery; order(column: string, options?: unknown): LooseQuery; maybeSingle(): Promise<{ data: unknown; error: { message: string; code?: string } | null }> };
 
-async function context() {
-  const auth = await requireFeatureRole("lead_import", LEAD_IMPORT_ROLES);
+// `write`: the import itself refuses a read-only (paused, suspended or cancelled) account; reading the
+// template does not (LA-8.5).
+async function context(write = false) {
+  const auth = await requireFeatureRole("lead_import", LEAD_IMPORT_ROLES, { write });
   if (auth instanceof NextResponse) return auth;
   // Independent tenant-scoped reads, so one round trip rather than two.
   const [template, pipelines] = await Promise.all([
@@ -70,7 +72,7 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const result = await context();
+  const result = await context(true);
   if (result instanceof NextResponse) return result;
   const body = await request.json().catch(() => null) as { csv?: unknown; campaign_id?: unknown; vendor_id?: unknown; mapping?: unknown; date_order?: unknown } | null;
   if (typeof body?.csv !== "string") return NextResponse.json({ error: "Choose a CSV file to import" }, { status: 400 });
@@ -81,6 +83,16 @@ export async function POST(request: NextRequest) {
   const suppliedKey = request.headers.get("Idempotency-Key")?.trim();
   if (suppliedKey && suppliedKey.length > 200) return NextResponse.json({ error: "Idempotency-Key is too long" }, { status: 400 });
   const idempotencyKey = suppliedKey || createHash("sha256").update(body.csv, "utf8").digest("hex");
+  // Checked before the request key is claimed: a refusal here writes nothing, so the same file (whose
+  // hash is the key) can be sent again once the campaign is active. Refused after the claim, the key
+  // stayed "processing" and the file could never be imported again (E2E 2026-10-16).
+  const campaignId = typeof body.campaign_id === "string" && body.campaign_id ? body.campaign_id : null;
+  const vendorId = typeof body.vendor_id === "string" && body.vendor_id ? body.vendor_id : null;
+  // The direct import keeps its original rule — active or paused campaigns only. Drafts are listed
+  // for the reviewed importer, which reports that a draft's leads are not served yet.
+  const campaign = campaignId ? result.campaigns.find((item: CampaignOption & { vendor_id?: string }) => item.id === campaignId && item.status !== "draft") : null;
+  if (campaignId && !campaign) return NextResponse.json({ error: "Choose a valid active campaign" }, { status: 400 });
+  if (vendorId && campaign && campaign.vendor_id !== vendorId) return NextResponse.json({ error: "The selected vendor does not own this campaign" }, { status: 400 });
   const supabase = getSupabaseServiceClient();
   const claimed = await supabase.from("agent_lead_import_batches").insert({ tenant_id: result.auth.context.tenantId, idempotency_key: idempotencyKey, created_by: result.auth.context.userId }).select("id, status, response, error_message").maybeSingle();
   if (claimed.error?.code === "23505") {
@@ -92,20 +104,13 @@ export async function POST(request: NextRequest) {
   }
   if (claimed.error || !claimed.data) return NextResponse.json({ error: "Could not start the import request" }, { status: 500 });
   try {
-    const campaignId = typeof body.campaign_id === "string" && body.campaign_id ? body.campaign_id : null;
-    const vendorId = typeof body.vendor_id === "string" && body.vendor_id ? body.vendor_id : null;
-    // The direct import keeps its original rule — active or paused campaigns only. Drafts are listed
-    // for the reviewed importer, which reports that a draft's leads are not served yet.
-    const campaign = campaignId ? result.campaigns.find((item: CampaignOption & { vendor_id?: string }) => item.id === campaignId && item.status !== "draft") : null;
-    if (campaignId && !campaign) return NextResponse.json({ error: "Choose a valid active campaign" }, { status: 400 });
-    if (vendorId && campaign && campaign.vendor_id !== vendorId) return NextResponse.json({ error: "The selected vendor does not own this campaign" }, { status: 400 });
     const mappingVendorId = vendorId ?? campaign?.vendor_id ?? null;
     let mapping = body.mapping;
     if (!mapping && mappingVendorId) {
       const saved = result.mappings.find((item: MappingOption) => item.vendor_id === mappingVendorId);
       mapping = saved?.mapping;
     }
-    const { imported, rejected, scrubMarked } = await importAgentLeads(result.auth.context.tenantId, result.auth.context.userId, result.template, body.csv, result.stages, campaignId, mapping && typeof mapping === "object" && !Array.isArray(mapping) ? mapping as Record<string, string | null> : undefined, dateOrder);
+    const { imported, rejected, scrubMarked, scrubWarning } = await importAgentLeads(result.auth.context.tenantId, result.auth.context.userId, result.template, body.csv, result.stages, campaignId, mapping && typeof mapping === "object" && !Array.isArray(mapping) ? mapping as Record<string, string | null> : undefined, dateOrder);
     const createdCount = imported.filter((item) => item.created).length;
     if (createdCount > 0) await recordOutboundUsage(result.auth.context.tenantId, "monthly_leads_imported", createdCount, `${idempotencyKey}:monthly_leads_imported`, idempotencyKey);
     // Same per-row audit rows as before, written in chunks rather than one insert per lead.
@@ -126,7 +131,7 @@ export async function POST(request: NextRequest) {
       leads: imported.map((item) => ({ rowNumber: item.rowNumber, id: item.lead.id })),
       servable: campaignId ? scrubMarked : true,
       ...(campaignId && !scrubMarked
-        ? { warning: "The leads imported, but this campaign could not be marked as scrubbed, so the dialer will not serve them yet. Mark it on Vendors & campaigns, or re-run the import." }
+        ? { warning: scrubWarning ?? "The leads imported, but this campaign could not be marked as scrubbed, so the dialer will not serve them yet. Mark it on Vendors & campaigns, or re-run the import." }
         : {}),
     };
     const completed = await supabase.from("agent_lead_import_batches").update({ status: "completed", response: responseBody, completed_at: new Date().toISOString() }).eq("id", claimed.data.id).eq("tenant_id", result.auth.context.tenantId);

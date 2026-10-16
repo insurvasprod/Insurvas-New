@@ -37,7 +37,8 @@ export type PartnerLeadRow = {
   stageType: string;
   disposition: string | null;
   outcome: string | null;
-  outcomeNote: string | null;
+  // No outcome note (LA-1 audit): the composed disposition note is the agency's internal record and
+  // never reaches a partner. Partners see the coded outcome and the stage only.
   submittedBy: { id: string | null; name: string };
   status: string;
   /** New / Claimed / Verification / Converted / closed. Set by the pipeline read; see lanes.ts. */

@@ -6,7 +6,7 @@ import { CampaignWorkspace } from "@/components/app/campaign-workspace";
 export default async function CampaignsPage() {
   const guard = await guardPage("outbound_dialing");
   if (!guard.entitled)
-    return <FeatureGateNotice guard={guard} featureLabel="Vendors & campaigns" description="Track who you buy leads from, what each batch cost, and what a usable lead really costs." />;
+    return <FeatureGateNotice guard={guard} featureLabel="Vendors & campaigns" description="Track lead vendors, batch costs and cost per usable lead." />;
   // Owner and producer only, matching the routes this screen reads. The page shows spend and cost
   // per lead, so the gate here has to be the same one the API enforces — a screen that renders for
   // a role the API refuses is just a page of error toasts.

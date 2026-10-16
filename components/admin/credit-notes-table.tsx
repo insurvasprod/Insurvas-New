@@ -58,8 +58,8 @@ const RECONCILIATION: Record<string, { label: string; tone: StatusTone }> = {
 };
 
 const PAGE = 10;
-const th = "px-3 py-2 text-left text-[12px] leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]";
-const td = "border-t border-[var(--border)] px-3 py-2 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--body)]";
+const th = "px-3 py-2 text-left text-xs leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]";
+const td = "border-t border-[var(--border)] px-3 py-2 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--body)]";
 
 /**
  * The refunds & credits table (p-adm-credit-notes): every credit note, what it was raised against,
@@ -122,11 +122,11 @@ export function CreditNotesTable({ notes, currentAdminId }: { notes: CreditNoteR
                 <tr key={note.id} className="align-top hover:bg-[color-mix(in_srgb,var(--primary),transparent_95%)]">
                   <td className={td}>
                     <span className="font-semibold text-[var(--ink)] tabular-nums">{note.number}</span>
-                    <span className="block text-[12px] text-[var(--muted)]"><span className="capitalize">{note.type}</span> · {fullDate(note.created_at)}</span>
+                    <span className="block text-xs text-[var(--muted)]"><span className="capitalize">{note.type}</span> · {fullDate(note.created_at)}</span>
                   </td>
                   <td className={td}>
                     {note.tenants?.name ?? "—"}
-                    <span className="block text-[12px] text-[var(--muted)]">{CREDIT_REASON_LABELS[note.reason_code]}{note.reason_text ? ` — ${note.reason_text}` : ""}</span>
+                    <span className="block text-xs text-[var(--muted)]">{CREDIT_REASON_LABELS[note.reason_code]}{note.reason_text ? ` — ${note.reason_text}` : ""}</span>
                   </td>
                   <td className={cn(td, "tabular-nums")}>
                     {note.invoice ? <Link href={`/admin/invoices/${note.invoice.id}`} className="font-semibold text-[var(--ink)] hover:underline">{note.invoice.number}</Link> : <span className="text-[var(--muted)]">No invoice</span>}
@@ -135,7 +135,7 @@ export function CreditNotesTable({ notes, currentAdminId }: { notes: CreditNoteR
                   <td className={td}><StatusChip tone={CREDIT_NOTE_TONE[note.status] ?? "neutral"} dot>{STATUS_LABEL[note.status] ?? note.status.replace(/_/g, " ")}</StatusChip></td>
                   <td className={td}>
                     <StatusChip tone={reconciliation.tone}>{reconciliation.label}</StatusChip>
-                    {note.last_reconciliation_error && note.reconciliation_state !== "reconciled" && <span className="mt-1 block max-w-[220px] text-[12px] text-[var(--muted)]">{note.last_reconciliation_error}</span>}
+                    {note.last_reconciliation_error && note.reconciliation_state !== "reconciled" && <span className="mt-1 block max-w-[220px] text-xs text-[var(--muted)]">{note.last_reconciliation_error}</span>}
                   </td>
                   <td className={cn(td, "text-right")}>
                     {providerPending ? (
@@ -143,7 +143,7 @@ export function CreditNotesTable({ notes, currentAdminId }: { notes: CreditNoteR
                     ) : pending ? (
                       isOwn ? (
                         // Shown rather than hidden: the person waiting needs to know WHY they cannot act.
-                        <span className="text-[12px] text-[var(--muted)]">You raised this — a second admin must approve</span>
+                        <span className="text-xs text-[var(--muted)]">You raised this — a second admin must approve</span>
                       ) : (
                         <Button type="button" size="sm" disabled={busy === note.id} onClick={() => void act(note, "approve")}>Approve</Button>
                       )

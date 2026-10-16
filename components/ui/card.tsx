@@ -22,8 +22,9 @@ function Card({
       data-slot="card"
       data-interactive={interactive || undefined}
       className={cn(
-        "flex flex-col gap-6 rounded-lg border bg-card py-6 text-card-foreground",
-        "shadow-[0_1px_2px_rgba(16,20,26,.05)] dark:shadow-[0_1px_2px_rgba(0,0,0,.55)]",
+        // m-glass: the frosted card surface and its hairline lift (app/globals.css, glass layer). A
+        // caller's own bg-* class still wins, since utilities sit above the components layer.
+        "m-glass flex flex-col gap-6 rounded-lg border py-6 text-card-foreground",
         interactive &&
           "cursor-pointer transition-[box-shadow,transform,border-color] duration-150 hover:-translate-y-px hover:border-[var(--border-strong)] hover:shadow-[var(--shadow-hover)] motion-reduce:transition-none motion-reduce:hover:translate-y-0",
         className

@@ -8,6 +8,7 @@ import { runExistingCustomerPreflight } from "@/lib/existingCustomerPreflight/se
 import { linkLeadsToContacts } from "@/lib/contacts/leadLink";
 import { notifyTenantAgents } from "@/lib/agentAlerts/service";
 import { intakeLocalDate } from "@/lib/dealFlow/localDate";
+import { getWorkspaceTimezone } from "@/lib/agencyProfile/timezone";
 
 type IntakeLead = {
   id: string;
@@ -43,7 +44,10 @@ export async function writePartnerIntakeArtifacts(input: IntakeActor): Promise<v
   const phone = textValue(["phone", "phone_number"]);
   const quote = textValue(["initial_quote", "quote"]);
   const trackingId = textValue(["tracking_id", "affiliate_tracking_id"]);
-  const localDate = intakeLocalDate(input.partnerTimezone);
+  // LA-1.13: the deal is filed under the AGENCY's day (Settings › Agency profile), as deal_local_date
+  // does in SQL when no agent has it yet — never the partner organisation's zone. Only an agency with
+  // no zone set keeps the partner's, as before.
+  const localDate = intakeLocalDate((await getWorkspaceTimezone(input.tenantId)) ?? input.partnerTimezone);
   const supabase = getSupabaseServiceClient();
   const attribution = input.affiliateLinkId ? { affiliate_link_id: input.affiliateLinkId, affiliate_campaign: input.affiliateCampaign ?? null } : {};
   const failures: Array<{ step: "preflight" | "work_item" | "deal_flow" | "notification"; error: string }> = [];
@@ -89,7 +93,9 @@ export async function writePartnerIntakeArtifacts(input: IntakeActor): Promise<v
     tracking_id: trackingId,
     local_date: localDate,
     ...attribution,
-  }, { onConflict: "lead_id" });
+    // A replay (the same submission after midnight, or a retried request) must not move the row's
+    // date or overwrite what the agent has since filled: the first write wins.
+  }, { onConflict: "lead_id", ignoreDuplicates: true });
   if (deal.error && deal.error.code !== "23505") failures.push({ step: "deal_flow", error: deal.error.message });
 
   const notification = await supabase.from("lead_notifications").insert({
@@ -105,7 +111,9 @@ export async function writePartnerIntakeArtifacts(input: IntakeActor): Promise<v
   // so a retried submission cannot make a single lead ring repeatedly.
   void notifyTenantAgents({
     tenantId: input.tenantId,
-    roles: ["owner", "producer"],
+    // Buffer agents (role `assistant`, LA-1.14) take the call first, so they are told too. An agency
+    // without buffer agents has no assistant members and nobody extra is alerted.
+    roles: ["owner", "producer", "assistant"],
     kind: "new_unclaimed_lead",
     title: "New lead available",
     body: `${name || "A new lead"} is waiting to be claimed${phone ? ` · ${phone}` : ""}.`,

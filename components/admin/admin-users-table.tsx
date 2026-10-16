@@ -1,5 +1,6 @@
 "use client";
 
+import { StatusChip } from "@/components/ui/status-chip";
 import { useMemo, useState, useSyncExternalStore, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { MoreHorizontal } from "lucide-react";
@@ -18,7 +19,7 @@ import {
   type StaffChange,
   type StaffRow,
 } from "@/lib/adminStaff/present";
-import { Pill, st } from "@/components/app/settings/primitives";
+import { st, pillTone } from "@/components/app/settings/primitives";
 import { BoardTableFooter } from "@/components/admin/board-table-footer";
 import { NoMatches } from "@/components/admin/empty-state";
 import { Button } from "@/components/ui/button";
@@ -180,21 +181,21 @@ export function AdminUsersTable({
                     <td className={cn(st.td, "break-words")}>
                       {admin.email}
                       {isSelf && (
-                        <Pill tone="brand" className="ml-2 align-middle">
+                        <StatusChip dot={false} tone="action" className="ml-2 align-middle">
                           You
-                        </Pill>
+                        </StatusChip>
                       )}
                     </td>
                     <td className={st.td}>{admin.name}</td>
                     <td className={st.td}>
-                      <Pill tone={admin.role === "super_admin" ? "info" : "neutral"} dot>
+                      <StatusChip tone={pillTone(admin.role === "super_admin" ? "info" : "neutral")} dot>
                         {ADMIN_ROLE_LABELS[admin.role]}
-                      </Pill>
+                      </StatusChip>
                     </td>
                     <td className={st.td}>
-                      <Pill tone={admin.is_active ? "success" : "neutral"} dot>
+                      <StatusChip tone={pillTone(admin.is_active ? "success" : "neutral")} dot>
                         {admin.is_active ? "Active" : "Deactivated"}
-                      </Pill>
+                      </StatusChip>
                     </td>
                     <td className={cn(st.td, "whitespace-nowrap tabular-nums")} title={localTitle(admin.last_login_at)}>
                       {staffDateTime(admin.last_login_at) ?? "Never"}
@@ -265,7 +266,7 @@ function RowMenu({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-64">
         {reason && (
-          <p role="note" className="m-0 px-2 py-1.5 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">
+          <p role="note" className="m-0 px-2 py-1.5 text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">
             {reason}
           </p>
         )}
@@ -366,10 +367,10 @@ function ConfirmChangeDialog({ pending, onClose, onDone }: { pending: Pending | 
           <>
             <DialogHeader>
               <DialogTitle>{copy.title}</DialogTitle>
-              <DialogDescription className="text-[14px] leading-[1.5]">{copy.body}</DialogDescription>
+              <DialogDescription className="text-sm leading-[1.5]">{copy.body}</DialogDescription>
             </DialogHeader>
             {error && (
-              <p role="alert" className="m-0 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--error-ink)]">
+              <p role="alert" className="m-0 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--error-ink)]">
                 {error}
               </p>
             )}

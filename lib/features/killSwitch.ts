@@ -13,6 +13,8 @@ import {
   applyKillSwitches,
   isFeatureAvailable,
   killSwitchNotice,
+  isUnknownFeatureKeyViolation,
+  UnknownFeatureKeyError,
   type FeatureSwitch,
   type SwitchReason,
 } from "./killSwitchRules";
@@ -282,6 +284,10 @@ export async function setSwitch(
       },
       { onConflict: "feature_key" },
     );
+    // The legacy table is tried for any failure, as before. When it fails too, a feature_key
+    // foreign-key violation on either table means the key is not in the catalog: a clear 400.
+    if (fallback.error && (isUnknownFeatureKeyViolation(error) || isUnknownFeatureKeyViolation(fallback.error)))
+      throw new UnknownFeatureKeyError(input.featureKey);
     if (fallback.error)
       throw new Error(
         `Could not save the switch for ${input.featureKey}: ${fallback.error.message}`,

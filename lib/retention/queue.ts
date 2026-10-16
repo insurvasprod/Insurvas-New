@@ -52,12 +52,14 @@ export type QueueCandidate = {
   /** The LA-4.16 reason this policy is on the call list, if it is. */
   boardReason: string | null;
   lastAttempt: { at: string; score: number } | null;
-  hold: { kind: "snooze" | "dismiss"; until: string | null; score: number } | null;
+  hold: { kind: "snooze" | "dismiss"; until: string | null; score: number; since?: string | null } | null;
   atRiskCents: number | null;
   nextDraftDays: number | null;
   monthsSinceIssue: number | null;
   /** LA-5.4: a fix the next file did not show, with its reason. Such a policy is back on the queue, first. */
   failedFix?: string | null;
+  /** When the file showed the fix had not happened. */
+  failedAt?: string | null;
   /** LA-5.5: the paper-bill campaign found no bank account. It is on the queue whatever its score, so the risk decides what else to try. */
   noBankAccount?: boolean;
 };
@@ -97,8 +99,11 @@ export const reachesQueue = (c: Pick<QueueCandidate, "confidence">) => c.confide
 
 /** The queue: eligible cards in order, capped. With nothing at the queue band, medium fills it when the setting says so. */
 export function buildQueue<T extends QueueCandidate>(all: T[], settings: RetentionSettings, today: string, sort: QueueSort = "value"): { cards: T[]; total: number; usedMedium: boolean; lowConfidence: number } {
-  // A fix the file did not show is back whatever its band, confidence or hold — never over an emergency.
-  const failed = all.filter((c) => c.failedFix && !isEmergency(c));
+  // A fix the file did not show is back whatever its band or confidence — never over an emergency. The
+  // cooldown from the call that started the fix does not hide it, nor does a hold made before it failed;
+  // a snooze or dismissal made after the failure does.
+  const heldSinceFailure = (c: T) => Boolean(c.hold?.since && c.failedAt && c.hold.since > c.failedAt) && isHeld({ ...c, lastAttempt: null }, today, settings.workedCooldownDays);
+  const failed = all.filter((c) => c.failedFix && !isEmergency(c) && !heldSinceFailure(c));
   const failedKeys = new Set(failed.map((c) => c.key));
   const open = all.filter((c) => !failedKeys.has(c.key) && !isEmergency(c) && !isHeld(c, today, settings.workedCooldownDays));
   const atBand = (c: T) => bandAtLeast(c.band, settings.queueMinBand);

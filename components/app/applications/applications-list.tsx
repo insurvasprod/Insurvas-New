@@ -5,6 +5,8 @@ import Link from "next/link";
 import { Download, Plus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { BulkBar, RowCheckbox, SelectAllCheckbox, useRowSelection } from "@/components/ui/bulk-bar";
+import { SavedViews, type BuiltInView, type ViewState } from "@/components/ui/saved-views";
 import { ClearFiltersButton, DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
@@ -70,11 +72,11 @@ export function useLiveRefresh<T>(opts: { sample: boolean; url: string; pick: (b
       const r = await fetch(url, { cache: "no-store" });
       const body = (await r.json().catch(() => null)) as { error?: string } | null;
       const value = r.ok ? pick(body) : null;
-      if (value === null) { setError(body?.error ?? "Could not refresh — what you see is from the last load."); return; }
+      if (value === null) { setError(body?.error ?? "Refresh failed — try again. Showing the last load."); return; }
       apply(value);
       setError(null);
     } catch {
-      setError("Could not refresh — check your connection. What you see is from the last load.");
+      setError("Refresh failed — check your connection. Showing the last load.");
     } finally {
       setRefreshing(false);
     }
@@ -104,6 +106,9 @@ export function missingNumber(row: ApplicationListRow): "reference" | "policy_nu
 // ── Applications ─────────────────────────────────────────────────────────────
 
 const OPEN_STATUSES = ["draft", "ready", "submitted", "pending_carrier", "counteroffer_pending"] as const satisfies readonly ApplicationStatus[];
+
+/** One row per insured on an attempt: the table's key, and the id a selection holds. */
+const rowId = (row: ApplicationRow) => `${row.applicationId}-${row.insuredRole}`;
 
 function statusKey(row: ApplicationListRow) {
   return row.status === "closed" && row.outcome ? `outcome:${row.outcome}` : row.status;
@@ -162,10 +167,33 @@ export function ApplicationsList({ rows: initialRows, sample = false, timeZone }
   const drafts = countOf("draft");
   const withCarrier = countOf("pending_carrier") + countOf("counteroffer_pending");
 
-  function exportCsv() {
-    downloadCsv("applications.csv",
+  function exportCsv(list: ApplicationRow[] = shown, filename = "applications.csv") {
+    downloadCsv(filename,
       ["Client", "Insured", "Carrier", "Product", "Attempt", "Status", "Monthly premium", "QA", "Carrier reference", "Policy number", "Updated"],
-      shown.map((row) => [row.clientName, row.insuredRole, row.carrierName, row.productLabel, row.attemptNo, statusView(row).label, row.monthlyPremiumCents === null ? null : formatCents(row.monthlyPremiumCents), row.qaVerdict, row.reference, row.policyNumber, row.updatedAt]));
+      list.map((row) => [row.clientName, row.insuredRole, row.carrierName, row.productLabel, row.attemptNo, statusView(row).label, row.monthlyPremiumCents === null ? null : formatCents(row.monthlyPremiumCents), row.qaVerdict, row.reference, row.policyNumber, row.updatedAt]));
+  }
+
+  // Ticked rows (2026-10-09 saved views): one per insured, kept across pages, dropped when a filter hides them.
+  const selection = useRowSelection(shown.map(rowId));
+  // Saved views: the search and the three filters as one state. Built-ins are the status filter's
+  // own choices (and Missing reference), with how many rows each would show.
+  const viewState: ViewState = { status: status === "all" ? "" : status, carrier: carrier === "all" ? "" : carrier, missingOnly, q: needle };
+  const builtInViews: BuiltInView[] = [
+    { id: "all", name: "All", state: {}, count: rows.length },
+    { id: "draft", name: APPLICATION_STATUS_LABEL.draft, state: { status: "draft" }, count: countOf("draft") },
+    { id: "ready", name: APPLICATION_STATUS_LABEL.ready, state: { status: "ready" }, count: countOf("ready") },
+    { id: "submitted", name: APPLICATION_STATUS_LABEL.submitted, state: { status: "submitted" }, count: countOf("submitted") },
+    { id: "pending_carrier", name: APPLICATION_STATUS_LABEL.pending_carrier, state: { status: "pending_carrier" }, count: countOf("pending_carrier") },
+    { id: "counteroffer_pending", name: APPLICATION_STATUS_LABEL.counteroffer_pending, state: { status: "counteroffer_pending" }, count: countOf("counteroffer_pending") },
+    { id: "missing", name: "Missing reference", state: { missingOnly: true }, count: noReference },
+  ];
+  function applyView(state: ViewState) {
+    const text = (key: string) => (typeof state[key] === "string" ? (state[key] as string) : "");
+    setStatus(text("status") || "all");
+    setCarrier(text("carrier") || "all");
+    setMissingOnly(state.missingOnly === true);
+    setSearch(text("q"));
+    setPage(1);
   }
 
   return (
@@ -173,7 +201,7 @@ export function ApplicationsList({ rows: initialRows, sample = false, timeZone }
       <PageHeader
         title="Applications"
         actions={<>
-          <Button type="button" variant="outline" onClick={exportCsv} disabled={shown.length === 0} title={shown.length === 0 ? "Nothing to export" : undefined}><Download aria-hidden="true" />Export</Button>
+          <Button type="button" variant="outline" onClick={() => exportCsv()} disabled={shown.length === 0} title={shown.length === 0 ? "Nothing to export" : undefined}><Download aria-hidden="true" />Export</Button>
           <Button asChild title="An application starts from the lead: open it and choose Start application"><Link href="/app/leads"><Plus aria-hidden="true" />New application</Link></Button>
         </>}
       />
@@ -209,18 +237,27 @@ export function ApplicationsList({ rows: initialRows, sample = false, timeZone }
             <Button type="button" variant="outline" aria-pressed={missingOnly} onClick={() => { setMissingOnly((value) => !value); setPage(1); }} className={cn(missingOnly && "border-[var(--primary)] bg-[var(--primary-soft)] text-foreground")}>
               Missing reference
             </Button>
+            <SavedViews storageKey="applications" current={viewState} builtIns={builtInViews} onApply={applyView} />
           </DataToolbar>
           {loadError && <p role="alert" className="w-full text-sm text-destructive">{loadError}</p>}
         </>}
         footer={<Pager page={current} total={shown.length} pageSize={pageSize} noun="applications" onPage={setPage} suffix={filtered ? `filtered from ${rows.length}` : "most recently touched first"} />}
       >
         {rows.length === 0
-          ? <EmptyState title="No applications yet" hint="An application opens when a client says yes on a call — from the dialer, an inbound transfer or a lead's page." />
+          ? <EmptyState title="No applications yet" hint="Start one from a lead's page." action={<Button asChild variant="outline"><Link href="/app/leads">Open leads</Link></Button>} />
           : shown.length === 0
             ? <NoMatches noun="applications" onClear={clearFilters} />
-            : <table className="portal-lead-table w-full min-w-[1160px] text-left text-sm">
+            : <>
+              <BulkBar
+                count={selection.count}
+                noun={["application", "applications"]}
+                onClear={selection.clear}
+                actions={<Button type="button" variant="outline" onClick={() => exportCsv(shown.filter((row) => selection.selected.has(rowId(row))), "applications-selected.csv")}><Download aria-hidden="true" />Export selected</Button>}
+              />
+              <table className="portal-lead-table w-full min-w-[1160px] text-left text-sm">
                 <thead>
                   <tr>
+                    <th className="w-10"><SelectAllCheckbox selection={selection} ids={pageRows.map(rowId)} label="Select every application on this page" /></th>
                     <th>Client</th>
                     <th className="w-[90px]">Insured</th>
                     <th className="w-[150px]">Carrier</th>
@@ -238,7 +275,8 @@ export function ApplicationsList({ rows: initialRows, sample = false, timeZone }
                     const href = caseHref(row.caseId, { insured: row.insuredRole, attempt: row.attemptNo });
                     const s = statusView(row);
                     return (
-                      <tr key={`${row.applicationId}-${row.insuredRole}`} className="m-row">
+                      <tr key={rowId(row)} className={cn("m-row", selection.isSelected(rowId(row)) && "bg-[var(--primary-soft)]")}>
+                        <td><RowCheckbox selection={selection} id={rowId(row)} label={`Select ${row.clientName}${row.insuredRole === "spouse" ? " (spouse)" : ""}`} /></td>
                         <td className="max-w-[220px] truncate" title={row.clientName}><Link href={href} className={clientLinkClass}>{row.clientName}</Link></td>
                         <td>{row.insuredRole === "spouse" ? "Spouse" : "Primary"}</td>
                         <td className="max-w-[150px] truncate" title={row.carrierName ?? undefined}>{row.carrierName ?? <span className="text-muted-foreground">No carrier yet</span>}</td>
@@ -259,7 +297,8 @@ export function ApplicationsList({ rows: initialRows, sample = false, timeZone }
                     );
                   })}
                 </tbody>
-              </table>}
+              </table>
+            </>}
       </TableCard>
     </div>
   );

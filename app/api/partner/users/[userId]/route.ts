@@ -24,11 +24,13 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       userId,
       status,
       maxPartnerUsers: entitlement.limits.max_partner_users,
+      actorPlane: "partner",
     });
     await audit({ actorType: "tenant", actorId: auth.context.userId, action: status === "revoked" ? "tenant.partner_user_deactivated" : "tenant.partner_user_reactivated", targetType: "partner_user", targetId: userId, metadata: { partnerId: auth.context.partnerId, actorPlane: "partner" }, request });
     return NextResponse.json({ ok: true, status });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Could not change user status";
+    if (message.includes("partner_user_suspended_by_agency")) return NextResponse.json({ error: "The agency suspended this user. Only the agency can reactivate them.", code: "suspended_by_agency" }, { status: 403 });
     if (message.includes("not_found") || message.includes("offboarded")) return NextResponse.json({ error: "Partner user not found" }, { status: 404 });
     if (message.includes("already_in_state")) return NextResponse.json({ error: "Partner user is already in that state" }, { status: 409 });
     if (message.includes("max_partner_users")) return NextResponse.json({ error: "Partner user limit reached. Upgrade your plan or deactivate another partner user first.", code: "limit_reached", limitKey: "max_partner_users", upgrade: true }, { status: 403 });

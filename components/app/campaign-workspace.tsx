@@ -20,6 +20,7 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { ClearFiltersButton, DataToolbar, FilterButton, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
+import { DetailPanel } from "@/components/ui/detail-panel";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageLoading } from "@/components/ui/page-loading";
@@ -28,7 +29,7 @@ import { StatStrip, StatTile } from "@/components/ui/stat";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
 import { Pager } from "@/components/ui/pager";
-import { NewVendorPanel, SidePanel, VendorRoster } from "@/components/app/vendor-roster";
+import { NewVendorPanel, SIDE_PANEL_FRAME, VendorRoster } from "@/components/app/vendor-roster";
 import { Callout } from "@/components/app/settings/primitives";
 import { vendorCampaignWarning, vendorTakesCampaigns } from "@/lib/vendors/types";
 import { cn } from "@/lib/utils";
@@ -406,6 +407,7 @@ export function CampaignWorkspace() {
     setNewVendor(null);
     setNewCampaign({ vendor_id: vendorId ?? vendors.find((vendor) => vendorTakesCampaigns(vendor.status))?.id ?? "", name: "", lead_type: leadType, product_code: "", total_spend: "", records_purchased: "", mixing_weight: "1" });
   };
+  const openNewVendor = () => { setNewCampaign(null); setNewVendor({ name: "", lead_type: "list", return_window_days: "30", terms: "" }); };
   const tabs: { key: View; label: string; count: number }[] = [
     { key: "campaigns", label: "Campaigns", count: campaigns.length },
     { key: "vendors", label: "Vendors", count: vendors.length },
@@ -430,7 +432,7 @@ export function CampaignWorkspace() {
       <StatTile label="Spend this period" value={money(spendCents)} footnote={`across ${spendingVendors} vendor${spendingVendors === 1 ? "" : "s"}`} />
       <StatTile label="Effective cost per dialable lead" value={money2(effectiveCostCents)} valueTone={effectiveCostCents === null ? undefined : "primary"} footnote="after suppression" />
     </StatStrip>
-    {atActiveLimit && activeLimit && <Callout tone="error" title={`${activeLimit.label}: ${activeLimit.usage} of ${activeLimit.limit} active — pause a finished campaign to free a slot, or upgrade your plan.`} />}
+    {atActiveLimit && activeLimit && <Callout tone="error" title={`Pause a finished campaign or upgrade your plan to activate another — ${activeLimit.usage} of ${activeLimit.limit} in use.`} />}
     {/* Said once, at the top, rather than as a "—" in eleven cells that each look like a bug. */}
     {pending.length > 0 && <Callout tone="warning" title="Some measurements are not available yet">{pending.map((item) => item.detail).join(" ")}</Callout>}
     {faults.length > 0 && <Callout tone="error" title="Part of this page could not be loaded">
@@ -450,14 +452,14 @@ export function CampaignWorkspace() {
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div role="tablist" aria-label="Vendors and campaigns" className="inline-flex h-9 w-fit gap-0.5 rounded-md bg-[var(--canvas)] p-0.5">
         {tabs.map((item) => (
-          <button key={item.key} type="button" role="tab" aria-selected={view === item.key} onClick={() => setView(item.key)} className={cn("inline-flex h-8 items-center gap-1.5 rounded-md border px-3 text-sm font-semibold tracking-[-0.01em]", view === item.key ? "border-border bg-card text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}>
+          <button key={item.key} type="button" role="tab" id={`campaigns-tab-${item.key}`} aria-controls={`campaigns-view-${item.key}`} aria-selected={view === item.key} onClick={() => setView(item.key)} className={cn("inline-flex h-8 items-center gap-1.5 rounded-md border px-3 text-sm font-semibold tracking-[-0.01em]", view === item.key ? "border-border bg-card text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}>
             {item.label}
             <span className="rounded-full bg-[var(--surface-alt)] px-1.5 text-xs tabular-nums text-muted-foreground">{item.count}</span>
           </button>
         ))}
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        <Button type="button" variant="outline" onClick={() => { setNewCampaign(null); setNewVendor({ name: "", lead_type: "list", return_window_days: "30", terms: "" }); }}>New vendor</Button>
+        <Button type="button" variant="outline" onClick={openNewVendor}>New vendor</Button>
         <Button type="button" disabled={vendors.length === 0} title={vendors.length === 0 ? "Add a vendor first — a campaign belongs to one" : undefined} onClick={() => openNewCampaign()}>New campaign</Button>
       </div>
     </div>
@@ -495,7 +497,7 @@ export function CampaignWorkspace() {
       </DialogContent>
     </Dialog>
 
-    {view === "campaigns" && <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
+    {view === "campaigns" && <div role="tabpanel" id="campaigns-view-campaigns" aria-labelledby="campaigns-tab-campaigns" className="flex flex-col gap-4 lg:flex-row lg:items-start">
       <TableCard
         className={`portal-campaigns-table ${FILL_CARD} min-h-[calc(100dvh-var(--top-bar-h)-300px)] min-w-0 flex-1`}
         toolbar={
@@ -528,8 +530,10 @@ export function CampaignWorkspace() {
         }
         footer={!loadError && filtered.length > 0 ? <Pager page={currentPage + 1} total={filtered.length} noun="campaigns" pageSize={pageSize} onPage={(next) => setPage(next - 1)} suffix="draft campaigns first" /> : undefined}
       >
-        {loadError ? <ErrorState title="Campaigns did not load" detail={`This is not a statement that you have none. ${loadError}`} action={<Button variant="outline" onClick={() => void refresh()}>Try again</Button>} />
-          : campaigns.length === 0 ? <EmptyState title="No campaigns yet" hint={vendors.length === 0 ? "Start with a vendor — a campaign belongs to one." : "Create a campaign before importing a list, so its leads carry a cost."} />
+        {loadError ? <ErrorState title="Campaigns did not load" detail={loadError} action={<Button variant="outline" onClick={() => void refresh()}>Try again</Button>} />
+          : campaigns.length === 0 ? (vendors.length === 0
+            ? <EmptyState title="No campaigns yet" hint="Add the vendor you buy from first." action={<Button type="button" onClick={openNewVendor}>New vendor</Button>} />
+            : <EmptyState title="No campaigns yet" hint="Add one before importing a list, so leads carry a cost." action={<Button type="button" onClick={() => openNewCampaign()}>New campaign</Button>} />)
           : filtered.length === 0 ? <NoMatches noun="campaigns" onClear={clearFilters} />
           : <Table>
               <TableHeader><TableRow>
@@ -596,7 +600,7 @@ export function CampaignWorkspace() {
             </Table>}
       </TableCard>
 
-      {campaign && <SidePanel title={campaign.name} subtitle={`${vendorName.get(campaign.vendor_id) ?? "Unknown vendor"} · ${STATUS_LABEL[campaign.status] ?? campaign.status}`} onClose={closePanel}>
+      {campaign && <DetailPanel mode="split" className={SIDE_PANEL_FRAME} title={campaign.name} subtitle={`${vendorName.get(campaign.vendor_id) ?? "Unknown vendor"} · ${STATUS_LABEL[campaign.status] ?? campaign.status}`} onClose={closePanel}>
           <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
             {fact("Lead type", `${campaign.lead_type}${campaign.product_code ? ` · ${campaign.product_code}` : ""}`)}
             {/* LA-2.3's gate, surfaced: only a scrubbed campaign serves leads. */}
@@ -617,7 +621,7 @@ export function CampaignWorkspace() {
             <Link className="font-semibold text-[var(--accent-ink)] hover:underline" href={`/app/settings?cadenceCampaign=${campaign.campaign_id}#cadence`}>{lead && lead.own_cadence_rules > 0 ? "Edit its cadence" : "Give it its own cadence"}</Link>
           </p>
           <ScrubLine campaign={campaign} run={run} canScrub={canScrub && scrubRuns !== null} driving={driving} leads={lead?.leads_received ?? null} error={scrubError?.campaignId === campaign.campaign_id ? scrubError.message : null} onRun={() => void runScrub(campaign)} onStop={stopScrub} />
-          {hasNoWorkableLeads(lead) && campaign.status !== "exhausted" && <p className="portal-campaigns-claim">No workable leads left in {campaign.name} — mark it exhausted when you are done with it.</p>}
+          {hasNoWorkableLeads(lead) && campaign.status !== "exhausted" && <p className="portal-campaigns-claim">No workable leads left. Mark it exhausted when you are done.</p>}
           {(campaign.records_rejected ?? 0) > 0 && <p className="portal-campaigns-claim">{count(campaign.records_rejected)} purchased row{campaign.records_rejected === 1 ? "" : "s"} could never be dialed — about {money(campaign.rejected_spend_cents)} to claim back from the vendor.</p>}
           <div className="grid gap-3 sm:grid-cols-3">
             <label className="portal-campaigns-field"><span>Total spend ($)</span><input className={focusRing} inputMode="decimal" value={editValue(campaign, "total_spend_cents")} onChange={(event) => setEdit(campaign, "total_spend_cents", event.target.value)} /></label>
@@ -641,7 +645,7 @@ export function CampaignWorkspace() {
             {campaign.status !== "exhausted" && <Button type="button" variant="outline" disabled={busy === campaign.campaign_id} onClick={() => void patchCampaign(campaign.campaign_id, { status: "exhausted" }, `${campaign.name} marked exhausted — its leads are no longer served.`)}>Mark exhausted</Button>}
             {testBatches !== null && <label className="flex items-center gap-2 text-sm text-[var(--body)]"><input type="checkbox" checked={isTest} disabled={busy === campaign.campaign_id} onChange={(event) => void patchCampaign(campaign.campaign_id, { is_test_batch: event.target.checked }, event.target.checked ? `${campaign.name} marked as a test batch.` : `${campaign.name} is no longer a test batch.`)} />Test batch</label>}
           </div>
-      </SidePanel>}
+      </DetailPanel>}
     </div>}
 
     {/* Not on the board, and kept: speed to lead and consent evidence per vendor are LA-2.5/2.6's
@@ -650,8 +654,8 @@ export function CampaignWorkspace() {
         trial and drop facts are added to this table; the layout is the same table. */}
     {/* The failure is checked before the empty case: "no vendor rows" and "could not look" are
         different facts. The campaigns tab already says why the load failed. */}
-    {view === "vendors" && <>{loadError ? <TableCard><ErrorState title="Vendors did not load" detail={loadError} /></TableCard>
-      : rollup.length === 0 ? (vendors.length === 0 && !loading && !loadError ? <TableCard><EmptyState title="No vendors yet" hint="Add the one you buy from with New vendor, and its costs, speed and returns collect here." /></TableCard> : <TableCard><EmptyState title="No vendor figures yet" hint="A vendor's costs, speed and returns collect here once it has a campaign." /></TableCard>)
+    {view === "vendors" && <div role="tabpanel" id="campaigns-view-vendors" aria-labelledby="campaigns-tab-vendors">{loadError ? <TableCard><ErrorState title="Vendors did not load" detail={loadError} action={<Button variant="outline" onClick={() => void refresh()}>Try again</Button>} /></TableCard>
+      : rollup.length === 0 ? (vendors.length === 0 && !loading && !loadError ? <TableCard><EmptyState title="No vendors yet" hint="Add the vendor you buy leads from." action={<Button type="button" onClick={openNewVendor}>New vendor</Button>} /></TableCard> : <TableCard><EmptyState title="No vendor figures yet" hint="Figures appear once a vendor has a campaign." action={<Button type="button" onClick={() => openNewCampaign()}>New campaign</Button>} /></TableCard>)
       : <VendorRoster
       vendors={vendors}
       rollup={rollup}
@@ -667,7 +671,7 @@ export function CampaignWorkspace() {
         setPage(0);
         setView("campaigns");
       }}
-    />}</>}
+    />}</div>}
   </div>;
 }
 
@@ -700,7 +704,7 @@ function ScrubLine({ campaign, run, canScrub, driving, leads, error, onRun, onSt
   else if (run?.status === "scrubbed") status = `Last scrubbed ${new Date(run.finished_at ?? run.last_progress_at).toLocaleString("en-US", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })} — ${counts}.`;
 
   const label = open ? "Resume the scrub" : campaign.scrub_status === "scrubbed" ? "Scrub again" : "Run the scrub";
-  const cannot = !canScrub ? "Only an owner can run a scrub — it bills screening lookups." : leads === 0 ? "Nothing has been imported into this campaign yet." : elsewhere ? "Another window is running this scrub." : null;
+  const cannot = !canScrub ? "Ask an owner to run the scrub — it bills screening lookups." : leads === 0 ? "Import a list into this campaign first." : elsewhere ? "Another window is running this scrub." : null;
 
   if (!status && !canScrub && !error) return null;
   return <div className="flex flex-col gap-2 text-sm leading-normal text-[var(--body)]">

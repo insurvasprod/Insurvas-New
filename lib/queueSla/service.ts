@@ -10,6 +10,7 @@ import { getEntitlement } from "@/lib/entitlements/get";
 import { hasFeature } from "@/lib/entitlements/types";
 import { isSchemaGap } from "@/lib/appointments/schemaGap";
 import { isOlderThanADay } from "./digestView";
+import { shouldEmail } from "@/lib/notifications/preferences";
 
 export type QueueSlaSettings = {
   tenant_id: string;
@@ -145,6 +146,8 @@ async function sendOwedEscalationEmails(): Promise<{ sent: number; settled: numb
       const reasons: string[] = [];
       let failedReason: string | null = null;
       for (const owner of owners) {
+        // LA-8.4: the owner's own choice for "Unclaimed lead escalated" (the in-app alert is separate).
+        if (!(await shouldEmail({ userId: owner.id, tenantId: row.tenant_id, eventKey: "unclaimed_escalation", title: `Unclaimed lead needs attention: ${name}`, link: `/app/leads/${row.lead_id}` }))) { reasons.push("not_sent: recipient_preference"); continue; }
         const email = slaEscalationEmail({ name: owner.name ?? "there", customerName: name, partnerName: partner.data?.name ?? "your partner", leadUrl: `${process.env.APP_URL ?? "http://localhost:3000"}/app/leads/${row.lead_id}` });
         const delivery = await sendEmail({ ...email, to: owner.email!, userId: owner.id, tenantId: row.tenant_id, templateKey: "lead.sla_escalation", dedupeKey: `unclaimed-sla:${row.work_item_id}:escalated:${owner.id}` });
         if (delivery.delivered) reasons.push("sent");
@@ -194,7 +197,7 @@ async function processEvent(event: SlaEvent): Promise<"no_longer_unclaimed" | nu
     const sourceKey = `unclaimed-sla:${event.work_item_id}:escalated`;
     const notification = await supabase.from("agent_notifications").upsert({ tenant_id: event.tenant_id, recipient_user_id: owner.id, kind: "unclaimed_sla_escalation", title: `Unclaimed lead needs attention: ${name}`, body: `${name} has been waiting unclaimed. Open the lead to claim it or coordinate coverage.`, link: `/app/leads/${event.lead_id}`, source_key: sourceKey }, { onConflict: "tenant_id,recipient_user_id,source_key" });
     if (notification.error) throw new Error(`Could not create escalation notification: ${notification.error.message}`);
-    if (owner.email) {
+    if (owner.email && await shouldEmail({ userId: owner.id, tenantId: event.tenant_id, eventKey: "unclaimed_escalation", title: `Unclaimed lead needs attention: ${name}`, link: `/app/leads/${event.lead_id}` })) {
       const email = slaEscalationEmail({ name: owner.name, customerName: name, partnerName, leadUrl: `${process.env.APP_URL ?? "http://localhost:3000"}/app/leads/${event.lead_id}` });
       const delivery = await sendEmail({ ...email, to: owner.email, userId: owner.id, tenantId: event.tenant_id, templateKey: "lead.sla_escalation", dedupeKey: `${sourceKey}:${owner.id}` });
       if (!delivery.delivered && !SETTLED_NOT_SENT.has(delivery.reason)) throw new Error(`Escalation email was not delivered: ${delivery.reason}`);

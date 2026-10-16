@@ -14,11 +14,11 @@ import {
   Send,
   Settings,
   Users,
+  WalletCards,
   X,
 } from "lucide-react";
 
 import type { PartnerRole } from "@/lib/partnerAuth/roles";
-import { ThemeToggle } from "@/components/theme-toggle";
 import { InsurvasLogo } from "@/components/shared/insurvas-logo";
 
 type PartnerStatus = "draft" | "active" | "paused" | "offboarded";
@@ -61,10 +61,11 @@ function PartnerNav({ role, onNavigate }: { role: PartnerRole; onNavigate?: () =
   const teamActive = isActivePath(pathname, "/partner/team");
   const settingsActive = isActivePath(pathname, "/partner/settings");
   const statusItems: PartnerNavItem[] = [
-    ...(role === "partner_admin" ? [{ label: "Team review", path: "/partner/team-review", icon: BarChart3 }, { label: "Team access", path: "/partner/team", icon: Users }] : []),
+    // LA-7.4: payout statements are the organisation's, not every seat's.
+    ...(role === "partner_admin" ? [{ label: "Statements", path: "/partner/payouts", icon: WalletCards }, { label: "Team review", path: "/partner/team-review", icon: BarChart3 }, { label: "Team access", path: "/partner/team", icon: Users }] : []),
     { label: "Settings", path: "/partner/settings", icon: Settings },
   ];
-  const orgActive = teamActive || settingsActive || isActivePath(pathname, "/partner/team-review");
+  const orgActive = teamActive || settingsActive || isActivePath(pathname, "/partner/team-review") || isActivePath(pathname, "/partner/payouts");
   // Shut by default, as drawn; open whenever the page you are on lives inside it, so a deep link
   // never lands in a section that looks closed.
   const [orgOpen, setOrgOpen] = useState(orgActive);
@@ -148,9 +149,4 @@ export function PartnerSidebar({ role, partnerStatus, partnerName, footer }: { r
       </aside>
     </>
   );
-}
-
-/** The theme toggle only. Sign-out is the labelled last row of the top bar’s account menu. */
-export function PartnerSidebarFooter() {
-  return <ThemeToggle tone="onBrand" />;
 }

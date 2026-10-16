@@ -2,7 +2,7 @@ import "server-only";
 
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 
-import { readFoundRow, readHasPhone, type ExistenceRead, type SetupProgress } from "./checklist";
+import { readFoundRow, readHasPhone, type ExistenceRead, type SetupProfileFacts, type SetupProgress } from "./checklist";
 import { hasImportedStatement } from "./summaries";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- tenants.support_phone is not in database.types.ts yet (shared; not ours to regenerate)
@@ -18,12 +18,12 @@ async function proves(read: PromiseLike<ExistenceRead>, test: (result: Existence
 }
 
 /**
- * The setup checklist's per-step facts, for one tenant. Five cheap existence reads (`limit 1` or a
+ * The setup checklist's per-step facts, for one tenant. Six cheap existence reads (`limit 1` or a
  * head count) run in parallel. Every read is filtered by the tenant: these go through the service
  * role, which has no RLS predicate, and an unfiltered read would walk every tenant's rows.
  */
 export async function loadSetupProgress(tenantId: string): Promise<SetupProgress> {
-  const [carriersAdded, statementImported, appointmentsConfirmed, leadSourcesAdded, phoneAdded, finished] = await Promise.all([
+  const [carriersAdded, statementImported, appointmentsConfirmed, leadSourcesAdded, phoneAdded, bookImported, finished] = await Promise.all([
     proves(db().from("tenant_carriers").select("id").eq("tenant_id", tenantId).eq("is_active", true).limit(1), readFoundRow),
     hasImportedStatement(tenantId),
     // An agency appointment in force — the same rows the "Appointments" tile counts.
@@ -32,13 +32,30 @@ export async function loadSetupProgress(tenantId: string): Promise<SetupProgress
     proves(db().from("partners").select("id").eq("tenant_id", tenantId).neq("status", "offboarded").limit(1), readFoundRow),
     // The phone on the agency profile tab (migration 20260924210000). The tenant's own row.
     proves(db().from("tenants").select("support_phone").eq("id", tenantId).maybeSingle(), readHasPhone),
+    // The book import step (only when the business profile recommended it): any policy from the carrier files.
+    proves(db().from("policy_current").select("policy_number").eq("tenant_id", tenantId).limit(1), readFoundRow),
     // LA-0.3's "does not come back": stamped once, the first time every step was done. Before the
     // column is migrated the read errors, which proves nothing — the checklist just follows the steps.
     proves(db().from("tenants").select("setup_checklist_completed_at").eq("id", tenantId).maybeSingle(), (read) =>
       readFoundRow(read) && (read?.data as { setup_checklist_completed_at?: unknown }).setup_checklist_completed_at != null,
     ),
   ]);
-  return { carriersAdded, statementImported, appointmentsConfirmed, leadSourcesAdded, phoneAdded, finished };
+  return { carriersAdded, statementImported, appointmentsConfirmed, leadSourcesAdded, phoneAdded, bookImported, finished };
+}
+
+/**
+ * The business profile saved at signup: the lead sources ticked and the setup steps recommended from
+ * them. The checklist reads it to skip what the agency said it does not need (a referrals-only agent
+ * has no lead sources to route). A failed read is no profile: every step the plan allows is shown.
+ */
+export async function loadSetupProfile(tenantId: string): Promise<SetupProfileFacts | null> {
+  try {
+    const { data, error } = await db().from("business_profiles").select("lead_sources, recommended_setup_steps").eq("tenant_id", tenantId).maybeSingle();
+    if (error || !data) return null;
+    return { leadSources: data.lead_sources ?? null, recommendedSetupSteps: data.recommended_setup_steps ?? null };
+  } catch {
+    return null;
+  }
 }
 
 /**

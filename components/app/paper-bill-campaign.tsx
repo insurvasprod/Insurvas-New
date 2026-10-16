@@ -93,7 +93,7 @@ export function PaperBillCampaign({ campaign, isOwner, readOnly }: { campaign: C
                 <tr key={r.key}>
                   <td>
                     <span className="block font-semibold text-foreground">{r.clientName ?? "No client linked"}</span>
-                    {r.phone ? <a href={`tel:${r.phone.replace(/[^\d+]/g, "")}`} className="block font-medium tabular-nums text-[var(--accent-ink)] hover:underline">{phoneText(r.phone)}</a> : <span className="block text-xs text-muted-foreground">No phone on file</span>}
+                    {r.phone ? <span className="block select-all font-medium tabular-nums text-foreground" title="Check the calling window and do-not-call list before dialling">{phoneText(r.phone)}</span> : <span className="block text-xs text-muted-foreground">No phone on file</span>}
                     <Link href={`/app/policies/carrier/${r.carrierId}/${encodeURIComponent(r.policyNumber)}`} className="block text-xs text-muted-foreground hover:underline">{r.carrierName} · {r.policyNumber}</Link>
                   </td>
                   <td className="text-right tabular-nums">{money(r.monthlyCents)}<span className="block text-xs text-muted-foreground">a month</span></td>

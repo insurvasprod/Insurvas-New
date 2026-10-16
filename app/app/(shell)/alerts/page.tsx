@@ -33,10 +33,10 @@ export default async function AlertCentrePage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader title="Alert centre" description="Alerts clear when the work is claimed, not when they are read." />
+      <PageHeader title="Alert centre" description="Alerts clear when the work is claimed, not read." />
       {job
         ? <SlaJobStrip status={job} nowMs={now.getTime()} />
-        : <ErrorState detail="The unclaimed SLA job's status could not be read. Nothing has changed; reload the page to try again." />}
+        : <ErrorState title="SLA job status did not load" detail="Reload the page to try again. Nothing has changed." />}
       <AlertCentre
         lists={centre ? { open: centre.open, resolved: centre.resolved } : null}
         canClaim={context.role === "owner" || context.role === "producer" || context.role === "assistant"}
@@ -44,7 +44,7 @@ export default async function AlertCentrePage() {
         // so the digest tab is left out until then.
         digest={digest
           ? (digest.ready || job?.ready !== false) ? <SlaDigestCard ready={digest.ready} days={digest.days} /> : undefined
-          : <ErrorState detail="The daily digest could not be read. Nothing has changed; reload the page to try again." />}
+          : <ErrorState title="The daily digest did not load" detail="Reload the page to try again. Nothing has changed." />}
       />
     </div>
   );

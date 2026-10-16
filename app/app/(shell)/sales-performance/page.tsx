@@ -20,7 +20,7 @@ async function orPending<T>(read: Promise<T>): Promise<T | null> {
 
 export default async function SalesPerformancePage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const guard = await guardPage("sales_report");
-  if (!guard.entitled) return <FeatureGateNotice guard={guard} featureLabel="Sales performance" description="See where cases drop between quote and placed policy, and which carriers decline what." />;
+  if (!guard.entitled) return <FeatureGateNotice guard={guard} featureLabel="Sales performance" description="Where cases drop, and which carriers decline what." />;
   if (!["owner", "producer", "bookkeeper"].includes(guard.role)) return <RoleGateNotice featureLabel="Sales performance" detail="Owners, producers and bookkeepers can review sales performance." />;
   const query = await searchParams;
   if (query.preview === "sample" && process.env.NODE_ENV !== "production") {

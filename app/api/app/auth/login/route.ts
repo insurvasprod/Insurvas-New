@@ -11,7 +11,10 @@ import {
 } from "@/lib/tenants/suspension";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { holdsPartnerMembership, PARTNER_ACCOUNT_AT_AGENT_SIGN_IN, WRONG_PORTAL_CODE } from "@/lib/auth/planeSeparation";
-import { signTenantSessionToken, tenantSessionCookieOptions, TENANT_SESSION_COOKIE } from "@/lib/tenantAuth/session";
+import { signTenantPending2faToken, tenantPending2faCookieOptions, tenantSessionCookieOptions, TENANT_PENDING_2FA_COOKIE, TENANT_SESSION_COOKIE } from "@/lib/tenantAuth/session";
+import { issueTenantSession } from "@/lib/tenantAuth/sessionStore";
+import { hasTwoFactor } from "@/lib/tenantAuth/twoFactor";
+import { requiresTwoFactor } from "@/lib/tenantAuth/securityRules";
 import { partnerSessionCookieOptions, PARTNER_SESSION_COOKIE } from "@/lib/partnerAuth/session";
 import { recordLastLogin, recordLoginEvent, type LoginFailureReason } from "@/lib/loginEvents/record";
 import { signupDestination } from "@/lib/signup/context";
@@ -167,6 +170,23 @@ export async function POST(request: NextRequest) {
     return fail("no_membership", user.id, NextResponse.json(GENERIC_ERROR, { status: 401 }));
   }
 
+  // LA-8.2: with two-factor on, the password is only the first step. Nothing is recorded as a
+  // successful sign-in until the code is (POST /api/app/auth/verify-2fa); a short-lived cookie,
+  // which can never act as a session, carries the person there.
+  const enrolled = await hasTwoFactor(user.id).catch(() => false);
+  // A role that can reveal an SSN or bank details, without two-factor, is sent to set it up — prompted,
+  // not locked out: everything but those reveals keeps working (lib/tenantAuth/twoFactor.ts).
+  const redirectTo = signupDestination({ userStatus: user.status, onboardingState: tenant.onboarding_state })
+    ?? (!enrolled && requiresTwoFactor(membership.role) ? "/app/profile?two_factor=required#security" : "/app/dashboard");
+  if (enrolled) {
+    await clearLoginFailures("user", email, request);
+    const pending = await signTenantPending2faToken({ sub: user.id, tenantId: membership.tenant_id, sessionVersion: user.session_version, redirectTo });
+    const response = NextResponse.json({ ok: true, twoFactor: true });
+    response.cookies.set(TENANT_PENDING_2FA_COOKIE, pending, tenantPending2faCookieOptions);
+    response.cookies.set(PARTNER_SESSION_COOKIE, "", { ...partnerSessionCookieOptions, maxAge: 0 });
+    return response;
+  }
+
   // Only a successful login moves last_login_at — failures must never touch it (SA-1.5).
   // Three independent writes, so they go out together rather than as three trips in a row.
   await Promise.all([
@@ -175,12 +195,10 @@ export async function POST(request: NextRequest) {
     recordLoginEvent({ request, email, success: true, userId: user.id, actorType: "user" }),
   ]);
 
-  // Role is intentionally not baked into the token — it's resolved per request (SA-1.3).
-  const sessionToken = await signTenantSessionToken(user.id, membership.tenant_id, user.session_version);
-  const response = NextResponse.json({
-    ok: true,
-    redirectTo: signupDestination({ userStatus: user.status, onboardingState: tenant.onboarding_state }) ?? "/app/dashboard",
-  });
+  // Role is intentionally not baked into the token — it's resolved per request (SA-1.3). The token
+  // names its session row, which every request checks (LA-8.2).
+  const { token: sessionToken } = await issueTenantSession({ userId: user.id, tenantId: membership.tenant_id, sessionVersion: user.session_version, request });
+  const response = NextResponse.json({ ok: true, redirectTo });
   response.cookies.set(TENANT_SESSION_COOKIE, sessionToken, tenantSessionCookieOptions);
   // A successful agent login switches the browser to the agent identity plane. Clear any stale
   // partner session so a previous partner user cannot remain authenticated in another portal tab.

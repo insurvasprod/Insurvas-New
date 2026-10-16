@@ -61,6 +61,11 @@ export async function POST(request: NextRequest) {
     if (error.message.includes("PARTNER_PASSWORD_TOKEN") || error.message.includes("PARTNER_MEMBERSHIP")) return NextResponse.json(INVALID, { status: 400 });
     return NextResponse.json({ error: "Could not set password" }, { status: 500 });
   }
+  // The invitee has proven the link and chosen a password, so the account is live. The database
+  // function does this too once 20260929130000 is applied; until then nothing else moves the account
+  // out of 'invited' and login refuses it. Only from 'invited': a suspended account stays suspended.
+  const activated = await supabase.from("users").update({ status: "active" }).eq("id", invitation.user_id).filter("status", "eq", "invited"); // 'invited' is live but missing from the generated types
+  if (activated.error) return NextResponse.json({ error: "Could not activate the account" }, { status: 500 });
   const { data: membership } = await supabase.from("partner_users").select("tenant_id").eq("partner_id", invitation.partner_id).eq("user_id", invitation.user_id).maybeSingle<{ tenant_id: string }>();
   await audit({ actorType: "tenant", actorId: invitation.user_id, action: "tenant.partner_user_accepted", targetType: "partner_user", targetId: invitation.user_id, metadata: { partnerId: invitation.partner_id, actorPlane: "partner" }, request });
   return NextResponse.json({ ok: true, tenantId: membership?.tenant_id ?? null });

@@ -81,23 +81,23 @@ function UsageRow({
   return (
     <div className="border-t border-[var(--border)] py-3">
       <div className="flex justify-between gap-3">
-        <span className="text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--body)]">{label}</span>
+        <span className="text-sm leading-[1.5] tracking-[-0.02em] text-[var(--body)]">{label}</span>
         <span
-          className={cn("text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] tabular-nums whitespace-nowrap", VALUE_INK[tone])}
+          className={cn("text-sm leading-[1.5] font-semibold tracking-[-0.02em] tabular-nums whitespace-nowrap", VALUE_INK[tone])}
           title={title}
         >
           {value}
         </span>
       </div>
       <SettingsMeter value={used} max={max} tone={BAR[tone]} ariaLabel={`${label}: ${value}`} />
-      {note && <p className={cn("m-0 mt-1.5 text-[12px] leading-[1.5] tracking-[-0.01em]", NOTE_INK[noteTone])}>{note}</p>}
+      {note && <p className={cn("m-0 mt-1.5 text-xs leading-[1.5] tracking-[-0.01em]", NOTE_INK[noteTone])}>{note}</p>}
     </div>
   );
 }
 
 function Header() {
   return (
-    <h2 className="m-0 mb-3 text-[18px] leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]">Usage against plan limits</h2>
+    <h2 className="m-0 mb-3 text-title-sm leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]">Usage against plan limits</h2>
   );
 }
 
@@ -110,7 +110,7 @@ export async function TenantUsagePanel({ usage }: { usage: TenantUsageSummary })
     return (
       <section className={CARD} aria-label="Usage against plan limits">
         <Header />
-        <p className="m-0 border-t border-[var(--border)] pt-3 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">
+        <p className="m-0 border-t border-[var(--border)] pt-3 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">
           No subscription, so nothing is metered.
         </p>
       </section>
@@ -189,7 +189,7 @@ export async function TenantUsagePanel({ usage }: { usage: TenantUsageSummary })
         );
       })}
 
-      <p className="m-0 border-t border-[var(--border)] pt-3 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">
+      <p className="m-0 border-t border-[var(--border)] pt-3 text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">
         {usage.meters.length === 0
           ? "This plan doesn’t meter anything."
           : `Current billing period${usage.periodStart ? `, since ${recordDate(usage.periodStart)}` : ""}.`}

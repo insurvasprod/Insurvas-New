@@ -5,7 +5,7 @@ import { applyCoupon, type ApplyResult } from "@/lib/coupons/service";
 import { createCoupon } from "@/lib/coupons/service";
 import { parseDollarsToCents } from "@/lib/money";
 import type { BillingCycle, OfferFormInput, OfferRow, PlanType } from "./constants";
-import { manualOfferWarning, offerEligibilityFailures, type OfferCustomerContext } from "./rules";
+import { couponCapForOfferCap, manualOfferWarning, offerApplyRefusal, offerEligibilityFailures, type OfferCustomerContext } from "./rules";
 import { fetchOffer, fetchOfferForApplication } from "./queries";
 import type { Database } from "@/lib/supabase/database.types";
 
@@ -109,6 +109,17 @@ export async function updateOffer(id: string, input: UpdateOfferInput): Promise<
   if (input.is_active !== undefined) patch.is_active = input.is_active;
 
   const supabase = getSupabaseServiceClient();
+  // Lowering the campaign cap lowers the linked coupon's cap too (audit, 2026-10-15): the coupon is
+  // what admin_apply_coupon counts, so a cap kept only on the offer was a cap in name. The coupon is
+  // written first; if the offer update then fails, the tighter coupon cap is the safe leftover. The
+  // Whop promo code keeps the cap it was created with — Whop is not called from here.
+  const couponCap = input.max_redemptions !== undefined
+    ? couponCapForOfferCap(input.max_redemptions, current.coupon.max_redemptions)
+    : undefined;
+  if (couponCap !== undefined) {
+    const { error: couponError } = await supabase.from("coupons").update({ max_redemptions: couponCap } as never).eq("id", current.coupon_id);
+    if (couponError) throw new Error(`Could not lower the offer's coupon cap: ${couponError.message}`);
+  }
   const { error } = await supabase.from("offers").update(patch).eq("id", id);
   if (error) throw new Error(`Could not update offer: ${error.message}`);
   const updated = await fetchOffer(id);
@@ -152,7 +163,7 @@ async function applicationContext(subscriptionId: string): Promise<ApplicationCo
 export type ManualApplyResult =
   | { status: "confirmation_required"; warning: string }
   | { status: "applied" }
-  | { status: "rejected"; result: Exclude<ApplyResult, "ok"> };
+  | { status: "rejected"; result: Exclude<ApplyResult, "ok">; message?: string };
 
 export async function applyOfferManually(
   offerId: string,
@@ -162,6 +173,10 @@ export async function applyOfferManually(
 ): Promise<ManualApplyResult> {
   const [offer, context] = await Promise.all([fetchOfferForApplication(offerId), applicationContext(subscriptionId)]);
   if (!offer || !context) return { status: "rejected", result: "not_found" };
+  // The offer's own active flag and cap, before anything else: a paused or used-up offer is refused
+  // whatever the admin confirms (audit, 2026-10-15).
+  const refusal = offerApplyRefusal(offer);
+  if (refusal) return { status: "rejected", result: refusal.result, message: refusal.message };
 
   const warning = manualOfferWarning(
     {
@@ -177,8 +192,28 @@ export async function applyOfferManually(
   );
   if (warning && !confirmed) return { status: "confirmation_required", warning };
 
-  const result = await applyCoupon(subscriptionId, offer.coupon_id, appliedBy);
-  return result === "ok" ? { status: "applied" } : { status: "rejected", result };
+  const result = await applyOfferWithinCap(offerId, subscriptionId, offer.coupon_id, appliedBy);
+  if (result === "ok") return { status: "applied" };
+  // Refused under the lock (a concurrent apply took the last redemption, or it was paused meanwhile).
+  const late = result === "inactive" || result === "exhausted" ? offerApplyRefusal(await fetchOfferForApplication(offerId) ?? offer) : null;
+  return { status: "rejected", result, ...(late ? { message: late.message } : {}) };
+}
+
+/**
+ * admin_apply_offer (20261015610100) re-checks the offer's flag and cap with the offer row locked,
+ * then applies its coupon in the same transaction, so two admins cannot both take the last
+ * redemption. Before that migration is live, fall back to the coupon apply; the check above still
+ * ran, only without the lock.
+ */
+async function applyOfferWithinCap(offerId: string, subscriptionId: string, couponId: string, appliedBy: string): Promise<ApplyResult> {
+  const { data, error } = await getSupabaseServiceClient().rpc("admin_apply_offer" as never, {
+    p_offer_id: offerId,
+    p_subscription_id: subscriptionId,
+    p_applied_by: appliedBy,
+  } as never) as unknown as { data: string | null; error: { code?: string; message: string } | null };
+  if (error && (error.code === "PGRST202" || error.code === "42883")) return applyCoupon(subscriptionId, couponId, appliedBy);
+  if (error) throw new Error(`Could not apply the offer: ${error.message}`);
+  return (data as ApplyResult | null) ?? "not_found";
 }
 
 export async function applyAutoOffer(subscriptionId: string): Promise<string | null> {

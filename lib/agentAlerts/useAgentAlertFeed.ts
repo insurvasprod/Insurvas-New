@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { notify } from "@/lib/notify";
 
-import { type AgentAlertEvent, type AgentAlertSettings } from "./presentation";
+import { PROTECTED_ALERT_EVENTS, type AgentAlertEvent, type AgentAlertSettings } from "./presentation";
 import { setServerSoundSettings } from "@/lib/notify/sound";
 
 /**
@@ -25,6 +25,8 @@ export type AgentAlert = {
   link: string;
   event_type: AgentAlertEvent;
   created_at: string;
+  /** LA-8.4: false when this person chose no browser notification for the event, or it is their quiet hours. */
+  push?: boolean;
 };
 
 type AlertResponse = { alerts: AgentAlert[]; settings: AgentAlertSettings; soundTreatmentsPersisted?: boolean };
@@ -72,8 +74,11 @@ export function useAgentAlertFeed() {
     // Coalescing is still honoured: `notify` rate-limits to one sound per 2s, so a burst of six
     // alerts is six toasts and one chime, which is what coalesceAlertBatch was doing by hand.
     fresh.forEach((alert) => {
-      notify.arrive(alert.title, { detail: alert.body, action: { label: "Open", onClick: () => openAlert(alert) } });
-      if (response.settings.do_not_disturb || typeof Notification === "undefined") return;
+      // A protected event (a deadline that does not come back) arrives as a warning, not news.
+      const announce = PROTECTED_ALERT_EVENTS.includes(alert.event_type) ? notify.warn : notify.arrive;
+      announce(alert.title, { detail: alert.body, action: { label: "Open", onClick: () => openAlert(alert) } });
+      // LA-8.4: the person's own push choice for this event, quiet hours included (decided on the server).
+      if (response.settings.do_not_disturb || alert.push === false || typeof Notification === "undefined") return;
       if (Notification.permission === "granted") {
         // Browser/lock-screen notifications intentionally avoid lead, policy, and account details.
         // The authenticated in-portal toast remains the detailed surface.

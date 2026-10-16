@@ -108,6 +108,9 @@ export async function sendInvoiceForCollection(
       // amount the customer has not seen before; charging a stored card for it is how disputes
       // start, and Whop emails a hosted pay page instead.
       collectionMethod: "send_invoice",
+      // The local id rides on the Whop plan so the payment can be settled against THIS invoice,
+      // and keys the request so two same-amount, same-reason invoices are not one Whop invoice.
+      localInvoiceId: input.invoiceId,
     });
 
     const { error: storeError } = await supabase

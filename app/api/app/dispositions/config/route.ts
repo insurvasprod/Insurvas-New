@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { audit } from "@/lib/audit/log";
+import { recordSettingsChanges } from "@/lib/settingsAudit/record";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import { createDisposition, createDispositionNode, createDispositionOption, DispositionError, listDispositionConfig, updateDisposition, updateDispositionNode, updateDispositionOption } from "@/lib/dispositions/service";
 
@@ -48,6 +49,7 @@ async function save(request: Request, create: boolean) {
     else if (body.kind === "node") saved = "flow_id" in body ? await createDispositionNode(auth.context.tenantId, body) : await updateDispositionNode(auth.context.tenantId, body.id, body);
     else saved = "node_id" in body ? await createDispositionOption(auth.context.tenantId, body) : await updateDispositionOption(auth.context.tenantId, body.id, body);
     await audit({ actorType: "tenant", actorId: auth.context.userId, action: "setting.updated", targetType: `disposition_${body.kind}`, targetId: saved.id, metadata: { kind: body.kind, created: create }, request });
+    await recordSettingsChanges({ tenantId: auth.context.tenantId, actorId: auth.context.userId, section: "dispositions", changes: [{ key: `${body.kind}:${saved.id}`, label: `${body.kind === "disposition" ? "Call outcome" : body.kind === "node" ? "Outcome question" : "Outcome answer"} “${String((saved as { label?: unknown; name?: unknown }).label ?? (saved as { name?: unknown }).name ?? saved.id)}”`, from: null, to: create ? "added" : "edited", changeType: create ? "create" : "update" }] }); 
     return NextResponse.json({ saved }, { status: create ? 201 : 200 });
   } catch (error) { return errorResponse(error); }
 }

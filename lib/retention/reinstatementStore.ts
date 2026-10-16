@@ -4,6 +4,7 @@ import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isSchemaGap } from "@/lib/supabase/schemaGap";
 import { advanceAtRisk } from "@/lib/ingestion/retentionStore";
 
+import { agencyToday } from "./agencyDay";
 import { settingsFromRow, type RetentionSettings } from "./constants";
 import { canMove, caseOrder, compare, daysRemaining, estimateOwed, OPEN_CASE_STATUSES, urgencyOf, type CaseStatus, type Comparison, type Urgency } from "./reinstatement";
 
@@ -136,7 +137,8 @@ export async function loadReinstatement(viewer: Viewer): Promise<Reinstatement |
   const contactOf = new Map<string, Loose>(contacts.map((c: Loose) => [c.id, c]));
   const userName = new Map<string, string>(((users.data ?? []) as Loose[]).map((u) => [u.id, u.name || u.email]));
   const carrierName = new Map<string, string>(((carriers.data ?? []) as Loose[]).map((c) => [c.id, c.name]));
-  const today = (policies.map((p: Loose) => p.as_of as string).filter(Boolean).sort().at(-1) as string | undefined) ?? new Date().toISOString().slice(0, 10);
+  // The agency's own day — the same one the banner and the database's expiry count from.
+  const today = await agencyToday(viewer.tenantId);
 
   const rows: CaseRow[] = visible.map((c) => {
     const key = keyOf(c);
@@ -230,8 +232,10 @@ export async function updateCase(viewer: Viewer, id: string, patch: CasePatch) {
   if (patch.requirementsNote !== undefined) out.carrier_requirements_note = patch.requirementsNote?.trim() || null;
   if (patch.carrierReference !== undefined) out.carrier_reference = patch.carrierReference?.trim() || null;
   if (patch.note !== undefined) out.note = patch.note?.trim() || null;
-  const update = await db().from("reinstatement_case").update(out).eq("tenant_id", viewer.tenantId).eq("id", id).eq("status", c.status);
+  const update = await db().from("reinstatement_case").update(out).eq("tenant_id", viewer.tenantId).eq("id", id).eq("status", c.status).select("id");
   if (update.error) throw new Error(`Could not update the case: ${update.error.message}`);
+  // Someone (or the next file) moved it meanwhile: say so rather than report a save that did not happen.
+  if (!update.data?.length) throw new ReinstatementError("This case changed while you had it open. Reload it and try again.", 409);
   return { from: c.status as CaseStatus, to: (out.status ?? c.status) as CaseStatus };
 }
 
@@ -244,7 +248,7 @@ export async function closingSoon(viewer: Viewer): Promise<number | null> {
   // Before the migration, or on any read failure, the pinned line is simply not shown.
   if (cases.error) return null;
   const pin = settingsFromRow(settings.data).reinstatementPinDays;
-  const today = new Date().toISOString().slice(0, 10);
+  const today = await agencyToday(viewer.tenantId);
   let rows = (cases.data ?? []) as Loose[];
   if (viewer.role === "producer" && rows.length) {
     const mine = await inChunks([...new Set(rows.map((r) => r.policy_number))], (part) => db().from("policy_current").select("carrier_id, policy_number").eq("tenant_id", viewer.tenantId).eq("agent_user_id", viewer.userId).in("policy_number", part));

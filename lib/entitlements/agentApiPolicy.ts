@@ -23,6 +23,8 @@ export const AGENT_API_POLICIES: AgentApiPolicy[] = [
   // Switching workspace is account plumbing, not a paid module: requireTenant() with no role list,
   // and the target membership is verified server-side against the session's own user id.
   { sourceFile: "app/api/app/auth/switch-workspace/route.ts", featureKey: null },
+  // LA-8.2: the second sign-in step. Signed out (a five-minute pending cookie, never a session).
+  { sourceFile: "app/api/app/auth/verify-2fa/route.ts", featureKey: null },
   { sourceFile: "app/api/app/auth/workspaces/route.ts", featureKey: null },
   { sourceFile: "app/api/app/checkout/coupon/route.ts", featureKey: null },
   { sourceFile: "app/api/app/checkout/start/route.ts", featureKey: null },
@@ -31,6 +33,14 @@ export const AGENT_API_POLICIES: AgentApiPolicy[] = [
   // and roles inside lib/search/service.ts.
   { sourceFile: "app/api/app/search/route.ts", featureKey: null },
   { sourceFile: "app/api/app/agency-profile/route.ts", featureKey: null, allowedRoles: ["owner"] },
+  // LA-8.3: the audited tax-ID reveal and the logo documents print.
+  { sourceFile: "app/api/app/agency-profile/tax-id/route.ts", featureKey: null, allowedRoles: ["owner"] },
+  { sourceFile: "app/api/app/agency-profile/logo/route.ts", featureKey: null, allowedRoles: ["owner"] },
+  // LA-8.5: Plan & billing — the subscription, its card page, and the book export. No feature, so a
+  // paused or cancelled agency still reaches them.
+  { sourceFile: "app/api/app/billing/route.ts", featureKey: null, allowedRoles: ["owner"] },
+  { sourceFile: "app/api/app/billing/payment-method/route.ts", featureKey: null, allowedRoles: ["owner"] },
+  { sourceFile: "app/api/app/billing/export/route.ts", featureKey: null, allowedRoles: ["owner"] },
   // The support email and phone partners see; agency identity, not a feature, like the profile above.
   { sourceFile: "app/api/app/partner-support-contact/route.ts", featureKey: null, allowedRoles: ["owner"] },
   { sourceFile: "app/api/app/carrier-library/route.ts", featureKey: "appointment_vault", allowedRoles: ["owner"] },
@@ -96,6 +106,50 @@ export const AGENT_API_POLICIES: AgentApiPolicy[] = [
   // Reads True CPA's figures only when the tenant also has true_cpa (checked inside the route).
   { sourceFile: "app/api/app/vendors/cards/route.ts", featureKey: "outbound_dialing", allowedRoles: ["owner", "producer"] },
   { sourceFile: "app/api/app/compliance/consent/claim/route.ts", featureKey: "lead_import", allowedRoles: ["owner", "producer"] },
+  // LA-6.3: the evidence report and the book-wide gap scan. The writing agent and the owner only.
+  { sourceFile: "app/api/app/compliance/evidence/route.ts", featureKey: "litigation_packet", allowedRoles: ["owner", "producer"] },
+  { sourceFile: "app/api/app/compliance/gap-scan/route.ts", featureKey: "litigation_packet", allowedRoles: ["owner", "producer"] },
+  // LA-6.4: complaints. Setting a regulator's deadline is agency configuration, owner only.
+  { sourceFile: "app/api/app/compliance/complaints/route.ts", featureKey: "tcpa_checker", allowedRoles: ["owner", "producer"] },
+  { sourceFile: "app/api/app/compliance/complaints/[id]/route.ts", featureKey: "tcpa_checker", allowedRoles: ["owner", "producer"] },
+  { sourceFile: "app/api/app/compliance/complaints/[id]/deadline/route.ts", featureKey: "tcpa_checker", allowedRoles: ["owner"] },
+  { sourceFile: "app/api/app/compliance/complaints/[id]/attachments/route.ts", featureKey: "tcpa_checker", allowedRoles: ["owner", "producer"] },
+  // LA-6.5: consumer deletion. Logging and reading a request: owner and producer; moving it (verify, reject, cancel, perform) is checked as owner-only inside the route.
+  { sourceFile: "app/api/app/compliance/deletions/route.ts", featureKey: "tcpa_checker", allowedRoles: ["owner", "producer"] },
+  { sourceFile: "app/api/app/compliance/deletions/[id]/route.ts", featureKey: "tcpa_checker", allowedRoles: ["owner", "producer"] },
+  { sourceFile: "app/api/app/compliance/deletions/[id]/certificate/route.ts", featureKey: "tcpa_checker", allowedRoles: ["owner", "producer"] },
+  // LA-6.6: retention rules, runs and legal holds — agency configuration, owner only.
+  { sourceFile: "app/api/app/compliance/retention/route.ts", featureKey: "tcpa_checker", allowedRoles: ["owner"] },
+  { sourceFile: "app/api/app/compliance/retention/runs/route.ts", featureKey: "tcpa_checker", allowedRoles: ["owner"] },
+  { sourceFile: "app/api/app/compliance/retention/holds/route.ts", featureKey: "tcpa_checker", allowedRoles: ["owner"] },
+  // LA-6.8: compliance settings — agency configuration, owner only.
+  { sourceFile: "app/api/app/compliance/settings/route.ts", featureKey: "tcpa_checker", allowedRoles: ["owner"] },
+  // LA-7.2: vendor invoices — what the agency pays for leads. Owner and bookkeeper.
+  { sourceFile: "app/api/app/accounting/invoices/route.ts", featureKey: "profit_and_loss", allowedRoles: ["owner", "bookkeeper"] },
+  { sourceFile: "app/api/app/accounting/invoices/[id]/route.ts", featureKey: "profit_and_loss", allowedRoles: ["owner", "bookkeeper"] },
+  { sourceFile: "app/api/app/accounting/invoices/[id]/document/route.ts", featureKey: "profit_and_loss", allowedRoles: ["owner", "bookkeeper"] },
+  { sourceFile: "app/api/app/accounting/invoice-templates/route.ts", featureKey: "profit_and_loss", allowedRoles: ["owner", "bookkeeper"] },
+  // LA-7.3: expenses — tools, insurance, fees. Owner and bookkeeper.
+  { sourceFile: "app/api/app/accounting/expenses/route.ts", featureKey: "profit_and_loss", allowedRoles: ["owner", "bookkeeper"] },
+  { sourceFile: "app/api/app/accounting/expenses/[id]/route.ts", featureKey: "profit_and_loss", allowedRoles: ["owner", "bookkeeper"] },
+  // LA-7.7: the P&L's drill-through — the entries behind a figure.
+  { sourceFile: "app/api/app/accounting/pnl/drill/route.ts", featureKey: "profit_and_loss", allowedRoles: ["owner", "bookkeeper"] },
+  // LA-7.4: partner payout runs — what the agency owes its call centres. Owner and bookkeeper.
+  { sourceFile: "app/api/app/accounting/payouts/route.ts", featureKey: "payout_runs", allowedRoles: ["owner", "bookkeeper"] },
+  { sourceFile: "app/api/app/accounting/payouts/[id]/route.ts", featureKey: "payout_runs", allowedRoles: ["owner", "bookkeeper"] },
+  { sourceFile: "app/api/app/accounting/payouts/[id]/statement/route.ts", featureKey: "payout_runs", allowedRoles: ["owner", "bookkeeper"] },
+  // LA-7.5: producer splits — the agency's side (owner, bookkeeper) and a producer's own balance (producer, own rows only).
+  { sourceFile: "app/api/app/accounting/producers/route.ts", featureKey: "profit_and_loss", allowedRoles: ["owner", "bookkeeper"] },
+  { sourceFile: "app/api/app/accounting/producer-runs/[id]/route.ts", featureKey: "profit_and_loss", allowedRoles: ["owner", "bookkeeper"] },
+  { sourceFile: "app/api/app/accounting/my-balance/route.ts", featureKey: "profit_and_loss", allowedRoles: ["producer"] },
+  // LA-7.6: bank deposits — what actually arrived. Owner and bookkeeper.
+  { sourceFile: "app/api/app/accounting/bank/route.ts", featureKey: "profit_and_loss", allowedRoles: ["owner", "bookkeeper"] },
+  { sourceFile: "app/api/app/accounting/bank/import/route.ts", featureKey: "profit_and_loss", allowedRoles: ["owner", "bookkeeper"] },
+  // LA-7.8: tax figures and the export. Owner and bookkeeper; revealing a tax ID is further limited inside the route.
+  { sourceFile: "app/api/app/accounting/tax/route.ts", featureKey: "tax_summaries", allowedRoles: ["owner", "bookkeeper"] },
+  { sourceFile: "app/api/app/accounting/tax/export/route.ts", featureKey: "tax_summaries", allowedRoles: ["owner", "bookkeeper"] },
+  // LA-7.9: accounting settings — read by owner and bookkeeper, changed by the owner (checked inside the route).
+  { sourceFile: "app/api/app/accounting/settings/route.ts", featureKey: "profit_and_loss", allowedRoles: ["owner", "bookkeeper"] },
   { sourceFile: "app/api/app/deal-flow/route.ts", featureKey: "daily_deal_flow", allowedRoles: ["owner", "producer"] },
   { sourceFile: "app/api/app/deal-flow/[id]/route.ts", featureKey: "daily_deal_flow", allowedRoles: ["owner", "producer"] },
   { sourceFile: "app/api/app/deal-flow/funnel/route.ts", featureKey: "daily_deal_flow", allowedRoles: ["owner", "producer"] },
@@ -218,6 +272,8 @@ export const AGENT_API_POLICIES: AgentApiPolicy[] = [
   { sourceFile: "app/api/app/applications/for-lead/[leadId]/route.ts", featureKey: "applications", allowedRoles: ["owner", "producer"] },
   { sourceFile: "app/api/app/applications/cases/[caseId]/interview/route.ts", featureKey: "applications", allowedRoles: ["owner", "producer"] },
   { sourceFile: "app/api/app/applications/cases/[caseId]/interview/medications/route.ts", featureKey: "applications", allowedRoles: ["owner", "producer"] },
+  // The workspace's Quote step records the carrier's quote the agent reads out; it is part of the application,
+  // not the quoting engine, so the `quoting` kill switch (off since 2026-09-29) must not stop applications.
   { sourceFile: "app/api/app/applications/cases/[caseId]/quotes/route.ts", featureKey: "applications", allowedRoles: ["owner", "producer"] },
   { sourceFile: "app/api/app/quotes/[id]/select/route.ts", featureKey: "applications", allowedRoles: ["owner", "producer"] },
   { sourceFile: "app/api/app/applications/attempts/[id]/values/route.ts", featureKey: "applications", allowedRoles: ["owner", "producer"] },
@@ -297,6 +353,25 @@ export const AGENT_API_POLICIES: AgentApiPolicy[] = [
   { sourceFile: "app/api/app/profile/route.ts", featureKey: null },
   // The same person's own profile picture, the same rule: requireTenant() and the session's user only.
   { sourceFile: "app/api/app/profile/avatar/route.ts", featureKey: null },
+  // LA-8.2: the caller's own sign-in and security. Every role; their own account only.
+  { sourceFile: "app/api/app/profile/password/route.ts", featureKey: null },
+  { sourceFile: "app/api/app/profile/email/route.ts", featureKey: null },
+  { sourceFile: "app/api/app/profile/two-factor/route.ts", featureKey: null },
+  { sourceFile: "app/api/app/profile/sessions/route.ts", featureKey: null },
+  { sourceFile: "app/api/app/profile/security-events/route.ts", featureKey: null },
+  // LA-8.4: the caller's own notification preferences. Every role; events they cannot receive are absent.
+  { sourceFile: "app/api/app/notification-preferences/route.ts", featureKey: null },
+  // LA-8.7: integration API keys and webhooks. Agency plumbing, not a paid module; tenant-admin only.
+  { sourceFile: "app/api/app/api-keys/route.ts", featureKey: null, allowedRoles: ["owner"] },
+  { sourceFile: "app/api/app/api-keys/[id]/route.ts", featureKey: null, allowedRoles: ["owner"] },
+  { sourceFile: "app/api/app/api-keys/[id]/rotate/route.ts", featureKey: null, allowedRoles: ["owner"] },
+  { sourceFile: "app/api/app/webhooks/route.ts", featureKey: null, allowedRoles: ["owner"] },
+  { sourceFile: "app/api/app/webhooks/[id]/route.ts", featureKey: null, allowedRoles: ["owner"] },
+  { sourceFile: "app/api/app/webhooks/[id]/test/route.ts", featureKey: null, allowedRoles: ["owner"] },
+  // LA-8.8: the settings history. Every role may read its own entries (?mine=1); only the owner the
+  // whole log, which the route enforces. The "last changed" line is the owner's.
+  { sourceFile: "app/api/app/settings-audit/route.ts", featureKey: null },
+  { sourceFile: "app/api/app/settings-audit/last/route.ts", featureKey: null, allowedRoles: ["owner"] },
   // Alert preferences are a cross-cutting agent setting, not a paid module. The route still
   // resolves tenant and current membership server-side via requireTenant().
   { sourceFile: "app/api/app/notifications/route.ts", featureKey: null },
@@ -346,5 +421,9 @@ export const AGENT_API_POLICIES: AgentApiPolicy[] = [
   { sourceFile: "app/api/app/team/[userId]/invite/route.ts", featureKey: null, allowedRoles: ["owner"] },
   { sourceFile: "app/api/app/team/[userId]/licensed-states/route.ts", featureKey: null, allowedRoles: ["owner"] },
   { sourceFile: "app/api/app/team/[userId]/resend-invite/route.ts", featureKey: null, allowedRoles: ["owner"] },
+  // LA-8.6: deactivate (open work handed over first), reactivate, and the member's own time zone.
+  { sourceFile: "app/api/app/team/[userId]/deactivate/route.ts", featureKey: null, allowedRoles: ["owner"] },
+  { sourceFile: "app/api/app/team/[userId]/reactivate/route.ts", featureKey: null, allowedRoles: ["owner"] },
+  { sourceFile: "app/api/app/team/[userId]/timezone/route.ts", featureKey: null, allowedRoles: ["owner"] },
   { sourceFile: "app/api/app/team/route.ts", featureKey: null, allowedRoles: ["owner"] },
 ];

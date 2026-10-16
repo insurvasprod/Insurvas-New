@@ -12,6 +12,8 @@ import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 import { countdown, dayOnDay } from "@/lib/dashboard/todayMath";
 import { hourLabel, periodChange } from "@/lib/dashboard/insights";
+import { waitLabel } from "@/lib/dashboard/summaryText";
+import { Ring } from "@/components/ui/ring";
 import type { HomeFigureKey, HomeNeedKey, HomeSectionKey } from "@/lib/dashboard/roleHome";
 import type { DashboardToday } from "@/lib/dashboard/today";
 
@@ -119,7 +121,7 @@ export function NextCallback({ callback, serverNow, href }: { callback: NonNulla
 
 /* ── Today's figures: the page's one strip ───────────────────────────────── */
 
-type Figure = { label: string; value: ReactNode; foot?: string; tone?: Tone; trend?: "up" | "down" | null; spark?: Array<number | null>; tip?: string };
+type Figure = { label: string; value: ReactNode; foot?: string; tone?: Tone; trend?: "up" | "down" | null; spark?: Array<number | null>; tip?: string; ring?: { value: number; max: number; label: string } };
 
 /**
  * The figures this reader's home lists, in its order, each only when its number was read: a figure
@@ -161,18 +163,45 @@ function HomeFigures({ data, figures }: { data: DashboardToday; figures: Array<{
       label: "Premium · 30 days", value: <CountUp value={data.policies30.premiumCents / 100} prefix="$" compact />,
       foot: `${data.policies30.count.toLocaleString()} polic${data.policies30.count === 1 ? "y" : "ies"} written`, tone: data.policies30.count ? "good" : "neutral",
     },
-    queue: () => data.queueReady === null ? null : { label: "Queue ready", value: <CountUp value={data.queueReady} />, foot: "leads waiting to dial" },
+    queue: () => data.queueReady === null ? null : { label: "Queue ready", value: <CountUp value={data.queueReady} />, foot: data.scope === "you" ? "in the agency's pool" : "leads waiting to dial" },
     booked: () => {
       const week = data.setterWeek;
       if (!week) return null;
-      // Decision 12: the show rate never travels without its coverage.
+      return { label: "Booked · 7 days", value: <CountUp value={week.booked} />, foot: "booked by you" };
+    },
+    shown: () => {
+      const week = data.setterWeek;
+      if (!week) return null;
+      return { label: "Shown · 7 days", value: <CountUp value={week.showed} />, foot: `${week.noShow.toLocaleString()} no-show${week.noShow === 1 ? "" : "s"}`, tone: week.showed ? "good" : "neutral" };
+    },
+    showRate: () => {
+      const week = data.setterWeek;
+      if (!week) return null;
+      // Decision 12 / Sixteen #12: the show rate never travels without its coverage —
+      // "62%, based on 31 of 38 closed out".
       const decided = week.showed + week.noShow;
       const showRate = pct(week.showed, decided);
-      const coverage = pct(week.closedOut, week.closeable);
       return {
-        label: "Booked · 7 days", value: <CountUp value={week.booked} />,
-        foot: showRate === null ? "none closed out yet" : `${showRate.toFixed(0)}% showed · ${coverage === null ? "—" : `${coverage.toFixed(0)}%`} closed out`,
+        label: "Show rate · 7 days", value: showRate === null ? "—" : <CountUp value={showRate} suffix="%" />,
+        foot: week.closeable ? `based on ${week.closedOut.toLocaleString()} of ${week.closeable.toLocaleString()} closed out` : "none to close out yet",
+        ring: week.closeable ? { value: week.closedOut, max: week.closeable, label: `${week.closedOut} of ${week.closeable} appointments closed out` } : undefined,
         tip: "Show rate counts only appointments with a recorded outcome. Closed out is the share of your past appointments that have one.",
+      };
+    },
+    closeOut: () => {
+      const own = data.closeOut;
+      if (!own) return null;
+      // Sixteen #12: the reader's own close-out rate, with the show rate it covers beside it.
+      const closed = own.showed + own.noShow;
+      const closeable = closed + own.awaiting;
+      const coverage = pct(closed, closeable);
+      const showRate = pct(own.showed, closed);
+      return {
+        label: "Your close-out · 30 days", value: coverage === null ? "—" : <CountUp value={coverage} suffix="%" />,
+        foot: closeable ? `${showRate === null ? "—" : `${showRate.toFixed(0)}%`} showed, based on ${closed.toLocaleString()} of ${closeable.toLocaleString()} closed out` : "nothing to close out yet",
+        tone: own.awaiting ? "warning" : closeable ? "good" : "neutral",
+        ring: closeable ? { value: closed, max: closeable, label: `${closed} of ${closeable} of your appointments closed out` } : undefined,
+        tip: "Of the appointments on your calendar in the last 30 days that have started, the share with an outcome recorded.",
       };
     },
   };
@@ -194,6 +223,7 @@ function HomeFigures({ data, figures }: { data: DashboardToday; figures: Array<{
           reserveFootnote
           footnote={cell.foot ? (
             <span className={`inline-flex items-center gap-1 ${toneInk[cell.tone ?? "neutral"]}`}>
+              {cell.ring && <Ring value={cell.ring.value} max={cell.ring.max} size={18} tone="primary" label={cell.ring.label}><></></Ring>}
               {cell.trend === "up" && <ArrowUpRight className="size-3.5 shrink-0" aria-hidden="true" />}
               {cell.trend === "down" && <ArrowDownRight className="size-3.5 shrink-0" aria-hidden="true" />}
               {cell.foot}
@@ -274,7 +304,8 @@ function NeedsList({ needs, rows: wanted }: { needs: DashboardToday["needs"]; ro
   const build: Record<HomeNeedKey, (href: string) => NeedRow | null> = {
     transfers: (href) => needs.transfersWaiting === null ? null : {
       key: "transfers", label: "Transfers waiting", value: needs.transfersWaiting, href,
-      sentence: needs.slaBreaching ? `${needs.slaBreaching} past the ${needs.slaMinutes ?? 15}m SLA` : needs.transfersWaiting ? "None past the SLA" : "Nobody waiting",
+      // The SLA, and how long the longest one has waited (the queue SLA ladder's own read).
+      sentence: `${needs.slaBreaching ? `${needs.slaBreaching} past the ${needs.slaMinutes ?? 15}m SLA` : needs.transfersWaiting ? "None past the SLA" : "Nobody waiting"}${needs.transfersWaiting && needs.oldestWaitingSeconds !== null ? ` · longest ${waitLabel(needs.oldestWaitingSeconds)}` : ""}`,
       tone: needs.slaBreaching ? "danger" : needs.transfersWaiting ? "warning" : "good",
     },
     callbacks: (href) => needs.callbacksOverdue === null ? null : { key: "callbacks", label: "Callbacks overdue", value: needs.callbacksOverdue, sentence: needs.callbacksToday ? `${needs.callbacksToday} more due later today` : "Nothing else due today", href, tone: needs.callbacksOverdue ? "warning" : "good" },
@@ -293,7 +324,7 @@ function NeedsList({ needs, rows: wanted }: { needs: DashboardToday["needs"]; ro
       title="Needs you today"
       action={<StatusChip tone={attention ? "danger" : "good"} dot>{attention ? `${attention} need attention` : "All clear"}</StatusChip>}
     >
-      <ul className="m-0 grid list-none grid-cols-1 gap-px overflow-hidden border-t border-border bg-border p-0sm:grid-cols-2 xl:grid-flow-col xl:auto-cols-fr xl:grid-cols-none">
+      <ul className="m-0 grid list-none grid-cols-1 gap-px overflow-hidden border-t border-border bg-border p-0 sm:grid-cols-2 xl:grid-flow-col xl:auto-cols-fr xl:grid-cols-none">
         {rows.map((row) => (
           <li key={row.key} className="bg-card">
             <Link href={row.href} className="m-row group flex items-center gap-3 px-4 py-3 text-inherit no-underline">

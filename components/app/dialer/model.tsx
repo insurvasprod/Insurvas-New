@@ -17,7 +17,7 @@ export type Eligibility = {
   checkedAt: string;
   timezone: string | null;
   customerLocalTime: string | null;
-  /** Vendor availability, not a lookup of this number. See lib/dialerScripts/service.ts. */
+  /** The stored-list answer for this number (local tables only, never a vendor). See lib/dialerScripts/service.ts. */
   dncCheck: "pending" | "clear" | "suppressed" | "unavailable";
   suppression?: "clear" | "suppressed" | "unavailable" | "not_checked";
   /** Every stored list the number is on (20260925700200); null when only the agency's list could be read. */
@@ -101,21 +101,21 @@ export const FILTERS: Array<{ key: QueueFilter; label: string }> = [
 
 export const card = "min-w-0 rounded-[12px] border border-[var(--border)] bg-[var(--surface)]";
 
-export const h2 = "m-0 text-[18px] leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]";
+export const h2 = "m-0 text-title-sm leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]";
 
-export const label = "text-[12px] leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]";
+export const label = "text-xs leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]";
 
-export const value = "mt-1 text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)] tabular-nums break-words";
+export const value = "mt-1 text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)] tabular-nums break-words";
 
-export const small = "text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]";
+export const small = "text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]";
 
-export const body14 = "text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--body)]";
+export const body14 = "text-sm leading-[1.5] tracking-[-0.02em] text-[var(--body)]";
 
 export const barHead = "flex items-center justify-between gap-4 border-b border-[var(--border)] bg-[var(--surface-alt)] px-4 py-3";
 
-export const barTitle = "text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]";
+export const barTitle = "text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]";
 
-export const fieldLabel = "text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]";
+export const fieldLabel = "text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]";
 
 /** A form control in a side panel: the same 36px box as the buttons beside it. */
 export const fieldClass = cn(toolbarControl, "mt-1.5 w-full");
@@ -155,7 +155,7 @@ export function announceDisposition(value: string, body: { attempt?: unknown } |
 
 /** A key hint inside a button (LA-2.9-9). Hidden from screen readers: the button carries aria-keyshortcuts. */
 export function Kbd({ children }: { children: React.ReactNode }) {
-  return <kbd aria-hidden="true" className="ml-2 rounded-[4px] border border-current px-1 font-sans text-[12px] leading-[1.4] font-semibold opacity-60">{children}</kbd>;
+  return <kbd aria-hidden="true" className="ml-2 rounded-[4px] border border-current px-1 font-sans text-xs leading-[1.4] font-semibold opacity-60">{children}</kbd>;
 }
 
 export function leadName(values: Record<string, unknown>) {

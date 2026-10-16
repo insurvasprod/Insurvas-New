@@ -2,7 +2,7 @@ import "server-only";
 import { cache } from "react";
 
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
-import type { Entitlement } from "./types";
+import { applyRetentionWindow, type Entitlement } from "./types";
 
 /**
  * Reads the cached entitlement, computing it on first access.
@@ -11,7 +11,8 @@ import type { Entitlement } from "./types";
  * re-joining plans, add-ons, meters and usage on every request.
  */
 export async function getEntitlement(tenantId: string): Promise<Entitlement> {
-  return readEntitlement(tenantId);
+  // LA-8.5: a cancelled agency's read-only window ends on the day, not at the next rebuild.
+  return applyRetentionWindow(await readEntitlement(tenantId));
 }
 
 // One read per tenant per request. The shell builds the menu from it and the page's guard checks it

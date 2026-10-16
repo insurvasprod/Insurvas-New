@@ -12,6 +12,7 @@ import { ChevronRight } from "lucide-react";
 
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
+import { InfoTip } from "@/components/ui/info-tip";
 import { EmptyState } from "@/components/ui/page-states";
 import { StatTile } from "@/components/ui/stat";
 import { StatusChip } from "@/components/ui/status-chip";
@@ -61,12 +62,12 @@ export function DraftDateCalculator() {
 
   return (
     <div className="m-stagger flex flex-col gap-6">
-      <PageHeader title="Draft-date calculator" description="When their money arrives, and the safest day to take the premium." />
+      <PageHeader title="Draft-date calculator" description="The safest day to draft the premium." />
 
       <div className="flex flex-col items-start gap-6 xl:flex-row">
         <StepCard title="Income and draft day" className="w-full min-w-0 flex-1" bodyClassName="gap-0 p-0">
           <div className="grid gap-4 px-5 py-[18px] md:grid-cols-[minmax(0,1fr)_minmax(0,1.9fr)_minmax(0,1.05fr)]">
-            <Field label="Date of birth" htmlFor="dd.dob" hint="The day of the month is what sets the cycle">
+            <Field label="Date of birth" htmlFor="dd.dob" hint="Its day sets the pay cycle">
               <input id="dd.dob" type="date" className={control} value={dob} onChange={(e) => setDob(e.target.value)} />
             </Field>
             <IncomeFields m={m} dob={dob || null} readOnly={false} idPrefix="dd" className="sm:grid-cols-2" />
@@ -77,17 +78,21 @@ export function DraftDateCalculator() {
 
           <div className="px-5 pb-5">
             {!rec ? (
-              <p className="text-sm text-[var(--muted)]">Choose how the client gets their money to see the safest draft day.</p>
+              <p className="text-sm text-[var(--muted)]">Pick an income type to see the draft day.</p>
             ) : rec.kind === "not_applicable" ? (
               <p className="text-sm text-[var(--muted)]">{rec.why}</p>
             ) : (
               <div className="flex flex-col gap-4 rounded-lg border border-[var(--border)] bg-[var(--primary-soft)] p-4">
                 {/* The figure in the system's StatTile type (2026-10-06 redesign: no off-scale 32px). */}
-                <StatTile
-                  className="border-0 bg-transparent p-0 shadow-none"
-                  label={shown === recommended ? (rec.kind === "neutral" ? "Best guess" : "Recommended draft day") : "Draft day"}
-                  value={shown === null ? "—" : ordinal(shown)}
-                />
+                {/* The why sits behind a tip beside the figure (2026-10-09 copy pass). */}
+                <div className="flex items-start gap-1">
+                  <StatTile
+                    className="border-0 bg-transparent p-0 shadow-none"
+                    label={shown === recommended ? (rec.kind === "neutral" ? "Best guess" : "Recommended draft day") : "Draft day"}
+                    value={shown === null ? "—" : ordinal(shown)}
+                  />
+                  {why && <InfoTip label="Why this day" side="right">{why}</InfoTip>}
+                </div>
                 {aloud && <ReadAloud title="Read this back to them, word for word" text={aloud} />}
                 {others.length > 0 && (
                   <div className="flex flex-wrap items-center gap-3">
@@ -100,7 +105,6 @@ export function DraftDateCalculator() {
                     ))}
                   </div>
                 )}
-                {why && <p className="text-xs text-[var(--muted)]">{why}</p>}
               </div>
             )}
           </div>
@@ -132,7 +136,7 @@ export function DraftDateCalculator() {
           {rec?.kind === "recommended" ? (
             <ArrivalTable m={m} day={shown} />
           ) : (
-            <EmptyState title="No schedule yet" hint="Choose how the client gets their money to see the next twelve deposits." />
+            <EmptyState title="No schedule yet" hint="Pick an income type to see the next twelve deposits." />
           )}
         </PagedTableCard>
       </div>

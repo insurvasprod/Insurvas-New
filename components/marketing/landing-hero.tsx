@@ -1,84 +1,69 @@
-"use client";
-
 import Link from "next/link";
-import { ArrowRight, Calculator, ShieldCheck, Trophy } from "lucide-react";
+import { ViewTransition, type CSSProperties } from "react";
+import { ArrowRight, Check } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Tilt3D, usePrefersReducedMotion } from "@/components/marketing/motion";
-import { AppWindow, DialerMock, InboundMock, Satellite } from "@/components/marketing/landing-mocks";
+import { LandingObject } from "@/components/marketing/three/landing-object";
 import styles from "@/components/marketing/landing.module.css";
 
 /**
- * The hero: copy on the left, a 3D stage on the right. The stage is three layers at different
- * depths (a dialer window far back, the inbound floor in the middle, three satellites up front)
- * inside one preserve-3d scene that tilts toward the pointer, over a perspective grid floor that
- * runs toward the viewer. Dark ground in both themes — the one band on the page that is.
+ * The hero (2026-10-13). Light and editorial, with one living object: a WebGL ribbon in the brand
+ * greens flowing behind the headline — the stream of leads and money the product follows.
+ *
+ * Its entrance is one sequence, in CSS so it runs from the first paint and never waits on
+ * hydration (owner, 2026-10-13): after the intro lifts, the ribbon sweeps in slowly, then the
+ * headline rises word by word, then the rest. Every delay is measured from --intro-delay
+ * (landing.module.css), which is 0 when there is no intro. Under reduced motion it all just shows.
  */
+const at = (ms: number) => ({ "--at": `${ms}ms` }) as CSSProperties;
+
+function Words({ text, from, className = "" }: { text: string; from: number; className?: string }) {
+  const words = text.split(" ");
+  return words.map((word, index) => (
+    <span key={`${word}-${index}`}>
+      <span className={styles.heroWordClip}><span className={`${styles.heroWord} ${className}`} style={at(from + index * 80)}>{word}</span></span>
+      {index < words.length - 1 ? " " : null}
+    </span>
+  ));
+}
+
 export function LandingHero() {
-  const reduced = usePrefersReducedMotion();
   return (
-    <section className="relative isolate overflow-hidden bg-[var(--footer-bg)] text-[var(--nav-ink)]">
-      <div aria-hidden="true" className={`${styles.aurora} -left-40 -top-72`} />
-      <div aria-hidden="true" className={`${styles.aurora} -right-60 top-40 opacity-60`} style={{ animationDelay: "-7s" }} />
-      <div aria-hidden="true" className={styles.floor} />
+    <section data-landing-hero="" className={`relative isolate overflow-hidden bg-background ${styles.hero}`}>
+      {/* Named, so it morphs into the sign-in pages' brand panel (components/portal/portal-auth-split-shell.tsx). */}
+      <ViewTransition name="brand-ribbon" share="ribbon-morph" default="none">
+        <LandingObject kind="ribbon" className={`pointer-events-none absolute -right-[12%] top-[-6%] -z-10 h-[112%] w-[100%] [mask-image:linear-gradient(90deg,transparent_0%,black_35%,black_85%,transparent_100%)] lg:w-[78%] ${styles.ribbonIn}`} />
+      </ViewTransition>
+      {/* Keeps the headline legible where the ribbon passes behind it. */}
+      <div aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-0 -z-10 w-full bg-[linear-gradient(90deg,var(--background)_30%,transparent_70%)] lg:w-2/3" />
 
-      <div className="relative mx-auto grid max-w-7xl items-center gap-14 px-4 pb-24 pt-16 sm:px-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] lg:px-16 lg:pb-32 lg:pt-24">
-        <div className="relative z-10 max-w-[620px]">
-          <span className="inline-flex items-center gap-2 rounded-full border border-[color-mix(in_srgb,var(--primary)_40%,transparent)] bg-[color-mix(in_srgb,var(--primary)_14%,transparent)] px-3 py-1 text-xs font-semibold text-[color-mix(in_srgb,var(--primary)_70%,white)]">
-            <span className={`size-1.5 rounded-full bg-[var(--primary)] ${styles.pulse}`} aria-hidden="true" />
-            Built for agencies that buy their leads
-          </span>
-          <h1 className="mt-6 text-[44px] font-semibold leading-[1.02] tracking-[-0.035em] sm:text-[56px] lg:text-[64px]">
-            Know what every lead{" "}
-            <span className="bg-[linear-gradient(100deg,var(--primary),color-mix(in_srgb,var(--primary)_55%,white))] bg-clip-text text-transparent">cost you.</span>
-          </h1>
-          <p className="mt-6 max-w-[56ch] text-base leading-[1.6] text-[var(--nav-muted)] sm:text-lg">
-            Insurvas runs the inbound floor, the outbound dialer and the book of business in one workspace — and traces every
-            issued policy back to the campaign that paid for it.
-          </p>
-          <div className="mt-8 flex flex-wrap items-center gap-3">
-            <Button asChild className="h-12 rounded-full px-7 text-base shadow-[0_10px_40px_-10px_var(--primary)]">
-              <Link href="/signup">Start your 14-day trial<ArrowRight className="size-4" aria-hidden="true" /></Link>
-            </Button>
-            <Link href="#product" className="inline-flex h-12 items-center rounded-full border border-[var(--nav-line)] px-6 text-base font-semibold text-[var(--nav-ink)] no-underline transition-colors hover:border-[var(--nav-muted)] hover:bg-white/5">
-              See it working
-            </Link>
-          </div>
-          <p className="mt-4 text-sm text-[var(--nav-muted)]">No card. Your data stays in your workspace. Cancel from the app.</p>
+      <div className="mx-auto flex min-h-[100svh] max-w-7xl flex-col justify-center px-4 pb-20 pt-32 sm:px-6 lg:px-16">
+        <p className={`text-sm font-semibold text-[var(--accent-ink)] ${styles.heroRise}`} style={at(700)}>For life &amp; health agencies and call centers that buy their leads</p>
+        <h1 className="mt-5 max-w-[840px] text-headline-lg font-semibold leading-[1.0] tracking-[-0.045em] text-[var(--ink)] sm:text-hero lg:text-[clamp(3.5rem,6.2vw,5.25rem)]">
+          <Words text="Know what every lead" from={850} />{" "}
+          <Words text="really" from={1170} className="pr-[0.1em] font-light italic text-[var(--accent-ink)]" />{" "}
+          <Words text="cost you." from={1250} />
+        </h1>
+        <p className={`mt-7 max-w-[560px] text-base leading-[1.65] text-muted-foreground sm:text-lg ${styles.heroRise}`} style={at(1500)}>
+          Live transfers, dialing, applications and commissions in one workspace — and every issued policy traced back to
+          the campaign that paid for it.
+        </p>
+        <div className={`mt-9 flex flex-wrap items-center gap-3 ${styles.heroRise}`} style={at(1650)}>
+          <Button asChild className="h-12 rounded-full px-7 text-base">
+            <Link href="/signup">Start your free trial<ArrowRight className="size-4" aria-hidden="true" /></Link>
+          </Button>
+          <Button asChild variant="outline" className="h-12 rounded-full bg-background/70 px-7 text-base backdrop-blur">
+            <Link href="#product">See the product</Link>
+          </Button>
         </div>
-
-        {/* The stage. Hidden from assistive tech: it is a picture of the product, described by the
-            copy beside it and by the tour below. */}
-        <div aria-hidden="true" className="relative mx-auto w-full max-w-[640px] lg:max-w-none lg:pl-10">
-          <Tilt3D max={7} rest={{ x: reduced ? 0 : 9, y: reduced ? 0 : -11 }} perspective={1600} className="py-10">
-            <div className="relative" style={{ transformStyle: "preserve-3d" }}>
-              {/* Far layer: the dialer, peeking out behind and to the right */}
-              <div className="absolute -right-6 -top-14 hidden w-[74%] opacity-80 sm:block" style={{ transform: "translateZ(-160px)" }}>
-                <AppWindow url="app.insurvas.com/app/dialer" tag={false}>
-                  <DialerMock />
-                </AppWindow>
-              </div>
-
-              {/* Middle layer: the inbound floor */}
-              <div style={{ transform: "translateZ(0)" }}>
-                <AppWindow url="app.insurvas.com/app/inbound">
-                  <InboundMock />
-                </AppWindow>
-              </div>
-
-              {/* Front layer: satellites, each floating on its own rhythm */}
-              <div className={`absolute -left-4 top-[60%] hidden sm:block ${styles.float}`} style={{ transform: "translateZ(120px)" }}>
-                <Satellite icon={<ShieldCheck className="size-4" />} label="Screened before the dial" value="4 of 4 checks clear" tone="success" />
-              </div>
-              <div className={`absolute -right-8 -bottom-10 hidden sm:block ${styles.floatSlow}`} style={{ transform: "translateZ(170px)" }}>
-                <Satellite icon={<Calculator className="size-4" />} label="True CPA, per issued policy" value="$227.44" />
-              </div>
-              <div className={`absolute -top-8 left-[18%] hidden md:block ${styles.floatAlt}`} style={{ transform: "translateZ(90px)" }}>
-                <Satellite icon={<Trophy className="size-4" />} label="Transfer claimed" value="One winner, settled by the server" />
-              </div>
-            </div>
-          </Tilt3D>
-        </div>
+        <ul className={`mt-8 flex flex-wrap gap-x-6 gap-y-2 p-0 text-sm text-muted-foreground ${styles.heroRise}`} style={at(1780)}>
+          {/* Each line is one the product can back: a card is taken at checkout but nothing is charged
+              during the trial; there is no per-lead fee (add-ons and metered usage are priced on
+              /pricing); screening runs the agency's own checks and vendors, it is not a legal guarantee. */}
+          {["$0 due during the free trial", "No per-lead fees", "Consent, DNC and calling-window screening before a dial"].map((item) => (
+            <li key={item} className="flex list-none items-center gap-2"><Check className="size-4 text-[var(--accent-ink)]" aria-hidden="true" />{item}</li>
+          ))}
+        </ul>
       </div>
     </section>
   );

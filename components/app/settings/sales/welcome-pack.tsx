@@ -12,10 +12,11 @@
  * draft live, with an example client and the signed-in person as the agent.
  */
 
+import { StatusChip } from "@/components/ui/status-chip";
 import { useRef, useState } from "react";
 import { notify } from "@/lib/notify";
 
-import { Callout, Field, LockIcon, Pill, SettingsCard, SettingsStack, control } from "@/components/app/settings/primitives";
+import { Callout, Field, LockIcon, SettingsCard, SettingsStack, control } from "@/components/app/settings/primitives";
 import { face, money, ordinal } from "@/components/app/applications/parts";
 import { Button } from "@/components/ui/button";
 import { SettingsSaveBar } from "@/components/ui/settings-layout";
@@ -63,7 +64,7 @@ function Rendered({ text, values }: { text: string; values: Record<string, strin
       {tokenParts(text).map((part, i) => {
         if (!part.token) return <span key={i}>{part.text}</span>;
         const value = values[part.token];
-        if (value === undefined) return <span key={i} className="rounded-[4px] bg-[var(--warning-surface)] px-1 font-mono text-[14px] text-[var(--warning-ink)]" title="The welcome pack does not know this token.">{part.token}</span>;
+        if (value === undefined) return <span key={i} className="rounded-[4px] bg-[var(--warning-surface)] px-1 font-mono text-sm text-[var(--warning-ink)]" title="The welcome pack does not know this token.">{part.token}</span>;
         const locked = LOCKED.some((t) => t.token === part.token);
         return locked ? <strong key={i} className="font-semibold text-[var(--ink)]">{value}</strong> : <span key={i}>{value}</span>;
       })}
@@ -74,18 +75,18 @@ function Rendered({ text, values }: { text: string; values: Record<string, strin
 function Preview({ subject, body, me }: { subject: string; body: string; me: SalesSettingsView["me"] }) {
   const values = exampleValues(me);
   return (
-    <SettingsCard title="Preview" sub="An example client, signed with your name and phone." action={<Pill tone="brand">Live</Pill>} pad={20}>
+    <SettingsCard title="Preview" sub="An example client, signed with your name and phone." action={<StatusChip dot={false} tone="action">Live</StatusChip>} pad={20}>
       <dl className="m-0 flex flex-col gap-2">
         <div>
-          <dt className="text-[12px] leading-[1.5] text-[var(--muted)]">To</dt>
-          <dd className="m-0 text-[14px] leading-[1.5] text-[var(--ink)]">The client&apos;s email on the application</dd>
+          <dt className="text-xs leading-[1.5] text-[var(--muted)]">To</dt>
+          <dd className="m-0 text-sm leading-[1.5] text-[var(--ink)]">The client&apos;s email on the application</dd>
         </div>
         <div>
-          <dt className="text-[12px] leading-[1.5] text-[var(--muted)]">Subject</dt>
-          <dd className="m-0 text-[14px] leading-[1.5] font-semibold text-[var(--ink)]"><Rendered text={subject || "No subject"} values={values} /></dd>
+          <dt className="text-xs leading-[1.5] text-[var(--muted)]">Subject</dt>
+          <dd className="m-0 text-sm leading-[1.5] font-semibold text-[var(--ink)]"><Rendered text={subject || "No subject"} values={values} /></dd>
         </div>
       </dl>
-      <div className="mt-3 flex flex-col gap-3 rounded-[8px] bg-[var(--canvas)] p-3.5 text-[16px] leading-[1.6] tracking-[-0.01em] text-[var(--body)]">
+      <div className="mt-3 flex flex-col gap-3 rounded-[8px] bg-[var(--canvas)] p-3.5 text-base leading-[1.6] tracking-[-0.01em] text-[var(--body)]">
         {body.split(/\n{2,}/).filter((p) => p.trim()).map((paragraph, i) => (
           <p key={i} className="m-0 whitespace-pre-line break-words"><Rendered text={paragraph.trim()} values={values} /></p>
         ))}
@@ -137,7 +138,7 @@ function Editor({ view, save }: { view: SalesSettingsView; save: (next: SalesSet
     }
   }
 
-  const chip = "inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 font-mono text-[12px] leading-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)] disabled:cursor-not-allowed disabled:opacity-60";
+  const chip = "inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 font-mono text-xs leading-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)] disabled:cursor-not-allowed disabled:opacity-60";
   const problem = bodyError ?? (subject.trim() ? null : "Give the email a subject.") ?? (valid ? null : "Check the subject and body.");
 
   return (
@@ -159,8 +160,8 @@ function Editor({ view, save }: { view: SalesSettingsView; save: (next: SalesSet
                   <li key={t.token} className="flex items-center gap-3 border-t border-[var(--border)] py-2.5 first:border-t-0 first:pt-0">
                     <span className="text-[var(--muted)]"><LockIcon /></span>
                     <span className="min-w-0 flex-1" title={WHY[t.token]}>
-                      <span className="block text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">{t.label}</span>
-                      <span className={cn("block font-mono text-[12px] leading-[1.5]", gone ? "text-[var(--error-ink)]" : "text-[var(--muted)]")}>{t.token}{gone ? " — missing from the body" : ""}</span>
+                      <span className="block text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">{t.label}</span>
+                      <span className={cn("block font-mono text-xs leading-[1.5]", gone ? "text-[var(--error-ink)]" : "text-[var(--muted)]")}>{t.token}{gone ? " — missing from the body" : ""}</span>
                     </span>
                     {gone && !ro && <Button type="button" variant="outline" size="sm" onClick={() => insert(t.token)}>Put it back</Button>}
                   </li>
@@ -186,10 +187,10 @@ function Editor({ view, save }: { view: SalesSettingsView; save: (next: SalesSet
                   onChange={(e) => setBody(e.target.value)}
                 />
               </Field>
-              {unknown.length > 0 && <p role="alert" className="m-0 text-[12px] leading-[1.5] text-[var(--warning-ink)]">{unknown.join(", ")} {unknown.length === 1 ? "isn't a token" : "aren't tokens"} the pack knows — the client would see {unknown.length === 1 ? "it" : "them"} as written.</p>}
+              {unknown.length > 0 && <p role="alert" className="m-0 text-xs leading-[1.5] text-[var(--warning-ink)]">{unknown.join(", ")} {unknown.length === 1 ? "isn't a token" : "aren't tokens"} the pack knows — the client would see {unknown.length === 1 ? "it" : "them"} as written.</p>}
               {!ro && (
                 <div className="flex flex-col gap-2">
-                  <span className="text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]">Insert a token</span>
+                  <span className="text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]">Insert a token</span>
                   <div className="flex flex-wrap gap-2">
                     {OPTIONAL.map((t) => (
                       <button key={t.token} type="button" onClick={() => insert(t.token)} title={`${t.label} — inserted at the cursor`} className={cn(chip, "border-[var(--border-strong)] bg-[var(--surface)] text-[var(--body)] hover:bg-[var(--surface-alt)]")}>

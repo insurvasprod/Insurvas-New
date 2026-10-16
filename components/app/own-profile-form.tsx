@@ -9,6 +9,8 @@ import { Label } from "@/components/ui/label";
 import { LICENCE_NUMBER_MAX, OWN_NAME_MAX, OWN_PHONE_MAX, type OwnProfile } from "@/lib/users/ownProfile";
 import { AVATAR_TYPES, avatarFileProblem } from "@/lib/users/avatarRules";
 import { notify } from "@/lib/notify";
+import { control } from "@/components/app/settings/primitives";
+import { WORKSPACE_TIMEZONES } from "@/lib/agencyProfile/types";
 import { Upload } from "lucide-react";
 
 /**
@@ -108,6 +110,7 @@ export function OwnProfileForm({ initial }: { initial: OwnProfile }) {
   const [phone, setPhone] = useState(initial.phone ?? "");
   const [npn, setNpn] = useState(initial.npn ?? "");
   const [numbers, setNumbers] = useState<Record<string, string>>(initial.licenceNumbers);
+  const [timezone, setTimezone] = useState(initial.displayTimezone ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -115,6 +118,7 @@ export function OwnProfileForm({ initial }: { initial: OwnProfile }) {
   const dirty =
     name.trim() !== profile.name ||
     (phone.trim() || null) !== profile.phone ||
+    (timezone || null) !== profile.displayTimezone ||
     (profile.licenceNumbersReady && ((npn.trim() || null) !== profile.npn ||
       states.some((state) => (numbers[state] ?? "").trim() !== (profile.licenceNumbers[state] ?? ""))));
 
@@ -123,7 +127,7 @@ export function OwnProfileForm({ initial }: { initial: OwnProfile }) {
     setSaving(true);
     setError(null);
     try {
-      const body: Record<string, unknown> = { name, phone };
+      const body: Record<string, unknown> = { name, phone, displayTimezone: timezone || null };
       // Only sent when they can be stored, so a pending migration never blocks a phone correction.
       if (profile.licenceNumbersReady) {
         body.npn = npn;
@@ -140,6 +144,7 @@ export function OwnProfileForm({ initial }: { initial: OwnProfile }) {
       setProfile(result.profile);
       setName(result.profile.name);
       setPhone(result.profile.phone ?? "");
+      setTimezone(result.profile.displayTimezone ?? "");
       setNpn(result.profile.npn ?? "");
       setNumbers(result.profile.licenceNumbers);
       notify.done("Profile saved");
@@ -172,11 +177,19 @@ export function OwnProfileForm({ initial }: { initial: OwnProfile }) {
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="profile-email">Email</Label>
             <Input id="profile-email" value={profile.email} readOnly aria-describedby="profile-email-hint" />
-            <p id="profile-email-hint" className="text-xs text-[var(--muted)]">Your sign-in. Ask your owner to change it.</p>
+            <p id="profile-email-hint" className="text-xs text-[var(--muted)]">Your sign-in. Change it under Sign-in and security.</p>
           </div>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="profile-phone">Phone</Label>
             <Input id="profile-phone" type="tel" value={phone} maxLength={OWN_PHONE_MAX} autoComplete="tel" placeholder="(312) 555-0100" onChange={(event) => setPhone(event.target.value)} />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="profile-timezone">Display timezone</Label>
+            <select id="profile-timezone" className={`${control} mt-0`} value={timezone} onChange={(event) => setTimezone(event.target.value)} aria-describedby="profile-timezone-hint">
+              <option value="">The agency&apos;s timezone</option>
+              {(timezone && !(WORKSPACE_TIMEZONES as readonly string[]).includes(timezone) ? [timezone, ...WORKSPACE_TIMEZONES] : WORKSPACE_TIMEZONES).map((zone) => <option key={zone} value={zone}>{zone}</option>)}
+            </select>
+            <p id="profile-timezone-hint" className="text-xs text-[var(--muted)]">How times show for you only. Calling hours still follow each customer&apos;s state.</p>
           </div>
         </div>
       </section>

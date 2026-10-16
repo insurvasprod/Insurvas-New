@@ -1,16 +1,17 @@
 "use client";
 
+import { StatusChip } from "@/components/ui/status-chip";
 import { Fragment, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { Bell, ChevronDown, ChevronLeft, Loader2 } from "lucide-react";
 
-import { Callout, KeyValues, Pill, SettingsMeter, Timeline, type PillTone } from "@/components/app/settings/primitives";
-import { withFrom } from "@/lib/applications/backLink";
+import { Callout, KeyValues, SettingsMeter, Timeline, type PillTone, pillTone } from "@/components/app/settings/primitives";
 import { DispositionWizardDialog } from "@/components/app/disposition-wizard-dialog";
 import { Button } from "@/components/ui/button";
 import { toolbarControl } from "@/components/ui/data-toolbar";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageLoading } from "@/components/ui/page-loading";
+import { withFrom } from "@/lib/applications/backLink";
 import { productLineLabel } from "@/lib/format/productLine";
 import { notify } from "@/lib/notify";
 import type { TemplateField } from "@/lib/templates/constants";
@@ -51,10 +52,10 @@ function elapsed(from: string, now: number) {
 /* ── local controls: a text link and a flat 16px editor ─ */
 
 const b = {
-  link: "cursor-pointer border-0 bg-transparent p-0 text-[12px] leading-[1.5] font-semibold tracking-[-0.01em] text-[var(--accent-ink)] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)] disabled:cursor-not-allowed disabled:opacity-50",
+  link: "cursor-pointer border-0 bg-transparent p-0 text-xs leading-[1.5] font-semibold tracking-[-0.01em] text-[var(--accent-ink)] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)] disabled:cursor-not-allowed disabled:opacity-50",
 };
-const FLAT = "box-border w-full rounded-[6px] border border-transparent bg-transparent px-2 text-[16px] leading-[1.5] tracking-[-0.02em] text-[var(--ink)] outline-none placeholder:text-[var(--muted)] hover:border-[var(--border)] focus:border-[var(--border-strong)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--ring-color)] disabled:cursor-not-allowed disabled:opacity-60";
-const label12 = "text-[12px] leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]";
+const FLAT = "box-border w-full rounded-[6px] border border-transparent bg-transparent px-2 text-base leading-[1.5] tracking-[-0.02em] text-[var(--ink)] outline-none placeholder:text-[var(--muted)] hover:border-[var(--border)] focus:border-[var(--border-strong)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--ring-color)] disabled:cursor-not-allowed disabled:opacity-60";
+const label12 = "text-xs leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]";
 
 const STATE_PILL: Record<VerificationState, { tone: PillTone; label: string }> = {
   confirmed: { tone: "success", label: "Confirmed" },
@@ -76,7 +77,7 @@ function FieldEditor({ id, field, value, onChange, disabled, placeholder }: { id
     return (
       <div id={id} role="group" aria-label={field.label} className="flex flex-wrap gap-x-4 gap-y-1 px-2 py-1">
         {field.options.map((option) => (
-          <label key={option} className="inline-flex items-center gap-2 text-[16px] leading-[1.5] tracking-[-0.02em] text-[var(--ink)]">
+          <label key={option} className="inline-flex items-center gap-2 text-base leading-[1.5] tracking-[-0.02em] text-[var(--ink)]">
             <input type="checkbox" checked={Array.isArray(value) && value.includes(option)} disabled={disabled} onChange={(event) => onChange([...(Array.isArray(value) ? value : []).filter((item) => item !== option), ...(event.target.checked ? [option] : [])])} />
             {option}
           </label>
@@ -103,7 +104,7 @@ function sectionComplete(fields: Array<{ is_required: boolean; state: Verificati
 function Card({ title, children, className }: { title: string; children: ReactNode; className?: string }) {
   return (
     <section className={cn("min-w-0 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] p-5", className)}>
-      <h2 className="m-0 text-[16px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">{title}</h2>
+      <h2 className="m-0 text-base leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">{title}</h2>
       <div className="mt-3">{children}</div>
     </section>
   );
@@ -311,7 +312,7 @@ export function VerificationPanel({ workItemId, readOnly, canHandoff }: { workIt
         {[["Customer", leadName], ["State", leadState], ["Product", panel.template.product_name || productLineLabel(panel.workItem.productLine)], ["Lead source", source], ["Session status", requiredDone ? "Complete" : "In progress"]].map(([label, value]) => (
           <div key={label} className="min-w-0">
             <div className={label12}>{label}</div>
-            <div className="mt-1 truncate text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">{value}</div>
+            <div className="mt-1 truncate text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">{value}</div>
           </div>
         ))}
       </section>
@@ -324,13 +325,13 @@ export function VerificationPanel({ workItemId, readOnly, canHandoff }: { workIt
 
       {canHandoff && handoffContext && (
         <section aria-label="Hand off to a licensed agent" className="flex min-w-0 flex-wrap items-center gap-3 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
-          <label htmlFor="handoff-agent" className="text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">Hand off to a licensed agent</label>
+          <label htmlFor="handoff-agent" className="text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">Hand off to a licensed agent</label>
           <select id="handoff-agent" className={cn(toolbarControl, "min-w-56 flex-1 sm:flex-none")} value={handoffTarget} disabled={readOnly || handoffSaving} onChange={(event) => setHandoffTarget(event.target.value)}>
             <option value="">Choose an agent…</option>
             {handoffContext.licensedAgents.map((agent) => <option key={agent.id} value={agent.id}>{agent.name} ({agent.role})</option>)}
           </select>
           <Button type="button" onClick={() => void offerHandoff()} disabled={readOnly || handoffSaving || !handoffTarget}>{handoffSaving ? "Offering…" : "Offer handoff"}</Button>
-          {handoffError && <p role="alert" className="m-0 w-full text-[14px] leading-[1.5] text-[var(--error-ink)]">{handoffError}</p>}
+          {handoffError && <p role="alert" className="m-0 w-full text-sm leading-[1.5] text-[var(--error-ink)]">{handoffError}</p>}
         </section>
       )}
       {canHandoff && handoffError && !handoffContext && <Callout tone="error" title={`Handoff is unavailable: ${handoffError}`} />}
@@ -339,8 +340,8 @@ export function VerificationPanel({ workItemId, readOnly, canHandoff }: { workIt
         <div className="flex min-w-0 flex-1 flex-col gap-6">
           <section aria-label="Application fields" className="flex min-w-0 flex-col overflow-hidden rounded-[12px] border border-[var(--border)] bg-[var(--surface)]">
             <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[var(--border)] bg-[var(--surface-alt)] px-4 py-3">
-              <span className="text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">Application fields</span>
-              <Pill tone={requiredDone ? "success" : "brand"}>{progressText}</Pill>
+              <span className="text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">Application fields</span>
+              <StatusChip dot={false} tone={pillTone(requiredDone ? "success" : "brand")}>{progressText}</StatusChip>
             </div>
             {panel.sections.map((section, sectionIndex) => {
               const complete = sectionComplete(section.fields);
@@ -353,14 +354,14 @@ export function VerificationPanel({ workItemId, readOnly, canHandoff }: { workIt
                   <button type="button" aria-expanded={!folded} aria-controls={`verify-section-${section.section_key}`} onClick={() => setReopened((current) => ({ ...current, [section.section_key]: !current[section.section_key] }))} className={cn("flex w-full cursor-pointer items-center justify-between gap-3 border-0 bg-[var(--canvas)] px-4 py-2 text-left focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--ring-color)]", sectionIndex > 0 && "border-t border-solid border-[var(--border)]", label12)}>
                     <span>{section.label}</span>
                     <span className="inline-flex items-center gap-2 normal-case tracking-[-0.01em]">
-                      <Pill tone="success" dot>Complete · {done} of {section.fields.length}</Pill>
+                      <StatusChip tone="good" dot>Complete · {done} of {section.fields.length}</StatusChip>
                       <ChevronDown aria-hidden className={cn("size-4 transition-transform", !folded && "rotate-180")} />
                     </span>
                   </button>
                 ) : (
                   <div className={cn("bg-[var(--canvas)] px-4 py-2", sectionIndex > 0 && "border-t border-[var(--border)]", label12)}>{section.label}</div>
                 )}
-                {!folded && section.fields.length === 0 && <p className="m-0 border-t border-[var(--border)] px-4 py-3.5 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">No fields apply to this section with the answers so far.</p>}
+                {!folded && section.fields.length === 0 && <p className="m-0 border-t border-[var(--border)] px-4 py-3.5 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">No fields apply to this section with the answers so far.</p>}
                 <div id={`verify-section-${section.section_key}`} hidden={folded}>
                 {section.fields.map((field) => {
                   const key = field.field_key;
@@ -376,7 +377,7 @@ export function VerificationPanel({ workItemId, readOnly, canHandoff }: { workIt
                   return (
                     <div key={key} className="border-t border-[var(--border)] px-4 py-3.5">
                       <div className="flex flex-wrap items-center gap-4">
-                        <label htmlFor={inputId} className="w-[190px] shrink-0 text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]">
+                        <label htmlFor={inputId} className="w-[190px] shrink-0 text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]">
                           {field.label}{field.is_required && <span className="text-[var(--error-ink)]" aria-label="required"> *</span>}
                         </label>
                         <div className="flex min-w-[200px] flex-1 basis-[220px] items-center gap-2">
@@ -390,7 +391,7 @@ export function VerificationPanel({ workItemId, readOnly, canHandoff }: { workIt
                           )}
                         </div>
                         <div className="ml-auto flex items-center gap-4">
-                          <Pill tone={pill.tone} dot>{pill.label}</Pill>
+                          <StatusChip tone={pillTone(pill.tone)} dot>{pill.label}</StatusChip>
                           <span className="flex gap-2">
                             {field.state === "outstanding" ? (
                               <>
@@ -408,10 +409,10 @@ export function VerificationPanel({ workItemId, readOnly, canHandoff }: { workIt
                       </div>
                       {(field.help_text || fieldErrors[key] || dirty || (isSensitive && isRevealed)) && (
                         <div className="mt-1.5 flex flex-col gap-1 lg:pl-[206px]">
-                          {field.help_text && <p className="m-0 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">{field.help_text}</p>}
-                          {isSensitive && isRevealed && <p className="m-0 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">Shown in full for reading back. This reveal was recorded in the audit log.</p>}
-                          {dirty && <p className="m-0 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--warning-ink)]">{isSensitive ? "Unsaved correction." : `Changed from ${displayValue(stored)}, not saved yet.`} Save correction to keep it.</p>}
-                          {fieldErrors[key] && <p role="alert" className="m-0 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--error-ink)]">{fieldErrors[key]}</p>}
+                          {field.help_text && <p className="m-0 text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">{field.help_text}</p>}
+                          {isSensitive && isRevealed && <p className="m-0 text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">Shown in full for reading back. This reveal was recorded in the audit log.</p>}
+                          {dirty && <p className="m-0 text-xs leading-[1.5] tracking-[-0.01em] text-[var(--warning-ink)]">{isSensitive ? "Unsaved correction." : `Changed from ${displayValue(stored)}, not saved yet.`} Save correction to keep it.</p>}
+                          {fieldErrors[key] && <p role="alert" className="m-0 text-xs leading-[1.5] tracking-[-0.01em] text-[var(--error-ink)]">{fieldErrors[key]}</p>}
                         </div>
                       )}
                     </div>
@@ -439,7 +440,7 @@ export function VerificationPanel({ workItemId, readOnly, canHandoff }: { workIt
 
           <Card title="Change history">
             {history.length === 0 ? (
-              <p className="m-0 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">{context ? "No changes recorded yet." : "The change history could not be loaded."}</p>
+              <p className="m-0 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">{context ? "No changes recorded yet." : "The change history could not be loaded."}</p>
             ) : (
               <>
                 <Timeline items={historyShown.map((entry) => ({ title: historyTitle(entry), sub: `${entry.actorName} · ${clock(entry.at)}`, tone: entry.kind === "corrected" ? "warning" : entry.kind === "confirmed" ? "success" : entry.kind === "outstanding" ? "error" : "muted" }))} />

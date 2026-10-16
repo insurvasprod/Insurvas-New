@@ -5,6 +5,7 @@ import { SchemaPendingError } from "@/lib/carriers/schemaGap";
 import { supportContactInputSchema } from "@/lib/partnerSupport/contact";
 import { getSupportContact, saveSupportContact } from "@/lib/partnerSupport/service";
 import { requireTenant } from "@/lib/tenantAuth/requireTenant";
+import { changedFields, recordSettingsChanges } from "@/lib/settingsAudit/record";
 
 /**
  * The support email and phone this agency's partners see in partner portal › Messages › Details.
@@ -27,7 +28,14 @@ export async function PUT(request: NextRequest) {
   const parsed = supportContactInputSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Enter a valid support contact" }, { status: 400 });
   try {
+    const before = await getSupportContact(auth.context.tenantId).catch(() => null);
     const contact = await saveSupportContact(auth.context.tenantId, parsed.data);
+    await recordSettingsChanges({
+      tenantId: auth.context.tenantId,
+      actorId: auth.context.userId,
+      section: "business-identity",
+      changes: changedFields(before, contact, [{ key: "email", label: "Partner support email" }, { key: "phone", label: "Partner support phone" }]),
+    });
     await audit({
       actorType: "tenant",
       actorId: auth.context.userId,

@@ -7,6 +7,7 @@ import { X } from "lucide-react";
 import { Dialog as DialogPrimitive } from "radix-ui";
 
 import { Button } from "@/components/ui/button";
+import { InfoTip } from "@/components/ui/info-tip";
 import { SectionLoading } from "@/components/ui/page-states";
 import { PagedBody, PagedPager, PagedProvider } from "@/components/ui/paged";
 import { Callout, control } from "@/components/app/settings/primitives";
@@ -236,13 +237,15 @@ export function LeadListAssignDrawer({ campaignId, listName, assignable }: { cam
 
           <div className="flex min-h-0 flex-1 flex-col gap-[18px] overflow-y-auto p-[22px]">
             <div className="block">
-              <label htmlFor={modeId} className="text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]">Assign by</label>
+              <span className="inline-flex items-center gap-0.5">
+                <label htmlFor={modeId} className="text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]">Assign by</label>
+                <InfoTip label="About the rule chain" side="right">The chain is what Assign next follows. Choosing anything else here applies to this assignment only.</InfoTip>
+              </span>
               <select id={modeId} className={control} value={mode} disabled={busy} onChange={(event) => { setMode(event.target.value as LeadListAssignMode); setChanged(false); setCommitError(""); }}>
                 {(Object.keys(MODE_LABEL) as LeadListAssignMode[]).map((value) => <option key={value} value={value}>{MODE_LABEL[value]}</option>)}
               </select>
               {/* The board said "what the dialer already follows"; the dialer serves what is assigned
-                  and follows no rules. Assign next is what walks the chain. */}
-              <span className="mt-1.5 block text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">The chain is what Assign next follows. Overriding it here is a one-off.</span>
+                  and follows no rules. Assign next is what walks the chain (the InfoTip above). */}
             </div>
 
             {mode !== "chain" && (
@@ -288,7 +291,7 @@ export function LeadListAssignDrawer({ campaignId, listName, assignable }: { cam
                         })}
                       </div>
                     )}
-                    <span className="mt-1.5 block text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">Each lead goes to the next member in this order who may take it.</span>
+                    <span className="mt-1.5 block text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">Leads go round in this order.</span>
                   </fieldset>
                 )}
                 <div className="block">

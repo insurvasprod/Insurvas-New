@@ -5,7 +5,7 @@ import { LeadImportWorkspace } from "@/components/app/lead-import-workspace";
 
 export default async function LeadImportPage() {
   const guard = await guardPage("lead_import");
-  if (!guard.entitled) return <FeatureGateNotice guard={guard} featureLabel="List import" description="Import a lead list into your versioned product pipeline." />;
+  if (!guard.entitled) return <FeatureGateNotice guard={guard} featureLabel="List import" description="Import vendor lead lists, scrubbed before anyone dials." />;
   if (!("owner" === guard.role || "producer" === guard.role || "assistant" === guard.role)) return <RoleGateNotice featureLabel="List import" detail="Only owners, producers and assistants can import leads." />;
   return <LeadImportWorkspace />;
 }

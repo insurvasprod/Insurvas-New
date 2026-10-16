@@ -103,6 +103,18 @@ Helper text belongs in a field's `hint`, a tooltip, or nowhere.
 - No card around a card. No decorative side panels. Two-column layouts only when the second column is
   real content (e.g. a detail pane for the selected row), never notes.
 - Compact: prefer fewer, denser blocks.
+- **A record's details or a create form beside a list is `DetailPanel`** (`components/ui/detail-panel.tsx`,
+  2026-10-09): `mode="split"` sits beside the table (30%, the Callbacks booking panel is the model),
+  `mode="overlay"` slides over it from the right. It owns the header, the "Close" button, Escape,
+  focus return and the slide-in — never hand-build an `<aside>` for this. A short confirmation or a
+  small form is a `Dialog` instead.
+- **A page with several lists shows one at a time** with `ViewTabs` (`components/ui/view-tabs.tsx`),
+  page actions on the right of the same row; size the pager with `useFittingPageSize`
+  (`components/ui/use-fitting-page-size.ts`).
+- **Say it in a few words; explain behind an `InfoTip`** (`components/ui/info-tip.tsx`) beside the term.
+  Compliance and legal wording is never moved into a tip: it stays on the screen, in full.
+- **An empty list offers the action that fills it** (`EmptyState`'s `action`), linking only to a page
+  or flow that exists. A filtered list with nothing in it is `NoMatches` with its clear action.
 
 ## 9. CSS
 - New screens use Tailwind and the shared components; do not add page-specific `.portal-*` rules to

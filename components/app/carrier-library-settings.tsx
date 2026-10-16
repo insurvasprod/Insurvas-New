@@ -9,20 +9,13 @@
  * still shows which products have a rate at the current level.
  */
 
+import { StatusChip } from "@/components/ui/status-chip";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 
 import { Plus } from "lucide-react";
 
-import {
-  Callout,
-  control,
-  Field,
-  Pill,
-  SettingsSectionHeader,
-  SettingsStack,
-  st,
-} from "@/components/app/settings/primitives";
+import { Callout, control, Field, SettingsSectionHeader, SettingsStack, st, pillTone } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { DataToolbar, RefreshButton, ToolbarSearch } from "@/components/ui/data-toolbar";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -292,8 +285,8 @@ function ContractDialog({
     await onSaved();
   }
 
-  const subhead = "text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]";
-  const listRow = "flex flex-wrap items-center gap-2 border-t border-[var(--border)] py-2 text-[14px] leading-[1.5] text-[var(--body)] tabular-nums";
+  const subhead = "text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]";
+  const listRow = "flex flex-wrap items-center gap-2 border-t border-[var(--border)] py-2 text-sm leading-[1.5] text-[var(--body)] tabular-nums";
 
   return (
     <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
@@ -325,8 +318,8 @@ function ContractDialog({
                       chosen ? "border-[var(--primary)] bg-[var(--brand-50)]" : "border-[var(--border)] hover:bg-[var(--surface-alt)]"
                     )}
                   >
-                    <span className="block text-[14px] font-semibold text-[var(--ink)]">{row.name}</span>
-                    <span className="mt-1 block text-[12px] text-[var(--muted)]">{configured ? "Contract configured" : "Not configured"}</span>
+                    <span className="block text-sm font-semibold text-[var(--ink)]">{row.name}</span>
+                    <span className="mt-1 block text-xs text-[var(--muted)]">{configured ? "Contract configured" : "Not configured"}</span>
                   </button>
                 );
               })}
@@ -355,7 +348,7 @@ function ContractDialog({
 
         {carrier && (
           <div className="border-t border-[var(--border)] pt-4">
-            <label htmlFor="carrier-requires-eo" className="flex items-start gap-2 text-[14px] leading-[1.5] text-[var(--body)]">
+            <label htmlFor="carrier-requires-eo" className="flex items-start gap-2 text-sm leading-[1.5] text-[var(--body)]">
               <input
                 id="carrier-requires-eo"
                 type="checkbox"
@@ -366,14 +359,14 @@ function ContractDialog({
               />
               <span>
                 {carrier.name} requires E&amp;O cover in force
-                <span className="block text-[12px] text-[var(--muted)]">
+                <span className="block text-xs text-[var(--muted)]">
                   {snapshot.requirementsAvailable === false
                     ? "This setting needs a database update that has not been applied yet."
                     : "Saved as soon as it changes."}
                 </span>
               </span>
             </label>
-            {requirementError && <p role="alert" className="mt-2 text-[14px] text-[var(--error-ink)]">{requirementError}</p>}
+            {requirementError && <p role="alert" className="mt-2 text-sm text-[var(--error-ink)]">{requirementError}</p>}
           </div>
         )}
 
@@ -384,7 +377,7 @@ function ContractDialog({
             <PagedBody as="div" className="mt-1">
               {contracts.map((row) => (
                 <div key={row.id} className={listRow}>
-                  <Pill tone={row.is_active ? "success" : "neutral"}>{row.is_active ? "Current" : "History"}</Pill>
+                  <StatusChip dot={false} tone={pillTone(row.is_active ? "success" : "neutral")}>{row.is_active ? "Current" : "History"}</StatusChip>
                   <span>{formatBps(row.contract_level_bp)} ({formatPercentFromBps(row.contract_level_bp)}) · {row.writing_number}</span>
                   <span className="text-[var(--muted)]">effective {formatDay(row.effective_from)}</span>
                 </div>

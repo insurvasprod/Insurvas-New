@@ -11,10 +11,11 @@
  * sensitive handling. One row per field is stored, so a new carrier field needs no migration.
  */
 
+import { StatusChip } from "@/components/ui/status-chip";
 import { useMemo, useState } from "react";
 import { Lock, Plus, Trash2 } from "lucide-react";
 
-import { Callout, Pill, SettingsStack, control, st } from "@/components/app/settings/primitives";
+import { Callout, SettingsStack, control, st } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { DataToolbar, RefreshButton, toolbarControl } from "@/components/ui/data-toolbar";
 import { EmptyState } from "@/components/ui/page-states";
@@ -202,7 +203,7 @@ export function SalesFieldSets() {
                         <td className={st.td}>{r.productLabel}</td>
                         <td className={cn(st.td, st.num)}>{list.length}</td>
                         <td className={cn(st.td, st.num)}>{list.filter((e) => e.sensitive).length}</td>
-                        <td className={st.td}>{r.own ? <Pill tone="brand">Your agency</Pill> : <Pill tone="neutral">Platform</Pill>}</td>
+                        <td className={st.td}>{r.own ? <StatusChip dot={false} tone="action">Your agency</StatusChip> : <StatusChip dot={false} tone="neutral">Platform</StatusChip>}</td>
                         <td className={st.td}>
                           <LifecyclePill state={!r.own ? "platform" : r.own.status === "draft" ? "draft" : "live"} />
                         </td>
@@ -262,7 +263,7 @@ export function SalesFieldSets() {
                   <tbody className="m-seq">
                     {entries.map((e) => (
                       <tr key={e.key} className="m-row">
-                        <td className={st.td}><code className="font-mono text-[12px] text-[var(--ink)]">{e.key}</code></td>
+                        <td className={st.td}><code className="font-mono text-xs text-[var(--ink)]">{e.key}</code></td>
                         <td className={st.td}>
                           {readOnly ? e.label : (
                             <input aria-label={`Label on the form for ${e.key}`} className={cn(control, "mt-0")} value={e.label} placeholder={e.canonicalLabel} onChange={(ev) => patch(e.key, { label: ev.target.value })} />
@@ -270,16 +271,16 @@ export function SalesFieldSets() {
                         </td>
                         <td className={st.td}>{e.typeLabel}</td>
                         <td className={st.td}>
-                          {readOnly ? (e.required ? <Pill tone="success">Yes</Pill> : "—") : (
+                          {readOnly ? (e.required ? <StatusChip dot={false} tone="good">Yes</StatusChip> : "—") : (
                             <label className="inline-flex items-center gap-2">
                               <input type="checkbox" className={checkbox} checked={e.required} onChange={(ev) => patch(e.key, { required: ev.target.checked })} aria-label={`${e.key} is required`} />
-                              {e.required ? <Pill tone="success">Yes</Pill> : <span className="text-[var(--muted)]">—</span>}
+                              {e.required ? <StatusChip dot={false} tone="good">Yes</StatusChip> : <span className="text-[var(--muted)]">—</span>}
                             </label>
                           )}
                         </td>
                         <td className={st.td}>
                           {e.sensitive ? (
-                            <span className="inline-flex items-center gap-1.5 text-[var(--error-ink)]"><Lock className="size-3.5" aria-hidden="true" /><span className="text-[12px] font-semibold">Sensitive</span></span>
+                            <span className="inline-flex items-center gap-1.5 text-[var(--error-ink)]"><Lock className="size-3.5" aria-hidden="true" /><span className="text-xs font-semibold">Sensitive</span></span>
                           ) : "—"}
                         </td>
                         {!readOnly && (

@@ -23,10 +23,16 @@ export function canVoidInvoices(role: AdminRole): boolean {
  * correct instrument is a credit note or a refund (SA-3.8). Returning a reason rather than a
  * boolean so the UI can say why instead of hiding the button.
  */
-export function voidRefusalReason(status: string): string | null {
+export function voidRefusalReason(status: string, paidCents = 0): string | null {
   if (status === "paid") {
     return "This invoice was paid. Voiding it would leave the books disagreeing with the bank — issue a refund or a credit note instead.";
   }
   if (status === "void") return "This invoice is already void.";
+  // Part-paid: money arrived against it, so voiding has the same problem as voiding a paid one —
+  // the payment would point at an invoice that no longer asks for anything (billing audit,
+  // 2026-10-15). The database trigger refuses it too.
+  if (paidCents > 0) {
+    return "Part of this invoice has been paid. Voiding it would leave that payment against nothing — refund or credit it instead.";
+  }
   return null;
 }

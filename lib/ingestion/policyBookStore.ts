@@ -249,7 +249,7 @@ export async function loadBook(viewer: Viewer) {
   const [names, notes, filters, unpricedRead, sales] = await Promise.all([
     namesFor(viewer.tenantId, read.rows), annotations(viewer.tenantId), savedFilters(viewer),
     // LA-4.13: policies whose pay trigger has occurred but which no rate can price.
-    everyRow(() => db().from("expected_commission").select("carrier_id, policy_number").eq("tenant_id", viewer.tenantId).eq("confidence", "no_rate_card").order("carrier_id").order("policy_number")),
+    everyRow(() => db().from("expected_commission").select("carrier_id, policy_number").eq("tenant_id", viewer.tenantId).eq("confidence", "no_rate_card").order("carrier_id").order("policy_number").order("policy_year")),
     saleNames(viewer.tenantId, read.rows),
   ]);
   const rows: BookRow[] = read.rows.map((row: Loose): BookRow => {

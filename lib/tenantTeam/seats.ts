@@ -63,6 +63,22 @@ export function seatLimitFor(maxSeats: number | null | undefined, planType: stri
   return planType === "individual" ? 1 : null;
 }
 
+/**
+ * LA-8.6: a plan with one seat has nobody to invite, so Team & access is absent for it rather than
+ * shown with a disabled button.
+ */
+export function isSingleSeatPlan(maxSeats: number | null | undefined): boolean {
+  return maxSeats === 1;
+}
+
+/**
+ * The settings sections this plan hides — one list, read by the settings rail AND by search, so the
+ * search box never offers a section the page does not show.
+ */
+export function planHiddenSettingsSections(maxSeats: number | null | undefined): string[] {
+  return isSingleSeatPlan(maxSeats) ? ["team-access"] : [];
+}
+
 /** "12 of 12 seats", "3 seats · no limit". */
 export function seatsLabel(held: number, max: number | null): string {
   return max === null ? `${held} seat${held === 1 ? "" : "s"} · no limit` : `${held} of ${max} seats`;

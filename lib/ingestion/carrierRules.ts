@@ -107,3 +107,24 @@ export function resolveSettings(platform: SettingsRow | null, agency: SettingsRo
     return [field, { value: shared, scope: shared !== null ? "platform" : null }];
   })) as Record<SettingField, { value: string | number | null; scope: "agency" | "platform" | null }>;
 }
+
+export type PayTimingGap = { carrierId: string; carrierName: string; inForce: number; missing: Array<"trigger" | "lag"> };
+
+/**
+ * The carriers missing commission is NOT checked for: those with policies in force but no pay
+ * trigger, or no payment lag, at either level (LA-4.13 needs both to say a commission is overdue).
+ * Nothing is defaulted — a carrier's contract terms are never guessed — so the gap is shown
+ * instead, most policies first.
+ */
+export function payTimingGaps(rows: Array<{ carrierId: string; carrierName: string; inForce: number | null; trigger: unknown; lagDays: unknown }>): PayTimingGap[] {
+  return rows
+    .filter((row) => (row.inForce ?? 0) > 0 && (row.trigger == null || row.lagDays == null))
+    .map((row) => ({ carrierId: row.carrierId, carrierName: row.carrierName, inForce: row.inForce ?? 0, missing: [...(row.trigger == null ? ["trigger" as const] : []), ...(row.lagDays == null ? ["lag" as const] : [])] }))
+    .sort((a, b) => b.inForce - a.inForce || a.carrierName.localeCompare(b.carrierName));
+}
+
+/** "Aetna (no pay trigger), Aflac (no payment lag)…" for a sentence. */
+export function payTimingGapText(gaps: PayTimingGap[], max = 6): string {
+  const named = gaps.slice(0, max).map((gap) => `${gap.carrierName} (${gap.missing.length === 2 ? "no pay trigger or lag" : gap.missing[0] === "trigger" ? "no pay trigger" : "no payment lag"})`);
+  return gaps.length > max ? `${named.join(", ")} and ${gaps.length - max} more` : named.join(", ");
+}

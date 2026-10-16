@@ -5,7 +5,7 @@ import type { Json } from "@/lib/supabase/database.types";
 import type { Disposition, DispositionFlow, DispositionNode, DispositionNodeType, DispositionOption, DispositionSettingsRow, DispositionWizard } from "./types";
 import { DISPOSITION_KEY_PATTERN, DISPOSITION_NODE_TYPES, DO_NOT_CALL_DISPOSITION_KEY } from "./types";
 import { isMissingSchema, SCHEMA_PENDING_MESSAGE } from "./schemaGap";
-import { customerName, customerTimezone } from "@/lib/callbacks/timezone";
+import { customerName, customerTimezone, resolveCustomerTimezone } from "@/lib/callbacks/timezone";
 import { ensureDefaultPublisherDispositionMappings } from "@/lib/pipelines/service";
 import { derivedNextAction, endsDialing, validateNextAction, type NextActionSetting } from "./nextAction";
 import { checkCallbackInCallingWindow } from "./callbackWindow";
@@ -370,7 +370,7 @@ export async function answerDisposition(tenantId: string, userId: string, input:
   return result.data;
 }
 
-export async function completeDisposition(tenantId: string, userId: string, input: { work_item_id: unknown; walk_id: unknown; disposition_key: unknown; callback_subtype?: unknown; callback_local?: unknown; callback_assigned_to?: unknown; callback_idempotency_key?: unknown }) {
+export async function completeDisposition(tenantId: string, userId: string, input: { work_item_id: unknown; walk_id: unknown; disposition_key: unknown; callback_subtype?: unknown; callback_local?: unknown; callback_assigned_to?: unknown; callback_idempotency_key?: unknown; callback_timezone?: unknown }) {
   const subtype = input.callback_subtype == null || input.callback_subtype === "" ? null : text(input.callback_subtype, "Callback detail", 120);
   const dispositionKey = key(input.disposition_key, "Disposition key");
   const supabase = getSupabaseServiceClient();
@@ -388,10 +388,13 @@ export async function completeDisposition(tenantId: string, userId: string, inpu
         supabase.from("agent_leads").select("values").eq("tenant_id", tenantId).eq("id", queue.data.lead_id).single(),
       ]);
       if (lead.error || !lead.data) throw new DispositionError("lead_not_found", "That lead was not found.");
+      // Never a guessed zone: an unknown or split state needs the agent's choice (a coded 400).
+      const zone = resolveCustomerTimezone((lead.data.values ?? {}) as Record<string, unknown>, input.callback_timezone);
+      if (!zone.ok) throw new DispositionError(zone.code, zone.message);
       // Checked against the customer's calling window before anything is written.
-      const window = await checkCallbackInCallingWindow({ tenantId, leadId: queue.data.lead_id, callbackLocal: local, timezone: customerTimezone((lead.data.values ?? {}) as Record<string, unknown>), actorId: userId });
+      const window = await checkCallbackInCallingWindow({ tenantId, leadId: queue.data.lead_id, callbackLocal: local, timezone: zone.zone, actorId: userId });
       if (!window.ok) throw new DispositionError(window.status === 503 ? "disposition_unavailable" : "callback_outside_window", window.message);
-      return supabase.rpc("complete_disposition_with_callback", { p_tenant_id: tenantId, p_work_item_id: uuid(input.work_item_id, "work item"), p_user_id: userId, p_walk_id: uuid(input.walk_id, "walk"), p_callback_local: local, p_customer_timezone: customerTimezone((lead.data.values ?? {}) as Record<string, unknown>), p_assigned_to: assigned, p_callback_note: subtype, p_idempotency_key: callbackKey });
+      return supabase.rpc("complete_disposition_with_callback", { p_tenant_id: tenantId, p_work_item_id: uuid(input.work_item_id, "work item"), p_user_id: userId, p_walk_id: uuid(input.walk_id, "walk"), p_callback_local: local, p_customer_timezone: zone.zone, p_assigned_to: assigned, p_callback_note: subtype, p_idempotency_key: callbackKey });
     })()
     : await (async () => {
       const queue = await supabase.from("lead_queue").select("pipeline_id").eq("tenant_id", tenantId).eq("id", uuid(input.work_item_id, "work item")).single();

@@ -1,6 +1,7 @@
 import "server-only";
 
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
+import { csvCell } from "@/lib/csv/cell";
 import type { PartnerLeadDetail, PartnerLeadFacets, PartnerLeadFilters, PartnerLeadRow, PartnerPipelineStage } from "@/lib/partnerLeads/types";
 import type { PartnerRole } from "@/lib/partnerAuth/roles";
 import { maskSensitiveValues } from "@/lib/partnerLeads/mask";
@@ -27,7 +28,7 @@ type QueueRow = {
 };
 
 type LeadRow = { id: string; values: unknown; created_by: string | null; created_at: string; updated_at: string; product_line: string; pipeline_id: string; stage_id: string };
-type DealRow = { lead_id: string; notes: string | null; call_result: string | null; disposition_at: string | null; disposition_by: string | null; updated_at: string };
+type DealRow = { lead_id: string; call_result: string | null; disposition_at: string | null; disposition_by: string | null; updated_at: string };
 type StageRow = { id: string; pipeline_id: string; name: string; position: number; stage_type: string; color: string; is_archived: boolean };
 type PipelineRow = { id: string; name: string };
 type UserRow = { id: string; name: string };
@@ -112,7 +113,7 @@ async function loadPartnerData(tenantId: string, partnerId: string, filters: Par
   const leadIds = queueRows.map((row) => row.lead_id);
   if (!leadIds.length) return { queues: [], leads: [], deals: [], stages: [], pipelines: [], users: [], dispositions: [], timelineMessages: null };
   const leadsPage = (start: number) => { let query = db.from("agent_leads").select("id, values, created_by, created_at, updated_at, product_line, pipeline_id, stage_id").eq("tenant_id", tenantId).eq("partner_id", partnerId).order("created_at", { ascending: false }).range(start, start + 999); if (leadId) query = query.eq("id", leadId); return query; };
-  const dealsPage = (start: number) => { let query = db.from("deal_flow").select("lead_id, notes, call_result, disposition_at, disposition_by, updated_at").eq("tenant_id", tenantId).eq("partner_id", partnerId).order("updated_at", { ascending: false }).range(start, start + 999); if (leadId) query = query.eq("lead_id", leadId); return query; };
+  const dealsPage = (start: number) => { let query = db.from("deal_flow").select("lead_id, call_result, disposition_at, disposition_by, updated_at").eq("tenant_id", tenantId).eq("partner_id", partnerId).order("updated_at", { ascending: false }).range(start, start + 999); if (leadId) query = query.eq("lead_id", leadId); return query; };
   const [firstLeads, firstDeals, stages, pipelines, partnerMembers, dispositions, timelineMessages] = await Promise.all([
     leadsPage(0),
     dealsPage(0),
@@ -141,7 +142,6 @@ async function loadPartnerData(tenantId: string, partnerId: string, filters: Par
 
 function mapRows(data: Awaited<ReturnType<typeof loadPartnerData>>, filters: PartnerLeadFilters): PartnerLeadRow[] {
   const leads = new Map(data.leads.map((row) => [row.id, row]));
-  const deals = new Map(data.deals.map((row) => [row.lead_id, row]));
   const stages = new Map(data.stages.map((row) => [row.id, row]));
   const users = new Map(data.users.map((row) => [row.id, row.name]));
   const dispositions = new Map(data.dispositions.map((row) => [row.disposition_key, row.label]));
@@ -150,9 +150,8 @@ function mapRows(data: Awaited<ReturnType<typeof loadPartnerData>>, filters: Par
     const stage = stages.get(queue.stage_id);
     if (!lead || !stage) return [];
     if (filters.closerId && lead.created_by !== filters.closerId) return [];
-    const deal = deals.get(queue.lead_id);
     const outcome = queue.disposition ? partnerOutcomeLabel(dispositions.get(queue.disposition) ?? queue.disposition) : null;
-    return [{ id: lead.id, workItemId: queue.id, customer: displayName(lead.values), submittedAt: lead.created_at, updatedAt: queue.updated_at, product: queue.product_line, stageId: stage.id, stageName: partnerStageLabel(stage.name, stage.stage_type, queue.status, queue.disposition), stageType: stage.stage_type, disposition: queue.disposition, outcome, outcomeNote: deal?.notes ?? null, submittedBy: { id: lead.created_by, name: lead.created_by ? users.get(lead.created_by) ?? "Partner closer" : "Partner closer" }, status: queue.status }];
+    return [{ id: lead.id, workItemId: queue.id, customer: displayName(lead.values), submittedAt: lead.created_at, updatedAt: queue.updated_at, product: queue.product_line, stageId: stage.id, stageName: partnerStageLabel(stage.name, stage.stage_type, queue.status, queue.disposition), stageType: stage.stage_type, disposition: queue.disposition, outcome, submittedBy: { id: lead.created_by, name: lead.created_by ? users.get(lead.created_by) ?? "Partner closer" : "Partner closer" }, status: queue.status }];
   });
 }
 
@@ -343,7 +342,7 @@ export async function listPartnerLeads(tenantId: string, partnerId: string, filt
     const stageType = hasStageFields ? value[8] : "";
     const disposition = hasStageFields ? value[9] : value[7];
     const outcome = hasStageFields ? value[10] : value[8];
-    const outcomeNote = hasStageFields ? value[11] : value[9];
+    // Position 11 (9 in the older payload) is the internal outcome note: read past, never passed on.
     const submittedById = hasStageFields ? value[12] : value[10];
     const submittedByName = hasStageFields ? value[13] : value[11];
     const status = hasStageFields ? value[14] : value[12];
@@ -354,7 +353,6 @@ export async function listPartnerLeads(tenantId: string, partnerId: string, filt
       stageType: typeof stageType === "string" ? stageType : "",
       disposition: typeof disposition === "string" ? disposition : null,
       outcome: partnerOutcomeLabel(typeof outcome === "string" ? outcome : null),
-      outcomeNote: typeof outcomeNote === "string" ? outcomeNote : null,
       submittedBy: { id: typeof submittedById === "string" ? submittedById : null, name: submittedByName },
       status,
     }];
@@ -447,7 +445,7 @@ export async function getPartnerLeadDetail(tenantId: string, partnerId: string, 
   const visibleNoteIds = new Set((sharedNotes.data ?? []).filter((note) => note.visibility === "shared" && !note.deleted_at).map((note) => note.id));
   const timeline: PartnerLeadDetail["timeline"] = [{ type: "submitted", label: "Lead submitted", at: lead.created_at, detail: row.submittedBy.name }];
   if (queue.claimed_at) timeline.push({ type: "claimed", label: "Lead claimed", at: queue.claimed_at, detail: queue.owner_user_id ? data.users.find((user) => user.id === queue.owner_user_id)?.name ?? "Agent" : "Agent" });
-  if (queue.disposition_at) timeline.push({ type: "outcome", label: row.outcome ?? "Outcome recorded", at: queue.disposition_at, detail: row.outcomeNote });
+  if (queue.disposition_at) timeline.push({ type: "outcome", label: row.outcome ?? "Outcome recorded", at: queue.disposition_at, detail: null });
   for (const message of (messages.data ?? []).filter((item) => !item.event_key?.startsWith("lead-note:") || visibleNoteIds.has(item.event_key.slice("lead-note:".length)))) timeline.push({ type: message.message_kind === "system_card" ? "system" : "message", label: message.message_kind === "system_card" ? "Pipeline update" : "Message", at: message.created_at, detail: message.message });
   timeline.sort((a, b) => a.at.localeCompare(b.at));
   const told = await partnerToldIds(db, tenantId, partnerId, [row.workItemId]);
@@ -455,10 +453,8 @@ export async function getPartnerLeadDetail(tenantId: string, partnerId: string, 
   return { ...row, stageName, values: maskSensitiveValues(lead.values) as Record<string, unknown>, timeline };
 }
 
-function csvCell(value: unknown) { return `"${String(value ?? "").replace(/"/g, '""')}"`; }
-
 export function partnerLeadsCsv(rows: PartnerLeadRow[]) {
-  const header = ["customer", "submitted_at", "product", "stage", "outcome", "outcome_note", "submitted_by", "status"];
-  const lines = rows.map((row) => [row.customer, row.submittedAt, row.product, row.stageName, row.outcome, row.outcomeNote, row.submittedBy.name, row.status].map(csvCell).join(","));
+  const header = ["customer", "submitted_at", "product", "stage", "outcome", "submitted_by", "status"];
+  const lines = rows.map((row) => [row.customer, row.submittedAt, row.product, row.stageName, row.outcome, row.submittedBy.name, row.status].map(csvCell).join(","));
   return [header.map(csvCell).join(","), ...lines].join("\r\n") + "\r\n";
 }

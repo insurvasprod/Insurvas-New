@@ -51,6 +51,12 @@ function fail(error: { message: string; code?: string }, fallback: string): neve
 }
 
 const day = (iso: string) => iso.slice(0, 10);
+
+/** A read's rows, or a loud failure: an error is never read as "nothing there". */
+function rowsOrFail<T = Loose>(read: { data: T[] | null; error: { message: string; code?: string } | null }, what: string): T[] {
+  if (read.error) fail(read.error, what);
+  return read.data ?? [];
+}
 const addDays = (iso: string, days: number) => new Date(Date.parse(`${day(iso)}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
 const sameCarrier = (text: string | null, carrier: { name: string; code: string | null }) => {
   const value = (text ?? "").trim().toLowerCase();
@@ -98,8 +104,9 @@ async function record(tenantId: string, carrierId: string, policyNumber: string,
 async function contactsOfLeads(leadIds: string[]): Promise<Map<string, string | null>> {
   const out = new Map<string, string | null>();
   if (!leadIds.length) return out;
-  const { data } = await db().from("agent_leads").select("id, contact_id").in("id", [...new Set(leadIds)]);
-  for (const row of data ?? []) out.set(row.id, row.contact_id ?? null);
+  // A failed read must not look like "no client yet": the caller would create a second one.
+  const data = rowsOrFail(await db().from("agent_leads").select("id, contact_id").in("id", [...new Set(leadIds)]), "Could not read the sales' leads");
+  for (const row of data) out.set(row.id, row.contact_id ?? null);
   return out;
 }
 
@@ -188,14 +195,16 @@ async function fillSaleClients(tenantId: string, carrierId: string, policies: st
 /** Step 2: the policies whose number we already hold. Returns those it linked. */
 async function linkExact(tenantId: string, carrier: { id: string; name: string; code: string | null }, policies: string[]): Promise<Set<string>> {
   const linked = new Set<string>();
+  // Step 2 is the certain step: a failed read here fails the run loudly. Read as "no record", it
+  // would send a policy we can link to a provisional client or the review queue instead.
   const [byNumber, byReference] = await Promise.all([
     db().from("tenant_application_submissions").select("application_id, policy_number, carrier_reference, submitted_at").eq("tenant_id", tenantId).eq("carrier_id", carrier.id).in("policy_number", policies),
     db().from("tenant_application_submissions").select("application_id, policy_number, carrier_reference, submitted_at").eq("tenant_id", tenantId).eq("carrier_id", carrier.id).eq("reference_kind", "policy_no").in("carrier_reference", policies),
   ]);
-  const submissions = [...(byNumber.data ?? []), ...(byReference.data ?? [])].sort((a: Loose, b: Loose) => String(b.submitted_at).localeCompare(String(a.submitted_at)));
+  const submissions = [...rowsOrFail(byNumber, "Could not read the submitted policy numbers"), ...rowsOrFail(byReference, "Could not read the submitted carrier references")].sort((a: Loose, b: Loose) => String(b.submitted_at).localeCompare(String(a.submitted_at)));
   const appIds = [...new Set(submissions.map((row: Loose) => row.application_id))];
-  const { data: apps } = appIds.length ? await db().from("tenant_applications").select("id, lead_id").eq("tenant_id", tenantId).in("id", appIds) : { data: [] };
-  const leadOf = new Map<string, string>((apps ?? []).map((app: Loose) => [app.id, app.lead_id]));
+  const apps = appIds.length ? rowsOrFail(await db().from("tenant_applications").select("id, lead_id").eq("tenant_id", tenantId).in("id", appIds), "Could not read the submitted applications") : [];
+  const leadOf = new Map<string, string>(apps.map((app: Loose) => [app.id, app.lead_id]));
   const contactOf = await contactsOfLeads([...leadOf.values()]);
   for (const policy of policies) {
     const hit = submissions.find((row: Loose) => row.policy_number === policy || row.carrier_reference === policy);
@@ -208,8 +217,8 @@ async function linkExact(tenantId: string, carrier: { id: string; name: string; 
 
   const rest = policies.filter((policy) => !linked.has(policy));
   if (!rest.length) return linked;
-  const { data: issued } = await db().from("tenant_issued_policies").select("id, lead_id, deal_id, carrier, policy_number").eq("tenant_id", tenantId).in("policy_number", rest);
-  const ours = (issued ?? []).filter((row: Loose) => sameCarrier(row.carrier, carrier));
+  const issued = rowsOrFail(await db().from("tenant_issued_policies").select("id, lead_id, deal_id, carrier, policy_number").eq("tenant_id", tenantId).in("policy_number", rest), "Could not read the issued policies");
+  const ours = issued.filter((row: Loose) => sameCarrier(row.carrier, carrier));
   const issuedContacts = await contactsOfLeads(ours.map((row: Loose) => row.lead_id).filter(Boolean));
   for (const policy of rest) {
     const hit = ours.find((row: Loose) => row.policy_number === policy);
@@ -235,7 +244,8 @@ export async function relinkToSale(tenantId: string, carrierId: string, policies
   const { data: links, error } = await db().from("policy_match").select("policy_number, contact_id")
     .eq("tenant_id", tenantId).eq("carrier_id", carrierId).is("superseded_by_id", null)
     .in("matched_to_type", ["provisional", "contact"]).in("method", ["no_match", "identity_exact", "import"]).in("policy_number", policies);
-  if (error || !links?.length) return new Set();
+  if (error) fail(error, "Could not read the policies' links");
+  if (!links?.length) return new Set();
   const relinked = await linkExact(tenantId, await carrierOf(carrierId), links.map((link: Loose) => link.policy_number));
   if (!relinked.size) return relinked;
   const { data: now } = await db().from("policy_match").select("policy_number, contact_id").eq("tenant_id", tenantId).eq("carrier_id", carrierId).is("superseded_by_id", null).in("policy_number", [...relinked]);

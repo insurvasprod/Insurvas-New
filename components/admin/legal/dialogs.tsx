@@ -81,7 +81,7 @@ export function PublishDialog({
           <DialogTitle>
             Publish version {version} of the {LEGAL_DOC_LABELS[doc]}?
           </DialogTitle>
-          <DialogDescription className="text-[14px] leading-[1.5] tracking-[-0.02em]">
+          <DialogDescription className="text-sm leading-[1.5] tracking-[-0.02em]">
             The version number is allocated when you publish. Older versions stay readable forever &mdash; that is what makes an acceptance
             record mean anything.
           </DialogDescription>
@@ -108,14 +108,14 @@ export function PublishDialog({
             ]}
           />
           <div>
-            <div className="text-[12px] leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]">What changed</div>
-            <p className="m-0 mt-1 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--body)]">
+            <div className="text-xs leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]">What changed</div>
+            <p className="m-0 mt-1 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--body)]">
               {editor.changeSummary.trim() || "No summary. Users are not told what changed."}
             </p>
           </div>
 
           {error && (
-            <p role="alert" className="m-0 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--error-ink)]">
+            <p role="alert" className="m-0 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--error-ink)]">
               {error}
             </p>
           )}
@@ -186,7 +186,7 @@ export function ClearDialog({
             <DialogTitle>
               Stop requiring acceptance of version {target?.version} of the {LEGAL_DOC_LABELS[doc]}?
             </DialogTitle>
-            <DialogDescription className="text-[14px] leading-[1.5] tracking-[-0.02em]">
+            <DialogDescription className="text-sm leading-[1.5] tracking-[-0.02em]">
               Use this if it was published by mistake. Nobody is blocked by it any more; the text is not changed or deleted, and people who
               already accepted keep their record. The reason is kept in the audit log.
             </DialogDescription>

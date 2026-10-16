@@ -93,9 +93,14 @@ export type ScreeningDeps = ProviderDeps & {
   claim(phoneDigits: string): Promise<ScreeningClaim | null>;
   loadCached(resultId: string): Promise<ScreeningResultRow | null>;
   release(phoneDigits: string, claimToken: string): Promise<void>;
+  /**
+   * Capacity is CHECKED before the vendor call (a fast refusal) and CONSUMED — atomically, under the
+   * meter's lock, so concurrent submissions cannot pass the cap — only after a successful lookup.
+   */
   checkTcpaCapacity(): Promise<{ allowed: boolean }>;
+  checkDncCapacity(): Promise<{ allowed: boolean }>;
+  consumeTcpaCapacity(idempotencyKey: string, ref: string): Promise<{ allowed: boolean }>;
   consumeDncCapacity(idempotencyKey: string, ref: string): Promise<{ allowed: boolean }>;
-  recordTcpaUsage(idempotencyKey: string, ref: string): Promise<void>;
   /** Internal DQ: the number is already on a lead in this tenant. Read fresh, never cached. */
   hasExistingLead(phoneDigits: string): Promise<boolean>;
   complete(params: {
@@ -243,20 +248,21 @@ async function screenAgainstLists(deps: ScreeningDeps, phoneDigits: string): Pro
   const claimToken = claim.claim_token;
   const release = () => deps.release(phoneDigits, claimToken);
   try {
-    // One charge per claimed lookup: the claim token is the idempotency key, so a retry of the same
-    // claim never bills twice and a cached replay never bills at all.
+    // One charge per SUCCESSFUL lookup. Capacity is only checked here (a fast refusal); the atomic
+    // consume runs after the vendors answered, keyed on the claim token. A vendor failure releases the
+    // claim without billing, so the retry that follows is the one (and only) charge; the result is
+    // then cached for 24 hours, so the same number is not looked up — or billed — again that day.
     const idempotencyBase = `screening:${claimToken}`;
     const tcpaCapacity = await deps.checkTcpaCapacity();
     if (!tcpaCapacity.allowed) {
       await release();
       return unavailable(phoneDigits, "screening_meter_cap", SCREENING_TCPA_ALLOWANCE_MESSAGE);
     }
-    const dncCapacity = await deps.consumeDncCapacity(`${idempotencyBase}:dnc`, idempotencyBase);
+    const dncCapacity = await deps.checkDncCapacity();
     if (!dncCapacity.allowed) {
       await release();
       return unavailable(phoneDigits, "screening_meter_cap", SCREENING_DNC_ALLOWANCE_MESSAGE);
     }
-    await deps.recordTcpaUsage(`${idempotencyBase}:tcpa`, idempotencyBase);
 
     const [tcpa, dnc] = await Promise.all([
       runProviderType(deps, "litigator_scrub", phoneDigits),
@@ -269,6 +275,18 @@ async function screenAgainstLists(deps: ScreeningDeps, phoneDigits: string): Pro
     const expiresAt = new Date(checkedAt.getTime() + SCREENING_CACHE_TTL_SECONDS * 1000);
     const vendor = `litigator:${tcpa.vendorId},dnc:${dnc.vendorId}`;
     const rawResponse: JsonObject = { litigator: tcpa.rawResponse, dnc: dnc.rawResponse, internal_dq: internalDq };
+    // The lookup succeeded: charge it, atomically. A cap reached meanwhile by a concurrent submission
+    // refuses here with the allowance message, and nothing is cached for a lookup that was not paid.
+    const tcpaCharged = await deps.consumeTcpaCapacity(`${idempotencyBase}:tcpa`, idempotencyBase);
+    if (!tcpaCharged.allowed) {
+      await release();
+      return unavailable(phoneDigits, "screening_meter_cap", SCREENING_TCPA_ALLOWANCE_MESSAGE);
+    }
+    const dncCharged = await deps.consumeDncCapacity(`${idempotencyBase}:dnc`, idempotencyBase);
+    if (!dncCharged.allowed) {
+      await release();
+      return unavailable(phoneDigits, "screening_meter_cap", SCREENING_DNC_ALLOWANCE_MESSAGE);
+    }
     const resultId = await deps.complete({
       phoneDigits,
       claimToken,
@@ -294,9 +312,12 @@ export async function runScreening(deps: ScreeningDeps, phoneDigits: string): Pr
   // The tenant's own list is read before the cache so a number added after a previous vendor
   // result still warns on the very next intake. It no longer ends the screen: the litigator
   // list still runs, because a TCPA hit outranks DNC.
-  const tenantSuppressed = await deps.tenantSuppressed(phoneDigits);
+  // A list that cannot be read is an incomplete screen (503 upstream), never a bad request: the
+  // caller did nothing wrong. No vendor is called, so nothing is charged.
+  let tenantSuppressed = false;
   let screened: Screened;
   try {
+    tenantSuppressed = await deps.tenantSuppressed(phoneDigits);
     screened = await screenAgainstLists(deps, phoneDigits);
   } catch {
     screened = unavailable(phoneDigits, "screening_unavailable");

@@ -5,7 +5,7 @@
 
 import { checkBeneficiaries } from "./beneficiaries.ts";
 import { CANONICAL_GROUPS, OUTCOMES_NEEDING_REASON, type WorkspaceStep } from "./constants.ts";
-import { cardBrand, cardExpiryInFuture } from "./formats.ts";
+import { cardBrand, cardExpiryInFuture, digitsOnly, isPlausibleSsn } from "./formats.ts";
 import { premiumPer1000, DEFAULT_PER1000_BAND } from "../quotes/math.ts";
 import type { AttemptView, InterviewView } from "./types.ts";
 
@@ -23,11 +23,12 @@ export type QaVerdict = {
 const CHECKS: { label: string; codes: string[] }[] = [
   { label: "quote selected", codes: ["QA_NO_QUOTE"] },
   { label: "required fields present", codes: ["QA_REQUIRED_FIELD"] },
+  { label: "Social Security number valid", codes: ["QA_SSN_INVALID"] },
   { label: "primary share total", codes: ["BENEFICIARY_PRIMARY_TOTAL", "BENEFICIARY_NO_PRIMARY"] },
   { label: "contingent has a primary", codes: ["BENEFICIARY_CONTINGENT_TOTAL"] },
   { label: "beneficiary details", codes: ["BENEFICIARY_NAME", "BENEFICIARY_RELATIONSHIP", "BENEFICIARY_RELATIONSHIP_OTHER"] },
   { label: "disclosures acknowledged", codes: ["QA_DISCLOSURE"] },
-  { label: "payment method complete", codes: ["QA_PAYMENT_MISSING", "QA_ROUTING", "QA_ACCOUNT", "QA_ACCOUNT_TYPE", "QA_CARD", "QA_CARD_EXPIRED"] },
+  { label: "payment method complete", codes: ["QA_PAYMENT_MISSING", "QA_ROUTING", "QA_ACCOUNT", "QA_ACCOUNT_TYPE", "QA_CARD", "QA_CARD_EXPIRED", "QA_CARD_EXPIRY_MISSING"] },
   { label: "draft day", codes: ["QA_DRAFT_DAY", "QA_DRAFT_DAY_UNSAFE"] },
   { label: "issue age", codes: ["QA_ISSUE_AGE", "QA_FE_AGE"] },
   { label: "face limits", codes: ["QA_FACE_LIMIT"] },
@@ -50,6 +51,8 @@ const DETAIL: Record<string, string> = {
   QA_ACCOUNT_TYPE: "A savings account drafted as checking bounces.",
   QA_CARD: "The carrier needs the card number to set up the charge.",
   QA_CARD_EXPIRED: "An expired card declines on the first draft.",
+  QA_CARD_EXPIRY_MISSING: "The carrier cannot charge a card without its expiry date.",
+  QA_SSN_INVALID: "The Social Security Administration never issues this number — an area of 000, 666 or 900–999, a group of 00 or a serial of 0000. Check the nine digits with the client.",
   QA_DIRECT_EXPRESS_BIN: "Direct Express cards are Mastercard. A different brand usually means a mistyped number.",
   QA_DRAFT_DAY: "Carriers take a draft day from the 1st to the 28th.",
   QA_DRAFT_DAY_UNSAFE: "Drafts taken before the money arrives bounce, and bounced drafts lapse. Record why this day is right, or use the recommendation.",
@@ -91,6 +94,11 @@ export function runQa(input: {
   settings?: QaSettings;
   /** Area-code state of the client's phone, when known (warning only). */
   phoneState?: string | null;
+  /**
+   * Whether the stored (encrypted) SSN passes the SSA rules. Only the server knows — it decrypts it
+   * for the `ready` and `submitted` checks; the live rail leaves it undefined and judges what it can see.
+   */
+  ssnValid?: boolean | null;
   today?: Date;
 }): QaVerdict {
   const { attempt, caseId } = input;
@@ -117,6 +125,15 @@ export function runQa(input: {
     if (!has(key)) add(blocking, "QA_REQUIRED_FIELD", `${LABEL.get(key) ?? key} is required by ${attempt.carrierName ?? "this carrier"}.`, key);
   }
 
+  // SSA validity (LA-3.7): a plaintext value is checked whole; a masked one by its serial (the last
+  // four), plus the server's verdict on the decrypted number when it supplies one.
+  const ssn = v("insured.ssn");
+  if (ssn && (ssn.hasValue || (ssn.value !== null && ssn.value !== ""))) {
+    const plain = typeof ssn.value === "string" || typeof ssn.value === "number" ? String(ssn.value) : null;
+    const serialZero = typeof ssn.masked === "string" && digitsOnly(ssn.masked).endsWith("0000");
+    if ((plain !== null && !isPlausibleSsn(plain)) || serialZero || input.ssnValid === false) add(blocking, "QA_SSN_INVALID", "The Social Security number is not a valid one.", "insured.ssn");
+  }
+
   for (const issue of checkBeneficiaries(attempt.beneficiaries, today)) {
     add(issue.severity === "block" ? blocking : warnings, issue.code, issue.message, issue.id ? `beneficiary.${issue.id}` : null, "beneficiaries");
   }
@@ -135,7 +152,8 @@ export function runQa(input: {
     }
     if (pay.method === "direct_express" || pay.method === "debit_card" || pay.method === "credit_card") {
       if (!pay.card?.hasValue) add(blocking, "QA_CARD", "Card number is missing.", "pay.card_number", "payment");
-      else if (pay.card.expMonth && pay.card.expYear && !cardExpiryInFuture(pay.card.expMonth, pay.card.expYear, today)) add(blocking, "QA_CARD_EXPIRED", "The card has expired.", "pay.card_exp", "payment");
+      else if (!pay.card.expMonth || !pay.card.expYear) add(blocking, "QA_CARD_EXPIRY_MISSING", "The card's expiry date is missing.", "pay.card_exp", "payment");
+      else if (!cardExpiryInFuture(pay.card.expMonth, pay.card.expYear, today)) add(blocking, "QA_CARD_EXPIRED", "The card has expired.", "pay.card_exp", "payment");
       if (pay.method === "direct_express" && pay.card?.brand && pay.card.brand !== "mastercard") add(warnings, "QA_DIRECT_EXPRESS_BIN", "Direct Express cards are Mastercard — check the number.", "pay.card_number", "payment");
     }
     if (pay.method !== "direct_bill") {

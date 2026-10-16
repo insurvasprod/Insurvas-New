@@ -30,7 +30,7 @@ export default async function ReinstatementPage({ searchParams }: { searchParams
   const winbackView = view === "winback";
   const viewer = { tenantId: guard.context.tenantId, userId: guard.context.userId, role: guard.role };
   const readOnly = guard.entitlement.access === "read_only";
-  const [cases, winback] = winbackView ? [null, await loadWinback(viewer)] : [await loadReinstatement(viewer), null];
+  const [cases, winback] = winbackView ? [null, await loadWinback(viewer, { release: !readOnly })] : [await loadReinstatement(viewer), null];
 
   return (
     <div className="m-stagger flex min-h-0 flex-grow flex-col gap-6">

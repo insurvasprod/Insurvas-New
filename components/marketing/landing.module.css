@@ -116,8 +116,375 @@
 .grow { transform-origin: bottom; animation: grow 900ms cubic-bezier(.16,1,.3,1) both; }
 @keyframes grow { from { transform: scaleY(0); } to { transform: scaleY(1); } }
 
+/* ── 2026-10-13 rebuild ─────────────────────────────────────────────────────────────────────── */
+
+/* Hero ground: a dot grid that drifts, fading out toward the edges */
+.dots {
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(color-mix(in srgb, var(--primary) 30%, transparent) 1px, transparent 1.4px);
+  background-size: 28px 28px;
+  mask-image: radial-gradient(ellipse 70% 60% at 65% 45%, black 20%, transparent 75%);
+  -webkit-mask-image: radial-gradient(ellipse 70% 60% at 65% 45%, black 20%, transparent 75%);
+  animation: dots-drift 24s linear infinite;
+  opacity: .55;
+  pointer-events: none;
+}
+@keyframes dots-drift { to { background-position: 28px 56px; } }
+
+/* The hero trace draws itself once */
+.drawPath { stroke-dasharray: 1; stroke-dashoffset: 1; animation: draw-path 1.6s cubic-bezier(.65,0,.35,1) .4s forwards; }
+@keyframes draw-path { to { stroke-dashoffset: 0; } }
+
+/* A ring that ripples out of the lit step's node */
+.ping { transform-box: fill-box; transform-origin: center; animation: ping 1.2s cubic-bezier(0,0,.2,1) infinite; }
+@keyframes ping { 0% { transform: scale(.6); opacity: .55; } 80%, 100% { transform: scale(1.9); opacity: 0; } }
+
+/* Headline words in the brand gradient, with a slow light passing across them */
+.shimmerText {
+  background: linear-gradient(100deg, var(--primary) 0%, color-mix(in srgb, var(--primary) 45%, white) 45%, var(--primary) 70%);
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: shimmer-text 6s ease-in-out infinite;
+}
+@keyframes shimmer-text { 0%, 100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
+
+/* Entrances for the hero's supporting lines */
+.fadeIn { animation: fade-in 800ms ease both; }
+.fadeUp { animation: fade-up 900ms cubic-bezier(.16,1,.3,1) both; }
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes fade-up { from { opacity: 0; transform: translate3d(0, 18px, 0); } to { opacity: 1; transform: none; } }
+
+/* A light sweep across the primary button every few seconds */
+.sheen { position: relative; overflow: hidden; }
+.sheen::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(110deg, transparent 35%, rgba(255,255,255,.45) 50%, transparent 65%);
+  transform: translateX(-120%);
+  animation: sheen 4.5s cubic-bezier(.65,0,.35,1) 2s infinite;
+  pointer-events: none;
+}
+@keyframes sheen { 0% { transform: translateX(-120%); } 30%, 100% { transform: translateX(120%); } }
+
+/* The marquee's second row runs the other way */
+.marqueeReverse { animation-direction: reverse; animation-duration: 46s; }
+
+/* The recommended plan: a slowly turning gradient border */
+.glowBorder {
+  background:
+    linear-gradient(var(--color-card), var(--color-card)) padding-box,
+    conic-gradient(from var(--glow-angle, 0deg), color-mix(in srgb, var(--primary) 85%, transparent), transparent 30%, transparent 60%, color-mix(in srgb, var(--primary) 85%, transparent)) border-box;
+  border-width: 1.5px;
+  box-shadow: 0 30px 80px -40px var(--primary);
+  animation: glow-turn 8s linear infinite;
+}
+@property --glow-angle { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
+@keyframes glow-turn { to { --glow-angle: 360deg; } }
+
+/* The scroll cue under the hero */
+.scrollCue {
+  display: block;
+  width: 22px;
+  height: 36px;
+  border: 2px solid currentColor;
+  border-radius: 12px;
+  position: relative;
+  opacity: .7;
+}
+.scrollCue::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 7px;
+  width: 3px;
+  height: 7px;
+  margin-left: -1.5px;
+  border-radius: 2px;
+  background: currentColor;
+  animation: scroll-cue 1.8s cubic-bezier(.65,0,.35,1) infinite;
+}
+@keyframes scroll-cue { 0% { transform: translateY(0); opacity: 1; } 70% { transform: translateY(12px); opacity: 0; } 100% { transform: translateY(0); opacity: 0; } }
+
 @media (prefers-reduced-motion: reduce) {
   .floor, .aurora, .float, .floatSlow, .floatAlt, .pulse, .scan::after, .orb::before, .orb::after,
-  .flipIn, .progress, .marquee, .grow { animation: none !important; }
+  .flipIn, .progress, .marquee, .grow, .dots, .ping, .shimmerText, .fadeIn, .fadeUp, .sheen::after,
+  .glowBorder, .scrollCue::after { animation: none !important; }
   .progress { transform: scaleX(1); }
+  .drawPath { animation: none !important; stroke-dashoffset: 0; }
+}
+
+/* ── The landing intro (2026-10-13, short cut — owner: no panels, 2.5 s at most) ──
+ * 0–0.6 the lines sweep in (three depths) · 0.5–1.0 they pull into the centre while the mark's bands
+ * are traced · 0.95–1.4 the mark fills, the slashes snap in, one sweep of light · 1.6–2.3 the mark
+ * flies onto the nav logo (--fly-x/y/s, measured by the page script) as the ground dissolves to the
+ * page · 2.3–2.5 the nav logo fades in under it as it goes. The overlay ends invisible and
+ * click-through on its own at 2.5 s, script or no script. */
+.intro {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  overflow: hidden;
+  animation: intro-out 100ms linear 2400ms forwards;
+}
+/* The ground is its own layer, so it can dissolve to the page while the mark is still flying. */
+.introBackdrop { position: absolute; inset: 0; background: var(--color-page-bg); animation: intro-dissolve 650ms cubic-bezier(.65,0,.35,1) 1600ms forwards; }
+@keyframes intro-dissolve { to { opacity: 0; } }
+/* The intro's clock: an invisible animation both shots (and a skip) read and move. */
+.introClock { position: absolute; width: 0; height: 0; animation: intro-clock 6000ms linear both; }
+@keyframes intro-clock { from { opacity: 0; } to { opacity: 0; } }
+:global(html.intro-seen) .intro, :global(html.intro-done) .intro,
+:global(html.intro-seen) .introSkip, :global(html.intro-done) .introSkip { display: none; }
+@keyframes intro-out { to { opacity: 0; visibility: hidden; pointer-events: none; } }
+
+/* The frame of the shot. It does not move, so the page script can measure where the mark sits. */
+.introCamera {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+}
+
+/* Beat 2–3: the stream. Three depths — far ribbons are thin, slow and faint; near ones are heavy,
+ * quick and soft-edged (a wide, faint halo under the core stands in for depth of field, which is far
+ * cheaper than a blur filter at full screen). Each layer drifts at its own rate for parallax. */
+.introFlows { position: absolute; inset: 0; width: 100%; height: 100%; }
+.introFlow {
+  fill: none;
+  stroke: url(#intro-flow);
+  stroke-linecap: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  transform-origin: 50% 50%;
+  transform-box: view-box;
+  animation:
+    intro-draw var(--draw, 600ms) cubic-bezier(.65,0,.35,1) var(--d, 0ms) both,
+    intro-gather 420ms cubic-bezier(.65,0,.35,1) var(--gather, 560ms) forwards;
+}
+.introLayerFar .introFlow { stroke-width: 1; opacity: .4; --draw: 650ms; --gather: 520ms; }
+.introLayerMid .introFlow { stroke-width: 1.8; opacity: .75; --draw: 560ms; --gather: 560ms; }
+.introLayerNear .introFlow { stroke-width: 3.2; opacity: .95; --draw: 480ms; --gather: 600ms; }
+.introLayerNear .introFlowHalo { stroke-width: 14; opacity: .12; }
+.introLayerFar, .introLayerMid, .introLayerNear { transform-origin: 50% 50%; transform-box: view-box; }
+.introLayerFar { animation: intro-drift-far 1000ms cubic-bezier(.33,0,.2,1) both; }
+.introLayerMid { animation: intro-drift-mid 1000ms cubic-bezier(.33,0,.2,1) both; }
+.introLayerNear { animation: intro-drift-near 1000ms cubic-bezier(.33,0,.2,1) both; }
+@keyframes intro-drift-far { from { transform: scale(1); } to { transform: scale(1.02); } }
+@keyframes intro-drift-mid { from { transform: scale(1); } to { transform: scale(1.05); } }
+@keyframes intro-drift-near { from { transform: scale(1.02); } to { transform: scale(1.12); } }
+.introFlowStopEdge { stop-color: var(--primary); stop-opacity: 0; }
+.introFlowStopGreen { stop-color: var(--primary); stop-opacity: .9; }
+.introFlowStopInk { stop-color: var(--accent-ink); stop-opacity: 1; }
+@keyframes intro-draw { to { stroke-dashoffset: 0; } }
+@keyframes intro-gather { to { opacity: 0; transform: scaleY(.12); } }
+
+/* The mark, at the centre of the shot. Once formed it flies onto the nav logo's isotype: the page
+ * script measures both and sets --fly-x/--fly-y/--fly-s on <html>. Without them it simply stays and
+ * fades with the overlay. As it lands it fades out while the nav logo fades in beneath it. */
+.introStage {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 168px;
+  height: 168px;
+  animation:
+    intro-fly 700ms cubic-bezier(.65,0,.35,1) 1600ms forwards,
+    intro-land 200ms ease 2300ms forwards;
+}
+@keyframes intro-fly { to { transform: translate3d(var(--fly-x, 0px), var(--fly-y, 0px), 0) scale(var(--fly-s, 1)); } }
+@keyframes intro-land { to { opacity: 0; } }
+@media (max-width: 640px) { .introStage { width: 120px; height: 120px; } }
+.introMark {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  animation: intro-mark-in 1200ms cubic-bezier(.16,1,.3,1) both;
+}
+@keyframes intro-mark-in { from { transform: scale(.9); } to { transform: none; } }
+
+/* Beat 3: each band traced in its own gradient, outermost first; beat 4: filled. */
+.introWave {
+  stroke-width: 2.4;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  stroke-linejoin: round;
+  fill-opacity: 0;
+  animation:
+    intro-draw 380ms cubic-bezier(.65,0,.35,1) var(--d, 0ms) both,
+    intro-fill 300ms ease var(--f, 0ms) forwards;
+}
+@keyframes intro-fill { to { fill-opacity: 1; stroke-opacity: 0; } }
+
+/* Beat 4: the slashes snap in with a 4% overshoot — the only bounce in the shot. */
+.introSlash {
+  fill: #0a8769;
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: 50% 50%;
+  animation: intro-slash 260ms cubic-bezier(.16,1,.3,1) var(--d, 0ms) forwards;
+}
+@keyframes intro-slash {
+  0% { opacity: 0; transform: translateY(6px) scale(.6); }
+  70% { opacity: 1; transform: translateY(0) scale(1.04); }
+  100% { opacity: 1; transform: none; }
+}
+
+/* Beat 4: one specular sweep across the mark, clipped to its shape — the title-card moment. */
+.introSweep {
+  transform: translateX(-200px);
+  animation: intro-sweep 450ms cubic-bezier(.65,0,.35,1) 1200ms both;
+}
+.introSweepEdge { stop-color: white; stop-opacity: 0; }
+.introSweepCore { stop-color: white; stop-opacity: .5; }
+@keyframes intro-sweep { from { transform: translateX(-200px); } to { transform: translateX(220px); } }
+
+/* Beat 4: a bloom of green light behind the mark at its brightest, and a single ripple. */
+.introBloom {
+  position: absolute;
+  inset: -110%;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--primary) 22%, transparent), transparent 72%);
+  opacity: 0;
+  animation: intro-bloom 700ms ease 950ms both;
+}
+@keyframes intro-bloom { 0% { opacity: 0; transform: scale(.8); } 45% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(1.1); } }
+/* Not used in the short cut. */
+.introRipple {
+  position: absolute;
+  inset: -8px;
+  border-radius: 50%;
+  border: 1.5px solid var(--primary);
+  opacity: 0;
+  animation: intro-ripple 900ms cubic-bezier(.16,1,.3,1) 2250ms forwards;
+}
+@keyframes intro-ripple { 0% { opacity: .6; transform: scale(.7); } 100% { opacity: 0; transform: scale(2.6); } }
+
+/* The lens: a soft vignette and 4% film grain over the whole shot. */
+.introVignette {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse at 50% 50%, transparent 52%, rgba(13, 64, 55, .1) 100%);
+}
+:global(.dark) .introVignette { background: radial-gradient(ellipse at 50% 50%, transparent 48%, rgba(0, 0, 0, .5) 100%); }
+/* Static: an animated full-screen grain costs a repaint per step, and at 4% nobody sees it move. */
+.introGrain {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: .045;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+:global(.dark) .introGrain { opacity: .07; }
+
+.introVignette, .introGrain { animation: intro-dissolve 650ms cubic-bezier(.65,0,.35,1) 1600ms forwards; }
+
+/* Skip: quiet, bottom-right, from one second in; it leaves with the overlay. */
+.introSkip {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 101;
+  height: 32px;
+  padding: 0 14px;
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-card) 85%, transparent);
+  color: var(--muted-foreground);
+  font-size: .75rem;
+  font-weight: 600;
+  letter-spacing: .02em;
+  cursor: pointer;
+  opacity: 0;
+  animation: intro-skip-in 300ms ease 600ms forwards, intro-out 300ms ease 1600ms forwards;
+}
+.introSkip:hover { color: var(--foreground); }
+.introSkip:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+@keyframes intro-skip-in { from { opacity: 0; } to { opacity: 1; } }
+
+/* ── The Data Highway (3D) shot: takes the overlay over when it is ready in time ──
+ * The CSS shot hides, the overlay's own fade becomes a late safety net (the 3D hand-off dissolves
+ * the ground itself), and the hero waits for the hand-off. */
+.highway { position: absolute; inset: 0; visibility: hidden; pointer-events: none; }
+:global(html.intro-3d) .highway { visibility: visible; }
+:global(html.intro-3d) .introCamera { animation: intro-fade-away 300ms ease-out forwards; }
+@keyframes intro-fade-away { to { opacity: 0; visibility: hidden; } }
+/* A late safety net only: the 3D conductor normally retires the overlay itself once the mark lands. */
+:global(html.intro-3d) .intro { animation-delay: 3300ms; animation-duration: 200ms; }
+:global(html.intro-3d) .introSkip { animation-delay: 600ms, 1950ms; }
+/* The 3D shot (review only, ?intro=3d) dissolves the ground and the lens itself. */
+:global(html.intro-3d) .introBackdrop, :global(html.intro-3d) .introVignette, :global(html.intro-3d) .introGrain { animation: none; }
+:global(html.intro-3d) .hero { --intro-delay: 1700ms; }
+.highwayCanvas { position: absolute; inset: 0; }
+.highwayMark { position: absolute; left: calc(50% - 84px); top: calc(50% - 84px); width: 168px; height: 168px; opacity: 0; transform-origin: 50% 50%; }
+@media (max-width: 640px) { .highwayMark { left: calc(50% - 60px); top: calc(50% - 60px); width: 120px; height: 120px; } }
+.highwayMarkSvg { position: relative; display: block; width: 100%; height: 100%; overflow: visible; transform-origin: 50% 50%; }
+.highwaySlash { fill: #0a8769; }
+.highwayBloom {
+  position: absolute;
+  inset: -110%;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--primary) 22%, transparent), transparent 72%);
+  opacity: 0;
+}
+
+/* The mark's own gradient — the light file's stops, and the on-dark file's in dark mode. */
+.introStop0 { stop-color: #07d6a0; }
+.introStop1 { stop-color: #07c896; }
+.introStop2 { stop-color: #099f79; }
+.introStop3 { stop-color: #0a7c61; }
+.introStop4 { stop-color: #0b624e; }
+.introStop5 { stop-color: #0c4f41; }
+.introStop6 { stop-color: #0c4339; }
+.introStop7 { stop-color: #0d4037; }
+:global(.dark) .introStop1 { stop-color: #07d29d; }
+:global(.dark) .introStop2 { stop-color: #08c896; }
+:global(.dark) .introStop3 { stop-color: #08bf90; }
+:global(.dark) .introStop4 { stop-color: #09b88b; }
+:global(.dark) .introStop5 { stop-color: #09b388; }
+:global(.dark) .introStop6 { stop-color: #09b086; }
+:global(.dark) .introStop7 { stop-color: #09af85; }
+
+/* ── The hero waits for the intro, then: the ribbon sweeps in slowly, then the words rise ──
+ * --intro-delay is the intro's length on a first visit and 0 after it (or without it). */
+.hero { --intro-delay: 1400ms; }
+:global(html.intro-seen) .hero { --intro-delay: 0ms; }
+.ribbonIn {
+  animation: ribbon-in 2200ms cubic-bezier(.22,1,.36,1) both;
+  animation-delay: var(--intro-delay);
+}
+@keyframes ribbon-in {
+  from { opacity: 0; transform: translate3d(8%, 2%, 0) scale(1.06); }
+  to { opacity: .9; transform: none; }
+}
+/* Each word rises out of its own clip box. The box reaches past the glyphs (descenders, and the
+ * italic "really" whose y leans out to the right) and the negative margins give that room back, so
+ * nothing is cut and the line keeps its spacing. */
+.heroWordClip {
+  display: inline-block;
+  overflow: hidden;
+  vertical-align: bottom;
+  padding: .04em .14em .3em;
+  margin: -.04em -.14em -.18em;
+}
+.heroWord {
+  display: inline-block;
+  animation: hero-word 1000ms cubic-bezier(.16,1,.3,1) both;
+  animation-delay: calc(var(--intro-delay) + var(--at, 0ms));
+}
+@keyframes hero-word { from { opacity: 0; transform: translate3d(0, 105%, 0) rotate(4deg); } to { opacity: 1; transform: none; } }
+.heroRise {
+  animation: fade-up 900ms cubic-bezier(.16,1,.3,1) both;
+  animation-delay: calc(var(--intro-delay) + var(--at, 0ms));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .intro, .introSkip { display: none; }
+  .hero { --intro-delay: 0ms; }
+  .ribbonIn, .heroWord, .heroRise { animation: none !important; }
+  .ribbonIn { opacity: .9; }
 }

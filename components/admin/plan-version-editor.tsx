@@ -13,6 +13,7 @@ import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip } from "@/components/admin/status-chip";
 import type { FeatureModuleGroup } from "@/lib/features/constants";
 import type { PlanLimits } from "@/lib/metering/constants";
+import type { PlanEditorMeter } from "@/lib/plans/planSave";
 import { buildAgentMenu } from "@/lib/menu/definition";
 import { BILLING_CYCLE_LABELS, formatCents, formatCentsAsCurrency, monthlyEquivalentCents, parseDollarsToCents, type PlanPrices } from "@/lib/money";
 import { cn } from "@/lib/utils";
@@ -25,10 +26,10 @@ function centsFromInput(value: string): { cents: number | null; invalid: boolean
 }
 
 const card = "min-w-0 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] p-5";
-const h2 = "text-[18px] leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]";
-const label = "text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]";
-const input = "mt-1.5 box-border h-9 w-full rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] px-3 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--ink)] outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)] aria-[invalid=true]:border-[var(--error)]";
-const hint = "mt-1.5 block text-[12px] leading-[1.5] text-[var(--muted)]";
+const h2 = "text-title-sm leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]";
+const label = "text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]";
+const input = "mt-1.5 box-border h-9 w-full rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] px-3 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--ink)] outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)] aria-[invalid=true]:border-[var(--error)]";
+const hint = "mt-1.5 block text-xs leading-[1.5] text-[var(--muted)]";
 
 const EDITABLE_LIMITS: Array<[keyof PlanLimits, string]> = [
   ["max_publishers", "Publishers"],
@@ -38,7 +39,11 @@ const EDITABLE_LIMITS: Array<[keyof PlanLimits, string]> = [
   ["max_partner_users", "Partner users"],
   ["max_setter_seats", "Setter seats"],
   ["max_active_campaigns", "Active campaigns"],
+  ["max_carriers", "Carriers"],
 ];
+
+/** One meter's editor state: whether the plan sets its own allowance, and what it is (blank = unlimited). */
+type MeterDraft = { own: boolean; included: string; hardCap: boolean };
 
 /** "Two months free" when a longer cycle costs less than that many months at the monthly price. */
 function cycleNote(cycle: "monthly" | "quarterly" | "yearly", cents: number | null, monthlyCents: number | null) {
@@ -75,6 +80,8 @@ export function PlanVersionEditor({
   initialPrices,
   initialLimits,
   subscriberCount,
+  nextVersion,
+  meters,
 }: {
   planId: string;
   planName: string;
@@ -86,6 +93,9 @@ export function PlanVersionEditor({
   initialPrices: PlanPrices | null;
   initialLimits: PlanLimits | null;
   subscriberCount: number;
+  /** What a publish would number the new version: max(version) of the code + 1, not this row + 1. */
+  nextVersion: number;
+  meters: PlanEditorMeter[];
 }) {
   const router = useRouter();
   const [granted, setGranted] = useState<Set<string>>(new Set(initialGranted));
@@ -96,6 +106,18 @@ export function PlanVersionEditor({
   const [trialDays, setTrialDays] = useState(String(initialPrices?.trial_days ?? 0));
   const [limits, setLimits] = useState<Record<string, string>>(
     Object.fromEntries(EDITABLE_LIMITS.map(([key]) => [key, initialLimits?.[key] == null ? "" : String(initialLimits[key])])),
+  );
+  const [meterDrafts, setMeterDrafts] = useState<Record<string, MeterDraft>>(
+    Object.fromEntries(
+      meters.map((meter) => [
+        meter.meter_key,
+        {
+          own: meter.plan !== null,
+          included: meter.plan?.included_qty == null ? "" : String(meter.plan.included_qty),
+          hardCap: meter.plan?.hard_cap ?? meter.default_hard_cap,
+        },
+      ]),
+    ),
   );
   const [saving, setSaving] = useState(false);
 
@@ -114,12 +136,13 @@ export function PlanVersionEditor({
   const trial = Number(trialDays);
   const trialInvalid = !Number.isInteger(trial) || trial < 0 || trial > 365;
   const limitInvalid = Object.values(limits).some((value) => value.trim() !== "" && !/^\d+$/.test(value.trim()));
+  const meterInvalid = Object.values(meterDrafts).some((draft) => draft.own && draft.included.trim() !== "" && !/^\d+$/.test(draft.included.trim()));
   const priceInvalid = parsed.monthly.invalid || parsed.quarterly.invalid || parsed.yearly.invalid || parsedSetup.invalid;
   const noCyclePriced = parsed.monthly.cents === null && parsed.quarterly.cents === null && parsed.yearly.cents === null;
   const grantedCount = granted.size;
-  const canSave = grantedCount > 0 && !priceInvalid && !trialInvalid && !limitInvalid;
+  const canSave = grantedCount > 0 && !priceInvalid && !trialInvalid && !limitInvalid && !meterInvalid;
   const publishes = subscriberCount > 0;
-  const actionLabel = publishes ? `Publish version ${planVersion + 1}` : "Save changes";
+  const actionLabel = publishes ? `Publish version ${nextVersion}` : "Save changes";
 
   function toggle(key: string) {
     if (lockedArchived.has(key)) return;
@@ -146,6 +169,10 @@ export function PlanVersionEditor({
         setup_fee_cents: parsedSetup.cents ?? 0,
         trial_days: trial || 0,
         limits: Object.fromEntries(Object.entries(limits).map(([key, value]) => [key, value.trim() === "" ? null : Number(value)])),
+        // The full list of meters this version sets itself; the rest take the platform default.
+        meters: Object.entries(meterDrafts)
+          .filter(([, draft]) => draft.own)
+          .map(([meter_key, draft]) => ({ meter_key, included_qty: draft.included.trim() === "" ? null : Number(draft.included), hard_cap: draft.hardCap })),
       }),
     });
     const body = await res.json().catch(() => null);
@@ -169,7 +196,7 @@ export function PlanVersionEditor({
   return (
     <div className="flex min-w-0 flex-col gap-6">
       <div>
-        <Link href="/admin/plans" className="mb-2 inline-flex items-center gap-1.5 text-[12px] font-semibold text-[var(--muted)] no-underline hover:text-[var(--ink)]">
+        <Link href="/admin/plans" className="mb-2 inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--muted)] no-underline hover:text-[var(--ink)]">
           <ArrowLeft className="size-3.5" aria-hidden />Back to plans
         </Link>
         <PageHeader
@@ -204,7 +231,7 @@ export function PlanVersionEditor({
       {publishes && (
         <Callout
           tone="warning"
-          title={`Saving publishes version ${planVersion + 1}; the ${subscriberCount.toLocaleString()} existing ${subscriberCount === 1 ? "subscriber stays" : "subscribers stay"} on version ${planVersion}.`}
+          title={`Saving publishes version ${nextVersion}; the ${subscriberCount.toLocaleString()} existing ${subscriberCount === 1 ? "subscriber stays" : "subscribers stay"} on version ${planVersion}.`}
         />
       )}
 
@@ -238,7 +265,7 @@ export function PlanVersionEditor({
                 <span className={cn(hint, trialInvalid && "text-[var(--error-ink)]")}>{trialInvalid ? "A whole number from 0 to 365." : "0 means no trial."}</span>
               </label>
             </div>
-            {noCyclePriced && !priceInvalid && <p className="mt-3 text-[12px] font-semibold text-[var(--warning-ink)]">No cycle is priced — this version can be saved, but not sold.</p>}
+            {noCyclePriced && !priceInvalid && <p className="mt-3 text-xs font-semibold text-[var(--warning-ink)]">No cycle is priced — this version can be saved, but not sold.</p>}
           </section>
 
           <section className={card} aria-labelledby="plan-capacity">
@@ -251,8 +278,51 @@ export function PlanVersionEditor({
                 </label>
               ))}
             </div>
-            <p className="mt-4 border-t border-[var(--border)] pt-3 text-[12px] leading-normal text-[var(--muted)]">
-              Seats: <strong className="font-semibold text-[var(--ink)] tabular-nums">{initialLimits?.max_seats ?? "unlimited"}</strong> · Carriers: <strong className="font-semibold text-[var(--ink)] tabular-nums">{initialLimits?.max_carriers ?? "unlimited"}</strong> (not editable here).
+            <p className="mt-4 border-t border-[var(--border)] pt-3 text-xs leading-normal text-[var(--muted)]">
+              Seats: <strong className="font-semibold text-[var(--ink)] tabular-nums">{initialLimits?.max_seats ?? "unlimited"}</strong> (not editable here).
+            </p>
+          </section>
+
+          <section className={card} aria-labelledby="plan-allowances">
+            <h2 id="plan-allowances" className={h2}>Usage allowances</h2>
+            <div className="mt-4 flex flex-col divide-y divide-[var(--border)]">
+              {meters.map((meter) => {
+                const draft = meterDrafts[meter.meter_key];
+                const set = (patch: Partial<MeterDraft>) => setMeterDrafts((prev) => ({ ...prev, [meter.meter_key]: { ...prev[meter.meter_key], ...patch } }));
+                const invalid = draft.own && draft.included.trim() !== "" && !/^\d+$/.test(draft.included.trim());
+                return (
+                  <div key={meter.meter_key} className="grid gap-3 py-3 first:pt-0 last:pb-0 sm:grid-cols-[minmax(0,1fr)_160px_120px] sm:items-center">
+                    <label className="flex min-w-0 items-start gap-2.5">
+                      <input type="checkbox" checked={draft.own} onChange={(e) => set({ own: e.target.checked })} className="mt-0.5 size-4 shrink-0 accent-[var(--primary)]" />
+                      <span className="min-w-0">
+                        <span className={label}>{meter.label}</span>
+                        <span className={hint}>
+                          {draft.own ? "Set by this plan." : `Platform default: ${meter.platform_default === null ? "unlimited" : `${meter.platform_default.toLocaleString("en-US")} ${meter.unit}s`}.`}
+                        </span>
+                      </span>
+                    </label>
+                    <input
+                      className={cn(input, "mt-0")}
+                      type="number"
+                      min={0}
+                      step={1}
+                      placeholder="Unlimited"
+                      aria-label={`${meter.label} included per period`}
+                      disabled={!draft.own}
+                      value={draft.included}
+                      onChange={(e) => set({ included: e.target.value })}
+                      aria-invalid={invalid || undefined}
+                    />
+                    <label className="flex items-center gap-2 text-sm text-[var(--body)]">
+                      <input type="checkbox" checked={draft.hardCap} disabled={!draft.own} onChange={(e) => set({ hardCap: e.target.checked })} className="size-4 accent-[var(--primary)]" />
+                      Hard cap
+                    </label>
+                  </div>
+                );
+              })}
+            </div>
+            <p className="mt-4 border-t border-[var(--border)] pt-3 text-xs leading-normal text-[var(--muted)]">
+              Per billing period. Empty means unlimited, 0 means none. A hard cap stops the action at the limit; without one, extra use is billed as overage.
             </p>
           </section>
 
@@ -265,7 +335,7 @@ export function PlanVersionEditor({
             return (
               <section key={group.module.key} className={card} aria-labelledby={`module-${group.module.key}`}>
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <h2 id={`module-${group.module.key}`} className={h2}>{group.module.label} <span className="text-[14px] font-normal text-[var(--muted)] tabular-nums">{on} of {visible.length}</span></h2>
+                  <h2 id={`module-${group.module.key}`} className={h2}>{group.module.label} <span className="text-sm font-normal text-[var(--muted)] tabular-nums">{on} of {visible.length}</span></h2>
                   {selectable.length > 0 && (
                     <Button type="button" variant="ghost" onClick={() => toggleModule(group)}>{allOn ? "Clear all" : "Select all"}</Button>
                   )}
@@ -278,11 +348,11 @@ export function PlanVersionEditor({
                       <label key={feature.id} className={cn("flex items-start gap-2.5 rounded-[8px] border p-2.5", isOn ? "border-[var(--primary)] bg-[var(--brand-50)]" : "border-[var(--border)]", isLocked ? "cursor-not-allowed opacity-70" : "cursor-pointer hover:bg-[var(--surface-alt)]")}>
                         <input type="checkbox" checked={isOn} disabled={isLocked} onChange={() => toggle(feature.feature_key)} className="mt-0.5 size-4 shrink-0 accent-[var(--primary)]" />
                         <span className="min-w-0">
-                          <span className="flex items-center gap-1.5 text-[14px] font-semibold text-[var(--ink)]">
+                          <span className="flex items-center gap-1.5 text-sm font-semibold text-[var(--ink)]">
                             {feature.label}
                             {isLocked && <span title="Archived, but still granted by this plan"><Lock className="size-3 text-[var(--muted)]" aria-label="Archived, still granted" /></span>}
                           </span>
-                          <code className="text-[12px] text-[var(--muted)]">{feature.feature_key}</code>
+                          <code className="text-xs text-[var(--muted)]">{feature.feature_key}</code>
                         </span>
                       </label>
                     );
@@ -298,15 +368,15 @@ export function PlanVersionEditor({
             <h2 id="menu-preview" className={h2}>An owner will see</h2>
             {/* Named for the role it renders: buildAgentMenu defaults to "owner", the widest menu the plan can produce; other roles see a subset. */}
             <div className="mt-3 rounded-[8px] bg-[var(--nav-bg)] p-3">
-              {previewMenu.length === 0 && <p className="text-[14px] text-[var(--nav-muted)]">Nothing — no feature granted.</p>}
+              {previewMenu.length === 0 && <p className="text-sm text-[var(--nav-muted)]">Nothing — no feature granted.</p>}
               {previewMenu.map((section) => (
                 <div key={section.id} className="mb-3 last:mb-0">
-                  <p className="mb-1 text-[12px] font-semibold tracking-[0.02em] uppercase text-[var(--nav-muted)]">{section.label}</p>
-                  {section.items.map((item) => <p key={item.key} className="py-0.5 pl-2 text-[14px] text-[var(--nav-ink)]">{item.label}</p>)}
+                  <p className="mb-1 text-xs font-semibold tracking-[0.02em] uppercase text-[var(--nav-muted)]">{section.label}</p>
+                  {section.items.map((item) => <p key={item.key} className="py-0.5 pl-2 text-sm text-[var(--nav-ink)]">{item.label}</p>)}
                 </div>
               ))}
             </div>
-            <p className="mt-2 text-[12px] text-[var(--muted)]"><span className="tabular-nums">{grantedCount} {grantedCount === 1 ? "feature" : "features"}</span>{grantedCount === 0 && <span className="font-semibold text-[var(--error-ink)]"> — at least one required</span>}</p>
+            <p className="mt-2 text-xs text-[var(--muted)]"><span className="tabular-nums">{grantedCount} {grantedCount === 1 ? "feature" : "features"}</span>{grantedCount === 0 && <span className="font-semibold text-[var(--error-ink)]"> — at least one required</span>}</p>
           </section>
         </aside>
       </div>

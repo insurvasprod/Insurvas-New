@@ -2,7 +2,12 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { audit } from "@/lib/audit/log";
 import { getAdminSession } from "@/lib/adminAuth/requireAdminRole";
-import { ADMIN_SESSION_COOKIE, ADMIN_PENDING_2FA_COOKIE, clearedAdminCookieOptions } from "@/lib/adminAuth/session";
+import {
+  ADMIN_PENDING_2FA_COOKIE,
+  ADMIN_SESSION_COOKIE,
+  ADMIN_TOTP_ENROL_COOKIE,
+  clearedAdminCookieOptions,
+} from "@/lib/adminAuth/session";
 
 export async function POST(request: NextRequest) {
   // Who is signing out, from the verified cookie. No session (already expired, or never signed
@@ -31,5 +36,6 @@ export async function POST(request: NextRequest) {
   // would leave an ADMIN_COOKIE_DOMAIN cookie in place.
   response.cookies.set(ADMIN_SESSION_COOKIE, "", clearedAdminCookieOptions);
   response.cookies.set(ADMIN_PENDING_2FA_COOKIE, "", clearedAdminCookieOptions);
+  response.cookies.set(ADMIN_TOTP_ENROL_COOKIE, "", clearedAdminCookieOptions);
   return response;
 }

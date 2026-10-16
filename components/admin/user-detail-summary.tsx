@@ -1,8 +1,10 @@
+import { StatusChip } from "@/components/ui/status-chip";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 
 import { DashboardUtcTime } from "@/components/admin/dashboard-utc-time";
-import { Callout, Pill } from "@/components/app/settings/primitives";
+import { Callout } from "@/components/app/settings/primitives";
+import { pillTone } from "@/lib/ui/pillTone";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import type { UserDetail } from "@/lib/adminUsers/detail";
@@ -35,7 +37,7 @@ export function UserDetailSummary({ user }: { user: UserDetail }) {
       <div>
         <Link
           href="/admin/users"
-          className="mb-2.5 inline-flex items-center gap-2 rounded-sm text-[14px] leading-[1.43] font-semibold tracking-[-0.01em] text-[var(--ink)] no-underline hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
+          className="mb-2.5 inline-flex items-center gap-2 rounded-sm text-sm leading-[1.43] font-semibold tracking-[-0.01em] text-[var(--ink)] no-underline hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
         >
           <ArrowLeft className="size-[13px] stroke-[2.4]" aria-hidden="true" />
           Back to users
@@ -44,23 +46,23 @@ export function UserDetailSummary({ user }: { user: UserDetail }) {
           title={user.name || user.email || "User"}
           actions={
             <span role="group" aria-label="Account state" className="flex flex-wrap items-center gap-2">
-              <Pill tone={userStatusTone(user.status)} dot>
+              <StatusChip tone={pillTone(userStatusTone(user.status))} dot>
                 {userStatusLabel(user.status)}
-              </Pill>
-              {user.memberships.length === 0 && <Pill tone="neutral">No agency</Pill>}
+              </StatusChip>
+              {user.memberships.length === 0 && <StatusChip dot={false} tone="neutral">No agency</StatusChip>}
               {user.memberships.map((membership) => (
                 <span key={membership.tenantId} className="contents">
-                  {roleLabel(membership.role) && <Pill tone="neutral">{roleLabel(membership.role)}</Pill>}
+                  {roleLabel(membership.role) && <StatusChip dot={false} tone="neutral">{roleLabel(membership.role)}</StatusChip>}
                   <Link
                     href={`/admin/tenants/${membership.tenantId}`}
                     className="rounded-full no-underline hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
                     title="Open this agency's record"
                   >
-                    <Pill tone="neutral">{membership.tenantName ?? "Unnamed agency"}</Pill>
+                    <StatusChip dot={false} tone="neutral">{membership.tenantName ?? "Unnamed agency"}</StatusChip>
                   </Link>
                 </span>
               ))}
-              {!isOnboarded(user) && <Pill tone="warning">Invite pending</Pill>}
+              {!isOnboarded(user) && <StatusChip dot={false} tone="warning">Invite pending</StatusChip>}
             </span>
           }
         />

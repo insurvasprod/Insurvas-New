@@ -165,7 +165,7 @@ function ResolveDialog({ claim, onClose, onDone }: { claim: ClaimRow; onClose: (
       <DialogContent className="sm:max-w-[460px]">
         <DialogHeader>
           <DialogTitle>Mark handled: {claim.clientName ?? claim.policyNumber}</DialogTitle>
-          <DialogDescription>{claim.carrierName} · {claim.policyNumber}. The client stays off every call list either way.</DialogDescription>
+          <DialogDescription>{claim.carrierName} · {claim.policyNumber}. This policy is never sent to a win-back list. The phone number is not blocked, because the household may share it.</DialogDescription>
         </DialogHeader>
         <label htmlFor="claim-note" className="grid gap-1.5 text-sm font-medium text-foreground">
           What happened

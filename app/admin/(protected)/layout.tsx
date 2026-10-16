@@ -5,7 +5,6 @@ import { ADMIN_ROLE_LABELS } from "@/lib/adminAuth/roles";
 import { buildAdminNav } from "@/lib/adminNav/build";
 import { AdminSidebar } from "@/components/admin/admin-sidebar";
 import { AdminTopBar } from "@/components/admin/admin-top-bar";
-import { ThemeToggle } from "@/components/theme-toggle";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const admin = await getCurrentAdmin();
@@ -22,7 +21,6 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         nodes={buildAdminNav(admin.role)}
         adminName={admin.name}
         roleLabel={ADMIN_ROLE_LABELS[admin.role]}
-        footer={<ThemeToggle tone="onBrand" />}
       />
       {/* min-w-0 is load-bearing. A flex item defaults to min-width:auto, so <main> refused to
           shrink below its widest child — a wide table pushed main, main pushed the page, and the

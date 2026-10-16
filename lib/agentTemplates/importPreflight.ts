@@ -19,6 +19,8 @@ import type { AgentTemplate } from "@/lib/agentTemplates/service";
 import { getTenantTemplateForProductVersion, validateImportValues } from "@/lib/agentTemplates/service";
 import { friendlyImportCommitError } from "@/lib/agentTemplates/errors";
 import { commitLeadImport, ImportCommitRefusal, projectedUsableCostCents, type ImportItem, type ScrubRejection } from "@/lib/agentTemplates/importCommit";
+import { existingLeadsByPhone } from "@/lib/agentTemplates/existingLeadPhones";
+import { importScrubDecision } from "@/lib/campaigns/importScrubMark";
 
 type DbError = { message: string; code?: string };
 type Result<T> = { data: T; error: DbError | null };
@@ -228,10 +230,6 @@ const INLINE_BUDGET_MS = 8_000;
 export const STEP_BUDGET_MS = 20_000;
 /** The most numbers one step screens, whatever the budget. */
 export const MAX_STEP_NUMBERS = 2_000;
-/** Numbers per dedupe call. One call answers all of them; the chunk only bounds the request body. */
-const LOOKUP_CHUNK = 5_000;
-/** Numbers per fallback IN-query, which travels in a URL. */
-const FALLBACK_CHUNK = 150;
 
 export function hashCsv(csv: string) {
   return createHash("sha256").update(csv, "utf8").digest("hex");
@@ -321,60 +319,6 @@ async function pinnedTemplate(tenantId: string, current: AgentTemplate, definiti
     // the current form is the only thing left, and the commit re-validates every row against it.
     return current;
   }
-}
-
-/**
- * Which of these numbers already belong to one of the tenant's leads, and to which lead.
- *
- * Both callers used to read EVERY lead the tenant has (`select id, values … eq tenant_id`) and build
- * the set in TypeScript. The service client is a plain supabase-js client with no range paging, so
- * that read was capped by PostgREST's max-rows (1,000 on a hosted project unless raised) and on a
- * tenant with ~214k leads the dedupe quietly checked the first thousand and missed everyone else.
- *
- * `import_existing_lead_phones` (20260924330000) returns one jsonb object for just the numbers in
- * the file, so no row cap applies. Before that migration, an IN-query on the two phone keys stands
- * in; it finds leads whose phone is stored as ten or eleven digits — which is how every import
- * stores it — but not a phone saved with punctuation by another intake path.
- */
-async function existingLeadsByPhone(db: Db, tenantId: string, phones: string[]): Promise<Map<string, string>> {
-  const found = new Map<string, string>();
-  if (phones.length === 0) return found;
-  for (let start = 0; start < phones.length; start += LOOKUP_CHUNK) {
-    const chunk = phones.slice(start, start + LOOKUP_CHUNK);
-    const result = await db.rpc("import_existing_lead_phones", { p_tenant_id: tenantId, p_phones: chunk });
-    if (result.error) {
-      if (isMissingSchema(result.error)) return existingLeadsByPhoneFallback(db, tenantId, phones);
-      throw new Error(`Could not check existing leads: ${result.error.message}`);
-    }
-    const map = (result.data ?? {}) as Record<string, unknown>;
-    for (const [phone, leadId] of Object.entries(map)) if (typeof leadId === "string") found.set(phone, leadId);
-  }
-  return found;
-}
-
-async function existingLeadsByPhoneFallback(db: Db, tenantId: string, phones: string[]): Promise<Map<string, string>> {
-  const earliest = new Map<string, { id: string; createdAt: string }>();
-  for (let start = 0; start < phones.length; start += FALLBACK_CHUNK) {
-    const chunk = phones.slice(start, start + FALLBACK_CHUNK);
-    const variants = chunk.flatMap((phone) => [phone, `1${phone}`]);
-    for (const column of ["values->>phone", "values->>phone_number"]) {
-      const result = await db
-        .from("agent_leads")
-        .select("id, values, created_at")
-        .eq("tenant_id", tenantId)
-        .in(column, variants)
-        .order("created_at", { ascending: true })
-        .limit(1000);
-      if (result.error) throw new Error(`Could not check existing leads: ${result.error.message}`);
-      for (const lead of (result.data as unknown as Array<{ id: string; values: Record<string, unknown> | null; created_at: string }>) ?? []) {
-        const digits = phoneOf(lead.values ?? {});
-        if (!digits) continue;
-        const seen = earliest.get(digits);
-        if (!seen || lead.created_at < seen.createdAt) earliest.set(digits, { id: lead.id, createdAt: lead.created_at });
-      }
-    }
-  }
-  return new Map([...earliest].map(([phone, lead]) => [phone, lead.id]));
 }
 
 /** The review buckets for any plan, including one staged before the buckets were recorded. */
@@ -1161,6 +1105,15 @@ export async function commitImport(input: {
     : null;
   const pItems = items.map((item) => ({ ...item, cost_cents: costCents }));
 
+  // The campaign's scrub status, and whether it held any lead, BEFORE this commit: the scrub mark
+  // below may only claim what this import scrubbed (lib/campaigns/importScrubMark.ts).
+  const [priorCampaign, priorLead] = items.length > 0
+    ? await Promise.all([
+        db.from("tenant_campaigns").select("status, scrub_status").eq("tenant_id", input.tenantId).eq("id", campaignId).maybeSingle(),
+        db.from("agent_leads").select("id").eq("tenant_id", input.tenantId).eq("campaign_id", campaignId).limit(1),
+      ])
+    : [null, null];
+
   let committed: Awaited<ReturnType<typeof commitLeadImport>>;
   try {
     committed = await commitLeadImport({
@@ -1220,20 +1173,43 @@ export async function commitImport(input: {
     // visible, and recoverable by re-running — rather than a campaign advertising a scrub that
     // never finished. A failure here does not throw: the leads are committed, and calling the import
     // failed would be a lie. It is returned as `servable: false` instead.
-    const marked = await db
-      .from("tenant_campaigns")
-      .update({ scrub_status: "scrubbed", scrubbed_at: new Date().toISOString(), scrub_error: null })
-      .eq("tenant_id", input.tenantId)
-      .eq("id", campaignId)
-      .select("id, status");
-    if (marked.error) {
-      console.error(
-        `[import] leads committed but campaign ${campaignId} could not be marked scrubbed; they will not be served until it is: ${marked.error.message}`,
-      );
+    //
+    // Only when this import scrubbed EVERY lead the campaign holds (importScrubDecision): a campaign
+    // whose last scrub failed, that is mid-scrub, or that held leads awaiting a (re-)scrub keeps its
+    // blocking status. The write is conditional on the status read before the commit, so a re-scrub
+    // requested in between is not overwritten.
+    const prior = priorCampaign && !priorCampaign.error && priorCampaign.data && priorLead && !priorLead.error
+      ? { scrubStatus: (priorCampaign.data as { scrub_status?: string | null }).scrub_status ?? null, status: (priorCampaign.data as { status?: string | null }).status ?? null, hadLeadsBefore: Array.isArray(priorLead.data) && priorLead.data.length > 0 }
+      : null;
+    const decision = prior
+      ? importScrubDecision(prior)
+      : { mark: false as const, reason: "This campaign's scrub status could not be read, so it was not marked as scrubbed and the dialer will not serve these yet." };
+    const notMarked = (reason: string) => {
+      summary.campaignStatus = prior?.status ?? null;
+      summary.servable = false;
+      summary.warning = [summary.warning, reason].filter(Boolean).join(" ");
+    };
+    if (!decision.mark) {
+      notMarked(decision.reason);
     } else {
+      const marked = await db
+        .from("tenant_campaigns")
+        .update({ scrub_status: "scrubbed", scrubbed_at: new Date().toISOString(), scrub_error: null })
+        .eq("tenant_id", input.tenantId)
+        .eq("id", campaignId)
+        .eq("scrub_status", prior?.scrubStatus ?? "unscrubbed")
+        .select("id, status");
       const campaignRow = (Array.isArray(marked.data) ? marked.data[0] : marked.data) as { status?: string } | undefined;
-      summary.campaignStatus = campaignRow?.status ?? null;
-      summary.servable = summary.campaignStatus === "active";
+      if (marked.error) {
+        console.error(
+          `[import] leads committed but campaign ${campaignId} could not be marked scrubbed; they will not be served until it is: ${marked.error.message}`,
+        );
+      } else if (!campaignRow) {
+        notMarked("This campaign's scrub status changed during the import (a re-scrub was requested), so it was not marked as scrubbed. Its leads are served when that scrub completes.");
+      } else {
+        summary.campaignStatus = campaignRow.status ?? null;
+        summary.servable = summary.campaignStatus === "active";
+      }
     }
   }
 

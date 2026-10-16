@@ -4,7 +4,10 @@ import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { fetchFeatureCatalog } from "@/lib/features/queries";
 import type { FeatureModuleGroup } from "@/lib/features/constants";
 import type { PlanPrices } from "@/lib/money";
-import type { PlanLimits } from "@/lib/metering/constants";
+import type { PlanLimits, PlanMeterRow } from "@/lib/metering/constants";
+import { nextPlanVersion, type PlanEditorMeter } from "@/lib/plans/planSave";
+
+export type { PlanEditorMeter };
 
 export type PlanVersionEditorData = {
   plan: {
@@ -22,6 +25,9 @@ export type PlanVersionEditorData = {
   limits: PlanLimits | null;
   /** Non-cancelled subscriptions on THIS version. Non-zero means saving publishes a new version. */
   subscriberCount: number;
+  /** The version a publish would create: max(version) of the code + 1, as admin_create_plan_version numbers it. */
+  nextVersion: number;
+  meters: PlanEditorMeter[];
 };
 
 export async function fetchPlanVersionEditorData(planId: string): Promise<PlanVersionEditorData | null> {
@@ -35,7 +41,7 @@ export async function fetchPlanVersionEditorData(planId: string): Promise<PlanVe
 
   if (!plan) return null;
 
-  const [groups, { data: granted }, { data: prices }, { data: limits }, { count }] = await Promise.all([
+  const [groups, { data: granted }, { data: prices }, { data: limits }, { count }, { data: versions }, { data: meterRows }, { data: pricing }, { data: planMeters }] = await Promise.all([
     fetchFeatureCatalog({ includeArchived: true }),
     supabase.from("plan_features").select("feature_key").eq("plan_id", planId),
     supabase
@@ -51,7 +57,25 @@ export async function fetchPlanVersionEditorData(planId: string): Promise<PlanVe
       .select("id", { count: "exact", head: true })
       .eq("plan_id", planId)
       .neq("status", "cancelled"),
+    supabase.from("plans").select("version").eq("code", plan.code),
+    supabase.from("meters").select("meter_key, label, unit, default_hard_cap, sort_order").order("sort_order"),
+    supabase.from("meter_pricing").select("meter_key, default_included"),
+    supabase.from("plan_meters").select("meter_key, included_qty, hard_cap").eq("plan_id", planId),
   ]);
+
+  const defaults = new Map((pricing ?? []).map((row) => [row.meter_key, row.default_included]));
+  const own = new Map((planMeters ?? []).map((row) => [row.meter_key, row as PlanMeterRow]));
+  const meters: PlanEditorMeter[] = (meterRows ?? []).map((row) => {
+    const mine = own.get(row.meter_key);
+    return {
+      meter_key: row.meter_key,
+      label: row.label,
+      unit: row.unit,
+      default_hard_cap: row.default_hard_cap,
+      platform_default: defaults.get(row.meter_key) ?? null,
+      plan: mine ? { included_qty: mine.included_qty, hard_cap: mine.hard_cap } : null,
+    };
+  });
 
   return {
     plan,
@@ -60,6 +84,8 @@ export async function fetchPlanVersionEditorData(planId: string): Promise<PlanVe
     prices: prices ?? null,
     limits: limits ?? null,
     subscriberCount: count ?? 0,
+    nextVersion: nextPlanVersion((versions ?? []).map((row) => row.version), plan.version),
+    meters,
   };
 }
 

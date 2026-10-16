@@ -55,12 +55,12 @@ export function SlaDigestCard({ ready, days }: { ready: boolean; days: SlaDigest
       // The alert centre's third tab: like the other two, the card reaches the bottom of the window.
       className="flex min-h-[calc(100dvh-var(--top-bar-h)-330px)] flex-col [&>*:nth-child(2)]:flex-1"
       toolbar={ready ? <DataToolbar actions={<PageRefreshButton />} /> : undefined}
-      footer={ready && days.length > 0 ? <span>Escalated and expired transfers by partner. Days run midnight to midnight, {zones}.</span> : undefined}
+      footer={ready && days.length > 0 ? <span>Days run midnight to midnight, {zones}</span> : undefined}
     >
       {!ready ? (
         <p className="m-0 px-4 py-3 text-sm text-[var(--muted)]">{SLA_PENDING_LINE}</p>
       ) : days.length === 0 ? (
-        <EmptyState title="Nothing escalated or expired this week" hint="Each day's escalated and expired transfers are counted here by partner." />
+        <EmptyState title="Nothing escalated or expired this week" hint="Counted each day, by partner." />
       ) : (
         <table className="portal-lead-table w-full">
           <thead>

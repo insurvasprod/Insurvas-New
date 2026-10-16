@@ -37,6 +37,19 @@
      added with next/font/local; Montserrat 600 until then. */
   --font-display: var(--font-montserrat), 'Montserrat', system-ui, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  /* The type scale above 16px (docs/design/00-FOUNDATION.md §3), as classes: text-title-sm 18,
+     text-title-md 24, text-title-lg 32, text-headline-lg 40, text-hero 56. 12/14/16 are Tailwind's
+     text-xs / text-sm / text-base. Nothing should need text-[Npx] (2026-10-09). */
+  --text-title-sm: 1.125rem;
+  --text-title-sm--line-height: 1.28;
+  --text-title-md: 1.5rem;
+  --text-title-md--line-height: 1.21;
+  --text-title-lg: 2rem;
+  --text-title-lg--line-height: 1.2;
+  --text-headline-lg: 2.5rem;
+  --text-headline-lg--line-height: 1.15;
+  --text-hero: 3.5rem;
+  --text-hero--line-height: 1.1;
 }
 
 /*
@@ -459,6 +472,11 @@
 /* 5 · View swap. The outgoing view is cut, not faded, so the two are never on
    screen together. */
 .m-swap { animation: m-rise 260ms var(--e-out) both; }
+/* A side panel (a record's details, a create form) slides in from the edge it is attached to, and a
+   tab's view fades in when the tab changes (2026-10-09). Transform and opacity only, like the rest. */
+@keyframes m-panel-in { from { opacity: 0; transform: translateX(16px); } to { opacity: 1; transform: none; } }
+.m-panel { animation: m-panel-in var(--t-panel) var(--e-out) both; }
+[role="tabpanel"] { animation: m-fade 180ms var(--e-out) both; }
 
 /* 6 · Refusal. The only animation in the product that signals no. */
 .m-deny { animation: m-deny 200ms var(--e) 1 both; animation-delay: 760ms; }
@@ -1667,9 +1685,18 @@ body {
    white on load, which reads as a rendering fault rather than a choice. */
 html { color-scheme: light; }
 html.dark { color-scheme: dark; }
+/* The root carries the page colour too, so a tile the browser has not painted yet (a fast scroll past
+   the landing page's 3D) shows the page, never white. */
+html { background-color: var(--color-page-bg); }
 /* Set by ThemeProvider for the one frame the theme class changes in: a theme switch is instant, not a
    120ms fade of every control from the old colours to the new ones. */
 html.theme-switching *, html.theme-switching *::before, html.theme-switching *::after { transition: none !important; }
+
+/* The landing nav's theme switch (components/public/theme-switch.tsx) reveals the new theme as a
+   circle growing from the button. Only while that runs: no crossfade, new frame drawn on top. */
+html.theme-reveal::view-transition-old(root),
+html.theme-reveal::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
+html.theme-reveal::view-transition-new(root) { z-index: 1; }
 
 /* SA-3.3 · Printable invoice.
    The print route lives inside the admin layout, so the sidebar has to be taken off the paper
@@ -2043,8 +2070,6 @@ html.theme-switching *, html.theme-switching *::before, html.theme-switching *::
 /* Lead workspace: board-first operations surface with a compact master/detail preview. */
 .lead-workspace-page { width: 100%; min-width: 0; padding: 0; color: var(--ink); } /* title size now comes from PageHeader — one 32px title everywhere inside the shell */
 .eyebrow { display: block; color: var(--muted); font-size: .65rem; font-weight: 600; letter-spacing: .11em; }
-.lead-workspace-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1rem; align-items: start; }
-.has-preview .lead-workspace-grid { grid-template-columns: minmax(0, 1fr) minmax(300px, 34%); }
 .lead-column-empty { display: grid; min-height: 6rem; place-items: center; border: 1px dashed var(--border-strong); border-radius: 8px; color: var(--muted); font-size: .75rem; text-align: center; }
 .lead-stage-pill { display: inline-flex; align-items: center; border-radius: 999px; padding: .25rem .55rem; font-size: .68rem; font-weight: 600; }
 .lead-stage-open { background: var(--info-surface); color: var(--info-ink); }
@@ -2086,8 +2111,7 @@ html.theme-switching *, html.theme-switching *::before, html.theme-switching *::
 .lead-full-link { display: flex; align-items: center; justify-content: center; gap: .35rem; width: 100%; border-radius: 8px; background: var(--accent-ink); padding: .6rem .8rem; color: var(--on-primary); font-size: .75rem; font-weight: 600; }
 .lead-full-link:hover { background: var(--accent-ink); }
 .lead-form-control { width: 100%; min-height: 2.25rem; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); padding: 0 .65rem; color: var(--accent-ink); font-size: .82rem; }
-@media (max-width: 1100px) { .has-preview .lead-workspace-grid { grid-template-columns: minmax(0, 1fr) minmax(280px, 38%); }  }
-@media (max-width: 760px) {      .has-preview .lead-workspace-grid { grid-template-columns: 1fr; } .lead-preview-panel { position: relative; top: auto; max-height: none; }   }
+@media (max-width: 760px) { .lead-preview-panel { position: relative; top: auto; max-height: none; }   }
 
 /* Settings is a focused workspace: one configuration surface is visible at a time. */
 .portal-settings-panel { min-width: 0; animation: portal-settings-panel-in 180ms ease both; }
@@ -2321,6 +2345,48 @@ html.theme-switching *, html.theme-switching *::before, html.theme-switching *::
 .portal-agent-nav-business-groups { border-left-color: var(--nav-line); }
 
 .portal-agent-module-icon { border-color: var(--nav-line); background: rgba(255, 255, 255, .06); color: var(--nav-ink); }
+
+/* The rail as a tree (2026-10-06). Three levels read at a glance: a heading (LA-1 Inbound, Business,
+   Partners) in capitals; inside Business, its groups (Book of Business, Leads, …) one step in, in
+   sentence case; the pages one step further. Each level hangs off a hairline drawn from its
+   heading's icon, so what belongs to what is visible without opening anything. The collapsed rail
+   hides every list, so none of this applies there. */
+.portal-agent-module-items,
+.portal-agent-nav-section:not(.portal-agent-nav-business-group) > .portal-agent-nav-sublist,
+.portal-agent-nav-business-groups {
+  margin: .125rem 0 .25rem 1.3rem !important;
+  padding-left: .375rem !important;
+  border-left: 1px solid rgba(255, 255, 255, .2) !important;
+}
+.portal-agent-nav-business-group .portal-agent-nav-sublist-nested {
+  margin: .125rem 0 .25rem 1.05rem !important;
+  padding-left: .375rem !important;
+  border-left: 1px solid rgba(255, 255, 255, .2) !important;
+}
+/* A group heading is a level below the capitals: sentence case, the rail's ink, its arrow leading. */
+.portal-agent-nav-business-group > .portal-agent-nav-disclosure {
+  height: 2rem;
+  margin-top: .0625rem;
+  padding: 0 .5rem;
+  color: var(--nav-ink);
+  font-size: .8125rem;
+  font-weight: 600;
+  letter-spacing: -.01em;
+  text-transform: none;
+}
+.portal-agent-nav-business-group > .portal-agent-nav-disclosure > .portal-agent-nav-chevron {
+  order: -1;
+  width: .875rem;
+  height: .875rem;
+  transform: rotate(-90deg);
+}
+.portal-agent-nav-business-group > .portal-agent-nav-disclosure > .portal-agent-nav-chevron.is-open { transform: none; }
+/* Pages inside a tree branch: a touch smaller than a top-level page, so the levels differ in weight too. */
+.portal-agent-module-items .portal-agent-nav-link,
+.portal-agent-nav-sublist .portal-agent-nav-link { height: 2rem; padding: 0 .5rem; font-size: .8125rem; }
+/* The branch that holds the open page draws its line in the active green. */
+.portal-agent-module-items:has(.is-active),
+.portal-agent-nav-sublist:has(.is-active) { border-left-color: var(--portal-primary) !important; }
 
 /* The plan card: at the foot of the rail, outside the scroll, in the rail's own hairline. */
 .portal-agent-plan-card {
@@ -2630,7 +2696,7 @@ html.theme-switching *, html.theme-switching *::before, html.theme-switching *::
 .portal-callbacks-checks { display: flex; flex-direction: column; gap: 10px; }
 .portal-callbacks-checks > span { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
 .portal-callbacks-checks small { color: var(--muted); font-size: 12px; line-height: 1.5; letter-spacing: -.01em; }
-.portal-callbacks-card [data-slot="button"] { height: 44px; border-radius: 999px; font-size: 14px; }
+.portal-callbacks-card [data-slot="button"] { height: 2.25rem; border-radius: 999px; font-size: .875rem; }
 .portal-callbacks-card-more { display: flex; flex-wrap: wrap; gap: 16px; margin-top: -4px; }
 .portal-callbacks-card-more button { border: 0; background: none; padding: 0; color: var(--accent-ink); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
 .portal-callbacks-card-more button:disabled { color: var(--muted); cursor: default; }
@@ -2735,5 +2801,124 @@ html.theme-switching *, html.theme-switching *::before, html.theme-switching *::
 .portal-top-badge { border-color: var(--nav-bg); }
 .portal-top-panel { color: var(--ink); }
 
-/* A StatTile inside a StatStrip is one cell of the strip, not a box of its own (components/ui/stat.tsx). */
-.m-stat-strip .m-stat-tile { border: 0; border-radius: 0; box-shadow: none; }
+/* A StatTile inside a StatStrip is one cell of the strip, not a box of its own (components/ui/stat.tsx).
+   The cell is clear so the strip's glass shows through; it draws its own left and top hairline, and
+   the strip's overflow clips the ones along its outer edge. */
+.m-stat-strip .m-stat-tile {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: -1px 0 0 var(--border), 0 -1px 0 var(--border);
+}
+
+/* ── Glass + glow layer (2026-10-13) ─────────────────────────────────────────────────────────────
+   The look the owner picked for the three role homes, applied everywhere through the shared
+   components: Card, TableCard and StatStrip carry `m-glass`. Every surface is slightly translucent
+   with a light top edge. Inside <DashboardStage> (components/ui/dashboard-stage.tsx), where two soft
+   brand glows sit behind the page, the glass also blurs what is under it; elsewhere the canvas is
+   flat, a blur would do nothing, and it is left off to keep long tables cheap to scroll.
+   In the components layer, so a caller's own bg-* or shadow-* utility still wins. */
+:root {
+  --glass-alpha: 88%;
+  --glass-highlight: color-mix(in srgb, white 75%, transparent);
+  --ambient-opacity: .2;
+}
+.dark {
+  --glass-alpha: 74%;
+  --glass-highlight: rgba(255, 255, 255, .06);
+  --ambient-opacity: .34;
+}
+
+@layer components {
+  .m-glass {
+    background-color: color-mix(in srgb, var(--color-card) var(--glass-alpha), transparent);
+    box-shadow: inset 0 1px 0 var(--glass-highlight), var(--shadow-rest);
+  }
+}
+
+.m-stage .m-glass {
+  -webkit-backdrop-filter: blur(16px) saturate(150%);
+  backdrop-filter: blur(16px) saturate(150%);
+}
+
+/* The strip's lit edge: a thin brand line along its top that fades out at both ends. */
+.m-stat-strip { position: relative; }
+.m-stat-strip::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  z-index: 1;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--primary) 75%, transparent) 50%, transparent);
+  pointer-events: none;
+}
+
+/* The halo behind a figure, dark mode only: on a light ground a glow reads as a smudge. */
+.dark .m-figure { text-shadow: 0 0 22px color-mix(in srgb, var(--primary) 34%, transparent); }
+
+/* The two glows behind a role home. They drift slowly; reduced motion stills them (the global rule). */
+.m-ambient-orb {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(64px);
+  opacity: var(--ambient-opacity);
+  animation: m-ambient-drift 22s ease-in-out infinite alternate;
+}
+.m-ambient-orb--a { left: 4%; top: -40px; width: 46%; height: 320px; background: radial-gradient(closest-side, var(--primary), transparent); }
+.m-ambient-orb--b { right: 2%; top: 80px; width: 38%; height: 280px; background: radial-gradient(closest-side, color-mix(in srgb, var(--primary) 55%, var(--info)), transparent); animation-delay: -11s; }
+@keyframes m-ambient-drift {
+  from { transform: translate3d(0, 0, 0) scale(1); }
+  to { transform: translate3d(4%, 18px, 0) scale(1.08); }
+}
+
+/* LiveStamp's dot (components/ui/live-stamp.tsx): a ring that breathes out while the data is fresh. */
+.m-live-dot { width: 7px; height: 7px; border-radius: 9999px; background: var(--primary); animation: m-live-pulse 1.8s ease-out infinite; }
+.m-live-dot.is-stale { background: var(--warning); animation: none; }
+@keyframes m-live-pulse {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--primary) 60%, transparent); }
+  100% { box-shadow: 0 0 0 7px transparent; }
+}
+
+/* Ring (components/ui/ring.tsx) draws its arc once, from empty to its value. */
+.m-ring { animation: m-ring-draw 900ms var(--e-out) both; animation-delay: 200ms; }
+@keyframes m-ring-draw { from { stroke-dasharray: 0 100; } }
+
+/* ═════════════════════════════════════════════════════════════════════════════════════════════
+   Sign-in doors (2026-10-13): the brand panel carries the landing hero's silk ribbon, and moving
+   between the landing page and a door, or from one door to another, is one continuous scene.
+   React <ViewTransition> names the pieces (components/portal/portal-auth-split-shell.tsx); these
+   are their animations. The page itself crossfades underneath.
+   ═════════════════════════════════════════════════════════════════════════════════════════════ */
+.portal-auth-story-scene { position: relative; overflow: hidden; isolation: isolate; }
+/* Keeps the panel's words legible where the ribbon passes behind them. */
+.portal-auth-story-veil {
+  position: absolute; inset: 0; z-index: 1; pointer-events: none;
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--brand-700) 96%, transparent) 0%, color-mix(in srgb, var(--brand-700) 84%, transparent) 48%, color-mix(in srgb, var(--brand-700) 30%, transparent) 78%, transparent 100%),
+    radial-gradient(90% 60% at 15% 100%, color-mix(in srgb, var(--brand-700) 85%, transparent), transparent 70%);
+}
+
+::view-transition-old(root),
+::view-transition-new(root) { animation-duration: 380ms; animation-timing-function: cubic-bezier(.22, 1, .36, 1); }
+
+/* The ribbon and the logo travel from where they were to where they land. */
+::view-transition-group(.ribbon-morph) { animation-duration: 760ms; animation-timing-function: cubic-bezier(.22, 1, .36, 1); }
+::view-transition-image-pair(.ribbon-morph) { animation-name: auth-via-blur; animation-duration: 760ms; }
+@keyframes auth-via-blur { 35% { filter: blur(6px); } }
+
+/* Door to door: the form and the panel's words swap in place. */
+::view-transition-group(.auth-swap) { animation-duration: 460ms; animation-timing-function: cubic-bezier(.22, 1, .36, 1); }
+::view-transition-old(.auth-swap) { animation: auth-fade-out 200ms ease both; }
+::view-transition-new(.auth-swap) { animation: auth-rise-in 520ms cubic-bezier(.22, 1, .36, 1) 80ms both; }
+/* Arriving from the landing page (no pair yet): the form rises in; leaving, it fades. */
+::view-transition-new(.auth-rise) { animation: auth-rise-in 560ms cubic-bezier(.22, 1, .36, 1) 120ms both; }
+::view-transition-old(.auth-fade) { animation: auth-fade-out 220ms ease both; }
+@keyframes auth-rise-in { from { opacity: 0; transform: translateY(16px); } }
+@keyframes auth-fade-out { to { opacity: 0; transform: translateY(-6px); } }
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-image-pair(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) { animation: none !important; }
+}

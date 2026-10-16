@@ -7,10 +7,11 @@
  * persistency flag on the field. The five persistency questions cannot be deleted.
  */
 
+import { StatusChip } from "@/components/ui/status-chip";
 import type { ReactNode } from "react";
 import { ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-react";
 
-import { Field, Pill, SettingsCard, ToggleRow, control } from "@/components/app/settings/primitives";
+import { Field, SettingsCard, ToggleRow, control } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { freshKey, hasChoices, isLockedPersistency, orderBySection, type UwDraft, type UwQuestion } from "@/lib/salesSettings/templateDefinition";
 import { feedOfQuestionKey, INTERVIEW_FEEDS, type InterviewFeed } from "@/lib/applications/prefill";
@@ -118,7 +119,7 @@ export function QuestionBuilder({ draft, onChange, readOnly, selectedKey, onSele
             <div key={s.key} className={cn("py-3", si === 0 ? "pt-0" : "border-t border-[var(--border)]")}>
               <div className="flex flex-wrap items-center justify-between gap-2">
                 {readOnly ? (
-                  <h4 className="m-0 text-[14px] leading-[1.5] font-semibold text-[var(--ink)]">{s.label}</h4>
+                  <h4 className="m-0 text-sm leading-[1.5] font-semibold text-[var(--ink)]">{s.label}</h4>
                 ) : (
                   <input
                     aria-label={`Section name: ${s.label}`}
@@ -137,7 +138,7 @@ export function QuestionBuilder({ draft, onChange, readOnly, selectedKey, onSele
                 )}
               </div>
               {inSection.length === 0 ? (
-                <p className="m-0 mt-2 text-[14px] text-[var(--muted)]">No questions in this section.</p>
+                <p className="m-0 mt-2 text-sm text-[var(--muted)]">No questions in this section.</p>
               ) : (
                 <ol className="m-0 mt-2 flex list-none flex-col p-0">
                   {inSection.map((q, i) => {
@@ -153,21 +154,21 @@ export function QuestionBuilder({ draft, onChange, readOnly, selectedKey, onSele
                           aria-pressed={on}
                           className="min-w-0 flex-1 rounded-[6px] text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
                         >
-                          <span className="flex gap-2 text-[14px] leading-[1.5] text-[var(--ink)]">
+                          <span className="flex gap-2 text-sm leading-[1.5] text-[var(--ink)]">
                             <span className="w-6 shrink-0 tabular-nums text-[var(--muted)]">{numberOf.get(q.key)}.</span>
                             <span className="min-w-0">{q.label || <span className="text-[var(--muted)]">No question text</span>}</span>
                           </span>
                           <span className="mt-1 ml-8 flex flex-wrap gap-1.5">
-                            <Pill tone="neutral">{isYnu(q) ? "Yes / No / Unsure" : TYPE_SHORT[q.type]}</Pill>
-                            {q.required && <Pill tone="neutral">Required</Pill>}
-                            {q.knockout && <Pill tone="error">Knockout</Pill>}
+                            <StatusChip dot={false} tone="neutral">{isYnu(q) ? "Yes / No / Unsure" : TYPE_SHORT[q.type]}</StatusChip>
+                            {q.required && <StatusChip dot={false} tone="neutral">Required</StatusChip>}
+                            {q.knockout && <StatusChip dot={false} tone="danger">Knockout</StatusChip>}
                             {q.showWhen && (
                               // A pill never wraps: a long parent question is cut to the card's width (in full on hover), so it cannot run out of the card on a phone.
                               <span className="flex min-w-0 max-w-full" title={`When “${parent?.label ?? q.showWhen.key}” is ${answerText(parent, q.showWhen.equals)}`}>
-                                <Pill tone="info" className="min-w-0 max-w-full"><span className="truncate">When “{parent?.label ?? q.showWhen.key}” is {answerText(parent, q.showWhen.equals)}</span></Pill>
+                                <StatusChip dot={false} tone="info" className="min-w-0 max-w-full"><span className="truncate">When “{parent?.label ?? q.showWhen.key}” is {answerText(parent, q.showWhen.equals)}</span></StatusChip>
                               </span>
                             )}
-                            {q.persistency && <Pill tone="success">{PERSISTENCY_LABEL}</Pill>}
+                            {q.persistency && <StatusChip dot={false} tone="good">{PERSISTENCY_LABEL}</StatusChip>}
                           </span>
                         </button>
                         {!readOnly && (
@@ -271,8 +272,8 @@ function QuestionCard({ q, index, total, all, sections, readOnly, onPatch, onQue
       className={cn(q.knockout && "border-l-[3px] border-l-[var(--error)]")}
       action={(q.persistency || q.knockout) ? (
         <span className="flex flex-wrap items-center gap-2">
-          {q.persistency && <Pill tone="success">{PERSISTENCY_LABEL}</Pill>}
-          {q.knockout && <Pill tone="error">Knockout</Pill>}
+          {q.persistency && <StatusChip dot={false} tone="good">{PERSISTENCY_LABEL}</StatusChip>}
+          {q.knockout && <StatusChip dot={false} tone="danger">Knockout</StatusChip>}
         </span>
       ) : undefined}
     >

@@ -1,7 +1,7 @@
 import "server-only";
 
 import { audit } from "@/lib/audit/log";
-import { markDealPolicyIssued } from "@/lib/issuedPolicies/service";
+import { markApplicationPolicyIssued } from "@/lib/issuedPolicies/service";
 import { answerWithSale } from "@/lib/ingestion/policyMatchingStore";
 import { checkBeneficiaries, FULL_SHARE } from "./beneficiaries";
 import { CANONICAL_GROUPS, isSensitiveKey, OUTCOMES_NEEDING_REASON, type ApplicationOutcome, type InsuredRole, type PaymentMethod } from "./constants";
@@ -11,7 +11,8 @@ import { cardBrand, cardExpiryInFuture, digitsOnly, isPlausibleSsn, isValidAbaRo
 import { INTERVIEW_MAY_REPLACE, prefillFromInterview, prefillFromQuote, QUOTE_MAY_REPLACE } from "./prefill";
 import { runQa, type QaVerdict } from "./qa";
 import { ApplicationError, db, isMissingSchema, rows, rpcError, SchemaPendingError } from "./db";
-import { getCaseView } from "./service";
+import { getCaseView, scrubLeadSsn } from "./service";
+import { stateOfPhone } from "./areaCodes";
 import { hiddenAnswerKeys, insuredFacts, interviewQuestions, missingRequiredAnswers, pickTemplate, type StoredDefinition, type TemplateChoice } from "./templates";
 import { genericTransitionRefusal } from "./transitionRules";
 import { bandFallback, checkQuote, ratingAge } from "@/lib/quotes/math";
@@ -102,6 +103,9 @@ export async function saveSensitiveValue(actor: Actor, applicationId: string, fi
     source: "manual", reviewed_at: new Date().toISOString(), reviewed_by: actor.userId, updated_by: actor.userId,
   }, { onConflict: "application_id,field_key" });
   if (error) fail(error, "Could not save the Social Security number");
+  // The primary insured's SSN is now on the application, encrypted: any plaintext copy the lead
+  // arrived with is masked (LA-3.7).
+  if (a.insured_role === "primary") await scrubLeadSsn(actor.tenantId, a.lead_id, a.id);
   return { last4: digits.slice(-4) };
 }
 
@@ -253,20 +257,22 @@ export async function saveDraftDay(actor: Actor, applicationId: string, input: {
 export async function saveBeneficiaries(actor: Actor, applicationId: string, list: BeneficiaryView[]) {
   const a = await attemptHead(actor.tenantId, applicationId);
   for (const b of list) if (!(b.share_bp > 0 && b.share_bp <= FULL_SHARE)) throw new ApplicationError("SHARE_INVALID", "Each share is between 0.01% and 100%.");
-  const client = db();
-  const del = await client.from("tenant_application_beneficiaries").delete().eq("tenant_id", actor.tenantId).eq("application_id", a.id);
-  if (del.error) fail(del.error, "Could not save the beneficiaries");
-  if (list.length) {
-    const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    // The client's own ids are kept, so QA deep links and the row being typed in survive a save.
-    const ins = await client.from("tenant_application_beneficiaries").insert(list.map((b, i) => ({
-      ...(uuid.test(b.id) ? { id: b.id } : {}),
-      application_id: a.id, tenant_id: actor.tenantId, tier: b.tier,
-      first_name: ["estate", "trust", "funeral_home"].includes(b.relationship) && !b.first_name?.trim() ? null : (b.first_name ?? "").trim(),
-      last_name: b.last_name.trim(), relationship: b.relationship || "other",
-      relationship_other: b.relationship === "other" ? b.relationship_other?.trim() || null : null, dob: b.dob || null, share_bp: b.share_bp, phone: b.phone || null, sort_order: i,
-    })));
-    if (ins.error) fail(ins.error, "Could not save the beneficiaries");
+  // A contingent only inherits if a primary is named: one with none is refused here, not only by QA.
+  if (list.some((b) => b.tier === "contingent") && !list.some((b) => b.tier === "primary")) throw new ApplicationError("BENEFICIARY_CONTINGENT_WITHOUT_PRIMARY", "Add a primary beneficiary before a contingent one.");
+  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  // One transaction (save_application_beneficiaries): the old set is replaced only if the whole new
+  // set is written, so a failed insert can never leave the application with no beneficiaries.
+  // The client's own ids are kept, so QA deep links and the row being typed in survive a save.
+  const payload = list.map((b, i) => ({
+    id: uuid.test(b.id) ? b.id : null, tier: b.tier,
+    first_name: ["estate", "trust", "funeral_home"].includes(b.relationship) && !b.first_name?.trim() ? null : (b.first_name ?? "").trim(),
+    last_name: b.last_name.trim(), relationship: b.relationship || "other",
+    relationship_other: b.relationship === "other" ? b.relationship_other?.trim() || null : null, dob: b.dob || null, share_bp: b.share_bp, phone: b.phone || null, sort_order: i,
+  }));
+  const { error } = await db().rpc("save_application_beneficiaries", { p_tenant_id: actor.tenantId, p_application_id: a.id, p_actor: actor.userId, p_rows: payload });
+  if (error) {
+    if (/BENEFICIARY_CONTINGENT_WITHOUT_PRIMARY/.test(error.message ?? "")) throw new ApplicationError("BENEFICIARY_CONTINGENT_WITHOUT_PRIMARY", "Add a primary beneficiary before a contingent one.");
+    rpcError(error, "Could not save the beneficiaries");
   }
   return { issues: checkBeneficiaries(list) };
 }
@@ -620,9 +626,18 @@ async function qaFor(tenantId: string, applicationId: string): Promise<{ view: C
   const head = await attemptHead(tenantId, applicationId, { allowClosed: true });
   const view = await getCaseView(tenantId, head.case_id);
   const attempt = view.attempts.find((x) => x.id === applicationId)!;
-  const settings = await db().from("tenant_sales_settings").select("settings").eq("tenant_id", tenantId).maybeSingle();
+  const [settings, ssnRow] = await Promise.all([
+    db().from("tenant_sales_settings").select("settings").eq("tenant_id", tenantId).maybeSingle(),
+    db().from("tenant_application_values").select("value_ciphertext, key_version").eq("tenant_id", tenantId).eq("application_id", applicationId).eq("field_key", "insured.ssn").maybeSingle(),
+  ]);
   const s = resolveSalesSettings(settings.data?.settings);
-  return { view, verdict: runQa({ caseId: view.caseId, attempt, interview: view.interviews[attempt.insuredRole] ?? null, settings: { appointmentBlocks: s.appointmentBlocks, per1000Band: s.per1000Band } }) };
+  // The stored SSN is judged whole, by its SSA rules — the screen only ever sees its last four.
+  const cipher = (ssnRow.data as { value_ciphertext?: string | null; key_version?: number | null } | null) ?? null;
+  const ssnPlain = cipher?.value_ciphertext ? decryptSensitive(cipher.value_ciphertext, cipher.key_version ?? null, { tenantId, applicationId, fieldKey: "insured.ssn" }) : null;
+  const ssnValid = ssnPlain === null ? null : isPlausibleSsn(ssnPlain);
+  // The phone the application holds, else the lead's: its area code's state against the address.
+  const phone = attempt.values["contact.phone"]?.value ?? view.clientPhone;
+  return { view, verdict: runQa({ caseId: view.caseId, attempt, interview: view.interviews[attempt.insuredRole] ?? null, settings: { appointmentBlocks: s.appointmentBlocks, per1000Band: s.per1000Band }, phoneState: stateOfPhone(phone), ssnValid }) };
 }
 
 export async function transition(actor: Actor, applicationId: string, input: { to: string; outcome?: ApplicationOutcome | null; reasonCode?: string | null; reasonText?: string | null; policyNumber?: string | null; issuedOn?: string | null }) {
@@ -687,9 +702,11 @@ async function linkIssuedPolicy(actor: Actor, applicationId: string, policyNumbe
     client.from("deal_flow").select("id").eq("tenant_id", actor.tenantId).eq("lead_id", head.lead_id).maybeSingle(),
     head.carrier_id ? client.from("carriers").select("name").eq("id", head.carrier_id).maybeSingle() : Promise.resolve({ data: null }),
   ]);
-  if (!deal.data || !carrier.data) return { linked: false, message: "Recorded as issued, but the deal row was not found to attach the policy to." };
+  if (!carrier.data) return { linked: false, message: "Recorded as issued, but the carrier was not found to attach the policy to." };
   try {
-    await markDealPolicyIssued(actor.tenantId, { dealId: deal.data.id, carrier: carrier.data.name, policyNumber: number, issuedOn: issuedOn ?? new Date().toISOString().slice(0, 10) });
+    // Per application (mark_application_policy_issued): the spouse's policy is its own row beside the
+    // primary's, though the household shares one deal (deal_flow allows one deal per lead).
+    await markApplicationPolicyIssued(actor.tenantId, { applicationId, dealId: deal.data?.id ?? null, carrier: carrier.data.name, policyNumber: number, issuedOn: issuedOn ?? new Date().toISOString().slice(0, 10) });
     return { linked: true, message: null };
   } catch (e) {
     return { linked: false, message: e instanceof Error ? e.message : "The policy could not be attached to the deal." };
@@ -700,7 +717,13 @@ async function linkIssuedPolicy(actor: Actor, applicationId: string, policyNumbe
 
 export async function recordSubmission(actor: Actor, applicationId: string, input: { reference: string | null; referenceKind: "application_no" | "policy_no"; submittedAt: string | null; submittedVia: "extension" | "copy_assist" | "carrier_portal_manual"; notes?: string | null }) {
   const head = await attemptHead(actor.tenantId, applicationId);
-  if (head.status !== "ready") throw new ApplicationError("APPLICATION_NOT_READY", "Mark the application ready before recording the submission.", 409);
+  if (head.status !== "ready") {
+    // A double click, a retry after a dropped response or a second tab: the attempt is already
+    // submitted, so the submission it was submitted under comes back instead of a refusal.
+    const prior = await submissionOf(actor.tenantId, applicationId);
+    if (prior) return { submissionId: prior, duplicate: null, replayed: true };
+    throw new ApplicationError("APPLICATION_NOT_READY", "Mark the application ready before recording the submission.", 409);
+  }
   const { view, verdict } = await qaFor(actor.tenantId, applicationId);
   if (verdict.verdict === "fail") throw new ApplicationError("QA_FAILED", "Something changed since it was marked ready — fix the items on the Review step.", 409);
   const attempt = view.attempts.find((a) => a.id === applicationId)!;
@@ -715,20 +738,32 @@ export async function recordSubmission(actor: Actor, applicationId: string, inpu
       duplicate = { applicationId: dup.data.application_id, caseId: other.data?.case_id ?? "" };
     }
   }
-  const ins = await client.from("tenant_application_submissions").insert({
-    tenant_id: actor.tenantId, application_id: applicationId, attempt_no: head.attempt_no, carrier_id: head.carrier_id, carrier_reference: reference,
-    reference_kind: reference ? input.referenceKind : null, policy_number: reference && input.referenceKind === "policy_no" ? reference : null,
-    submitted_at: input.submittedAt ?? new Date().toISOString(), submitted_via: input.submittedVia, qa_verdict: verdict,
-    health_snapshot: interview ? { answers: interview.answers, medications: interview.medications, template: interview.templateName, revision: interview.templateRevision } : {}, notes: input.notes?.trim() || null, created_by: actor.userId,
-  }).select("id").single();
-  if (ins.error) fail(ins.error, "Could not record the submission");
-  const moved = await client.rpc("application_transition", { p_tenant_id: actor.tenantId, p_application_id: applicationId, p_actor: actor.userId, p_to: "submitted", p_outcome: null, p_reason_code: null, p_reason_text: null });
-  if (moved.error) rpcError(moved.error, "Could not mark the application submitted");
+  // One transaction (record_application_submission, 20261015570000): the attempt row is locked, the
+  // submission written and the attempt moved to `submitted` together, and one submission per attempt
+  // is a unique key. A concurrent second request waits on the lock, then gets this submission back.
+  const recorded = await client.rpc("record_application_submission", {
+    p_tenant_id: actor.tenantId, p_application_id: applicationId, p_actor: actor.userId, p_carrier_reference: reference,
+    p_reference_kind: reference ? input.referenceKind : null, p_policy_number: reference && input.referenceKind === "policy_no" ? reference : null,
+    p_submitted_at: input.submittedAt ?? new Date().toISOString(), p_submitted_via: input.submittedVia, p_qa_verdict: verdict,
+    p_health_snapshot: interview ? { answers: interview.answers, medications: interview.medications, template: interview.templateName, revision: interview.templateRevision } : {}, p_notes: input.notes?.trim() || null,
+  });
+  if (recorded.error) {
+    if (/APPLICATION_NOT_READY/.test(recorded.error.message ?? "")) throw new ApplicationError("APPLICATION_NOT_READY", "Mark the application ready before recording the submission.", 409);
+    if (/SUBMISSION_IN_FUTURE/.test(recorded.error.message ?? "")) throw new ApplicationError("SUBMITTED_AT_FUTURE", "The submission time cannot be in the future.");
+    rpcError(recorded.error, "Could not record the submission");
+  }
+  const result = (recorded.data ?? {}) as { submission_id?: string; replayed?: boolean };
+  if (!result.submission_id) throw new ApplicationError("APPLICATION_UNAVAILABLE", "The submission did not come back.", 500);
+  if (result.replayed) return { submissionId: result.submission_id, duplicate, replayed: true };
   // The fill is done: no extension grant outlives the `ready` state it was minted for (LA-3.12).
   await revokeGrants(actor.tenantId, applicationId, "submitted");
   // The deal row (LA-1.13) takes its figures from the attempt, not from typed text. draft_date is left alone (Q8).
+  // A household shares one deal (one per lead), so it carries the primary insured's sale: a spouse's
+  // submission writes it only when the primary has none on the case (LA-3.24 · each policy is its own
+  // record — the spouse's reaches Module 4 through its own issued-policy row, not by overwriting this).
   const quote = attempt.quotes.find((q) => q.id === attempt.selectedQuoteId);
-  if (quote) {
+  const primarySubmitted = head.insured_role === "spouse" ? view.attempts.some((x) => x.insuredRole === "primary" && x.submissions.length > 0) : false;
+  if (quote && !primarySubmitted) {
     await client.from("deal_flow").update({ carrier: attempt.carrierName, product_type: attempt.productLabel ?? attempt.productCode, monthly_premium_cents: quote.monthlyPremiumCents, face_amount_cents: quote.faceAmountCents, updated_at: new Date().toISOString() })
       .eq("tenant_id", actor.tenantId).eq("lead_id", head.lead_id);
   }
@@ -736,7 +771,14 @@ export async function recordSubmission(actor: Actor, applicationId: string, inpu
   if (reference && input.referenceKind === "policy_no") await answerWithSale(actor.tenantId, head.carrier_id, reference);
   await audit({ actorType: "tenant", actorId: actor.userId, action: "tenant.application_submitted", targetType: "tenant_application", targetId: applicationId, metadata: { reference, via: input.submittedVia, verdict: verdict.verdict }, request: actor.request });
   await syncLeadStageForApplication(actor.tenantId, applicationId);
-  return { submissionId: ins.data.id as string, duplicate };
+  return { submissionId: result.submission_id, duplicate, replayed: false };
+}
+
+/** The submission an attempt was submitted under, if any (one per attempt). */
+async function submissionOf(tenantId: string, applicationId: string): Promise<string | null> {
+  const q = await db().from("tenant_application_submissions").select("id").eq("tenant_id", tenantId).eq("application_id", applicationId).order("submitted_at", { ascending: false }).limit(1);
+  if (q.error) fail(q.error, "Could not load the submission");
+  return rows<{ id: string }>(q.data)[0]?.id ?? null;
 }
 
 export async function setSubmissionReference(actor: Actor, applicationId: string, submissionId: string, input: { reference?: string | null; referenceKind?: "application_no" | "policy_no" | null; policyNumber?: string | null }) {

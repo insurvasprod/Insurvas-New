@@ -119,7 +119,7 @@ export function PartnerQualityWorkspace({ initialPeriod }: { initialPeriod?: Per
   const th = (key: SortKey, label: string, hint?: string) => <th className="text-right" title={hint}><SortButton label={label} active={sort.key === key} onClick={() => toggleSort(key)} /></th>;
 
   return <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
-    <PageHeader title="Partner quality" description="Lead quality and conversion by partner, against the prior period." />
+    <PageHeader title="Partner quality" description="Lead quality by partner, against the prior period." />
 
     {/* Four figures an operator acts on (2026-10-06 redesign). Partners with leads rides on Leads
         sent and the duplicate rate on Screening pass; both stay columns and drill-downs below. */}
@@ -152,7 +152,7 @@ export function PartnerQualityWorkspace({ initialPeriod }: { initialPeriod?: Per
       footer={<Pager page={current} total={shown.length} pageSize={pageSize} noun="partners" onPage={setPage} suffix={`${SORT_LABEL[sort.key]} first`} />}
     >
       {data.rows.length === 0
-        ? <EmptyState title="No partners yet" hint="Partners appear here once they are added under Partners." />
+        ? <EmptyState title="No partners yet" hint="Add a partner to track its lead quality." action={<Button asChild variant="outline"><Link href="/app/publishers">Open partners</Link></Button>} />
         : shown.length === 0
           ? <NoMatches noun="partners" onClear={clearFilters} />
           : <table className="portal-lead-table w-full min-w-[1200px] text-left text-sm">

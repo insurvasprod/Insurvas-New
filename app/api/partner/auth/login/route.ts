@@ -10,6 +10,9 @@ import { AGENT_ACCOUNT_AT_PARTNER_SIGN_IN, holdsAgencyMembership, WRONG_PORTAL_C
 import { recordLastLogin, recordLoginEvent } from "@/lib/loginEvents/record";
 import { checkLoginAllowed, clearLoginFailures, logBlockedLoginAttempt, loginRateLimitResponse, recordLoginFailure } from "@/lib/authProtection";
 import { isTenantSuspended, TENANT_SUSPENDED_CODE, TENANT_SUSPENDED_MESSAGE } from "@/lib/tenants/suspension";
+import { getEntitlement } from "@/lib/entitlements/get";
+import { hasFeature } from "@/lib/entitlements/types";
+import { PARTNER_PORTAL_FEATURE } from "@/lib/partnerAuth/requirePartner";
 
 const DUMMY_HASH = "$2b$12$C6UzMDM.H6dfI/f/IKcEeOG1JDFsDLK7g7HDkVK6PmVNv7HDvXe5S";
 const GENERIC_ERROR = { error: "Invalid email or password" };
@@ -71,6 +74,14 @@ export async function POST(request: NextRequest) {
     return tenant
       ? NextResponse.json({ error: TENANT_SUSPENDED_MESSAGE, code: TENANT_SUSPENDED_CODE }, { status: 403 })
       : NextResponse.json(GENERIC_ERROR, { status: 401 });
+  }
+
+  // Partner logins are part of the agency's publisher_records feature; without it the portal is
+  // closed, handled like a suspended agency (requirePartner refuses the session the same way).
+  const portalOpen = await getEntitlement(membership.tenant_id).then((entitlement) => hasFeature(entitlement, PARTNER_PORTAL_FEATURE), () => false);
+  if (!portalOpen) {
+    await recordLoginEvent({ request, email, success: false, userId: user.id, actorType: "user", failureReason: "suspended" });
+    return NextResponse.json({ error: "This agency's partner portal is not available. Contact the agency.", code: "partner_portal_unavailable" }, { status: 403 });
   }
 
   // Independent writes, sent together — the failure path above already does the same.

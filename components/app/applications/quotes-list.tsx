@@ -130,7 +130,7 @@ export function QuotesList({ rows: initialRows, sample = false, timeZone = "UTC"
         footer={<Pager page={current} total={shown.length} pageSize={pageSize} noun="quotes" onPage={setPage} suffix={filtered ? `filtered from ${rows.length}` : "most recent first"} />}
       >
         {rows.length === 0
-          ? <EmptyState title="No quotes yet" hint="A quote is saved from a case's Quote step, while you compare carriers with the client." />
+          ? <EmptyState title="No quotes yet" hint="Save one from an application's Quote step." action={<Button asChild variant="outline"><Link href="/app/applications">Open applications</Link></Button>} />
           : shown.length === 0
             ? <NoMatches noun="quotes" onClear={clearFilters} />
             : <table className="portal-lead-table w-full min-w-[1080px] text-left text-sm">

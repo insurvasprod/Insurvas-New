@@ -14,6 +14,7 @@ import { whopAmountToCents } from "@/lib/payments/whop/client";
 import { completeCheckout } from "@/lib/checkout/complete";
 import type { SubscriptionStatus } from "./access";
 import type { WhopEnvelope } from "@/lib/payments/whop/events";
+import { notifyPlanPaymentFailed } from "@/lib/notifications/outbox";
 
 export type EventOutcome = {
   applied: boolean;
@@ -125,6 +126,13 @@ export async function applyProviderEvent(
   // recorded no payment at all, and the revenue was invisible.
   if (envelope.type === "payment.succeeded") {
     await recordPayment(envelope, tenantId);
+  }
+
+  // LA-8.4: a failed payment is a protected notification — the owners are told in the app and by
+  // email, whatever they chose, because otherwise the account suspends and nobody knows why. One per
+  // provider event (a redelivery is a no-op). A failure to notify never fails the event itself.
+  if (envelope.type === "payment.failed" || envelope.type === "invoice.past_due") {
+    await notifyPlanPaymentFailed(tenantId, envelope.id).catch((error: unknown) => console.error("[whop] payment-failed alert", error instanceof Error ? error.message : error));
   }
 
   const { data: subscription } = await supabase

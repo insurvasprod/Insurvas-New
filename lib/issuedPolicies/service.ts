@@ -80,6 +80,26 @@ export async function markDealPolicyIssued(tenantId: string, input: { dealId: un
   return { ...(data as IssuedPolicy), lapsed_at: (data as IssuedPolicy).lapsed_at ?? null };
 }
 
+/**
+ * Mark one application's policy issued (LA-3 → Module 4). Each insured's application is its own
+ * policy: a household's spouse no longer collides with the primary on their shared deal row
+ * (deal_flow allows one deal per lead), because the "already issued" check is per application.
+ * Idempotent: the same policy number again returns the policy already recorded. Before migration
+ * 20261015570000 the function is missing and the deal-level writer is used, as before.
+ */
+export async function markApplicationPolicyIssued(tenantId: string, input: { applicationId: string; dealId: string | null; carrier: unknown; policyNumber: unknown; issuedOn: unknown }): Promise<IssuedPolicy> {
+  const carrier = typeof input.carrier === "string" ? input.carrier.trim() : "";
+  const policyNumber = typeof input.policyNumber === "string" ? input.policyNumber.trim() : "";
+  if (!carrier || carrier.length > 160) throw new Error("Enter the carrier that issued the policy (up to 160 characters).");
+  if (!policyNumber || policyNumber.length > 120) throw new Error("Enter the policy number (up to 120 characters).");
+  const issuedOn = assertPolicyDay(input.issuedOn, "Issue date");
+  const { data, error } = await db().rpc("mark_application_policy_issued", { p_tenant_id: tenantId, p_application_id: uuid(input.applicationId, "application"), p_carrier: carrier, p_policy_number: policyNumber, p_issued_on: issuedOn });
+  if (error && isMissingFunction(error) && input.dealId) return markDealPolicyIssued(tenantId, { dealId: input.dealId, carrier, policyNumber, issuedOn });
+  if (error) throw refusal(error, "Could not record the issued policy");
+  if (!data || typeof data !== "object") throw new Error("The issued policy did not come back");
+  return { ...(data as IssuedPolicy), lapsed_at: (data as IssuedPolicy).lapsed_at ?? null };
+}
+
 export async function markIssuedPolicyLapsed(tenantId: string, input: { policyId: unknown; lapsedOn: unknown }): Promise<IssuedPolicy> {
   const policyId = uuid(input.policyId, "policy");
   const lapsedOn = assertPolicyDay(input.lapsedOn, "Lapse date");

@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { audit } from "@/lib/audit/log";
 import { requireTenant } from "@/lib/tenantAuth/requireTenant";
+import { memberSnapshot, recordSettingsChanges } from "@/lib/settingsAudit/record";
 import { licensedStatesSchema } from "@/lib/tenantTeam/schemas";
 import { setMemberLicensedStates } from "@/lib/tenantTeam/service";
 import { SchemaPendingError, schemaPendingBody } from "@/lib/appointments/pendingSchema";
@@ -27,6 +28,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   }
 
   try {
+    const before = await memberSnapshot(auth.context.tenantId, userId);
     const saved = await setMemberLicensedStates(auth.context.tenantId, userId, [...new Set(parsed.data.states)], parsed.data.expiries);
     await audit({
       actorType: "tenant",
@@ -37,6 +39,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       metadata: { tenantId: auth.context.tenantId, states: saved.states, expiries: saved.expiries },
       request,
     });
+    await recordSettingsChanges({ tenantId: auth.context.tenantId, actorId: auth.context.userId, section: "team-access", changes: [{ key: `member:${userId}.states`, label: `${before.name} — licensed states`, from: before.states.join(", ") || null, to: [...saved.states].sort().join(", ") || null }] });
     return NextResponse.json({ ok: true, userId, licensedStates: saved.states, licensedStateExpiries: saved.expiries });
   } catch (error) {
     if (error instanceof SchemaPendingError) return NextResponse.json(schemaPendingBody(), { status: 503 });

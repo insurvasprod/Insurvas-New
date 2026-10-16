@@ -24,9 +24,11 @@ export function AuthCard({ width, eyebrow, title, description, children, classNa
 }) {
   return (
     <div className={cn("m-in w-full", width === 640 ? "max-w-[640px]" : width === 680 ? "max-w-[680px]" : "max-w-[1040px]", className)}>
-      <div className="rounded-xl border border-border bg-card p-6 sm:p-10">
+      <div data-auth-card="" className="rounded-xl border border-border bg-card p-6 sm:p-10">
         {eyebrow && <div className="text-center text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] text-muted-foreground">{eyebrow}</div>}
-        {title && <h1 className={cn("text-center text-[32px] font-semibold leading-[1.13] tracking-[-0.025em] text-foreground", eyebrow ? "mt-2" : "mt-2")}>{title}</h1>}
+        {/* A plain string, not cn(): tailwind-merge takes the custom text-title-lg for a colour and drops it
+            in favour of text-foreground, which left this title at 16px. */}
+        {title && <h1 className="mt-2 text-center text-title-lg font-semibold leading-[1.13] tracking-[-0.025em] text-foreground">{title}</h1>}
         {description && <p className="mt-2.5 text-center text-base leading-normal tracking-[-0.02em] text-muted-foreground">{description}</p>}
         {children}
       </div>

@@ -8,6 +8,7 @@ import { notify } from "@/lib/notify";
 import { Button } from "@/components/ui/button";
 import { ClearFiltersButton, DataToolbar, RefreshButton, ToolbarSearch } from "@/components/ui/data-toolbar";
 import { PageHeader } from "@/components/ui/page-header";
+import { InfoTip } from "@/components/ui/info-tip";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
 import { StatStrip, StatTile } from "@/components/ui/stat";
@@ -165,7 +166,7 @@ export function PendingCases({
     panel = (
       <TableCard className={FILL} toolbar={toolbar("Search client, carrier, requirement")} footer={<Pager page={current} total={shownRequirements.length} pageSize={pageSize} noun="open requirements" onPage={setPage} suffix="waiting on the client first, then oldest" />}>
         {requirements.length === 0
-          ? <EmptyState title="No open requirements" hint="When a carrier asks for something after submission — an APS, a phone interview, a signature — it shows here until it is met." />
+          ? <EmptyState title="No open requirements" hint="Carrier requests after submission show here." />
           : shownRequirements.length === 0
             ? <NoMatches noun="requirements" onClear={clearFilters} />
             : <table className="portal-lead-table w-full min-w-[1120px] text-left text-sm">
@@ -175,7 +176,7 @@ export function PendingCases({
                     <th className="w-[150px]">Carrier</th>
                     <th className="w-[180px]">Requirement</th>
                     <th className="w-[150px]">Waiting on</th>
-                    <th className="w-[100px]">Age</th>
+                    <th className="w-[100px]"><span className="inline-flex items-center gap-1">Age<InfoTip label="About age">Days since the carrier raised it. Amber from {ageingDays} days, red from {ageingDays * 2}.</InfoTip></span></th>
                     <th className="w-[130px]">Last chased</th>
                     <th className="w-[80px] text-right">Chases</th>
                     <th className="w-[140px] text-right"><span className="sr-only">Log a chase</span></th>
@@ -211,7 +212,7 @@ export function PendingCases({
     panel = (
       <TableCard className={FILL} toolbar={toolbar("Search client, carrier")} footer={<Pager page={current} total={shownCounteroffers.length} pageSize={pageSize} noun="open counteroffers" onPage={setPage} suffix="soonest to expire first" />}>
         {counteroffers.length === 0
-          ? <EmptyState title="No counteroffers waiting" hint="When a carrier approves at a different rate or benefit, the offer waits here for the client's answer." />
+          ? <EmptyState title="No counteroffers waiting" hint="Offers at a different rate or benefit show here." />
           : shownCounteroffers.length === 0
             ? <NoMatches noun="counteroffers" onClear={clearFilters} />
             : <table className="portal-lead-table w-full min-w-[1040px] text-left text-sm">
@@ -256,7 +257,7 @@ export function PendingCases({
     panel = (
       <TableCard className={FILL} toolbar={toolbar("Search client, carrier, reference")} footer={<Pager page={current} total={shownAwaiting.length} pageSize={pageSize} noun="applications" onPage={setPage} suffix="longest waiting first" />}>
         {awaiting.length === 0
-          ? <EmptyState title="Every submitted application has its number" hint="An application shows here when it is submitted without a carrier reference, or issued without a policy number." />
+          ? <EmptyState title="Every application has its number" hint="Missing references and policy numbers show here." />
           : shownAwaiting.length === 0
             ? <NoMatches noun="applications" onClear={clearFilters} />
             : <table className="portal-lead-table w-full min-w-[1260px] text-left text-sm">

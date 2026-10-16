@@ -176,3 +176,19 @@ export function weekOverWeek(thisWeek: number, lastWeekToDate: number | null): s
   const sign = change > 0 ? "+" : change < 0 ? "−" : "±";
   return `${sign}${Math.abs(change)}% vs same time last week`;
 }
+
+/* ── who sees staff sign-ins ─────────────────────────────────────────────── */
+
+/**
+ * Staff (actor_type 'admin') sign-ins carry staff email addresses and IPs. Only super_admin sees
+ * them; support_agent and billing_admin read tenant-user sign-ins only. The API route, the server
+ * page and the feed's actor filter all ask this one function.
+ */
+export function staffLoginsVisibleTo(role: string): boolean {
+  return role === "super_admin";
+}
+
+/** The actor filter's choices for this viewer: no "Staff" choice for a role that cannot see staff. */
+export function actorOptionsFor(role: string): typeof ACTOR_OPTIONS {
+  return staffLoginsVisibleTo(role) ? ACTOR_OPTIONS : ACTOR_OPTIONS.filter((option) => option.value !== "admin");
+}

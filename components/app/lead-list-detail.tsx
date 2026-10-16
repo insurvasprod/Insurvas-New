@@ -6,10 +6,12 @@ import { LeadListAssignDrawer } from "@/components/app/lead-list-assign-drawer";
 import { LeadListClaimButton } from "@/components/app/lead-list-claim-button";
 import { TabbedPanels } from "@/components/app/lead-ops-view-tabs";
 import { Button } from "@/components/ui/button";
+import { InfoTip } from "@/components/ui/info-tip";
 import { LinkArrow } from "@/components/ui/link-arrow";
 import { PageHeader } from "@/components/ui/page-header";
 import { Meter, StatStrip, StatTile, type MeterTone } from "@/components/ui/stat";
 import { EmptyState } from "@/components/ui/page-states";
+import { PagedBody, PagedTableCard } from "@/components/ui/paged";
 import { TableCard } from "@/components/ui/table-card";
 import type { LeadListDetail, PoolBlocker, PoolBlockers, RemovalReason } from "@/lib/leadLists/detail";
 import { cn } from "@/lib/utils";
@@ -137,7 +139,7 @@ function unblocks(blocker: PoolBlocker, groups: PoolBlockers["groups"], pool: Po
   const link = "font-semibold text-foreground underline underline-offset-2";
   switch (blocker) {
     case "ready":
-      return "Nothing. Serve next hands these out to anyone who may work the state — they do not need assigning first.";
+      return "Nothing — Serve next hands these out unassigned.";
     case "campaign": {
       const why = [
         pool.campaign.status && pool.campaign.status !== "active" ? `is ${pool.campaign.status}` : null,
@@ -148,17 +150,17 @@ function unblocks(blocker: PoolBlocker, groups: PoolBlockers["groups"], pool: Po
     case "no_agent":
       return <>{states}. Nobody here holds a current licence there, and no setter is active. <Link href="/app/settings#states-licences" className={link}>Add a licence</Link> to work them.</>;
     case "at_capacity":
-      return <>{states}. Everyone who may work them is at their open-lead ceiling. <Link href="/app/assignments" className={link}>Raise a capacity</Link> on Lead assignment.</>;
+      return <>{states}. <Link href="/app/assignments" className={link}>Raise a capacity</Link> on Lead assignment.</>;
     case "no_state":
-      return "Without a state there is no legal calling window. Add the state to the lead.";
+      return "Add a state to these leads to call them.";
     case "rules_stale":
-      return "The calling-window rules are past their refresh date, so nothing is dialed until they are refreshed.";
+      return "Refresh the calling-window rules to resume dialing.";
     case "outside_window": {
       const openings = [...groups]
         .filter((group) => group.state)
         .sort((a, b) => (a.nextAt ?? "9").localeCompare(b.nextAt ?? "9"));
       const shown = openings.slice(0, 4).map((group) => `${group.state} ${group.nextAt ? `opens ${localOpening(group.nextAt, group.zone)}` : "does not open in the next 8 days"}`);
-      return `${shown.join(" · ")}${openings.length > 4 ? ` · +${openings.length - 4} more` : ""}. They are served when their window opens.`;
+      return `${shown.join(" · ")}${openings.length > 4 ? ` · +${openings.length - 4} more` : ""}. Served when it opens.`;
     }
     case "waiting": {
       const next = groups.map((group) => group.nextAt).filter((value): value is string => Boolean(value)).sort()[0];
@@ -166,11 +168,11 @@ function unblocks(blocker: PoolBlocker, groups: PoolBlockers["groups"], pool: Po
       return `The cadence has them waiting between attempts${next ? `; the first is due ${localOpening(next, zone)}` : ""}.`;
     }
     case "unscheduled":
-      return <>A retry or recycled lead with no next attempt set, so no tier ever reaches it. <Link href="/app/nurture" className={link}>Lead recycling</Link> can reschedule them.</>;
+      return <>Reschedule them in <Link href="/app/nurture" className={link}>Lead recycling</Link>.</>;
     case "suppressed":
       return "Their number went onto a do-not-call or suppression list after import. They are never dialed.";
     case "exhausted":
-      return <>Every attempt the cadence allows has been made. <Link href="/app/nurture" className={link}>Lead recycling</Link> can bring them back.</>;
+      return <>Bring them back in <Link href="/app/nurture" className={link}>Lead recycling</Link>.</>;
     case "lead_state": {
       const statuses = [...new Set(groups.map((group) => group.detail).filter(Boolean))].join(", ");
       return `Lead status ${statuses || "unknown"}, which Serve next does not hand out.`;
@@ -276,6 +278,14 @@ export function LeadListDetailView({
         ) : undefined
       }
     >
+      {/* The reasons are always listed (zeros included), so the empty case is a list with no file yet. */}
+      {!d.firstImportAt ? (
+        <EmptyState
+          title="Nothing imported yet"
+          hint="Import a file against this list to see what the scrub removes."
+          action={<Button asChild type="button" variant="outline"><Link href="/app/import">Import a list</Link></Button>}
+        />
+      ) : (
       <table className="portal-lead-table w-full min-w-[620px]! text-left text-sm">
         <thead>
           <tr>
@@ -314,11 +324,14 @@ export function LeadListDetailView({
           </tr>
         </tfoot>
       </table>
+      )}
     </TableCard>
   );
 
   const mappingCard = (
-    <TableCard
+    <PagedTableCard
+      total={d.mapping.rows.length}
+      noun="columns"
       title="Column mapping"
       action={
         <>
@@ -339,7 +352,7 @@ export function LeadListDetailView({
               <th className="w-[110px]"><span className="sr-only">Status</span></th>
             </tr>
           </thead>
-          <tbody className="m-seq">
+          <PagedBody className="m-seq">
             {d.mapping.rows.map((row) => (
               <tr key={row.header} className="m-row">
                 <td>{row.header}</td>
@@ -348,12 +361,12 @@ export function LeadListDetailView({
                 <td>{row.field ? <Chip tone="good" dot>Remembered</Chip> : <Chip tone="neutral" dot>Ignored</Chip>}</td>
               </tr>
             ))}
-          </tbody>
+          </PagedBody>
         </table>
       ) : (
-        <EmptyState title={`No mapping saved for ${d.vendorName}`} hint="Save one on the import screen and later files from this vendor map themselves." />
+        <EmptyState title={`No mapping saved for ${d.vendorName}`} hint="Save one on your next import from this vendor." />
       )}
-    </TableCard>
+    </PagedTableCard>
   );
 
   return (
@@ -404,10 +417,14 @@ export function LeadListDetailView({
         <StatTile label="Paid per record" value={perRecord(d.costPerRecordCents)} footnote={`${wholeMoney(d.totalSpendCents)} / ${count(d.recordsPurchased)} rows`} />
         <StatTile
           label="Cost per usable record"
-          labelTitle={`From ${REPEATS_COUNTED_FROM} a number repeated inside a file counts as removed, so it no longer counts as usable.`}
           value={perRecord(d.costPerUsableCents)}
           valueTone="primary"
-          footnote={`${wholeMoney(netSpend)} / ${count(d.recordsUsable)} after scrub`}
+          footnote={
+            <span className="inline-flex items-center gap-0.5">
+              {`${wholeMoney(netSpend)} / ${count(d.recordsUsable)} after scrub`}
+              <InfoTip label="About cost per usable record">Net spend over the rows that survived the scrub. From {REPEATS_COUNTED_FROM}, a number repeated inside a file counts as removed.</InfoTip>
+            </span>
+          }
         />
         <StatTile
           label="Contact rate"

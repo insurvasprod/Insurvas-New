@@ -4,6 +4,7 @@ import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isSchemaGap } from "@/lib/supabase/schemaGap";
 import { advanceAtRisk, loadBoard } from "@/lib/ingestion/retentionStore";
 
+import { mapLimit, READ_CONCURRENCY } from "./batch";
 import { RADAR_PENDING_MESSAGE, type ActionTaken, type Band, type ContactOutcome, type HoldKind, type RetentionSettings } from "./constants";
 import { recommendFixes, type Fix } from "./fixes";
 import { buildQueue, daysUntilNextDraft, isEmergency, type QueueCandidate, type QueueSort } from "./queue";
@@ -51,11 +52,11 @@ const keyOf = (r: { carrier_id: string; policy_number: string }) => `${r.carrier
 /** Rows of a policy-keyed table for these policy numbers, kept to the keys asked for. */
 async function byPolicy(table: string, columns: string, tenantId: string, keys: Set<string>, extra?: (q: Loose) => Loose): Promise<Loose[]> {
   const numbers = [...new Set([...keys].map((k) => k.slice(k.indexOf("|") + 1)))];
-  const results = await Promise.all(chunks(numbers, CHUNK).map((part) => {
+  const results = await mapLimit<string[], Loose>(chunks(numbers, CHUNK), READ_CONCURRENCY, (part) => {
     let q = db().from(table).select(columns).eq("tenant_id", tenantId).in("policy_number", part);
     if (extra) q = extra(q);
     return q;
-  }));
+  });
   for (const r of results) if (r.error) throw r.error;
   return results.flatMap((r: Loose) => r.data ?? []).filter((row: Loose) => keys.has(keyOf(row)));
 }
@@ -124,7 +125,7 @@ async function candidates(viewer: Viewer, only?: { carrierId: string; policyNumb
     byPolicy("policy_current", "carrier_id, policy_number, contact_id, agent_user_id, status_normalized, days_past_due, months_paid, product_code, as_of, premium_cents, premium_mode", viewer.tenantId, keys),
     byPolicy("policy_risk_signals", "*", viewer.tenantId, keys),
     byPolicy("save_attempt", "carrier_id, policy_number, attempted_at, risk_score_at_attempt", viewer.tenantId, keys, (q) => q.order("attempted_at", { ascending: false })),
-    byPolicy("save_queue_hold", "id, carrier_id, policy_number, kind, until_date, score_at_hold", viewer.tenantId, keys, (q) => q.is("released_at", null).order("created_at", { ascending: false })),
+    byPolicy("save_queue_hold", "id, carrier_id, policy_number, kind, until_date, score_at_hold, created_at", viewer.tenantId, keys, (q) => q.is("released_at", null).order("created_at", { ascending: false })),
     loadBoard(viewer, only),
     requestsByPolicy(viewer.tenantId, keys),
     // LA-5.5: the paper-bill campaign found no bank account for these.
@@ -138,8 +139,8 @@ async function candidates(viewer: Viewer, only?: { carrierId: string; policyNumb
   const visiblePolicies = visible.map((s) => policyOf.get(keyOf(s)));
   const [atRisk, contacts, users, carriers] = await Promise.all([
     advanceAtRisk(viewer.tenantId, visiblePolicies),
-    Promise.all(chunks([...new Set(visiblePolicies.map((p: Loose) => p.contact_id).filter(Boolean))] as string[], CHUNK).map((ids) => db().from("contacts").select("id, first_name, last_name, primary_phone").eq("tenant_id", viewer.tenantId).in("id", ids))).then((r) => r.flatMap((x: Loose) => x.data ?? [])),
-    Promise.all(chunks([...new Set(visiblePolicies.map((p: Loose) => p.agent_user_id).filter(Boolean))] as string[], CHUNK).map((ids) => db().from("users").select("id, name, email").in("id", ids))).then((r) => r.flatMap((x: Loose) => x.data ?? [])),
+    mapLimit(chunks([...new Set(visiblePolicies.map((p: Loose) => p.contact_id).filter(Boolean))] as string[], CHUNK), READ_CONCURRENCY, (ids) => db().from("contacts").select("id, first_name, last_name, primary_phone").eq("tenant_id", viewer.tenantId).in("id", ids)).then((r) => r.flatMap((x: Loose) => x.data ?? [])),
+    mapLimit(chunks([...new Set(visiblePolicies.map((p: Loose) => p.agent_user_id).filter(Boolean))] as string[], CHUNK), READ_CONCURRENCY, (ids) => db().from("users").select("id, name, email").in("id", ids)).then((r) => r.flatMap((x: Loose) => x.data ?? [])),
     db().from("carriers").select("id, name"),
   ]);
   const signalOf = new Map<string, Loose>(signals.map((s: Loose) => [keyOf(s), s]));
@@ -165,7 +166,7 @@ async function candidates(viewer: Viewer, only?: { carrierId: string; policyNumb
     return {
       key, score: sc.score, band: sc.band as Band, status: p.status_normalized, daysPastDue: p.days_past_due, boardReason: reasonOf.get(key) ?? null,
       lastAttempt: a ? { at: a.attempted_at, score: a.risk_score_at_attempt } : null,
-      hold: h ? { kind: h.kind, until: h.until_date, score: h.score_at_hold } : null,
+      hold: h ? { kind: h.kind, until: h.until_date, score: h.score_at_hold, since: h.created_at ?? null } : null,
       atRiskCents: atRisk.get(key) ?? null, nextDraftDays: daysUntilNextDraft(sig.draftDay, today), monthsSinceIssue: sig.monthsSinceIssue,
       carrierId: sc.carrier_id, carrierName: carrierName.get(sc.carrier_id) ?? "Carrier not known", policyNumber: sc.policy_number,
       clientName: contact ? [contact.first_name, contact.last_name].filter(Boolean).join(" ") || null : null, phone: contact?.primary_phone ?? null,
@@ -173,7 +174,7 @@ async function candidates(viewer: Viewer, only?: { carrierId: string; policyNumb
       confidence: sc.confidence, signalsAvailable: sc.signals_available, missing: sig.missing, explanation: sc.explanation, contributions: score.contributions,
       fixes: recommendFixes(sig, score), weightSetVersion: sc.weight_set_version,
       premiumCents: p.premium_cents === null ? null : Number(p.premium_cents), premiumMode: p.premium_mode, incomeKnown: sig.monthlyIncomeCents !== null,
-      openRequests: requests.get(key)?.open ?? [], failedFix: requests.get(key)?.failed?.reason ?? null, noBankAccount: noBankKeys.has(key),
+      openRequests: requests.get(key)?.open ?? [], failedFix: requests.get(key)?.failed?.reason ?? null, failedAt: requests.get(key)?.failed?.at ?? null, noBankAccount: noBankKeys.has(key),
     };
   });
   const computedAt = scores.map((s) => s.computed_at as string).sort().at(-1) ?? null;
@@ -222,7 +223,12 @@ export async function loadSaveQueue(viewer: Viewer, sort: QueueSort = "value"): 
 }
 
 /** The one card, recomputed here — the browser's copy is never trusted. */
-async function cardFor(viewer: Viewer, carrierId: string, policyNumber: string): Promise<SaveCard> {
+/** Refuses (SaveQueueError) when the queue would not take this card — before anything is written. */
+export async function assertQueueCard(viewer: Viewer, carrierId: string, policyNumber: string): Promise<void> {
+  await cardFor(viewer, carrierId, policyNumber);
+}
+
+async function cardFor(viewer: Viewer, carrierId: string, policyNumber: string): Promise<SaveCard & { today: string }> {
   const loaded = await candidates(viewer, { carrierId, policyNumber }).catch((error) => {
     if (isSchemaGap(error)) throw new SaveQueueError(RADAR_PENDING_MESSAGE, 503);
     throw error;
@@ -231,11 +237,11 @@ async function cardFor(viewer: Viewer, carrierId: string, policyNumber: string):
   const card = loaded.rows[0];
   if (!card) throw new SaveQueueError("That policy isn't scored for you now.", 404);
   if (isEmergency(card)) throw new SaveQueueError("This policy is past due or on the Lapse risk call list now: work it there.", 409);
-  return card;
+  return { ...card, today: loaded.today };
 }
 
 /** Log a worked card, capturing the score, band, weight version and exposure at this moment (LA-5.9 needs them). */
-export async function logSaveAttempt(viewer: Viewer, input: { carrierId: string; policyNumber: string; outcome: ContactOutcome; actionTaken: ActionTaken; note: string | null }) {
+export async function logSaveAttempt(viewer: Viewer, input: { carrierId: string; policyNumber: string; outcome: ContactOutcome; actionTaken: ActionTaken; note: string | null; servicingRequestId?: string }) {
   const card = await cardFor(viewer, input.carrierId, input.policyNumber);
   const { data: saved, error } = await db().from("save_attempt").insert({
     tenant_id: viewer.tenantId, carrier_id: input.carrierId, policy_number: input.policyNumber,
@@ -243,6 +249,7 @@ export async function logSaveAttempt(viewer: Viewer, input: { carrierId: string;
     unearned_advance_at_attempt_cents: card.atRiskCents,
     recommended_actions_json: card.fixes.map((f) => ({ action: f.action, label: f.label, target_draft_day: f.targetDraftDay ?? null })),
     action_taken: input.actionTaken, contact_outcome: input.outcome, attempted_by: viewer.userId, note: input.note?.trim() || null,
+    servicing_request_id: input.servicingRequestId ?? null,
   }).select("id").single();
   if (error) {
     if (isSchemaGap(error)) throw new SaveQueueError(RADAR_PENDING_MESSAGE, 503);
@@ -254,7 +261,8 @@ export async function logSaveAttempt(viewer: Viewer, input: { carrierId: string;
 /** Snooze (until a day) or dismiss (until released), with a reason. A newer hold replaces an open one. */
 export async function holdCard(viewer: Viewer, input: { carrierId: string; policyNumber: string; kind: HoldKind; reason: string; days: number | null }) {
   const card = await cardFor(viewer, input.carrierId, input.policyNumber);
-  const untilDate = input.kind === "snooze" ? new Date(Date.now() + (input.days ?? 7) * 86_400_000).toISOString().slice(0, 10) : null;
+  // Counted from the agency's day the queue compares against, not UTC (a day ahead in US evenings).
+  const untilDate = input.kind === "snooze" ? new Date(Date.parse(`${card.today}T00:00:00Z`) + (input.days ?? 7) * 86_400_000).toISOString().slice(0, 10) : null;
   const now = new Date().toISOString();
   const release = await db().from("save_queue_hold").update({ released_at: now }).eq("tenant_id", viewer.tenantId).eq("carrier_id", input.carrierId).eq("policy_number", input.policyNumber).is("released_at", null);
   if (release.error && !isSchemaGap(release.error)) throw new Error(`Could not update the hold: ${release.error.message}`);

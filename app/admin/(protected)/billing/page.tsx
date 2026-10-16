@@ -35,8 +35,8 @@ export default async function BillingWorkspacePage() {
             <Card interactive className="h-full">
               <CardContent>
                 <h2 className="text-lg font-semibold leading-[1.28] tracking-[-0.015em] text-[var(--ink)]">{title}</h2>
-                <p className="mt-2 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">{description}</p>
-                <span className="mt-5 inline-flex items-center gap-1.5 text-[14px] leading-[1.43] font-semibold tracking-[-0.01em] text-[var(--ink)]">
+                <p className="mt-2 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">{description}</p>
+                <span className="mt-5 inline-flex items-center gap-1.5 text-sm leading-[1.43] font-semibold tracking-[-0.01em] text-[var(--ink)]">
                   Open
                   <svg
                     width="13"

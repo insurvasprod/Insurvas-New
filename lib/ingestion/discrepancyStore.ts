@@ -2,6 +2,7 @@ import "server-only";
 
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 
+import { BusinessIdentityMissingError, requireBusinessIdentity } from "@/lib/agencyProfile/identity";
 import { getCarrierCommissionContact } from "@/lib/discrepancies/carrierContacts";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isSchemaGap } from "@/lib/supabase/schemaGap";
@@ -34,6 +35,7 @@ export class DiscrepancyError extends Error {
   }
 }
 
+/** Every row, page by page. `build()` must order on a unique key (ending in the primary key), or rows tied on the sort can repeat or vanish between pages. */
 async function everyRow(build: () => Loose, max = 100_000): Promise<Loose[]> {
   const rows: Loose[] = [];
   for (let from = 0; from < max; from += 1000) {
@@ -54,14 +56,16 @@ export async function runDetection(tenantId: string, todayGiven?: string) {
     if (isSchemaGap(probe.error)) return { available: false as const };
     throw new Error(probe.error.message);
   }
-  const [policies, expected, entries, statements, carriers, settings, flagged] = await Promise.all([
+  const [policies, expected, entries, statements, carriers, settings, flagged, unreceived] = await Promise.all([
     everyRow(() => db().from("policy_current").select("carrier_id, policy_number, status_normalized, in_clawback_window, lapsed_on, months_paid").eq("tenant_id", tenantId).order("carrier_id").order("policy_number")),
-    everyRow(() => db().from("expected_commission").select("*").eq("tenant_id", tenantId).order("carrier_id").order("policy_number")),
-    everyRow(() => db().from("commission_entry").select("id, carrier_id, policy_number, entry_type, corrects_type, reverses_entry_id, amount_cents, transaction_date, statement_date, rate_bp, commissionable_premium_cents, months_advanced, file_id").eq("tenant_id", tenantId).order("created_at")),
+    everyRow(() => db().from("expected_commission").select("*").eq("tenant_id", tenantId).order("carrier_id").order("policy_number").order("policy_year")),
+    everyRow(() => db().from("commission_entry").select("id, carrier_id, policy_number, entry_type, corrects_type, reverses_entry_id, amount_cents, transaction_date, statement_date, rate_bp, commissionable_premium_cents, months_advanced, file_id").eq("tenant_id", tenantId).order("created_at").order("id")),
     db().from("carrier_account_checks").select("*").eq("tenant_id", tenantId).order("statement_date"),
     db().from("carriers").select("id, name"),
     db().from("carrier_operating_settings").select("tenant_id, carrier_id, tolerance_cents").or(`tenant_id.eq.${tenantId},tenant_id.is.null`),
     flaggedFiles(tenantId),
+    // LA-7.6: statements the bank shows no payment for. Absent until that migration is applied — then simply none.
+    db().rpc("deposit_unreceived_statements", { p_tenant_id: tenantId, p_today: today }).then((r: Loose) => (r.error ? [] : (r.data ?? [])) as Loose[]),
   ]);
   const names = new Map<string, string>((carriers.data ?? []).map((c: Loose) => [c.id, c.name]));
   const tolerance = new Map<string, number>();
@@ -87,6 +91,7 @@ export async function runDetection(tenantId: string, todayGiven?: string) {
     })),
     carrierNames: names,
     tolerance: (carrierId) => tolerance.get(carrierId) ?? DEFAULT_TOLERANCE_CENTS,
+    unreceived: unreceived.map((u: Loose) => ({ statementId: u.statement_id, carrierId: u.carrier_id, statementDate: u.statement_date, paidCents: Number(u.amount_paid_cents), receivedCents: Number(u.received_cents), lagDays: Number(u.lag_days), dueBy: u.due_by })),
   });
   const { data, error } = await db().rpc("record_discrepancy_run", { p_tenant_id: tenantId, p_run_id: crypto.randomUUID(), p_findings: findings });
   if (error) throw new Error(`Could not record the discrepancies: ${error.message}`);
@@ -143,20 +148,26 @@ export async function setStatus(tenantId: string, userId: string, id: string, st
   if (!data) throw new DiscrepancyError("That item can't be changed: it isn't this agency's, or it is in a dispute.", 409);
 }
 
-/** The letter's parties: the agency, the carrier's commissions address, the writing number, who signs. */
+/**
+ * The letter's parties: the agency, the carrier's commissions address, the writing number, who signs.
+ * The agency's name, address and NPN are the business identity's (LA-8.3); a letter is refused, with
+ * the missing field named, until they are in.
+ */
 async function parties(tenantId: string, userId: string, carrierId: string) {
-  const [profile, tenant, user, contract, contact, carrier] = await Promise.all([
-    db().from("agency_profiles").select("legal_name, dba, npn, principal_address").eq("tenant_id", tenantId).maybeSingle(),
-    db().from("tenants").select("name").eq("id", tenantId).maybeSingle(),
+  const [identity, user, contract, contact, carrier] = await Promise.all([
+    requireBusinessIdentity(tenantId, "dispute_letter").catch((error: unknown) => {
+      if (error instanceof BusinessIdentityMissingError) throw new DiscrepancyError(error.message, error.status);
+      throw error;
+    }),
     db().from("users").select("name, email, phone").eq("id", userId).maybeSingle(),
     db().from("tenant_carriers").select("writing_number").eq("tenant_id", tenantId).eq("carrier_id", carrierId).eq("is_active", true).order("effective_from", { ascending: false }).limit(1).maybeSingle(),
     getCarrierCommissionContact(tenantId, carrierId).catch(() => ({ available: false, contact: null })),
     db().from("carriers").select("name").eq("id", carrierId).maybeSingle(),
   ]);
   return {
-    agencyName: profile.data?.dba?.trim() || profile.data?.legal_name?.trim() || tenant.data?.name?.trim() || "Our agency",
-    agencyAddress: profile.data?.principal_address ?? null,
-    npn: profile.data?.npn ?? null,
+    agencyName: identity.tradingName ?? "",
+    agencyAddress: identity.addressLines.join("\n"),
+    npn: identity.npn,
     writingNumber: contract.data?.writing_number ?? null,
     carrierName: carrier.data?.name ?? "The carrier",
     savedRecipient: (contact as Loose).contact?.address ?? null,

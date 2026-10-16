@@ -5,10 +5,12 @@
  *
  * Five kinds, each with the arithmetic that proves it:
  *
- *   never_paid             an active policy, issued at least `graceDays` ago, from a carrier whose
- *                          statements cover a period ending after that grace, and not one accepted
- *                          line for it. Owed: only the entries whose payment window (the day it
- *                          fell due to `graceDays` later) a statement reported. A 2025 advance is
+ *   never_paid             an active policy, issued at least the carrier's payment lag ago (its
+ *                          expected_lag_days, LA-4.17 carrier rules — the same lag the carrier-file
+ *                          engine uses; no lag set, no "never paid" for that carrier), from a carrier
+ *                          whose statements cover a period ending after that lag, and not one
+ *                          accepted line for it. Owed: only the entries whose payment window (the
+ *                          day it fell due to the lag later) a statement reported. A 2025 advance is
  *                          not "never paid" because a 2026 statement does not show it: it may sit
  *                          on a 2025 statement nobody imported.
  *   short_paid             the carrier reported less than the book expects inside the periods it
@@ -67,8 +69,6 @@ export const DISCREPANCY_KIND_LABELS: Record<DiscrepancyKind, { label: string; p
   unexpected_chargeback: { label: "Unexpected chargeback", plural: "charged back while active", meaning: "A chargeback for a policy your book says is still in force." },
 };
 
-/** Days after issue before a policy with no payment counts as "never paid" (proposed 45; backlog 211). */
-export const NEVER_PAID_GRACE_DAYS = 45;
 
 export type DiscrepancyPolicy = {
   id: string;
@@ -144,6 +144,18 @@ function paidRate(line: ReceivedEntry): number | null {
   return null;
 }
 
+/**
+ * Each carrier's payment lag from its operating settings (LA-4.17): the agency's own value, else the
+ * platform's — the same resolution the carrier-file engine uses (expectedCommissionStore). A carrier
+ * with no lag at either level is absent, never defaulted.
+ */
+export function carrierLagDays(rows: Array<{ tenant_id: string | null; carrier_id: string; expected_lag_days: number | null }>, tenantId: string): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const row of rows) if (row.tenant_id === null && row.expected_lag_days !== null) out.set(row.carrier_id, Number(row.expected_lag_days));
+  for (const row of rows) if (row.tenant_id === tenantId && row.expected_lag_days !== null) out.set(row.carrier_id, Number(row.expected_lag_days));
+  return out;
+}
+
 export type FingerprintVersion = "v1" | "v2";
 
 export function computeDiscrepancies(input: {
@@ -152,7 +164,12 @@ export function computeDiscrepancies(input: {
   received: ReceivedEntry[];
   coverage: CoveredPeriod[];
   today: string;
-  graceDays?: number;
+  /**
+   * Each carrier's payment lag in days (carrier rules, LA-4.17): how long after issue a payment is
+   * due before its absence is "never paid". A carrier with none is never judged "never paid" — no
+   * hard-coded window stands in for a rule nobody entered.
+   */
+  lagDays?: ReadonlyMap<string, number>;
   toleranceCents?: number;
   /** v2 unless the stored rows have not been re-keyed yet (see the header). */
   fingerprints?: FingerprintVersion;
@@ -166,7 +183,6 @@ export function computeDiscrepancies(input: {
   pending?: CoveredPeriod[];
 }): DiscrepancyFinding[] {
   const v2 = (input.fingerprints ?? "v2") === "v2";
-  const grace = input.graceDays ?? NEVER_PAID_GRACE_DAYS;
   const tolerance = input.toleranceCents ?? RECONCILE_TOLERANCE_CENTS;
   const findings: DiscrepancyFinding[] = [];
   const policyById = new Map(input.policies.map((policy) => [policy.id, policy]));
@@ -185,6 +201,8 @@ export function computeDiscrepancies(input: {
   for (const policy of input.policies) {
     if (policy.status !== "active" || !policy.carrierId) continue;
     if (receivedByPolicy.has(policy.id)) continue;
+    const grace = input.lagDays?.get(policy.carrierId);
+    if (grace === undefined) continue;
     const graceEnds = addDays(policy.effectiveDate, grace);
     if (graceEnds > input.today) continue;
     const covering = input.coverage.filter((period) => period.carrierId === policy.carrierId && period.periodEnd >= graceEnds);
@@ -292,7 +310,7 @@ export function computeDiscrepancies(input: {
           detail: {
             expectedCents: 0, receivedCents: -groupTaken, allowedCents: 0, takenCents: groupTaken, periods: groupPeriods,
             expectedEntryIds: [], receivedLineIds: group.lines.map((line) => line.id), statementIds: [...new Set(group.lines.map((line) => line.statementId))],
-            explanation: `${money(groupTaken)} charged back, but your book has this policy in force. If it lapsed, update its status; otherwise the carrier owes it back.`,
+            explanation: `${money(groupTaken)} charged back, but your book has this policy in force. Three things can explain it: the policy lapsed and your book is out of date, the carrier made an error, or the chargeback belongs to another policy. Check which before disputing.`,
           },
         });
       }
@@ -389,11 +407,18 @@ export function planRefresh(stored: StoredFinding[], findings: DiscrepancyFindin
   return { writes, clearIds, opened, reopened };
 }
 
+/**
+ * Kinds whose figure is money the carrier owes. An unexpected chargeback asserts no cause (the book
+ * may be out of date, or the line matched to the wrong policy), so its figure is listed but never
+ * counted as owed.
+ */
+export const OWED_KINDS: ReadonlySet<DiscrepancyKind> = new Set(["never_paid", "short_paid", "mis_rated", "duplicate_chargeback"]);
+
 /** The total owed, and the split by kind, over findings (or stored rows) still open or disputed. */
 export function owedSummary(items: Array<{ kind: DiscrepancyKind; owedCents: number }>): { totalCents: number; count: number; byKind: Record<DiscrepancyKind, { count: number; cents: number }> } {
   const byKind = Object.fromEntries(DISCREPANCY_KINDS.map((kind) => [kind, { count: 0, cents: 0 }])) as Record<DiscrepancyKind, { count: number; cents: number }>;
   for (const item of items) { byKind[item.kind].count += 1; byKind[item.kind].cents += item.owedCents; }
-  return { totalCents: items.reduce((total, item) => total + item.owedCents, 0), count: items.length, byKind };
+  return { totalCents: items.filter((item) => OWED_KINDS.has(item.kind)).reduce((total, item) => total + item.owedCents, 0), count: items.length, byKind };
 }
 
 /** Re-exported so callers date the window the same way the ledger does. */

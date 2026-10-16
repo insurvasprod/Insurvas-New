@@ -30,7 +30,7 @@ const supabase = createClient(url, serviceKey, { auth: { persistSession: false }
 // 20261007100000, granted to every plan holding statement_ingestion.
 const EXPECTED_FEATURES = {
   basic: ["appointment_vault", "book_of_business", "cohort_persistency", "commission_ledger", "discrepancy_report", "statement_ingestion"],
-  pro: ["ai_assistant", "applications", "appointment_vault", "book_of_business", "callback_calendar", "carrier_extension", "cohort_persistency", "commission_ledger", "consent_locker", "daily_deal_flow", "discrepancy_report", "draft_date_optimizer", "duplicate_detection", "inbound_transfers", "lead_import", "outbound_dialing", "quoting", "sales_report", "statement_ingestion", "tcpa_checker"],
+  pro: ["ai_assistant", "applications", "appointment_vault", "book_of_business", "callback_calendar", "carrier_extension", "cohort_persistency", "commission_ledger", "consent_locker", "daily_deal_flow", "discrepancy_report", "draft_date_optimizer", "duplicate_detection", "inbound_transfers", "lead_import", "outbound_dialing", "partner_quality", "publisher_records", "quoting", "sales_report", "statement_ingestion", "tcpa_checker"],
   advance: ["ai_assistant", "applications", "appointment_vault", "book_of_business", "callback_calendar", "carrier_extension", "chargeback_radar", "cohort_persistency", "commission_ledger", "consent_locker", "daily_deal_flow", "discrepancy_report", "draft_date_optimizer", "duplicate_detection", "inbound_transfers", "lead_import", "litigation_packet", "outbound_dialing", "partner_quality", "payment_repair", "payout_runs", "profit_and_loss", "publisher_records", "quoting", "sales_report", "statement_ingestion", "tax_summaries", "tcpa_checker", "true_cpa", "winback"],
 };
 

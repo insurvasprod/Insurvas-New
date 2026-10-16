@@ -84,13 +84,28 @@ function Preview({ detail, loading, onClose }: { detail: PartnerLeadDetail | nul
   </aside>;
 }
 
+/**
+ * The filters a link opened the page with (LA-4.20: the partner home's figures open the rows behind
+ * them), e.g. /partner/pipeline?stage_id=…&view=table or ?lead=<id>. The page renders PageLoading
+ * until its first read, so the server's empty state and this one draw the same markup.
+ */
+function linkedState() {
+  const params = typeof window === "undefined" ? new URLSearchParams() : new URLSearchParams(window.location.search);
+  const filters = { ...EMPTY_FILTERS };
+  for (const key of Object.keys(EMPTY_FILTERS) as Array<keyof Filters>) filters[key] = params.get(key)?.slice(0, 64) ?? "";
+  const view: "board" | "table" = params.get("view") === "table" ? "table" : "board";
+  const lead = params.get("lead");
+  return { filters, view, lead: lead && /^[0-9a-f-]{36}$/i.test(lead) ? lead : null };
+}
+
 export function PartnerLeadPipeline({ role }: { partnerStatus: "draft" | "active" | "paused" | "offboarded"; role: PartnerRole; partnerName?: string | null }) {
+  const [linked] = useState(linkedState);
   const [data, setData] = useState<PipelineResponse | null>(null);
-  const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
+  const [filters, setFilters] = useState<Filters>(linked.filters);
   const [search, setSearch] = useState("");
-  const [view, setView] = useState<"board" | "table">("board");
-  const [moreFilters, setMoreFilters] = useState(false);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [view, setView] = useState<"board" | "table">(linked.view);
+  const [moreFilters, setMoreFilters] = useState(() => Boolean(linked.filters.stage_id || linked.filters.closer_id || linked.filters.outcome || linked.filters.date_from || linked.filters.date_to));
+  const [selectedId, setSelectedId] = useState<string | null>(linked.lead);
   const [detail, setDetail] = useState<PartnerLeadDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [loading, setLoading] = useState(true);

@@ -54,9 +54,23 @@ export function effectiveStatus(reported: string | null, dpd: number | null, gra
   return reported === "active" && graceDays !== null && dpd !== null && dpd > graceDays ? "at_risk" : reported;
 }
 
-/** Days left before the carrier closes it — only while it is in force, only with a rule. */
+/**
+ * Days late. Normally from the paid-to date. An approved policy whose first premium has not been
+ * drawn (approved_unpaid, nothing paid past the effective date) owes its first draft on the
+ * effective date, so it is late from then — the first-payment window counts from it. Other statuses
+ * with no paid-to date stay null: a carrier that sends none gives no countdown, never an invented one.
+ */
+export function daysLate(asOf: string, status: string | null, effectiveDate: string | null, paidToDate: string | null): number | null {
+  if (status === "approved_unpaid" && effectiveDate && (!paidToDate || paidToDate <= effectiveDate)) return daysPastDue(asOf, effectiveDate);
+  return daysPastDue(asOf, paidToDate);
+}
+
+/** The statuses a carrier window counts down for: in force, or approved and waiting for its first draft. */
+const COUNTED = new Set(["active", "at_risk", "approved_unpaid"]);
+
+/** Days left before the carrier closes it — only while it is in force (or awaiting its first draft), only with a rule. */
 export function countdown(status: string | null, windowDays: number | null, dpd: number | null): number | null {
-  if (status !== "active" && status !== "at_risk") return null;
+  if (!COUNTED.has(status ?? "")) return null;
   if (dpd === null) return null;
   return daysUntilCarrierCloses({ windowDays }, dpd);
 }
@@ -65,9 +79,18 @@ export function inClawbackWindow(months: number | null, clawbackMonths: number |
   return months === null || clawbackMonths === null ? null : months < clawbackMonths;
 }
 
-/** The band, from what was observed: status, days past due, the carrier's window, the clawback window. */
-export function riskBand(input: { status: string | null; dpd: number | null; untilCloses: number | null; inClawback: boolean | null }): RiskBand {
+/**
+ * The band, from what was observed: status, days past due, the carrier's window, the clawback window.
+ * An approved policy waiting for its first draft is watched once the draft is late, at risk past the
+ * first-payment grace, and critical once the carrier's first-payment window has run out.
+ */
+export function riskBand(input: { status: string | null; dpd: number | null; untilCloses: number | null; inClawback: boolean | null; graceDays?: number | null }): RiskBand {
   if (input.status === "at_risk") return input.inClawback === true || (input.untilCloses !== null && input.untilCloses <= 0) ? "critical" : "at_risk";
+  if (input.status === "approved_unpaid") {
+    if (input.untilCloses !== null && input.untilCloses <= 0) return "critical";
+    if (input.graceDays != null && (input.dpd ?? 0) > input.graceDays) return "at_risk";
+    return (input.dpd ?? 0) > 0 ? "watch" : "none";
+  }
   if (input.status === "active" && (input.dpd ?? 0) > 0) return "watch";
   return "none";
 }
@@ -85,7 +108,7 @@ export type CurrentInput = {
 
 /** Every computed field for one policy, in the order refresh_policy_current computes them. */
 export function computeCurrent(input: CurrentInput) {
-  const dpd = daysPastDue(input.asOf, input.paidToDate);
+  const dpd = daysLate(input.asOf, input.status, input.effectiveDate, input.paidToDate);
   const months = monthsPaid(input.effectiveDate, input.paidToDate);
   const status = effectiveStatus(input.status, dpd, input.rule?.graceDays ?? null);
   const untilCloses = countdown(status, input.rule?.windowDays ?? null, dpd);
@@ -98,8 +121,22 @@ export function computeCurrent(input: CurrentInput) {
     daysUntilCarrierCloses: untilCloses,
     monthsPaid: months,
     inClawbackWindow: inClawback,
-    riskBand: riskBand({ status, dpd, untilCloses, inClawback }),
+    riskBand: riskBand({ status, dpd, untilCloses, inClawback, graceDays: input.rule?.graceDays ?? null }),
   };
+}
+
+/**
+ * The line under a policy's risk (LA-4.11 policy page): the countdown when there is one, else how
+ * late it is, else what is actually known — never "paid up to date" for a policy whose first premium
+ * has not been drawn, or one the carrier sends no paid-to date for.
+ */
+export function riskFootnote(p: { status: string | null; daysLeft: number | null; daysPastDue: number | null; paidTo: string | null }): string {
+  const days = (n: number) => `${n} day${n === 1 ? "" : "s"}`;
+  if (p.daysLeft !== null) return p.daysLeft <= 0 ? "the carrier's window has run out" : `${days(p.daysLeft)} until the carrier closes it`;
+  if (p.status === "approved_unpaid") return p.daysPastDue ? `first premium not drawn, ${days(p.daysPastDue)} late; no first-payment window set for this carrier` : "first premium not drawn yet";
+  if (p.daysPastDue) return `${days(p.daysPastDue)} past due`;
+  if (!p.paidTo) return "no paid-to date from the carrier";
+  return "paid up to date";
 }
 
 /**

@@ -5,6 +5,7 @@ import { sendEmail } from "@/lib/email/transport";
 import { customerName } from "@/lib/callbacks/timezone";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { appointmentReminderEventKey, appointmentReminderTimes, customerReminderAllowed } from "./reminderContract";
+import { shouldEmail } from "@/lib/notifications/preferences";
 
 const DEFAULT_LEAD_MINUTES = 24 * 60;
 
@@ -96,6 +97,12 @@ export async function processAppointmentReminders(input: { now?: Date; leadMinut
       if (!recipient.email) {
         skipped += 1;
         if (eventId) await db.from("tenant_appointment_reminder_events").update({ delivery_status: "delivered", delivered_at: now.toISOString(), updated_at: now.toISOString() }).eq("id", eventId);
+        continue;
+      }
+      // LA-8.4: an agent's own choice for "Appointment due" (a customer's reminder is not theirs to switch off).
+      if (recipient.notify && !(await shouldEmail({ userId: recipient.key, tenantId: row.tenant_id, eventKey: "appointment_due", title: `Appointment reminder: ${name}`, link: `/app/leads/${row.lead_id}` }))) {
+        skipped += 1;
+        if (eventId) await db.from("tenant_appointment_reminder_events").update({ delivery_status: "skipped", failure_reason: "recipient_preference", updated_at: now.toISOString() }).eq("id", eventId);
         continue;
       }
       const rendered = appointmentReminderEmail({ name: recipient.name, customerName: name, customerTime: times.customerLocal, customerTimezone: times.customerTimezone, agentTime: times.agentLocal, agentTimezone: times.agentTimezone, note: row.notes, leadUrl: `${process.env.APP_URL ?? "http://localhost:3000"}/app/leads/${encodeURIComponent(row.lead_id)}` });

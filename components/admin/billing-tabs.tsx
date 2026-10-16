@@ -30,7 +30,7 @@ export function BillingTabs() {
             href={href}
             aria-current={active ? "page" : undefined}
             className={cn(
-              "-mb-px inline-flex h-10 shrink-0 items-center border-b-2 px-1 text-[14px] leading-[1.43] font-semibold tracking-[-0.01em] no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]",
+              "-mb-px inline-flex h-10 shrink-0 items-center border-b-2 px-1 text-sm leading-[1.43] font-semibold tracking-[-0.01em] no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]",
               active ? "border-[var(--primary)] text-[var(--ink)]" : "border-transparent text-[var(--muted)] hover:text-[var(--ink)]",
             )}
           >

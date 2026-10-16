@@ -172,6 +172,10 @@ export type PartnerQualityDetail = {
   /** Sent in the period by no partner account (API posts, agency imports). */
   unattributed: PartnerQualityPeriodMetrics;
   agents: PartnerQualityAgentRow[];
+  /** LA-6.2: transfers the pre-transfer gate rejected, and accepts screened only at submit (this period and the one before). */
+  gate: { current: PartnerQualityGate; previous: PartnerQualityGate };
 };
+
+export type PartnerQualityGate = { rejected: number; screenedLate: number; accepted: number; /** LA-6.4: complaints about leads this partner supplied. */ complaints: number };
 
 export const PARTNER_QUALITY_METRICS: PartnerQualityMetric[] = ["sent", "claimed", "worked", "submitted", "disqualified", "tcpa", "dnc", "invalid", "duplicate", "disposition"];

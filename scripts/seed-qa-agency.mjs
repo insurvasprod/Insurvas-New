@@ -382,7 +382,8 @@ await section("agency_profiles", async () => {
   if (existing) { bump("agency_profiles", "kept"); return; }
   bump("agency_profiles", "inserted"); bump("agency_profile_history", "inserted");
   if (DRY) return;
-  must(await db.rpc("save_agency_profile", { p_tenant_id: TENANT_ID, p_actor_id: owner.id, p_legal_name: "Ellery & Fields Insurance Group LLC", p_dba: "Ellery & Fields", p_npn: "18442907", p_tax_id_change: false, p_tax_id_ciphertext: null, p_tax_id_last4: null, p_principal_address: "4820 Bluebonnet Ln, Suite 210, Austin, TX 78745", p_timezone: "America/Chicago" }), "save agency profile");
+  // LA-8.3: save_business_identity replaced save_agency_profile (migration 20261015300000).
+  must(await db.rpc("save_business_identity", { p_tenant_id: TENANT_ID, p_actor_id: owner.id, p_identity: { legal_name: "Ellery & Fields Insurance Group LLC", trading_name: "Ellery & Fields", npn: "18442907", entity_type: "llc", address_line1: "4820 Bluebonnet Ln", address_line2: "Suite 210", city: "Austin", state: "TX", postal_code: "78745", phone: "(512) 555-0142", timezone: "America/Chicago" }, p_tax_id_change: false, p_tax_id_ciphertext: null, p_tax_id_last4: null }), "save business identity");
 });
 
 async function readContracts() { return must(await db.from("tenant_carriers").select("id, carrier_id, contract_level_bp, writing_number, effective_from, is_active").eq("tenant_id", TENANT_ID), "read tenant carriers"); }

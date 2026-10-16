@@ -10,6 +10,7 @@ import type { CarrierFacts } from "@/lib/salesSettings/views";
 import { hasFeature } from "@/lib/entitlements/types";
 import { featureKillState } from "@/lib/features/killSwitch";
 import { isTenantSuspended } from "@/lib/tenants/suspension";
+import { checkTenantSession } from "@/lib/tenantAuth/sessionStore";
 import { auditExtension } from "./audit";
 import { GRANT_SCOPE } from "./constants";
 import {
@@ -29,7 +30,7 @@ export const EXTENSION_FEATURE = "carrier_extension";
 const GRANT_ROLES = ["owner", "producer"];
 const GRANT_COLUMNS = "id, tenant_id, user_id, application_id, carrier_origin, scope, issued_at, expires_at, revoked_at, revoked_reason, field_reads";
 
-type Actor = { tenantId: string; userId: string; role: string; request: Request };
+type Actor = { tenantId: string; userId: string; role: string; request: Request; sessionId?: string | null };
 type FullGrantRow = GrantRow & { revoked_reason: string | null; field_reads: number };
 type AppHead = { id: string; case_id: string; lead_id: string; attempt_no: number; status: string; carrier_id: string | null; carrier_product_id: string | null };
 
@@ -96,10 +97,14 @@ export async function mintGrant(actor: Actor, input: { applicationId: string; ca
 
   const issuedAt = new Date();
   const expiresAt = grantExpiry(issuedAt);
-  const inserted = await client.from("tenant_extension_grants").insert({
+  const row = {
     tenant_id: actor.tenantId, user_id: actor.userId, application_id: app.id, carrier_origin: origin, scope: GRANT_SCOPE,
     issued_at: issuedAt.toISOString(), expires_at: expiresAt.toISOString(),
-  }).select("id").single();
+  };
+  // Bound to the sign-in that opened it: when that session ends, the grant stops working. Before
+  // 20261015570000 there is no column to bind to, and the grant is written as before.
+  let inserted = await client.from("tenant_extension_grants").insert({ ...row, session_id: actor.sessionId ?? null }).select("id").single();
+  if (inserted.error && isMissingSchema(inserted.error) && /session_id/.test(inserted.error.message ?? "")) inserted = await client.from("tenant_extension_grants").insert(row).select("id").single();
   if (inserted.error) fail(inserted.error, "Extension grants");
   const grantId = inserted.data.id as string;
 
@@ -148,6 +153,21 @@ async function memberStillAllowed(tenantId: string, userId: string) {
 }
 
 /**
+ * Is the session the grant was opened in still live? A grant with no session recorded (opened before
+ * grants carried one) has nothing to check and is decided by its row alone — sign-out revokes it.
+ */
+async function grantSessionLive(grant: FullGrantRow): Promise<boolean> {
+  const q = await db().from("tenant_extension_grants").select("session_id").eq("tenant_id", grant.tenant_id).eq("id", grant.id).maybeSingle();
+  if (q.error) {
+    if (isMissingSchema(q.error)) return true;
+    fail(q.error, "Extension grants");
+  }
+  const sessionId = (q.data as { session_id?: string | null } | null)?.session_id ?? null;
+  if (!sessionId) return true;
+  return (await checkTenantSession(sessionId, grant.user_id)).live;
+}
+
+/**
  * Every extension request: token → grant row → origin → application → person → entitlement.
  * No session cookie is read. Refusals are logged against the grant when the token is authentic.
  */
@@ -176,6 +196,8 @@ export async function authenticateExtension(request: Request, opts: { applicatio
   const application = await applicationHead(grant.tenant_id, grant.application_id).catch(() => null);
   if (!application) return refuse("application_mismatch", grant, 404, "That application could not be found.");
   if (application.status !== "ready") return refuse("application_not_ready", grant, 409, "This application is no longer ready to submit. Reopen it in Insurvas.");
+  // The sign-in that opened the grant must still be live: signing out ends it (LA-3.12).
+  if (!(await grantSessionLive(grant))) return refuse("member_inactive", grant, 401, "You signed out of Insurvas, so this grant has ended. Sign in and open a new one.");
   const member = await memberStillAllowed(grant.tenant_id, grant.user_id);
   if (member === "member_inactive") return refuse("member_inactive", grant, 403, "Your Insurvas access has changed. Sign in again and open a new grant.");
   if (member === "not_entitled") return refuse("not_entitled", grant, 403, "The browser extension is not available on your account.");

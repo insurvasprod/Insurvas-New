@@ -1,9 +1,12 @@
 "use client";
 
+import { StatusChip } from "@/components/ui/status-chip";
 import { X } from "lucide-react";
 import { Dialog as DialogPrimitive } from "radix-ui";
 
-import { Callout, Pill, btn, st, type PillTone } from "@/components/app/settings/primitives";
+import { Callout, btn, st, type PillTone, pillTone } from "@/components/app/settings/primitives";
+import { InfoTip } from "@/components/ui/info-tip";
+
 import { isImportDateField, slashDateReadings, type ImportDateOrder, type ImportDateScan } from "@/lib/agentTemplates/csv";
 import type { TemplateFieldType } from "@/lib/templates/constants";
 import { cn } from "@/lib/utils";
@@ -175,9 +178,9 @@ export function ColumnMappingDialog({
 
             <div className="flex min-h-0 flex-1 flex-col gap-[18px] overflow-y-auto p-[22px]">
               <div className="flex flex-wrap items-center gap-3" role="status">
-                <Pill tone="success" dot>{status.mapped.toLocaleString()} mapped</Pill>
-                {status.needsDecision > 0 && <Pill tone="warning" dot>{status.needsDecision.toLocaleString()} {status.needsDecision === 1 ? "needs" : "need"} a decision</Pill>}
-                <Pill>{status.ignored.toLocaleString()} ignored</Pill>
+                <StatusChip tone="good" dot>{status.mapped.toLocaleString()} mapped</StatusChip>
+                {status.needsDecision > 0 && <StatusChip tone="warning" dot>{status.needsDecision.toLocaleString()} {status.needsDecision === 1 ? "needs" : "need"} a decision</StatusChip>}
+                <StatusChip dot={false}>{status.ignored.toLocaleString()} ignored</StatusChip>
                 <span className="flex-1" />
                 <span className="text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">{saveNote}</span>
               </div>
@@ -208,7 +211,7 @@ export function ColumnMappingDialog({
                         </td>
                         <td className={st.td}>
                           {rowStatus && <span className="flex min-w-0 flex-col items-start" title={rowStatus.detail}>
-                            <Pill tone={rowStatus.tone}>{rowStatus.label}</Pill>
+                            <StatusChip dot={false} tone={pillTone(rowStatus.tone)}>{rowStatus.label}</StatusChip>
                             <span className="mt-0.5 block max-w-full truncate text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">{rowStatus.detail}</span>
                           </span>}
                         </td>
@@ -220,7 +223,7 @@ export function ColumnMappingDialog({
                       <td className={st.td}>{field.label}</td>
                       <td className={st.td}>
                         <span className="flex min-w-0 flex-col items-start">
-                          <Pill tone="error">Required — not mapped</Pill>
+                          <StatusChip dot={false} tone="danger">Required — not mapped</StatusChip>
                           <span className="mt-0.5 block text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">Pick the column that holds it above</span>
                         </span>
                       </td>
@@ -233,7 +236,7 @@ export function ColumnMappingDialog({
                 tone="warning"
                 title={dates.firstUnambiguous ? `${dates.firstUnambiguous} is unambiguous. ${ambiguous} is not.` : `${ambiguous} can be read two ways`}
               >
-                <p className="m-0">This file has {dates.ambiguous.toLocaleString()} date{dates.ambiguous === 1 ? "" : "s"} where both readings are valid. Pick the format once and it applies to the whole file. The preview updates when you continue.</p>
+                <p className="m-0">Pick one format for all {dates.ambiguous.toLocaleString()} date{dates.ambiguous === 1 ? "" : "s"} in this file.</p>
                 <fieldset className="m-0 mt-3 flex min-w-0 flex-wrap gap-3 border-0 p-0">
                   <legend className="sr-only">Date format</legend>
                   {([["mdy", "Month first (US)", readings.mdy], ["dmy", "Day first", readings.dmy]] as const).map(([order, label, reading]) => {
@@ -253,7 +256,10 @@ export function ColumnMappingDialog({
 
             <div className="flex shrink-0 flex-wrap items-center justify-between gap-4 border-t border-[var(--border)] bg-[var(--canvas)] px-[22px] py-3.5">
               <span className="max-w-[380px] text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">
-                Nothing is imported until step 4, and the leads land in one transaction — all of them or none.
+                <span className="inline-flex items-center gap-0.5">
+                  Nothing is imported until step 4.
+                  <InfoTip label="About the import step">The leads land in one transaction: all of them or none.</InfoTip>
+                </span>
                 {(blocked || continueNote) && <span id="column-mapping-continue-note" className={cn("mt-1 block font-semibold", blocked ? "text-[var(--warning-ink)]" : "text-[var(--body)]")}>{blocked ?? continueNote}</span>}
               </span>
               <span className="flex gap-2.5">

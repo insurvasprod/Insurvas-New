@@ -1,12 +1,13 @@
 "use client";
 
+import { StatusChip } from "@/components/ui/status-chip";
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
-import { Callout, Pill, btn, st, type PillTone } from "@/components/app/settings/primitives";
+import { Callout, btn, st, type PillTone, pillTone } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { TableCard } from "@/components/ui/table-card";
@@ -163,13 +164,13 @@ export function TenantUsersPanel({ tenantId, data, can }: { tenantId: string; da
                       member.name
                     )}
                     <br />
-                    <span className="text-[12px] text-[var(--muted)]">{member.email}</span>
+                    <span className="text-xs text-[var(--muted)]">{member.email}</span>
                   </td>
                   <td className={st.td}>
-                    <Pill tone={ROLE_TONE(member.role)}>{TENANT_ROLE_LABELS[member.role] ?? member.role}</Pill>
+                    <StatusChip dot={false} tone={pillTone(ROLE_TONE(member.role))}>{TENANT_ROLE_LABELS[member.role] ?? member.role}</StatusChip>
                   </td>
                   <td className={st.td}>
-                    <Pill tone={state.tone}>{state.label}</Pill>
+                    <StatusChip dot={false} tone={pillTone(state.tone)}>{state.label}</StatusChip>
                     {state.note && <span className={st.sub}>{state.note}</span>}
                   </td>
                   <td className={cn(st.td, "tabular-nums")}>{lastSeenLabel(member, readAt)}</td>
@@ -297,16 +298,16 @@ function RevokeStaleDialog({ tenantId, stale, open, onClose, onDone }: { tenantI
             audit log.
           </DialogDescription>
         </DialogHeader>
-        <ul className="m-0 list-none space-y-1 p-0 text-[14px] leading-[1.5] text-[var(--body)]">
+        <ul className="m-0 list-none space-y-1 p-0 text-sm leading-[1.5] text-[var(--body)]">
           {shown.map((member) => (
             <li key={member.id}>
-              {member.name} <span className="text-[12px] text-[var(--muted)]">{member.email}</span>
+              {member.name} <span className="text-xs text-[var(--muted)]">{member.email}</span>
             </li>
           ))}
-          {count > shown.length && <li className="text-[12px] text-[var(--muted)]">and {count - shown.length} more</li>}
+          {count > shown.length && <li className="text-xs text-[var(--muted)]">and {count - shown.length} more</li>}
         </ul>
         {error && (
-          <p role="alert" className="m-0 text-[14px] leading-[1.5] text-[var(--error-ink)]">
+          <p role="alert" className="m-0 text-sm leading-[1.5] text-[var(--error-ink)]">
             {error}
           </p>
         )}

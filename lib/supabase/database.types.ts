@@ -6459,7 +6459,7 @@ export type Database = {
       };
     };
     Enums: {
-      legal_doc_type: "tos" | "privacy" | "dpa";
+      legal_doc_type: "tos" | "privacy" | "dpa" | "refund" | "cookies" | "subprocessors";
       email_status: "sent" | "failed" | "skipped";
       admin_role:
         "super_admin" | "support_agent" | "billing_admin" | "platform_config";

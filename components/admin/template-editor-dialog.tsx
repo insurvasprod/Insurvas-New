@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Callout, Pill } from "@/components/app/settings/primitives";
+import { Callout, pillTone } from "@/components/app/settings/primitives";
 import type { ProductRow } from "@/lib/products/constants";
 import {
   TEMPLATE_FIELD_TYPES,
@@ -240,8 +240,8 @@ export function TemplateEditorDialog({
 
           {isEdit && template && (
             <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border p-3 text-sm">
-              {state && <Pill tone={STATE_TONE[state]} dot>{TEMPLATE_STATE_LABELS[state]}</Pill>}
-              <Pill tone="neutral">v{template.version}</Pill>
+              {state && <StatusChip tone={pillTone(STATE_TONE[state])} dot>{TEMPLATE_STATE_LABELS[state]}</StatusChip>}
+              <StatusChip dot={false} tone="neutral">v{template.version}</StatusChip>
               <span className="text-muted-foreground">
                 {usage
                   ? `Copied by ${plural(usage.agencies, "agency", "agencies")}${usage.agenciesOnEarlierVersion > 0 ? ` (${usage.agenciesOnEarlierVersion.toLocaleString("en-US")} on an earlier version)` : ""} · ${plural(usage.inProgress, "application")} in progress${usage.inProgressOnEarlierVersion > 0 ? ` (${usage.inProgressOnEarlierVersion.toLocaleString("en-US")} on an earlier version)` : ""}`

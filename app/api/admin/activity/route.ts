@@ -3,11 +3,14 @@ import { NextResponse, type NextRequest } from "next/server";
 import { requireAdminRole } from "@/lib/adminAuth/requireAdminRole";
 import { CAN_VIEW_USERS } from "@/lib/users/permissions";
 import { fetchLoginActivityPage, ACTIVITY_PAGE_SIZE } from "@/lib/loginEvents/queries";
-import { parseActivityFilters } from "@/lib/loginEvents/present";
+import { parseActivityFilters, staffLoginsVisibleTo } from "@/lib/loginEvents/present";
 
 /**
  * GET /api/admin/activity?page&outcome&actor&range&q — one page of the platform-wide login feed.
  * Read-only, so no audit row. Unrecognised filter values fall back to the defaults.
+ *
+ * Staff sign-ins (emails + IPs of platform admins) are in the feed for super_admin only; support
+ * and billing get tenant-user sign-ins, whatever `actor` they ask for.
  */
 export async function GET(request: NextRequest) {
   const auth = await requireAdminRole(CAN_VIEW_USERS);
@@ -18,7 +21,11 @@ export async function GET(request: NextRequest) {
   const filters = parseActivityFilters(params);
 
   try {
-    const { events, total, rangeTotal } = await fetchLoginActivityPage({ page, filters });
+    const { events, total, rangeTotal } = await fetchLoginActivityPage({
+      page,
+      filters,
+      includeStaff: staffLoginsVisibleTo(auth.session.role),
+    });
     return NextResponse.json(
       { events, total, rangeTotal, page, pageSize: ACTIVITY_PAGE_SIZE },
       { headers: { "cache-control": "no-store" } },

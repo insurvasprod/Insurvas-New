@@ -4,7 +4,7 @@ import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isSchemaGap } from "@/lib/supabase/schemaGap";
 
 import type { ContactOutcome, PaymentMethod } from "./constants";
-import { logSaveAttempt } from "./queueStore";
+import { assertQueueCard, logSaveAttempt, SaveQueueError } from "./queueStore";
 import { computeRadar } from "./radarStore";
 import { fieldChanges, OPEN_STATUSES, ServicingRuleError, canStep, WAITING_STATUSES, type CarrierMethod, type FieldChange, type Origin, type RequestInput, type RequestStatus, type RequestType } from "./servicing";
 
@@ -143,22 +143,25 @@ export async function createRequest(viewer: Viewer, input: {
     if (error instanceof ServicingRuleError) throw new ServicingError(error.message, 400);
     throw error;
   }
+  // From the save queue, the card must still be one the queue works (not past due, not on the Lapse
+  // risk list) — checked before the request exists, so a refusal leaves nothing behind.
+  if (input.fromQueue) {
+    try {
+      await assertQueueCard(viewer, input.carrierId, input.policyNumber);
+    } catch (error) {
+      if (error instanceof SaveQueueError) throw new ServicingError(error.message, error.status);
+      throw error;
+    }
+  }
   const already = prefill.open.find((o) => o.type === change.type);
   if (already) throw new ServicingError("There is already an open request of this kind for this policy. Finish or cancel it first.", 409);
-
-  let saveAttemptId: string | null = null;
-  if (input.fromQueue) {
-    const action = change.type === "draft_date_change" ? "move_draft_date" : change.type === "bill_to_draft_conversion" ? "convert_to_draft" : "confirm_account";
-    const logged = await logSaveAttempt(viewer, { carrierId: input.carrierId, policyNumber: input.policyNumber, outcome: input.fromQueue.outcome, actionTaken: action, note: input.note });
-    saveAttemptId = logged.id;
-  }
 
   const target = change.type === "draft_date_change" ? change.targetDraftDay : change.type === "bill_to_draft_conversion" ? change.targetDraftDay : null;
   const usesRecommended = target !== null && target === prefill.recommendedDraftDay;
   const now = new Date().toISOString();
   const { data, error } = await db().from("servicing_request").insert({
     tenant_id: viewer.tenantId, agency_id: p.agency_id ?? null, carrier_id: input.carrierId, policy_number: input.policyNumber, contact_id: p.contact_id ?? null,
-    request_type: change.type, origin: input.origin, save_attempt_id: saveAttemptId,
+    request_type: change.type, origin: input.origin, save_attempt_id: null,
     field_changes_json: changes, target_draft_day: target, target_draft_reason: usesRecommended ? prefill.recommendedReason : null,
     carrier_method: input.send?.method ?? null, carrier_form_ref: input.send?.formRef?.trim() || null, carrier_reference: input.send?.reference?.trim() || null,
     status: input.send ? "submitted" : "draft", submitted_at: input.send ? now : null, expected_effective_date: input.send?.expectedEffectiveDate ?? null,
@@ -169,9 +172,19 @@ export async function createRequest(viewer: Viewer, input: {
     if (error.code === "23505") throw new ServicingError("There is already an open request of this kind for this policy.", 409);
     throw new Error(`Could not open the request: ${error.message}`);
   }
-  if (saveAttemptId) {
-    const link = await db().from("save_attempt").update({ servicing_request_id: data.id }).eq("tenant_id", viewer.tenantId).eq("id", saveAttemptId);
-    if (link.error) console.error("[servicing] the save attempt could not be linked", link.error);
+  // From the save queue, the worked call is logged after the request exists and points at it, so a
+  // request that failed to open never leaves a call record behind (save_attempt is append-only). If
+  // the call cannot be logged, the request is cancelled rather than left without its call.
+  if (input.fromQueue) {
+    const action = change.type === "draft_date_change" ? "move_draft_date" : change.type === "bill_to_draft_conversion" ? "convert_to_draft" : "confirm_account";
+    try {
+      await logSaveAttempt(viewer, { carrierId: input.carrierId, policyNumber: input.policyNumber, outcome: input.fromQueue.outcome, actionTaken: action, note: input.note, servicingRequestId: data.id });
+    } catch (error) {
+      // cancelled_at too: the servicing_request_cancelled check refuses a cancel without it.
+      const undo = await db().from("servicing_request").update({ status: "cancelled", cancelled_at: new Date().toISOString(), note: "Cancelled: the call could not be logged." }).eq("tenant_id", viewer.tenantId).eq("id", data.id);
+      if (undo.error) console.error("[servicing] the request could not be cancelled after the call failed to log", undo.error);
+      throw error;
+    }
   }
   // LA-5.5: from the paper-bill campaign, the client's "yes" is logged with the request it opened.
   // It counts as converted only when the file verifies that request.
@@ -309,14 +322,14 @@ export async function requestsByPolicy(tenantId: string, keys: Set<string>) {
   const numbers = [...new Set([...keys].map((k) => k.slice(k.indexOf("|") + 1)))];
   const rows: Loose[] = [];
   for (let i = 0; i < numbers.length; i += CHUNK) {
-    const part = await db().from("servicing_request").select("id, carrier_id, policy_number, request_type, status, failure_reason, created_at").eq("tenant_id", tenantId).in("policy_number", numbers.slice(i, i + CHUNK)).order("created_at", { ascending: false });
+    const part = await db().from("servicing_request").select("id, carrier_id, policy_number, request_type, status, failure_reason, failed_at, created_at").eq("tenant_id", tenantId).in("policy_number", numbers.slice(i, i + CHUNK)).order("created_at", { ascending: false });
     if (part.error) {
-      if (isSchemaGap(part.error)) return new Map<string, { open: Array<{ type: RequestType; status: RequestStatus }>; failed: { id: string; reason: string } | null }>();
+      if (isSchemaGap(part.error)) return new Map<string, { open: Array<{ type: RequestType; status: RequestStatus }>; failed: { id: string; reason: string; at: string | null } | null }>();
       throw part.error;
     }
     rows.push(...(part.data ?? []));
   }
-  const out = new Map<string, { open: Array<{ type: RequestType; status: RequestStatus }>; failed: { id: string; reason: string } | null }>();
+  const out = new Map<string, { open: Array<{ type: RequestType; status: RequestStatus }>; failed: { id: string; reason: string; at: string | null } | null }>();
   for (const r of rows) {
     const key = `${r.carrier_id}|${r.policy_number}`;
     if (!keys.has(key)) continue;
@@ -324,7 +337,7 @@ export async function requestsByPolicy(tenantId: string, keys: Set<string>) {
     const seenNewer = out.has(key);
     if ((OPEN_STATUSES as readonly string[]).includes(r.status)) entry.open.push({ type: r.request_type, status: r.status });
     // A failure counts only while nothing newer was opened for the policy after it.
-    if (r.status === "failed" && !seenNewer && !entry.failed) entry.failed = { id: r.id, reason: r.failure_reason };
+    if (r.status === "failed" && !seenNewer && !entry.failed) entry.failed = { id: r.id, reason: r.failure_reason, at: r.failed_at ?? null };
     out.set(key, entry);
   }
   return out;

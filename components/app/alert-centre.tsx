@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition, type ReactNode } from "react";
+import { useMemo, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,7 @@ import { KBD_ITEM_ATTRIBUTE, KBD_LIST_ATTRIBUTE } from "@/lib/keyboard/listNavig
 import { notify } from "@/lib/notify";
 import { dateTime } from "@/lib/format/dates";
 import { useViewerTimeZone } from "@/components/app/use-viewer-time-zone";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 
 /**
  * The alert centre's lists. Open alerts carry the action that resolves them — claiming the lead,
@@ -42,17 +43,6 @@ function when(iso: string, zone: string) {
   return dateTime(date, zone, { weekday: true, clock: "12h" });
 }
 
-/** Rows per page that fit the window under the page's chrome (the Inbound list's rule). */
-function useFittingPageSize(reserved: number, rowHeight: number) {
-  const [size, setSize] = useState(10);
-  useEffect(() => {
-    const fit = () => setSize(Math.min(10, Math.max(5, Math.floor((window.innerHeight - reserved) / rowHeight))));
-    fit();
-    window.addEventListener("resize", fit);
-    return () => window.removeEventListener("resize", fit);
-  }, [reserved, rowHeight]);
-  return size;
-}
 
 function OpenAlertRow({ entry, canClaim }: { entry: CentreEntry; canClaim: boolean }) {
   const router = useRouter();
@@ -178,6 +168,7 @@ export function AlertCentre({ lists, canClaim, digest }: {
     <>
       <ViewTabs
         label="Alert centre views"
+        idPrefix="alert-view"
         value={tab}
         onChange={choose}
         tabs={[
@@ -187,9 +178,10 @@ export function AlertCentre({ lists, canClaim, digest }: {
         ]}
       />
 
+      <div role="tabpanel" aria-labelledby={`alert-view-${tab}`} className="flex min-w-0 flex-col">
       {tab === "digest" && digest ? digest : !lists ? (
         <TableCard className={FILL}>
-          <ErrorState detail="The alert centre could not read the queue, so it cannot say which alerts are open. Nothing has changed; reload the page to try again." />
+          <ErrorState title="Open alerts did not load" detail="Reload the page to try again. Until then, which alerts are open is unknown." />
         </TableCard>
       ) : (
         <TableCard
@@ -199,7 +191,7 @@ export function AlertCentre({ lists, canClaim, digest }: {
         >
           {rows.length === 0 ? (
             filtered ? <NoMatches noun="alerts" onClear={clear} />
-              : tab === "open" ? <EmptyState title="Nothing is wrong with the queue" hint="Unclaimed leads and escalations appear here the moment they are raised." />
+              : tab === "open" ? <EmptyState title="Nothing is wrong with the queue" hint="Unclaimed leads and escalations show up here." />
               : <EmptyState title="Nothing resolved this week" hint="A fixed alert moves here with what resolved it." />
           ) : tab === "open" ? (
             <table className="w-full min-w-[900px] border-collapse text-left">
@@ -214,6 +206,7 @@ export function AlertCentre({ lists, canClaim, digest }: {
           )}
         </TableCard>
       )}
+      </div>
     </>
   );
 }

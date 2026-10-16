@@ -190,7 +190,7 @@ function Coverage({ fieldKey, label, shown }: { fieldKey: string; label: string;
       {shown ? (
         <PrefillHint fv={fv} fieldKey={fieldKey} readOnly />
       ) : !readOnly && (
-        <button type="button" onClick={() => goTo("quote")} className="mt-1.5 text-[12px] font-semibold text-[var(--accent-ink)] underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]">
+        <button type="button" onClick={() => goTo("quote")} className="mt-1.5 text-xs font-semibold text-[var(--accent-ink)] underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]">
           Choose one on the Quote step
         </button>
       )}

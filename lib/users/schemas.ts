@@ -42,6 +42,9 @@ export const updateUserSchema = z.object({
   phone: z.string().trim().max(40).optional().or(z.literal("")),
   role: z.enum(TENANT_ROLES),
   email: z.string().trim().toLowerCase().email(),
+  // The tenant whose role is being edited. Required in practice for a user in more than one tenant
+  // (the route refuses an ambiguous edit); optional so a single-tenant edit needs nothing new.
+  tenantId: z.string().uuid().nullable().optional(),
 });
 
 export const confirmEmailSchema = z.object({

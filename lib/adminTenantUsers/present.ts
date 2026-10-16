@@ -2,6 +2,7 @@
  * Wording for the Users & seats tab and its CSV export. Plain module: the client island and the
  * export route both use it, so the file and the screen say the same thing.
  */
+import { csvCell } from "../csv/cell.ts";
 import { relativeSeen } from "../tenantTeam/lastSeen.ts";
 import { userStatusLabel } from "../users/constants.ts";
 import type { AdminTenantMember } from "./types.ts";
@@ -50,11 +51,7 @@ export function sortMembers(members: readonly AdminTenantMember[]): AdminTenantM
 }
 
 /** One CSV cell: quoted, and a leading formula character neutralised so a spreadsheet cannot run it. */
-export function csvCell(value: string | number | null | undefined): string {
-  let text = value === null || value === undefined ? "" : String(value);
-  if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`;
-  return `"${text.replace(/"/g, '""')}"`;
-}
+export { csvCell };
 
 export const CSV_HEADER = ["Name", "Email", "Role", "State", "Holds a seat", "Invited", "Accepted", "Last seen", "Last sign-in", "Sign-ins (30d)", "Invite expires"];
 

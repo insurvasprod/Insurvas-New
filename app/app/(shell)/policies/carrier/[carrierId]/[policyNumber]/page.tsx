@@ -17,7 +17,7 @@ import { fileDay } from "@/lib/ingestion/constants";
 import { fileHref, rowHref } from "@/lib/ingestion/trace";
 import { RISK_LABELS, statusLabel, type RiskBand } from "@/lib/ingestion/policyBook";
 import { loadIssuedAwaitingOne, loadPolicy } from "@/lib/ingestion/policyBookStore";
-import { moneyOrUnknown } from "@/lib/ingestion/policyCurrent";
+import { moneyOrUnknown, riskFootnote } from "@/lib/ingestion/policyCurrent";
 import { isRecordUuid } from "@/lib/ingestion/path";
 
 const RISK_TONE: Record<RiskBand, StatusTone> = { none: "neutral", watch: "info", at_risk: "warning", critical: "danger" };
@@ -74,7 +74,7 @@ export default async function PolicyPage({ params }: { params: Promise<{ carrier
         <StatTile label="Premium" value={dollars(policy.premiumCents)} footnote={policy.premiumMode ? `${MODE[policy.premiumMode] ?? policy.premiumMode}${monthly !== null && policy.premiumMode !== "monthly" ? ` · ${dollars(monthly)} a month` : ""}` : "mode not given"} />
         <StatTile label="Face amount" value={dollars(policy.faceCents)} />
         <StatTile label="Status" value={statusLabel(policy.status)} footnote={policy.statusRaw ? `carrier says “${policy.statusRaw}”` : undefined} />
-        <StatTile label="Risk" value={RISK_LABELS[policy.riskBand]} valueTone={policy.riskBand === "at_risk" || policy.riskBand === "critical" ? "warning" : undefined} footnote={policy.daysLeft !== null ? `${policy.daysLeft} day${policy.daysLeft === 1 ? "" : "s"} until the carrier closes it` : policy.daysPastDue ? `${policy.daysPastDue} days past due` : "paid up to date"} />
+        <StatTile label="Risk" value={RISK_LABELS[policy.riskBand]} valueTone={policy.riskBand === "at_risk" || policy.riskBand === "critical" ? "warning" : undefined} footnote={riskFootnote(policy)} />
         <StatTile label="Paid to" value={fileDay(policy.paidTo)} footnote={policy.lastFileDate ? `per the carrier file of ${fileDay(policy.lastFileDate)}` : undefined} />
       </StatStrip>
 

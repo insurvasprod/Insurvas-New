@@ -3,10 +3,15 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
+import { Download } from "lucide-react";
+
 import { Button } from "@/components/ui/button";
+import { BulkBar, RowCheckbox, SelectAllCheckbox, useRowSelection } from "@/components/ui/bulk-bar";
 import { toolbarControl } from "@/components/ui/data-toolbar";
+import { downloadCsv } from "@/components/app/partner-quality-parts";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { EmptyState, NoMatches, SectionLoading } from "@/components/ui/page-states";
+import { InfoTip } from "@/components/ui/info-tip";
 import { Pager, paginate } from "@/components/ui/pager";
 import type { PipelineStage } from "@/lib/pipelines/types";
 import type { MappedDisposition, PipelineViewContext, StageEvent } from "@/lib/pipelines/views";
@@ -107,7 +112,7 @@ export function dispositionGroups(pipeline: ViewPipeline | undefined, currentSta
 // ── the picker ───────────────────────────────────────────────────────────────────────────────
 
 export function DispositionPicker({
-  open, onOpenChange, title, description, groups, busy, onPick, emptyText = "No disposition lands on this stage, so a lead cannot be moved into it. An owner maps one under Settings › Dispositions.",
+  open, onOpenChange, title, description, groups, busy, onPick, emptyText = "Map a disposition to this stage in Settings › Dispositions to move leads here.",
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -202,13 +207,14 @@ export function StagesView({ pipelines, leads, context, isOwner, now }: { pipeli
     <div className="flex flex-col">
       {unmapped.length > 0 && (
         <ViewAlert tone="warning">
-          {unmapped.length} {unmapped.length === 1 ? "disposition has" : "dispositions have"} no stage ({unmapped.slice(0, 3).map((entry) => entry.label).join(", ")}{unmapped.length > 3 ? ", …" : ""}) — {unmappedUses.toLocaleString()} recorded {unmappedUses === 1 ? "outcome is" : "outcomes are"} missing from the stage counts.
+          {unmapped.length} {unmapped.length === 1 ? "disposition has" : "dispositions have"} no stage ({unmapped.slice(0, 3).map((entry) => entry.label).join(", ")}{unmapped.length > 3 ? ", …" : ""}) — {unmappedUses.toLocaleString()} {unmappedUses === 1 ? "outcome" : "outcomes"} left out of the counts.
           {isOwner && <> <Link href="/app/settings#pipelines" className="font-semibold text-foreground underline-offset-4 hover:underline">Map them in Settings › Pipelines</Link></>}
         </ViewAlert>
       )}
       {drift > 0 && (
         <ViewAlert tone="error">
-          {drift} {drift === 1 ? "lead's stage disagrees" : "leads' stages disagree"} between its two records. Move {drift === 1 ? "it" : "each"} with a disposition to set both again.
+          Move {drift === 1 ? "1 lead" : `${drift} leads`} with a disposition to fix {drift === 1 ? "its" : "their"} stage.
+          <InfoTip className="ml-1" label="About stage mismatches">The lead and its stage history name different stages. Recording a disposition sets both again.</InfoTip>
         </ViewAlert>
       )}
       {pipelines.map((pipeline, pipelineIndex) => {
@@ -244,22 +250,49 @@ export function StagesView({ pipelines, leads, context, isOwner, now }: { pipeli
                 </div>
               );
             })}
-            {live.length === 0 && <p className="px-4 py-6 text-sm text-muted-foreground">This pipeline has no stages yet.</p>}
+            {live.length === 0 && <EmptyState title="No stages yet" hint="Add stages to this pipeline to sort its leads." action={isOwner ? <Button asChild variant="outline"><Link href="/app/settings#pipelines">Open Settings › Pipelines</Link></Button> : undefined} />}
           </section>
         );
       })}
-      {pipelines.length === 0 && <EmptyState title="No pipelines yet" hint="An owner sets pipelines up under Settings › Pipelines." />}
+      {pipelines.length === 0 && <EmptyState title="No pipelines yet" hint={isOwner ? "Set up a pipeline to start sorting leads." : "Ask an owner to set up a pipeline."} action={isOwner ? <Button asChild variant="outline"><Link href="/app/settings#pipelines">Open Settings › Pipelines</Link></Button> : undefined} />}
     </div>
   );
 }
 
 // ── Table ────────────────────────────────────────────────────────────────────────────────────
 
-type SavedView = "all" | "overdue" | "mine" | "unassigned";
+/**
+ * Which leads the Table shows of those the workspace filters let through. Chosen from the
+ * workspace's Saved views control (components/ui/saved-views.tsx, 2026-10-09 saved views), which
+ * replaced the row of scope chips that used to sit here.
+ */
+export type TableScope = "all" | "overdue" | "mine" | "unassigned";
+export const TABLE_SCOPES: readonly TableScope[] = ["all", "overdue", "mine", "unassigned"];
+
+export function inTableScope(lead: ViewLead, scope: TableScope, context: ViewContext | null, now: number, currentUserId: string | null) {
+  return scope === "all" || (scope === "overdue" && isOverdue(lead, context, now)) || (scope === "mine" && Boolean(currentUserId) && lead.owner_user_id === currentUserId) || (scope === "unassigned" && !lead.owner_user_id);
+}
+
+export function tableScopeCounts(leads: ViewLead[], context: ViewContext | null, now: number, currentUserId: string | null): Record<TableScope, number> {
+  return {
+    all: leads.length,
+    overdue: leads.filter((lead) => inTableScope(lead, "overdue", context, now, currentUserId)).length,
+    mine: leads.filter((lead) => inTableScope(lead, "mine", context, now, currentUserId)).length,
+    unassigned: leads.filter((lead) => inTableScope(lead, "unassigned", context, now, currentUserId)).length,
+  };
+}
 
 export function TableView({
-  leads, stageName, context, now, money, currentUserId, readOnly, onOpen, onBulkMove,
+  leads, stageName, context, now, money, currentUserId, readOnly, onOpen, onBulkMove, filtered = false, onClearFilters, emptyAction, scope = "all", onScopeChange,
 }: {
+  /** The saved view's scope (Assigned to me, Unassigned, Overdue in stage); the workspace owns it. */
+  scope?: TableScope;
+  onScopeChange?: (scope: TableScope) => void;
+  /** The workspace's search or filters are narrowing `leads`: an empty table is then "no matches", not "no leads". */
+  filtered?: boolean;
+  onClearFilters?: () => void;
+  /** What fills an empty pipeline (Add lead, Import). */
+  emptyAction?: React.ReactNode;
   leads: ViewLead[];
   stageName: (stageId: string) => { name: string; color: string; pipeline: string };
   context: ViewContext | null;
@@ -270,55 +303,61 @@ export function TableView({
   onOpen: (lead: ViewLead) => void;
   onBulkMove: (leadIds: string[]) => void;
 }) {
-  const [saved, setSaved] = useState<SavedView>("all");
-  const [selected, setSelected] = useState<Set<string>>(new Set());
+  // The page resets when the scope changes (the workspace keys this view by scope).
   const [page, setPage] = useState(1);
   const PAGE = 10;
-  const counts = {
-    all: leads.length,
-    overdue: leads.filter((lead) => isOverdue(lead, context, now)).length,
-    mine: leads.filter((lead) => currentUserId && lead.owner_user_id === currentUserId).length,
-    unassigned: leads.filter((lead) => !lead.owner_user_id).length,
-  };
   const rows = useMemo(() => {
-    const filtered = leads.filter((lead) => saved === "all" || (saved === "overdue" && isOverdue(lead, context, now)) || (saved === "mine" && currentUserId && lead.owner_user_id === currentUserId) || (saved === "unassigned" && !lead.owner_user_id));
+    const filtered = leads.filter((lead) => inTableScope(lead, scope, context, now, currentUserId));
     // Longest in stage first — the leads most likely to need a hand.
     return [...filtered].sort((a, b) => (inStageMs(b, now) ?? -1) - (inStageMs(a, now) ?? -1));
-  }, [leads, saved, context, now, currentUserId]);
+  }, [leads, scope, context, now, currentUserId]);
+  // Ticked rows survive paging; a lead that leaves the list (a filter, a move, a refresh) drops out.
+  const selection = useRowSelection(useMemo(() => rows.map((lead) => lead.id), [rows]));
   const { current, rows: pageRows } = paginate(rows, page, PAGE);
-  const allOnPage = pageRows.length > 0 && pageRows.every((lead) => selected.has(lead.id));
-  const toggle = (id: string) => setSelected((set) => { const next = new Set(set); if (next.has(id)) next.delete(id); else next.add(id); return next; });
+  const pageIds = pageRows.map((lead) => lead.id);
   const premiumTotal = pageRows.reduce((sum, lead) => sum + (lead.monthly_premium_cents ?? 0) * 12, 0);
-  const views: Array<[SavedView, string]> = [["all", "All"], ["overdue", "Overdue in stage"], ["mine", "My leads"], ["unassigned", "Unassigned"]];
+
+  /** Export selected: the table's own columns, for the ticked leads, built in the browser. */
+  function exportSelected() {
+    const chosen = rows.filter((lead) => selection.selected.has(lead.id));
+    downloadCsv("leads-selected.csv",
+      ["Lead", "Partner", "Stage", "Disposition", "In stage", "Owner", ...(money ? ["Premium"] : [])],
+      chosen.map((lead) => [
+        leadName(lead),
+        lead.submitter_name ?? "Workspace",
+        stageName(lead.stage_id).name,
+        dispositionLabel(lead.disposition, context) ?? "",
+        durationLabel(inStageMs(lead, now)),
+        lead.owner_name ?? (lead.owner_user_id ? "Member" : "Unassigned"),
+        ...(money ? [lead.monthly_premium_cents != null ? Math.round((lead.monthly_premium_cents * 12) / 100) : null] : []),
+      ]));
+  }
 
   return (
     <div className="flex flex-col">
-      {/* Saved views and the bulk actions: one row directly under the workspace toolbar. */}
-      <div className="flex min-h-[3.25rem] flex-wrap items-center gap-2 border-b border-border px-4 py-2">
-        <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Saved views">
-          {views.map(([key, label]) => (
-            <button key={key} type="button" aria-pressed={saved === key} onClick={() => { setSaved(key); setPage(1); }} disabled={key === "overdue" && !context?.schemaReady} title={key === "overdue" && !context?.schemaReady ? "Needs time allowed per stage (database update 20260925100000)" : undefined} className={cn("inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs font-semibold disabled:opacity-50", saved === key ? "border-[var(--primary)] bg-[var(--primary-soft)] text-[var(--accent-ink)]" : "border-border bg-card text-[var(--body)]")}>
-              {label}<span className="tabular-nums opacity-70">{counts[key].toLocaleString()}</span>
-            </button>
-          ))}
-        </div>
-        {selected.size > 0 && (
-          <div className="ml-auto flex flex-wrap items-center gap-2 text-sm">
-            <span className="font-semibold">{selected.size} {selected.size === 1 ? "lead" : "leads"} selected</span>
-            <Button type="button" variant="outline" onClick={() => setSelected(new Set())}>Clear</Button>
-            <Button type="button" disabled={readOnly} onClick={() => onBulkMove([...selected])}>Change stage</Button>
-          </div>
-        )}
-      </div>
+      {/* The bulk actions, directly under the workspace toolbar, only while leads are ticked. */}
+      <BulkBar
+        count={selection.count}
+        noun={["lead", "leads"]}
+        onClear={selection.clear}
+        actions={<>
+          <Button type="button" variant="outline" onClick={exportSelected}><Download aria-hidden="true" />Export selected</Button>
+          {/* One request for every ticked lead (POST /api/app/leads/move takes lead_ids); the
+              workspace asks which disposition, then confirms how many and where they go. */}
+          <Button type="button" disabled={readOnly} onClick={() => onBulkMove(selection.ids)}>Change stage</Button>
+        </>}
+      />
 
       {rows.length === 0 ? (
-        saved === "all" ? <NoMatches noun="leads" /> : <NoMatches noun="leads" onClear={() => { setSaved("all"); setPage(1); }} />
+        scope !== "all" ? <NoMatches noun="leads" onClear={() => { onScopeChange?.("all"); setPage(1); }} />
+          : filtered ? <NoMatches noun="leads" onClear={onClearFilters} />
+          : <EmptyState title="No leads in this pipeline yet" hint="Add a lead or import a list." action={emptyAction} />
       ) : (
         <div className="overflow-x-auto">
           <table className="portal-lead-table w-full min-w-[900px] text-left text-sm">
             <thead>
               <tr>
-                <th className="w-10"><input type="checkbox" aria-label="Select every lead on this page" checked={allOnPage} onChange={() => setSelected((set) => { const next = new Set(set); if (allOnPage) pageRows.forEach((lead) => next.delete(lead.id)); else pageRows.forEach((lead) => next.add(lead.id)); return next; })} className="size-4 accent-[var(--primary)]" /></th>
+                <th className="w-10"><SelectAllCheckbox selection={selection} ids={pageIds} label="Select every lead on this page" /></th>
                 <th>Lead</th>
                 <th>Partner</th>
                 <th>Stage</th>
@@ -333,8 +372,8 @@ export function TableView({
                 const stage = stageName(lead.stage_id);
                 const late = isOverdue(lead, context, now);
                 return (
-                  <tr key={lead.id} className={cn("m-row", selected.has(lead.id) && "bg-[var(--primary-soft)]")}>
-                    <td><input type="checkbox" aria-label={`Select ${leadName(lead)}`} checked={selected.has(lead.id)} onChange={() => toggle(lead.id)} className="size-4 accent-[var(--primary)]" /></td>
+                  <tr key={lead.id} className={cn("m-row", selection.isSelected(lead.id) && "bg-[var(--primary-soft)]")}>
+                    <td><RowCheckbox selection={selection} id={lead.id} label={`Select ${leadName(lead)}`} /></td>
                     <td><button type="button" className="font-semibold text-foreground underline-offset-4 hover:underline" onClick={() => onOpen(lead)}>{leadName(lead)}</button></td>
                     <td className="text-[var(--body)]">{lead.submitter_name ?? "Workspace"}</td>
                     <td><Chip dot={stage.color}>{stage.name}</Chip></td>
@@ -371,8 +410,11 @@ export function TableView({
 const LIST_GROUP_PAGE = 10;
 
 export function ListView({
-  pipelines, leads, context, now, readOnly, onMove,
+  pipelines, leads, context, now, readOnly, onMove, filtered = false, onClearFilters, emptyAction,
 }: {
+  filtered?: boolean;
+  onClearFilters?: () => void;
+  emptyAction?: React.ReactNode;
   pipelines: ViewPipeline[];
   leads: ViewLead[];
   context: ViewContext | null;
@@ -452,7 +494,7 @@ export function ListView({
                   const late = isOverdue(lead, context, now);
                   return (
                     <button key={lead.id} type="button" onClick={() => setSelectedId(active ? null : lead.id)} aria-pressed={active} className={cn("flex w-full items-center gap-2.5 border-t border-border px-4 py-2 text-left", active ? "bg-[var(--primary-soft)] shadow-[inset_3px_0_0_var(--primary)]" : "bg-card hover:bg-[var(--surface-alt)]")}>
-                      <span className={cn("inline-flex size-[26px] shrink-0 items-center justify-center rounded-full text-[11px] font-bold", active ? "bg-[var(--primary)] text-[var(--primary-foreground)]" : "bg-[var(--surface-alt)] text-[var(--body)]")}>{initials(leadName(lead))}</span>
+                      <span className={cn("inline-flex size-[26px] shrink-0 items-center justify-center rounded-full text-xs font-bold", active ? "bg-[var(--primary)] text-[var(--primary-foreground)]" : "bg-[var(--surface-alt)] text-[var(--body)]")}>{initials(leadName(lead))}</span>
                       <span className="min-w-0 flex-grow">
                         <span className="block truncate text-sm font-semibold">{leadName(lead)}</span>
                         <span className="block truncate text-xs text-muted-foreground tabular-nums">{lead.submitter_name ?? "Workspace"} · {stageAge(lead, now)}</span>
@@ -473,7 +515,7 @@ export function ListView({
               </div>
             );
           })}
-          {groups.length === 0 && <NoMatches noun="leads" />}
+          {groups.length === 0 && (filtered ? <NoMatches noun="leads" onClear={onClearFilters} /> : <EmptyState title="No leads in this pipeline yet" hint="Add a lead or import a list." action={emptyAction} />)}
         </section>
 
         <section aria-label="Selected lead" className="flex min-w-0 flex-grow flex-col border-t border-border xl:border-t-0">
@@ -526,7 +568,7 @@ export function ListView({
               </div>
             </>
           ) : (
-            <p className="m-auto px-6 py-16 text-center text-sm text-muted-foreground">Pick a lead to see its stage history and record an outcome.</p>
+            <p className="m-auto px-6 py-16 text-center text-sm text-muted-foreground">Pick a lead to record an outcome.</p>
           )}
         </section>
       </div>

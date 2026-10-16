@@ -102,7 +102,8 @@ export type DispositionWizard = {
   dispositions: Disposition[];
   lead: { id: string; values: Record<string, unknown> };
   workItem: { id: string; productLine: string };
-  customerTimezone: string;
+  /** Null when it cannot be derived (unknown or split state): the agent chooses it for a callback. */
+  customerTimezone: string | null;
   customerName: string;
   assignees: Array<{ id: string; name: string; role: string }>;
 };

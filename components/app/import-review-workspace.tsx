@@ -1,15 +1,17 @@
 "use client";
 
+import { StatusChip } from "@/components/ui/status-chip";
 import { Fragment, useMemo, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight, ChevronRight, Info } from "lucide-react";
+import { ArrowRight, ChevronRight } from "lucide-react";
 import { notify } from "@/lib/notify";
 
 import { Button } from "@/components/ui/button";
+import { InfoTip } from "@/components/ui/info-tip";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { TableCard } from "@/components/ui/table-card";
-import { KeyValues, Pill, st } from "@/components/app/settings/primitives";
+import { KeyValues, st } from "@/components/app/settings/primitives";
 import { ImportStepper } from "@/components/app/import-stepper";
 import { normalizeImportState, parseCsv } from "@/lib/agentTemplates/csv";
 import {
@@ -72,38 +74,6 @@ const CHECKS: Array<{ bucket: ReviewBucket; outcome: Outcome; label: string; blu
 ];
 
 const LIST_PAGE = 10;
-
-/** A definition on demand — click, focus or hover — for a figure whose name alone is not enough. */
-function InfoTip({ id, label, children }: { id: string; label: string; children: ReactNode }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <span className="relative inline-flex align-middle normal-case">
-      <button
-        type="button"
-        aria-label={label}
-        aria-describedby={id}
-        aria-expanded={open}
-        onClick={() => setOpen((value) => !value)}
-        onBlur={() => setOpen(false)}
-        onMouseEnter={() => setOpen(true)}
-        onMouseLeave={() => setOpen(false)}
-        className="ml-1 inline-flex size-4 items-center justify-center rounded-full text-[var(--muted)] hover:text-[var(--ink)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
-      >
-        <Info className="size-3.5" aria-hidden />
-      </button>
-      <span
-        id={id}
-        role="tooltip"
-        className={cn(
-          "absolute bottom-full left-1/2 z-10 mb-2 w-[260px] -translate-x-1/2 rounded-[8px] border border-[var(--border)] bg-[var(--surface)] p-2.5 text-xs leading-[1.5] font-normal tracking-[-0.01em] text-[var(--body)] shadow-[var(--shadow-overlay)]",
-          open ? "block" : "hidden",
-        )}
-      >
-        {children}
-      </span>
-    </span>
-  );
-}
 
 const money = (cents: number | null) => (cents === null ? "—" : formatCents(Math.round(cents)));
 
@@ -230,7 +200,7 @@ export function ImportReviewWorkspace({ plan, csv }: { plan: ReviewPlan; csv: st
         notify.warn(counted, {
           detail: `${spend ? `${spend} ` : ""}${summary.campaignStatus && summary.campaignStatus !== "active"
             ? `${campaignLabel} is ${summary.campaignStatus}, so the dialer will not serve these leads until it is active.`
-            : "The campaign could not be marked as scrubbed, so the dialer will not serve these yet. Mark it on Vendors & campaigns, or re-run the import."}`,
+            : summary.warning ? "" : "The campaign could not be marked as scrubbed, so the dialer will not serve these yet. Mark it on Vendors & campaigns, or re-run the import."}`.trim(),
         });
       try { sessionStorage.removeItem(`${IMPORT_CSV_KEY}:${plan.batchId}`); } catch { /* the tab keeps it until it closes */ }
       router.push(typeof body.redirect === "string" ? body.redirect : "/app/leads");
@@ -371,7 +341,7 @@ export function ImportReviewWorkspace({ plan, csv }: { plan: ReviewPlan; csv: st
       <TableCard
         className="min-w-0"
         title="Validation & scrub"
-        action={accountedFor ? <Pill>every row accounted for</Pill> : <Pill tone="warning">rows do not add up</Pill>}
+        action={accountedFor ? <StatusChip dot={false}>every row accounted for</StatusChip> : <StatusChip dot={false} tone="warning">rows do not add up</StatusChip>}
       >
         <table className={cn(st.table, "min-w-[520px]")}>
           <thead>
@@ -400,7 +370,7 @@ export function ImportReviewWorkspace({ plan, csv }: { plan: ReviewPlan; csv: st
                         <ChevronRight className={cn("size-4 shrink-0 text-[var(--muted)] transition-transform", expanded && "rotate-90")} aria-hidden />
                         {check.label}
                       </button>
-                      {choice && <Pill>{choice}</Pill>}
+                      {choice && <StatusChip dot={false}>{choice}</StatusChip>}
                     </span>
                   </td>
                   <td className={cn(st.td, "text-right tabular-nums")}>{count.toLocaleString()}</td>
@@ -444,14 +414,14 @@ export function ImportReviewWorkspace({ plan, csv }: { plan: ReviewPlan; csv: st
             { label: "Accepted leads", value: accepted.toLocaleString() },
             { label: "Cost per accepted", value: money(perAccepted) },
             {
-              label: <>Effective per dialable<InfoTip id="effective-per-dialable" label="What effective per dialable means">
+              label: <>Effective per dialable<InfoTip className="ml-1" label="What effective per dialable means">
                 Batch cost ÷ rows that will be one of your leads and are not suppressed: new leads plus people you already have who get this campaign added. It moves with the choices in the table.
               </InfoTip></>,
               value: money(perDialable),
             },
             ...(offTerritory
               ? [{
-                  label: <>Outside your licensed states<InfoTip id="off-territory" label="What outside your licensed states means">
+                  label: <>Outside your licensed states<InfoTip className="ml-1" label="What outside your licensed states means">
                     New leads in this file whose state is not one your members are licensed in (Team &amp; access). They import, and nobody here can sell to them. Costed at the effective per dialable; a loss, not a vendor credit.
                   </InfoTip></>,
                   value: `${offTerritory.rows.toLocaleString()} ${offTerritory.rows === 1 ? "row" : "rows"}${offTerritoryCents !== null && offTerritory.rows > 0 ? ` · ${money(offTerritoryCents)}` : ""}`,

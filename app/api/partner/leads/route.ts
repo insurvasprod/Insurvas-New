@@ -16,7 +16,10 @@ import {
 } from "@/lib/agentTemplates/service";
 import { requirePartner } from "@/lib/partnerAuth/requirePartner";
 import { assertPartnerProductApproved } from "@/lib/partnerProducts/service";
-import { screenPartnerPhone } from "@/lib/compliance/screening";
+import { evaluateTransfer, linkVerdictToLead, TransferGateUnrecorded } from "@/lib/compliance/transferGate";
+import { partnerRejectsThisMonth } from "@/lib/compliance/partnerCompliance";
+import { partnerRejectPayload } from "@/lib/compliance/transferGateCore";
+import { SCREENING_UNAVAILABLE_MESSAGE } from "@/lib/compliance/screeningCore";
 import {
   NEUTRAL_END_CALL_SCRIPT,
   recordRejectedPartnerSubmission,
@@ -211,12 +214,46 @@ export async function POST(request: NextRequest) {
     );
     if (validationError && !phoneValidationError)
       return NextResponse.json({ error: validationError }, { status: 400 });
-    const screening = await screenPartnerPhone({
+    // LA-6.2: the gate runs again at submit (lists change, minutes pass) and records its verdict.
+    const gate = await evaluateTransfer({
       tenantId: auth.context.tenantId,
       partnerId: auth.context.partnerId,
-      userId: auth.context.userId,
+      partnerUserId: auth.context.userId,
+      productCode: body.product_code,
       phone: phoneField ? values[phoneField.field_key] : undefined,
+      carrierState: market.state,
+      submissionId: body.submission_id,
+      stage: "submit",
+      values,
     });
+    const screening = gate.screening;
+    if (!screening)
+      return NextResponse.json(
+        { error: SCREENING_UNAVAILABLE_MESSAGE, code: "unavailable", blocked: true },
+        { status: 503 },
+      );
+    if (
+      gate.decision.verdict === "reject" &&
+      (gate.decision.blockingReason === "internal_dnc" ||
+        gate.decision.blockingReason === "consent_missing")
+    ) {
+      // A coded reason and a count, never the reason or the number (Q9).
+      const count = await partnerRejectsThisMonth(
+        auth.context.tenantId,
+        auth.context.partnerId,
+      );
+      return NextResponse.json(
+        partnerRejectPayload(Math.max(count, 1), NEUTRAL_END_CALL_SCRIPT),
+        { status: 422 },
+      );
+    }
+    // Any other reject that LA-1.5 itself let through (the do-not-call list could not be read):
+    // the screen did not complete, so the number is not treated as safe.
+    if (gate.decision.verdict === "reject" && screening.allowed)
+      return NextResponse.json(
+        { error: SCREENING_UNAVAILABLE_MESSAGE, code: "unavailable", blocked: true },
+        { status: 503 },
+      );
     if (!screening.allowed) {
       const status = screening.outcome === "unavailable" ? 503 : 422;
       if (screening.outcome === "tcpa_litigator") {
@@ -246,15 +283,14 @@ export async function POST(request: NextRequest) {
             },
             request,
           });
+        // Recorded in full for the agency above; the partner gets the same coded answer as any other
+        // compliance block (LA-1 audit): never which list fired, never the number.
+        const count = await partnerRejectsThisMonth(
+          auth.context.tenantId,
+          auth.context.partnerId,
+        );
         return NextResponse.json(
-          {
-            error: "This submission cannot continue",
-            code: TCPA_REJECTION_REASON,
-            blocked: true,
-            phone: rejection.maskedPhone,
-            blocked_count: rejection.count,
-            neutral_end_call_script: NEUTRAL_END_CALL_SCRIPT,
-          },
+          partnerRejectPayload(Math.max(count, 1), NEUTRAL_END_CALL_SCRIPT),
           { status: 422 },
         );
       }
@@ -310,6 +346,7 @@ export async function POST(request: NextRequest) {
       },
     );
     const lead = result.lead;
+    await linkVerdictToLead(auth.context.tenantId, gate.verdictId, lead.id);
     const failureInjection =
       process.env.NODE_ENV !== "production" &&
       request.headers.get("x-insurvas-test-fail-step") === "work_item"
@@ -378,6 +415,12 @@ export async function POST(request: NextRequest) {
       { status: result.replayed ? 200 : 201 },
     );
   } catch (error) {
+    // LA-6.2: a verdict that could not be recorded is an incomplete screen, not a bad request.
+    if (error instanceof TransferGateUnrecorded)
+      return NextResponse.json(
+        { error: error.message, code: "unavailable", blocked: true },
+        { status: error.status },
+      );
     if (error instanceof PartnerDuplicateError) {
       await audit({
         actorType: "tenant",
@@ -392,11 +435,13 @@ export async function POST(request: NextRequest) {
         },
         request,
       });
+      // Which fields matched, never which lead: the ids may be another partner's leads (LA-1 audit).
+      // The agency's audit row above keeps the full matches.
       return NextResponse.json(
         {
           error: error.message,
           code: "duplicate_lead",
-          matches: error.matches,
+          matches: error.matches.map((match) => ({ matchedOn: match.matchedOn })),
         },
         { status: 409 },
       );

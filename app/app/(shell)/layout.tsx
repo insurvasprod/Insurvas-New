@@ -14,10 +14,11 @@ import { AnnouncementStrip } from "@/components/app/announcement-strip";
 import { SubscriptionStateBanner } from "@/components/app/subscription-state-banner";
 import { getMaintenanceStatus, getActiveAnnouncements } from "@/lib/system/service";
 import { planDisplayName } from "@/lib/plans/display";
-import { ThemeToggle } from "@/components/theme-toggle";
 import { AppTopBar } from "@/components/app/app-top-bar";
 import { NotifySoundPrimer } from "@/components/app/notify-sound-primer";
 import { PortalPageTransition } from "@/components/portal/portal-page-transition";
+import { OverdueComplaintBanner } from "@/components/app/overdue-complaint-banner";
+import { overdueRegulatorComplaintCount } from "@/lib/compliance/complaintBanner";
 
 /**
  * Enforcement point 1 of 3: the MENU.
@@ -47,7 +48,7 @@ export default async function AgentShellLayout({ children }: { children: React.R
     return result.value;
   };
 
-  const [signupContext, context, outstandingSettled, entitlementSettled, maintenance, announcementsSettled, switchesSettled] =
+  const [signupContext, context, outstandingSettled, entitlementSettled, maintenance, announcementsSettled, switchesSettled, , overdueComplaints] =
     await Promise.all([
       resolveSignupContext(),
       resolveTenantContext(),
@@ -58,6 +59,8 @@ export default async function AgentShellLayout({ children }: { children: React.R
       settle(loadFeatureSwitches()),
       // Display-only; started here so `readTopBarIdentity` below finds it already fetched.
       settle(prefetchTopBarIdentity(session.sub, session.tenantId)),
+      // LA-6.4: a regulator complaint past its deadline (one counted read; 0 on any failure).
+      overdueRegulatorComplaintCount(session.tenantId),
     ]);
 
   // Self-serve users must finish the gated signup states before the normal entitlement shell.
@@ -95,10 +98,6 @@ export default async function AgentShellLayout({ children }: { children: React.R
       available.includes("true_cpa"),
   };
 
-  // No sign-out here: it is the labelled last row of the top bar's account menu, and a second copy
-  // at the foot of the rail was the "lone way out" the top-bar board rules against. The theme
-  // toggle stays until it has a home of its own.
-  const footer = <ThemeToggle tone="onBrand" />;
   const plan = {
     name: planName,
     seats: entitlement.limits.max_seats,
@@ -110,7 +109,6 @@ export default async function AgentShellLayout({ children }: { children: React.R
     <div className="portal-agent flex min-h-screen flex-col md:flex-row">
       <AgentSidebar
         menu={menu}
-        footer={footer}
         moduleAccess={moduleAccess}
         plan={plan}
       />
@@ -131,11 +129,13 @@ export default async function AgentShellLayout({ children }: { children: React.R
         {/* No context strip under the bar (removed 2026-09-28): the workspace, plan and role are in
             the account menu and the plan card, and the read-only and maintenance states it echoed
             are the banners just below, which say what to do about them. */}
-        <AppTopBar user={identity} />
+        <AppTopBar user={identity} userId={context.userId} />
         <div className="flex min-w-0 flex-1 flex-col p-4 sm:p-6 lg:p-8 lg:pt-6">
+        {/* Louder than everything below it, and not dismissible (LA-6.4). */}
+        <OverdueComplaintBanner count={overdueComplaints} />
         <MaintenanceMessage status={maintenance} />
         <AnnouncementStrip initialAnnouncements={announcements} />
-        <SubscriptionStateBanner status={entitlement.status} />
+        <SubscriptionStateBanner status={entitlement.status} isOwner={context.role === "owner"} />
         <PortalPageTransition>{children}</PortalPageTransition>
       </div>
       </main>

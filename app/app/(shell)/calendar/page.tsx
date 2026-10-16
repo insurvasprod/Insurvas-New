@@ -19,7 +19,7 @@ export default async function CalendarPage({
       <FeatureGateNotice
         guard={guard}
         featureLabel="Calendar"
-        description="The appointments booked onto your calendar, by day or by week, with each customer's own local time."
+        description="Booked appointments by day or week, in each customer's own time."
       />
     );
   // A setter books into this diary, so a setter can see it. Changing it is the availability editor,

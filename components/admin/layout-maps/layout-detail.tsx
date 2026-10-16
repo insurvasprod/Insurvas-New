@@ -55,7 +55,7 @@ export function LayoutDetail({ layoutKey, initialVersions, initialAssignments, c
   const [busy, setBusy] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [removing, setRemoving] = useState(false);
-  const [waiting, setWaiting] = useState<WaitingFile[]>([]);
+  const [waitingFor, setWaitingFor] = useState<{ fileType: string; files: WaitingFile[] } | null>(null);
   const [assignCarrier, setAssignCarrier] = useState("");
   const sampleInput = useRef<HTMLInputElement>(null);
 
@@ -65,14 +65,23 @@ export function LayoutDetail({ layoutKey, initialVersions, initialAssignments, c
   // Removed: no live version and no draft (removeLayout); a new version brings it back.
   const removed = !openDraft && !liveVersion;
 
-  // A different version opened, or the same one saved: the form starts from what is stored.
-  useEffect(() => { if (open) { setDraft(draftOf(open)); setProblems([]); } }, [open?.id, open?.updatedAt]); // eslint-disable-line react-hooks/exhaustive-deps
+  // A different version opened, or the same one saved: the form starts from what is stored
+  // (adjusted while rendering, not in an effect, so it never renders the old draft first).
+  const openKey = open ? `${open.id}|${open.updatedAt}` : "";
+  const [draftKey, setDraftKey] = useState(openKey);
+  if (draftKey !== openKey) {
+    setDraftKey(openKey);
+    if (open) { setDraft(draftOf(open)); setProblems([]); }
+  }
 
-  // Files held back for want of a layout of this type: real headers to fill a draft from.
+  // Files held back for want of a layout of this type: real headers to fill a draft from. Kept with
+  // the file type they were fetched for, and shown only while that type is open for editing.
+  const waiting = open && editable && waitingFor?.fileType === open.fileType ? waitingFor.files : [];
   useEffect(() => {
-    if (!open || !editable) { setWaiting([]); return; }
+    if (!open || !editable) return;
     let live = true;
-    call<{ files: WaitingFile[] }>(`/api/admin/layout-maps/sample-headers?file_type=${open.fileType}`).then((data) => { if (live) setWaiting(data.files); }).catch(() => { if (live) setWaiting([]); });
+    const fileType = open.fileType;
+    call<{ files: WaitingFile[] }>(`/api/admin/layout-maps/sample-headers?file_type=${fileType}`).then((data) => { if (live) setWaitingFor({ fileType, files: data.files }); }).catch(() => { if (live) setWaitingFor({ fileType, files: [] }); });
     return () => { live = false; };
   }, [open?.id, open?.fileType, editable]); // eslint-disable-line react-hooks/exhaustive-deps
 

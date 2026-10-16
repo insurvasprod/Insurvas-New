@@ -83,10 +83,14 @@ export const transitionSchema = z.object({
   issued_on: isoDate.nullish(),
 }).strict();
 
+/** How far ahead of the server's clock a submission time may be: the agent's device clock drifts. */
+export const SUBMITTED_AT_SKEW_MS = 5 * 60_000;
+
 export const submissionSchema = z.object({
   reference: z.string().max(120).nullish(),
   reference_kind: z.enum(["application_no", "policy_no"]).default("application_no"),
-  submitted_at: z.string().datetime({ offset: true }).nullish(),
+  // When it was sent on the carrier's portal: never later than now (plus a few minutes of clock skew).
+  submitted_at: z.string().datetime({ offset: true }).refine((v) => Date.parse(v) <= Date.now() + SUBMITTED_AT_SKEW_MS, { message: "The submission time cannot be in the future." }).nullish(),
   submitted_via: z.enum(["extension", "copy_assist", "carrier_portal_manual"]),
   notes: z.string().max(2000).nullish(),
 }).strict();

@@ -1,7 +1,6 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { AgentSettingsOverview } from "@/components/app/agent-settings-overview";
 import { AppointmentVaultSettings } from "@/components/app/appointment-vault-settings";
 import { CarrierLibrarySettings } from "@/components/app/carrier-library-settings";
 import { DispositionSettings } from "@/components/app/disposition-settings";
@@ -13,7 +12,11 @@ import { CallingWindowSettingsPanel } from "@/components/app/calling-window-sett
 import { LeadPostKeysSettings } from "@/components/app/lead-post-keys-settings";
 import { TeamSettings } from "@/components/app/team-settings";
 import { TemplateSettings } from "@/components/app/template-settings";
-import { ManagedElsewhereSettings } from "@/components/app/settings/managed-settings";
+import { BillingSettings } from "@/components/app/settings/billing-settings";
+import { BusinessIdentitySettings } from "@/components/app/settings/business-identity";
+import { NotificationPreferences } from "@/components/app/settings/notification-preferences";
+import { IntegrationsSettings } from "@/components/app/settings/integrations";
+import { SettingsHistory } from "@/components/app/settings/settings-history";
 import {
   SalesAiAssistant, SalesCarriersSettings, SalesDisclosures, SalesExtension, SalesFieldMaps, SalesFieldSets,
   SalesPipelineSync, SalesQaPreferences, SalesQuotationTemplates, SalesUnderwritingTemplates, SalesWelcomePack,
@@ -22,20 +25,25 @@ import type { TeamSnapshot } from "@/lib/tenantTeam/service";
 import type { WorkspaceSnapshot } from "@/lib/settings/workspaceSnapshot";
 
 /**
- * Which component draws each settings section (UX-4). Keyed by the section ids in
+ * Which component draws each in-page settings section (UX-4). Keyed by the section ids in
  * `lib/settings/sections.ts`, which owns the rail's order, labels and groups.
  *
- * Adding a section is one entry there and one entry here. `lib/settings/panels.test.mjs` fails
+ * Adding an in-page section is one entry there and one entry here; a section that lives on its own
+ * module's screen (`route`) is one entry there and none here. `lib/settings/panels.test.mjs` fails
  * when a section has no panel (it would render "not available") or a panel has no section (it would
  * be unreachable — the defect the calendar and cadence editors once shipped with).
  */
-export type SettingsPanelContext = { team: TeamSnapshot; workspace: WorkspaceSnapshot };
+/**
+ * The team and workspace snapshots are read for an owner only (LA-8.1 opened Settings to every role,
+ * and only owner sections draw from them); a panel that needs one and is handed null draws nothing.
+ */
+export type SettingsPanelContext = { team: TeamSnapshot | null; workspace: WorkspaceSnapshot | null };
 
 export const SETTINGS_PANELS: Record<string, (context: SettingsPanelContext) => ReactNode> = {
-  "agency-profile": ({ team, workspace }) => <AgentSettingsOverview team={team} workspace={workspace} />,
+  "business-identity": ({ team, workspace }) => <BusinessIdentitySettings team={team} workspace={workspace} />,
   "carrier-library": () => <CarrierLibrarySettings />,
   "states-licences": () => <AppointmentVaultSettings inSettings />,
-  "team-access": ({ team, workspace }) => <TeamSettings initial={team} workspace={workspace} />,
+  "team-access": ({ team, workspace }) => (team && workspace ? <TeamSettings initial={team} workspace={workspace} /> : null),
   calendar: () => <CalendarAvailabilitySettings />,
   cadence: () => <CadenceSettings />,
   "calling-windows": () => <CallingWindowSettingsPanel />,
@@ -55,6 +63,8 @@ export const SETTINGS_PANELS: Record<string, (context: SettingsPanelContext) => 
   "sales-pipeline-sync": () => <SalesPipelineSync />,
   "sales-ai": () => <SalesAiAssistant />,
   "sales-extension": () => <SalesExtension />,
-  alerts: () => <ManagedElsewhereSettings which="alerts" />,
-  billing: () => <ManagedElsewhereSettings which="billing" />,
+  alerts: () => <NotificationPreferences />,
+  integrations: () => <IntegrationsSettings />,
+  "settings-history": () => <SettingsHistory />,
+  billing: () => <BillingSettings />,
 };

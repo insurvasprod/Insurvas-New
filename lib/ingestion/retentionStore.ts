@@ -64,12 +64,14 @@ export async function loadBoard(viewer: Viewer, only?: { carrierId: string; poli
   const today = (policies.map((p) => p.as_of as string | null).filter(Boolean).sort().at(-1) as string | undefined) ?? utcToday;
   const ruleIds = [...new Set(policies.map((p) => p.retention_rule_id).filter(Boolean))] as string[];
   const [rules, reinstatement, changes, carriers] = await Promise.all([
-    ruleIds.length ? db().from("carrier_retention_rule").select("id, grace_days").in("id", ruleIds) : { data: [] },
+    ruleIds.length ? db().from("carrier_retention_rule").select("id, rule_type, window_days, grace_days").in("id", ruleIds) : { data: [] },
     db().from("carrier_retention_rule").select("tenant_id, carrier_id, rule_type, window_days, cleared, effective_from, created_at").in("rule_type", ["reinstatement", "conservation", "cancellation_request"]).or(`tenant_id.eq.${viewer.tenantId},tenant_id.is.null`).lte("effective_from", today).order("effective_from", { ascending: true }).order("created_at", { ascending: true }),
-    everyRow(() => db().from("policy_change").select("carrier_id, policy_number, field_name, old_value, new_value, to_snapshot_date").eq("tenant_id", viewer.tenantId).in("field_name", ["paid_to_date", "carrier_status_raw"]).gte("to_snapshot_date", new Date(Date.now() - 120 * 86_400_000).toISOString().slice(0, 10)).order("to_snapshot_date").order("detected_at")),
+    everyRow(() => db().from("policy_change").select("carrier_id, policy_number, field_name, old_value, new_value, to_snapshot_date").eq("tenant_id", viewer.tenantId).in("field_name", ["paid_to_date", "carrier_status_raw"]).gte("to_snapshot_date", new Date(Date.now() - 120 * 86_400_000).toISOString().slice(0, 10)).order("to_snapshot_date").order("detected_at").order("id")),
     db().from("carriers").select("id, name"),
   ]);
   const grace = new Map<string, number | null>((rules.data ?? []).map((r: Loose) => [r.id, r.grace_days]));
+  // The policy's own rule, when it is a first-payment one: its window counts a missed first draft down.
+  const firstWindow = new Map<string, number | null>((rules.data ?? []).filter((r: Loose) => r.rule_type === "first_payment").map((r: Loose) => [r.id, r.window_days]));
   // Each window: the agency's own (unless cleared, then back to the platform's), else the platform's;
   // the latest in force. Reinstatement, conservation and cancellation-request alike.
   const windowFor = (ruleType: string) => {
@@ -105,6 +107,7 @@ export async function loadBoard(viewer: Viewer, only?: { carrierId: string; poli
       reinstatementDays: reinstate.get(p.carrier_id) ?? null, lastSnapshotDate: p.last_snapshot_date,
       noticeSince: wordSince.get(key) ?? p.first_seen_date ?? null,
       noticeWindowDays: null as number | null,
+      firstPaymentWindowDays: p.retention_rule_id ? firstWindow.get(p.retention_rule_id) ?? null : null,
     };
     const first = reasonFor(input, today);
     if (first === "conservation") input.noticeWindowDays = conservationWindow.get(p.carrier_id) ?? null;

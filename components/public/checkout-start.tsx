@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { notify } from "@/lib/notify";
 
 import { Button } from "@/components/ui/button";
@@ -9,8 +9,12 @@ import { Input } from "@/components/ui/input";
 /**
  * The part of checkout that acts: the coupon card, the button that leaves for the provider, and the
  * line saying the card never reaches us. The plan, dates and summary around it are the server's.
+ *
+ * `disclosure` is the automatic-renewal statement (price, period, first charge date, taxes, where
+ * to cancel). It sits directly above the button so it is read before the buyer leaves for the
+ * provider, as automatic-renewal laws expect of a "clear and conspicuous" disclosure.
  */
-export function CheckoutStart() {
+export function CheckoutStart({ disclosure }: { disclosure?: ReactNode }) {
   const [couponCode, setCouponCode] = useState("");
   const [valid, setValid] = useState<{ code: string; summary: string | null } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -101,7 +105,13 @@ export function CheckoutStart() {
         )}
       </div>
 
-      <Button onClick={start} disabled={busy} className="h-11 w-full px-4">
+      {disclosure ? (
+        <p id="renewal-terms" className="text-sm leading-normal tracking-[-0.02em] text-[var(--body)]">
+          {disclosure}
+        </p>
+      ) : null}
+
+      <Button onClick={start} disabled={busy} aria-describedby={disclosure ? "renewal-terms" : undefined} className="h-11 w-full px-4">
         Continue to secure checkout
       </Button>
 

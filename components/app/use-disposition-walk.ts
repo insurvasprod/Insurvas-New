@@ -76,14 +76,18 @@ export function useDispositionWalk({ workItemId, readOnly, enabled = true, onRec
   const [callbackSubtype, setCallbackSubtype] = useState("");
   const [callbackLocal, setCallbackLocal] = useState("");
   const [callbackAssignee, setCallbackAssignee] = useState("");
+  // Chosen by the agent only when the customer's zone cannot be derived (unknown or split state).
+  const [callbackTimezone, setCallbackTimezone] = useState("");
   // One key per outcome attempt, kept across retries: a retry after a lost response must find the
   // callback the first attempt booked rather than book a second one.
   const [idempotencyKey] = useState(() => crypto.randomUUID());
 
   const load = useCallback(async () => {
     setLoading(true); setError("");
-    const url = attemptId ? `/api/app/dialer/attempt/${encodeURIComponent(attemptId)}/disposition` : `/api/app/inbound/disposition?work_item_id=${encodeURIComponent(workItemId)}`;
-    const response = await fetch(url, { cache: "no-store" });
+    // Inbound: opening the wizard STARTS a walk, so it is a POST (a GET never writes).
+    const response = attemptId
+      ? await fetch(`/api/app/dialer/attempt/${encodeURIComponent(attemptId)}/disposition`, { cache: "no-store" })
+      : await fetch("/api/app/inbound/disposition", { method: "POST", cache: "no-store", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "start", work_item_id: workItemId }) });
     const body = await response.json().catch(() => null);
     // A walk finished on an earlier call suggested that call's outcome; this call chooses its own.
     if (!response.ok) setError(body?.error ?? "Could not load the call outcome wizard."); else { setWizard(body); setDispositionKey(body.callMode?.earlierWalk ? "" : body.walk.final_disposition_key ?? ""); }
@@ -134,12 +138,15 @@ export function useDispositionWalk({ workItemId, readOnly, enabled = true, onRec
   }
 
   // Everything below reads the loaded walk; null until it has loaded.
-  const view = wizard ? derive(wizard, { editingSequence, answer, dispositionKey, callbackAssignee, callbackLocal, phase }) : null;
+  const view = wizard ? derive(wizard, { editingSequence, answer, dispositionKey, callbackAssignee, callbackLocal, callbackTimezone, phase }) : null;
 
   function next() {
     setError("");
     if (phase === "outcome") setPhase(view?.isCallback ? "details" : "review");
-    else if (phase === "details") setPhase("review");
+    else if (phase === "details") {
+      if (!view?.customerZone) { setError("Choose the customer's timezone before booking the callback."); return; }
+      setPhase("review");
+    }
   }
   function back() {
     setError("");
@@ -157,7 +164,7 @@ export function useDispositionWalk({ workItemId, readOnly, enabled = true, onRec
         ...(wizard?.walk.id && wizard.steps.length && !wizard.callMode?.earlierWalk ? { walk_id: wizard.walk.id } : {}),
         ...(isCallback ? {
           callback_local: callbackLocal,
-          customer_timezone: wizard?.customerTimezone,
+          customer_timezone: view?.customerZone ?? undefined,
           ...(callbackSubtype.trim() ? { callback_note: callbackSubtype.trim() } : {}),
           ...(callbackAssignee ? { assigned_to: callbackAssignee } : {}),
         } : {}),
@@ -173,12 +180,14 @@ export function useDispositionWalk({ workItemId, readOnly, enabled = true, onRec
       callback_local: isCallback ? callbackLocal : undefined,
       callback_assigned_to: isCallback && callbackAssignee ? callbackAssignee : undefined,
       callback_idempotency_key: isCallback ? idempotencyKey : undefined,
+      // Only when the agent chose it; a derived zone is resolved again on the server.
+      callback_timezone: isCallback && callbackTimezone ? callbackTimezone : undefined,
     });
   }
 
   return {
     wizard, loading, saving, error, answer, setAnswer, editingSequence, phase,
-    dispositionKey, setDispositionKey, callbackSubtype, setCallbackSubtype, callbackLocal, setCallbackLocal, callbackAssignee, setCallbackAssignee,
+    dispositionKey, setDispositionKey, callbackSubtype, setCallbackSubtype, callbackLocal, setCallbackLocal, callbackAssignee, setCallbackAssignee, callbackTimezone, setCallbackTimezone,
     load, beginEdit, cancelEdit, saveAnswer, next, back, record, view,
   };
 }
@@ -186,7 +195,7 @@ export function useDispositionWalk({ workItemId, readOnly, enabled = true, onRec
 export type DispositionWalk = ReturnType<typeof useDispositionWalk>;
 export type WalkView = NonNullable<DispositionWalk["view"]>;
 
-function derive(wizard: WizardData, s: { editingSequence: number | null; answer: unknown; dispositionKey: string; callbackAssignee: string; callbackLocal: string; phase: Phase }) {
+function derive(wizard: WizardData, s: { editingSequence: number | null; answer: unknown; dispositionKey: string; callbackAssignee: string; callbackLocal: string; callbackTimezone: string; phase: Phase }) {
   const nodesById = new Map(wizard.flow.nodes.map((node) => [node.id, node]));
   const node = s.editingSequence === null ? wizard.currentNode : nodesById.get(wizard.steps.find((step) => step.sequence === s.editingSequence)?.node_id ?? "") ?? null;
   const multi = node?.node_type === "multi_select";
@@ -202,7 +211,9 @@ function derive(wizard: WizardData, s: { editingSequence: number | null; answer:
   const assigneeName = s.callbackAssignee ? wizard.assignees.find((person) => person.id === s.callbackAssignee)?.name ?? "The assignee" : null;
   const orderedSteps = [...wizard.steps].sort((x, y) => x.sequence - y.sequence);
   const firstSequence = orderedSteps.length ? Math.min(...orderedSteps.map((step) => step.sequence)) : null;
-  const callbackAt = isCallback && s.callbackLocal ? zonedLocalToUtc(s.callbackLocal, wizard.customerTimezone) : null;
+  // The customer's zone: derived on the server, or — for an unknown or split state — the agent's choice.
+  const customerZone = wizard.customerTimezone ?? (s.callbackTimezone || null);
+  const callbackAt = isCallback && s.callbackLocal && customerZone ? zonedLocalToUtc(s.callbackLocal, customerZone) : null;
 
   // The stepper is the walk as it happened, then the three fixed steps. No "N of 5": a configured
   // flow has as many questions as the tenant gave it.
@@ -218,5 +229,5 @@ function derive(wizard: WizardData, s: { editingSequence: number | null; answer:
       state: (completed ? "done" : walking ? "upcoming" : index < phaseIndex ? "done" : index === phaseIndex ? "current" : "upcoming") as Step["state"],
     })),
   ];
-  return { nodesById, node, multi, selected, completed, options, chosen, isCallback, customerName, myName, assigneeName, orderedSteps, firstSequence, callbackAt, walking, steps };
+  return { nodesById, node, multi, selected, completed, options, chosen, isCallback, customerName, myName, assigneeName, orderedSteps, firstSequence, callbackAt, customerZone, walking, steps };
 }

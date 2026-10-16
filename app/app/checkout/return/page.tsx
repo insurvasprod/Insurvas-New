@@ -39,7 +39,7 @@ export default async function CheckoutReturnPage() {
       {/* Not a direct `main` child: the shell's `.portal-agent > main` reserves 264px for a sidebar. */}
       <div className="w-full max-w-[680px]">
         <main className="m-in rounded-lg border border-border bg-card p-6 sm:p-10">
-          <h1 className="mt-2 text-center text-[32px] font-semibold leading-[1.13] tracking-[-0.025em] text-foreground">
+          <h1 className="mt-2 text-center text-title-lg font-semibold leading-[1.13] tracking-[-0.025em] text-foreground">
             Confirming with the payment provider
           </h1>
           <p className="mt-2.5 text-center text-base leading-normal tracking-[-0.02em] text-muted-foreground">

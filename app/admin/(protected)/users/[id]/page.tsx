@@ -16,7 +16,7 @@ import {
 } from "@/components/admin/user-detail-tabs";
 
 const CARD = "min-w-0 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] p-5";
-const CARD_TITLE = "m-0 text-[18px] leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]";
+const CARD_TITLE = "m-0 text-title-sm leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]";
 
 /**
  * The admin user record (board p-adm-user-detail): header, chips and facts, then the tabbed
@@ -70,11 +70,11 @@ export default async function UserDetailPage({
               <h2 id="user-suspension-title" className={CARD_TITLE}>
                 Suspension reason
               </h2>
-              <p className="m-0 mt-3 text-[14px] leading-[1.5] tracking-[-0.02em] break-words text-[var(--body)]">
+              <p className="m-0 mt-3 text-sm leading-[1.5] tracking-[-0.02em] break-words text-[var(--body)]">
                 {user.suspensionReason ?? suspension?.reason ?? "No reason was recorded."}
               </p>
               {(suspendedBy || suspendedWhen) && (
-                <div className="mt-2 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">
+                <div className="mt-2 text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">
                   {suspendedBy}
                   {suspendedBy && suspendedWhen && " · "}
                   {suspendedWhen && <DashboardUtcTime iso={suspendedWhen} text={utcDateTime(suspendedWhen)} />}

@@ -60,8 +60,8 @@ function Facts({ items }: { items: { label: string; value: string }[] }) {
     <dl className="m-0 grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-4">
       {items.map((item) => (
         <div key={item.label} className="min-w-0">
-          <dt className="text-[12px] leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]">{item.label}</dt>
-          <dd className="m-0 text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] break-words text-[var(--ink)] tabular-nums">
+          <dt className="text-xs leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]">{item.label}</dt>
+          <dd className="m-0 text-sm leading-[1.5] font-semibold tracking-[-0.02em] break-words text-[var(--ink)] tabular-nums">
             {item.value}
           </dd>
         </div>
@@ -89,7 +89,7 @@ function SubscriptionCard({
       aria-labelledby="overview-subscription"
       className="flex min-w-0 flex-1 flex-col gap-5 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] p-5"
     >
-      <h2 id="overview-subscription" className="m-0 text-[18px] leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]">
+      <h2 id="overview-subscription" className="m-0 text-title-sm leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]">
         Subscription
       </h2>
 
@@ -120,7 +120,7 @@ function SubscriptionCard({
           )}
         </>
       ) : (
-        <p className="m-0 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">
+        <p className="m-0 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">
           Nothing sold to this tenant yet — no plan, no allowances, no seat limit.
         </p>
       )}
@@ -150,7 +150,7 @@ function SubscriptionCard({
           )}
         </div>
       ) : (
-        <p className="m-0 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">
+        <p className="m-0 text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">
           Read-only for your role.
         </p>
       )}
@@ -169,13 +169,13 @@ export async function TenantOverviewTab({ tenantId, admin }: TenantTabProps) {
   const suspension = suspended ? await fetchLatestSuspension(tenantId) : null;
 
   const account = [
-    { label: "Tenant id", value: <span className="font-mono text-[13px] font-normal break-all">{tenant.id}</span> },
+    { label: "Tenant id", value: <span className="font-mono text-sm font-normal break-all">{tenant.id}</span> },
     {
       label: "Owner",
       value: owner ? (
         <>
           {owner.name}
-          <span className="block text-[12px] leading-[1.5] font-normal tracking-[-0.01em] text-[var(--muted)]">{owner.email}</span>
+          <span className="block text-xs leading-[1.5] font-normal tracking-[-0.01em] text-[var(--muted)]">{owner.email}</span>
         </>
       ) : (
         "No owner yet"

@@ -1,13 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, Users } from "lucide-react";
 import { notify } from "@/lib/notify";
 
 import { Button } from "@/components/ui/button";
 import { DataToolbar, RefreshButton, toolbarControl } from "@/components/ui/data-toolbar";
-import { ErrorState, SectionLoading } from "@/components/ui/page-states";
+import { EmptyState, ErrorState, SectionLoading } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
 import { TableCard } from "@/components/ui/table-card";
 import { fullHeightCard, useFittingPageSize } from "@/components/app/lead-ops-view-tabs";
@@ -165,7 +166,7 @@ export function LeadListWorkspace() {
         {atCapacity && (
           // Said before the attempt, not after. The server skips a full member anyway; being
           // told by a toast after selecting four hundred leads is a worse way to learn it.
-          <p role="status" className="rounded-lg border border-[var(--warning)]/30 bg-[var(--warning-surface)] px-4 py-2.5 text-sm text-[var(--warning-ink)]">{chosen?.name} is at capacity — the server will skip them. Choose somebody else or free some of their open leads.</p>
+          <p role="status" className="rounded-lg border border-[var(--warning)]/30 bg-[var(--warning-surface)] px-4 py-2.5 text-sm text-[var(--warning-ink)]">Choose someone else — {chosen?.name} is at capacity.</p>
         )}
 
         <TableCard
@@ -252,13 +253,21 @@ export function LeadListWorkspace() {
                 // assigned" is a claim about leads that exist; saying it about a list that received
                 // none is asserting something nothing measured, which is the empty state this audit
                 // has spent a week removing elsewhere.
-                <p className="px-4 py-8 text-center text-sm text-muted-foreground">
-                  {open.leadsReceived === 0
-                    ? "No leads have arrived against this list yet, so there is nothing to hand out."
-                    : unassignedOnly
-                      ? "Every lead in this list is already assigned."
-                      : "No leads match this filter."}
-                </p>
+                open.leadsReceived === 0 ? (
+                  <EmptyState
+                    title="No leads have arrived against this list yet"
+                    hint="Import a file against it to hand leads out."
+                    action={<Button asChild type="button" variant="outline"><Link href="/app/import">Import a list</Link></Button>}
+                  />
+                ) : unassignedOnly ? (
+                  <EmptyState
+                    title="Every lead in this list is already assigned"
+                    hint="See who has them under All leads."
+                    action={<Button type="button" variant="outline" onClick={() => showUnassigned(false)}>Show all leads</Button>}
+                  />
+                ) : (
+                  <EmptyState title="No leads match this filter" hint="Switch back to unassigned only." />
+                )
               )}
             </>
           )}

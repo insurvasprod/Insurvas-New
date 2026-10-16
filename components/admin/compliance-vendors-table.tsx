@@ -1,11 +1,12 @@
 "use client";
 
+import { StatusChip } from "@/components/ui/status-chip";
 import { useCallback, useId, useMemo, useState, useSyncExternalStore, type FormEvent } from "react";
 
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 import { BoardStatGrid, BoardStatTile } from "@/components/admin/board-stat-tile";
-import { Callout, Field, KeyValues, Pill, control, st } from "@/components/app/settings/primitives";
+import { Callout, Field, KeyValues, control, st, pillTone } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { DataToolbar, RefreshButton } from "@/components/ui/data-toolbar";
 import { PageHeader } from "@/components/ui/page-header";
@@ -221,9 +222,9 @@ export function ComplianceVendorsTable({ initial }: { initial: ComplianceRegistr
                     </td>
                     <td className={st.td} title={COMPLIANCE_VENDOR_TYPE_LABELS[vendor.vendor_type]}>{vendor.vendor_type}</td>
                     <td className={st.td}>
-                      {vendor.is_enabled ? <Pill tone="success" dot>Enabled</Pill> : <Pill tone="neutral" dot>Disabled</Pill>}
+                      {vendor.is_enabled ? <StatusChip tone="good" dot>Enabled</StatusChip> : <StatusChip tone="neutral" dot>Disabled</StatusChip>}
                     </td>
-                    <td className={st.td} title={pill.hint}><Pill tone={pill.tone} dot>{pill.label}</Pill></td>
+                    <td className={st.td} title={pill.hint}><StatusChip tone={pillTone(pill.tone)} dot>{pill.label}</StatusChip></td>
                     <td className={cn(st.td, "whitespace-nowrap tabular-nums")} title={timeTitle(vendor.last_checked_at) ?? "No lookup or connection test in the last 7 days"}>
                       {shortUtc(vendor.last_checked_at, nowYear) ?? "—"}
                     </td>
@@ -246,9 +247,9 @@ export function ComplianceVendorsTable({ initial }: { initial: ComplianceRegistr
           {editing && health && (
             <div className="flex flex-col gap-4 rounded-[12px] border border-[var(--border)] p-4">
               <div className="flex flex-wrap items-center gap-2">
-                {editing.is_enabled ? <Pill tone="success" dot>Enabled</Pill> : <Pill tone="neutral" dot>Disabled</Pill>}
-                <Pill tone={health.tone} dot>{health.label}</Pill>
-                <span className="text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">{roles.get(editing.id) ?? "Unused"} · {ROLE_HINT[roles.get(editing.id) ?? "Unused"]}</span>
+                {editing.is_enabled ? <StatusChip tone="good" dot>Enabled</StatusChip> : <StatusChip tone="neutral" dot>Disabled</StatusChip>}
+                <StatusChip tone={pillTone(health.tone)} dot>{health.label}</StatusChip>
+                <span className="text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">{roles.get(editing.id) ?? "Unused"} · {ROLE_HINT[roles.get(editing.id) ?? "Unused"]}</span>
               </div>
               <KeyValues
                 items={[
@@ -260,7 +261,7 @@ export function ComplianceVendorsTable({ initial }: { initial: ComplianceRegistr
                   { label: "Priority", value: String(editing.priority) },
                 ]}
               />
-              <p className="m-0 min-w-0 truncate font-mono text-[12px] text-[var(--muted)]" title={editing.endpoint}>{editing.endpoint}</p>
+              <p className="m-0 min-w-0 truncate font-mono text-xs text-[var(--muted)]" title={editing.endpoint}>{editing.endpoint}</p>
               <div className="flex flex-wrap items-center gap-2.5">
                 <Button type="button" variant="outline" onClick={() => test(editing)} disabled={testing === editing.id}>
                   {testing === editing.id ? "Testing…" : "Test connection"}
@@ -297,7 +298,7 @@ export function ComplianceVendorsTable({ initial }: { initial: ComplianceRegistr
                 <input id={`${formId}-cost`} className={control} required type="number" min="0" value={form.cost_per_lookup_cents} onChange={(e) => setForm({ ...form, cost_per_lookup_cents: e.target.value })} />
               </Field>
               {!editing && (
-                <label htmlFor={`${formId}-enabled`} className="flex items-center gap-2 pt-8 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--body)]">
+                <label htmlFor={`${formId}-enabled`} className="flex items-center gap-2 pt-8 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--body)]">
                   <input id={`${formId}-enabled`} type="checkbox" checked={form.is_enabled} onChange={(e) => setForm({ ...form, is_enabled: e.target.checked })} /> Enabled
                 </label>
               )}

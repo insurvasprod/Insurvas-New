@@ -7,7 +7,7 @@ import { loadFeatureSwitches } from "@/lib/features/killSwitch";
 import { applyKillSwitches } from "@/lib/features/killSwitchRules";
 import { visibleDashboardTiles } from "@/lib/dashboard/tiles";
 import { setupChecklistForState } from "@/lib/dashboard/checklist";
-import { loadSetupProgress, recordSetupFinished } from "@/lib/dashboard/setupProgress";
+import { loadSetupProfile, loadSetupProgress, recordSetupFinished } from "@/lib/dashboard/setupProgress";
 import { getDashboardOnboardingState } from "@/lib/dashboard/service";
 import { resolveRoleHome, splitHomeSections, type HomeSectionKey, type ResolvedHome } from "@/lib/dashboard/roleHome";
 import { greeting, longDate } from "@/lib/dashboard/todayMath";
@@ -22,6 +22,10 @@ import { getWorkspaceTimezone } from "@/lib/agencyProfile/timezone";
 import { getDashboardToday, readFirstName, type DashboardToday } from "@/lib/dashboard/today";
 import { DashboardStreamed, DashboardTodaySkeleton, NextCallback } from "@/components/app/dashboard-today";
 import { DashboardMetrics } from "@/components/app/dashboard-metrics";
+import { DashboardMoneyList, DashboardMoneyLoading, DashboardMoneyStrip, DashboardUpgrade } from "@/components/app/dashboard-money";
+import { getDashboardMoney, type DashboardMoney } from "@/lib/dashboard/money";
+import { DashboardStage } from "@/components/ui/dashboard-stage";
+import { LiveStamp } from "@/components/ui/live-stamp";
 import type { ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -164,17 +168,19 @@ export default async function AgentDashboardPage() {
   // it afterwards cost a second serial round trip, ~170ms of ~340ms of data time on this page,
   // for a criterion ("loads in under 1 second") with no room to spare. The greeting's two reads
   // (the agency's zone, the reader's first name) ride in the same round trip.
-  const [entitlement, onboardingState, switches, setupProgress, workspaceZone, firstName] = await Promise.all([
+  const [entitlement, onboardingState, switches, setupProgress, setupProfile, workspaceZone, firstName] = await Promise.all([
     getEntitlement(context.tenantId),
     getDashboardOnboardingState(context.tenantId),
     loadFeatureSwitches(),
     loadSetupProgress(context.tenantId),
+    loadSetupProfile(context.tenantId),
     getWorkspaceTimezone(context.tenantId).catch(() => null),
     readFirstName(context.userId),
   ]);
   const available = applyKillSwitches(entitlement.features, switches, context.tenantId);
   const tiles = visibleDashboardTiles(available, context.role);
-  const checklist = setupChecklistForState(onboardingState, setupProgress);
+  // Only the steps this plan can do (and the business profile asked for), so every plan can finish.
+  const checklist = setupChecklistForState(onboardingState, setupProgress, { features: available, profile: setupProfile });
   // LA-0.3: the first render that finds every step done stamps it, so the checklist never returns.
   // After the response, so the stamp never holds up the page.
   if (checklist.complete && !setupProgress.finished) afterResponse(() => recordSetupFinished(context.tenantId));
@@ -184,9 +190,18 @@ export default async function AgentDashboardPage() {
   // switching `callback_calendar` off platform-wide hid the callbacks TILE and left the card
   // rendering and still querying due callbacks. Every section below is now decided from
   // `available` by the role home, the same way the tiles are.
-  const home = resolveRoleHome(available, context.role);
+  // Sixteen #15: the raw plan (code, grants, staff switch-offs) picks the dashboard profile and
+  // decides the one upgrade tile; every link stays gated by `available`.
+  const home = resolveRoleHome(available, context.role, { code: entitlement.plan_code, features: entitlement.features, disabled: entitlement.disabled_features });
+  // A profile with too few tiles skips the dashboard for the plan's primary working screen.
+  if (home.landing) redirect(home.landing);
   const { before, streamed, after } = splitHomeSections(home.sections);
   const shown = new Set(home.sections);
+  // Money and retention (LA-4.18) and the upgrade tile's count: one streamed read, started now so it
+  // runs beside the "today" read rather than after it.
+  const money: Promise<DashboardMoney> | null = home.money.length > 0 || home.upgrade
+    ? getDashboardMoney({ context, wanted: home.money, upgrade: Boolean(home.upgrade) }).catch(() => ({ figures: [], exposurePolicies: null }))
+    : null;
 
   // eslint-disable-next-line react-hooks/purity -- a server render: "today" is as of this request.
   const serverNow = Date.now();
@@ -218,10 +233,22 @@ export default async function AgentDashboardPage() {
         <CallbacksCard tenantId={context.tenantId} href={callbacksHref} />
       </Suspense>
     ) : null,
-    // The registry's tiles as a metrics grid: every way in the old "Your workspace" grid gave, now
-    // led by its live number.
+    // Money and retention: the strip on a money profile, a list beside the day's strip otherwise.
+    money: money && shown.has("money") ? (
+      <Suspense fallback={<DashboardMoneyLoading as={home.moneyAs} />}>
+        {home.moneyAs === "strip" ? <DashboardMoneyStrip money={money} /> : <DashboardMoneyList money={money} />}
+      </Suspense>
+    ) : null,
+    // The one upgrade tile, in its fixed place under the strip; it shows only when the count is above zero.
+    upgrade: money && home.upgrade ? (
+      <Suspense fallback={null}>
+        <DashboardUpgrade money={money} featureHref={home.upgrade.featureHref} rowsHref={home.upgrade.rowsHref} />
+      </Suspense>
+    ) : null,
+    // The registry's tiles as one "Your modules" list: every way in, with a live figure where the
+    // reader may read it at that scope (components/app/dashboard-metrics.tsx).
     shortcuts: tiles.length > 0 ? (
-      <DashboardMetrics tiles={tiles} tenantId={context.tenantId} />
+      <DashboardMetrics tiles={tiles} tenantId={context.tenantId} role={context.role} />
     ) : (
       /* Two different empty states, because they have two different causes and two different
          answers. The entitlement genuinely granting nothing is the owner's problem to solve. A
@@ -242,14 +269,17 @@ export default async function AgentDashboardPage() {
   const name = firstName ? `, ${firstName}` : "";
 
   // m-stagger: the blocks arrive 32ms apart, capped at the eighth, then the rest land together.
+  // DashboardStage: the glass layer's ambient ground; LiveStamp: how fresh this render's figures are.
   return (
+    <DashboardStage>
     <div className="portal-dashboard m-stagger mx-auto flex w-full max-w-[1400px] flex-col gap-4">
       <PageHeader
         size="hero"
         title={`${greeting(serverNow, zone)}${name}`}
         description={longDate(serverNow, zone)}
-        actions={(today && callbacksHref) || primary ? (
+        actions={
           <>
+            <LiveStamp updatedAt={serverNow} />
             {today && callbacksHref && (
               <Suspense fallback={null}>
                 <NextCallbackSlot today={today} href={callbacksHref} serverNow={serverNow} />
@@ -260,7 +290,7 @@ export default async function AgentDashboardPage() {
             ))}
             {primary && <Button asChild><Link href={primary.href}>{primary.label}</Link></Button>}
           </>
-        ) : undefined}
+        }
       />
 
       <Run keys={before} slots={slots} setupOpen={shown.has("setup") && !checklist.complete} />
@@ -273,5 +303,6 @@ export default async function AgentDashboardPage() {
 
       <Run keys={after} slots={slots} setupOpen={shown.has("setup") && !checklist.complete} />
     </div>
+    </DashboardStage>
   );
 }

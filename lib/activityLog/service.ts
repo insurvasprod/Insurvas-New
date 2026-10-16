@@ -1,6 +1,7 @@
 import "server-only";
 
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
+import { csvCell as sharedCsvCell } from "@/lib/csv/cell";
 import {
   blockedForPage,
   mayReviewZeroClick,
@@ -329,7 +330,7 @@ export async function markActivityDisposition(tenantId: string, actorId: string,
   return response(result.data);
 }
 
-function csvCell(value: unknown) { const text = value == null ? "" : Array.isArray(value) ? value.join(";") : String(value); const safe = /^[=+\-@]/.test(text) ? `'${text}` : text; return `"${safe.replaceAll('"', '""')}"`; }
+function csvCell(value: unknown) { return sharedCsvCell(Array.isArray(value) ? value.join(";") : value); }
 /** The original twelve columns keep their order; what 20260925705100 adds is appended after them. */
 export function activityCsv(rows: ActivityRow[]) {
   const header = ["served_at", "agent", "lead_id", "lead", "campaign", "attempt", "number_clicked_at", "dispositioned_at", "disposition", "card_open_seconds", "notes", "integrity_flags", "lead_state", "open_to_log_seconds", "callback_at", "callback_timezone", "deal_face_amount_cents", "deal_product", "on_internal_dnc", "vendor_claim_status"];

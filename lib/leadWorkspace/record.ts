@@ -179,7 +179,8 @@ export async function getLeadRecord(tenantId: string, leadId: string): Promise<L
     id: row.id,
     scheduledAtUtc: str(row.metadata?.requestedAtUtc),
     requestedLocal: str(row.metadata?.requestedLocal),
-    customerTimezone: str(row.metadata?.timezone) ?? customerTimezone(values),
+    // The zone the refusal was judged in; else the customer's, else (never guessed) the agency's clock.
+    customerTimezone: str(row.metadata?.timezone) ?? customerTimezone(values) ?? workspaceZone ?? "UTC",
     status: "refused",
     bookedBy: row.actor_id ? nameOf.get(row.actor_id) ?? null : null,
     completedAt: null,

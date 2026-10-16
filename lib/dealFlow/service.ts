@@ -2,6 +2,7 @@ import "server-only";
 
 import { getTenantTemplateForProduct } from "@/lib/agentTemplates/service";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
+import { csvCell } from "@/lib/csv/cell";
 import { resolveRuntimeStage, partnerTypeForLead } from "@/lib/pipelines/service";
 import type { DealFlowFilterOptions, DealFlowKpis, DealFlowReport, DealFlowRow, DealFlowSource, DealFlowStageType, DealFlowStatus, DealFlowSummary } from "./types";
 import { DEAL_FLOW_STAGE_TYPES, DEAL_FLOW_STATUSES, shortLeadId } from "./types";
@@ -408,9 +409,21 @@ export async function updateDealFlow(tenantId: string, dealId: string, input: { 
     notes: text(input.notes, "Notes", 5000, false),
     local_date: date(input.local_date, "Deal date"),
   };
-  const { data, error } = await getSupabaseServiceClient().from("deal_flow").update(patch).eq("tenant_id", tenantId).eq("id", id).select(select).maybeSingle();
+  const supabase = getSupabaseServiceClient();
+  // The row as it was, so the audit entry can say what changed from what (LA-1.13: "editing a field
+  // writes an audit entry" — a list of field names alone cannot be reviewed).
+  const before = await supabase.from("deal_flow").select(Object.keys(patch).join(", ")).eq("tenant_id", tenantId).eq("id", id).maybeSingle();
+  if (before.error || !before.data) throw new Error(before.error?.message ?? "Deal flow row not found");
+  const previous = before.data as unknown as Record<string, unknown>;
+  const { data, error } = await supabase.from("deal_flow").update(patch).eq("tenant_id", tenantId).eq("id", id).select(select).maybeSingle();
   if (error || !data) throw new Error(error?.message ?? "Deal flow row not found");
-  return data;
+  const clip = (value: unknown) => (typeof value === "string" && value.length > 500 ? `${value.slice(0, 500)}…` : value ?? null);
+  const changes: Record<string, { from: unknown; to: unknown }> = {};
+  for (const [field, next] of Object.entries(patch)) {
+    const was = previous[field] ?? null;
+    if (String(was ?? "") !== String(next ?? "")) changes[field] = { from: clip(was), to: clip(next) };
+  }
+  return { deal: data, changes };
 }
 
 export async function createManualDeal(tenantId: string, userId: string, input: { product_line: unknown; insured_name: unknown; phone?: unknown; partner_id?: unknown; local_date: unknown; carrier?: unknown; product_type?: unknown; monthly_premium_cents?: unknown; face_amount_cents?: unknown; draft_date?: unknown; status?: unknown; call_result?: unknown; notes?: unknown; initial_quote?: unknown }) {
@@ -435,7 +448,6 @@ export async function createManualDeal(tenantId: string, userId: string, input: 
   return deal.data;
 }
 
-const csvCell = (value: unknown) => { const raw = String(value ?? ""); const safe = /^[=+\-@]/.test(raw) ? `'${raw}` : raw; return `"${safe.replaceAll('"', '""')}"`; };
 // The first sixteen columns are the export's original shape and stay in place for the
 // spreadsheets already reading it; everything the board added is appended after them.
 const CSV_HEADERS = [

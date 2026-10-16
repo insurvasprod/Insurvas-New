@@ -7,6 +7,26 @@ export { maskLastFour, NEUTRAL_END_CALL_SCRIPT, TCPA_REJECTION_REASON } from "./
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+/**
+ * Read-only: how many of this partner's submissions compliance screening has rejected, as a count
+ * (Sixteen Open Questions #9: a coded reason and a running total, never which numbers). Scoped to
+ * the tenant and partner, and to one submitter when `userId` is given (a partner_user sees only
+ * their own). Head-only on the (tenant_id, partner_id, created_at) index: no row leaves the database.
+ */
+export async function countPartnerRejectedSubmissions(tenantId: string, partnerId: string, userId: string | null): Promise<number> {
+  if (!UUID.test(tenantId) || !UUID.test(partnerId) || (userId !== null && !UUID.test(userId))) throw new Error("Could not load rejected submission count");
+  let query = getSupabaseServiceClient()
+    .from("partner_rejected_submissions")
+    .select("id", { count: "exact", head: true })
+    .eq("tenant_id", tenantId)
+    .eq("partner_id", partnerId)
+    .eq("reason", TCPA_REJECTION_REASON);
+  if (userId) query = query.eq("user_id", userId);
+  const { count, error } = await query;
+  if (error) throw new Error("Could not load rejected submission count");
+  return count ?? 0;
+}
+
 export async function recordRejectedPartnerSubmission(input: {
   tenantId: string;
   partnerId: string;

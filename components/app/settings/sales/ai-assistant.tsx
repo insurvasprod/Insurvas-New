@@ -111,8 +111,8 @@ export function SalesAiAssistant() {
                   <li key={item.label} className="flex gap-2.5 border-t border-[var(--border)] px-4 py-2.5">
                     <Check aria-hidden className="mt-0.5 size-4 shrink-0 text-[var(--success)]" />
                     <span className="min-w-0">
-                      <span className="block text-[14px] leading-[1.5] text-[var(--body)]">{item.label}</span>
-                      <span className="block text-[12px] leading-[1.5] text-[var(--muted)]">{item.sub}</span>
+                      <span className="block text-sm leading-[1.5] text-[var(--body)]">{item.label}</span>
+                      <span className="block text-xs leading-[1.5] text-[var(--muted)]">{item.sub}</span>
                     </span>
                   </li>
                 ))}
@@ -123,7 +123,7 @@ export function SalesAiAssistant() {
                 {NEVER.map((label) => (
                   <li key={label} className="flex gap-2.5 border-t border-[var(--border)] px-4 py-2.5">
                     <X aria-hidden className="mt-0.5 size-4 shrink-0 text-[var(--error-ink)]" />
-                    <span className="text-[14px] leading-[1.5] text-[var(--body)]">{label}</span>
+                    <span className="text-sm leading-[1.5] text-[var(--body)]">{label}</span>
                   </li>
                 ))}
               </ul>

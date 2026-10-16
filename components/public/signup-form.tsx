@@ -133,7 +133,7 @@ export function SignupForm({ initialPlanCode, initialCycle }: Props) {
   return (
     <div className="flex flex-col gap-12 lg:flex-row lg:gap-12">
       <div className="min-w-0 flex-1">
-        <h1 className="text-[32px] font-semibold leading-[1.13] tracking-[-0.025em] text-foreground">
+        <h1 className="text-title-lg font-semibold leading-[1.13] tracking-[-0.025em] text-foreground">
           Create your workspace
         </h1>
         <p className="mb-7 mt-2.5 max-w-[620px] text-base leading-normal tracking-[-0.02em] text-muted-foreground">
@@ -160,7 +160,10 @@ export function SignupForm({ initialPlanCode, initialCycle }: Props) {
             <Label htmlFor="phone">
               Mobile phone <span className="text-[var(--error)]">*</span>
             </Label>
-            <Input id="phone" name="phone" type="tel" autoComplete="tel" minLength={7} maxLength={40} required />
+            <Input id="phone" name="phone" type="tel" autoComplete="tel" minLength={7} maxLength={40} required aria-describedby="phone-note" />
+            <p id="phone-note" className="text-xs leading-normal tracking-[-0.01em] text-muted-foreground">
+              So our team can reach you about your account, for example during your trial or if a payment fails.
+            </p>
           </div>
 
           <div className="space-y-1.5">
@@ -206,7 +209,7 @@ export function SignupForm({ initialPlanCode, initialCycle }: Props) {
                   name="acceptTerms"
                   checked={accepted}
                   onChange={(event) => setAccepted(event.target.checked)}
-                  className="mt-0.5 size-4 shrink-0 accent-[var(--primary)]"
+                  className="mt-0.5 size-4 shrink-0 accent-[var(--accent-ink)]"
                 />
                 <span>
                   I agree to the{" "}
@@ -252,7 +255,7 @@ export function SignupForm({ initialPlanCode, initialCycle }: Props) {
           </Button>
 
           <p className="text-center text-xs leading-normal tracking-[-0.01em] text-muted-foreground">
-            No card is taken here. Payment happens on the provider&rsquo;s hosted page after checkout.
+            No card is taken here. At checkout you enter a card on the provider&rsquo;s hosted page; nothing is charged during the trial.
           </p>
           <p className="text-center text-xs leading-normal tracking-[-0.01em] text-muted-foreground">
             Already have an account?{" "}

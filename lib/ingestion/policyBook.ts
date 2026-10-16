@@ -7,6 +7,7 @@
  */
 
 import { STATUS_LABELS, type NormalizedStatus } from "./statuses.ts";
+import { csvCellMinimal } from "../csv/cell.ts";
 
 export type RiskBand = "none" | "watch" | "at_risk" | "critical";
 
@@ -191,12 +192,7 @@ export function csvRows(rows: BookRow[]): Array<Array<string | number | null>> {
  * spreadsheet shows it rather than running it; carrier files are outside input. Numbers pass as is.
  */
 export function toCsv(header: string[], rows: Array<Array<string | number | null>>): string {
-  const cell = (value: string | number | null) => {
-    if (value === null || value === undefined) return "";
-    if (typeof value === "number") return String(value);
-    const safe = /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
-    return /[",\n\r]/.test(safe) ? `"${safe.replaceAll('"', '""')}"` : safe;
-  };
+  const cell = (value: string | number | null) => csvCellMinimal(value);
   return [header, ...rows].map((row) => row.map(cell).join(",")).join("\r\n");
 }
 

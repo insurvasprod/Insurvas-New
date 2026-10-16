@@ -15,7 +15,7 @@ export default async function VendorReturnsPage({ searchParams }: { searchParams
       <FeatureGateNotice
         guard={guard}
         featureLabel="Vendor returns"
-        description="Prepare evidence-backed return claims and reconcile vendor credits without losing the source history."
+        description="Claim returns from vendors and reconcile their credits."
       />
     );
   }

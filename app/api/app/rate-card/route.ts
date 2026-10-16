@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { audit } from "@/lib/audit/log";
 import { saveAdvanceRule, saveCommissionSchedule, saveTenantCarrier } from "@/lib/carriers/service";
+import { CarrierLimitError } from "@/lib/carriers/limit";
 import { refreshDiscrepanciesQuietly } from "@/lib/discrepancies/service";
 import { addBand, computeExpected, RateCardError, saveProductFamily } from "@/lib/ingestion/expectedCommissionStore";
 import { isRecordUuid } from "@/lib/ingestion/path";
@@ -33,6 +34,7 @@ const body = z.discriminatedUnion("action", [
 
 function failure(error: unknown, fallback: string) {
   if (error instanceof RateCardError) return NextResponse.json({ error: error.message }, { status: error.status });
+  if (error instanceof CarrierLimitError) return NextResponse.json({ error: error.message, code: error.code, limit: error.limit }, { status: 403 });
   const message = error instanceof Error ? error.message : "";
   if (/Save the carrier contract level/.test(message)) return NextResponse.json({ error: "Save your contract level with this carrier first." }, { status: 409 });
   console.error(`[rate-card] ${fallback}:`, error);

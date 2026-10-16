@@ -3,6 +3,8 @@ import "server-only";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { allMenuItems } from "@/lib/menu/definition";
 import { SETTINGS_SECTIONS } from "@/lib/settings/sections";
+import { searchSettings } from "@/lib/settings/registry";
+import { matchActions, suggestedActions, type WorkspaceAction } from "@/lib/search/actions";
 import type { TenantRole } from "@/lib/tenantAuth/roles";
 
 /**
@@ -24,7 +26,7 @@ import type { TenantRole } from "@/lib/tenantAuth/roles";
  */
 
 /** The tenant search's own groups, in the order they are shown. */
-export type SearchGroup = "Leads" | "Policies" | "Lead lists" | "Partners" | "Pages";
+export type SearchGroup = "Actions" | "Leads" | "Policies" | "Lead lists" | "Partners" | "Pages" | "Settings";
 
 /**
  * `group` is a display heading, not a discriminator — staff search by tenant and invoice, a partner
@@ -46,7 +48,6 @@ const ACCESS = {
   policies: { feature: "book_of_business", roles: ["owner", "producer", "bookkeeper"] },
   leadLists: { feature: "lead_import", roles: ["owner", "producer", "assistant"] },
   partners: { feature: "publisher_records", roles: ["owner", "bookkeeper"] },
-  settings: { feature: "book_of_business", roles: ["owner"] },
 } satisfies Record<string, { feature: string; roles: TenantRole[] }>;
 
 /** Final expense is said "FE" on the floor, and the artboard's meta line says it the same way. */
@@ -227,33 +228,46 @@ function searchPages(term: string, granted: Set<string>, role: TenantRole): Sear
       meta: item.blurb ?? item.sectionLabel,
       href: item.path,
     }));
-  // Each settings section is its own destination: "dispositions" should land on Dispositions, not
-  // on the settings page with the person left to find the tab. Disabled sections are not offered.
-  const settings: SearchHit[] = can(ACCESS.settings, granted, role)
-    ? SETTINGS_SECTIONS
-        .filter((section) => !section.disabled && !section.managed)
-        .filter((section) => section.label.toLowerCase().includes(needle) || (section.group ?? "").toLowerCase().includes(needle))
-        .map((section) => ({
-          group: "Pages" as const,
-          title: `Settings › ${section.label}`,
-          meta: section.description,
-          href: `/app/settings#${section.id}`,
-        }))
-    : [];
-  return [...pages, ...settings].slice(0, 5);
+  return pages.slice(0, 5);
+}
+
+/**
+ * Settings (LA-8.1): every registered section and the individual settings inside them, each gated
+ * by its own feature and role, so search never offers a setting that would answer 403. A setting
+ * lands on its anchor, not the top of its page. A section that is also a menu page is offered once.
+ */
+function searchSettingsHits(term: string, granted: Set<string>, role: TenantRole, pages: readonly SearchHit[], hidden: readonly string[] = []): SearchHit[] {
+  const taken = new Set(pages.map((hit) => hit.href));
+  const sections = hidden.length ? SETTINGS_SECTIONS.filter((section) => !hidden.includes(section.id)) : SETTINGS_SECTIONS;
+  return searchSettings(sections, granted, role, term)
+    .filter((hit) => !taken.has(hit.href))
+    .map((hit) => ({ group: "Settings" as const, title: hit.title, meta: hit.meta, href: hit.href }));
 }
 
 function can(access: { feature: string; roles: TenantRole[] }, granted: Set<string>, role: TenantRole) {
   return granted.has(access.feature) && access.roles.includes(role);
 }
 
-/** Group order is fixed: what you were looking for first, where you could go last. */
-const ORDER: SearchGroup[] = ["Leads", "Policies", "Lead lists", "Partners", "Pages"];
+/**
+ * Group order is fixed: something to do first (2026-10-09 — "book an appointment" should not sit
+ * under three leads called Book), then what you were looking for, where you could go last.
+ */
+const ORDER: SearchGroup[] = ["Actions", "Leads", "Policies", "Lead lists", "Partners", "Pages", "Settings"];
+
+const actionHit = (action: WorkspaceAction): SearchHit => ({ group: "Actions", title: action.title, meta: action.meta, href: action.href });
+
+/** What the box offers before anything is typed: the everyday actions this person may take. */
+export function suggestWorkspace(input: { role: TenantRole; grantedFeatures: Iterable<string> }): { hits: SearchHit[]; total: number; truncated: boolean } {
+  const hits = suggestedActions(input.grantedFeatures, input.role).map(actionHit);
+  return { hits, total: hits.length, truncated: false };
+}
 
 export async function searchWorkspace(input: {
   tenantId: string;
   role: TenantRole;
   grantedFeatures: Iterable<string>;
+  /** Settings section ids the settings page hides for this agency's plan (planHiddenSettingsSections). */
+  hiddenSettings?: readonly string[];
   query: string;
   limit?: number;
 }): Promise<{ hits: SearchHit[]; total: number; truncated: boolean }> {
@@ -272,7 +286,9 @@ export async function searchWorkspace(input: {
   ]);
 
   const found: SearchHit[] = settled.flatMap((result) => (result.status === "fulfilled" ? result.value : []));
-  found.push(...searchPages(term, granted, input.role));
+  const pages = searchPages(term, granted, input.role);
+  found.push(...pages, ...searchSettingsHits(term, granted, input.role, pages, input.hiddenSettings));
+  found.push(...matchActions(term, granted, input.role).map(actionHit));
 
   const ranked = ORDER.flatMap((group) => found.filter((hit) => hit.group === group));
   const limit = Math.min(20, Math.max(1, input.limit ?? 7));

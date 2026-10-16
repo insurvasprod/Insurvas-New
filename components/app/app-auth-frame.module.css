@@ -1,0 +1,8 @@
+/*
+ * Cards drawn inside the app's sign-in frame (AppAuthFrame) lose their own box — border, panel,
+ * padding — and their centred heading: the frame's form column is the surface, as on the sign-in
+ * form. AuthCard and the confirm-email card mark themselves with [data-auth-card].
+ */
+.frame { width: 100%; }
+.frame :global([data-auth-card]) { border: 0; border-radius: 0; background: transparent; padding: 0; box-shadow: none; }
+.frame :global([data-auth-card]) > :is(div, h1, p) { text-align: left; }

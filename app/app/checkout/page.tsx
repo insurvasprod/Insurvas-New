@@ -53,6 +53,7 @@ export default async function CheckoutHandoffPage({ searchParams }: { searchPara
       planLine={[moduleLine, seats, cycle ? `billed ${cycle}` : null].filter(Boolean).join(" · ")}
       cycle={cycle}
       price={priceCents === null ? null : formatCentsAsCurrency(priceCents)}
+      setupFee={prices?.setup_fee_cents ? formatCentsAsCurrency(prices.setup_fee_cents) : null}
       // Card at signup, not charged for the trial — the constant the checkout itself opens with.
       trialDays={TRIAL_DAYS}
       trialEnds={dayMonthYear(trialEndDate(), "UTC")}

@@ -1,9 +1,10 @@
 "use client";
 
+import { StatusChip } from "@/components/ui/status-chip";
 import { useState, type FormEvent } from "react";
 
 import { DashboardUtcTime } from "@/components/admin/dashboard-utc-time";
-import { Callout, Field, Pill, btn, control } from "@/components/app/settings/primitives";
+import { Callout, Field, btn, control, pillTone } from "@/components/app/settings/primitives";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { formatUtcDateTime } from "@/lib/adminDashboard/figures";
 import { STATE_CODES, US_STATES } from "@/lib/appointments/constants";
@@ -136,10 +137,10 @@ export function StateDisclosureEditor({
     <Dialog open onOpenChange={(next) => !next && !saving && !withdrawBusy && onClose()}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[760px]">
         <DialogHeader>
-          <DialogTitle className="text-[18px] leading-[1.28] font-semibold tracking-[-0.015em]">
+          <DialogTitle className="text-title-sm leading-[1.28] font-semibold tracking-[-0.015em]">
             {row ? `${row.stateName} · ${row.productName}` : "Add a disclosure"}
           </DialogTitle>
-          <DialogDescription className="text-[14px] leading-[1.5] tracking-[-0.02em]">
+          <DialogDescription className="text-sm leading-[1.5] tracking-[-0.02em]">
             Agents see this wording on the dialer and must confirm it before the call can proceed.
           </DialogDescription>
         </DialogHeader>
@@ -149,11 +150,11 @@ export function StateDisclosureEditor({
             {row.live ? (
               <div className="rounded-[12px] border border-[var(--border)] bg-[var(--surface)] p-4">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">In force today</span>
-                  <Pill tone="success">Since {formatEffectiveDate(row.live.effective_from)}</Pill>
-                  {row.placeholder && <Pill tone="warning">Placeholder — not approved</Pill>}
+                  <span className="text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">In force today</span>
+                  <StatusChip dot={false} tone="good">Since {formatEffectiveDate(row.live.effective_from)}</StatusChip>
+                  {row.placeholder && <StatusChip dot={false} tone="warning">Placeholder — not approved</StatusChip>}
                 </div>
-                <p className="m-0 mt-2 max-h-48 overflow-y-auto text-[14px] leading-[1.5] tracking-[-0.02em] whitespace-pre-wrap text-[var(--body)]">
+                <p className="m-0 mt-2 max-h-48 overflow-y-auto text-sm leading-[1.5] tracking-[-0.02em] whitespace-pre-wrap text-[var(--body)]">
                   {row.live.required_text}
                 </p>
               </div>
@@ -177,7 +178,7 @@ export function StateDisclosureEditor({
 
             {row.versions.length > 0 && (
               <div>
-                <h3 className="m-0 text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">Versions</h3>
+                <h3 className="m-0 text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">Versions</h3>
                 <ul className="m-0 mt-2 flex list-none flex-col gap-2 p-0">
                   {row.versions.map((version) => {
                     const status = STATUS[version.status];
@@ -185,13 +186,13 @@ export function StateDisclosureEditor({
                     return (
                       <li key={version.id} className="rounded-[8px] border border-[var(--border)] px-3 py-2">
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)] tabular-nums">
+                          <span className="text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)] tabular-nums">
                             {formatEffectiveDate(version.effective_from)}
                           </span>
-                          <Pill tone={status.tone}>{status.label}</Pill>
-                          {isPlaceholderDisclosure(version.required_text) && <Pill tone="warning">Placeholder</Pill>}
+                          <StatusChip dot={false} tone={pillTone(status.tone)}>{status.label}</StatusChip>
+                          {isPlaceholderDisclosure(version.required_text) && <StatusChip dot={false} tone="warning">Placeholder</StatusChip>}
                           {added && (
-                            <span className="text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">
+                            <span className="text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">
                               added <DashboardUtcTime iso={version.created_at} text={added} />
                             </span>
                           )}
@@ -210,8 +211,8 @@ export function StateDisclosureEditor({
                           )}
                         </div>
                         <details className="mt-1">
-                          <summary className="cursor-pointer text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">Show wording</summary>
-                          <p className="m-0 mt-1 text-[14px] leading-[1.5] tracking-[-0.02em] whitespace-pre-wrap text-[var(--body)]">
+                          <summary className="cursor-pointer text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">Show wording</summary>
+                          <p className="m-0 mt-1 text-sm leading-[1.5] tracking-[-0.02em] whitespace-pre-wrap text-[var(--body)]">
                             {version.required_text}
                           </p>
                         </details>
@@ -224,10 +225,10 @@ export function StateDisclosureEditor({
 
             {withdrawing && (
               <div role="alertdialog" aria-label="Confirm withdrawal" className="rounded-[12px] border border-[var(--error)] bg-[var(--error-surface)] p-4">
-                <p className="m-0 text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--error-ink)]">
+                <p className="m-0 text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--error-ink)]">
                   Withdraw the {formatEffectiveDate(withdrawing.effective_from)} version?
                 </p>
-                <p className="m-0 mt-1 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--body)]">
+                <p className="m-0 mt-1 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--body)]">
                   {withdrawing.status === "scheduled"
                     ? "It has not taken effect yet, so no call has used it. It is deleted and the current wording stays in force."
                     : fallback
@@ -235,7 +236,7 @@ export function StateDisclosureEditor({
                       : `Nothing else is in force for this pair, so outbound dialing for ${row.stateName} / ${row.productCode} is blocked until another version is published. The row is deleted, and with it the record of the wording agents read while it was in force.`}
                 </p>
                 {withdrawError && (
-                  <p role="alert" className="m-0 mt-2 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--error-ink)]">
+                  <p role="alert" className="m-0 mt-2 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--error-ink)]">
                     {withdrawError}
                   </p>
                 )}
@@ -258,7 +259,7 @@ export function StateDisclosureEditor({
         )}
 
         <form onSubmit={submit} className="flex flex-col gap-4 border-t border-[var(--border)] pt-4">
-          <h3 className="m-0 text-[16px] leading-[1.4] font-semibold tracking-[-0.02em] text-[var(--ink)]">
+          <h3 className="m-0 text-base leading-[1.4] font-semibold tracking-[-0.02em] text-[var(--ink)]">
             {reviewAvailable ? "Propose a new version" : "Publish a new version"}
           </h3>
 
@@ -319,7 +320,7 @@ export function StateDisclosureEditor({
 
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-3">
-              <span className="text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]">
+              <span className="text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]">
                 States <span className="font-normal text-[var(--muted)]">({states.length} selected)</span>
               </span>
               {row && !moreStates && (
@@ -342,14 +343,14 @@ export function StateDisclosureEditor({
               <fieldset className="m-0 mt-2 grid max-h-52 grid-cols-3 gap-1 overflow-y-auto rounded-[8px] border border-[var(--border-strong)] p-3 sm:grid-cols-6">
                 <legend className="sr-only">States</legend>
                 {US_STATES.map(([code, name]) => (
-                  <label key={code} className="flex items-center gap-2 text-[14px] leading-[1.5] text-[var(--body)]" title={name}>
+                  <label key={code} className="flex items-center gap-2 text-sm leading-[1.5] text-[var(--body)]" title={name}>
                     <input type="checkbox" checked={states.includes(code)} onChange={() => toggleState(code)} />
                     {code}
                   </label>
                 ))}
               </fieldset>
             ) : (
-              <p className="m-0 mt-1 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">{row?.stateName} only.</p>
+              <p className="m-0 mt-1 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">{row?.stateName} only.</p>
             )}
           </div>
 
@@ -391,12 +392,12 @@ export function StateDisclosureEditor({
           )}
 
           {error && (
-            <p role="alert" className="m-0 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--error-ink)]">
+            <p role="alert" className="m-0 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--error-ink)]">
               {error}
             </p>
           )}
           {!error && blocker && (trimmed.length > 0 || states.length === 0) && (
-            <p className="m-0 text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">{blocker}</p>
+            <p className="m-0 text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">{blocker}</p>
           )}
 
           <DialogFooter>

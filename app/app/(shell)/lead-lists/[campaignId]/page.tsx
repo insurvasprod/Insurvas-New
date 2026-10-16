@@ -4,7 +4,8 @@ import { guardPage } from "@/lib/entitlements/guardPage";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { LeadListDetailView } from "@/components/app/lead-list-detail";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
-import { getWorkspaceTimezone } from "@/lib/agencyProfile/timezone";
+// LA-8.2: times show in the viewer's own display timezone, else the agency's.
+import { getViewerTimezone } from "@/lib/users/viewerTimezone";
 import { leadListDetail } from "@/lib/leadLists/detail";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -16,7 +17,7 @@ export default async function LeadListDetailPage({ params }: { params: Promise<{
       <FeatureGateNotice
         guard={guard}
         featureLabel="Lead lists"
-        description="What you bought from each vendor, how much of it arrived, and how much of it nobody has touched."
+        description="What each bought list delivered, and what is still untouched."
       />
     );
   // The same roles as the index this opens from.
@@ -34,16 +35,16 @@ export default async function LeadListDetailPage({ params }: { params: Promise<{
   const money = trueCpa.entitled && ["owner", "producer"].includes(guard.role);
   const manager = ["owner", "producer"].includes(guard.role);
   const assignBlocked = !dialing.entitled
-    ? "Assigning leads needs Outbound dialing on your plan."
+    ? "Add Outbound dialing to your plan to assign leads."
     : dialing.entitlement.access === "read_only"
-      ? "Your plan is read-only right now, so leads cannot be assigned."
+      ? "Restore full access to your plan to assign leads — it is read-only."
       : null;
   const [detail, timeZone] = await Promise.all([
     leadListDetail(guard.context.tenantId, guard.context.userId, campaignId, {
       money,
       readOnly: trueCpa.entitlement.access === "read_only",
     }),
-    getWorkspaceTimezone(guard.context.tenantId).catch(() => null),
+    getViewerTimezone(guard.context.tenantId, guard.context.userId).catch(() => null),
   ]);
   if (!detail) notFound();
 
@@ -53,7 +54,7 @@ export default async function LeadListDetailPage({ params }: { params: Promise<{
       money={money}
       timeZone={timeZone}
       assign={{ manager, blocked: assignBlocked }}
-      claimBlocked={trueCpa.entitlement.access === "read_only" ? "Your plan is read-only right now, so a claim cannot be drafted." : null}
+      claimBlocked={trueCpa.entitlement.access === "read_only" ? "Restore full access to your plan to draft a claim — it is read-only." : null}
     />
   );
 }

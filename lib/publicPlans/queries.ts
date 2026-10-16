@@ -3,7 +3,7 @@ import "server-only";
 import { formatCents } from "@/lib/money";
 import { fetchPlans } from "@/lib/plans/queries";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
-import type { PublicPlan } from "./types";
+import type { PublicFeature, PublicPlan } from "./types";
 
 type PriceRow = {
   plan_id: string;
@@ -14,7 +14,8 @@ type PriceRow = {
 };
 
 type GrantRow = { plan_id: string; feature_key: string };
-type FeatureRow = { feature_key: string; label: string; sort_order: number };
+type FeatureRow = { feature_key: string; label: string; sort_order: number; module: string | null };
+type ModuleRow = { key: string; label: string; sort_order: number };
 
 /**
  * The only public plan projection. The frontend receives marketing-safe fields, never internal
@@ -39,13 +40,18 @@ export async function fetchPublicPlans(): Promise<PublicPlan[]> {
   if (grantError) throw new Error(`Could not load public plan features: ${grantError.message}`);
 
   const featureKeys = [...new Set((grants ?? []).map((grant) => grant.feature_key))];
-  const featureResult = featureKeys.length
-    ? await supabase
-        .from("features")
-        .select("feature_key, label, sort_order")
-        .in("feature_key", featureKeys)
-        .order("sort_order")
-    : { data: [] as FeatureRow[], error: null };
+  const [featureResult, moduleResult] = await Promise.all([
+    featureKeys.length
+      ? supabase
+          .from("features")
+          .select("feature_key, label, sort_order, module")
+          .in("feature_key", featureKeys)
+          .order("sort_order")
+      : Promise.resolve({ data: [] as FeatureRow[], error: null }),
+    // The module labels and order, so the pricing page can group features the way the catalog does.
+    // Optional: without them every feature still shows, under its module key.
+    supabase.from("feature_modules").select("key, label, sort_order").order("sort_order"),
+  ]);
 
   if (featureResult.error) {
     throw new Error(`Could not load public feature bullets: ${featureResult.error.message}`);
@@ -55,7 +61,9 @@ export async function fetchPublicPlans(): Promise<PublicPlan[]> {
   const featureByKey = new Map(
     ((featureResult.data ?? []) as FeatureRow[]).map((feature) => [feature.feature_key, feature]),
   );
+  const moduleByKey = new Map(((moduleResult.error ? [] : moduleResult.data ?? []) as ModuleRow[]).map((row) => [row.key, row]));
   const grantsByPlan = new Map<string, string[]>();
+  const featuresByPlan = new Map<string, PublicFeature[]>();
 
   for (const grant of (grants ?? []) as GrantRow[]) {
     const feature = featureByKey.get(grant.feature_key);
@@ -63,6 +71,11 @@ export async function fetchPublicPlans(): Promise<PublicPlan[]> {
     const labels = grantsByPlan.get(grant.plan_id) ?? [];
     labels.push(feature.label);
     grantsByPlan.set(grant.plan_id, labels);
+    const moduleKey = feature.module ?? "other";
+    const moduleRow = moduleByKey.get(moduleKey);
+    const rows = featuresByPlan.get(grant.plan_id) ?? [];
+    rows.push({ key: feature.feature_key, label: feature.label, module: moduleKey, moduleLabel: moduleRow?.label ?? moduleKey, moduleOrder: moduleRow?.sort_order ?? 999, order: feature.sort_order });
+    featuresByPlan.set(grant.plan_id, rows);
   }
 
   return latest.map((plan) => {
@@ -76,6 +89,7 @@ export async function fetchPublicPlans(): Promise<PublicPlan[]> {
       price_yearly: price?.price_yearly_cents == null ? null : formatCents(price.price_yearly_cents),
       blurb: plan.description,
       feature_bullets: grantsByPlan.get(plan.id) ?? [],
+      features: (featuresByPlan.get(plan.id) ?? []).sort((a, b) => a.moduleOrder - b.moduleOrder || a.order - b.order),
       trial_days: price?.trial_days ?? 0,
       // Read, not inferred. This was `index === 0`, which silently meant "the cheapest published
       // plan" — and the plan a business wants to lead with is rarely the cheapest one.

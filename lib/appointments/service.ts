@@ -5,7 +5,8 @@ import type { Json } from "@/lib/supabase/database.types";
 import type { CarrierRow } from "@/lib/carriers/constants";
 import { switchedOffCarrierIds, type TenantCarrierRow } from "@/lib/carriers/service";
 import type { AppointmentRow, AppointmentStatus, CarrierTrainingRow, CeRecordRow, EoPolicyRow, LicenseRow } from "./service-types";
-import { canWriteFromVault } from "./eligibility";
+import { getSetting } from "@/lib/settings/queries";
+import { canWriteReasonFromVault, effectiveEoGraceDays, type CanWriteResult } from "./eligibility";
 import { isPendingSchema, SchemaPendingError } from "./pendingSchema";
 
 export type AppointmentVault = {
@@ -241,9 +242,19 @@ export async function saveCeRecord(tenantId: string, input: { state: string; cre
   return writeNew ? writeExtras("ce_records", data as CeRecordRow, extras) : (data as CeRecordRow);
 }
 
+/** The platform's E&O grace (compliance.eo_grace_days); an unreadable store is the coded default. */
+export async function eoGraceDays(): Promise<number> {
+  return effectiveEoGraceDays({ graceDays: await getSetting<number>("compliance.eo_grace_days").catch(() => null) });
+}
+
 export async function canWrite(tenantId: string, carrierId: string, state: string, asOf: string): Promise<boolean> {
-  const vault = await getAppointmentVault(tenantId);
-  return canWriteFromVault(vault, carrierId, state, asOf);
+  return (await canWriteReason(tenantId, carrierId, state, asOf)).allowed;
+}
+
+/** canWrite with its reason (Sixteen #4): ok, grace, no_contract, no_appointment, no_licence, eo_expired, no_eo. */
+export async function canWriteReason(tenantId: string, carrierId: string, state: string, asOf: string): Promise<CanWriteResult> {
+  const [vault, graceDays] = await Promise.all([getAppointmentVault(tenantId), eoGraceDays()]);
+  return canWriteReasonFromVault(vault, carrierId, state, asOf, { graceDays });
 }
 
 export { canWriteFromVault } from "./eligibility";

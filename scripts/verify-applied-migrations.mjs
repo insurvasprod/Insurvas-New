@@ -15,7 +15,11 @@ import fs from "node:fs";
 import pg from "pg";
 
 const DIR = "supabase/migrations";
-const files = fs.readdirSync(DIR).filter((name) => name >= (process.argv[2] ?? "20260923") && name.endsWith(".sql")).sort();
+// --strict: every non-trivial function line must be live, not just the longest one. Use it on a fresh
+// apply; older files read "differs" under it wherever a later migration patched a body in place.
+const STRICT = process.argv.includes("--strict");
+const FROM = process.argv.slice(2).find((a) => a !== "--strict") ?? "20260923";
+const files = fs.readdirSync(DIR).filter((name) => name >= FROM && name.endsWith(".sql")).sort();
 const client = new pg.Client({ connectionString: process.env.TENANT_DB_URL, ssl: { rejectUnauthorized: false } });
 await client.connect();
 
@@ -46,10 +50,14 @@ for (const file of files) {
     if (!rows.length) { problems.push(`function ${name} missing`); continue; }
     const newest = newestDefiner.get(name);
     if (newest && newest !== file) { superseded.push(`${name} → ${newest.slice(0, 14)}`); continue; }
-    // A distinctive line: the longest non-trivial line of the body.
+    // A distinctive line: the longest non-trivial line of the body. That passes a patch which only ADDS
+    // lines to an older body (20260929130000 read "applied" on 2026-10-16 while live lacked it), so
+    // --strict checks every line.
     const lines = body.split("\n").map((l) => norm(l)).filter((l) => l.length > 25 && !/^(begin|end|declare|return|if|else|loop)\b/i.test(l));
-    const probe = lines.sort((a, b) => b.length - a.length)[0];
-    if (probe && !rows.some((row) => norm(row.prosrc).includes(probe))) problems.push(`function ${name} body differs (probe: "${probe.slice(0, 70)}")`);
+    const live = rows.map((row) => norm(row.prosrc));
+    const sorted = lines.sort((a, b) => b.length - a.length);
+    const probe = (STRICT ? sorted : sorted.slice(0, 1)).find((l) => !live.some((src) => src.includes(l)));
+    if (probe) problems.push(`function ${name} body differs (probe: "${probe.slice(0, 70)}")`);
   }
 
   for (const m of text.matchAll(/create\s+table\s+if\s+not\s+exists\s+(?:public\.)?([a-z_0-9]+)/gi)) {

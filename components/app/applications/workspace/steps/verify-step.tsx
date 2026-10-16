@@ -78,7 +78,7 @@ export function VerifyStep() {
     >
       <div className="flex flex-col gap-1.5">
         <Meter value={count} max={items.length} tone="good" label={chip} className="h-1.5" />
-        <span className="text-[12px] leading-[1.5] text-[var(--muted)]">
+        <span className="text-xs leading-[1.5] text-[var(--muted)]">
           {chip}{complete ? " · verified on the call" : onCall.size ? " · confirmed on the call where marked; the call's verification is not finished" : verification?.workItemId ? " · the call's verification is not finished" : ""}
         </span>
       </div>

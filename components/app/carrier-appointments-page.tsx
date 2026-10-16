@@ -56,7 +56,7 @@ import {
 } from "@/components/app/appointment-vault-parts";
 import type { CarrierRow } from "@/lib/carriers/constants";
 import { US_REGIONS, US_STATES, regionOf } from "@/lib/appointments/constants";
-import { appointmentIsActiveAt } from "@/lib/appointments/eligibility";
+import { appointmentIsActiveAt, eoCoverState } from "@/lib/appointments/eligibility";
 import { SCHEMA_PENDING_MESSAGE } from "@/lib/appointments/pendingSchema";
 import {
   READINESS_WINDOW_DAYS,
@@ -97,6 +97,8 @@ type Vault = {
   appointmentDetails?: boolean;
   /** Null until 20260924310100. */
   carrierTrainings?: CarrierTrainingRow[] | null;
+  /** Sixteen #4: the platform's E&O grace, the same number canWrite uses. */
+  eoGraceDays?: number;
 };
 
 type Dialog = null | "license" | "eo" | "ce" | "training" | { carrierId: string; state: string };
@@ -290,6 +292,8 @@ export function CarrierAppointmentsPage({ canEdit, isOwner, readOnlyReason = nul
 
   const eoPolicy = currentEoPolicy(vault.eoPolicies, today);
   const eoDays = eoPolicy ? daysUntilExpiry(eoPolicy.expires_at, today) : null;
+  // Sixteen #4: in the grace after E&O expiry, new business can still be written — say so, in red, every visit.
+  const eoCover = eoCoverState(vault.eoPolicies, today, { graceDays: vault.eoGraceDays });
   const ceRecord = currentCeRecord(vault.ceRecords, today);
   const outstanding = trainings ? outstandingTrainings(trainings) : null;
   const overdueTrainings = outstanding ? outstanding.filter((row) => row.due_on < today).length : 0;
@@ -317,6 +321,14 @@ export function CarrierAppointmentsPage({ canEdit, isOwner, readOnlyReason = nul
     <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
       {header}
       {readOnlyReason && <p role="status" className="m-0 rounded-md bg-[var(--warning-surface)] px-3 py-2 text-sm text-[var(--warning-ink)]">{readOnlyReason}</p>}
+
+      {/* Not dismissible, by decision: it stays until a renewal is entered (a backdated effective date closes the gap). */}
+      {eoCover.state === "grace" && eoCover.expiredOn && eoCover.graceEndsOn && (
+        <div role="alert" className="rounded-lg border border-border border-l-[3px] border-l-[var(--error)] bg-[var(--error-surface)] px-4 py-2.5 text-sm text-[var(--error-ink)]">
+          <strong className="font-semibold">E&amp;O cover expired {shortDate(eoCover.expiredOn)}.</strong>{" "}
+          New business can still be written until {shortDate(eoCover.graceEndsOn)}, then new applications stop. Your book, servicing and reports stay open. Enter the renewal under CE &amp; E&amp;O cover, with its real effective date, even if that is in the past.
+        </div>
+      )}
 
       {!canEdit && (
         <div role="status" className="rounded-lg border border-border border-l-[3px] border-l-[var(--info)] bg-[var(--info-surface)] px-4 py-2.5 text-sm text-[var(--info-ink)]">

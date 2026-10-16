@@ -6,8 +6,9 @@ import type { RealtimeChannel } from "@supabase/supabase-js";
 import { CheckCircle2, FileText, Info, Loader2, MessageCircle, Paperclip, PhoneOff, Plus, Search, SendHorizontal, Users, X, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toolbarControl } from "@/components/ui/data-toolbar";
+import { DetailPanel } from "@/components/ui/detail-panel";
 import { PageHeader } from "@/components/ui/page-header";
-import { SectionLoading } from "@/components/ui/page-states";
+import { EmptyState, NoMatches, SectionLoading } from "@/components/ui/page-states";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { cardTitle, type PartnerMessage } from "@/lib/partnerChat/cards";
 import { cn } from "@/lib/utils";
@@ -214,13 +215,8 @@ export function AgentPartnerChatWorkspace() {
   const updateCount = selected?.messages.filter((item) => item.messageKind === "system_card").length ?? 0;
   const shownMessages = (selected?.messages ?? []).filter((item) => threadView === "all" || (threadView === "updates") === (item.messageKind === "system_card"));
   // The details pane is closed until asked for: the thread gets the room.
+  // Esc closes it: DetailPanel's own handler (2026-10-09 detail panel).
   const [detailsOpen, setDetailsOpen] = useState(false);
-  useEffect(() => {
-    if (!detailsOpen) return;
-    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setDetailsOpen(false); };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [detailsOpen]);
   const selectedUsers = useMemo(() => data.directory.filter((user) => recipientIds.includes(user.id)), [data.directory, recipientIds]);
   // Mirrors the server rule: one agency channel may hold people from one partner at most.
   const mixedPartners = new Set(selectedUsers.filter((user) => user.scope === "partner").map((user) => user.partnerId)).size > 1;
@@ -282,7 +278,9 @@ export function AgentPartnerChatWorkspace() {
             </div>
           </div>
           <div ref={setListNode} onScroll={(event) => loadMoreNearEnd(event.currentTarget)} className="min-h-0 flex-1 overflow-y-auto p-1">
-            {!loaded ? <SectionLoading rows={6} columns={2} label="Loading conversations" /> : filteredChannels.length === 0 ? <p className="px-4 py-6 text-center text-sm text-muted-foreground">{data.channels.length ? "No conversation matches that." : "No conversations yet."}</p> : visibleChannels.map((channel) => {
+            {!loaded ? <SectionLoading rows={6} columns={2} label="Loading conversations" /> : filteredChannels.length === 0 ? (data.channels.length
+              ? <NoMatches noun="conversations" onClear={() => { setConversationSearch(""); setListFilter("all"); resetList(); }} />
+              : <EmptyState title="No conversations yet" hint="Message a partner or your team." action={<Button type="button" variant="outline" onClick={() => setNewConversationOpen(true)}><Plus aria-hidden="true" />New conversation</Button>} />) : visibleChannels.map((channel) => {
               const active = channel.id === selectedId;
               const last = channel.messages.at(-1);
               const unread = channel.unreadCount > 0;
@@ -332,7 +330,7 @@ export function AgentPartnerChatWorkspace() {
                   </select>
                   <span className="mt-1 block text-xs font-normal text-muted-foreground">{selectedUsers.length ? selectedUsers.map((user) => user.name).join(", ") : "Choose at least one person"}</span>
                 </label>
-                {mixedPartners && <p role="alert" className="m-0 rounded-md bg-[var(--warning-surface)] px-3 py-2 text-sm text-[var(--warning-ink)]">These people belong to different partners: start a separate conversation for each partner.</p>}
+                {mixedPartners && <p role="alert" className="m-0 rounded-md bg-[var(--warning-surface)] px-3 py-2 text-sm text-[var(--warning-ink)]">Start a separate conversation for each partner — these people belong to different ones.</p>}
                 <div className="flex justify-end gap-2">
                   <Button type="button" variant="outline" onClick={() => setNewConversationOpen(false)}>Cancel</Button>
                   <Button type="button" disabled={busy || recipientIds.length === 0 || mixedPartners} onClick={() => void createChannel()}>{busy ? "Creating…" : newType === "direct" ? "Start direct message" : "Create team channel"}</Button>
@@ -367,7 +365,7 @@ export function AgentPartnerChatWorkspace() {
               </div>
               <div ref={threadRef} className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pb-3" aria-live="polite">
                 {shownMessages.length === 0 ? (
-                  <div className="m-auto text-center text-sm text-muted-foreground"><MessageCircle className="mx-auto mb-2 size-6" aria-hidden="true" />{selected.messages.length === 0 ? "No messages yet. Send the first one." : threadView === "updates" ? "No automatic updates in this conversation." : "Nobody has written here yet — only automatic updates so far."}</div>
+                  <div className="m-auto text-center text-sm text-muted-foreground"><MessageCircle className="mx-auto mb-2 size-6" aria-hidden="true" />{selected.messages.length === 0 ? "No messages yet. Send the first one." : threadView === "updates" ? "No automatic updates yet." : "Only automatic updates so far."}</div>
                 ) : shownMessages.map((item, index) => {
                   const previous = shownMessages[index - 1];
                   const newDay = !previous || new Date(previous.createdAt).toDateString() !== new Date(item.createdAt).toDateString();
@@ -453,15 +451,18 @@ export function AgentPartnerChatWorkspace() {
         </section>
 
         {/* Conversation details */}
-        {/* Opened from the info button in the thread header. From xl it is a third column; narrower, it
-            slides over the thread from the right. */}
-        <aside id="partner-chat-details" className={cn("absolute inset-y-0 right-0 z-20 min-h-0 w-[300px] min-w-0 flex-col overflow-y-auto border-l border-border bg-card shadow-[-8px_0_24px_rgba(16,20,26,.12)] xl:static xl:w-auto xl:shadow-none", detailsOpen && selected ? "flex" : "hidden")} aria-label="Conversation details">
-          {selected ? (
-            <>
-              <div className="flex min-h-12 shrink-0 items-center gap-2 border-b border-border py-1.5 pr-1.5 pl-4">
-                <h2 className="m-0 flex-1 text-sm font-semibold">Details</h2>
-                <Button type="button" variant="ghost" size="icon" aria-label="Close conversation details" title="Close (Esc)" onClick={() => setDetailsOpen(false)}><X aria-hidden="true" /></Button>
-              </div>
+        {/* Opened from the info button in the thread header. From xl it is a third column (split);
+            narrower, it opens over the thread from the right (overlay). */}
+        {detailsOpen && selected && (
+          <DetailPanel
+            mode="split"
+            splitFrom="xl"
+            id="partner-chat-details"
+            title="Details"
+            onClose={() => setDetailsOpen(false)}
+            bodyClassName="flex flex-col"
+            className="xl:w-auto xl:min-w-0 xl:rounded-none xl:border-0 xl:border-l xl:shadow-none"
+          >
               <div className="flex items-start gap-2.5 border-b border-border px-4 py-3">
                 <Face name={selected.name} kind={faceKind(selected)} />
                 <div className="flex min-w-0 flex-1 flex-col gap-1">
@@ -525,9 +526,8 @@ export function AgentPartnerChatWorkspace() {
                   </div>
                 )}
               </div>
-            </>
-          ) : <p className="m-0 p-5 text-sm text-muted-foreground">Choose a conversation to see its details.</p>}
-        </aside>
+          </DetailPanel>
+        )}
       </div>
     </div>
   );

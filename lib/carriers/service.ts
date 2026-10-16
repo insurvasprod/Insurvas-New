@@ -4,6 +4,7 @@ import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import type { ProductRow } from "@/lib/products/constants";
 import type { CarrierRow } from "./constants";
 import { isPendingSchema, SchemaPendingError } from "./schemaGap";
+import { CarrierLimitError, parseCarrierLimit } from "./limit";
 export { resolveCommissionRate } from "./resolve";
 
 export type TenantCarrierRow = { id: string; tenant_id: string; carrier_id: string; contract_level_bp: number; writing_number: string; effective_from: string; is_active: boolean; created_at: string };
@@ -115,6 +116,9 @@ export async function switchedOffCarrierIds(tenantId: string): Promise<Set<strin
 
 export async function saveTenantCarrier(tenantId: string, input: { carrier_id: string; contract_level_bp: number; writing_number: string; effective_from: string }) {
   const { data, error } = await getSupabaseServiceClient().rpc("save_tenant_carrier", { p_tenant_id: tenantId, p_carrier_id: input.carrier_id, p_contract_level_bp: input.contract_level_bp, p_writing_number: input.writing_number, p_effective_from: input.effective_from }).single();
+  // The plan's carrier limit (max_carriers), enforced in the database: a typed 403, not a 400.
+  const overLimit = parseCarrierLimit(error?.message);
+  if (overLimit) throw new CarrierLimitError(overLimit.held, overLimit.limit);
   if (error || !data) throw new Error(error?.message ?? "Could not save carrier contract");
   return data as TenantCarrierRow;
 }

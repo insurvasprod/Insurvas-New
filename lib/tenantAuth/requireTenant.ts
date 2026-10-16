@@ -8,6 +8,7 @@ import { TENANT_SESSION_COOKIE, verifyTenantSessionToken, type TenantSessionPayl
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { holdsPartnerMembership } from "@/lib/auth/planeSeparation";
 import { isTenantSuspended, TENANT_SUSPENDED_CODE, TENANT_SUSPENDED_MESSAGE } from "@/lib/tenants/suspension";
+import { checkTenantSession, type SessionCheck } from "./sessionStore";
 
 /** The verified cookie only — identity, no authorisation. Use resolveTenantContext for the role. */
 export async function getTenantSession(): Promise<TenantSessionPayload | null> {
@@ -29,6 +30,10 @@ export type TenantContext = {
   userId: string;
   tenantId: string;
   role: TenantRole;
+  /** The tenant_user_session row of this request's cookie (LA-8.2); null on a cookie issued before sessions were rows. */
+  sessionId?: string | null;
+  /** When this session passed the second factor; null when it did not. */
+  twoFactorAt?: string | null;
 };
 
 /**
@@ -61,7 +66,13 @@ const readTenantAccess = cache(async (): Promise<{ context: TenantContext | null
   // suspending an agency ends every session in it on the next request, not at token expiry.
   // …and whether the account belongs to a partner organisation, in the same round trip: a partner
   // account never opens the agent app, whatever tenant_users says (lib/auth/planeSeparation.ts).
-  const [{ data: membership }, { data: user }, { data: tenant }, isPartnerAccount] = await Promise.all([
+  // …and, for a cookie that names its session (LA-8.2), whether that session is still live — read
+  // from the store on every request, so ending a session takes effect on its next one. A failed
+  // check closes the session rather than opening it.
+  const sessionCheck: Promise<SessionCheck> = session.sid
+    ? checkTenantSession(session.sid, session.sub).catch(() => ({ live: false, twoFactorAt: null }))
+    : Promise.resolve({ live: true, twoFactorAt: null });
+  const [{ data: membership }, { data: user }, { data: tenant }, isPartnerAccount, live] = await Promise.all([
     supabase
       .from("tenant_users")
       .select("role")
@@ -71,6 +82,7 @@ const readTenantAccess = cache(async (): Promise<{ context: TenantContext | null
     supabase.from("users").select("status, session_version").eq("id", session.sub).maybeSingle<{ status: string; session_version: number }>(),
     supabase.from("tenants").select("status").eq("id", session.tenantId).maybeSingle<{ status: string }>(),
     holdsPartnerMembership(session.sub),
+    sessionCheck,
   ]);
 
   if (isPartnerAccount) return none;
@@ -78,12 +90,13 @@ const readTenantAccess = cache(async (): Promise<{ context: TenantContext | null
   if (!membership || !isTenantRole(membership.role)) return none;
   if (!user || user.status !== "active") return none;
   if (session.sessionVersion !== undefined && session.sessionVersion !== user.session_version) return none;
+  if (!live.live) return none;
   // A missing tenant row (or a failed read) closes the session rather than opening it.
   if (!tenant) return none;
   // Only a person who would otherwise be let in learns that the agency is suspended.
   if (isTenantSuspended(tenant.status)) return { context: null, suspended: true };
 
-  return { context: { userId: session.sub, tenantId: session.tenantId, role: membership.role }, suspended: false };
+  return { context: { userId: session.sub, tenantId: session.tenantId, role: membership.role, sessionId: session.sid ?? null, twoFactorAt: live.twoFactorAt }, suspended: false };
 });
 
 /**

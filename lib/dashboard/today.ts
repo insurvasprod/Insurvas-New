@@ -3,6 +3,7 @@ import "server-only";
 import { getWorkspaceTimezone } from "@/lib/agencyProfile/timezone";
 import { listDueCallbacks } from "@/lib/callbacks/service";
 import { getQueueSlaSettings } from "@/lib/queueSla/service";
+import { getOldestWaitingSeconds } from "@/lib/queueSla/stats";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import type { TenantRole } from "@/lib/tenantAuth/roles";
 
@@ -43,6 +44,8 @@ export type DashboardToday = {
     transfersWaiting: number | null;
     slaBreaching: number | null;
     slaMinutes: number | null;
+    /** How long the longest-waiting transfer has waited, in seconds; null when none or not read. */
+    oldestWaitingSeconds: number | null;
     callbacksOverdue: number | null;
     callbacksToday: number | null;
     lapsing: number | null;
@@ -66,6 +69,12 @@ export type DashboardToday = {
    * its coverage. Null unless the home asks for it, or when the read fails.
    */
   setterWeek: { booked: number; showed: number; noShow: number; closedOut: number; closeable: number } | null;
+  /**
+   * The reader's own close-out (Sixteen #12): of the appointments on their own calendar that have
+   * started in the last 30 days and need an outcome (showed, no-show, or awaiting one), how many
+   * have one. Null unless the home asks for it, or when the read fails.
+   */
+  closeOut: { showed: number; noShow: number; awaiting: number } | null;
 };
 
 /**
@@ -73,7 +82,7 @@ export type DashboardToday = {
  * this function did before; the dashboard passes only what the reader's home shows, so a
  * bookkeeper's page does not count dials and an assistant's does not read the diary.
  */
-export type TodayReadsInput = Partial<{ dialing: boolean; policies: boolean; inbound: boolean; callbacks: boolean; lapse: boolean; licences: boolean; setterWeek: boolean }>;
+export type TodayReadsInput = Partial<{ dialing: boolean; policies: boolean; inbound: boolean; callbacks: boolean; lapse: boolean; licences: boolean; setterWeek: boolean; closeOut: boolean }>;
 
 const SAMPLE_LIMIT = 5000;
 
@@ -239,7 +248,17 @@ export async function getDashboardToday(input: { tenantId: string; userId: strin
     return { booked: total((row) => row.booked), showed: total((row) => row.showed), noShow: total((row) => row.no_show), closedOut: total((row) => row.closed_out), closeable: total((row) => row.closeable) };
   })().catch(() => null) : Promise.resolve(null);
 
-  const [person, series, dialsYesterday, appointmentsToday, queueReady, nextCallback, due, slaBlock, lapsing, licences, insights, appointmentsWeek, policies30, setterWeek] = await Promise.all([
+  // The reader's own close-out: three head counts on their own calendar, past starts only. Asked for
+  // explicitly only, like the setter's week.
+  const closeOutRead = dialing && input.reads?.closeOut === true ? (async () => {
+    const since = new Date(now - 30 * 86_400_000).toISOString();
+    const mine = (status: string) => count(db().from("tenant_appointments").select("id", { count: "exact", head: true })
+      .eq("tenant_id", input.tenantId).eq("agent_user_id", input.userId).eq("status", status).gte("starts_at_utc", since).lt("starts_at_utc", new Date(now).toISOString()));
+    const [showed, noShow, awaiting] = await Promise.all([mine("showed"), mine("no_show"), mine("pending")]);
+    return showed === null || noShow === null || awaiting === null ? null : { showed, noShow, awaiting };
+  })().catch(() => null) : Promise.resolve(null);
+
+  const [person, series, dialsYesterday, appointmentsToday, queueReady, nextCallback, due, slaBlock, lapsing, licences, insights, appointmentsWeek, policies30, setterWeek, closeOut] = await Promise.all([
     db().from("users").select("name").eq("id", input.userId).limit(1),
     Promise.all(seriesReads),
     dialing ? count(attempts().gte("attempted_at", yesterdayStart).lt("attempted_at", sameTimeYesterday)) : Promise.resolve(null),
@@ -258,9 +277,10 @@ export async function getDashboardToday(input: { tenantId: string; userId: strin
       const cutoff = new Date(now - sla.escalate_after_seconds * 1000).toISOString();
       // Both head counts on the same tenant-filtered rows: partner-sent, unclaimed — in parallel.
       const waiting = () => db().from("lead_queue").select("id", { count: "exact", head: true }).eq("tenant_id", input.tenantId).eq("status", "unclaimed").not("partner_id", "is", null);
-      const [breaching, all] = await Promise.all([count(waiting().lt("queued_at", cutoff)), count(waiting())]);
-      return { breaching, waiting: all, minutes: Math.round(sla.escalate_after_seconds / 60) };
-    })().catch(() => ({ breaching: null, waiting: null, minutes: null })) : Promise.resolve({ breaching: null, waiting: null, minutes: null }),
+      // And how long the longest one has waited: the queue SLA ladder's own read (one row).
+      const [breaching, all, oldest] = await Promise.all([count(waiting().lt("queued_at", cutoff)), count(waiting()), getOldestWaitingSeconds(input.tenantId, new Date(now)).catch(() => null)]);
+      return { breaching, waiting: all, minutes: Math.round(sla.escalate_after_seconds / 60), oldest };
+    })().catch(() => ({ breaching: null, waiting: null, minutes: null, oldest: null })) : Promise.resolve({ breaching: null, waiting: null, minutes: null, oldest: null }),
     has("chargeback_radar") && wants("lapse") ? count(db().from("tenant_policy_lapse_signals").select("id", { count: "exact", head: true }).eq("tenant_id", input.tenantId).is("resolved_at", null)) : Promise.resolve(null),
     (input.role === "owner" || input.role === "producer") && wants("licences") ? (async () => {
       const horizon = new Date(now + 30 * 86_400_000).toISOString();
@@ -275,6 +295,7 @@ export async function getDashboardToday(input: { tenantId: string; userId: strin
     appointmentsWeekRead,
     policiesRead,
     setterWeekRead,
+    closeOutRead,
   ]);
 
   const todayPair = series[series.length - 1];
@@ -301,6 +322,7 @@ export async function getDashboardToday(input: { tenantId: string; userId: strin
       transfersWaiting: slaBlock.waiting,
       slaBreaching: slaBlock.breaching,
       slaMinutes: slaBlock.minutes,
+      oldestWaitingSeconds: slaBlock.oldest,
       callbacksOverdue: dueList ? dueList.filter((item) => item.isOverdue).length : null,
       callbacksToday: dueList ? dueList.filter((item) => !item.isOverdue).length : null,
       lapsing,
@@ -310,5 +332,6 @@ export async function getDashboardToday(input: { tenantId: string; userId: strin
     appointmentsWeek,
     policies30,
     setterWeek,
+    closeOut,
   };
 }

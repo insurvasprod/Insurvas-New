@@ -1,12 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { AlertCircle, Clock, X } from "lucide-react";
+import { AlertCircle, Clock } from "lucide-react";
 import { notify } from "@/lib/notify";
 
 import { Button } from "@/components/ui/button";
 import { ClearFiltersButton, DataToolbar, RefreshButton, ToolbarSearch } from "@/components/ui/data-toolbar";
+import { DetailPanel } from "@/components/ui/detail-panel";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { InfoTip } from "@/components/ui/info-tip";
 import { NoMatches } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -159,25 +161,10 @@ function VendorFields({ draft, onChange, idPrefix, allowInactive }: { draft: Dra
 
 /**
  * The full-length detail panel beside a table (2026-10-06 redesign, after the callback calendar): a
- * row opens it, X or Esc closes it, and the table keeps its own height and scroll beside it.
+ * row opens it, X or Esc closes it. Since 2026-10-09 it is the shared DetailPanel (split), kept in
+ * view beside the table while the table scrolls.
  */
-export function SidePanel({ title, subtitle, onClose, children }: { title: string; subtitle?: ReactNode; onClose: () => void; children: ReactNode }) {
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
-  return <aside aria-label={title} className="flex min-w-0 flex-col rounded-lg border border-border bg-card shadow-[0_1px_2px_rgba(16,20,26,.05)] lg:sticky lg:top-[calc(var(--top-bar-h)+1rem)] lg:max-h-[calc(100dvh-var(--top-bar-h)-2rem)] lg:w-[34%] lg:shrink-0">
-    <div className="flex items-start justify-between gap-3 border-b border-border px-4 py-3">
-      <div className="min-w-0">
-        <h2 className="truncate text-base font-semibold text-foreground" title={title}>{title}</h2>
-        {subtitle && <p className="mt-0.5 text-xs text-muted-foreground">{subtitle}</p>}
-      </div>
-      <Button type="button" variant="ghost" size="icon" aria-label="Close" onClick={onClose}><X aria-hidden="true" /></Button>
-    </div>
-    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">{children}</div>
-  </aside>;
-}
+export const SIDE_PANEL_FRAME = "lg:sticky lg:top-[calc(var(--top-bar-h)+1rem)] lg:max-h-[calc(100dvh-var(--top-bar-h)-2rem)]";
 
 /** The New vendor form, in a dialog. Opened by the page's "New vendor". */
 export function NewVendorPanel({ onClose, onCreated }: { onClose: () => void; onCreated: () => Promise<unknown> | void }) {
@@ -228,10 +215,10 @@ function TrialLine({ facts, onShowCampaigns, onOrderAnother, orderDisabledReason
   const needs = [campaigns <= 1 ? "a second campaign" : null, leads < threshold ? `${(threshold - leads).toLocaleString()} more leads` : null].filter(Boolean).join(" and ");
   const policies = facts.issued_policies;
   const sensitivity = facts.one_more_sale_moves_cents === null ? null
-    : policies === 0 ? ` The first sale would put its cost per policy at ${money(facts.one_more_sale_moves_cents)}.`
-    : ` One more sale would move its cost per policy by ${money(facts.one_more_sale_moves_cents)}.`;
+    : policies === 0 ? `The first sale would put its cost per policy at ${money(facts.one_more_sale_moves_cents)}.`
+    : `One more sale would move its cost per policy by ${money(facts.one_more_sale_moves_cents)}.`;
   return <FactLine tone="info" icon={<AlertCircle className="mt-0.5 size-4 shrink-0 text-[var(--info-ink)]" aria-hidden="true" />}>
-    <p className="m-0"><strong className="font-semibold text-[var(--info-ink)]">Trialling.</strong> {plural(campaigns, "campaign")}, {plural(leads, "lead")}{policies !== null ? `, ${plural(policies, "policy", "policies")} so far` : ""}. Not ranked or flagged until it has {needs}.{sensitivity}</p>
+    <p className="m-0"><strong className="font-semibold text-[var(--info-ink)]">Trialling.</strong> {plural(campaigns, "campaign")}, {plural(leads, "lead")}{policies !== null ? `, ${plural(policies, "policy", "policies")} so far` : ""}. Not ranked or flagged until it has {needs}.{sensitivity && <> <InfoTip label="Why it is not ranked yet">A small sample swings too much to rank. {sensitivity}</InfoTip></>}</p>
     <div className="mt-2 flex flex-wrap items-center gap-2">
       <Button type="button" variant="outline" size="sm" onClick={onShowCampaigns}>See its campaigns</Button>
       <Button type="button" variant="outline" size="sm" disabled={orderDisabledReason !== null} title={orderDisabledReason ?? undefined} onClick={onOrderAnother}>Order another</Button>
@@ -334,7 +321,7 @@ export function VendorRoster({ vendors, rollup, speed, consent, onChanged, onNew
       </DataToolbar>}
       footer={<>
         {matching.length > 0 ? <Pager page={current} total={matching.length} noun={matching.length === 1 ? "vendor" : "vendors"} onPage={setPage} pageSize={pageSize} /> : <span />}
-        {(factsError || (facts?.pending.length ?? 0) > 0) && <span role="status">{factsError ? `Cost per policy, claimable returns and trial status did not load: ${factsError}` : facts?.pending.map((item) => item.detail).join(" ")}</span>}
+        {(factsError || (facts?.pending.length ?? 0) > 0) && <span role="status" title={factsError ?? undefined}>{factsError ? "Refresh to load cost per policy and returns." : facts?.pending.map((item) => item.detail).join(" ")}</span>}
       </>}
     >
       {matching.length === 0 ? <NoMatches noun="vendors" onClear={() => { setSearch(""); setPage(1); }} /> : <Table className="[&_td]:text-[var(--body)]">
@@ -427,13 +414,13 @@ function VendorPanel({ vendor, row, fact, draft, onDraft, saving, saveError, onS
 }) {
   const status = row?.status ?? vendor.status;
   const category = row?.category ?? fact?.category ?? null;
-  const orderDisabledReason = vendorTakesCampaigns(status) ? null : "Inactive vendors take no new campaigns. Set it back to active first.";
+  const orderDisabledReason = vendorTakesCampaigns(status) ? null : "Set this vendor to active to order more.";
   const contact = row ? contactOf(row) : {};
   // Said beside the edit, from the draft: choosing "Under review" is when the reader needs it.
   const warning = draft ? vendorCampaignWarning(draft.status, row?.name ?? vendor.vendor_name) : null;
   const dropText = fact?.drop ? fact.drop.reasons.map((reason) => reason.text).join("; ") : "";
   const renews = fact?.drop ? calendarDate(fact.drop.renews_on) : null;
-  return <SidePanel title={vendor.vendor_name} subtitle={`${category ? `${category} · ` : ""}${vendor.lead_type} · ${vendor.active_campaign_count} of ${vendor.campaign_count} active`} onClose={onClose}>
+  return <DetailPanel mode="split" className={SIDE_PANEL_FRAME} title={vendor.vendor_name} subtitle={`${category ? `${category} · ` : ""}${vendor.lead_type} · ${vendor.active_campaign_count} of ${vendor.campaign_count} active`} onClose={onClose}>
     {fact?.claimable && <FactLine tone="danger" icon={<Clock className="mt-0.5 size-4 shrink-0 text-[var(--error-ink)]" aria-hidden="true" />}>
       <p className="m-0 tabular-nums"><strong className="font-semibold">{money(fact.claimable.cents)} claimable, {daysLeft(fact.claimable.days_left)}.</strong> {plural(fact.claimable.rows, "row")} at the campaign&rsquo;s purchased rate. <a className="font-semibold text-[var(--accent-ink)] hover:underline" href={`/app/vendor-returns?vendor=${vendor.vendor_id}`}>Claim it now</a></p>
     </FactLine>}
@@ -463,5 +450,5 @@ function VendorPanel({ vendor, row, fact, draft, onDraft, saving, saveError, onS
       </div>
       {orderDisabledReason && <p className="m-0 text-right text-xs text-muted-foreground">{orderDisabledReason}</p>}
     </>}
-  </SidePanel>;
+  </DetailPanel>;
 }

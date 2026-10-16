@@ -73,7 +73,7 @@ export function RevealBox({ id, fieldKey, masked, display, hasValue, label }: { 
     <div
       id={id}
       tabIndex={id ? -1 : undefined}
-      className="mt-1.5 flex h-9 min-w-0 items-center justify-between gap-2 rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] pl-3 pr-1 text-[14px] text-[var(--ink)] outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
+      className="mt-1.5 flex h-9 min-w-0 items-center justify-between gap-2 rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] pl-3 pr-1 text-sm text-[var(--ink)] outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
     >
       {!hasValue ? (
         <span className="text-[var(--muted)]">Not given</span>

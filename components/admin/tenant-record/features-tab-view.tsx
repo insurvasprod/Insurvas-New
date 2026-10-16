@@ -1,9 +1,10 @@
 "use client";
 
+import { StatusChip } from "@/components/ui/status-chip";
 import { useRouter } from "next/navigation";
 import { Fragment, useId, useMemo, useState, type FormEvent } from "react";
 
-import { Field, Pill, SettingsCard, btn, control, st } from "@/components/app/settings/primitives";
+import { Field, SettingsCard, btn, control, st } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { TableCard } from "@/components/ui/table-card";
 import { Pager, paginate } from "@/components/ui/pager";
@@ -42,7 +43,7 @@ function shortDate(value: string | null, dateOnly = false): string {
 }
 
 function StatePill({ state }: { state: OverrideState }) {
-  return state === "on" ? <Pill tone="success">On</Pill> : <Pill tone="neutral">Off</Pill>;
+  return state === "on" ? <StatusChip dot={false} tone="good">On</StatusChip> : <StatusChip dot={false} tone="neutral">Off</StatusChip>;
 }
 
 function killNote(kill: "off" | "beta" | undefined): string | null {
@@ -78,7 +79,7 @@ export function FeaturesTabView({
         <TableCard
           title={`Everything ${plan} grants`}
           footer={<Pager page={grantedCurrent} total={granted.length} noun="features" onPage={setGrantedPage} />}
-          action={<Pill tone="neutral">{granted.length === 1 ? "1 feature" : `${granted.length} features`}</Pill>}
+          action={<StatusChip dot={false} tone="neutral">{granted.length === 1 ? "1 feature" : `${granted.length} features`}</StatusChip>}
         >
           <table className={st.table}>
             <thead>
@@ -105,13 +106,13 @@ export function FeaturesTabView({
                     </td>
                     <td className={st.td}>
                       {kill[row.feature_key] === "off" ? (
-                        <Pill tone="error">Off for everyone</Pill>
+                        <StatusChip dot={false} tone="danger">Off for everyone</StatusChip>
                       ) : kill[row.feature_key] === "beta" ? (
-                        <Pill tone="warning">Named tenants only</Pill>
+                        <StatusChip dot={false} tone="warning">Named tenants only</StatusChip>
                       ) : row.override?.state === "off" ? (
-                        <Pill tone="warning">Overridden off</Pill>
+                        <StatusChip dot={false} tone="warning">Overridden off</StatusChip>
                       ) : (
-                        <Pill tone="success">On</Pill>
+                        <StatusChip dot={false} tone="good">On</StatusChip>
                       )}
                     </td>
                   </tr>
@@ -191,11 +192,11 @@ function OverridesTable({
       footer={<Pager page={current} total={rows.length} noun="overrides" onPage={setPage} />}
       action={
         deviations > 0 ? (
-          <Pill tone="warning" dot>
+          <StatusChip tone="warning" dot>
             {deviations === 1 ? "1 deviation" : `${deviations} deviations`} from {plan}
-          </Pill>
+          </StatusChip>
         ) : (
-          <Pill tone="neutral">No deviations from {plan}</Pill>
+          <StatusChip dot={false} tone="neutral">No deviations from {plan}</StatusChip>
         )
       }
     >
@@ -344,7 +345,7 @@ function AddOverrideCard({ tenantId, role, state, plan }: { tenantId: string; ro
   if (!canWriteOverrides(role)) {
     return (
       <SettingsCard title="Add an override">
-        <p className="m-0 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--body)]">
+        <p className="m-0 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--body)]">
           Read-only for your role ({ADMIN_ROLE_LABELS[role]}).
         </p>
       </SettingsCard>
@@ -409,7 +410,7 @@ function AddOverrideCard({ tenantId, role, state, plan }: { tenantId: string; ro
     <SettingsCard title="Add an override">
       <form className="flex flex-col gap-3.5" onSubmit={submit} noValidate>
         {closedReason && (
-          <p role="note" className="m-0 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--warning-ink)]">
+          <p role="note" className="m-0 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--warning-ink)]">
             {closedReason}
           </p>
         )}
@@ -484,7 +485,7 @@ function AddOverrideCard({ tenantId, role, state, plan }: { tenantId: string; ro
             {busy ? "Saving…" : "Add the override"}
           </Button>
           {saved && (
-            <span role="status" className="text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--success-ink)]">
+            <span role="status" className="text-sm leading-[1.5] tracking-[-0.02em] text-[var(--success-ink)]">
               {saved}
             </span>
           )}

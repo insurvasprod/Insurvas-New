@@ -1,15 +1,19 @@
 "use client";
 
+import Link from "next/link";
+
+import { StatusChip } from "@/components/ui/status-chip";
 import { Button } from "@/components/ui/button";
+import { InfoTip } from "@/components/ui/info-tip";
 import { ToolbarSearch } from "@/components/ui/data-toolbar";
-import { Field, Pill, PlusIcon, control } from "@/components/app/settings/primitives";
+import { Field, PlusIcon, control } from "@/components/app/settings/primitives";
 import { CONDITION_TYPES, MATCH_LABEL, MATCH_TYPES, MAX_EXTRA_CONDITIONS, RULE_STRATEGIES, SCHEMA_PENDING_MESSAGE, STRATEGY_LABEL, nobodySentence, type AssignmentMember, type ConditionType, type MatchType, type PreviewRow, type RuleStrategy } from "@/lib/assignment/constants";
 import { cn } from "@/lib/utils";
 import { type ConditionDraft, type RuleDraft, conditionProblem, roleLabel } from "./model";
 
 export function PreviewWhy({ row, ruleNumber, memberName }: { row: PreviewRow; ruleNumber: number | null; memberName: (id: string) => string }) {
-  if (row.outcome === "taken") return <Pill>Already taken</Pill>;
-  if (row.outcome === "error") return <Pill tone="error">{row.error ?? "Could not route"}</Pill>;
+  if (row.outcome === "taken") return <StatusChip dot={false}>Already taken</StatusChip>;
+  if (row.outcome === "error") return <StatusChip dot={false} tone="danger">{row.error ?? "Could not route"}</StatusChip>;
   if (row.outcome === "nobody") {
     const d = row.detail ?? {};
     const other = (d.capacity ?? 0) + (d.rest ?? 0) + (d.household ?? 0) + (d.day_off ?? 0) + (d.language ?? 0);
@@ -19,12 +23,12 @@ export function PreviewWhy({ row, ruleNumber, memberName }: { row: PreviewRow; r
       : (d.capacity ?? 0) > 0 && (d.capacity ?? 0) + (d.licence ?? 0) === d.candidates ? "Everyone full"
       : (d.household ?? 0) > 0 || (d.rest ?? 0) > 0 ? "Household held"
       : "No one eligible";
-    return <span title={nobodySentence(row.detail)}><Pill tone="error">{label}</Pill></span>;
+    return <span title={nobodySentence(row.detail)}><StatusChip dot={false} tone="danger">{label}</StatusChip></span>;
   }
-  if (row.setter_without_licensed_agent) return <Pill tone="info">No licence &mdash; setter</Pill>;
+  if (row.setter_without_licensed_agent) return <StatusChip dot={false} tone="info">No licence &mdash; setter</StatusChip>;
   const base = ruleNumber ? `Rule ${ruleNumber}` : "Whole roster";
   const full = row.full_user_ids[0];
-  return <Pill>{full ? <>{base} &mdash; {memberName(full)} full</> : base}</Pill>;
+  return <StatusChip dot={false}>{full ? <>{base} &mdash; {memberName(full)} full</> : base}</StatusChip>;
 }
 
 /** The expanded editor under a rule row. */
@@ -49,18 +53,24 @@ export function RuleEditor({
   onClose: () => void;
 }) {
   const id = `rule-editor-${draft.key}`;
-  const note: Record<MatchType, string> = {
-    realtime: "Leads posted in the last N seconds go to these assignees. Posted leads already sort first in the queue, so this decides who gets them — and, with Posted leads › Route on arrival on, it runs the moment they land.",
-    language: "Only assignees with the lead's language recorded in the capacity table take these leads. If none of them has it, the lead falls through to the next rule.",
-    campaign: "Leads bought on these campaigns.",
-    product: "Leads for these product codes. Licensed only keeps setters off them, here and in every rule after this one.",
-    state: "Leads in these states. Licence still decides who in the list may take each one.",
-    fallback: "Everything that reaches this rule, which always runs last, across the assignees. None ticked is the whole roster.",
+  // One short line under the select; the how lives behind the "?" (2026-10-09 copy pass).
+  const note: Record<MatchType, { text: string; tip?: string }> = {
+    realtime: { text: "Leads posted in the last N seconds.", tip: "Posted leads already sort first in the queue, so this decides who gets them. With Posted leads › Route on arrival on, it runs the moment they land." },
+    language: { text: "Assignees who share the lead's language.", tip: "Only assignees with the lead's language recorded in the capacity table take these leads. If none of them has it, the lead falls through to the next rule." },
+    campaign: { text: "Leads bought on these campaigns." },
+    product: { text: "Leads for these product codes.", tip: "Licensed only keeps setters off them, here and in every rule after this one." },
+    state: { text: "Leads in these states. Licence still decides who in the list may take each one." },
+    fallback: { text: "Everything left. Always runs last.", tip: "Spread across the assignees. None ticked is the whole roster." },
   };
+  const matchNote = note[draft.matchType];
   return (
     <div id={id} className="border-t border-[var(--border)] bg-[var(--canvas)] px-4 py-4">
       <div className="grid gap-4 md:grid-cols-[180px_minmax(0,1fr)]">
-        <Field label="Match" htmlFor={`${id}-type`} hint={note[draft.matchType]}>
+        <Field
+          label="Match"
+          htmlFor={`${id}-type`}
+          hint={matchNote.tip ? <span className="inline-flex items-center gap-0.5">{matchNote.text}<InfoTip label={`About ${MATCH_LABEL[draft.matchType]} rules`}>{matchNote.tip}</InfoTip></span> : matchNote.text}
+        >
           <select id={`${id}-type`} className={control} value={draft.matchType} disabled={!canManage} onChange={(event) => onChange({ matchType: event.target.value as MatchType })}>
             {MATCH_TYPES.map((type) => <option key={type} value={type} disabled={type === "realtime" && !boardSchema && draft.matchType !== "realtime"}>{MATCH_LABEL[type]}</option>)}
           </select>
@@ -91,7 +101,8 @@ export function RuleEditor({
             <fieldset className="m-0 min-w-0 border-0 p-0">
               <legend className="text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]">Campaigns</legend>
               {campaignCount > 8 && <div className="mt-1.5"><ToolbarSearch value={campaignFilter} onChange={onCampaignFilter} placeholder="Find a campaign" label="Find a campaign" /></div>}
-              {campaignCount === 0 ? <p className="mt-1.5 text-xs text-[var(--muted)]">This workspace has no campaigns yet. Add them on Lead vendors.</p> : (
+              {campaignCount === 0 ? <p className="mt-1.5 text-xs text-[var(--muted)]">No campaigns yet. <Link href="/app/campaigns" className="font-semibold text-[var(--accent-ink)] underline-offset-2 hover:underline">Add one on Vendors &amp; campaigns</Link></p>
+ : (
                 <div className="mt-2 flex max-h-44 flex-wrap gap-x-4 gap-y-2 overflow-y-auto">
                   {campaigns.map((campaign) => (
                     <label key={campaign.id} className="flex items-center gap-1.5 text-sm text-[var(--body)]">

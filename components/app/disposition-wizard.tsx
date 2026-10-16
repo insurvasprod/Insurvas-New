@@ -9,15 +9,16 @@ import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageLoading } from "@/components/ui/page-loading";
 import type { DispositionOption } from "@/lib/dispositions/types";
+import { US_CUSTOMER_TIMEZONES } from "@/lib/callbacks/timezone";
 import { cn } from "@/lib/utils";
 import { answerLabel, useDispositionWalk, when, type DispositionWalk, type Step, type WalkView } from "@/components/app/use-disposition-walk";
 
 const b = {
-  edit: "cursor-pointer border-0 bg-transparent p-1 text-[12px] leading-[1.5] font-semibold tracking-[-0.01em] text-[var(--ink)] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)] disabled:cursor-not-allowed disabled:opacity-50",
+  edit: "cursor-pointer border-0 bg-transparent p-1 text-xs leading-[1.5] font-semibold tracking-[-0.01em] text-[var(--ink)] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)] disabled:cursor-not-allowed disabled:opacity-50",
 };
-const control = "mt-1.5 box-border h-11 w-full rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] px-3 text-[16px] leading-[1.5] tracking-[-0.02em] text-[var(--ink)] outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)] disabled:cursor-not-allowed disabled:opacity-60";
-const fieldLabel = "text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]";
-const label12 = "text-[12px] leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]";
+const control = "mt-1.5 box-border h-11 w-full rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)] px-3 text-base leading-[1.5] tracking-[-0.02em] text-[var(--ink)] outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)] disabled:cursor-not-allowed disabled:opacity-60";
+const fieldLabel = "text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]";
+const label12 = "text-xs leading-[1.33] font-semibold tracking-[0.02em] uppercase text-[var(--muted)]";
 
 function Stepper({ steps }: { steps: Step[] }) {
   return (
@@ -25,10 +26,10 @@ function Stepper({ steps }: { steps: Step[] }) {
       {steps.map((step, index) => (
         <li key={step.key} aria-current={step.state === "current" ? "step" : undefined} className={cn("flex min-w-0 items-center", index < steps.length - 1 && "flex-1")}>
           <span className="flex shrink-0 items-center gap-2.5">
-            <span className={cn("inline-flex size-6 items-center justify-center rounded-full text-[12px] leading-[1.5] font-semibold", step.state === "done" ? "bg-[var(--success)] text-[var(--surface)]" : step.state === "current" ? "bg-[var(--primary)] text-[var(--on-primary)]" : "bg-[var(--surface-alt)] text-[var(--muted)]")}>
+            <span className={cn("inline-flex size-6 items-center justify-center rounded-full text-xs leading-[1.5] font-semibold", step.state === "done" ? "bg-[var(--success)] text-[var(--surface)]" : step.state === "current" ? "bg-[var(--primary)] text-[var(--on-primary)]" : "bg-[var(--surface-alt)] text-[var(--muted)]")}>
               {step.state === "done" ? <Check aria-hidden className="size-3.5" strokeWidth={3} /> : index + 1}
             </span>
-            <span className={cn("text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] whitespace-nowrap", step.state === "upcoming" ? "text-[var(--muted)]" : "text-[var(--ink)]")}>{step.label}</span>
+            <span className={cn("text-sm leading-[1.5] font-semibold tracking-[-0.02em] whitespace-nowrap", step.state === "upcoming" ? "text-[var(--muted)]" : "text-[var(--ink)]")}>{step.label}</span>
           </span>
           {index < steps.length - 1 && <span aria-hidden className={cn("m-track mx-3 h-0.5 min-w-4 flex-1", step.state === "done" ? "bg-[var(--success)]" : "bg-[var(--border)]")} />}
         </li>
@@ -42,8 +43,8 @@ function Choice({ name, checked, disabled, onSelect, title, sub, multi }: { name
     <label className={cn("flex w-full cursor-pointer items-center gap-3.5 rounded-[8px] px-4 py-3.5", checked ? "border-[1.5px] border-[var(--primary)] bg-[var(--brand-50)]" : "border border-[var(--border-strong)] bg-[var(--surface)] hover:bg-[var(--surface-alt)]", disabled && "cursor-not-allowed opacity-60")}>
       <input type={multi ? "checkbox" : "radio"} name={name} checked={checked} disabled={disabled} onChange={onSelect} className="size-[18px] shrink-0 accent-[var(--primary)]" />
       <span className="min-w-0">
-        <span className="block text-[16px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">{title}</span>
-        {sub && <span className="block text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">{sub}</span>}
+        <span className="block text-base leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">{title}</span>
+        {sub && <span className="block text-sm leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">{sub}</span>}
       </span>
     </label>
   );
@@ -61,8 +62,8 @@ export function OptionCard({ name, checked, disabled, onSelect, title, sub, mult
         {checked && <Check className="size-2.5" strokeWidth={4} />}
       </span>
       <span className="min-w-0">
-        <span className={cn("block text-[14px] leading-[1.5] font-semibold tracking-[-0.02em]", checked ? "text-[var(--accent-ink)]" : "text-[var(--ink)]")}>{title}</span>
-        {sub && <span className="block text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">{sub}</span>}
+        <span className={cn("block text-sm leading-[1.5] font-semibold tracking-[-0.02em]", checked ? "text-[var(--accent-ink)]" : "text-[var(--ink)]")}>{title}</span>
+        {sub && <span className="block text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">{sub}</span>}
       </span>
     </label>
   );
@@ -71,8 +72,8 @@ export function OptionCard({ name, checked, disabled, onSelect, title, sub, mult
 function Panel({ title, sub, children }: { title: string; sub?: ReactNode; children: ReactNode }) {
   return (
     <section className="min-w-0 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] p-5">
-      <h2 className="m-0 text-[18px] leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]">{title}</h2>
-      {sub && <p className="mt-1 mb-4 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">{sub}</p>}
+      <h2 className="m-0 text-title-sm leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]">{title}</h2>
+      {sub && <p className="mt-1 mb-4 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">{sub}</p>}
       <div className={sub ? "" : "mt-4"}>{children}</div>
     </section>
   );
@@ -150,8 +151,18 @@ export function CallbackDetailsFields({ walk, view, readOnly }: { walk: Disposit
       <div>
         <label htmlFor="callback-local" className={fieldLabel}>Callback date and time</label>
         <input id="callback-local" type="datetime-local" required className={control} value={walk.callbackLocal} disabled={readOnly || walk.saving} onChange={(event) => walk.setCallbackLocal(event.target.value)} aria-describedby="callback-timezones" />
-        <span id="callback-timezones" className="mt-1.5 block text-[12px] leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">Customer’s time ({wizard.customerTimezone}){view.callbackAt ? ` · ${when(view.callbackAt)} your time` : ""}</span>
+        <span id="callback-timezones" className="mt-1.5 block text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">Customer’s time ({view.customerZone ?? "choose their timezone"}){view.callbackAt ? ` · ${when(view.callbackAt)} your time` : ""}</span>
       </div>
+      {wizard.customerTimezone ? null : (
+        <div>
+          {/* The lead's state is unknown or spans zones: the agent says which, never a guess. */}
+          <label htmlFor="callback-timezone" className={fieldLabel}>Customer’s timezone</label>
+          <select id="callback-timezone" required className={control} value={walk.callbackTimezone} disabled={readOnly || walk.saving} onChange={(event) => walk.setCallbackTimezone(event.target.value)}>
+            <option value="">Choose…</option>
+            {US_CUSTOMER_TIMEZONES.map((zone) => <option key={zone} value={zone}>{zone.replace(/_/g, " ")}</option>)}
+          </select>
+        </div>
+      )}
       <div>
         <label htmlFor="callback-assignee" className={fieldLabel}>Assignee</label>
         <select id="callback-assignee" className={control} value={walk.callbackAssignee} disabled={readOnly || walk.saving} onChange={(event) => walk.setCallbackAssignee(event.target.value)}>
@@ -181,12 +192,12 @@ export function ReviewSummary({ walk, view, workItemId, verificationLink }: { wa
             ? { label: "What happens", value: chosen.description }
             : { label: chosen.stage.is_current ? "Stays in" : "Moves to", value: `${chosen.stage.name} · ${chosen.stage.pipeline_name}` },
           ...(isCallback ? [
-            { label: "Callback", value: callbackAt && wizard ? when(callbackAt, wizard.customerTimezone) : "—" },
+            { label: "Callback", value: callbackAt && view.customerZone ? when(callbackAt, view.customerZone) : "—" },
             { label: "Assigned to", value: assigneeName ?? myName },
           ] : []),
         ]} />
       ) : (
-        <p className="m-0 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">Choose an outcome first.</p>
+        <p className="m-0 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">Choose an outcome first.</p>
       )}
       {chosen?.needs_verification && (
         <div className="mt-5">
@@ -212,7 +223,7 @@ export function OutcomeEffects({ walk, view }: { walk: DispositionWalk; view: Wa
   return (
     <>
       {isCallback ? (
-        <>A callback is scheduled for {callbackAt ? <><strong>{when(callbackAt, wizard.customerTimezone)}</strong> (<strong>{when(callbackAt)}</strong> your time)</> : "the time you choose"}, the lead {lands} <strong>{stage.name}</strong>, and {assigneeName ? <><strong>{assigneeName}</strong> is assigned the callback</> : keeps}.</>
+        <>A callback is scheduled for {callbackAt ? <><strong>{when(callbackAt, view.customerZone ?? undefined)}</strong> (<strong>{when(callbackAt)}</strong> your time)</> : "the time you choose"}, the lead {lands} <strong>{stage.name}</strong>, and {assigneeName ? <><strong>{assigneeName}</strong> is assigned the callback</> : keeps}.</>
       ) : (
         <>The lead {lands} <strong>{stage.name}</strong>{stage.is_current ? "" : ` in ${stage.pipeline_name}`}, and {keeps}.</>
       )}
@@ -243,8 +254,8 @@ export function DispositionWizard({ workItemId, readOnly }: { workItemId: string
 
   const preview = chosen && !completed && !walking ? (
     <div className="rounded-[12px] border border-[var(--border)] border-l-[3px] border-l-[var(--primary)] bg-[var(--brand-50)] px-4 py-3">
-      <div className="text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--accent-ink)]">What this outcome will do</div>
-      <p className="mt-1 mb-0 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--body)]"><OutcomeEffects walk={walk} view={view} /></p>
+      <div className="text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--accent-ink)]">What this outcome will do</div>
+      <p className="mt-1 mb-0 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--body)]"><OutcomeEffects walk={walk} view={view} /></p>
     </div>
   ) : null;
 
@@ -293,8 +304,8 @@ export function DispositionWizard({ workItemId, readOnly }: { workItemId: string
               <div className="flex items-start gap-3 rounded-[8px] border border-[var(--border)] bg-[var(--canvas)] px-4 py-3">
                 <Check aria-hidden className="mt-1 size-4 shrink-0 text-[var(--success-ink)]" />
                 <div className="min-w-0">
-                  <p className="m-0 text-[16px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">{wizard.dispositions.find((item) => item.disposition_key === wizard.walk.final_disposition_key)?.label ?? chosen?.label ?? wizard.walk.final_disposition_key}</p>
-                  <p className="mt-1 mb-0 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">{wizard.walk.composed_note || "No note was composed."}</p>
+                  <p className="m-0 text-base leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">{wizard.dispositions.find((item) => item.disposition_key === wizard.walk.final_disposition_key)?.label ?? chosen?.label ?? wizard.walk.final_disposition_key}</p>
+                  <p className="mt-1 mb-0 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">{wizard.walk.composed_note || "No note was composed."}</p>
                 </div>
               </div>
               <div className="mt-4 flex flex-wrap gap-2">
@@ -323,16 +334,16 @@ export function DispositionWizard({ workItemId, readOnly }: { workItemId: string
           <section aria-label="Walked path" className="min-w-0 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] p-5">
             <div className={label12}>Walked path</div>
             {orderedSteps.length === 0 ? (
-              <p className="mt-2 mb-0 border-t border-[var(--border)] pt-2 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">No answers recorded yet.</p>
+              <p className="mt-2 mb-0 border-t border-[var(--border)] pt-2 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">No answers recorded yet.</p>
             ) : (
               <ol className="m-0 mt-2 list-none p-0">
                 {orderedSteps.map((step, index) => {
                   const stepNode = nodesById.get(step.node_id);
                   return (
                     <li key={step.id} className="flex items-center gap-2.5 border-t border-[var(--border)] py-2">
-                      <span className="inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-[var(--surface-alt)] text-[12px] leading-[1.5] font-semibold text-[var(--ink)]">{index + 1}</span>
-                      <span className="min-w-0 flex-1 text-[14px] leading-[1.5] tracking-[-0.02em] text-[var(--body)]">{stepNode?.prompt || step.node_label}</span>
-                      <span className="text-[14px] leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">{answerLabel(step, stepNode)}</span>
+                      <span className="inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-[var(--surface-alt)] text-xs leading-[1.5] font-semibold text-[var(--ink)]">{index + 1}</span>
+                      <span className="min-w-0 flex-1 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--body)]">{stepNode?.prompt || step.node_label}</span>
+                      <span className="text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">{answerLabel(step, stepNode)}</span>
                       <button type="button" onClick={() => walk.beginEdit(step.sequence)} disabled={readOnly || saving} className={b.edit} aria-label={`Edit the answer to ${stepNode?.prompt || step.node_label}`}>Edit</button>
                     </li>
                   );

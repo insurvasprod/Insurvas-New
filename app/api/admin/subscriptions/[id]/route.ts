@@ -3,10 +3,10 @@ import { z } from "zod";
 
 import { requireAdminRole } from "@/lib/adminAuth/requireAdminRole";
 import { CAN_MANAGE_SUBSCRIPTIONS } from "@/lib/subscriptions/permissions";
-import { changePlanSchema, cancelSubscriptionSchema, pauseSubscriptionSchema } from "@/lib/subscriptions/schemas";
+import { changePlanSchema, cancelSubscriptionSchema, pauseSubscriptionSchema, resumeSubscriptionSchema } from "@/lib/subscriptions/schemas";
+import { changePlanErrorResponse, queuedAsDowngrade } from "@/lib/subscriptions/mutationErrors";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { audit } from "@/lib/audit/log";
-import { rebuildEntitlement } from "@/lib/entitlements/rebuild";
 import { settleMidPeriodPlanChange } from "@/lib/billing/planChange";
 import type { Json } from "@/lib/supabase/database.types";
 import {
@@ -18,8 +18,13 @@ import {
 
 const actionSchema = z.object({ action: z.enum(["change_plan", "cancel", "pause", "resume"]) });
 
-/** One endpoint per subscription, dispatching on `action`, so every path shares the audit and
- *  entitlement-rebuild wiring rather than four routes each remembering to do it. */
+/** One endpoint per subscription, dispatching on `action`, so every path shares the audit wiring
+ *  rather than four routes each remembering to do it.
+ *
+ *  The entitlement rebuild is no longer a step here: every function below rebuilds it in its own
+ *  transaction when access changes now (20261015600000), so a failed rebuild undoes the change
+ *  instead of committing it and failing afterwards. What runs after the commit (proration, the audit
+ *  row) is caught and reported, so the idempotency claim always resolves. */
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireAdminRole(CAN_MANAGE_SUBSCRIPTIONS);
   if (auth instanceof NextResponse) return auth;
@@ -74,6 +79,19 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json(responseBody, { status, headers: { "Idempotency-Key": idempotency.key! } });
   };
 
+  // After the commit: record, never throw past finish().
+  const warnings: string[] = [];
+  const recordAudit = async (params: Parameters<typeof audit>[0]) => {
+    try {
+      await audit(params);
+    } catch (auditError) {
+      console.error(`[subscriptions] audit failed after ${params.action}`, auditError);
+      warnings.push("The change was saved but its audit entry could not be written.");
+    }
+  };
+  const withWarnings = (responseBody: Record<string, Json>): Json =>
+    warnings.length ? { ...responseBody, warning: warnings.join(" ") } : responseBody;
+
   switch (actionParsed.data.action) {
     case "change_plan": {
       const parsed = changePlanSchema.safeParse(body);
@@ -88,46 +106,49 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       });
 
       if (error) {
-        if (/plan_archived|plan_not_found/.test(error.message ?? "")) {
-          return finish({ error: "That plan is not available for new subscriptions" }, 409, "failed");
-        }
-        if (error.message?.includes("cycle_not_offered")) {
-          return finish({ error: "That plan isn't sold on this subscription's billing cycle" }, 400, "failed");
-        }
-        return finish({ error: "Could not change the plan" }, 500, "failed");
+        const mapped = changePlanErrorResponse(error);
+        if (mapped.status === 500) console.error("[subscriptions] change plan failed", error);
+        return finish({ error: mapped.error }, mapped.status, "failed");
       }
 
       const result = Array.isArray(data) ? data[0] : data;
-
-      // Only rebuild when something actually changed now; a queued downgrade changes nothing
-      // until the period rolls, and rebuilding early would revoke access they still paid for.
-      if (result.applied_now) {
-        await rebuildEntitlement(existing.tenant_id, "subscription.plan_changed");
-      }
+      // The database decided the timing from the prices; a downgrade asked for "now" was queued.
+      const downgradeQueued = queuedAsDowngrade(parsed.data.apply_now, result.applied_now);
 
       // Backlog #41: an immediate change mid-period has a price, and until now nobody paid it.
       // The difference is parked as a pending charge and collected on the next invoice, and the
       // old membership is stopped from renewing at the old price. A queued change needs none of
       // this — it takes effect exactly at the boundary, where there is nothing to prorate.
-      const proration = result.applied_now
-        ? await settleMidPeriodPlanChange({
+      let proration: Awaited<ReturnType<typeof settleMidPeriodPlanChange>> | null = null;
+      if (result.applied_now) {
+        try {
+          proration = await settleMidPeriodPlanChange({
             subscriptionId: id,
             fromPlanId: existing.plan_id,
             toPlanId: parsed.data.plan_id,
             createdBy: auth.session.sub,
-          })
-        : null;
+          });
+        } catch (settleError) {
+          // The plan has moved; the difference was not parked. Said, and recorded, so it is billed by hand.
+          console.error("[subscriptions] proration failed after plan change", settleError);
+          warnings.push("The plan changed, but the mid-period difference could not be calculated — raise it as a manual charge.");
+        }
+      }
 
-      await audit({
+      await recordAudit({
         actorId: auth.session.sub,
         action: "subscription.plan_changed",
         targetType: "subscription",
         targetId: id,
+        reason: parsed.data.reason,
         metadata: {
           tenantId: existing.tenant_id,
           plan: { from: existing.plan_id, to: parsed.data.plan_id },
           appliedNow: result.applied_now,
+          requestedNow: parsed.data.apply_now,
+          downgradeQueued,
           effectiveAt: result.effective_at,
+          ...(warnings.length ? { warnings: [...warnings] } : {}),
           // The money is part of the record. An upgrade that charged the customer $122.58 and an
           // upgrade that charged nothing must be distinguishable afterwards without re-deriving it.
           proration: proration
@@ -146,8 +167,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       });
 
       return finish(
-        {
+        withWarnings({
           appliedNow: result.applied_now,
+          downgradeQueued,
           effectiveAt: result.effective_at,
           proration: proration
             ? {
@@ -159,7 +181,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
                 warning: proration.providerWarning,
               }
             : null,
-        },
+        }),
         200,
         "succeeded",
       );
@@ -181,15 +203,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         if (/subscription_state_not_cancellable|plan_archived|plan_not_found/.test(error.message ?? "")) {
           return finish({ error: "That subscription cannot be cancelled in its current state" }, 409, "failed");
         }
+        console.error("[subscriptions] cancel failed", error);
         return finish({ error: "Could not cancel the subscription" }, 500, "failed");
       }
 
       const result = Array.isArray(data) ? data[0] : data;
-      if (result.cancelled_now) {
-        await rebuildEntitlement(existing.tenant_id, "subscription.cancelled");
-      }
 
-      await audit({
+      await recordAudit({
         actorId: auth.session.sub,
         action: "subscription.cancelled",
         targetType: "subscription",
@@ -203,21 +223,17 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         request,
       });
 
-      return finish({ cancelledNow: result.cancelled_now, effectiveAt: result.effective_at }, 200, "succeeded");
+      return finish(withWarnings({ cancelledNow: result.cancelled_now, effectiveAt: result.effective_at }), 200, "succeeded");
     }
 
     case "pause":
     case "resume": {
       const pausing = actionParsed.data.action === "pause";
-      let reason: string | undefined;
-
-      if (pausing) {
-        const parsed = pauseSubscriptionSchema.safeParse(body);
-        if (!parsed.success) {
-          return finish({ error: parsed.error.issues[0]?.message ?? "A reason is required" }, 400, "failed");
-        }
-        reason = parsed.data.reason;
+      const parsed = (pausing ? pauseSubscriptionSchema : resumeSubscriptionSchema).safeParse(body);
+      if (!parsed.success) {
+        return finish({ error: parsed.error.issues[0]?.message ?? "A reason is required" }, 400, "failed");
       }
+      const reason = parsed.data.reason;
 
       // bugs_sa.md M2-5. This was a bare status write, so `resume` acted as a universal
       // "make it active" and one crafted request restored full access to a cancelled
@@ -234,13 +250,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         if (error.code === "23514" || /cannot be paused|can be resumed/.test(error.message)) {
           return finish({ error: error.message }, 409, "failed");
         }
+        console.error(`[subscriptions] ${pausing ? "pause" : "resume"} failed`, error);
         return finish({ error: `Could not ${pausing ? "pause" : "resume"} the subscription` }, 500, "failed");
       }
 
-      // Pausing drops the tenant to read-only, so the entitlement must change immediately.
-      await rebuildEntitlement(existing.tenant_id, pausing ? "subscription.paused" : "subscription.resumed");
-
-      await audit({
+      // Pausing drops the tenant to read-only; the function rebuilt the entitlement in its own
+      // transaction, so it has already changed.
+      await recordAudit({
         actorId: auth.session.sub,
         action: pausing ? "subscription.paused" : "subscription.resumed",
         targetType: "subscription",
@@ -250,7 +266,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         request,
       });
 
-      return finish({ ok: true }, 200, "succeeded");
+      return finish(withWarnings({ ok: true }), 200, "succeeded");
     }
   }
 }

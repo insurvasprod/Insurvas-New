@@ -47,14 +47,20 @@ export type SetupProfileInput = {
   leadSources: string[];
 };
 
+/** Lead sources that arrive through a publisher or a feed, and so need routing. Referrals do not. */
+export const ROUTED_LEAD_SOURCES: readonly string[] = ["purchased", "website", "social"];
+/** Saved in business_profiles.recommended_setup_steps; the dashboard checklist reads them back. */
+export const LEAD_SOURCE_SETUP_STEP = "Connect and route your lead sources";
+export const BOOK_IMPORT_SETUP_STEP = "Import your existing book of business";
+
 export function deriveRecommendedSetupSteps(profile: SetupProfileInput): string[] {
   const steps = ["Configure your product workspace"];
 
-  if (profile.leadSources.some((source) => ["purchased", "website", "social"].includes(source))) {
-    steps.push("Connect and route your lead sources");
+  if (profile.leadSources.some((source) => ROUTED_LEAD_SOURCES.includes(source))) {
+    steps.push(LEAD_SOURCE_SETUP_STEP);
   }
   if (profile.leadSources.includes("existing_book")) {
-    steps.push("Import your existing book of business");
+    steps.push(BOOK_IMPORT_SETUP_STEP);
   }
   if (["101_250", "251_500", "500_plus"].includes(profile.monthlyVolumeRange)) {
     steps.push("Configure high-volume workflow automation");

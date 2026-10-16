@@ -6,6 +6,7 @@ import { isSchemaGap } from "@/lib/supabase/schemaGap";
 import { getCommissionLedger } from "@/lib/ledger/service";
 
 import {
+  carrierLagDays,
   computeDiscrepancies,
   owedSummary,
   planRefresh,
@@ -55,6 +56,7 @@ type Query = PromiseLike<Result> & {
   select(columns: string, options?: unknown): Query;
   eq(column: string, value: unknown): Query;
   neq(column: string, value: unknown): Query;
+  or(filters: string): Query;
   in(column: string, values: readonly unknown[]): Query;
   order(column: string, options?: unknown): Query;
   range(from: number, to: number): Query;
@@ -84,14 +86,18 @@ type EntryRow = { line_id: string; statement_id: string; carrier_id: string; per
 
 /** Everything the engine reads, for one tenant. */
 async function gather(tenantId: string, today: string) {
-  const [ledger, library, policies, entries, statements] = await Promise.all([
+  const [ledger, library, policies, entries, statements, settings] = await Promise.all([
     getCommissionLedger({ tenantId, canView: () => true, today }),
     getCarrierLibrary(tenantId),
     readAll<PolicyRow>(() => db().from("tenant_policies").select("id, policy_number, insured_name, carrier, status, effective_date, created_by").eq("tenant_id", tenantId).order("id")),
     readAll<EntryRow>(() => db().from("tenant_commission_statement_entries").select("line_id, statement_id, carrier_id, period_start, period_end, amount_cents, kind, posted_on, policy_id").eq("tenant_id", tenantId).order("line_id")),
     readAll<{ id: string; carrier_id: string; period_start: string; period_end: string; status: string }>(() => db().from("tenant_commission_statements").select("id, carrier_id, period_start, period_end, status").eq("tenant_id", tenantId).neq("status", "voided").order("id")),
+    // Each carrier's payment lag (LA-4.17 carrier rules): the agency's own, else the platform's.
+    readAll<{ id: string; tenant_id: string | null; carrier_id: string; expected_lag_days: number | null }>(() => db().from("carrier_operating_settings").select("id, tenant_id, carrier_id, expected_lag_days").or(`tenant_id.eq.${tenantId},tenant_id.is.null`).order("id")),
   ]);
   for (const read of [policies, entries, statements]) if (read.error) throw new Error(`Could not read the book for discrepancies: ${read.error.message}`);
+  if (settings.error && !isSchemaGap(settings.error)) throw new Error(`Could not read the carrier rules for discrepancies: ${settings.error.message}`);
+  const lagDays = carrierLagDays(settings.error ? [] : settings.rows, tenantId);
 
   // LA-4.3 premium and rate, when the carrier showed them (after 20261002100000).
   const rates = new Map<string, { premium: number | null; rate: number | null }>();
@@ -125,7 +131,7 @@ async function gather(tenantId: string, today: string) {
   const coverage: CoveredPeriod[] = statements.rows.filter((row) => reviewed.has(row.id)).map(asPeriod);
   // The days an unreviewed statement covers are not judged yet, for its carrier (computeDiscrepancies).
   const pending: CoveredPeriod[] = statements.rows.filter((row) => !reviewed.has(row.id)).map(asPeriod);
-  return { policies: policyRows, expected, received, coverage, pending, producerOf: new Map(policies.rows.map((row) => [row.id, row.created_by])) };
+  return { policies: policyRows, expected, received, coverage, pending, lagDays, producerOf: new Map(policies.rows.map((row) => [row.id, row.created_by])) };
 }
 
 type StoredRow = {

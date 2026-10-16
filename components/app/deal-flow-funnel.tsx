@@ -11,8 +11,8 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { SectionLoading } from "@/components/ui/page-states";
-import { TableCard } from "@/components/ui/table-card";
+import { EmptyState, SectionLoading } from "@/components/ui/page-states";
+import { PagedBody, PagedTableCard } from "@/components/ui/paged";
 import type { AgentLine, DialFunnel } from "@/lib/dealFlow/dialFunnel";
 import { formatCentsAsCurrency } from "@/lib/money";
 import { cn } from "@/lib/utils";
@@ -113,17 +113,19 @@ export function DealFlowFunnel({ from, to, agentId, isToday }: { from: string; t
             <span className="block text-xs leading-[1.5] text-[var(--muted)]">{spendFoot}</span>
           </div>
         </div>
-        {data.capped && <p className="mt-3 mb-0 text-xs leading-[1.5] text-[var(--warning-ink)]">This range is larger than the funnel reads at once, so the counts are a floor. Narrow the dates for exact figures.</p>}
+        {data.capped && <p className="mt-3 mb-0 text-xs leading-[1.5] text-[var(--warning-ink)]">Narrow the dates for exact counts — these are a floor.</p>}
       </section>
 
       <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-        <TableCard
+        <PagedTableCard
+          total={data.agents.length}
+          noun="agents"
           className="min-w-0"
           title="By agent"
           action={<Link href="/app/activity?view=scorecard" className="text-xs font-semibold text-[var(--ink)]">Open the scorecard</Link>}
         >
           {data.agents.length === 0 ? (
-            <p className="m-0 px-4 py-6 text-sm leading-[1.5] text-[var(--muted)]">Nobody was served or dialed a lead {when}.</p>
+            <EmptyState title={`No dials ${when}`} hint="Agents show here once they are served leads." action={<Button asChild variant="outline"><Link href="/app/dialer">Open the dialer</Link></Button>} />
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full min-w-[420px] border-collapse">
@@ -135,11 +137,11 @@ export function DealFlowFunnel({ from, to, agentId, isToday }: { from: string; t
                     <th scope="col" className={cn(label12, "px-4 py-2 text-right")}>Apps</th>
                   </tr>
                 </thead>
-                <tbody>{data.agents.map((agent) => <AgentRow key={agent.id} agent={agent} />)}</tbody>
+                <PagedBody>{data.agents.map((agent) => <AgentRow key={agent.id} agent={agent} />)}</PagedBody>
               </table>
             </div>
           )}
-        </TableCard>
+        </PagedTableCard>
 
         <section aria-labelledby="dial-leak-title" className="min-w-0 rounded-lg border border-border bg-card p-5">
           <h2 id="dial-leak-title" className="m-0 text-lg leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]">

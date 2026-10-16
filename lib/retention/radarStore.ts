@@ -7,6 +7,7 @@ import { isPolicyFeed } from "@/lib/ingestion/constants";
 import { historyStart, persistency, type ScorePolicy } from "@/lib/ingestion/scorecards";
 import { loadScorecards } from "@/lib/ingestion/scorecardsStore";
 
+import { mapLimit, READ_CONCURRENCY } from "./batch";
 import { PLATFORM_DEFAULT_WEIGHTS, SCORED_STATUSES, SIGNALS, settingsFromRow, type RetentionSettings, type Weights } from "./constants";
 import { scorePolicy } from "./score";
 import { deriveSignals, type SignalInput, type SignalRow } from "./signals";
@@ -50,11 +51,11 @@ async function everyRow(build: () => Loose, max = 200_000): Promise<Loose[]> {
 const chunks = <T,>(items: T[], size: number) => Array.from({ length: Math.ceil(items.length / size) }, (_, i) => items.slice(i * size, i * size + size));
 async function byIds(table: string, columns: string, column: string, ids: Array<string | null>, tenantId?: string): Promise<Loose[]> {
   const unique = [...new Set(ids.filter((id): id is string => Boolean(id)))];
-  const results = await Promise.all(chunks(unique, CHUNK).map((part) => {
+  const results = await mapLimit<string[], Loose>(chunks(unique, CHUNK), READ_CONCURRENCY, (part) => {
     let q = db().from(table).select(columns).in(column, part);
     if (tenantId) q = q.eq("tenant_id", tenantId);
     return q;
-  }));
+  });
   for (const r of results) if (r.error) throw r.error;
   return results.flatMap((r: Loose) => r.data ?? []);
 }
@@ -311,10 +312,14 @@ function signalColumns(tenantId: string, p: Loose, s: SignalRow, computedAt: str
   };
 }
 
-/** The newest computation, and the book's newest day: a run is due when the book moved past it. */
+/**
+ * The OLDEST computation, and the book's newest day: a run is due when the book moved past it. The
+ * oldest, not the newest — rescoring one policy (an income saved, a fix verified) must not make a
+ * stale book look fresh.
+ */
 export async function ensureRadarFresh(tenantId: string): Promise<RadarRun | null> {
   const [last, book] = await Promise.all([
-    db().from("policy_risk_score").select("as_of, computed_at").eq("tenant_id", tenantId).order("computed_at", { ascending: false }).limit(1).maybeSingle(),
+    db().from("policy_risk_score").select("as_of, computed_at").eq("tenant_id", tenantId).order("computed_at", { ascending: true }).limit(1).maybeSingle(),
     db().from("policy_current").select("as_of").eq("tenant_id", tenantId).in("status_normalized", [...SCORED_STATUSES]).order("as_of", { ascending: false }).limit(1).maybeSingle(),
   ]);
   if (last.error) {

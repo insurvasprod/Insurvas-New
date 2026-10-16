@@ -6,15 +6,20 @@
 // tell the truth so a human can chase.
 //
 // Meant to run daily. Run with: npm run mark:overdue
+// Also scheduled daily at /api/cron/invoices-overdue; both call lib/invoices/overdue.ts.
 import { createClient } from "@supabase/supabase-js";
+
+import { markOverdueInvoices } from "../lib/invoices/overdue.ts";
 
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, {
   auth: { persistSession: false },
 });
 
-const { data, error } = await supabase.rpc("mark_overdue_invoices");
-if (error) {
-  console.error("Could not mark overdue invoices:", error.message);
+let data;
+try {
+  data = await markOverdueInvoices(supabase);
+} catch (error) {
+  console.error(error instanceof Error ? error.message : error);
   process.exit(1);
 }
 

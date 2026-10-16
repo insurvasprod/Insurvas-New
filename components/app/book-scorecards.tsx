@@ -29,9 +29,9 @@ import { notify } from "@/lib/notify";
  * can't fill yet prints "Building".
  */
 
-export type CellView = { month: Bucket; building: boolean; readyOn: string | null; eligible: number; alive: number; premiumEligibleCents: number; premiumAliveCents: number; premiumUnknown: number };
-type SliceView = { key: string; name: string; policies: number; inForce: number; annualCents: number; annualUnknown: number };
-type ChargebackView = { key: string; name: string; advancedCents: number; chargedBackCents: number; advancedPolicies: number };
+export type CellView = { month: Bucket; building: boolean; readyOn: string | null; eligible: number; alive: number; premiumEligibleCents: number; premiumAliveCents: number; premiumUnknown: number; endUnknown: number };
+type SliceView = { key: string; name: string; policies: number; inForce: number; annualCents: number; inForceCents: number; annualUnknown: number };
+type ChargebackView = { key: string; name: string; advancedCents: number; chargedBackCents: number; advancedPolicies: number; earlierCents: number };
 type CardView = { key: string; name: string; policies: number; inForce: number; annualCents: number; issued: number; placed: number; contract: CellView; advancedCents: number; chargedBackCents: number; advancedPolicies: number; netCents: number; netKnown: boolean; spendCents?: number | null; sales?: number };
 
 export type ScorecardsView = {
@@ -40,7 +40,8 @@ export type ScorecardsView = {
   periods: number[];
   today: string;
   period: { from: string; to: string };
-  start: string | null;
+  /** How persistency is counted: how many carriers from issue dates, and which from their first file. */
+  history: { fromIssue: number; fromFirstFile: Array<{ name: string; since: string }> };
   minSample: number;
   canEditSettings: boolean;
   scoped: boolean;
@@ -80,7 +81,16 @@ function SliceTabs<K extends string>({ label, value, options, onChange }: { labe
 }
 
 const cellTitle = (c: CellView, minSample: number) =>
-  c.building ? `Needs ${c.month} months of issue history${c.readyOn ? ` (from ${readableDay(c.readyOn)})` : ""}` : c.eligible === 0 ? "No policy issued since the history began is old enough yet" : c.eligible < minSample ? `${c.alive} of ${c.eligible} in force; a percentage needs ${minSample} policies` : `${c.alive} of ${c.eligible} in force at month ${c.month}`;
+  c.building ? `Needs ${c.month} months of issue history${c.readyOn ? ` (from ${readableDay(c.readyOn)})` : ""}` : c.eligible === 0 ? "No policy is old enough for this month yet" : `${c.eligible < minSample ? `${c.alive} of ${c.eligible} in force; a percentage needs ${minSample} policies` : `${c.alive} of ${c.eligible} in force at month ${c.month}`}${c.endUnknown ? ` · ${c.endUnknown} lapsed with no end date on file, left out` : ""}`;
+
+/** How persistency was counted, in one sentence under the table (lib/ingestion/scorecards.ts historyStart). */
+function historyNote(history: ScorecardsView["history"]): string {
+  const late = history.fromFirstFile;
+  const issued = history.fromIssue ? `${history.fromIssue === 1 ? "One carrier is" : `${history.fromIssue} carriers are`} counted from issue dates: ${history.fromIssue === 1 ? "its files list" : "their files list"} lapsed policies with the date each ended.` : "";
+  if (!late.length) return issued;
+  const names = late.map((c) => `${c.name} (since ${readableDay(c.since)})`).join(", ");
+  return `${issued}${issued ? " " : ""}${names}: counted on policies issued since ${late.length === 1 ? "its" : "their"} first file, because ${late.length === 1 ? "its file lists" : "their files list"} only live policies, or lapses without the date they ended, so older policies can't be judged fairly.`;
+}
 
 export function BookScorecards({ model }: { model: ScorecardsView }) {
   const router = useRouter();
@@ -134,10 +144,11 @@ function Overview({ model, Fig, refresh }: Parts) {
   return (
     <>
       <StatStrip label="Book">
-        <StatTile label="Annualised premium" value={model.whole ? <Fig d={{ kind: "book", dim: "all", key: "all" }}>{centsText(model.whole.annualCents)}</Fig> : "—"} footnote={model.whole ? `${count(model.whole.inForce)} of ${count(model.whole.policies)} policies in force${model.whole.annualUnknown ? ` · ${model.whole.annualUnknown} with no premium on file` : ""}` : undefined} />
+        {/* The live book: in-force premium, opening the policies in force. */}
+        <StatTile label="In-force premium" value={model.whole ? <Fig d={{ kind: "book", dim: "all", key: "all", live: true }}>{centsText(model.whole.inForceCents)}</Fig> : "—"} footnote={model.whole ? `${count(model.whole.inForce)} of ${count(model.whole.policies)} policies in force · ${centsText(model.whole.annualCents)} across all${model.whole.annualUnknown ? ` · ${model.whole.annualUnknown} with no premium on file` : ""}` : undefined} />
         <StatTile label={`Month-${CONTRACT_MONTH} persistency`} value={m9.building || !m9.eligible ? persistencyText(m9, "count", model.minSample) : <Fig d={{ kind: "persistency", month: CONTRACT_MONTH, dim: "all", key: "" }}>{persistencyText(m9, "count", model.minSample)}</Fig>} valueTone={!m9.building && m9.eligible >= model.minSample ? (percentOf(m9.alive, m9.eligible) < CONTRACT_SHARE_PCT ? "danger" : "good") : undefined} footnote={m9.building ? cellTitle(m9, model.minSample) : `carriers look for ${CONTRACT_SHARE_PCT}%`} />
         <StatTile label="Placed" value={pl.issued ? <Fig d={{ kind: "placement", set: "placed" }}>{shareText(pl.placed, pl.issued, model.minSample)}</Fig> : "—"} footnote={pl.issued ? `of ${count(pl.issued)} issued in the period paid at least once` : "nothing issued in the period"} />
-        <StatTile label="Chargeback ratio" value={cbAll ? <Fig d={{ kind: "chargeback", dim: "all", key: "all" }}>{chargebackText(cbAll, model.minSample) ?? "Building"}</Fig> : "—"} footnote={cbAll ? `${centsText(cbAll.chargedBackCents)} back of ${centsText(cbAll.advancedCents)} advanced${chargebackText(cbAll, model.minSample) ? "" : ` · a ratio needs ${model.minSample} policies`}` : "no advance on file yet"} />
+        <StatTile label="Chargeback ratio" value={cbAll ? <Fig d={{ kind: "chargeback", dim: "all", key: "all" }}>{chargebackText(cbAll, model.minSample) ?? "Building"}</Fig> : "—"} footnote={cbAll ? `${centsText(cbAll.chargedBackCents)} back of ${centsText(cbAll.advancedCents)} advanced${chargebackText(cbAll, model.minSample) ? "" : ` · a ratio needs ${model.minSample} policies`}${cbAll.earlierCents ? ` · ${centsText(cbAll.earlierCents)} more on advances paid before your first statement` : ""}` : "no advance on file yet"} />
       </StatStrip>
 
       <PagedTableCard total={model.summary.facts.length} noun="items" title="Today" description={readableDay(model.summary.date)}>
@@ -148,28 +159,36 @@ function Overview({ model, Fig, refresh }: Parts) {
         )}
       </PagedTableCard>
 
-      <PagedTableCard key={bookDim} total={book.length} noun="rows" title="Book of business" toolbar={<DataToolbar actions={<><CsvButton name={`book-by-${bookDim}`} header={[DIMENSION_LABELS[bookDim], "Policies", "In force", "Annualised premium", "No premium on file"]} rows={book.map((s) => [bookDim === "status" ? statusLabel(s.key) : s.name, s.policies, s.inForce, dollars(s.annualCents), s.annualUnknown])} />{refresh}</>}><SliceTabs label="Book by" value={bookDim} options={["carrier", "product", "status", "agent", "agency"] as const} onChange={setBookDim} /></DataToolbar>}>
-        <table className="portal-lead-table w-full min-w-[640px] text-left text-sm">
-          <thead><tr><th>{DIMENSION_LABELS[bookDim]}</th><th className="w-[110px] text-right">Policies</th><th className="w-[110px] text-right">In force</th><th className="w-[170px] text-right">Annualised premium</th></tr></thead>
+      <PagedTableCard key={bookDim} total={book.length} noun="rows" title="Book of business" toolbar={<DataToolbar actions={<><CsvButton name={`book-by-${bookDim}`} header={[DIMENSION_LABELS[bookDim], "Policies", "In force", "In-force premium", "Premium, all policies", "No premium on file"]} rows={book.map((s) => [bookDim === "status" ? statusLabel(s.key) : s.name, s.policies, s.inForce, dollars(s.inForceCents), dollars(s.annualCents), s.annualUnknown])} />{refresh}</>}><SliceTabs label="Book by" value={bookDim} options={["carrier", "product", "status", "agent", "agency"] as const} onChange={setBookDim} /></DataToolbar>}>
+        <table className="portal-lead-table w-full min-w-[760px] text-left text-sm">
+          <thead><tr><th>{DIMENSION_LABELS[bookDim]}</th><th className="w-[110px] text-right">Policies</th><th className="w-[110px] text-right">In force</th><th className="w-[170px] text-right">In-force premium</th><th className="w-[170px] text-right">Premium, all policies</th></tr></thead>
           <PagedBody>
             {book.map((s) => (
               <tr key={s.key}>
                 <td className="font-semibold text-foreground">{bookDim === "status" ? statusLabel(s.key) : s.name}</td>
                 <td className="text-right"><Fig d={{ kind: "book", dim: bookDim, key: s.key }}>{count(s.policies)}</Fig></td>
                 <td className="text-right tabular-nums">{count(s.inForce)}</td>
-                <td className="text-right tabular-nums">{centsText(s.annualCents)}{s.annualUnknown ? <span className="block text-xs text-muted-foreground">{s.annualUnknown} with no premium on file</span> : null}</td>
+                <td className="text-right font-semibold">{s.inForce ? <Fig d={{ kind: "book", dim: bookDim, key: s.key, live: true }}>{centsText(s.inForceCents)}</Fig> : <span className="text-muted-foreground">—</span>}</td>
+                <td className="text-right tabular-nums text-muted-foreground">{centsText(s.annualCents)}{s.annualUnknown ? <span className="block text-xs">{s.annualUnknown} with no premium on file</span> : null}</td>
               </tr>
             ))}
           </PagedBody>
         </table>
       </PagedTableCard>
 
-      <TableCard title="Placement" description={`Issued ${readableDay(model.period.from)} – ${readableDay(model.period.to)}. Agents quote issued; placed is what pays.`} toolbar={<DataToolbar actions={<CsvButton name="placement" header={["Submitted", "Submitted and issued", "Issued", "Placed", "Issued, never paid"]} rows={[[pl.submitted, pl.submittedIssued, pl.issued, pl.placed, pl.notPlaced]]} />}><span className="text-sm text-muted-foreground">Placed = issued and paid at least once</span></DataToolbar>}>
+      {/* The carrier files' issued, placed and never-paid policies in the period. Applications
+          submitted through Insurvas are a different, much smaller set, so they are a footnote of
+          their own rather than a column beside the carriers' issued count (2026-10-13). */}
+      <TableCard
+        title="Placement"
+        description={`Issued ${readableDay(model.period.from)} – ${readableDay(model.period.to)}, from your carrier files. Agents quote issued; placed is what pays.`}
+        toolbar={<DataToolbar actions={<CsvButton name="placement" header={["Issued", "Placed", "Issued, never paid", "Placement rate", "Submitted through Insurvas", "Of those, issued"]} rows={[[pl.issued, pl.placed, pl.notPlaced, pl.issued ? shareText(pl.placed, pl.issued, model.minSample) : null, pl.submitted, pl.submittedIssued]]} />}><span className="text-sm text-muted-foreground">Placed = issued and paid at least once</span></DataToolbar>}
+        footer={pl.submitted === null ? <span>No applications were submitted through Insurvas in the period.</span> : <span>Through Insurvas: {count(pl.submitted)} {pl.submitted === 1 ? "application" : "applications"} submitted in the period, {count(pl.submittedIssued ?? 0)} issued so far.</span>}
+      >
         <table className="portal-lead-table w-full min-w-[640px] text-left text-sm">
-          <thead><tr><th className="text-right">Submitted</th><th className="text-right">Issued</th><th className="text-right">Placed</th><th className="text-right">Issued, never paid</th><th className="text-right">Placement rate</th></tr></thead>
+          <thead><tr><th className="text-right">Issued</th><th className="text-right">Placed</th><th className="text-right">Issued, never paid</th><th className="text-right">Placement rate</th></tr></thead>
           <tbody>
             <tr>
-              <td className="text-right tabular-nums">{pl.submitted === null ? <span className="text-muted-foreground" title="No applications were submitted through Insurvas in the period">—</span> : <>{count(pl.submitted)}<span className="block text-xs text-muted-foreground" title="Applications submitted through Insurvas whose policy a carrier file has shown issued">{count(pl.submittedIssued ?? 0)} through Insurvas issued</span></>}</td>
               <td className="text-right"><Fig d={{ kind: "placement", set: "issued" }}>{count(pl.issued)}</Fig></td>
               <td className="text-right"><Fig d={{ kind: "placement", set: "placed" }}>{count(pl.placed)}</Fig></td>
               <td className="text-right"><Fig d={{ kind: "placement", set: "not_placed" }}>{count(pl.notPlaced)}</Fig></td>
@@ -179,7 +198,7 @@ function Overview({ model, Fig, refresh }: Parts) {
         </table>
       </TableCard>
 
-      <PagedTableCard key={cbDim} total={cbRows.length} noun="rows" title="Chargeback ratio" toolbar={<DataToolbar actions={<CsvButton name={`chargebacks-by-${cbDim}`} header={[DIMENSION_LABELS[cbDim], "Advanced", "Charged back", "Policies advanced", "Ratio"]} rows={cbRows.map((r) => [r.name, dollars(r.advancedCents), dollars(r.chargedBackCents), r.advancedPolicies, chargebackText(r, model.minSample)])} />}><SliceTabs label="Chargebacks by" value={cbDim} options={["carrier", "product", "agent", "source"] as const} onChange={setCbDim} /></DataToolbar>}>
+      <PagedTableCard key={cbDim} total={cbRows.length} noun="rows" title="Chargeback ratio" toolbar={<DataToolbar actions={<CsvButton name={`chargebacks-by-${cbDim}`} header={[DIMENSION_LABELS[cbDim], "Advanced", "Charged back", "Policies advanced", "Ratio", "Charged back on earlier advances"]} rows={cbRows.map((r) => [r.name, dollars(r.advancedCents), dollars(r.chargedBackCents), r.advancedPolicies, chargebackText(r, model.minSample), dollars(r.earlierCents)])} />}><SliceTabs label="Chargebacks by" value={cbDim} options={["carrier", "product", "agent", "source"] as const} onChange={setCbDim} /></DataToolbar>}>
         {cbRows.length === 0 ? <EmptyState title="No advances on file yet" hint="The ratio appears once a commission file with advances has been read." /> : (
           <table className="portal-lead-table w-full min-w-[640px] text-left text-sm">
             <thead><tr><th>{DIMENSION_LABELS[cbDim]}</th><th className="w-[150px] text-right">Advanced</th><th className="w-[150px] text-right">Charged back</th><th className="w-[120px] text-right">Ratio</th></tr></thead>
@@ -188,7 +207,7 @@ function Overview({ model, Fig, refresh }: Parts) {
                 <tr key={r.key}>
                   <td className="font-semibold text-foreground">{r.name}</td>
                   <td className="text-right tabular-nums">{centsText(r.advancedCents)}<span className="block text-xs text-muted-foreground">{count(r.advancedPolicies)} {r.advancedPolicies === 1 ? "policy" : "policies"}</span></td>
-                  <td className="text-right tabular-nums">{centsText(r.chargedBackCents)}</td>
+                  <td className="text-right tabular-nums">{centsText(r.chargedBackCents)}{r.earlierCents ? <span className="block text-xs text-muted-foreground" title="Chargebacks on advances paid before your first statement: real money, but outside the ratio">+{centsText(r.earlierCents)} on earlier advances</span> : null}</td>
                   <td className="text-right"><Fig d={{ kind: "chargeback", dim: cbDim, key: r.key }}>{chargebackText(r, model.minSample) ?? <span className="text-muted-foreground" title={`A ratio needs ${model.minSample} advanced policies; ${r.advancedPolicies} so far`}>—<span className="block text-xs">needs {model.minSample} policies</span></span>}</Fig></td>
                 </tr>
               ))}
@@ -197,12 +216,18 @@ function Overview({ model, Fig, refresh }: Parts) {
         )}
       </PagedTableCard>
 
-      <PagedTableCard total={weeks.length} noun="weeks" title="Net commission by week" description="Advances and earned, less chargebacks, fees and advance interest. Held money is shown apart: it hasn't been paid." toolbar={<DataToolbar actions={<CsvButton name="net-commission-by-week" header={["Week of", "Advances", "Earned and overrides", "Chargebacks", "Fees and interest", "Other", "Net", "Held"]} rows={weeks.map((w) => [w.week, dollars(w.parts.advance), dollars(w.parts.earned + w.parts.override), dollars(w.parts.chargeback), dollars(w.parts.fee + w.parts.advance_interest), dollars(w.parts.other), dollars(w.netCents), dollars(w.heldCents)])} />}><span className="text-sm text-muted-foreground">The last 13 weeks</span></DataToolbar>}>
-        {model.weeks === null ? <EmptyState title="Not available yet" hint="This needs a database update (20261008270000)." /> : weeks.length === 0 ? <EmptyState title="No commission lines in the last 13 weeks" hint="Weeks appear once a commission file has been read." /> : (
+      <PagedTableCard total={weeks.length} noun="weeks" title="Net commission by week" description="Advances and earned, less chargebacks, fees and advance interest. Held money is shown apart: it hasn't been paid." toolbar={<DataToolbar actions={<CsvButton name="net-commission-by-week" header={["Week of", "Advances", "Earned and overrides", "Chargebacks", "Fees and interest", "Other", "Net", "Held"]} rows={weeks.map((w) => [w.week, dollars(w.parts.advance), dollars(w.parts.earned + w.parts.override), dollars(w.parts.chargeback), dollars(w.parts.fee + w.parts.advance_interest), dollars(w.parts.other), dollars(w.netCents), dollars(w.heldCents)])} />}><span className="text-sm text-muted-foreground">This week and the 13 before it</span></DataToolbar>}>
+        {model.weeks === null ? <EmptyState title="Not available yet" hint="This needs a database update (20261008270000)." /> : !weeks.some((w) => w.entries > 0) ? <EmptyState title="No commission lines in the last 13 weeks" hint="Weeks appear once a commission file has been read." /> : (
           <table className="portal-lead-table w-full min-w-[820px] text-left text-sm">
             <thead><tr><th>Week of</th><th className="text-right">Advances</th><th className="text-right">Earned</th><th className="text-right">Chargebacks</th><th className="text-right">Fees and interest</th><th className="text-right">Net</th><th className="text-right">Held</th></tr></thead>
             <PagedBody>
-              {weeks.map((w) => (
+              {weeks.map((w) => w.entries === 0 ? (
+                // A week with no ledger line: listed so the run of weeks has no gaps, with nothing to open.
+                <tr key={w.week} className="text-muted-foreground">
+                  <td>{readableDay(w.week)}</td>
+                  <td colSpan={6} className="text-right text-xs">No commission lines this week</td>
+                </tr>
+              ) : (
                 <tr key={w.week}>
                   <td className="font-semibold text-foreground">{readableDay(w.week)}</td>
                   <td className="text-right tabular-nums">{centsText(w.parts.advance)}</td>
@@ -274,7 +299,7 @@ function Persistency({ model, Fig, refresh }: Parts) {
         key={dim}
         total={rows.length}
         noun="rows"
-        suffix={model.start ? `counted on policies issued since your first carrier file, ${readableDay(model.start)}` : undefined}
+        suffix={model.history.fromFirstFile.length ? `${model.history.fromFirstFile.length} ${model.history.fromFirstFile.length === 1 ? "carrier" : "carriers"} counted from their first file` : undefined}
         toolbar={
           <DataToolbar actions={<><CsvButton name={`persistency-by-${dim}-${by}`} header={[DIMENSION_LABELS[dim], "Policies", ...model.buckets.map((b) => `Month ${b} (${by})`)]} rows={rows.map((r) => [r.name, r.policies, ...r.cells.map((c) => persistencyText(c, by, model.minSample))])} />{refresh}</>}>
             <SliceTabs label="Persistency by" value={dim} options={["carrier", "product", "agent", "agency", "source"] as const} onChange={setDim} />
@@ -282,7 +307,7 @@ function Persistency({ model, Fig, refresh }: Parts) {
             <SampleSize model={model} />
           </DataToolbar>
         }
-        footer={<span>{model.start ? `Counted on policies issued since your first carrier file, ${readableDay(model.start)}: older ones were only seen if they survived.` : ""}</span>}
+        footer={<span>{historyNote(model.history)}</span>}
       >
         <table className="portal-lead-table w-full min-w-[760px] text-left text-sm">
           <thead><tr><th>{DIMENSION_LABELS[dim]}</th><th className="w-[96px] text-right">Policies</th>{model.buckets.map((b) => <th key={b} className="w-[120px] text-right">Month {b}</th>)}</tr></thead>

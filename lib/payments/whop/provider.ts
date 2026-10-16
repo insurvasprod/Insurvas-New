@@ -6,6 +6,7 @@
 
 import { WhopApiError, WhopClient, centsToWhopAmount, extractCheckoutUrl, idempotencyKey, whopAmountToCents } from "./client.ts";
 import { ProviderUnsupportedError } from "../types.ts";
+import { invoiceMarker } from "../../invoices/providerMatch.ts";
 import type {
   CheckoutSession,
   ChargeLookup,
@@ -373,6 +374,13 @@ export class WhopProvider implements PaymentProvider {
      * asking them to re-enter a card they already gave us would be absurd.
      */
     collectionMethod?: "send_invoice" | "charge_automatically";
+    /**
+     * Our platform_invoices.id. Written into the plan's internal_notes, which Whop echoes on the
+     * payment, so payment.succeeded can be matched back to this invoice; and part of the
+     * idempotency key, so two invoices with the same amount and reason are two Whop invoices rather
+     * than a replay of the first (billing audit, 2026-10-15).
+     */
+    localInvoiceId?: string | null;
   }): Promise<{ invoiceId: string; payOnlineUrl: string | null }> {
     const body: Record<string, unknown> = {
       company_id: input.companyId,
@@ -383,6 +391,7 @@ export class WhopProvider implements PaymentProvider {
         initial_price: centsToWhopAmount(input.amountCents),
         currency: "usd",
         description: input.description,
+        ...(input.localInvoiceId ? { internal_notes: invoiceMarker(input.localInvoiceId) } : {}),
       },
       ...(input.dueAt ? { due_date: input.dueAt } : {}),
     };
@@ -391,7 +400,7 @@ export class WhopProvider implements PaymentProvider {
       "POST",
       "/invoices",
       body,
-      idempotencyKey(`invoice_${input.memberId}`, body),
+      idempotencyKey(input.localInvoiceId ? `invoice_${input.localInvoiceId}` : `invoice_${input.memberId}`, body),
     );
 
     let payOnlineUrl: string | null = null;
@@ -424,6 +433,15 @@ export class WhopProvider implements PaymentProvider {
 
   async resumeMembership(membershipId: string): Promise<void> {
     await this.client.request("POST", `/memberships/${encodeURIComponent(membershipId)}/resume`, {});
+  }
+
+  /**
+   * Where the customer updates the card on a membership (LA-8.5): the membership's `manage_url`,
+   * Whop's own signed-in billing page. Card details never pass through us. Null when Whop has none.
+   */
+  async membershipManageUrl(membershipId: string): Promise<string | null> {
+    const membership = await this.client.request<{ manage_url?: string | null }>("GET", `/memberships/${encodeURIComponent(membershipId)}`);
+    return typeof membership.manage_url === "string" && /^https:\/\//.test(membership.manage_url) ? membership.manage_url : null;
   }
 
   /**
@@ -481,13 +499,32 @@ export class WhopProvider implements PaymentProvider {
    * we cannot reduce. Whop bills the plan price regardless; days they are not billed for are worth
    * the same to them.
    */
-  async addFreeDays(membershipId: string, days: number): Promise<void> {
+  async addFreeDays(membershipId: string, days: number, operationKey?: string): Promise<void> {
     if (!Number.isInteger(days) || days <= 0) throw new Error(`days must be a positive integer, got ${days}`);
+    // `operationKey` names THIS redemption. Without it the key was membership + days, so a second
+    // genuine redemption of the same number of days months later replayed the first and added
+    // nothing — while the caller debited the credit anyway.
     await this.client.request(
       "POST",
       `/memberships/${encodeURIComponent(membershipId)}/add_free_days`,
       { days },
-      idempotencyKey(`freedays_${membershipId}`, { days }),
+      idempotencyKey(operationKey ? `freedays_${operationKey}` : `freedays_${membershipId}`, { days }),
     );
+  }
+
+  /**
+   * `POST /invoices/{id}/void` — the provider invoice can no longer be paid (billing audit,
+   * 2026-10-15). Voiding only locally left the hosted pay page live: a customer could pay an invoice
+   * we had written off. Permanent at Whop, like ours.
+   */
+  async voidInvoice(providerInvoiceId: string): Promise<{ status: string | null }> {
+    const response = await this.client.request<Record<string, unknown> | null>(
+      "POST",
+      `/invoices/${encodeURIComponent(providerInvoiceId)}/void`,
+      undefined,
+      idempotencyKey(`invoice_void_${providerInvoiceId}`, {}),
+      { timeoutMs: PROMO_TIMEOUT_MS },
+    );
+    return { status: typeof response?.status === "string" ? response.status : null };
   }
 }

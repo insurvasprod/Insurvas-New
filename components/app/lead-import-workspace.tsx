@@ -1,5 +1,6 @@
 "use client";
 
+import { StatusChip } from "@/components/ui/status-chip";
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -13,7 +14,7 @@ import { PageLoading } from "@/components/ui/page-loading";
 import { PagedBody, PagedPager, PagedProvider } from "@/components/ui/paged";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { TableCard } from "@/components/ui/table-card";
-import { Callout, DashedCard, Field, Pill, SettingsCard, control, st } from "@/components/app/settings/primitives";
+import { Callout, DashedCard, Field, SettingsCard, control, st } from "@/components/app/settings/primitives";
 import { ImportStepper, type ImportStep } from "@/components/app/import-stepper";
 import { ColumnMappingDialog, columnMappingStatus, type MappingRow } from "@/components/app/column-mapping-dialog";
 import { EMPTY_DATE_SCAN, inferredImportDateOrder, isImportDateOrder, parseCsv, previewLeadCsv, suggestLeadCsvMappings, type ImportDateOrder } from "@/lib/agentTemplates/csv";
@@ -192,7 +193,7 @@ export function LeadImportWorkspace() {
       : !info ? "Loading the import settings…"
         : validation?.error ? "Correct the file and choose it again."
           : !mapConfirmed ? "Confirm the column mapping first: use Map columns."
-            : (validation?.validRows ?? 0) === 0 ? "No row in this file can be imported as it is."
+            : (validation?.validRows ?? 0) === 0 ? "Fix the file: no row can be imported as it is."
               : pageReason;
   // Upload until the mapping is open or confirmed; Scrub from a confirmed mapping onwards.
   const step: ImportStep = !csv ? 1 : saving ? 3 : mapOpen && info && !preview.error ? 2 : mapConfirmed ? 3 : 1;
@@ -438,8 +439,8 @@ export function LeadImportWorkspace() {
         >
           <p className="m-0 flex items-center gap-2 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--body)]">
             {mapConfirmed
-              ? <Pill tone="success" dot>Confirmed</Pill>
-              : <><Pill tone="warning" dot>Not confirmed</Pill>Check each column before the scrub.</>}
+              ? <StatusChip tone="good" dot>Confirmed</StatusChip>
+              : <><StatusChip tone="warning" dot>Not confirmed</StatusChip>Check each column before the scrub.</>}
           </p>
           {dateOrderToSend && (datePicked || dates.ambiguous === 0) && <p className="m-0 text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">Slash dates are read {dateOrderToSend === "dmy" ? "day first" : "month first (US)"}.</p>}
           {saveNote && <p role="status" className="m-0 text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">{saveNote}</p>}
@@ -463,7 +464,8 @@ export function LeadImportWorkspace() {
           dateOrder={dateOrder}
           datePicked={datePicked}
           onPickDateOrder={setPickedDateOrder}
-          continueNote={pageReason ? `${pageReason} Continue keeps this mapping and takes you back to the page.` : null}
+          continueNote={pageReason ? `${pageReason} Continue keeps this mapping.`
+ : null}
           busy={saving}
         />}
 
@@ -481,8 +483,8 @@ export function LeadImportWorkspace() {
             ? <p role="alert" className="text-sm leading-[1.5] text-[var(--error-ink)]">{validation.error} Correct the file and choose it again.</p>
             : <div className="flex flex-col gap-3">
                 <div role="status" className="flex flex-wrap items-center gap-2">
-                  <Pill tone="success" dot>{validation.validRows.toLocaleString()} row{validation.validRows === 1 ? "" : "s"} ready</Pill>
-                  {validation.rejectedRows > 0 && <Pill tone="warning" dot>{validation.rejectedRows.toLocaleString()} row{validation.rejectedRows === 1 ? " needs" : "s need"} attention · left out</Pill>}
+                  <StatusChip tone="good" dot>{validation.validRows.toLocaleString()} row{validation.validRows === 1 ? "" : "s"} ready</StatusChip>
+                  {validation.rejectedRows > 0 && <StatusChip tone="warning" dot>{validation.rejectedRows.toLocaleString()} row{validation.rejectedRows === 1 ? " needs" : "s need"} attention · left out</StatusChip>}
                   {validation.rowErrors.length > 0 && <Button type="button" variant="outline" className="ml-auto" aria-expanded={errorsOpen} onClick={() => setErrorsOpen((open) => !open)}>
                     View errors ({validation.rejectedRows.toLocaleString()})
                     <ChevronDown className={cn("size-4 transition-transform", errorsOpen && "rotate-180")} aria-hidden />
@@ -508,19 +510,20 @@ export function LeadImportWorkspace() {
                 : "Every import is attributed to a campaign. Ask an owner or producer to create one."}
             </DashedCard>
           : <SettingsCard pad={20} title="Attribution" bodyClassName="flex flex-col gap-3.5">
-              <Field label="Vendor" htmlFor="lead-vendor" hint={vendorId ? "Filters the campaigns below, and reuses its saved column mapping." : undefined}>
+              <Field label="Vendor" htmlFor="lead-vendor" hint={vendorId ? "Reuses this vendor's saved mapping." : undefined}>
                 <select id="lead-vendor" className={control} value={vendorId} onChange={(event) => chooseVendor(event.target.value)}>
                   <option value="">Any vendor</option>
                   {activeVendors.map((vendor) => <option key={vendor.id} value={vendor.id}>{vendor.name}</option>)}
                 </select>
               </Field>
-              <Field label="Campaign" htmlFor="lead-campaign" required hint={campaign && campaign.status !== "active" ? `This campaign is ${campaign.status}. Its leads are imported but not dialled until it is active.` : "New leads carry this campaign permanently."}>
+              <Field label="Campaign" htmlFor="lead-campaign" required hint={campaign && campaign.status !== "active" ? `Activate it to dial these leads — it is ${campaign.status}.`
+ : "New leads carry this campaign permanently."}>
                 <select id="lead-campaign" className={control} required value={campaignId} onChange={(event) => chooseCampaign(event.target.value)}>
                   <option value="">Choose a campaign</option>
                   {visibleCampaigns.map((item) => <option key={item.id} value={item.id}>{item.name}{STATUS_SUFFIX[item.status] ?? ""}</option>)}
                 </select>
               </Field>
-              <Field label="Batch cost" htmlFor="lead-cost" hint="What this file cost, in dollars and cents. Optional." error={cost === "invalid" ? "Enter an amount like 4,500.00, up to $1,000,000." : undefined}>
+              <Field label="Batch cost" htmlFor="lead-cost" hint="Optional." error={cost === "invalid" ? "Enter an amount like 4,500.00, up to $1,000,000." : undefined}>
                 <span className="relative block">
                   <span aria-hidden className="pointer-events-none absolute top-[calc(50%+3px)] left-3 -translate-y-1/2 text-base text-[var(--muted)]">$</span>
                   <input id="lead-cost" className={cn(control, "pl-7 tabular-nums")} inputMode="decimal" autoComplete="off" placeholder="0.00" value={costText} onChange={(event) => setCostText(event.target.value)} aria-invalid={cost === "invalid" || undefined} />
