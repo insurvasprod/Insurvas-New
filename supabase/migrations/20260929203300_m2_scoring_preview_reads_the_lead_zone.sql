@@ -143,7 +143,11 @@ begin
   while extract(dow from v_day) <> 2 or exists (select 1 from public.calling_window_holidays h where h.holiday_date = v_day and h.blocked) loop
     v_day := v_day + 1;
   end loop;
-  v_at := (v_day + time '08:30') at time zone 'America/New_York';
+  -- 30 minutes after this tenant's FL window opens (the state's 8:00 or the agency's own later start — the demo
+  -- tenant opens at 9:00 since 2026-10-16), not a fixed 8:30: see 20260929203000's same check.
+  v_at := (v_day + make_interval(mins => coalesce(
+            (select w.start_minute from public.tenant_dial_window(v_tenant, 'FL', null, (v_day + time '12:00') at time zone 'America/New_York') w),
+            480) + 30)) at time zone 'America/New_York';
   if not public.tenant_can_dial_now(v_tenant, 'FL', null, v_at)
      or public.tenant_can_dial_now(v_tenant, 'FL', null, ((v_at at time zone 'America/Chicago') at time zone 'America/New_York')) then
     raise exception '203300 check: FL at 8:30 Eastern must be open and on a Central clock (7:30) closed';

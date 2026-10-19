@@ -164,6 +164,9 @@ begin
     return;
   end if;
 
+  -- The probe vendor and campaign live in a real tenant, so the whole probe runs in a subtransaction that
+  -- is rolled back at the end (2026-10-19): nothing it writes, nor anything a trigger writes for it, stays.
+  begin
   insert into public.tenant_lead_vendors (tenant_id, name, lead_type)
     values (v_tenant, '709610 atomic check ' || gen_random_uuid()::text, 'list')
     returning id into v_vendor;
@@ -191,6 +194,8 @@ begin
     raise exception '20260925709610: a failed commit left % ledger rows behind', v_ledger;
   end if;
 
-  delete from public.tenant_campaigns where id = v_campaign;
-  delete from public.tenant_lead_vendors where id = v_vendor;
+  raise exception using errcode = 'P0099', message = '20260925709610 probe rollback';
+  exception
+    when sqlstate 'P0099' then null;
+  end;
 end $$;

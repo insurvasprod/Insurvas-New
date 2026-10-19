@@ -1168,15 +1168,21 @@ begin
   while extract(dow from v_day) <> 2 or exists (select 1 from public.calling_window_holidays h where h.holiday_date = v_day and h.blocked) loop
     v_day := v_day + 1;
   end loop;
-  v_at := (v_day + time '08:30') at time zone 'America/New_York';
+  -- The probe runs 30 minutes after this tenant's FL window opens: the state's 8:00, or the agency's own later
+  -- start (the demo tenant opens at 9:00 since 2026-10-16). Fixed at 8:30 it failed on 2026-10-19 for that
+  -- reason alone. The same instant on a Central clock is then 30 minutes before opening, and an hour later
+  -- it is 30 minutes after.
+  v_at := (v_day + make_interval(mins => coalesce(
+            (select w.start_minute from public.tenant_dial_window(v_tenant, 'FL', null, (v_day + time '12:00') at time zone 'America/New_York') w),
+            480) + 30)) at time zone 'America/New_York';
 
-  -- the clock: Eastern 8:30 is inside the window, the same instant on a Central clock (7:30) is not
+  -- the clock: Eastern opening + 30 is inside the window, the same instant on a Central clock is not
   if public.calling_window_rules_stale(now()) then
     raise notice '20260929203000: zone check skipped, the calling-rules feed is stale so every window is closed';
     return;
   end if;
   if not public.tenant_can_dial_now(v_tenant, 'FL', null, v_at) then
-    raise exception '203000 check: FL at 8:30 Eastern on % should be inside the window', v_day;
+    raise exception '203000 check: FL at % Eastern on % should be inside the window', (v_at at time zone 'America/New_York')::time, v_day;
   end if;
   if public.tenant_can_dial_now(v_tenant, 'FL', null, ((v_at at time zone 'America/Chicago') at time zone 'America/New_York')) then
     raise exception '203000 check: FL on a Central clock (7:30) should be outside the window';
