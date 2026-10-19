@@ -15,6 +15,7 @@ import {
 } from "@/lib/compliance/dataSubjectStore";
 import { loadComplianceSettings } from "@/lib/compliance/settingsStore";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
+import { refuseNarrowInAgency } from "@/lib/agency/routeScope";
 
 /**
  * LA-6.5 (Notion sprint) · one deletion request: read it (with its audit trail and, before the
@@ -38,6 +39,8 @@ const fail = (error: unknown) => {
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireFeatureRole("tcpa_checker", ["owner", "producer"]);
   if (auth instanceof NextResponse) return auth;
+  const refused = await refuseNarrowInAgency(auth.context, "Deletion requests");
+  if (refused) return refused;
   const { id } = await params;
   if (!z.string().uuid().safeParse(id).success) return NextResponse.json({ error: "That request isn't here." }, { status: 404 });
   const { tenantId, userId, role } = auth.context;
@@ -55,6 +58,8 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireFeatureRole("tcpa_checker", ["owner", "producer"], { write: true });
   if (auth instanceof NextResponse) return auth;
+  const refused = await refuseNarrowInAgency(auth.context, "Deletion requests");
+  if (refused) return refused;
   // Who may move a request is the agency's setting (LA-6.8): the tenant admin always; a producer only if allowed.
   const performers = (await loadComplianceSettings(auth.context.tenantId)).deletion.performerRoles;
   if (!performers.includes(auth.context.role)) return NextResponse.json({ error: "Only the agency owner can verify or perform a deletion." }, { status: 403 });

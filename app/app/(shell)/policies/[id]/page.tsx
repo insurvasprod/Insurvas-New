@@ -23,6 +23,7 @@ import { getPolicyStatementLines } from "@/lib/ledger/statementService";
 import { leadSourceOf } from "@/lib/persistency/service";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isSchemaGap } from "@/lib/supabase/schemaGap";
+import { rowVisible, scopeFor } from "@/lib/agency/visibility";
 import { roleCanViewCommission } from "@/lib/tenantAuth/permissions";
 
 /**
@@ -63,7 +64,9 @@ export default async function PolicyPage({ params }: { params: Promise<{ id: str
   const tenantId = guard.context.tenantId;
   const row = await readPolicy(tenantId, id);
   if (!row) notFound();
-  const canView = (producerUserId: string | undefined) => roleCanViewCommission(guard.role, guard.context.userId, producerUserId);
+  // AG-0.5: the role rule (a producer sees his own) AND the session's producer scope — in an agency both must hold.
+  const scope = await scopeFor(guard.context);
+  const canView = (producerUserId: string | undefined) => roleCanViewCommission(guard.role, guard.context.userId, producerUserId) && rowVisible(scope, producerUserId);
   if (!canView(row.created_by ?? undefined)) notFound();
 
   const today = new Date().toISOString().slice(0, 10);

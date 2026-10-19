@@ -5,6 +5,7 @@ import { readBook, statusChangedAt } from "@/lib/ledger/service";
 import { normalisePolicyNumber } from "@/lib/ledger/statementMatch";
 import { isSchemaGap } from "@/lib/supabase/schemaGap";
 import { readPaged, type PageResult } from "@/lib/supabase/readPaged";
+import { keepVisible, type ProducerScope } from "@/lib/agency/visibility";
 
 import { computePersistency, type PersistencyPolicy, type PersistencyReport } from "./compute";
 
@@ -106,10 +107,15 @@ export async function leadSourceOf(tenantId: string, policyNumber: string): Prom
   return UNATTRIBUTED;
 }
 
-export async function getPersistencyReport(input: { tenantId: string; canView: (producerUserId: string | undefined) => boolean; today?: string }): Promise<PersistencyReport & { leadSourcesUnavailable: boolean }> {
+/**
+ * AG-0.5 · `scope` (from the session, scopeFor) drops every policy whose producer (created_by, as `canView`
+ * reads it) is outside the agency scope BEFORE the percentages are computed: a rate over a book that includes
+ * another producer's policies would still show that book. null/absent = no change.
+ */
+export async function getPersistencyReport(input: { tenantId: string; canView: (producerUserId: string | undefined) => boolean; today?: string; scope?: ProducerScope }): Promise<PersistencyReport & { leadSourcesUnavailable: boolean }> {
   const today = input.today ?? new Date().toISOString().slice(0, 10);
   const [book, { sourceByNumber, unavailable }] = await Promise.all([readBook(input.tenantId), readSources(input.tenantId)]);
-  const policies: PersistencyPolicy[] = book
+  const policies: PersistencyPolicy[] = keepVisible(input.scope ?? null, book, (row) => row.created_by)
     .filter((row) => input.canView(row.created_by ?? undefined))
     .map((row) => ({
       id: row.id,

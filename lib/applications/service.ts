@@ -16,6 +16,7 @@ import type {
 } from "./types";
 import { PRODUCT_LABEL } from "./constants";
 import type { ApplicationOutcome, ApplicationStatus, InsuredRole, OutcomeReasonCode, PaymentMethod, ValueSource } from "./constants";
+import { loadAnswers, loadMedications } from "./healthSeal";
 
 /**
  * LA-3 reads: the case the workspace renders, and the Applications list. Every query names the
@@ -180,8 +181,9 @@ export async function getCaseView(tenantId: string, caseId: string): Promise<Cas
     carrierIds.length ? optional<{ carrier_id: string; portal_url: string; username: string }>(client.from("tenant_carrier_portal_accounts").select("carrier_id, portal_url, username").eq("tenant_id", tenantId).in("carrier_id", carrierIds)) : Promise.resolve([]),
     optional<{ tenant_id: string | null; carrier_id: string | null; product_code: string; definition: StoredDefinition }>(client.from("sales_templates").select("tenant_id, carrier_id, product_code, definition, version").eq("kind", "application_field_set").eq("status", "published").or(`tenant_id.is.null,tenant_id.eq.${tenantId}`).order("version", { ascending: false })),
     templateIds.length ? optional<{ id: string; name: string; version: number; definition: StoredDefinition }>(client.from("sales_templates").select("id, name, version, definition").in("id", templateIds)) : Promise.resolve([]),
-    interviewIds.length ? optional<{ interview_id: string; question_key: string; value: unknown; notes: string | null }>(client.from("tenant_uw_answers").select("interview_id, question_key, value, notes").eq("tenant_id", tenantId).in("interview_id", interviewIds)) : Promise.resolve([]),
-    interviewIds.length ? optional<{ id: string; interview_id: string; name: string; dose: string | null; since: string | null; prescribed_for: string | null; prescribed_for_unknown: boolean; notes: string | null }>(client.from("tenant_medications").select("id, interview_id, name, dose, since, prescribed_for, prescribed_for_unknown, notes, sort_order").eq("tenant_id", tenantId).in("interview_id", interviewIds).order("sort_order")) : Promise.resolve([]),
+    // Opened from their seal (20261016420000) on the server; plain rows from before read as they are.
+    loadAnswers(tenantId, interviewIds).then((r) => { if (r.error) throw new Error(`Could not load the interview answers: ${r.error.message}`); return r.rows; }),
+    loadMedications(tenantId, interviewIds).then((r) => { if (r.error) throw new Error(`Could not load the medications: ${r.error.message}`); return r.rows; }),
     carrierIds.length ? optional<{ carrier_id: string; product_code: string; contract_level_bp: number; policy_year: number; rate_bp: number; effective_from: string }>(client.from("commission_schedules").select("carrier_id, product_code, contract_level_bp, policy_year, rate_bp, effective_from").eq("tenant_id", tenantId).eq("policy_year", 1).in("carrier_id", carrierIds)) : Promise.resolve([]),
   ]);
   const ackUserIds = [...new Set(disclosures.map((d) => d.acknowledged_by).filter((x): x is string => Boolean(x)))];
@@ -331,7 +333,7 @@ export async function getCaseView(tenantId: string, caseId: string): Promise<Cas
       id: iv.id, templateName: tpl?.name ?? "Interview", templateRevision: iv.template_version ?? tpl?.version ?? 1, startedAt: iv.started_at, completedAt: iv.completed_at,
       questions: interviewQuestions(tpl?.definition),
       answers: Object.fromEntries(answers.filter((x) => x.interview_id === iv.id).map((x) => [x.question_key, { value: x.value as InterviewView["answers"][string]["value"], notes: x.notes ?? undefined }])),
-      medications: medications.filter((m) => m.interview_id === iv.id).map((m) => ({ id: m.id, name: m.name, dose: m.dose ?? "", since: m.since ?? "", prescribedFor: m.prescribed_for ?? "", prescribedForUnknown: m.prescribed_for_unknown, notes: m.notes ?? undefined })),
+      medications: medications.filter((m) => m.interview_id === iv.id).map((m) => ({ id: m.id ?? "", name: m.name, dose: m.dose ?? "", since: m.since ?? "", prescribedFor: m.prescribed_for ?? "", prescribedForUnknown: m.prescribed_for_unknown, notes: m.notes ?? undefined })),
     };
     interviewViews[iv.insured_role] = view;
   }

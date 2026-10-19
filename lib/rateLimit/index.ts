@@ -6,6 +6,7 @@ import "server-only";
 // that do not share memory: an in-process counter resets on every cold start, so an attacker could
 // clear the limit just by spreading requests around.
 
+import { trustedClientIp } from "@/lib/request/clientInfo";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 
 export type RateLimitRule = {
@@ -42,15 +43,15 @@ export const VERIFICATION_RESEND: RateLimitRule = { name: "verify_resend", max: 
 export const LEAD_POST_PER_KEY: RateLimitRule = { name: "lead_post_key", max: 60, windowSeconds: 60 };
 
 /**
- * The caller's IP, from the proxy headers Vercel sets.
+ * The caller's IP, from the header the platform sets (x-real-ip on Vercel), never the first
+ * X-Forwarded-For hop, which the caller writes and could change per request to dodge every per-IP
+ * limit. See lib/request/clientInfo.ts.
  *
  * Falls back to a single shared bucket rather than to "no limit": if we cannot tell callers apart,
  * limiting them together is wrong but safe, whereas letting them all through is neither.
  */
 export function callerIp(headers: Headers): string {
-  const forwarded = headers.get("x-forwarded-for");
-  if (forwarded) return forwarded.split(",")[0]!.trim();
-  return headers.get("x-real-ip")?.trim() || "unknown";
+  return trustedClientIp(headers) || "unknown";
 }
 
 export type RateLimitResult = { allowed: true } | { allowed: false; rule: RateLimitRule };

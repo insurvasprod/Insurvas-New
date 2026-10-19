@@ -4,6 +4,7 @@ import { actorOf, body, failure, isUuid } from "@/lib/applications/http";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import { recordCounterofferSchema } from "@/lib/applications/afterSubmitSchemas";
 import { listCounteroffers, recordCounteroffer } from "@/lib/applications/counteroffers";
+import { guardAttempt } from "@/lib/agency/guards";
 
 const NOT_FOUND = { error: "That application could not be found." };
 
@@ -14,6 +15,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const actor = actorOf(auth, request);
   const { id } = await params;
   if (!isUuid(id)) return NextResponse.json(NOT_FOUND, { status: 404 });
+  // AG-0.5 · a producer cannot open another producer's record by id (404, not 403).
+  const hidden = await guardAttempt(auth.context, id);
+  if (hidden) return hidden;
   try {
     return NextResponse.json({ counteroffers: await listCounteroffers(actor.tenantId, id) }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
@@ -28,6 +32,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const actor = actorOf(auth, request);
   const { id } = await params;
   if (!isUuid(id)) return NextResponse.json(NOT_FOUND, { status: 404 });
+  // AG-0.5 · a producer cannot open another producer's record by id (404, not 403).
+  const hidden = await guardAttempt(auth.context, id);
+  if (hidden) return hidden;
   const input = await body(request, recordCounterofferSchema);
   if (input instanceof NextResponse) return input;
   try {

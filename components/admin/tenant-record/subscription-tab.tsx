@@ -24,6 +24,7 @@ import { AddonsPanel } from "@/components/admin/addons-panel";
 import { BillingModePanel } from "@/components/admin/billing-mode-panel";
 import { PaymentProviderPanel } from "@/components/admin/payment-provider-panel";
 import { SubscriptionCards } from "./subscription-cards";
+import { agencySeatSummary } from "@/lib/agency/adminSummary";
 import { TenantInvoicesCard } from "./tenant-invoices-card";
 
 type CouponLike = {
@@ -158,6 +159,7 @@ export async function TenantSubscriptionTab({ tenantId, admin }: TenantTabProps)
         currentPriceCents={currentPriceCents}
         seatLimits={seatLimits}
         seatsHeld={seatsHeld}
+        agency={subscription ? await agencySeatSummary(tenantId, seatLimits[subscription.plan_id]) : null}
         mrrCents={mrrCents}
         billing={canPayments ? { methodLabel: providerRecord?.payment_method_label ?? null, collection: billingMode } : null}
         pinning={pinning}

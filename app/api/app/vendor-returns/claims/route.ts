@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { ReturnsRequestError, createCombinedVendorReturnClaim, parseClaimReasons } from "@/lib/vendorScorecard/returnsService";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
+import { refuseNarrowInAgency } from "@/lib/agency/routeScope";
 
 /**
  * Drafts ONE claim for a campaign from its claimable rows — scrub hits and wrong-number or
@@ -12,6 +13,8 @@ import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 export async function POST(request: NextRequest) {
   const auth = await requireFeatureRole("true_cpa", ["owner", "producer", "bookkeeper"], { write: true });
   if (auth instanceof NextResponse) return auth;
+  const refused = await refuseNarrowInAgency(auth.context, "Vendor returns");
+  if (refused) return refused;
   try {
     const body = await request.json().catch(() => null) as { campaign_id?: unknown; reasons?: unknown } | null;
     const reasons = parseClaimReasons(body?.reasons ?? null);

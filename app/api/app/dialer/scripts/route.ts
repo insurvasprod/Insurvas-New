@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { saveScript } from "@/lib/dialerScripts/service";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
+import { refuseNarrowInAgency } from "@/lib/agency/routeScope";
 
 // LA-2.12 audit. A setter's whole job is "work the outbound queue" and "record dispositions", and
 // permissions.ts has granted them `dialer.use` since the role was added — but every route here
@@ -23,6 +24,12 @@ export async function PUT(request: NextRequest) {
   const auth = await requireFeatureRole("outbound_dialing", DIALER_ROLES, { write: true });
   if (auth instanceof NextResponse) return auth;
   if (!AUTHOR_ROLES.includes(auth.context.role)) return NextResponse.json({ error: "Only owners and producers can publish scripts.", code: "role_not_allowed" }, { status: 403 });
+  // AG-0.5: this route returns only tenant configuration (the saved script version), no producer's
+  // rows. But a script is agency-wide — every producer reads the new version on his next lead — so
+  // inside an agency publishing one is the owner's and an admin's, not one producer rewriting what the
+  // others say. Solo tenants (the owner and his producers) are unchanged.
+  const refused = await refuseNarrowInAgency(auth.context, "Publishing call scripts");
+  if (refused) return refused;
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Opening, qualifying questions, transition to quote and close are required" }, { status: 400 });
   try { return NextResponse.json({ script: await saveScript({ tenantId: auth.context.tenantId, userId: auth.context.userId, campaignId: parsed.data.campaign_id, productCode: parsed.data.product_code, sections: parsed.data.sections }) }, { status: 201 }); }

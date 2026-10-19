@@ -3,16 +3,20 @@ import "server-only";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isSchemaGap } from "@/lib/supabase/schemaGap";
 import { advanceAtRisk, loadBoard } from "@/lib/ingestion/retentionStore";
+import { rowVisible, type ProducerScope } from "@/lib/agency/visibility";
 
 import { mapLimit, READ_CONCURRENCY } from "./batch";
-import { RADAR_PENDING_MESSAGE, type ActionTaken, type Band, type ContactOutcome, type HoldKind, type RetentionSettings } from "./constants";
+import { RADAR_PENDING_MESSAGE, type ActionTaken, type Band, type ClientReason, type ContactOutcome, type HoldKind, type RetentionSettings } from "./constants";
 import { recommendFixes, type Fix } from "./fixes";
-import { buildQueue, daysUntilNextDraft, isEmergency, type QueueCandidate, type QueueSort } from "./queue";
+import { buildQueue, daysUntilNextDraft, isEmergency, isHeld, reachesQueue, type QueueCandidate, type QueueSort } from "./queue";
 import { ensureRadarFresh, loadRadarConfig } from "./radarStore";
 import type { Contribution, RiskScore } from "./score";
 import type { SignalRow } from "./signals";
 import type { RequestStatus, RequestType } from "./servicing";
 import { requestsByPolicy } from "./servicingStore";
+import { ownsCard } from "./assignment";
+import { ensureOwners, ownerOf, type Owner } from "./assignmentStore";
+import { openHoldoutKeys } from "./effectivenessStore";
 
 /**
  * LA-5.3 (Notion sprint) · the save queue, server side: policies paying perfectly well right now that
@@ -34,7 +38,12 @@ export class SaveQueueError extends Error {
   }
 }
 
-export type Viewer = { tenantId: string; userId: string; role: string };
+/**
+ * AG-0.5 · `scope` is the session's producer scope (scopeFor). With one, a card (and every count and total on
+ * the queue) is kept only when its policy is credited to a visible producer (policy_current.agent_user_id);
+ * owners are still resolved over the whole agency first, never from the narrowed list. Absent/null = unchanged.
+ */
+export type Viewer = { tenantId: string; userId: string; role: string; scope?: ProducerScope };
 
 async function everyRow(build: () => Loose, max = 100_000): Promise<Loose[]> {
   const rows: Loose[] = [];
@@ -82,6 +91,9 @@ export type SaveCard = QueueCandidate & {
   clientName: string | null;
   phone: string | null;
   agentName: string | null;
+  agentUserId: string | null;
+  /** LA-5.8: who works this card. Null only before 20261016200000. */
+  owner: Owner | null;
   signalsAvailable: number;
   missing: string[];
   explanation: string;
@@ -103,6 +115,10 @@ export type SaveQueue = {
   usedMedium: boolean;
   /** At the queue band but scored on under half the weight: kept off the queue, and counted. */
   lowConfidence: number;
+  /** LA-5.9: crossed the threshold and held back for the holdout (never an emergency). */
+  heldOut: number;
+  /** LA-5.8: owners are shown only when more than one person could own a card. */
+  showOwners: boolean;
   settings: RetentionSettings;
   weightSetVersion: number;
   stats: { scored: number; highOrAbove: number; critical: number; atRiskCents: number; atRiskUnknown: number; held: number; incomeKnown: number; affordabilityWeight: number };
@@ -135,7 +151,8 @@ async function candidates(viewer: Viewer, only?: { carrierId: string; policyNumb
     }),
   ]);
   const policyOf = new Map<string, Loose>(policies.map((p: Loose) => [keyOf(p), p]));
-  const visible = viewer.role === "producer" ? scores.filter((s) => policyOf.get(keyOf(s))?.agent_user_id === viewer.userId) : scores.filter((s) => policyOf.has(keyOf(s)));
+  const visible = (viewer.role === "producer" ? scores.filter((s) => policyOf.get(keyOf(s))?.agent_user_id === viewer.userId) : scores.filter((s) => policyOf.has(keyOf(s))))
+    .filter((s) => rowVisible(viewer.scope ?? null, policyOf.get(keyOf(s))?.agent_user_id));
   const visiblePolicies = visible.map((s) => policyOf.get(keyOf(s)));
   const [atRisk, contacts, users, carriers] = await Promise.all([
     advanceAtRisk(viewer.tenantId, visiblePolicies),
@@ -170,7 +187,7 @@ async function candidates(viewer: Viewer, only?: { carrierId: string; policyNumb
       atRiskCents: atRisk.get(key) ?? null, nextDraftDays: daysUntilNextDraft(sig.draftDay, today), monthsSinceIssue: sig.monthsSinceIssue,
       carrierId: sc.carrier_id, carrierName: carrierName.get(sc.carrier_id) ?? "Carrier not known", policyNumber: sc.policy_number,
       clientName: contact ? [contact.first_name, contact.last_name].filter(Boolean).join(" ") || null : null, phone: contact?.primary_phone ?? null,
-      agentName: p.agent_user_id ? userName.get(p.agent_user_id) ?? null : null,
+      agentName: p.agent_user_id ? userName.get(p.agent_user_id) ?? null : null, agentUserId: p.agent_user_id ?? null, owner: null,
       confidence: sc.confidence, signalsAvailable: sc.signals_available, missing: sig.missing, explanation: sc.explanation, contributions: score.contributions,
       fixes: recommendFixes(sig, score), weightSetVersion: sc.weight_set_version,
       premiumCents: p.premium_cents === null ? null : Number(p.premium_cents), premiumMode: p.premium_mode, incomeKnown: sig.monthlyIncomeCents !== null,
@@ -181,7 +198,7 @@ async function candidates(viewer: Viewer, only?: { carrierId: string; policyNumb
   return { config, rows, scored: rows.length, held: rows.filter((r) => r.hold).length, computedAt, today };
 }
 
-export async function loadSaveQueue(viewer: Viewer, sort: QueueSort = "value"): Promise<SaveQueue | { available: false }> {
+export async function loadSaveQueue(viewer: Viewer, sort?: QueueSort): Promise<SaveQueue | { available: false }> {
   try {
     await ensureRadarFresh(viewer.tenantId);
   } catch (error) {
@@ -190,14 +207,34 @@ export async function loadSaveQueue(viewer: Viewer, sort: QueueSort = "value"): 
   }
   let loaded: Awaited<ReturnType<typeof candidates>>;
   try {
-    loaded = await candidates(viewer);
+    // The whole agency's cards: owners are resolved across the queue, then this viewer's are kept.
+    loaded = await candidates({ ...viewer, role: "owner", scope: null });
   } catch (error) {
     if (isSchemaGap(error as Loose)) return { available: false };
     throw error;
   }
   if (!loaded) return { available: false };
-  const { config, rows, today } = loaded;
-  const queue = buildQueue(rows, config.settings, today, sort);
+  const { config, today } = loaded;
+  const order = sort ?? config.settings.queueDefaultSort;
+  // LA-5.9: a policy in the holdout is never shown here (an emergency is the LA-4.16 board's anyway).
+  const heldOutKeys = await openHoldoutKeys(viewer.tenantId).catch((error) => {
+    console.error("[save-queue] the holdout could not be read", error);
+    return new Set<string>();
+  });
+  const all = loaded.rows.map((r) => ({ ...r, inHoldout: heldOutKeys.has(r.key) }));
+
+  // LA-5.8: every card the agency's queue would show has an owner, resolved before anyone filters.
+  const wide = buildQueue(all, { ...config.settings, maxCards: Number.MAX_SAFE_INTEGER }, today, order);
+  const owners = await ensureOwners(viewer.tenantId, "save_queue", wide.cards.map((c) => ({ key: c.key, carrierId: c.carrierId, writingAgentId: c.agentUserId, exposureCents: c.atRiskCents })), config.settings, { keep: new Set(all.map((r) => r.key)) }).catch((error) => {
+    console.error("[save-queue] owners could not be resolved", error);
+    return null;
+  });
+  for (const r of all) r.owner = owners?.get(r.key) ?? null;
+  const rows = all
+    .filter((r) => (viewer.role === "producer" ? r.agentUserId === viewer.userId : viewer.role === "retention" ? owners !== null && r.owner?.userId === viewer.userId : true))
+    .filter((r) => rowVisible(viewer.scope ?? null, r.agentUserId));
+
+  const queue = buildQueue(rows, config.settings, today, order);
   const highOrAbove = rows.filter((r) => r.band === "high" || r.band === "critical");
   return {
     available: true,
@@ -206,20 +243,43 @@ export async function loadSaveQueue(viewer: Viewer, sort: QueueSort = "value"): 
     total: queue.total,
     usedMedium: queue.usedMedium,
     lowConfidence: queue.lowConfidence,
+    heldOut: queue.heldOut,
+    showOwners: Boolean(owners) && new Set(wide.cards.map((c) => owners?.get(c.key)?.userId)).size > 1,
     settings: config.settings,
     weightSetVersion: config.weightSetVersion,
     stats: {
-      scored: loaded.scored,
+      scored: rows.length,
       highOrAbove: highOrAbove.length,
       critical: rows.filter((r) => r.band === "critical").length,
       atRiskCents: queue.cards.reduce((sum, c) => sum + (c.atRiskCents ?? 0), 0),
       atRiskUnknown: queue.cards.filter((c) => c.atRiskCents === null).length,
-      held: loaded.held,
+      held: rows.filter((r) => r.hold).length,
       incomeKnown: rows.filter((r) => r.incomeKnown).length,
       affordabilityWeight: config.weights.affordability,
     },
     computedAt: loaded.computedAt,
   };
+}
+
+/**
+ * LA-5.11 · what the thresholds would do, for the settings page: every scored policy's score, and the
+ * scores of the ones that could reach the queue (not an emergency, not held, not low-confidence, not
+ * held out). The page counts bands and queue volume from these as the thresholds move.
+ */
+export async function scoreDistribution(tenantId: string): Promise<{ all: number[]; eligible: number[] } | null> {
+  const loaded = await candidates({ tenantId, userId: "settings", role: "owner" }).catch((error) => {
+    if (isSchemaGap(error)) return null;
+    throw error;
+  });
+  if (!loaded) return null;
+  const heldOutKeys = await openHoldoutKeys(tenantId).catch(() => new Set<string>());
+  const all = new Array(101).fill(0);
+  const eligible = new Array(101).fill(0);
+  for (const r of loaded.rows) {
+    all[r.score] += 1;
+    if (!isEmergency(r) && !isHeld(r, loaded.today, loaded.config.settings.workedCooldownDays) && reachesQueue(r) && !heldOutKeys.has(r.key)) eligible[r.score] += 1;
+  }
+  return { all, eligible };
 }
 
 /** The one card, recomputed here — the browser's copy is never trusted. */
@@ -236,13 +296,21 @@ async function cardFor(viewer: Viewer, carrierId: string, policyNumber: string):
   if (!loaded) throw new SaveQueueError(RADAR_PENDING_MESSAGE, 503);
   const card = loaded.rows[0];
   if (!card) throw new SaveQueueError("That policy isn't scored for you now.", 404);
+  // LA-5.8: a retention rep works the cards assigned to them, and only those.
+  if (viewer.role === "retention" && !ownsCard(viewer, (await ownerOf(viewer.tenantId, "save_queue", carrierId, policyNumber)) ?? undefined)) {
+    throw new SaveQueueError("That card is assigned to someone else.", 404);
+  }
   if (isEmergency(card)) throw new SaveQueueError("This policy is past due or on the Lapse risk call list now: work it there.", 409);
+  // LA-5.9: a held-out policy is left alone on purpose; it is not worked from here.
+  if ((await openHoldoutKeys(viewer.tenantId).catch(() => new Set<string>())).has(card.key)) throw new SaveQueueError("This policy is in the holdout, so it is not worked unless it falls past due.", 409);
   return { ...card, today: loaded.today };
 }
 
 /** Log a worked card, capturing the score, band, weight version and exposure at this moment (LA-5.9 needs them). */
-export async function logSaveAttempt(viewer: Viewer, input: { carrierId: string; policyNumber: string; outcome: ContactOutcome; actionTaken: ActionTaken; note: string | null; servicingRequestId?: string }) {
+export async function logSaveAttempt(viewer: Viewer, input: { carrierId: string; policyNumber: string; outcome: ContactOutcome; actionTaken: ActionTaken; note: string | null; servicingRequestId?: string; clientReason?: ClientReason | null }) {
   const card = await cardFor(viewer, input.carrierId, input.policyNumber);
+  // LA-5.8: the client's own reason is only theirs to give, on a call that reached them and was refused.
+  const clientReason = input.outcome === "reached_refused" ? input.clientReason ?? null : null;
   const { data: saved, error } = await db().from("save_attempt").insert({
     tenant_id: viewer.tenantId, carrier_id: input.carrierId, policy_number: input.policyNumber,
     risk_score_at_attempt: card.score, band_at_attempt: card.band, weight_set_version: card.weightSetVersion,
@@ -250,6 +318,7 @@ export async function logSaveAttempt(viewer: Viewer, input: { carrierId: string;
     recommended_actions_json: card.fixes.map((f) => ({ action: f.action, label: f.label, target_draft_day: f.targetDraftDay ?? null })),
     action_taken: input.actionTaken, contact_outcome: input.outcome, attempted_by: viewer.userId, note: input.note?.trim() || null,
     servicing_request_id: input.servicingRequestId ?? null,
+    ...(clientReason ? { client_reason: clientReason } : {}),
   }).select("id").single();
   if (error) {
     if (isSchemaGap(error)) throw new SaveQueueError(RADAR_PENDING_MESSAGE, 503);

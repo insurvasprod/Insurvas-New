@@ -74,7 +74,57 @@ export type RetentionSettings = {
   reinstatementAmberDays: number;
   reinstatementRedDays: number;
   reinstatementPinDays: number;
+  /** LA-5.11: Sign 7's own sample floor (Sign 6 keeps `sampleFloor`). */
+  carrierSampleFloor: number;
+  /** LA-5.11: the save queue's order when the agent has not picked one. */
+  queueDefaultSort: QueueDefaultSort;
+  /** LA-5.4: days after a request's expected date before a file that still disagrees fails it. */
+  servicingGraceDays: number;
+  /** LA-5.8: a reinstatement case moves to the writing agent this many days before its deadline. */
+  reinstatementEscalateDays: number;
+  /** LA-5.7: cooling-off per lapse reason, in days. */
+  winbackDays: Record<WinbackReason, number>;
+  /** LA-5.8: how retention reps share the LA-5 queues. */
+  assignmentStrategy: AssignmentStrategy;
+  /** LA-5.8 "by carrier": carrier id → the rep who owns it. */
+  assignmentCarrierReps: Record<string, string>;
+  /** LA-5.8 "by exposure": reps best first; the biggest cases go to the first. */
+  assignmentRepOrder: string[];
+  /** LA-5.9: the holdout. Off unless the agency switches it on. */
+  holdoutEnabled: boolean;
+  holdoutShareBp: number;
+  /** A policy with more advance at risk than this is never held out. */
+  holdoutMaxExposureCents: number;
+  /** LA-5.9: days between a prediction and the look at what happened. */
+  predictionHorizonDays: number;
 };
+
+export const QUEUE_DEFAULT_SORTS = ["value", "score", "exposure", "next_draft", "months"] as const;
+export type QueueDefaultSort = (typeof QUEUE_DEFAULT_SORTS)[number];
+
+export const WINBACK_REASONS = ["mechanical", "administrative", "unknown", "carrier_declined", "affordability", "no_longer_wanted"] as const;
+export type WinbackReason = (typeof WINBACK_REASONS)[number];
+
+export const ASSIGNMENT_STRATEGIES = ["round_robin", "by_carrier", "by_exposure"] as const;
+export type AssignmentStrategy = (typeof ASSIGNMENT_STRATEGIES)[number];
+export const ASSIGNMENT_STRATEGY_LABELS: Record<AssignmentStrategy, string> = {
+  round_robin: "Round-robin (default)",
+  by_carrier: "By carrier",
+  by_exposure: "By exposure: the biggest cases to the first rep",
+};
+
+/**
+ * LA-5.11 · safety limits. Platform-side, shown on the settings page and never editable there: the
+ * database refuses anything beyond them too (the retention_settings checks).
+ */
+export const PLATFORM_CAPS = {
+  /** LA-5.9: at most a fifth of the queue is ever held out. */
+  holdoutCeilingBp: 2000,
+  /** LA-5.7: someone who could not afford it is not called back inside six months. */
+  winbackAffordabilityFloorDays: 180,
+  /** LA-3.9: carriers reject a draft on the 29th–31st, and February breaks them. */
+  draftDayCap: 28,
+} as const;
 
 export const PLATFORM_DEFAULT_SETTINGS: RetentionSettings = {
   mediumFrom: 25,
@@ -94,12 +144,27 @@ export const PLATFORM_DEFAULT_SETTINGS: RetentionSettings = {
   reinstatementAmberDays: 14,
   reinstatementRedDays: 7,
   reinstatementPinDays: 3,
+  carrierSampleFloor: 20,
+  queueDefaultSort: "value",
+  servicingGraceDays: 10,
+  reinstatementEscalateDays: 7,
+  winbackDays: { mechanical: 30, administrative: 30, unknown: 90, carrier_declined: 90, affordability: 365, no_longer_wanted: 365 },
+  assignmentStrategy: "round_robin",
+  assignmentCarrierReps: {},
+  assignmentRepOrder: [],
+  holdoutEnabled: false,
+  holdoutShareBp: 1000,
+  holdoutMaxExposureCents: 100_000,
+  predictionHorizonDays: 90,
 };
+
+const or = <T,>(v: T | null | undefined, fallback: T): T => (v === null || v === undefined ? fallback : v);
 
 /** retention_settings row → settings; a missing row is the platform defaults. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function settingsFromRow(row: any | null | undefined): RetentionSettings {
-  if (!row) return { ...PLATFORM_DEFAULT_SETTINGS };
+  if (!row) return { ...PLATFORM_DEFAULT_SETTINGS, winbackDays: { ...PLATFORM_DEFAULT_SETTINGS.winbackDays } };
+  const d = PLATFORM_DEFAULT_SETTINGS;
   return {
     mediumFrom: row.medium_from,
     highFrom: row.high_from,
@@ -118,6 +183,19 @@ export function settingsFromRow(row: any | null | undefined): RetentionSettings 
     reinstatementAmberDays: row.reinstatement_amber_days ?? PLATFORM_DEFAULT_SETTINGS.reinstatementAmberDays,
     reinstatementRedDays: row.reinstatement_red_days ?? PLATFORM_DEFAULT_SETTINGS.reinstatementRedDays,
     reinstatementPinDays: row.reinstatement_pin_days ?? PLATFORM_DEFAULT_SETTINGS.reinstatementPinDays,
+    carrierSampleFloor: or(row.carrier_sample_floor, row.sample_floor ?? d.carrierSampleFloor),
+    queueDefaultSort: (QUEUE_DEFAULT_SORTS as readonly string[]).includes(row.queue_default_sort) ? row.queue_default_sort : d.queueDefaultSort,
+    servicingGraceDays: or(row.servicing_grace_days, d.servicingGraceDays),
+    reinstatementEscalateDays: or(row.reinstatement_escalate_days, d.reinstatementEscalateDays),
+    winbackDays: Object.fromEntries(WINBACK_REASONS.map((r) => [r, or(row[`winback_${r}_days`], d.winbackDays[r])])) as Record<WinbackReason, number>,
+    assignmentStrategy: (ASSIGNMENT_STRATEGIES as readonly string[]).includes(row.assignment_strategy) ? row.assignment_strategy : d.assignmentStrategy,
+    assignmentCarrierReps: row.assignment_carrier_reps && typeof row.assignment_carrier_reps === "object" ? { ...row.assignment_carrier_reps } : {},
+    assignmentRepOrder: Array.isArray(row.assignment_rep_order) ? [...row.assignment_rep_order] : [],
+    holdoutEnabled: row.holdout_enabled === true,
+    // The ceiling holds even if a row somehow carries more.
+    holdoutShareBp: Math.min(or(row.holdout_share_bp, d.holdoutShareBp), PLATFORM_CAPS.holdoutCeilingBp),
+    holdoutMaxExposureCents: Number(or(row.holdout_max_exposure_cents, d.holdoutMaxExposureCents)),
+    predictionHorizonDays: or(row.prediction_horizon_days, d.predictionHorizonDays),
   };
 }
 
@@ -141,6 +219,11 @@ export const CONTACT_OUTCOME_LABELS: Record<ContactOutcome, string> = {
   no_answer: "No answer",
   already_fixed: "Already fixed",
 };
+
+/** LA-5.8 · what the client said, when a reached client said no — the two reasons almost nothing fixes. */
+export const CLIENT_REASONS = ["affordability", "no_longer_wanted"] as const;
+export type ClientReason = (typeof CLIENT_REASONS)[number];
+export const CLIENT_REASON_LABELS: Record<ClientReason, string> = { affordability: "Said they can't afford it", no_longer_wanted: "Said they don't want it any more" };
 
 export const ACTION_TAKEN = ["none", ...FIX_ACTIONS] as const;
 export type ActionTaken = (typeof ACTION_TAKEN)[number];

@@ -7,6 +7,8 @@ import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { audit } from "@/lib/audit/log";
 import { z } from "zod";
 import { getEntitlement } from "@/lib/entitlements/get";
+import { AgencyRoleRefusal, memberTitles, setMemberAgencyRole } from "@/lib/agency/titles";
+import { isAgencyTitle } from "@/lib/tenantAuth/roles";
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ userId: string }> }) {
   const auth = await requireTenant(["owner"]);
@@ -19,6 +21,32 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   const parsed = updateTeamRoleSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Choose a valid role" }, { status: 400 });
+  }
+
+  // AG-0.2 · owner and admin are the keys to the agency. Only the owner who holds billing hands them out or
+  // takes them away; an admin manages everyone else.
+  const targetRow = await getSupabaseServiceClient().from("tenant_users").select("role").eq("tenant_id", auth.context.tenantId).eq("user_id", userId).maybeSingle<{ role: string }>();
+  const targetTitle = (await memberTitles(auth.context.tenantId)).get(userId) ?? null;
+  const touchesKeys = parsed.data.role === "owner" || parsed.data.role === "admin" || targetRow.data?.role === "owner";
+  if (touchesKeys && auth.context.memberRole === "admin") {
+    return NextResponse.json({ error: "Only the account owner can grant or remove owner and admin.", code: "owner_only" }, { status: 403 });
+  }
+
+  // AG-0.2 · an agency title goes through its one SQL writer, which also checks the plan is an agency plan.
+  if (isAgencyTitle(parsed.data.role)) {
+    try {
+      const granted = await setMemberAgencyRole(auth.context.tenantId, userId, parsed.data.role);
+      const from = targetTitle ?? targetRow.data?.role ?? null;
+      if (from !== parsed.data.role) {
+        await audit({ actorType: "tenant", actorId: auth.context.userId, action: "tenant.member_role_changed", targetType: "user", targetId: userId, metadata: { tenantId: auth.context.tenantId, from, to: parsed.data.role, base: granted.role }, request });
+        const who = await memberSnapshot(auth.context.tenantId, userId);
+        await recordSettingsChanges({ tenantId: auth.context.tenantId, actorId: auth.context.userId, section: "team-access", changes: [{ key: `member:${userId}.role`, label: `${who.name} — role`, from, to: parsed.data.role }] });
+      }
+      return NextResponse.json({ ok: true, userId, role: parsed.data.role });
+    } catch (error) {
+      if (error instanceof AgencyRoleRefusal) return NextResponse.json({ error: error.message, code: error.code }, { status: error.status });
+      throw error;
+    }
   }
 
   const entitlement = await getEntitlement(auth.context.tenantId);

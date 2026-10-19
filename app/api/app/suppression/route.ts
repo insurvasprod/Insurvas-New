@@ -15,6 +15,7 @@ import {
   type SuppressionListType,
   type SuppressionSource,
 } from "@/lib/suppression/service";
+import { refuseNarrowInAgency } from "@/lib/agency/routeScope";
 
 /**
  * LA-2.3 · the numbers this tenant must never call.
@@ -66,6 +67,12 @@ export async function GET(request: NextRequest) {
       );
     }
   }
+
+  // AG-0.5: past the one-number check, this is the agency's list and its figures — the screening audit
+  // names who checked what, the overview counts every producer's refused dials. A narrow session inside
+  // an agency keeps `?check=` (it is how anyone who dials asks "may we call this person") and nothing else.
+  const refused = await refuseNarrowInAgency(auth.context, "The suppression list");
+  if (refused) return refused;
 
   // `?audit=1`: LA-2.3-9, every screening check (who, when, vendor, raw response, outcome, cached),
   // newest first. `phone` and `outcome` narrow it, `page` (1-based) pages it.
@@ -119,6 +126,8 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const auth = await requireFeatureRole("tcpa_checker", WRITE_ROLES, { write: true });
   if (auth instanceof NextResponse) return auth;
+  const refused = await refuseNarrowInAgency(auth.context, "The suppression list");
+  if (refused) return refused;
 
   const parsed = addSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success)

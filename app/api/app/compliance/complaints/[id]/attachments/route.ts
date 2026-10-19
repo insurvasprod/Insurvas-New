@@ -4,6 +4,7 @@ import { z } from "zod";
 import { audit } from "@/lib/audit/log";
 import { addAttachment, attachmentUrl, ComplaintError } from "@/lib/compliance/complaintStore";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
+import { refuseNarrowInAgency } from "@/lib/agency/routeScope";
 
 /**
  * LA-6.4 (Notion sprint) · a complaint's files: the letter or carrier notice it arrived as, and what
@@ -21,6 +22,8 @@ const fail = (error: unknown) => {
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireFeatureRole("tcpa_checker", ROLES);
   if (auth instanceof NextResponse) return auth;
+  const refused = await refuseNarrowInAgency(auth.context, "Complaints");
+  if (refused) return refused;
   const { id } = await params;
   const path = request.nextUrl.searchParams.get("path") ?? "";
   if (!isId(id) || !path) return NextResponse.json({ error: "That file isn't here." }, { status: 404 });
@@ -35,6 +38,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireFeatureRole("tcpa_checker", ROLES, { write: true });
   if (auth instanceof NextResponse) return auth;
+  const refused = await refuseNarrowInAgency(auth.context, "Complaints");
+  if (refused) return refused;
   const { id } = await params;
   if (!isId(id)) return NextResponse.json({ error: "That complaint isn't here." }, { status: 404 });
   const form = await request.formData().catch(() => null);

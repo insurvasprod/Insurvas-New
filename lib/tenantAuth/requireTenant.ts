@@ -3,7 +3,8 @@ import { cache } from "react";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
-import { isTenantRole, type TenantRole } from "./roles";
+import { isAgencyTitle, isTenantRole, memberRoleOf, type AgencyTitle, type MemberRole, type TenantRole } from "./roles";
+import { titleWithholds } from "./permissions";
 import { TENANT_SESSION_COOKIE, verifyTenantSessionToken, type TenantSessionPayload } from "./session";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { holdsPartnerMembership } from "@/lib/auth/planeSeparation";
@@ -29,7 +30,12 @@ const readTenantSession = cache(async (): Promise<TenantSessionPayload | null> =
 export type TenantContext = {
   userId: string;
   tenantId: string;
+  /** The BASE role every gate compares. An agency admin is "owner" here, a manager "producer" (AG-0.2). */
   role: TenantRole;
+  /** AG-0.2 · the agency title on the same membership row; absent outside an agency. */
+  agencyTitle?: AgencyTitle | null;
+  /** AG-0.2 · the role as the person holds it — what labels show and what the matrix is read with. */
+  memberRole?: MemberRole;
   /** The tenant_user_session row of this request's cookie (LA-8.2); null on a cookie issued before sessions were rows. */
   sessionId?: string | null;
   /** When this session passed the second factor; null when it did not. */
@@ -72,13 +78,8 @@ const readTenantAccess = cache(async (): Promise<{ context: TenantContext | null
   const sessionCheck: Promise<SessionCheck> = session.sid
     ? checkTenantSession(session.sid, session.sub).catch(() => ({ live: false, twoFactorAt: null }))
     : Promise.resolve({ live: true, twoFactorAt: null });
-  const [{ data: membership }, { data: user }, { data: tenant }, isPartnerAccount, live] = await Promise.all([
-    supabase
-      .from("tenant_users")
-      .select("role")
-      .eq("user_id", session.sub)
-      .eq("tenant_id", session.tenantId)
-      .maybeSingle<{ role: string }>(),
+  const [membership, { data: user }, { data: tenant }, isPartnerAccount, live] = await Promise.all([
+    readMembership(session.sub, session.tenantId),
     supabase.from("users").select("status, session_version").eq("id", session.sub).maybeSingle<{ status: string; session_version: number }>(),
     supabase.from("tenants").select("status").eq("id", session.tenantId).maybeSingle<{ status: string }>(),
     holdsPartnerMembership(session.sub),
@@ -96,8 +97,63 @@ const readTenantAccess = cache(async (): Promise<{ context: TenantContext | null
   // Only a person who would otherwise be let in learns that the agency is suspended.
   if (isTenantSuspended(tenant.status)) return { context: null, suspended: true };
 
-  return { context: { userId: session.sub, tenantId: session.tenantId, role: membership.role, sessionId: session.sid ?? null, twoFactorAt: live.twoFactorAt }, suspended: false };
+  const agencyTitle = isAgencyTitle(membership.agency_role) ? membership.agency_role : null;
+  return {
+    context: {
+      userId: session.sub,
+      tenantId: session.tenantId,
+      role: membership.role,
+      agencyTitle,
+      memberRole: memberRoleOf(membership.role, agencyTitle),
+      sessionId: session.sid ?? null,
+      twoFactorAt: live.twoFactorAt,
+    },
+    suspended: false,
+  };
 });
+
+/**
+ * The membership row with its AG-0.2 agency title. Until migration 20261018110000 is applied the column
+ * does not exist, and asking for it would fail EVERY session; so an undefined-column answer retries
+ * without it and the person simply has no title.
+ */
+async function readMembership(userId: string, tenantId: string): Promise<{ role: string; agency_role: string | null } | null> {
+  const supabase = getSupabaseServiceClient();
+  // Newest schema first; each fallback drops the column a not-yet-applied migration adds
+  // (20261018150000 access_blocked_at, 20261018110000 agency_role), so a missing column never ends sessions.
+  for (const columns of ["role, agency_role, access_blocked_at", "role, agency_role", "role"]) {
+    const read = await supabase
+      .from("tenant_users")
+      .select(columns)
+      .eq("user_id", userId)
+      .eq("tenant_id", tenantId)
+      .maybeSingle<{ role: string; agency_role?: string | null; access_blocked_at?: string | null }>();
+    if (read.error) {
+      if (read.error.code === "42703" || /agency_role|access_blocked_at/.test(read.error.message ?? "")) continue;
+      return null;
+    }
+    if (!read.data) return null;
+    // AG-0.7: a suspended or offboarded producer's membership is blocked — in THIS agency only.
+    if (read.data.access_blocked_at) return null;
+    return { role: read.data.role, agency_role: read.data.agency_role ?? null };
+  }
+  return null;
+}
+
+/**
+ * AG-0.2 · billing and plan changes belong to the owner who holds billing. An agency admin passes every
+ * owner gate (that is what admin means) except this one. Call after requireTenant(["owner"]) on any
+ * route that changes the subscription, the plan, the payment method or a checkout.
+ */
+export function refuseWithoutBilling(context: TenantContext): NextResponse | null {
+  if (titleWithholds(context.memberRole ?? context.role, "billing.manage")) {
+    return NextResponse.json(
+      { error: "Only the account owner can change billing or the plan.", code: "billing_owner_only" },
+      { status: 403 },
+    );
+  }
+  return null;
+}
 
 /**
  * Server-side gate for every /api/app route. Tenant scope comes ONLY from the verified session

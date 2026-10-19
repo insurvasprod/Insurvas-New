@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { bookGapScan, EvidenceError, mayGenerateReports } from "@/lib/compliance/evidenceReport";
 import { evidenceRange } from "@/lib/compliance/evidenceRange";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
+import { refuseNarrowInAgency } from "@/lib/agency/routeScope";
 
 /**
  * LA-6.3 (Notion sprint) · the book-wide gap scan: the evidence report's eight gap checks across the
@@ -13,6 +14,8 @@ const ROLES = ["owner", "producer"] as const;
 export async function GET(request: NextRequest) {
   const auth = await requireFeatureRole("litigation_packet", ROLES);
   if (auth instanceof NextResponse) return auth;
+  const refused = await refuseNarrowInAgency(auth.context, "The compliance gap scan");
+  if (refused) return refused;
   const range = evidenceRange(request.nextUrl.searchParams.get("from"), request.nextUrl.searchParams.get("to"));
   if ("error" in range) return NextResponse.json({ error: range.error }, { status: 400 });
   const { tenantId, userId, role } = auth.context;

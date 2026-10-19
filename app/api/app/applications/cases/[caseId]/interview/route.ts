@@ -4,6 +4,7 @@ import { actorOf, body, failure, isUuid } from "@/lib/applications/http";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import { completeInterview, ensureInterview, saveAnswers } from "@/lib/applications/mutations";
 import { interviewAnswersSchema } from "@/lib/applications/schemas";
+import { guardCase } from "@/lib/agency/guards";
 
 /**
  * LA-3.2 · the underwriting interview for one insured on a case. PUT saves answers as they are given
@@ -16,6 +17,9 @@ export async function PUT(request: Request, { params }: { params: Promise<{ case
   const actor = actorOf(auth, request);
   const { caseId } = await params;
   if (!isUuid(caseId)) return NextResponse.json({ error: "That case could not be found." }, { status: 404 });
+  // AG-0.5 · a producer cannot open another producer's record by id (404, not 403).
+  const hidden = await guardCase(auth.context, caseId);
+  if (hidden) return hidden;
   const input = await body(request, interviewAnswersSchema);
   if (input instanceof NextResponse) return input;
   try {
@@ -34,6 +38,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ cas
   const actor = actorOf(auth, request);
   const { caseId } = await params;
   if (!isUuid(caseId)) return NextResponse.json({ error: "That case could not be found." }, { status: 404 });
+  // AG-0.5 · a producer cannot open another producer's record by id (404, not 403).
+  const hidden = await guardCase(auth.context, caseId);
+  if (hidden) return hidden;
   const role = new URL(request.url).searchParams.get("insured") === "spouse" ? "spouse" : "primary";
   try {
     const interviewId = await ensureInterview(actor, caseId, role);

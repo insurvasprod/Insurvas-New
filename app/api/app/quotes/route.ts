@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { actorOf, failure } from "@/lib/applications/http";
 import { listQuoteRows } from "@/lib/applications/lists";
+import { scopeFor } from "@/lib/agency/visibility";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 
 /**
@@ -13,7 +14,8 @@ export async function GET(request: Request) {
   if (auth instanceof NextResponse) return auth;
   const actor = actorOf(auth, request);
   try {
-    return NextResponse.json({ quotes: await listQuoteRows(actor.tenantId) });
+    // AG-0.5 · quotes follow their case's producer (opened_by).
+    return NextResponse.json({ quotes: await listQuoteRows(actor.tenantId, await scopeFor(auth.context)) });
   } catch (error) {
     return failure(error);
   }

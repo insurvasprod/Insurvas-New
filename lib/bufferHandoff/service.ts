@@ -4,6 +4,7 @@ import { getClientIp } from "@/lib/request/clientInfo";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { postPartnerSystemCard } from "@/lib/partnerChat/service";
 import { notifyAgentUser } from "@/lib/agentAlerts/service";
+import { rowVisible, type ProducerScope } from "../agency/visibilityCore";
 
 export type LicensedAgent = { id: string; name: string; role: "owner" | "producer" };
 
@@ -25,8 +26,14 @@ export async function listLicensedAgents(tenantId: string, excludeUserId?: strin
   return (memberships.data ?? []).map((membership) => ({ id: membership.user_id, name: names.get(membership.user_id) ?? "Licensed agent", role: membership.role as "owner" | "producer" }));
 }
 
-export async function getBufferHandoffContext(tenantId: string, bufferUserId: string) {
-  return { licensedAgents: await listLicensedAgents(tenantId, bufferUserId), canOffer: true };
+/**
+ * AG-0.5: `scope` is the buffer's producer scope (scopeFor, from the session). In an agency an assistant
+ * hands a caller only to the producers he assists; null (solo, all-seeing roles) lists every licensed
+ * agent, as before.
+ */
+export async function getBufferHandoffContext(tenantId: string, bufferUserId: string, scope: ProducerScope = null) {
+  const agents = await listLicensedAgents(tenantId, bufferUserId);
+  return { licensedAgents: scope === null ? agents : agents.filter((agent) => rowVisible(scope, agent.id)), canOffer: true };
 }
 
 export async function listPendingBufferHandoffs(tenantId: string, licensedAgentId: string) {

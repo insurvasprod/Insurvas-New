@@ -5,6 +5,7 @@ import { buildEvidenceReport, EvidenceError, mayGenerateReports, type EvidenceOu
 import { buildEvidencePdf, evidenceCsv } from "@/lib/compliance/evidencePdf";
 import { evidenceRange } from "@/lib/compliance/evidenceRange";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
+import { refuseNarrowInAgency } from "@/lib/agency/routeScope";
 
 /**
  * LA-6.3 (Notion sprint) · the compliance evidence report for one number, lead or client: on screen
@@ -16,6 +17,8 @@ const ROLES = ["owner", "producer"] as const;
 export async function GET(request: NextRequest) {
   const auth = await requireFeatureRole("litigation_packet", ROLES);
   if (auth instanceof NextResponse) return auth;
+  const refused = await refuseNarrowInAgency(auth.context, "The compliance evidence report");
+  if (refused) return refused;
   const p = request.nextUrl.searchParams;
   const phone = p.get("phone");
   const lead = p.get("lead");

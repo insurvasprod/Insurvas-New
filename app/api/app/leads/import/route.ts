@@ -10,6 +10,7 @@ import { listPipelines } from "@/lib/pipelines/service";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { outboundLimitResponse, outboundLimitSnapshot, recordOutboundUsage } from "@/lib/metering/outbound";
 import { isImportDateOrder, isRequiredLeadImportField, type ImportDateOrder } from "@/lib/agentTemplates/csv";
+import { refuseNarrowInAgency } from "@/lib/agency/routeScope";
 
 const LEAD_IMPORT_ROLES = ["owner", "producer", "assistant"] as const;
 type CampaignOption = { id: string; vendor_id: string; name: string; status: string };
@@ -23,6 +24,8 @@ type LooseQuery = PromiseLike<{ data: unknown; error: { message: string; code?: 
 async function context(write = false) {
   const auth = await requireFeatureRole("lead_import", LEAD_IMPORT_ROLES, { write });
   if (auth instanceof NextResponse) return auth;
+  const refused = await refuseNarrowInAgency(auth.context, "Lead import");
+  if (refused) return refused;
   // Independent tenant-scoped reads, so one round trip rather than two.
   const [template, pipelines] = await Promise.all([
     getAgentTemplate(auth.context.tenantId, auth.context.userId),

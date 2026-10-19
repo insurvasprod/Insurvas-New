@@ -4,6 +4,7 @@ import { z } from "zod";
 import { ActivityForbiddenError, activityCsv, getActivityReport, markActivityClick, markActivityDisposition } from "@/lib/activityLog/service";
 import { parseFlagFilter } from "@/lib/activityLog/types";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
+import { scopeFor } from "@/lib/agency/visibility";
 
 const ROLES = ["owner", "producer", "setter"] as const;
 const clickSchema = z.object({ action: z.literal("click"), activity_id: z.string().uuid() });
@@ -19,7 +20,8 @@ export async function GET(request: NextRequest) {
   const auth = await requireFeatureRole("outbound_dialing", ROLES);
   if (auth instanceof NextResponse) return auth;
   try {
-    const report = await getActivityReport(auth.context.tenantId, auth.context.userId, auth.context.role, filters(request));
+    // AG-0.5: a narrowed agency session sees the activity of the agents in its scope only (scope from the session).
+    const report = await getActivityReport(auth.context.tenantId, auth.context.userId, auth.context.role, filters(request), await scopeFor(auth.context));
     if (request.nextUrl.searchParams.get("format") === "csv") return new NextResponse(activityCsv(report.rows), { headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": "attachment; filename=lead-activity.csv", "Cache-Control": "no-store" } });
     return NextResponse.json(report, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {

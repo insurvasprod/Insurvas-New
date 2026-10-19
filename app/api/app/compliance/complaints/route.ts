@@ -5,6 +5,7 @@ import { audit } from "@/lib/audit/log";
 import { COMPLAINT_CATEGORIES, COMPLAINT_CHANNELS, COMPLAINT_VIA } from "@/lib/compliance/complaints";
 import { ComplaintError, deadlineSetup, listComplaints, openComplaint } from "@/lib/compliance/complaintStore";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
+import { refuseNarrowInAgency } from "@/lib/agency/routeScope";
 
 /**
  * LA-6.4 (Notion sprint) · complaints: the list (days remaining first; search reads past responses
@@ -38,6 +39,8 @@ const fail = (error: unknown) => {
 export async function GET(request: NextRequest) {
   const auth = await requireFeatureRole("tcpa_checker", ROLES);
   if (auth instanceof NextResponse) return auth;
+  const refused = await refuseNarrowInAgency(auth.context, "Complaints");
+  if (refused) return refused;
   const { tenantId, userId, role } = auth.context;
   try {
     const search = request.nextUrl.searchParams.get("q") ?? "";
@@ -51,6 +54,8 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const auth = await requireFeatureRole("tcpa_checker", ROLES, { write: true });
   if (auth instanceof NextResponse) return auth;
+  const refused = await refuseNarrowInAgency(auth.context, "Complaints");
+  if (refused) return refused;
   const parsed = body.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Check the complaint and try again." }, { status: 400 });
   const b = parsed.data;

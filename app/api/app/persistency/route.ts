@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { getPersistencyReport } from "@/lib/persistency/service";
 import { roleCanViewCommission } from "@/lib/tenantAuth/permissions";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
+import { scopeFor } from "@/lib/agency/visibility";
 
 /**
  * Money boundary (LA-4.8): persistency — the share of policies still alive 3, 6, 9 and 13 months
@@ -18,6 +19,8 @@ export async function GET() {
     const report = await getPersistencyReport({
       tenantId: auth.context.tenantId,
       canView: (producerUserId) => roleCanViewCommission(auth.context.role, auth.context.userId, producerUserId),
+      // AG-0.5 · and, in an agency, only the visible producers' policies count toward any rate.
+      scope: await scopeFor(auth.context),
     });
     return NextResponse.json({ ok: true, report }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {

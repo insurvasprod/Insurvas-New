@@ -53,6 +53,7 @@ const ROLE_REACH: { role: TenantRole; leads: string; money: string; settings: st
   { role: "setter", leads: "Dial and book only", money: "None", settings: "None" },
   { role: "assistant", leads: "Leads, imports and inbound; no dialer", money: "None", settings: "None" },
   { role: "bookkeeper", leads: "None", money: "Policies, all commissions, statements, payouts", settings: "None" },
+  { role: "retention", leads: "The save queue, paper-bill campaign, reinstatement and lapse-risk board", money: "Only the advance at risk on cards they work", settings: "None" },
 ];
 
 

@@ -1,3 +1,4 @@
+import { scopeFor } from "@/lib/agency/visibility";
 import { guardPage } from "@/lib/entitlements/guardPage";
 import { canWrite } from "@/lib/entitlements/types";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
@@ -36,7 +37,7 @@ export default async function PendingCasesPage({ searchParams }: { searchParams:
   if (query.preview === "sample" && process.env.NODE_ENV !== "production") {
     return <PendingCases requirements={FIXTURE_PENDING_ALL} counteroffers={FIXTURE_COUNTEROFFERS} awaiting={FIXTURE_AWAITING_NUMBER} ageingDays={DEFAULT_SALES_SETTINGS.requirementAgeingDays} initialTab={initialTab} readOnly={readOnly} sample />;
   }
-  const [data, timeZone] = await Promise.all([orPending(loadPending(guard.context.tenantId)), getViewerTimezone(guard.context.tenantId, guard.context.userId).catch(() => null)]);
+  const [data, timeZone] = await Promise.all([orPending(scopeFor(guard.context).then((scope) => loadPending(guard.context.tenantId, undefined, scope))), getViewerTimezone(guard.context.tenantId, guard.context.userId).catch(() => null)]);
   if (!data) return <SetupPending title="Pending cases" />;
   return <PendingCases requirements={data.requirements} counteroffers={data.counteroffers} awaiting={data.awaiting} ageingDays={data.ageingDays} initialTab={initialTab} readOnly={readOnly} timeZone={timeZone ?? undefined} />;
 }

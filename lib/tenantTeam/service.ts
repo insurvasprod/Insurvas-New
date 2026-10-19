@@ -107,7 +107,7 @@ export async function getTeamSnapshot(tenantId: string, entitlement: Entitlement
 
   type MemberUser = { id: string; name: string; email: string; status: string; last_login_at: string | null };
   const memberships = (rows ?? []) as unknown as Array<{ user_id: string; role: string; invited_at: string; accepted_at: string | null; users: MemberUser | null }>;
-  const byRole: Record<TenantRole, number> = { owner: 0, producer: 0, assistant: 0, bookkeeper: 0, setter: 0 };
+  const byRole: Record<TenantRole, number> = { owner: 0, producer: 0, assistant: 0, bookkeeper: 0, setter: 0, retention: 0 };
   const members: TeamMember[] = memberships.flatMap((membership) => {
     const user = membership.users;
     if (!user) return [];

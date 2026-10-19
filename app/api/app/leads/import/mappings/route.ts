@@ -6,6 +6,7 @@ import { getAgentTemplate } from "@/lib/agentTemplates/service";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { audit } from "@/lib/audit/log";
+import { refuseNarrowInAgency } from "@/lib/agency/routeScope";
 
 const roles = ["owner", "producer", "assistant"] as const;
 // `date_order` is optional: omitted, a saved format is left as it is; null clears it.
@@ -22,6 +23,8 @@ const isMissingDateOrder = (error: DbError | null) => Boolean(error) && (["42703
 export async function PUT(request: NextRequest) {
   const auth = await requireFeatureRole("lead_import", roles, { write: true });
   if (auth instanceof NextResponse) return auth;
+  const refused = await refuseNarrowInAgency(auth.context, "Lead import");
+  if (refused) return refused;
   const body = schema.safeParse(await request.json().catch(() => null));
   if (!body.success) return NextResponse.json({ error: body.error.issues[0]?.message ?? "Enter a valid import mapping" }, { status: 400 });
   try {

@@ -2,6 +2,8 @@ import { createClient } from "@supabase/supabase-js";
 import bcrypt from "bcryptjs";
 import * as OTPAuth from "otpauth";
 
+import { sealAdminTotpSecret } from "../lib/adminAuth/totpSecret.ts";
+
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
@@ -111,11 +113,14 @@ async function ensureAdmin(account, updateExisting = account.email.endsWith("@in
     return "updated";
   }
 
-  const { error } = await supabase.from("admin_users").insert({
-    ...values,
-    totp_secret: new OTPAuth.Secret({ size: 20 }).base32,
-  });
+  const { data: created, error } = await supabase.from("admin_users").insert(values).select("id").single();
   if (error) throw error;
+  // Sealed and bound to the new row's id (lib/adminAuth/totpSecret.ts), never stored in plain text.
+  const { error: sealError } = await supabase
+    .from("admin_users")
+    .update({ totp_secret: sealAdminTotpSecret(created.id, new OTPAuth.Secret({ size: 20 }).base32) })
+    .eq("id", created.id);
+  if (sealError) throw sealError;
   return "created";
 }
 

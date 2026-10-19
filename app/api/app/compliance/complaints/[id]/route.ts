@@ -5,6 +5,7 @@ import { audit } from "@/lib/audit/log";
 import { COMPLAINT_OUTCOMES, COMPLAINT_STATUSES } from "@/lib/compliance/complaints";
 import { checklistFor, ComplaintError, getComplaint, respondentFor, updateComplaint } from "@/lib/compliance/complaintStore";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
+import { refuseNarrowInAgency } from "@/lib/agency/routeScope";
 
 /**
  * LA-6.4 (Notion sprint) · one complaint: read it (with the response checklist) and move its
@@ -31,6 +32,8 @@ const fail = (error: unknown) => {
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireFeatureRole("tcpa_checker", ROLES);
   if (auth instanceof NextResponse) return auth;
+  const refused = await refuseNarrowInAgency(auth.context, "Complaints");
+  if (refused) return refused;
   const { id } = await params;
   if (!z.string().uuid().safeParse(id).success) return NextResponse.json({ error: "That complaint isn't here." }, { status: 404 });
   const { tenantId, userId, role } = auth.context;
@@ -47,6 +50,8 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireFeatureRole("tcpa_checker", ROLES, { write: true });
   if (auth instanceof NextResponse) return auth;
+  const refused = await refuseNarrowInAgency(auth.context, "Complaints");
+  if (refused) return refused;
   const { id } = await params;
   if (!z.string().uuid().safeParse(id).success) return NextResponse.json({ error: "That complaint isn't here." }, { status: 404 });
   const parsed = patch.safeParse(await request.json().catch(() => null));

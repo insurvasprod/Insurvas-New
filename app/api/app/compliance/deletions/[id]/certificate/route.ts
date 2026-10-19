@@ -5,6 +5,7 @@ import { DeletionError, getDeletionRequest } from "@/lib/compliance/dataSubjectS
 import { buildDeletionCertificate } from "@/lib/compliance/deletionCertificate";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
+import { refuseNarrowInAgency } from "@/lib/agency/routeScope";
 
 /**
  * LA-6.5 (Notion sprint) · the deletion certificate as a PDF, sendable to the requester. Built from
@@ -13,6 +14,8 @@ import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireFeatureRole("tcpa_checker", ["owner", "producer"]);
   if (auth instanceof NextResponse) return auth;
+  const refused = await refuseNarrowInAgency(auth.context, "Deletion requests");
+  if (refused) return refused;
   const { id } = await params;
   if (!z.string().uuid().safeParse(id).success) return NextResponse.json({ error: "That request isn't here." }, { status: 404 });
   const { tenantId, userId, role } = auth.context;

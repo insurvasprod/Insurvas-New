@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { audit } from "@/lib/audit/log";
 import { paymentMethodUrl } from "@/lib/billing/selfService";
-import { requireTenant } from "@/lib/tenantAuth/requireTenant";
+import { refuseWithoutBilling, requireTenant } from "@/lib/tenantAuth/requireTenant";
 
 /** Whop's signed-in membership page, when a membership has no manage_url of its own. */
 const WHOP_MEMBERSHIPS = "https://whop.com/@me/settings/memberships";
@@ -14,6 +14,9 @@ const WHOP_MEMBERSHIPS = "https://whop.com/@me/settings/memberships";
 export async function GET(request: Request) {
   const auth = await requireTenant(["owner"]);
   if (auth instanceof NextResponse) return auth;
+  // AG-0.2: the payment method is billing; an agency admin may not change it.
+  const billingOwnerOnly = refuseWithoutBilling(auth.context);
+  if (billingOwnerOnly) return billingOwnerOnly;
   try {
     const url = await paymentMethodUrl(auth.context.tenantId).catch(() => WHOP_MEMBERSHIPS);
     if (url === null) return NextResponse.json({ error: "There is no card on file for this workspace — invoices are paid by their own link." }, { status: 404 });

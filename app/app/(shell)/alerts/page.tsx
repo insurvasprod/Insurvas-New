@@ -6,6 +6,7 @@ import { ErrorState } from "@/components/ui/page-states";
 import { PageHeader } from "@/components/ui/page-header";
 import { listAlertCentre } from "@/lib/agentAlerts/service";
 import { getSlaDailyDigests, getSlaJobStatus } from "@/lib/queueSla/digest";
+import { scopeFor } from "@/lib/agency/visibility";
 import { resolveTenantContext } from "@/lib/tenantAuth/requireTenant";
 
 /**
@@ -25,10 +26,13 @@ export default async function AlertCentrePage() {
   if (!context) redirect("/app/login");
 
   const now = new Date();
+  // AG-0.5: inside an agency a narrow session sees only alerts about its visible producers' leads, and not the
+  // daily digest, which counts every partner's escalations across the agency.
+  const scope = await scopeFor(context);
   const [centre, job, digest] = await Promise.all([
-    listAlertCentre(context.tenantId, context.userId).catch(() => null),
+    listAlertCentre(context.tenantId, context.userId, scope).catch(() => null),
     getSlaJobStatus(context.tenantId, now).catch((error) => { console.error("SLA job status read failed", error); return null; }),
-    getSlaDailyDigests(context.tenantId, 7, now).catch((error) => { console.error("SLA digest read failed", error); return null; }),
+    scope !== null ? Promise.resolve(undefined) : getSlaDailyDigests(context.tenantId, 7, now).catch((error) => { console.error("SLA digest read failed", error); return null; }),
   ]);
 
   return (
@@ -42,7 +46,7 @@ export default async function AlertCentrePage() {
         canClaim={context.role === "owner" || context.role === "producer" || context.role === "assistant"}
         // Before 20260925709910 the strip's one line already says the update is pending; one is enough,
         // so the digest tab is left out until then.
-        digest={digest
+        digest={digest === undefined ? undefined : digest
           ? (digest.ready || job?.ready !== false) ? <SlaDigestCard ready={digest.ready} days={digest.days} /> : undefined
           : <ErrorState title="The daily digest did not load" detail="Reload the page to try again. Nothing has changed." />}
       />

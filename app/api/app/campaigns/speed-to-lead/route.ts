@@ -4,6 +4,7 @@ import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isSchemaGap } from "@/lib/supabase/schemaGap";
 import { campaignSpeedToLead, type CampaignSpeedRow } from "@/lib/leadPost/campaignSpeed";
+import { refuseNarrowInAgency } from "@/lib/agency/routeScope";
 
 /**
  * LA-2.5-5 · speed to lead per campaign: "arrival -> first dial per vendor/campaign: median and
@@ -63,6 +64,8 @@ async function computed(db: Loose, tenantId: string): Promise<CampaignSpeedRow[]
 export async function GET() {
   const auth = await requireFeatureRole("outbound_dialing", roles);
   if (auth instanceof NextResponse) return auth;
+  const refused = await refuseNarrowInAgency(auth.context, "Speed to lead");
+  if (refused) return refused;
   const db = getSupabaseServiceClient() as unknown as Loose;
   const read = await db
     .from("tenant_campaign_speed_to_lead")

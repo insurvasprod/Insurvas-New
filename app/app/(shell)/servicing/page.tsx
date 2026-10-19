@@ -1,3 +1,4 @@
+import { scopeFor } from "@/lib/agency/visibility";
 import { guardPage } from "@/lib/entitlements/guardPage";
 import { CAMPAIGN_PENDING_MESSAGE, loadCampaign } from "@/lib/retention/campaignStore";
 import { loadServicing, SERVICING_PENDING_MESSAGE } from "@/lib/retention/servicingStore";
@@ -23,11 +24,11 @@ export default async function ServicingPage({ searchParams }: { searchParams: Pr
   if (!guard.entitled) {
     return <FeatureGateNotice guard={guard} featureLabel="Servicing" description="Changes asked of the carrier, tracked until the next carrier file proves them." />;
   }
-  if (!["owner", "producer"].includes(guard.role)) {
-    return <RoleGateNotice featureLabel="Servicing" detail="Only owners and producers can open servicing requests." />;
+  if (!["owner", "producer", "retention"].includes(guard.role)) {
+    return <RoleGateNotice featureLabel="Servicing" detail="Only owners, producers and retention reps can open servicing requests." />;
   }
   const { status, view } = await searchParams;
-  const viewer = { tenantId: guard.context.tenantId, userId: guard.context.userId, role: guard.role };
+  const viewer = { tenantId: guard.context.tenantId, userId: guard.context.userId, role: guard.role, scope: await scopeFor(guard.context) };
   const readOnly = guard.entitlement.access === "read_only";
   const campaignView = view === "campaign";
   const [campaign, list] = campaignView ? [await loadCampaign(viewer), null] : [null, await loadServicing(viewer)];

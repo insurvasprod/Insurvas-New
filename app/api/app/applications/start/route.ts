@@ -6,7 +6,8 @@ import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import { startApplicationSchema } from "@/lib/applications/schemas";
 import { startApplication } from "@/lib/applications/service";
 import { ensureInterview } from "@/lib/applications/mutations";
-import { OutboundApplicationError } from "@/lib/outboundApplication/service";
+import { OutboundApplicationError, workItemLeadId } from "@/lib/outboundApplication/service";
+import { guardLead } from "@/lib/agency/guards";
 
 /**
  * LA-3 · the one doorway into an application. The dialer's "They are interested", an inbound
@@ -20,6 +21,10 @@ export async function POST(request: Request) {
   const actor = actorOf(auth, request);
   const input = await body(request, startApplicationSchema);
   if (input instanceof NextResponse) return input;
+  // AG-0.5 · the lead behind the work item must be one this session may see (a work item that is not this
+  // tenant's resolves to no lead, which a narrow session is refused as 404; for the rest the RPC answers).
+  const hidden = await guardLead(auth.context, (await workItemLeadId(actor.tenantId, input.work_item_id)) ?? input.work_item_id);
+  if (hidden) return hidden;
   try {
     const started = await startApplication({ tenantId: actor.tenantId, userId: actor.userId, workItemId: input.work_item_id, productLine: input.product_line ?? null });
     // The interview opens with the case: nothing else starts the primary insured's one, and the

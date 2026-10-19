@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { actorOf, failure } from "@/lib/applications/http";
 import { loadSalesReport } from "@/lib/applications/report";
 import { queryObject, salesReportQuery } from "@/lib/applications/reportSchemas";
+import { scopeFor } from "@/lib/agency/visibility";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 
 /**
@@ -17,7 +18,9 @@ export async function GET(request: Request) {
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Check the filters and try again.", code: "invalid_request" }, { status: 400 });
   const q = parsed.data;
   try {
-    const { report } = await loadSalesReport(actor.tenantId, { from: q.from, to: q.to, carrierId: q.carrier ?? null, productCode: q.product ?? null, source: q.source ?? null, producerId: q.producer ?? null });
+    // AG-0.5 · a producer's own report: scoped to the visible producers' cases. `producer` in the query can only
+    // narrow inside that scope; it never widens it, because the scope comes from the session.
+    const { report } = await loadSalesReport(actor.tenantId, { from: q.from, to: q.to, carrierId: q.carrier ?? null, productCode: q.product ?? null, source: q.source ?? null, producerId: q.producer ?? null }, Date.now(), await scopeFor(auth.context));
     return NextResponse.json({ report });
   } catch (error) {
     return failure(error);

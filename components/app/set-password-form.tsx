@@ -12,7 +12,7 @@ import { dateTime, viewerTimeZone } from "@/lib/format/dates";
 
 type TokenState =
   | { status: "checking" }
-  | { status: "valid"; email: string; name: string; purpose: "invite" | "password_reset"; expiresAt: string | null; organization: string | null; role: string | null }
+  | { status: "valid"; email: string; name: string; purpose: "invite" | "password_reset"; expiresAt: string | null; organization: string | null; role: string | null; hasAccount?: boolean }
   | { status: "invalid" };
 
 /**
@@ -58,7 +58,7 @@ export function SetPasswordForm({
       .then((body) => {
         if (cancelled) return;
         setTokenState(body?.valid
-          ? { status: "valid", email: body.email, name: body.name, purpose: body.purpose === "password_reset" ? "password_reset" : "invite", expiresAt: body.expiresAt ?? null, organization: body.organization ?? null, role: body.role ?? null }
+          ? { status: "valid", email: body.email, name: body.name, purpose: body.purpose === "password_reset" ? "password_reset" : "invite", expiresAt: body.expiresAt ?? null, organization: body.organization ?? null, role: body.role ?? null, hasAccount: body.hasAccount === true }
           : { status: "invalid" });
       })
       .catch(() => !cancelled && setTokenState({ status: "invalid" }));
@@ -105,10 +105,40 @@ export function SetPasswordForm({
   }
 
   if (done) {
-    return <AuthCard width={640} title="Password set" description="Taking you to sign in…" />;
+    return <AuthCard width={640} title={tokenState.hasAccount ? "You've joined" : "Password set"} description={tokenState.hasAccount ? "Sign in with your usual password, then pick this workspace." : "Taking you to sign in…"} />;
   }
 
   const invite = tokenState.purpose === "invite";
+
+  // AG-0.6 · an existing Insurvas account joins a second agency without choosing a new password.
+  if (invite && tokenState.hasAccount) {
+    const accept = async () => {
+      setError(null);
+      setLoading(true);
+      try {
+        const res = await fetch("/api/app/auth/accept-invite", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token }) });
+        const body = await res.json().catch(() => null);
+        if (!res.ok) { setError(body?.error ?? "Could not accept this invitation"); return; }
+        setDone(true);
+        setTimeout(() => router.push(loginPath), 2200);
+      } catch {
+        setError("Could not accept this invitation. Check your connection and try again.");
+      } finally {
+        setLoading(false);
+      }
+    };
+    return (
+      <AuthCard width={640} title={`Join ${tokenState.organization ?? "this workspace"}`} description={`You already have an Insurvas account as ${tokenState.email}. Your password stays the same.`}>
+        <div className="mt-6 grid grid-cols-1 gap-x-6 gap-y-4 rounded-lg bg-[var(--surface-alt)] p-4 sm:grid-cols-3">
+          <AuthFact label="Organization" value={tokenState.organization ?? "—"} />
+          <AuthFact label="Role" value={tokenState.role ?? "—"} />
+          <AuthFact label="Invitation expires" value={expiry(tokenState.expiresAt)} />
+        </div>
+        {error && <p role="alert" className="mt-4 rounded-lg border-l-[3px] border-l-[var(--error)] bg-[var(--error-surface)] p-3 text-sm text-[var(--error-ink)]">{error}</p>}
+        <Button type="button" className="mt-6 w-full" disabled={loading} onClick={accept}>{loading ? "Joining…" : "Accept invitation"}</Button>
+      </AuthCard>
+    );
+  }
   return (
     <AuthCard
       width={640}

@@ -5,6 +5,7 @@ import { audit } from "@/lib/audit/log";
 import { DELETION_VIA } from "@/lib/compliance/dataSubject";
 import { createDeletionRequest, DeletionError, listDeletionRequests } from "@/lib/compliance/dataSubjectStore";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
+import { refuseNarrowInAgency } from "@/lib/agency/routeScope";
 
 /**
  * LA-6.5 (Notion sprint) · consumer deletion requests: the list, and logging a new one (it arrives
@@ -31,6 +32,8 @@ const fail = (error: unknown) => {
 export async function GET() {
   const auth = await requireFeatureRole("tcpa_checker", ROLES);
   if (auth instanceof NextResponse) return auth;
+  const refused = await refuseNarrowInAgency(auth.context, "Deletion requests");
+  if (refused) return refused;
   const { tenantId, userId, role } = auth.context;
   try {
     return NextResponse.json({ requests: await listDeletionRequests({ tenantId, userId, role }) }, { headers: { "Cache-Control": "no-store" } });
@@ -42,6 +45,8 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   const auth = await requireFeatureRole("tcpa_checker", ROLES, { write: true });
   if (auth instanceof NextResponse) return auth;
+  const refused = await refuseNarrowInAgency(auth.context, "Deletion requests");
+  if (refused) return refused;
   const parsed = body.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Check the request and try again." }, { status: 400 });
   const b = parsed.data;

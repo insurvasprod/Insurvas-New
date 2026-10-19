@@ -6,8 +6,10 @@ import { getQueueSlaSettings } from "@/lib/queueSla/service";
 import { listDueCallbacks } from "@/lib/callbacks/service";
 import { owedToYou } from "@/lib/discrepancies/service";
 import { statementMoney } from "@/lib/ledger/statementConstants";
+import type { ProducerScope } from "@/lib/agency/visibilityCore";
 
 import { activitySentence, appointmentsSentence, callbacksSentence, carriersSentence, dialerSentence, inboundSentence, leadsSentence, policiesSentence, poolSentence, waitLabel } from "./summaryText";
+import { scopeWithSelf, waitingTransferOr } from "./scope";
 import { NOT_A_CONTACT } from "./todayMath";
 
 /**
@@ -19,7 +21,16 @@ import { NOT_A_CONTACT } from "./todayMath";
  * A figure is the number, a two- or three-word caption under it, and the full sentence
  * (summaryText) as the cell's hover text. Null for a tile with no figure, or when the read fails:
  * the cell then says "—" rather than showing a number it could not get.
+ *
+ * AG-0.5 · producer isolation. `viewer.scope` is the session's producer scope (scopeFor, from the
+ * session); null or no viewer = no filter, exactly as before. With a scope, only the three `shared`
+ * tiles (the ones a narrow role is ever shown a figure for, lib/dashboard/tiles) are read, each over
+ * what that session may see: callbacks assigned to its scope or to itself, the inbound transfers still
+ * waiting or held in its scope, and the floor's members in its scope plus itself (as the Agent Floor
+ * shows them). Every other figure is agency-wide by nature (the agency's leads, policies, statements,
+ * pool, carriers, dials) and is null under a scope: the cell keeps its way in, without a number.
  */
+export type TileViewer = { userId: string; scope: ProducerScope };
 export type TileMetric = {
   value: number;
   caption: string;
@@ -38,6 +49,8 @@ type Loose = {
 type Filterable = Head & PromiseLike<{ data: unknown[] | null; error: { message: string } | null; count: number | null }> & {
   eq(column: string, value: unknown): Filterable;
   is(column: string, value: null): Filterable;
+  in(column: string, values: readonly string[]): Filterable;
+  or(filters: string): Filterable;
   not(column: string, op: string, value: unknown): Filterable;
   lt(column: string, value: string): Filterable;
   gte(column: string, value: string): Filterable;
@@ -49,15 +62,17 @@ const db = () => getSupabaseServiceClient() as unknown as Loose;
 const n = (value: number) => value.toLocaleString("en-US");
 const plural = (value: number, word: string) => `${n(value)} ${word}${value === 1 ? "" : "s"}`;
 
-async function inbound(tenantId: string): Promise<TileMetric> {
+async function inbound(tenantId: string, held: ProducerScope = null): Promise<TileMetric> {
   // Inbound transfers are the queue rows a partner sent (partner_id set) that nobody has claimed.
-  const waiting = () => db().from("lead_queue").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId).eq("status", "unclaimed").not("partner_id", "is", null);
+  // AG-0.5: scoped, only those still waiting (anyone may claim them) or held in the scope.
+  const visible = (query: Filterable) => (held === null ? query : query.or(waitingTransferOr(held)));
+  const waiting = () => visible(db().from("lead_queue").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId).eq("status", "unclaimed").not("partner_id", "is", null));
   const sla = await getQueueSlaSettings(tenantId);
   const cutoff = new Date(Date.now() - sla.escalate_after_seconds * 1000).toISOString();
   const [all, past, oldest] = await Promise.all([
     waiting(),
     waiting().lt("queued_at", cutoff),
-    db().from("lead_queue").select("queued_at").eq("tenant_id", tenantId).eq("status", "unclaimed").not("partner_id", "is", null).order("queued_at", { ascending: true }).limit(1),
+    visible(db().from("lead_queue").select("queued_at").eq("tenant_id", tenantId).eq("status", "unclaimed").not("partner_id", "is", null)).order("queued_at", { ascending: true }).limit(1),
   ]);
   if (all.error || past.error || oldest.error) throw new Error("inbound summary unavailable");
   const first = ((oldest.data ?? []) as Array<{ queued_at: string }>)[0];
@@ -71,9 +86,12 @@ async function inbound(tenantId: string): Promise<TileMetric> {
   };
 }
 
-async function floor(tenantId: string): Promise<TileMetric> {
+async function floor(tenantId: string, members: ProducerScope = null): Promise<TileMetric> {
   // Who is on the floor right now: a presence row that heartbeat in the last minute and is not "off".
-  const rows = await db().from("agent_presence").select("status, last_seen_at").eq("tenant_id", tenantId).gte("last_seen_at", new Date(Date.now() - 60_000).toISOString());
+  // AG-0.5: scoped, only the members the Agent Floor shows this session (its scope and itself).
+  let query = db().from("agent_presence").select("status, last_seen_at").eq("tenant_id", tenantId).gte("last_seen_at", new Date(Date.now() - 60_000).toISOString());
+  if (members !== null) query = query.in("user_id", members);
+  const rows = await query;
   if (rows.error) throw new Error("floor summary unavailable");
   const live = ((rows.data ?? []) as Array<{ status: string }>).filter((row) => row.status !== "off");
   const ready = live.filter((row) => row.status === "ready").length;
@@ -171,8 +189,9 @@ async function owed(tenantId: string): Promise<TileMetric> {
   };
 }
 
-async function callbacks(tenantId: string): Promise<TileMetric> {
-  const due = await listDueCallbacks(tenantId);
+async function callbacks(tenantId: string, assigned: ProducerScope = null): Promise<TileMetric> {
+  // AG-0.5: scoped, the callbacks assigned to the scope or the reader (D1: assigned_to).
+  const due = await listDueCallbacks(tenantId, assigned);
   const overdue = due.filter((item) => item.isOverdue).length;
   return { value: due.length, caption: overdue ? `${n(overdue)} overdue` : "due today", detail: callbacksSentence(due.length - overdue, overdue), tone: overdue ? "danger" : undefined };
 }
@@ -242,10 +261,23 @@ export async function hasImportedStatement(tenantId: string): Promise<boolean> {
   }
 }
 
-export async function tileMetric(key: string, tenantId: string): Promise<TileMetric | null> {
-  const read = READERS[key];
-  if (!read) return null;
+/** AG-0.5: the figures that can be read under a producer scope, each over what the session may see. */
+const SCOPED_READERS: Record<string, (tenantId: string, visible: readonly string[]) => Promise<TileMetric>> = {
+  "work.callbacks": callbacks,
+  "work.inbound": inbound,
+  "work.floor": floor,
+};
+
+export async function tileMetric(key: string, tenantId: string, viewer?: TileViewer): Promise<TileMetric | null> {
+  const scope = viewer?.scope ?? null;
   try {
+    if (viewer && scope !== null) {
+      // A narrow session in an agency: the three shared figures, narrowed; nothing agency-wide.
+      const scoped = SCOPED_READERS[key];
+      return scoped ? await scoped(tenantId, scopeWithSelf(scope, viewer.userId) ?? []) : null;
+    }
+    const read = READERS[key];
+    if (!read) return null;
     return await read(tenantId);
   } catch {
     return null;

@@ -19,6 +19,7 @@ import { listPipelines } from "@/lib/pipelines/service";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { audit } from "@/lib/audit/log";
 import { outboundLimitResponse, recordOutboundUsage } from "@/lib/metering/outbound";
+import { refuseNarrowInAgency } from "@/lib/agency/routeScope";
 
 /**
  * Module 2 §6 · POST stages a file for review; PUT commits it with the decisions.
@@ -82,6 +83,8 @@ type LooseQuery = PromiseLike<{ data: unknown; error: { message: string } | null
 async function context() {
   const auth = await requireFeatureRole("lead_import", LEAD_IMPORT_ROLES, { write: true });
   if (auth instanceof NextResponse) return auth;
+  const refused = await refuseNarrowInAgency(auth.context, "Lead import");
+  if (refused) return refused;
   const template = await getAgentTemplate(auth.context.tenantId, auth.context.userId);
   const pipelines = await listPipelines(auth.context.tenantId);
   const pipeline =

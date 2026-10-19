@@ -4,6 +4,7 @@ import { getTenantSession, resolveTenantContext } from "@/lib/tenantAuth/require
 import { prefetchTopBarIdentity, readTopBarIdentity } from "@/lib/tenantAuth/topBarIdentity";
 import { getEntitlement } from "@/lib/entitlements/get";
 import { buildAgentMenu } from "@/lib/menu/definition";
+import { scopeFor } from "@/lib/agency/visibility";
 import { loadFeatureSwitches } from "@/lib/features/killSwitch";
 import { applyKillSwitches } from "@/lib/features/killSwitchRules";
 import { AgentSidebar } from "@/components/app/agent-sidebar";
@@ -87,7 +88,10 @@ export default async function AgentShellLayout({ children }: { children: React.R
   // function pure and shared with the admin plan preview, which deliberately shows plan grants
   // rather than the current outage state.
   const available = applyKillSwitches(entitlement.features, unwrap(switchesSettled), context.tenantId);
-  const menu = buildAgentMenu(available, context.role);
+  // AG-0.2: the member role, so an agency title sees its own items (an admin's and a manager's menus).
+  // AG-0.5: a narrowed session inside an agency is not offered the agency's own screens (their APIs refuse it).
+  const agencyNarrow = (await scopeFor(context)) !== null;
+  const menu = buildAgentMenu(available, context.memberRole ?? context.role, { agencyNarrow });
   const planName = entitlement.plan_code ? planDisplayName(entitlement.plan_code, entitlement.plan_name) : null;
   const identity = await readTopBarIdentity(context);
   const moduleAccess = {
@@ -132,7 +136,8 @@ export default async function AgentShellLayout({ children }: { children: React.R
         <AppTopBar user={identity} userId={context.userId} />
         <div className="flex min-w-0 flex-1 flex-col p-4 sm:p-6 lg:p-8 lg:pt-6">
         {/* Louder than everything below it, and not dismissible (LA-6.4). */}
-        <OverdueComplaintBanner count={overdueComplaints} />
+        {/* AG-0.5: complaints are the agency's, and their screen is refused to a narrowed session inside one. */}
+        <OverdueComplaintBanner count={agencyNarrow ? 0 : overdueComplaints} />
         <MaintenanceMessage status={maintenance} />
         <AnnouncementStrip initialAnnouncements={announcements} />
         <SubscriptionStateBanner status={entitlement.status} isOwner={context.role === "owner"} />

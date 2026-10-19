@@ -3,6 +3,7 @@ import "server-only";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isSchemaGap } from "@/lib/supabase/schemaGap";
 import { ISSUED_POLICY_SCHEMA_PENDING, issuedPolicyErrorText, type IssuedPolicy } from "./types";
+import { keepVisible, type ProducerScope } from "@/lib/agency/visibility";
 
 /**
  * Mark issued / Mark lapsed on a deal. Both writes go through SQL functions (20260925708300) that
@@ -47,10 +48,22 @@ export function assertPolicyDay(value: unknown, label: string): string {
 const COLUMNS = "id, deal_id, lead_id, campaign_id, vendor_id, carrier, policy_number, status, issued_at, lapsed_at, created_at";
 const BASE_COLUMNS = "id, deal_id, lead_id, campaign_id, vendor_id, carrier, policy_number, status, issued_at, created_at";
 
-/** The policies recorded on one deal, newest first. `writable` is false before 20260925708000. */
-export async function listDealPolicies(tenantId: string, dealId: unknown): Promise<{ policies: IssuedPolicy[]; writable: boolean }> {
+/** AG-0.5 · the lead a deal (deal_flow.id) is for, so the route can `guardLead` it; null when not this tenant's. */
+export async function dealLeadId(tenantId: string, dealId: string): Promise<string | null> {
+  if (!UUID.test(dealId)) return null;
+  const { data } = await db().from("deal_flow").select("lead_id").eq("tenant_id", tenantId).eq("id", dealId) as unknown as { data: Array<{ lead_id: string | null }> | null };
+  return data?.[0]?.lead_id ?? null;
+}
+
+/**
+ * The policies recorded on one deal, newest first. `writable` is false before 20260925708000.
+ * AG-0.5 · with a scope, a policy on an application case another producer opened is left out (issued policies
+ * follow their case, D1); one with no case is the deal's own, and the route has already guarded the deal's lead.
+ */
+export async function listDealPolicies(tenantId: string, dealId: unknown, scope: ProducerScope = null): Promise<{ policies: IssuedPolicy[]; writable: boolean }> {
   const id = uuid(dealId, "deal");
-  const read = (columns: string) => db().from("tenant_issued_policies").select(columns).eq("tenant_id", tenantId).eq("deal_id", id).order("issued_at", { ascending: false });
+  const caseColumns = scope === null ? "" : ", application_case_id, case_scope:tenant_application_cases!application_case_id(opened_by)";
+  const read = (columns: string) => db().from("tenant_issued_policies").select(`${columns}${caseColumns}`).eq("tenant_id", tenantId).eq("deal_id", id).order("issued_at", { ascending: false });
   let result = await read(COLUMNS);
   let writable = true;
   if (result.error && isSchemaGap(result.error)) {
@@ -58,8 +71,19 @@ export async function listDealPolicies(tenantId: string, dealId: unknown): Promi
     result = await read(BASE_COLUMNS);
   }
   if (result.error) throw new Error(`Could not load the deal's policies: ${result.error.message}`);
-  const rows = (result.data as Array<Partial<IssuedPolicy>> | null) ?? [];
-  return { policies: rows.map((row) => ({ ...row, lapsed_at: row.lapsed_at ?? null }) as IssuedPolicy), writable };
+  type Scoped = Partial<IssuedPolicy> & { application_case_id?: string | null; case_scope?: { opened_by?: string | null } | null };
+  const all = (result.data as Array<Scoped> | null) ?? [];
+  const onVisibleCase = new Set(keepVisible(scope, all.filter((row) => row.application_case_id), (row) => row.case_scope?.opened_by));
+  const rows = scope === null ? all : all.filter((row) => !row.application_case_id || onVisibleCase.has(row));
+  return {
+    policies: rows.map((scoped) => {
+      const row: Scoped = { ...scoped };
+      // The scope columns were read only to filter; the payload stays what it was.
+      if (scope !== null) { delete row.application_case_id; delete row.case_scope; }
+      return { ...row, lapsed_at: row.lapsed_at ?? null } as IssuedPolicy;
+    }),
+    writable,
+  };
 }
 
 function refusal(error: NonNullable<DbError>, fallback: string): Error {

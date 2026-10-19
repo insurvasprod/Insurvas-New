@@ -55,6 +55,8 @@ export type SubscriptionCardsProps = {
   currentPriceCents: number | null;
   seatLimits: Record<string, number | null>;
   seatsHeld: number;
+  /** AG-0.12 · an agency's seat band and producer count, in place of any per-seat line; null for a solo tenant. */
+  agency?: { bandLabel: string; producers: number } | null;
   mrrCents: number | null;
   /** Null when this role may not see payment details. */
   billing: { methodLabel: string | null; collection: "automatic" | "manual" } | null;
@@ -178,7 +180,12 @@ export function SubscriptionCards(props: SubscriptionCardsProps) {
     { label: "Price", value: priceCopy(props.currentPriceCents, subscription.billing_cycle) },
     {
       label: "Seats",
-      value: maxSeats === undefined || maxSeats === null ? `${props.seatsHeld} · no limit` : `${props.seatsHeld} of ${maxSeats}`,
+      value: (
+        <>
+          {maxSeats === undefined || maxSeats === null ? `${props.seatsHeld} · no limit` : `${props.seatsHeld} of ${maxSeats}`}
+          {props.agency && <Sub>{`Band ${props.agency.bandLabel} · ${props.agency.producers} producer${props.agency.producers === 1 ? "" : "s"}`}</Sub>}
+        </>
+      ),
       tone: typeof maxSeats === "number" && props.seatsHeld >= maxSeats ? "warning" : undefined,
     },
     {

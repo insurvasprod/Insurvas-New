@@ -2,6 +2,7 @@ import "server-only";
 
 import { localRangeToUtc } from "./localDate";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
+import { scopeQuery, type ProducerScope } from "@/lib/agency/visibility";
 import { buildDialFunnel, type Agent, type ApplicationRow, type AttemptRow, type DealPremiumRow, type DialFunnel, type QuotedRow, type ServedRow } from "./dialFunnel";
 
 /** Hard ceiling per source; a range that exceeds it is reported as capped rather than silently cut. */
@@ -12,7 +13,7 @@ type Result = { data: unknown[] | null; error: { message: string } | null };
 type Query = {
   select: (columns: string) => Query;
   eq: (column: string, value: unknown) => Query;
-  in: (column: string, values: unknown[]) => Query;
+  in: (column: string, values: readonly unknown[]) => Query;
   gte: (column: string, value: unknown) => Query;
   lt: (column: string, value: unknown) => Query;
   lte: (column: string, value: unknown) => Query;
@@ -35,16 +36,23 @@ async function all<T>(build: () => Query, label: string): Promise<{ rows: T[]; c
   return { rows, capped: true };
 }
 
-export async function loadDialFunnel(tenantId: string, input: { fromDate: string; toDate: string; agentId?: string; timeZone: string | null }): Promise<DialFunnel & { capped: boolean; timeZone: string }> {
+/**
+ * `scope` (AG-0.5, from scopeFor(auth.context)): null — the default — counts the whole agency as before. A
+ * narrowed agency session counts only what its producers did, each source by the agent column it is
+ * already filtered on: served cards (agent_user_id), dials (tenant_call_attempts.agent_id, D1),
+ * applications (tenant_application_cases.opened_by, D1), deals (worked_by) and quoted moves (actor). An
+ * `agentId` outside the scope therefore reads nothing.
+ */
+export async function loadDialFunnel(tenantId: string, input: { fromDate: string; toDate: string; agentId?: string; timeZone: string | null }, scope: ProducerScope = null): Promise<DialFunnel & { capped: boolean; timeZone: string }> {
   const zone = input.timeZone || "UTC";
   const { gte, lt } = localRangeToUtc(input.fromDate, input.toDate, zone);
   const db = getSupabaseServiceClient() as unknown as LooseDb;
   const agent = input.agentId;
 
-  const served = () => { let q = db.from("tenant_lead_activity").select("lead_id, agent_user_id, campaign_id").eq("tenant_id", tenantId).gte("served_at", gte).lt("served_at", lt).order("served_at"); if (agent) q = q.eq("agent_user_id", agent); return q; };
-  const attempts = () => { let q = db.from("tenant_call_attempts").select("lead_id, agent_id, dial_clicked_at, disposition").eq("tenant_id", tenantId).gte("attempted_at", gte).lt("attempted_at", lt).order("attempted_at"); if (agent) q = q.eq("agent_id", agent); return q; };
-  const applications = () => { let q = db.from("tenant_application_cases").select("lead_id, opened_by").eq("tenant_id", tenantId).gte("opened_at", gte).lt("opened_at", lt).order("opened_at"); if (agent) q = q.eq("opened_by", agent); return q; };
-  const deals = () => { let q = db.from("deal_flow").select("monthly_premium_cents").eq("tenant_id", tenantId).gte("local_date", input.fromDate).lte("local_date", input.toDate).order("created_at"); if (agent) q = q.eq("worked_by", agent); return q; };
+  const served = () => { let q = db.from("tenant_lead_activity").select("lead_id, agent_user_id, campaign_id").eq("tenant_id", tenantId).gte("served_at", gte).lt("served_at", lt).order("served_at"); if (agent) q = q.eq("agent_user_id", agent); return scopeQuery(q, "agent_user_id", scope); };
+  const attempts = () => { let q = db.from("tenant_call_attempts").select("lead_id, agent_id, dial_clicked_at, disposition").eq("tenant_id", tenantId).gte("attempted_at", gte).lt("attempted_at", lt).order("attempted_at"); if (agent) q = q.eq("agent_id", agent); return scopeQuery(q, "agent_id", scope); };
+  const applications = () => { let q = db.from("tenant_application_cases").select("lead_id, opened_by").eq("tenant_id", tenantId).gte("opened_at", gte).lt("opened_at", lt).order("opened_at"); if (agent) q = q.eq("opened_by", agent); return scopeQuery(q, "opened_by", scope); };
+  const deals = () => { let q = db.from("deal_flow").select("monthly_premium_cents").eq("tenant_id", tenantId).gte("local_date", input.fromDate).lte("local_date", input.toDate).order("created_at"); if (agent) q = q.eq("worked_by", agent); return scopeQuery(q, "worked_by", scope); };
 
   const [servedRows, attemptRows, applicationRows, dealRows, quotedStages, members] = await Promise.all([
     all<ServedRow>(served, "served leads"),
@@ -65,13 +73,14 @@ export async function loadDialFunnel(tenantId: string, input: { fromDate: string
   let quoted: QuotedRow[] | null = null;
   let quotedCapped = false;
   if (quotedStageIds.length) {
-    const result = await all<QuotedRow>(() => { let q = db.from("tenant_lead_stage_events").select("lead_id, actor_user_id").eq("tenant_id", tenantId).in("to_stage_id", quotedStageIds).gte("created_at", gte).lt("created_at", lt).order("created_at"); if (agent) q = q.eq("actor_user_id", agent); return q; }, "quoted stage moves");
+    const result = await all<QuotedRow>(() => { let q = db.from("tenant_lead_stage_events").select("lead_id, actor_user_id").eq("tenant_id", tenantId).in("to_stage_id", quotedStageIds).gte("created_at", gte).lt("created_at", lt).order("created_at"); if (agent) q = q.eq("actor_user_id", agent); return scopeQuery(q, "actor_user_id", scope); }, "quoted stage moves");
     quoted = result.rows;
     quotedCapped = result.capped;
   }
 
   // Names and roles for everyone who appears, members or not.
-  const memberRows = (members.data ?? []) as Array<{ user_id: string; role: string }>;
+  // A narrowed session's per-agent breakdown lists its scope's agents only.
+  const memberRows = ((members.data ?? []) as Array<{ user_id: string; role: string }>).filter((row) => scope === null || scope.includes(row.user_id));
   const roleById = new Map(memberRows.map((row) => [row.user_id, row.role]));
   const ids = new Set<string>(memberRows.map((row) => row.user_id));
   for (const row of servedRows.rows) if (row.agent_user_id) ids.add(row.agent_user_id);

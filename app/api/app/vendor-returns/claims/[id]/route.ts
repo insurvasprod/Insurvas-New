@@ -2,12 +2,15 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { getVendorReturnClaimDetail, updateVendorReturnClaim, vendorReturnCsv, vendorReturnEvidenceContext } from "@/lib/vendorScorecard/service";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
+import { refuseNarrowInAgency } from "@/lib/agency/routeScope";
 
 type Context = { params: Promise<{ id: string }> };
 
 export async function GET(request: NextRequest, { params }: Context) {
   const auth = await requireFeatureRole("true_cpa", ["owner", "producer", "bookkeeper"]);
   if (auth instanceof NextResponse) return auth;
+  const refused = await refuseNarrowInAgency(auth.context, "Vendor returns");
+  if (refused) return refused;
   try {
     const { id } = await params;
     const detail = await getVendorReturnClaimDetail(auth.context.tenantId, id);
@@ -25,6 +28,8 @@ export async function GET(request: NextRequest, { params }: Context) {
 export async function PATCH(request: NextRequest, { params }: Context) {
   const auth = await requireFeatureRole("true_cpa", ["owner", "producer", "bookkeeper"], { write: true });
   if (auth instanceof NextResponse) return auth;
+  const refused = await refuseNarrowInAgency(auth.context, "Vendor returns");
+  if (refused) return refused;
   try {
     const { id } = await params;
     const body = await request.json().catch(() => null) as Record<string, unknown> | null;

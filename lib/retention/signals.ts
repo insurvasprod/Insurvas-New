@@ -112,7 +112,7 @@ export function draftInput(draft: DraftInfo, asOf: string): DraftDateInput | nul
   };
 }
 
-export function deriveSignals(p: SignalInput, settings: Pick<RetentionSettings, "sampleFloor">): SignalRow {
+export function deriveSignals(p: SignalInput, settings: Pick<RetentionSettings, "sampleFloor"> & Partial<Pick<RetentionSettings, "carrierSampleFloor">>): SignalRow {
   const missing = new Set<Signal>();
 
   // 1. Draft vs income — LA-3.9's optimiser, called, never reimplemented.
@@ -178,7 +178,7 @@ export function deriveSignals(p: SignalInput, settings: Pick<RetentionSettings, 
     sourceSampleSize: sourceSample,
     carrierGraceDays: p.carrier?.graceDays ?? null,
     carrierRedraftAttempts: p.carrier?.redraftAttempts ?? null,
-    carrierLapseRateBp: p.carrier && p.carrier.sample >= settings.sampleFloor ? p.carrier.lapseRateBp : null,
+    carrierLapseRateBp: p.carrier && p.carrier.sample >= (settings.carrierSampleFloor ?? settings.sampleFloor) ? p.carrier.lapseRateBp : null,
     carrierSampleSize: p.carrier?.sample ?? 0,
     signalsAvailable: SIGNALS.length - list.length,
     missing: list,

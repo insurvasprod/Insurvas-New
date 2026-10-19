@@ -6,6 +6,7 @@ import { isUuid } from "@/lib/applications/http";
 import { CONTACT_INCOME_TYPES } from "@/lib/retention/income";
 import { contactForApplication, IncomeError, readIncome, saveIncome } from "@/lib/retention/incomeStore";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
+import { guardAttempt } from "@/lib/agency/guards";
 
 /**
  * LA-5.10 (Notion sprint) · the client's monthly income, from an application: the interview (LA-3.2)
@@ -33,6 +34,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   if (auth instanceof NextResponse) return auth;
   const { id } = await params;
   if (!isUuid(id)) return NextResponse.json({ error: "That application could not be found." }, { status: 404 });
+  // AG-0.5 · a producer cannot open another producer's record by id (404, not 403).
+  const hidden = await guardAttempt(auth.context, id);
+  if (hidden) return hidden;
   const where = surface.safeParse(request.nextUrl.searchParams.get("surface"));
   if (!where.success) return NextResponse.json({ error: "Say where this is being read." }, { status: 400 });
   const { tenantId, userId, role } = auth.context;
@@ -49,6 +53,9 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   if (auth instanceof NextResponse) return auth;
   const { id } = await params;
   if (!isUuid(id)) return NextResponse.json({ error: "That application could not be found." }, { status: 404 });
+  // AG-0.5 · a producer cannot open another producer's record by id (404, not 403).
+  const hidden = await guardAttempt(auth.context, id);
+  if (hidden) return hidden;
   const parsed = body.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Check the income and try again." }, { status: 400 });
   const b = parsed.data;

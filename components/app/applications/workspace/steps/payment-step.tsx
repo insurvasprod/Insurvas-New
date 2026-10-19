@@ -112,12 +112,15 @@ function NumberField({ id, label, fieldKey, stored, value, onChange, onLeave, er
   hint?: ReactNode;
   readOnly: boolean;
 }) {
-  const { value: revealed, busy, reveal, hide } = useReveal(fieldKey, stored?.masked);
+  const { value: revealed, busy, reveal, hide, dialog } = useReveal(fieldKey, stored?.masked, label.toLowerCase());
   const has = Boolean(stored?.hasValue);
   const revealButton = has && (revealed !== null ? (
     <Button type="button" variant="ghost" onClick={hide} aria-label={`Hide ${label.toLowerCase()}`}><EyeOff aria-hidden="true" />Hide</Button>
   ) : (
-    <Button type="button" variant="ghost" onClick={() => { void reveal(); }} disabled={busy} title={busy ? "Revealing…" : undefined} aria-label={`Reveal the stored ${label.toLowerCase()}`}><Eye aria-hidden="true" />Reveal</Button>
+    <>
+      {dialog}
+      <Button type="button" variant="ghost" onClick={() => { void reveal(); }} disabled={busy} title={busy ? "Revealing…" : undefined} aria-label={`Reveal the stored ${label.toLowerCase()}`}><Eye aria-hidden="true" />Reveal</Button>
+    </>
   ));
   const shownHint = hint ?? (revealed !== null ? "Masked again in a minute." : has ? `${readOnly ? "" : `Leave blank to keep ${stored!.masked}. `}One field per reveal. Each one writes an audit row.` : undefined);
 

@@ -11,6 +11,9 @@ import { buildInviteUrl, generateInviteToken, hashInviteToken, inviteExpiryFromN
 import { sendInvitationEmail } from "@/lib/email/sendInvitationEmail";
 import { configuredAppOrigin } from "@/lib/urls/origin";
 import { assertOutboundLimit, outboundLimitResponse, outboundLimitSnapshot } from "@/lib/metering/outbound";
+import { isAgencyTenant } from "@/lib/agency/audience";
+import { inviteAgencyMember } from "@/lib/agency/invite";
+import { isAgencyTitle } from "@/lib/tenantAuth/roles";
 
 export async function GET() {
   const auth = await requireTenant(["owner"]);
@@ -35,6 +38,32 @@ export async function POST(request: NextRequest) {
   }
 
   const { name, email, role } = parsed.data;
+
+  // AG-0.6 · an agency's invite: titles, a person already on Insurvas elsewhere, the producer row from the
+  // moment of the invite, the 7-day link and the band check. Same route, same email, one flow (LA-8.6).
+  if (await isAgencyTenant(auth.context.tenantId)) {
+    if (role === "owner") return NextResponse.json({ error: "An agency has one owner. Invite an admin instead.", code: "owner_not_invitable" }, { status: 400 });
+    if (role === "admin" && auth.context.memberRole === "admin") return NextResponse.json({ error: "Only the account owner can invite an admin.", code: "owner_only" }, { status: 403 });
+    const agencyToken = generateInviteToken();
+    const entitlementForAgency = await getEntitlement(auth.context.tenantId);
+    const invited = await inviteAgencyMember({
+      tenantId: auth.context.tenantId,
+      actorId: auth.context.userId,
+      name,
+      email,
+      memberRole: role,
+      tokenHash: hashInviteToken(agencyToken),
+      maxBufferSeats: entitlementForAgency.limits.max_buffer_seats,
+    });
+    if (!invited.ok) return NextResponse.json(invited.body, { status: invited.status });
+    const agencyInviteUrl = buildInviteUrl(agencyToken, configuredAppOrigin("agent"));
+    const { delivered: sent } = await sendInvitationEmail({ to: email, name, inviteUrl: agencyInviteUrl, expiresAt: invited.expiresAt, userId: invited.userId, tenantId: auth.context.tenantId });
+    await audit({ actorType: "tenant", actorId: auth.context.userId, action: "tenant.member_invited", targetType: "user", targetId: invited.userId, metadata: { email, role, tenantId: auth.context.tenantId, delivered: sent, existingAccount: invited.existing, producerId: invited.producerId }, request });
+    await recordSettingsChanges({ tenantId: auth.context.tenantId, actorId: auth.context.userId, section: "team-access", changes: [{ key: `member:${invited.userId}`, label: `${name} (${email})`, from: null, to: `invited as ${role}` }] });
+    return NextResponse.json({ ok: true, member: { id: invited.userId, name, email, role, producerId: invited.producerId }, invite: { url: agencyInviteUrl, expiresAt: invited.expiresAt.toISOString(), delivered: sent } }, { status: 201 });
+  }
+  if (isAgencyTitle(role)) return NextResponse.json({ error: "Admin and manager exist only on an agency plan.", code: "agency_plan_required" }, { status: 400 });
+
   const token = generateInviteToken();
   const expiresAt = await inviteExpiryFromNow();
   const origin = configuredAppOrigin("agent");

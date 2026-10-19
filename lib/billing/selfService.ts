@@ -234,8 +234,11 @@ async function planOptions(sub: BillingSubscription): Promise<PlanOption[]> {
   for (const p of (data ?? []) as { id: string; code: string; version: number; name: string; plan_type: string; sort_order: number }[]) {
     if (!newest.has(p.code)) newest.set(p.code, p);
   }
-  // Same kind of plan only: an agency with teams is not offered a single-seat plan, and back.
-  const candidates = [...newest.values()].filter((p) => p.id !== sub.plan_id && (!current || p.plan_type === current.plan_type));
+  // Same kind of plan only: an agency with teams is not offered a single-seat plan, and back — with one
+  // exception, AG-0.8: a solo agent who hires is offered the flat agency bands (the upgrade backfills his book
+  // onto him as producer #1). An agency is never offered a solo plan.
+  const soloToAgency = (p: { code: string; plan_type: string }) => current?.plan_type === "individual" && p.plan_type === "agency_with_teams" && p.code.startsWith("agency_");
+  const candidates = [...newest.values()].filter((p) => p.id !== sub.plan_id && (!current || p.plan_type === current.plan_type || soloToAgency(p)));
   const options = await Promise.all(candidates.map(async (p) => {
     const preview = await previewPlanChange({ subscriptionId: sub.id, fromPlanId: sub.plan_id, toPlanId: p.id });
     return preview?.newPriceCents != null ? { id: p.id, name: p.name, priceCents: preview.newPriceCents, applyNow: preview.applyNow, sort: p.sort_order } : null;

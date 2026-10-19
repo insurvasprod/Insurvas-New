@@ -4,6 +4,7 @@
 import { z } from "zod";
 
 import { APPLICATION_OUTCOMES, BENEFICIARY_RELATIONSHIPS, INCOME_TYPES, INSURED_ROLES, PAYMENT_METHODS } from "./constants";
+import { revealReasonField } from "./revealReason";
 
 const uuid = z.string().uuid();
 const fieldKey = z.string().regex(/^[a-z]+\.[a-z0-9_]+$/, "Choose a valid field");
@@ -19,7 +20,8 @@ export const patchValuesSchema = z.object({
 
 export const putSensitiveSchema = z.object({ field_key: z.literal("insured.ssn"), value: z.string().min(9).max(20) }).strict();
 
-export const revealSchema = z.object({ field_key: fieldKey, surface: z.enum(["web", "copy_assist"]).default("web") }).strict();
+// A reveal says why (lib/applications/revealReason.ts); the reason is kept on the access record.
+export const revealSchema = z.object({ field_key: fieldKey, surface: z.enum(["web", "copy_assist"]).default("web"), reason: revealReasonField }).strict();
 
 export const paymentSchema = z.object({
   method: z.enum(PAYMENT_METHODS),

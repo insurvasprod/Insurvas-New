@@ -4,6 +4,7 @@ import { guardPage } from "@/lib/entitlements/guardPage";
 import { loadComplianceDashboard } from "@/lib/compliance/dashboard";
 import type { AlertSeverity } from "@/lib/compliance/dashboardCore";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
+import { scopeFor } from "@/lib/agency/visibility";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
@@ -31,6 +32,8 @@ export default async function CompliancePage() {
   if (!["owner", "producer"].includes(guard.role)) {
     return <RoleGateNotice featureLabel="Compliance" detail="Only owners and producers can see the agency's compliance exposure." />;
   }
+  // AG-0.5: inside an agency this is the agency's business, not a producer's work — its API refuses a narrow session too.
+  if ((await scopeFor(guard.context)) !== null) return <RoleGateNotice featureLabel="Compliance" detail="In an agency, the owner and admins handle compliance." />;
   const { alerts, tiles } = await loadComplianceDashboard({ tenantId: guard.context.tenantId, userId: guard.context.userId, role: guard.role });
   return (
     <div className="m-stagger flex min-h-0 flex-grow flex-col gap-6">

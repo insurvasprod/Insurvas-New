@@ -163,7 +163,7 @@ function HomeFigures({ data, figures }: { data: DashboardToday; figures: Array<{
       label: "Premium · 30 days", value: <CountUp value={data.policies30.premiumCents / 100} prefix="$" compact />,
       foot: `${data.policies30.count.toLocaleString()} polic${data.policies30.count === 1 ? "y" : "ies"} written`, tone: data.policies30.count ? "good" : "neutral",
     },
-    queue: () => data.queueReady === null ? null : { label: "Queue ready", value: <CountUp value={data.queueReady} />, foot: data.scope === "you" ? "in the agency's pool" : "leads waiting to dial" },
+    queue: () => data.queueReady === null ? null : { label: "Queue ready", value: <CountUp value={data.queueReady} />, foot: data.isolated ? "assigned to you" : data.scope === "you" ? "in the agency's pool" : "leads waiting to dial" },
     booked: () => {
       const week = data.setterWeek;
       if (!week) return null;

@@ -6,7 +6,8 @@ import { getWorkspaceTimezone } from "@/lib/agencyProfile/timezone";
 import { resolveSalesSettings } from "@/lib/salesSettings/schema";
 import { ApplicationError, db, isMissingSchema, rows, SchemaPendingError } from "./db";
 import { PRODUCT_LABEL, type ApplicationOutcome, type ApplicationStatus, type InsuredRole, type RequirementKind, type WaitingOn } from "./constants";
-import { inChunks, insuredNames } from "./lists";
+import { caseScopedColumns, inChunks, insuredNames, scopeByCase } from "./lists";
+import type { ProducerScope } from "@/lib/agency/visibility";
 import {
   ageingFor, localDay, missingNumber, summarise, wholeDaysSince,
   type AwaitingNumberRow, type CounterofferRow, type PendingSummary, type RequirementRow,
@@ -16,6 +17,10 @@ import {
  * Pending cases (LA-3.18, 3.26, 3.15): the open requirements across the tenant, the counteroffers
  * waiting on the client, and the submitted applications still missing a number. Plus the one-click
  * chase. Every query names the tenant.
+ *
+ * AG-0.5 · each read takes an optional producer scope (from the session, via scopeFor). Requirements and
+ * counteroffers reach their case through their application, attempts through case_id; the filter runs in the
+ * database, so the counts on the dashboard card are over the visible rows only. null = the whole tenant.
  */
 
 type Actor = { tenantId: string; userId: string; request: Request };
@@ -45,12 +50,13 @@ export async function ageingDaysFor(tenantId: string) {
 }
 
 /** Requirements, with last_chased_by when 20260926102300 is applied, without it before. */
-async function openRequirements(tenantId: string): Promise<Requirement[]> {
+async function openRequirements(tenantId: string, scope: ProducerScope = null): Promise<Requirement[]> {
   const client = db();
-  const withBy = await client.from("tenant_application_requirements").select(`${REQ_COLUMNS}, last_chased_by`).eq("tenant_id", tenantId).in("status", OPEN).order("raised_at").limit(2000);
+  const read = (columns: string) => scopeByCase(client.from("tenant_application_requirements").select(caseScopedColumns(columns, scope, "application_id")).eq("tenant_id", tenantId).in("status", OPEN), scope, "application_id").order("raised_at").limit(2000);
+  const withBy = await read(`${REQ_COLUMNS}, last_chased_by`);
   if (!withBy.error) return rows<Requirement>(withBy.data);
   if (isMissingSchema(withBy.error) && /last_chased_by/.test(withBy.error.message ?? "")) {
-    const plain = await client.from("tenant_application_requirements").select(REQ_COLUMNS).eq("tenant_id", tenantId).in("status", OPEN).order("raised_at").limit(2000);
+    const plain = await read(REQ_COLUMNS);
     if (plain.error) throw new ApplicationError("APPLICATION_UNAVAILABLE", plain.error.message, 500);
     return rows<Requirement>(plain.data);
   }
@@ -58,14 +64,14 @@ async function openRequirements(tenantId: string): Promise<Requirement[]> {
   throw new ApplicationError("APPLICATION_UNAVAILABLE", withBy.error.message, 500);
 }
 
-export async function loadPending(tenantId: string, now = Date.now()): Promise<PendingData> {
+export async function loadPending(tenantId: string, now = Date.now(), scope: ProducerScope = null): Promise<PendingData> {
   const client = db();
   const [requirements, counterQ, awaitingQ, ageingDays] = await Promise.all([
-    openRequirements(tenantId),
-    client.from("tenant_application_counteroffers").select("id, application_id, received_at, offered_tier, offered_health_class, offered_face_cents, offered_monthly_premium_cents, reason_code, reason_text, expires_at, status")
-      .eq("tenant_id", tenantId).eq("status", "pending_client").order("expires_at", { ascending: true, nullsFirst: false }).limit(1000),
-    client.from("tenant_applications").select("id, case_id, lead_id, insured_role, attempt_no, carrier_id, carrier_product_id, product_code, quote_id, status, outcome, updated_at, submitted_at")
-      .eq("tenant_id", tenantId).or("status.in.(submitted,pending_carrier,counteroffer_pending),and(status.eq.closed,outcome.eq.issued)").limit(3000),
+    openRequirements(tenantId, scope),
+    scopeByCase(client.from("tenant_application_counteroffers").select(caseScopedColumns("id, application_id, received_at, offered_tier, offered_health_class, offered_face_cents, offered_monthly_premium_cents, reason_code, reason_text, expires_at, status", scope, "application_id"))
+      .eq("tenant_id", tenantId).eq("status", "pending_client"), scope, "application_id").order("expires_at", { ascending: true, nullsFirst: false }).limit(1000),
+    scopeByCase(client.from("tenant_applications").select(caseScopedColumns("id, case_id, lead_id, insured_role, attempt_no, carrier_id, carrier_product_id, product_code, quote_id, status, outcome, updated_at, submitted_at", scope))
+      .eq("tenant_id", tenantId).or("status.in.(submitted,pending_carrier,counteroffer_pending),and(status.eq.closed,outcome.eq.issued)"), scope).limit(3000),
     ageingDaysFor(tenantId),
   ]);
   if (counterQ.error && !isMissingSchema(counterQ.error)) throw new ApplicationError("APPLICATION_UNAVAILABLE", counterQ.error.message, 500);
@@ -148,8 +154,8 @@ export async function loadPending(tenantId: string, now = Date.now()): Promise<P
 }
 
 /** The dashboard's three figures. The same rows as the page, so the two never disagree. */
-export async function pendingSummary(tenantId: string): Promise<PendingSummary> {
-  return (await loadPending(tenantId)).summary;
+export async function pendingSummary(tenantId: string, scope: ProducerScope = null): Promise<PendingSummary> {
+  return (await loadPending(tenantId, Date.now(), scope)).summary;
 }
 
 // ── Log a chase (LA-3.18) ────────────────────────────────────────────────────
@@ -179,9 +185,10 @@ export async function chaseRequirement(actor: Actor, requirementId: string) {
   throw new ApplicationError("REQUIREMENT_BUSY", "Someone else is chasing this one right now — refresh and try again.", 409);
 }
 
-/** "Chase everything overdue": one chase on every red requirement not already chased today. */
-export async function chaseOverdue(actor: Actor, now = Date.now()) {
-  const [requirements, ageingDays, zone] = await Promise.all([openRequirements(actor.tenantId), ageingDaysFor(actor.tenantId), getWorkspaceTimezone(actor.tenantId).catch(() => null)]);
+/** "Chase everything overdue": one chase on every red requirement not already chased today.
+ *  AG-0.5 · with a scope, only the visible producers' overdue requirements are chased (and counted as skipped). */
+export async function chaseOverdue(actor: Actor, now = Date.now(), scope: ProducerScope = null) {
+  const [requirements, ageingDays, zone] = await Promise.all([openRequirements(actor.tenantId, scope), ageingDaysFor(actor.tenantId), getWorkspaceTimezone(actor.tenantId).catch(() => null)]);
   const tz = zone ?? "UTC";
   const today = localDay(new Date(now).toISOString(), tz);
   const due = requirements.filter((r) => ageingFor(wholeDaysSince(r.raised_at, now) ?? 0, ageingDays) === "red" && !(r.last_chased_at && localDay(r.last_chased_at, tz) === today));

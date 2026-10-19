@@ -2,6 +2,7 @@ import "server-only";
 
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isSchemaGap } from "@/lib/supabase/schemaGap";
+import { rowVisible, scopeQuery, type ProducerScope } from "@/lib/agency/visibility";
 
 import type { ContactOutcome, PaymentMethod } from "./constants";
 import { assertQueueCard, logSaveAttempt, SaveQueueError } from "./queueStore";
@@ -29,7 +30,12 @@ export class ServicingError extends Error {
   }
 }
 
-export type Viewer = { tenantId: string; userId: string; role: string };
+/**
+ * AG-0.5 · `scope` is the session's producer scope (scopeFor). With one, a request is opened, stepped or
+ * listed only on a policy credited to a visible producer (policy_current.agent_user_id), and the "verified in
+ * the last 30 days" count is over those. Absent or null = unchanged.
+ */
+export type Viewer = { tenantId: string; userId: string; role: string; scope?: ProducerScope };
 
 export type Guide = { method: CarrierMethod | null; whereToDoIt: string | null; whatTheyNeed: string | null; clientMustAuthorise: boolean | null; formRef: string | null; notes: string | null };
 
@@ -66,7 +72,7 @@ const ROW_COLUMNS = "id, carrier_id, policy_number, contact_id, request_type, or
 async function policyFor(viewer: Viewer, carrierId: string, policyNumber: string) {
   const { data, error } = await db().from("policy_current").select("carrier_id, policy_number, contact_id, agency_id, agent_user_id, payment_method, status_normalized, application_id").eq("tenant_id", viewer.tenantId).eq("carrier_id", carrierId).eq("policy_number", policyNumber).maybeSingle();
   if (error) throw new Error(`Could not read the policy: ${error.message}`);
-  if (!data || (viewer.role === "producer" && data.agent_user_id !== viewer.userId)) throw new ServicingError("That policy isn't in your book.", 404);
+  if (!data || (viewer.role === "producer" && data.agent_user_id !== viewer.userId) || !rowVisible(viewer.scope ?? null, data.agent_user_id)) throw new ServicingError("That policy isn't in your book.", 404);
   return data as Loose;
 }
 
@@ -254,6 +260,15 @@ export async function loadServicing(viewer: Viewer): Promise<ServicingList | { a
       for (const p of (part.data ?? []) as Loose[]) mine.add(`${p.carrier_id}|${p.policy_number}`);
     }
     rows = rows.filter((r) => mine.has(`${r.carrier_id}|${r.policy_number}`));
+  }
+  if ((viewer.scope ?? null) !== null) {
+    const numbers = [...new Set(rows.map((r) => r.policy_number))];
+    const visible = new Set<string>();
+    for (let i = 0; i < numbers.length; i += CHUNK) {
+      const part = await scopeQuery(db().from("policy_current").select("carrier_id, policy_number").eq("tenant_id", viewer.tenantId), "agent_user_id", viewer.scope ?? null).in("policy_number", numbers.slice(i, i + CHUNK));
+      for (const p of (part.data ?? []) as Loose[]) visible.add(`${p.carrier_id}|${p.policy_number}`);
+    }
+    rows = rows.filter((r) => visible.has(`${r.carrier_id}|${r.policy_number}`));
   }
   const contactIds = [...new Set(rows.map((r) => r.contact_id).filter(Boolean))] as string[];
   const contacts: Loose[] = [];

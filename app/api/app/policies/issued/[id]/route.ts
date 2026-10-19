@@ -3,11 +3,15 @@ import { NextResponse, type NextRequest } from "next/server";
 import { audit } from "@/lib/audit/log";
 import { IssuedPolicySchemaPendingError, markIssuedPolicyLapsed } from "@/lib/issuedPolicies/service";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
+import { guardIssuedPolicy } from "@/lib/agency/guards";
 
 /** "Mark lapsed": the policy stops counting as in force, and stops persisting from its lapse date. */
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireFeatureRole("daily_deal_flow", ["owner", "producer"], { write: true });
   if (auth instanceof NextResponse) return auth;
+  // AG-0.5 · a producer cannot open another producer's record by id (404, not 403).
+  const hidden = await guardIssuedPolicy(auth.context, (await params).id);
+  if (hidden) return hidden;
   const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
   if (body?.action !== "lapse") return NextResponse.json({ error: "Unsupported policy action" }, { status: 400 });
   try {

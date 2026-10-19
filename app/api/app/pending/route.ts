@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { actorOf, failure } from "@/lib/applications/http";
 import { loadPending } from "@/lib/applications/pending";
+import { scopeFor } from "@/lib/agency/visibility";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 
 /**
@@ -13,7 +14,8 @@ export async function GET(request: Request) {
   if (auth instanceof NextResponse) return auth;
   const actor = actorOf(auth, request);
   try {
-    return NextResponse.json(await loadPending(actor.tenantId));
+    // AG-0.5 · requirements, counteroffers and awaiting-number rows on the visible producers' cases only.
+    return NextResponse.json(await loadPending(actor.tenantId, Date.now(), await scopeFor(auth.context)));
   } catch (error) {
     return failure(error);
   }

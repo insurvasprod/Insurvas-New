@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { getAgentTemplate, searchAgentLeads } from "@/lib/agentTemplates/service";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
+import { scopeFor } from "@/lib/agency/visibility";
 
 const querySchema = z.object({
   q: z.string().trim().min(2).max(100),
@@ -17,7 +18,8 @@ export async function GET(request: NextRequest) {
   if (!parsed.success) return NextResponse.json({ error: "Enter at least two characters to search leads" }, { status: 400 });
   try {
     const template = await getAgentTemplate(auth.context.tenantId, auth.context.userId);
-    const leads = await searchAgentLeads(auth.context.tenantId, template, parsed.data.q, parsed.data.limit);
+    // AG-0.5: a narrowed agency session finds its producers' leads only (scope from the session).
+    const leads = await searchAgentLeads(auth.context.tenantId, template, parsed.data.q, parsed.data.limit, await scopeFor(auth.context));
     return NextResponse.json({ leads, mode: "non_serving_search" }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Could not search leads" }, { status: 500 });

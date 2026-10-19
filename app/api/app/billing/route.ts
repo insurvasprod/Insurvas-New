@@ -21,7 +21,7 @@ import {
   normalizeIdempotencyKey,
   type SubscriptionMutationOperation,
 } from "@/lib/subscriptions/idempotency";
-import { requireTenant } from "@/lib/tenantAuth/requireTenant";
+import { refuseWithoutBilling, requireTenant } from "@/lib/tenantAuth/requireTenant";
 import { recordSettingsChanges, type SettingsChange } from "@/lib/settingsAudit/record";
 
 /**
@@ -78,6 +78,9 @@ const OPERATION: Record<z.infer<typeof actionSchema>["action"], SubscriptionMuta
 export async function POST(request: NextRequest) {
   const auth = await requireTenant(["owner"]);
   if (auth instanceof NextResponse) return auth;
+  // AG-0.2: an agency admin passes the owner gate but may not change the subscription or the plan.
+  const billingOwnerOnly = refuseWithoutBilling(auth.context);
+  if (billingOwnerOnly) return billingOwnerOnly;
   const { tenantId, userId } = auth.context;
 
   const idempotency = normalizeIdempotencyKey(request.headers.get("Idempotency-Key"));

@@ -1,3 +1,4 @@
+import { scopeFor } from "@/lib/agency/visibility";
 import { guardPage } from "@/lib/entitlements/guardPage";
 import { ExceptionQueues } from "@/components/app/exception-queues";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
@@ -18,6 +19,9 @@ export default async function ExceptionsPage() {
   if (!guard.entitled) return <FeatureGateNotice guard={guard} featureLabel="Exceptions" description="Policies with no sale, sales with no policy, and clients who may be one person." />;
   // Premiums are inside: owner, producer and bookkeeper, as the API.
   if (!hasTenantPermission(guard.role, "policies.view")) return <RoleGateNotice featureLabel="Exceptions" detail="Exceptions are cleared by producers, bookkeepers and the account owner." />;
+  // AG-0.5: inside an agency these are operations — every item's choices reach across producers' books — so a
+  // narrow session is refused, as the API refuses it. A solo tenant and the all-seeing roles are unchanged.
+  if ((await scopeFor(guard.context)) !== null) return <RoleGateNotice featureLabel="Exceptions" detail="In an agency, the owner, admins and the bookkeeper clear exceptions." />;
   const seesAll = guard.role === "owner" || guard.role === "bookkeeper";
   // Ages are counted in the agency's day, not UTC's.
   const [view, today] = await Promise.all([loadQueues({ tenantId: guard.context.tenantId, userId: guard.context.userId, seesAll }), agencyToday(guard.context.tenantId)]);

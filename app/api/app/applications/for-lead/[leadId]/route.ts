@@ -3,6 +3,8 @@ import { NextResponse } from "next/server";
 import { db, isMissingSchema } from "@/lib/applications/db";
 import { actorOf, isUuid } from "@/lib/applications/http";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
+import { guardLead } from "@/lib/agency/guards";
+import { scopeFor, scopeQuery } from "@/lib/agency/visibility";
 
 /** LA-3 · the lead page's "Open application": this lead's open case, or its most recent one. */
 export async function GET(request: Request, { params }: { params: Promise<{ leadId: string }> }) {
@@ -11,7 +13,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ lead
   const actor = actorOf(auth, request);
   const { leadId } = await params;
   if (!isUuid(leadId)) return NextResponse.json({ caseId: null });
-  const q = await db().from("tenant_application_cases").select("id, status, opened_at").eq("tenant_id", actor.tenantId).eq("lead_id", leadId).order("opened_at", { ascending: false }).limit(5);
+  // AG-0.5 · another producer's lead is not found; and of a visible lead's cases only those a visible producer
+  // opened (D1: opened_by) are offered, so a reassigned lead never opens the previous producer's case.
+  const hidden = await guardLead(auth.context, leadId);
+  if (hidden) return hidden;
+  const scope = await scopeFor(auth.context);
+  const q = await scopeQuery(db().from("tenant_application_cases").select("id, status, opened_at").eq("tenant_id", actor.tenantId).eq("lead_id", leadId), "opened_by", scope).order("opened_at", { ascending: false }).limit(5);
   if (q.error) return NextResponse.json({ caseId: null, schemaPending: isMissingSchema(q.error) });
   const list = (q.data ?? []) as { id: string; status: string }[];
   const open = list.find((c) => c.status === "open") ?? list[0] ?? null;

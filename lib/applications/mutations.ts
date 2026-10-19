@@ -10,7 +10,9 @@ import { applicableDisclosures, disclosureChanges, type AttachedDisclosure, type
 import { cardBrand, cardExpiryInFuture, digitsOnly, isPlausibleSsn, isValidAbaRouting, isValidBankAccount, passesLuhn } from "./formats";
 import { INTERVIEW_MAY_REPLACE, prefillFromInterview, prefillFromQuote, QUOTE_MAY_REPLACE } from "./prefill";
 import { runQa, type QaVerdict } from "./qa";
+import { normaliseRevealReason, REVEAL_REASON_REQUIRED } from "./revealReason";
 import { ApplicationError, db, isMissingSchema, rows, rpcError, SchemaPendingError } from "./db";
+import { answerColumns, changeColumns, loadAnswers, loadMedications, medicationColumns, snapshotFor } from "./healthSeal";
 import { getCaseView, scrubLeadSsn } from "./service";
 import { stateOfPhone } from "./areaCodes";
 import { hiddenAnswerKeys, insuredFacts, interviewQuestions, missingRequiredAnswers, pickTemplate, type StoredDefinition, type TemplateChoice } from "./templates";
@@ -117,8 +119,12 @@ const PAY_COLUMN: Record<string, "routing_ciphertext" | "account_ciphertext" | "
   "pay.card_number": "card_ciphertext",
 };
 
-export async function revealField(actor: Actor, applicationId: string, fieldKey: string, surface: "web" | "copy_assist" | "extension" = "web") {
+export async function revealField(actor: Actor, applicationId: string, fieldKey: string, surface: "web" | "copy_assist" | "extension" = "web", reason: string | null = null) {
   if (!isSensitiveKey(fieldKey)) throw new ApplicationError("FIELD_NOT_SENSITIVE", "Only sensitive fields are revealed.");
+  // A person revealing a value says why (lib/applications/revealReason.ts). The extension's per-field
+  // read, filling the carrier's form the agent opened, is recorded as extension_read without one.
+  const why = normaliseRevealReason(reason);
+  if (surface !== "extension" && !why) throw new ApplicationError("REVEAL_REASON_REQUIRED", REVEAL_REASON_REQUIRED);
   const a = await attemptHead(actor.tenantId, applicationId, { allowClosed: true });
   const client = db();
   let ciphertext: string | null = null;
@@ -140,9 +146,12 @@ export async function revealField(actor: Actor, applicationId: string, fieldKey:
   if (value === null) throw new ApplicationError("FIELD_UNREADABLE", "The stored value could not be read.", 500);
 
   // The access record first, then the value — a reveal that could not be recorded does not happen.
-  const log = await client.from("tenant_sensitive_access_log").insert({ tenant_id: actor.tenantId, user_id: actor.userId, application_id: a.id, field_key: fieldKey, action: surface === "extension" ? "extension_read" : "reveal", surface });
+  const entry = { tenant_id: actor.tenantId, user_id: actor.userId, application_id: a.id, field_key: fieldKey, action: surface === "extension" ? "extension_read" : "reveal", surface };
+  let log = await client.from("tenant_sensitive_access_log").insert({ ...entry, reason: why });
+  // Until 20261016300000 adds the column, the reason is kept on the audit row below only.
+  if (log.error && isMissingSchema(log.error)) log = await client.from("tenant_sensitive_access_log").insert(entry);
   if (log.error) fail(log.error, "Could not record the reveal");
-  await audit({ actorType: "tenant", actorId: actor.userId, action: "tenant.application_field_revealed", targetType: "tenant_application", targetId: a.id, metadata: { fieldKey, surface, caseId: a.case_id }, request: actor.request });
+  await audit({ actorType: "tenant", actorId: actor.userId, action: "tenant.application_field_revealed", targetType: "tenant_application", targetId: a.id, metadata: { fieldKey, surface, caseId: a.case_id, ...(why ? { reason: why } : {}) }, request: actor.request });
   return { value };
 }
 
@@ -293,9 +302,9 @@ export async function refreshDisclosures(tenantId: string, applicationId: string
     client.from("tenant_application_values").select("field_key, value").eq("tenant_id", tenantId).eq("application_id", applicationId),
     client.from("tenant_uw_interviews").select("id").eq("tenant_id", tenantId).eq("case_id", head.data.case_id).eq("insured_role", head.data.insured_role).maybeSingle(),
   ]);
-  const answers = iv.data ? await client.from("tenant_uw_answers").select("question_key, value").eq("tenant_id", tenantId).eq("interview_id", iv.data.id) : { data: [] };
+  const answers = iv.data ? (await loadAnswers(tenantId, [iv.data.id])).rows : [];
   const values = Object.fromEntries(rows<{ field_key: string; value: unknown }>(vals.data).map((v) => [v.field_key, v.value]));
-  const answerMap = Object.fromEntries(rows<{ question_key: string; value: unknown }>(answers.data).map((v) => [v.question_key, v.value]));
+  const answerMap = Object.fromEntries(answers.map((v) => [v.question_key, v.value]));
   // A tenant's own version of a code replaces the platform one.
   const libRows = rows<{ id: string; tenant_id: string | null; code: string; version: number; states: string[] | null; carrier_ids: string[] | null }>(lib.data);
   const byCode = new Map<string, (typeof libRows)[number]>();
@@ -370,11 +379,11 @@ export async function saveAnswers(actor: Actor, interviewId: string, answers: { 
 
   // Every stored answer, then this save on top: what the follow-up rules are judged against.
   const [stored, tpl] = await Promise.all([
-    client.from("tenant_uw_answers").select("question_key, value").eq("tenant_id", actor.tenantId).eq("interview_id", interviewId),
+    loadAnswers(actor.tenantId, [interviewId]),
     iv.data.sales_template_id ? client.from("sales_templates").select("definition").eq("id", iv.data.sales_template_id).or(`tenant_id.is.null,tenant_id.eq.${actor.tenantId}`).maybeSingle() : Promise.resolve({ data: null, error: null }),
   ]);
   if (stored.error) fail(stored.error, "Could not load the answers");
-  const old = new Map(rows<{ question_key: string; value: unknown }>(stored.data).map((r) => [r.question_key, r.value]));
+  const old = new Map(stored.rows.map((r) => [r.question_key, r.value]));
   const merged: Record<string, unknown> = Object.fromEntries(old);
   for (const x of answers) merged[x.key] = x.value ?? null;
   // A follow-up that is hidden again is not stored (LA-3.1): the ones the client named, and the ones
@@ -387,10 +396,11 @@ export async function saveAnswers(actor: Actor, interviewId: string, answers: { 
   if (iv.data.completed_at) {
     // After the call: every change is recorded against the value it replaced (LA-3.2), removals too.
     // The record is written first; an amendment that could not be recorded is not made.
-    const changes = [
+    const changeList = [
       ...toSave.filter((x) => JSON.stringify(old.get(x.key) ?? null) !== JSON.stringify(x.value ?? null)).map((x) => ({ key: x.key, from: old.get(x.key) ?? null, to: x.value ?? null })),
       ...hidden.filter((k) => old.has(k) && old.get(k) !== null).map((k) => ({ key: k, from: old.get(k) ?? null, to: null })),
-    ].map((c) => ({ interview_id: interviewId, tenant_id: actor.tenantId, question_key: c.key, old_value: c.from, new_value: c.to, changed_by: actor.userId }));
+    ];
+    const changes = await Promise.all(changeList.map(async (c) => ({ interview_id: interviewId, tenant_id: actor.tenantId, question_key: c.key, ...(await changeColumns(actor.tenantId, interviewId, c.key, c.from, c.to)), changed_by: actor.userId })));
     if (changes.length) {
       const logged = await client.from("tenant_uw_answer_changes").insert(changes);
       if (logged.error) fail(logged.error, "Could not record the amendment");
@@ -398,7 +408,9 @@ export async function saveAnswers(actor: Actor, interviewId: string, answers: { 
   }
   const now = new Date().toISOString();
   if (toSave.length) {
-    const { error } = await client.from("tenant_uw_answers").upsert(toSave.map((x) => ({ interview_id: interviewId, tenant_id: actor.tenantId, question_key: x.key, value: x.value ?? null, notes: x.notes?.trim() || null, answered_at: now, answered_by: actor.userId })), { onConflict: "interview_id,question_key" });
+    // Sealed (20261016420000): the answer and its note go in as one ciphertext; the plain columns stay empty.
+    const upserts = await Promise.all(toSave.map(async (x) => ({ interview_id: interviewId, tenant_id: actor.tenantId, question_key: x.key, ...(await answerColumns(actor.tenantId, interviewId, x.key, x.value, x.notes?.trim() || null)), answered_at: now, answered_by: actor.userId })));
+    const { error } = await client.from("tenant_uw_answers").upsert(upserts, { onConflict: "interview_id,question_key" });
     if (error) fail(error, "Could not save the answers");
   }
   if (hidden.length) {
@@ -437,23 +449,25 @@ export async function saveMedications(actor: Actor, interviewId: string, meds: {
   const list = meds.filter((m) => m.name.trim());
   if (iv.data.completed_at) {
     // After the call the medication list is amended like any answer (LA-3.2): old and new list, recorded first.
-    const before = await client.from("tenant_medications").select("name, dose, since, prescribed_for, prescribed_for_unknown, notes").eq("tenant_id", actor.tenantId).eq("interview_id", interviewId).order("sort_order");
+    const before = await loadMedications(actor.tenantId, [interviewId]);
     if (before.error) fail(before.error, "Could not load the medications");
     const shape = (m: { name: string; dose: string | null; since: string | null; prescribed_for: string | null; prescribed_for_unknown: boolean; notes: string | null }) => ({ name: m.name, dose: m.dose, since: m.since, prescribed_for: m.prescribed_for, prescribed_for_unknown: m.prescribed_for_unknown, notes: m.notes });
-    const oldList = rows<Parameters<typeof shape>[0]>(before.data).map(shape);
+    const oldList = before.rows.map(shape);
     const newList = list.map((m) => shape({ name: m.name.trim(), dose: m.dose?.trim() || null, since: m.since?.trim() || null, prescribed_for: m.prescribedForUnknown ? null : m.prescribedFor?.trim() || null, prescribed_for_unknown: Boolean(m.prescribedForUnknown), notes: m.notes?.trim() || null }));
     if (JSON.stringify(oldList) !== JSON.stringify(newList)) {
-      const logged = await client.from("tenant_uw_answer_changes").insert({ interview_id: interviewId, tenant_id: actor.tenantId, question_key: "medications", old_value: oldList, new_value: newList, changed_by: actor.userId });
+      const logged = await client.from("tenant_uw_answer_changes").insert({ interview_id: interviewId, tenant_id: actor.tenantId, question_key: "medications", ...(await changeColumns(actor.tenantId, interviewId, "medications", oldList, newList)), changed_by: actor.userId });
       if (logged.error) fail(logged.error, "Could not record the amendment");
     }
   }
   const del = await client.from("tenant_medications").delete().eq("tenant_id", actor.tenantId).eq("interview_id", interviewId);
   if (del.error) fail(del.error, "Could not save the medications");
   if (list.length) {
-    const ins = await client.from("tenant_medications").insert(list.map((m, i) => ({
-      interview_id: interviewId, tenant_id: actor.tenantId, name: m.name.trim(), dose: m.dose?.trim() || null, since: m.since?.trim() || null,
-      prescribed_for: m.prescribedForUnknown ? null : m.prescribedFor?.trim() || null, prescribed_for_unknown: Boolean(m.prescribedForUnknown), notes: m.notes?.trim() || null, sort_order: i, created_by: actor.userId,
-    })));
+    const ins = await client.from("tenant_medications").insert(await Promise.all(list.map(async (m, i) => ({
+      interview_id: interviewId, tenant_id: actor.tenantId,
+      ...(await medicationColumns(actor.tenantId, interviewId, { name: m.name.trim(), dose: m.dose?.trim() || null, since: m.since?.trim() || null,
+        prescribed_for: m.prescribedForUnknown ? null : m.prescribedFor?.trim() || null, prescribed_for_unknown: Boolean(m.prescribedForUnknown), notes: m.notes?.trim() || null })),
+      sort_order: i, created_by: actor.userId,
+    }))));
     if (ins.error) fail(ins.error, "Could not save the medications");
   }
   return { saved: list.length };
@@ -472,12 +486,12 @@ export async function completeInterview(actor: Actor, interviewId: string) {
   // hand-made request cannot complete an interview with a required question unanswered.
   const [tpl, answers, meds, app] = await Promise.all([
     iv.data.sales_template_id ? client.from("sales_templates").select("definition").eq("id", iv.data.sales_template_id).or(`tenant_id.is.null,tenant_id.eq.${actor.tenantId}`).maybeSingle() : Promise.resolve({ data: null, error: null }),
-    client.from("tenant_uw_answers").select("question_key, value").eq("tenant_id", actor.tenantId).eq("interview_id", interviewId),
+    loadAnswers(actor.tenantId, [interviewId]),
     client.from("tenant_medications").select("id", { count: "exact", head: true }).eq("tenant_id", actor.tenantId).eq("interview_id", interviewId),
     client.from("tenant_applications").select("id").eq("tenant_id", actor.tenantId).eq("case_id", iv.data.case_id).eq("insured_role", iv.data.insured_role).neq("status", "closed").order("attempt_no", { ascending: false }).limit(1),
   ]);
   if (answers.error) fail(answers.error, "Could not load the answers");
-  const given = Object.fromEntries(rows<{ question_key: string; value: unknown }>(answers.data).map((r) => [r.question_key, r.value]));
+  const given = Object.fromEntries(answers.rows.map((r) => [r.question_key, r.value]));
   const appId = rows<{ id: string }>(app.data)[0]?.id;
   const facts = await (async () => {
     if (!appId) return insuredFacts({}, wrap(given));
@@ -622,6 +636,14 @@ export async function demoteIfFailing(actor: Who, applicationId: string) {
   await revokeGrants(actor.tenantId, applicationId, "qa_failed_after_edit");
 }
 
+/**
+ * AG-1.11 · Application Review reads LA-3's own check results for one application — the same verdict the
+ * submission gate uses — so the review screen never reimplements a check.
+ */
+export async function qaVerdictForReview(tenantId: string, applicationId: string): Promise<QaVerdict> {
+  return (await qaFor(tenantId, applicationId)).verdict;
+}
+
 async function qaFor(tenantId: string, applicationId: string): Promise<{ view: CaseView; verdict: QaVerdict }> {
   const head = await attemptHead(tenantId, applicationId, { allowClosed: true });
   const view = await getCaseView(tenantId, head.case_id);
@@ -745,7 +767,8 @@ export async function recordSubmission(actor: Actor, applicationId: string, inpu
     p_tenant_id: actor.tenantId, p_application_id: applicationId, p_actor: actor.userId, p_carrier_reference: reference,
     p_reference_kind: reference ? input.referenceKind : null, p_policy_number: reference && input.referenceKind === "policy_no" ? reference : null,
     p_submitted_at: input.submittedAt ?? new Date().toISOString(), p_submitted_via: input.submittedVia, p_qa_verdict: verdict,
-    p_health_snapshot: interview ? { answers: interview.answers, medications: interview.medications, template: interview.templateName, revision: interview.templateRevision } : {}, p_notes: input.notes?.trim() || null,
+    // Sealed too (20261016420000): the frozen copy holds the same health answers.
+    p_health_snapshot: interview ? await snapshotFor(actor.tenantId, applicationId, { answers: interview.answers, medications: interview.medications, template: interview.templateName, revision: interview.templateRevision }) : {}, p_notes: input.notes?.trim() || null,
   });
   if (recorded.error) {
     if (/APPLICATION_NOT_READY/.test(recorded.error.message ?? "")) throw new ApplicationError("APPLICATION_NOT_READY", "Mark the application ready before recording the submission.", 409);

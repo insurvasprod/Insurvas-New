@@ -97,9 +97,10 @@ service. After the subscription ends, Customer can read and export its data for 
 window shown at cancellation (90 days by default). On Customer's written request, made at any time
 up to [NUMBER] days after the retention window ends, Insurvas will delete or de-identify Customer
 Personal Information within [NUMBER] days, except where the law requires Insurvas to keep it, in
-which case this DPA continues to protect it. [OWNER/COUNSEL: the service does not currently delete
-a cancelled workspace's data automatically; decide whether to commit to automatic deletion after a
-fixed period and build it first.] Data in backups is deleted as the backups expire on their normal
+which case this DPA continues to protect it. [OWNER/COUNSEL: deletion on request is built (super-admin action,
+all-or-nothing, billing records kept; migration 20261016430000). The service does not delete a
+cancelled workspace automatically; it lists those past their window for staff. Decide whether to
+commit to automatic deletion after a fixed period.] Data in backups is deleted as the backups expire on their normal
 cycle [OWNER: state the backup retention period of the database provider].
 
 ## 9. Audits and information
@@ -144,8 +145,9 @@ This DPA lasts as long as Insurvas processes Customer Personal Information.
 - Separation of each customer's data by database row-level security, with the application
   connecting as a restricted role.
 - Application-level AES-256-GCM encryption, with per-customer derived keys, for Social Security
-  numbers, bank account and routing numbers, payment card numbers, agency tax IDs, calendar tokens,
-  vendor credentials and agency users' two-step secrets.
+  numbers, bank account and routing numbers, payment card numbers, health answers and medications
+  (with their change history and the health record kept with each submitted application), agency
+  tax IDs, calendar tokens, vendor credentials and agency users' two-step secrets.
 - Full values of encrypted fields revealed only to permitted roles after two-step verification,
   with each reveal logged.
 - Passwords stored as bcrypt hashes; optional TOTP two-step verification for agency users and

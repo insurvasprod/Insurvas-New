@@ -4,6 +4,7 @@ import { audit } from "@/lib/audit/log";
 import { EMPTY_SIGNATURE, SIGNATURE_KEYS, parseSignatureAnswers, type SignatureAnswers } from "@/lib/leadWorkspace/signatureReadiness";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
+import { guardLead } from "@/lib/agency/guards";
 
 /**
  * "Can she finish on this call?" for one lead: the six answers, read and saved. Until migration
@@ -37,6 +38,9 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
   if (auth instanceof NextResponse) return auth;
   const { id } = await params;
   if (!UUID.test(id) || !(await leadInTenant(auth.context.tenantId, id))) return NextResponse.json({ error: "Lead not found" }, { status: 404 });
+  // AG-0.5 · a producer cannot open another producer's record by id (404, not 403).
+  const hidden = await guardLead(auth.context, id);
+  if (hidden) return hidden;
   const { data, error } = await table().select(COLUMNS).eq("tenant_id", auth.context.tenantId).eq("lead_id", id).maybeSingle();
   if (missingTable(error)) return NextResponse.json({ schemaPending: true, answers: { ...EMPTY_SIGNATURE }, updatedAt: null });
   if (error) return NextResponse.json({ error: "Could not read the signature answers" }, { status: 500 });
@@ -48,6 +52,9 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   if (auth instanceof NextResponse) return auth;
   const { id } = await params;
   if (!UUID.test(id) || !(await leadInTenant(auth.context.tenantId, id))) return NextResponse.json({ error: "Lead not found" }, { status: 404 });
+  // AG-0.5 · a producer cannot open another producer's record by id (404, not 403).
+  const hidden = await guardLead(auth.context, id);
+  if (hidden) return hidden;
   const answers = parseSignatureAnswers(await request.json().catch(() => null));
   if (!answers) return NextResponse.json({ error: "Each answer must be yes, no or not asked" }, { status: 400 });
   const { data, error } = await table()

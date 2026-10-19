@@ -36,11 +36,13 @@ export const VALUE_KEY: Record<Exclude<MatchType, "fallback" | "realtime">, stri
 };
 
 /** How a rule picks among the people it may give the lead to (20260925702100). */
-export type RuleStrategy = "round_robin" | "least_loaded";
-export const RULE_STRATEGIES: readonly RuleStrategy[] = ["round_robin", "least_loaded"];
+// AG-0.10 adds best_placement: issued ÷ submitted over 90 days, highest first.
+export type RuleStrategy = "round_robin" | "least_loaded" | "best_placement";
+export const RULE_STRATEGIES: readonly RuleStrategy[] = ["round_robin", "least_loaded", "best_placement"];
 export const STRATEGY_LABEL: Record<RuleStrategy, string> = {
   round_robin: "Round robin",
   least_loaded: "Fewest open first",
+  best_placement: "Best recent placement rate",
 };
 
 /** The match types an extra AND-condition may use. */

@@ -3,6 +3,7 @@ import "server-only";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { getWorkspaceTimezone } from "@/lib/agencyProfile/timezone";
 import { formatInTimezone, stateFromLeadValues } from "./timezone";
+import { NO_PRODUCER, type ProducerScope } from "../agency/visibilityCore";
 
 export type CallbackStatus = "scheduled" | "due" | "completed" | "cancelled" | "missed";
 export type CallbackView = {
@@ -47,6 +48,12 @@ export type ListCallbacksOptions = {
   includeHistory?: boolean;
   /** Only callbacks in these states. Omitted = every state, including completed and cancelled. */
   statuses?: CallbackStatus[];
+  /**
+   * AG-0.5: the session's producer scope (scopeFor, from the session). A list keeps the callbacks
+   * assigned to those producers (D1: tenant_callbacks.assigned_to); null or omitted = every callback,
+   * exactly as before.
+   */
+  scope?: ProducerScope;
 };
 
 /**
@@ -86,6 +93,7 @@ export async function listCallbacks(tenantId: string, options: ListCallbacksOpti
     if (options.to) query = query.lte("scheduled_at_utc", options.to);
     if (options.callbackId) query = query.eq("id", options.callbackId);
     if (options.statuses) query = query.in("status", options.statuses);
+    if (options.scope) query = query.in("assigned_to", options.scope.length ? [...options.scope] : [NO_PRODUCER]);
     return query;
   };
   // The agency-side time on each callback is the workspace timezone (Settings › Agency profile). It
@@ -188,7 +196,7 @@ export async function listCallbacks(tenantId: string, options: ListCallbacksOpti
   });
 }
 
-export async function listDueCallbacks(tenantId: string) {
+export async function listDueCallbacks(tenantId: string, scope: ProducerScope = null) {
   // Due-today and overdue are only ever true for an open callback (see isDueToday/isOverdue above),
   // and "today" in any customer timezone ends at most ~26h from now (UTC+14). Bounding the read to
   // that stops the dashboard pulling every callback the tenant has ever had — completed and
@@ -196,6 +204,7 @@ export async function listDueCallbacks(tenantId: string) {
   const callbacks = await listCallbacks(tenantId, {
     statuses: ["scheduled", "due", "missed"],
     to: new Date(Date.now() + 36 * 3_600_000).toISOString(),
+    scope,
   });
   return callbacks.filter((callback) => callback.isDueToday || callback.isOverdue);
 }

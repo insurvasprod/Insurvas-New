@@ -3,7 +3,8 @@ import "server-only";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import type { Json } from "@/lib/supabase/database.types";
 import type { TemplateField } from "@/lib/templates/constants";
-import { getAgentTemplate } from "@/lib/agentTemplates/service";
+import { getAgentTemplate, latestLeadOwners, readByLeadIds, visibleLeadIds } from "@/lib/agentTemplates/service";
+import { keepVisible, type ProducerScope } from "@/lib/agency/visibility";
 import { getWorkspaceTimezone } from "@/lib/agencyProfile/timezone";
 import { csvContactLine, csvHeaderLine } from "./csv";
 import { planForMatches } from "./matchPolicy";
@@ -145,15 +146,50 @@ function householdLabel(row: { household_id: string | null; last_name: string; c
   return [row.last_name, place].filter(Boolean).join(", ") || null;
 }
 
+/* ── AG-0.5 · producer visibility ────────────────────────────────────────── */
+
+/**
+ * A contact has no producer column of its own: it is visible to a narrowed agency session when one of
+ * its leads (agent_leads.contact_id) is — and a lead is its latest work item's owner's (decision D1). A
+ * contact with no lead is unattributed and visible to the all-seeing roles only.
+ *
+ * The contacts a scope may see, each with how many of its VISIBLE leads point at it (the directory's
+ * lead count, which must not count another producer's leads).
+ */
+async function visibleContactLeadCounts(tenantId: string, scope: readonly string[]): Promise<Map<string, number>> {
+  const leadIds = await visibleLeadIds(tenantId, scope);
+  const rows = await readByLeadIds<{ id: string; contact_id: string | null }>(leadIds, (chunk) => loose().from("agent_leads").select("id, contact_id").eq("tenant_id", tenantId).in("id", chunk).not("contact_id", "is", null), "contacts");
+  const counts = new Map<string, number>();
+  for (const row of rows) if (row.contact_id) counts.set(row.contact_id, (counts.get(row.contact_id) ?? 0) + 1);
+  return counts;
+}
+
+/** Which of these contacts a scope may see — all of them for a null scope, with no read. */
+export async function visibleAmongContacts(tenantId: string, scope: ProducerScope, contactIds: readonly string[]): Promise<Set<string>> {
+  const unique = [...new Set(contactIds)];
+  if (scope === null) return new Set(unique);
+  if (!unique.length || !scope.length) return new Set();
+  // Along agent_leads_contact_idx (tenant_id, contact_id), then each lead's latest owner.
+  const leads = await readByLeadIds<{ id: string; contact_id: string }>(unique, (chunk) => loose().from("agent_leads").select("id, contact_id").eq("tenant_id", tenantId).in("contact_id", chunk), "contacts");
+  const owners = leads.length ? await latestLeadOwners(tenantId, leads.map((lead) => lead.id)) : new Map<string, string | null>();
+  return new Set(keepVisible(scope, leads, (lead) => owners.get(lead.id)).map((lead) => lead.contact_id));
+}
+
 /* ── directory ───────────────────────────────────────────────────────────── */
 
-export async function getContactDirectory(tenantId: string, options: { q?: string; page?: number; pageSize?: number } = {}): Promise<ContactDirectory> {
+/**
+ * `scope` (AG-0.5, from scopeFor(auth.context)): null — the default — pages the whole directory as before.
+ * A narrowed agency session pages only the contacts it may see (visibleContactLeadCounts), with the total
+ * and each lead count taken over that set, so neither a row nor a number is another producer's.
+ */
+export async function getContactDirectory(tenantId: string, options: { q?: string; page?: number; pageSize?: number } = {}, scope: ProducerScope = null): Promise<ContactDirectory> {
   const query = (options.q ?? "").trim().slice(0, 120);
   const pageSize = Math.min(100, Math.max(1, Math.floor(options.pageSize ?? 25)));
   const page = Math.max(0, Math.floor(options.page ?? 0));
   const nameQuery = normalizeText(query) || null;
   const digitsOnly = query.replace(/\D/g, "");
   const digits = digitsOnly.length >= 3 ? digitsOnly : null;
+  if (scope !== null) return scopedDirectory(tenantId, scope, { query, nameQuery, digits, page, pageSize });
 
   const rpc = await loose().rpc("contact_directory_page", {
     p_tenant_id: tenantId,
@@ -194,6 +230,31 @@ export async function getContactDirectory(tenantId: string, options: { q?: strin
   if (!(fallback.data ?? []).length && page > 0) return getContactDirectory(tenantId, { ...options, page: 0 });
   const hydrated = await hydrate(tenantId, (fallback.data ?? []) as unknown as ContactBase[]);
   return { rows: hydrated.map((row): DirectoryRow => ({ ...row, household_label: householdLabel(row), lead_count: null, open_review: null })), total: fallback.count ?? hydrated.length, page, pageSize, query };
+}
+
+/**
+ * The directory of a narrowed session. contact_directory_page cannot be told which contacts to keep, so
+ * the visible set is read (by id, in chunks), searched the way the PostgREST fallback searches — names and
+ * phones — and paged here; the total is the size of the visible matching set.
+ */
+async function scopedDirectory(tenantId: string, scope: readonly string[], q: { query: string; nameQuery: string | null; digits: string | null; page: number; pageSize: number }): Promise<ContactDirectory> {
+  const { query, nameQuery, digits, pageSize } = q;
+  if (query && !nameQuery && !digits) return { rows: [], total: 0, page: 0, pageSize, query };
+  const counts = await visibleContactLeadCounts(tenantId, scope);
+  const contacts = await readByLeadIds<ContactBase & { name_search: string | null }>([...counts.keys()], (chunk) => loose().from("contacts").select(`${CONTACT_COLUMNS}, name_search`).eq("tenant_id", tenantId).is("merged_into_id", null).in("id", chunk), "contacts");
+  const name = nameQuery?.toLowerCase() ?? null;
+  const matching = contacts
+    .filter((row) => !query || (name !== null && (row.name_search ?? "").toLowerCase().includes(name)) || (digits !== null && (row.primary_phone ?? "").replace(/\D/g, "").includes(digits)))
+    .sort((a, b) => b.created_at.localeCompare(a.created_at) || b.id.localeCompare(a.id));
+  const page = q.page * pageSize < matching.length ? q.page : 0;
+  const slice = matching.slice(page * pageSize, page * pageSize + pageSize).map((row) => {
+    const base: Partial<typeof row> = { ...row };
+    delete base.name_search;
+    return base as ContactBase;
+  });
+  const hydrated = await hydrate(tenantId, slice);
+  // open_review is the duplicate-review queue's, which a narrowed session does not work (its routes refuse).
+  return { rows: hydrated.map((row): DirectoryRow => ({ ...row, household_label: householdLabel(row), lead_count: counts.get(row.id) ?? 0, open_review: null })), total: matching.length, page, pageSize, query };
 }
 
 /* ── stats ───────────────────────────────────────────────────────────────── */
@@ -316,7 +377,24 @@ export async function dismissReview(tenantId: string, userId: string, reviewId: 
 
 /* ── workspace ───────────────────────────────────────────────────────────── */
 
-export async function getContactWorkspace(tenantId: string, userId: string | undefined, options: { q?: string; page?: number; pageSize?: number } = {}): Promise<ContactWorkspace & { queue: ReviewQueue }> {
+/**
+ * `scope` (AG-0.5): null — the default — is the workspace as before. For a narrowed agency session the
+ * directory and its counts cover the contacts it may see, and the duplicate-review half (merges, the
+ * review queue and their month figures) is left out: those are agency-wide, and the routes that act on
+ * them (contacts/reviews, contacts/merge) refuse a narrowed session.
+ */
+export async function getContactWorkspace(tenantId: string, userId: string | undefined, options: { q?: string; page?: number; pageSize?: number } = {}, scope: ProducerScope = null): Promise<ContactWorkspace & { queue: ReviewQueue }> {
+  if (scope !== null) {
+    const [directory, fieldSchema, timezone, visible] = await Promise.all([
+      getContactDirectory(tenantId, options, scope),
+      fieldSchemaForTenant(tenantId, userId),
+      getWorkspaceTimezone(tenantId).catch(() => null),
+      scopedContactTotals(tenantId, scope),
+    ]);
+    const stats: DuplicateStats = { contacts: visible.contacts, households: visible.households, pending: null, oldestPendingAt: null, mergedThisMonth: null, undoneThisMonth: null, undoableThisMonth: null, flaggedContacts: null, timezone: timezone ?? "UTC" };
+    const queue: ReviewQueue = { ready: true, total: 0, index: 0, pair: null };
+    return { directory, stats, merges: [], fieldSchema, reviewsReady: true, queue };
+  }
   const [directory, stats, merges, fieldSchema, queue] = await Promise.all([
     getContactDirectory(tenantId, options),
     getDuplicateStats(tenantId),
@@ -327,23 +405,50 @@ export async function getContactWorkspace(tenantId: string, userId: string | und
   return { directory, stats, merges, fieldSchema, reviewsReady: queue.ready, queue };
 }
 
+/** Active contacts and their distinct households, over the contacts a narrowed session may see. */
+async function scopedContactTotals(tenantId: string, scope: readonly string[]): Promise<{ contacts: number; households: number }> {
+  const counts = await visibleContactLeadCounts(tenantId, scope);
+  const rows = await readByLeadIds<{ id: string; household_id: string | null }>([...counts.keys()], (chunk) => loose().from("contacts").select("id, household_id").eq("tenant_id", tenantId).is("merged_into_id", null).in("id", chunk), "contacts");
+  return { contacts: rows.length, households: new Set(rows.map((row) => row.household_id).filter(Boolean)).size };
+}
+
 /* ── export ──────────────────────────────────────────────────────────────── */
 
 /**
  * Every active contact, streamed 200 at a time in id order, so an export is complete however large
  * the book is (the old export read the same 200-row page the directory showed).
  */
-export function streamContactsCsv(tenantId: string, schemaFields: FieldSchemaRow[]): ReadableStream<Uint8Array> {
+export function streamContactsCsv(tenantId: string, schemaFields: FieldSchemaRow[], scope: ProducerScope = null): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
   const BATCH = 200;
   let cursor: string | null = null;
   let done = false;
+  // AG-0.5: a narrowed agency session exports only the contacts it may see — resolved once, in id order,
+  // and walked BATCH ids at a time with the same cursor. Null (the default) streams every contact as before.
+  let visibleIds: string[] | null = null;
   return new ReadableStream<Uint8Array>({
     start(controller) { controller.enqueue(encoder.encode(csvHeaderLine(schemaFields))); },
     async pull(controller) {
       if (done) { controller.close(); return; }
       try {
         let select = getSupabaseServiceClient().from("contacts").select(CONTACT_COLUMNS).eq("tenant_id", tenantId).is("merged_into_id", null).order("id").limit(BATCH);
+        if (scope !== null) {
+          visibleIds ??= [...(await visibleContactLeadCounts(tenantId, scope)).keys()].sort();
+          // The cursor walks the visible ids, not the rows returned: a batch of merged contacts returns
+          // no row and must neither end the export early nor leave this pull without output.
+          for (;;) {
+            const after = cursor;
+            const next = visibleIds.filter((id) => after === null || id > after).slice(0, BATCH);
+            if (!next.length) { controller.close(); return; }
+            const { data, error } = await getSupabaseServiceClient().from("contacts").select(CONTACT_COLUMNS).eq("tenant_id", tenantId).is("merged_into_id", null).in("id", next).order("id");
+            if (error) throw new Error(error.message);
+            const rows = (data ?? []) as unknown as ContactBase[];
+            cursor = next[next.length - 1];
+            if (next.length < BATCH) done = true;
+            if (rows.length) { controller.enqueue(encoder.encode((await hydrate(tenantId, rows)).map((contact) => csvContactLine(schemaFields, contact)).join(""))); return; }
+            if (done) { controller.close(); return; }
+          }
+        }
         if (cursor) select = select.gt("id", cursor);
         const { data, error } = await select;
         if (error) throw new Error(error.message);
@@ -378,7 +483,13 @@ export type CreateContactResult = {
  * to the review queue; only a confident best match merges on its own, and that merge resolves its
  * own review row, so undoing it puts the pair back in the queue.
  */
-export async function createContact(tenantId: string, userId: string, input: ContactInput, options: { schema?: FieldSchemaRow[] } = {}): Promise<CreateContactResult> {
+/**
+ * `options.scope` (AG-0.5, from scopeFor(auth.context)): for a narrowed agency session the matches it is
+ * shown, the count of pairs queued and the contact it may be auto-merged into are limited to contacts it
+ * may see. Matches against another producer's contacts still go to the agency's review queue (the owner
+ * resolves them); they are just not named to this session. Null — the default — is today's behaviour.
+ */
+export async function createContact(tenantId: string, userId: string, input: ContactInput, options: { schema?: FieldSchemaRow[]; scope?: ProducerScope } = {}): Promise<CreateContactResult> {
   const normalized = normalizedPayload(input); await validateCustomFields(tenantId, normalized.value.custom_fields ?? {}, userId, options.schema);
   const duplicates = await findDuplicates(tenantId, normalized.value);
   const supabase = getSupabaseServiceClient();
@@ -397,17 +508,23 @@ export async function createContact(tenantId: string, userId: string, input: Con
     } else for (const row of (inserted.data ?? []) as Array<{ id: string; candidate_id: string }>) reviewIds.set(row.candidate_id, row.id);
   }
 
-  if (plan.auto) {
+  const scope = options.scope ?? null;
+  const visible = await visibleAmongContacts(tenantId, scope, duplicates.map((match) => match.contact_id));
+  const shown = scope === null ? duplicates : duplicates.filter((match) => visible.has(match.contact_id));
+  const queuedShown = scope === null ? plan.queue.length : plan.queue.filter((match) => visible.has(match.contact_id)).length;
+  // A contact this session may not see is never merged into on its behalf: that would hand it the other
+  // producer's contact. The pair stays in the agency's queue for the owner.
+  if (plan.auto && visible.has(plan.auto.contact_id)) {
     try {
       const mergeId = await mergeContacts(tenantId, userId, { kept_id: plan.auto.contact_id, merged_id: contact.id, field_choices: {}, review_id: reviewIds.get(plan.auto.contact_id) ?? null }, "auto");
-      return { contact: await loadContact(tenantId, plan.auto.contact_id), duplicates, outcome: "auto_merged", mergeId, queued: Math.max(0, plan.queue.length - 1), reviewsReady };
+      return { contact: await loadContact(tenantId, plan.auto.contact_id), duplicates: shown, outcome: "auto_merged", mergeId, queued: Math.max(0, queuedShown - 1), reviewsReady };
     } catch (mergeError) {
       // The candidate changed underneath us (merged, or resolved by someone else). The pair stays in
       // the queue for a person instead of failing the save that already happened.
       console.error("[contacts] auto-merge refused; left for review", mergeError);
     }
   }
-  return { contact, duplicates, outcome: plan.queue.length ? "review" : "created", mergeId: null, queued: plan.queue.length, reviewsReady };
+  return { contact, duplicates: shown, outcome: queuedShown ? "review" : "created", mergeId: null, queued: queuedShown, reviewsReady };
 }
 
 /**

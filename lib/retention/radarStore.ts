@@ -11,6 +11,7 @@ import { mapLimit, READ_CONCURRENCY } from "./batch";
 import { PLATFORM_DEFAULT_WEIGHTS, SCORED_STATUSES, SIGNALS, settingsFromRow, type RetentionSettings, type Weights } from "./constants";
 import { scorePolicy } from "./score";
 import { deriveSignals, type SignalInput, type SignalRow } from "./signals";
+import { afterRadarRun } from "./effectivenessStore";
 
 /**
  * LA-5.1 + LA-5.2 (Notion sprint) · the chargeback radar, server side: gather the seven signals for
@@ -84,7 +85,7 @@ export async function loadRadarConfig(tenantId: string): Promise<RadarConfig | n
   return { settings: settingsFromRow(settings.data), weights, weightSetId: set.id, weightSetVersion: set.version };
 }
 
-const POLICY_COLUMNS = "carrier_id, policy_number, status_normalized, payment_method, snapshot_id, issue_date, issued_on, effective_date, as_of, in_clawback_window, annualised_premium_cents, contact_id, household_id, application_id, vendor_id, campaign_id, retention_rule_id, first_seen_date, last_snapshot_date";
+const POLICY_COLUMNS = "carrier_id, policy_number, status_normalized, payment_method, snapshot_id, issue_date, issued_on, effective_date, as_of, in_clawback_window, annualised_premium_cents, contact_id, household_id, application_id, vendor_id, campaign_id, retention_rule_id, first_seen_date, last_snapshot_date, days_past_due, months_paid, product_code";
 
 /** The median gap between a carrier's policy files, per carrier, from the last half year. */
 async function cadenceByCarrier(tenantId: string, today: string): Promise<Map<string, number>> {
@@ -139,9 +140,11 @@ export type RadarRun = { scored: number; removed: number; available: true; previ
  * Compute the signals and scores. Whole book by default; one carrier (after its file) or a few
  * policies on demand. Rows for policies that left scope (lapsed, paid up) are removed.
  */
-export async function computeRadar(tenantId: string, scope: { carrierId?: string; policyNumbers?: string[] } = {}, options: { dryRun?: boolean } = {}): Promise<RadarRun> {
-  const config = await loadRadarConfig(tenantId);
-  if (!config) return { available: false };
+export async function computeRadar(tenantId: string, scope: { carrierId?: string; policyNumbers?: string[] } = {}, options: { dryRun?: boolean; weights?: Weights } = {}): Promise<RadarRun> {
+  const loadedConfig = await loadRadarConfig(tenantId);
+  if (!loadedConfig) return { available: false };
+  // LA-5.11's preview scores with weights not yet saved — only ever in a dry run.
+  const config = options.weights && options.dryRun ? { ...loadedConfig, weights: options.weights } : loadedConfig;
 
   const policies = await everyRow(() => {
     let q = db().from("policy_current").select(POLICY_COLUMNS).eq("tenant_id", tenantId).in("status_normalized", [...SCORED_STATUSES]);
@@ -295,6 +298,8 @@ export async function computeRadar(tenantId: string, scope: { carrierId?: string
       removed = gone.length;
     }
   }
+  // LA-5.9: holdout exits (past due leaves in this same run), draws, and the predictions to check later.
+  await afterRadarRun(tenantId, config.settings, today, scoreRows, policies, !scope.carrierId && !scope.policyNumbers);
   return { scored: scoreRows.length, removed, available: true };
 }
 

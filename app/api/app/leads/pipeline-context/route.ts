@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { dispositionLibrary, pipelineViewContext } from "@/lib/pipelines/views";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
+import { scopeFor } from "@/lib/agency/visibility";
 
 /**
  * What the pipeline views need besides the leads: each stage's rules, the dispositions that land on
@@ -19,7 +20,8 @@ export async function GET(request: NextRequest) {
       if (auth.context.role !== "owner") return NextResponse.json({ error: "Only an owner can open the disposition library." }, { status: 403 });
       return NextResponse.json({ library: await dispositionLibrary(auth.context.tenantId) }, { headers: { "Cache-Control": "no-store" } });
     }
-    return NextResponse.json(await pipelineViewContext(auth.context.tenantId), { headers: { "Cache-Control": "no-store" } });
+    // AG-0.5: the outcome counts and the drift count are of the session's producers' work items only.
+    return NextResponse.json(await pipelineViewContext(auth.context.tenantId, await scopeFor(auth.context)), { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Could not load the pipeline context" }, { status: 500 });
   }

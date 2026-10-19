@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
+import { scopeFor } from "@/lib/agency/visibility";
+import { guardWorkItem } from "@/lib/transferInbox/scope";
 import { announceTransferClaim, claimNextTransfer, ClaimNextError, claimWasResumed } from "@/lib/transferInbox/service";
 
 const safeFilter = (label: string, max: number) => z.string().trim().min(1).max(max).regex(/^[^\u0000-\u001f\u007f<>]+$/, `${label} contains unsupported characters`);
@@ -26,6 +28,12 @@ export async function POST(request: Request) {
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Choose valid inbox filters" }, { status: 400 });
 
   try {
+    // AG-0.5: claim_next_transfer only ever takes an UNCLAIMED live transfer, and every path that sets a
+    // row back to 'unclaimed' clears owner_user_id — so what it hands out is nobody's row yet, which
+    // AG-0.10 lets anyone who takes transfers claim (there is a caller on the line). The scope therefore
+    // narrows nothing here; it is read to hold that invariant: in an agency, a claim that comes back
+    // with a work item this session still may not see is refused rather than announced.
+    const scope = await scopeFor(auth.context);
     const claim = await claimNextTransfer({
       tenantId: auth.context.tenantId,
       userId: auth.context.userId,
@@ -35,6 +43,13 @@ export async function POST(request: Request) {
       state: parsed.data.state,
       screeningOutcome: parsed.data.screening_outcome,
     });
+    if (scope !== null) {
+      const hidden = await guardWorkItem(auth.context, claim.work_item_id, scope);
+      if (hidden) {
+        console.error("[claim-next] AG-0.5 invariant broken: claimed a work item outside the session's scope", claim.work_item_id);
+        return hidden;
+      }
+    }
     const { chatPosted } = await announceTransferClaim({ tenantId: auth.context.tenantId, userId: auth.context.userId, role: auth.context.role, workItemId: claim.work_item_id, claim, request, via: "claim_next" });
     // resumed: this re-claim reopened the verification the transfer had when it was given back (LA-1.11-6).
     return NextResponse.json({ claim, chatPosted, resumed: claimWasResumed(claim) });

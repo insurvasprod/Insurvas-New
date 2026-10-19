@@ -1,3 +1,4 @@
+import { canSeeProducerRow } from "@/lib/agency/visibility";
 import { guardPage } from "@/lib/entitlements/guardPage";
 import { myBalance, ProducerError } from "@/lib/accounting/producerStore";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
@@ -25,7 +26,8 @@ export default async function MyBalancePage() {
   let data: Awaited<ReturnType<typeof myBalance>> | null = null;
   let problem: string | null = null;
   try {
-    data = await myBalance(guard.context.tenantId, guard.context.userId);
+    // AG-0.5: only ever the session's own balance; a scope that ever excluded self (a failed read closes it) shows nothing.
+    if (await canSeeProducerRow(guard.context, guard.context.userId)) data = await myBalance(guard.context.tenantId, guard.context.userId);
   } catch (error) {
     if (!(error instanceof ProducerError)) throw error;
     problem = error.message;

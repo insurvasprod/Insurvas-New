@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
+import { guardCase } from "@/lib/agency/guards";
 import { guardPage } from "@/lib/entitlements/guardPage";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
@@ -39,6 +40,8 @@ export default async function CopyAssistPopoutPage({ params, searchParams }: {
     caseView = FIXTURE_CASE;
   } else {
     if (!isUuid(caseId)) notFound();
+    // AG-0.5: another producer's case is not found, not forbidden — its existence isn't confirmed.
+    if (await guardCase(guard.context, caseId)) notFound();
     try {
       caseView = await getCaseView(guard.context.tenantId, caseId);
     } catch (error) {

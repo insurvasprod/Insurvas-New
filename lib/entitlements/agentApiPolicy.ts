@@ -203,19 +203,21 @@ export const AGENT_API_POLICIES: AgentApiPolicy[] = [
   { sourceFile: "app/api/app/carrier-accounts/route.ts", featureKey: "statement_ingestion", allowedRoles: ["owner", "bookkeeper"] },
   { sourceFile: "app/api/app/commission-discrepancies/route.ts", featureKey: "discrepancy_report", allowedRoles: ["owner", "bookkeeper"] },
   { sourceFile: "app/api/app/commission-discrepancies/disputes/[id]/pdf/route.ts", featureKey: "discrepancy_report", allowedRoles: ["owner", "bookkeeper"] },
-  { sourceFile: "app/api/app/retention/route.ts", featureKey: "chargeback_radar", allowedRoles: ["owner", "producer"] },
+  { sourceFile: "app/api/app/retention/route.ts", featureKey: "chargeback_radar", allowedRoles: ["owner", "producer", "retention"] },
   // LA-5.3 · the save queue: log a worked card, snooze or dismiss it. A producer reaches their own policies.
-  { sourceFile: "app/api/app/retention/save-queue/route.ts", featureKey: "chargeback_radar", allowedRoles: ["owner", "producer"] },
+  { sourceFile: "app/api/app/retention/save-queue/route.ts", featureKey: "chargeback_radar", allowedRoles: ["owner", "producer", "retention"] },
   // LA-5.4 · servicing requests: open one, take a step. Verified and failed are the carrier file's alone.
-  { sourceFile: "app/api/app/retention/servicing/route.ts", featureKey: "payment_repair", allowedRoles: ["owner", "producer"] },
+  { sourceFile: "app/api/app/retention/servicing/route.ts", featureKey: "payment_repair", allowedRoles: ["owner", "producer", "retention"] },
   // LA-5.5 · the paper-bill campaign: log a call; owners save the talk track.
-  { sourceFile: "app/api/app/retention/campaign/route.ts", featureKey: "payment_repair", allowedRoles: ["owner", "producer"] },
+  { sourceFile: "app/api/app/retention/campaign/route.ts", featureKey: "payment_repair", allowedRoles: ["owner", "producer", "retention"] },
   // LA-5.6 · reinstatement cases: a person's steps; reinstated and expired are the files' and the calendar's.
-  { sourceFile: "app/api/app/retention/reinstatement/route.ts", featureKey: "winback", allowedRoles: ["owner", "producer"] },
+  { sourceFile: "app/api/app/retention/reinstatement/route.ts", featureKey: "winback", allowedRoles: ["owner", "producer", "retention"] },
   // LA-5.7 · win-back: mark a possible claim handled. Releases happen at the cooling-off date, never on request.
   { sourceFile: "app/api/app/retention/winback/route.ts", featureKey: "winback", allowedRoles: ["owner", "producer"] },
   // LA-5.10 · a client's monthly income: owners and producers only (never setters, assistants or bookkeepers).
   { sourceFile: "app/api/app/retention/income/route.ts", featureKey: "chargeback_radar", allowedRoles: ["owner", "producer"] },
+  // LA-5.11 · the retention settings hub: weights, thresholds, cooling-off, holdout, assignment. Owner only.
+  { sourceFile: "app/api/app/retention/settings/route.ts", featureKey: "chargeback_radar", allowedRoles: ["owner"] },
   { sourceFile: "app/api/app/applications/attempts/[id]/income/route.ts", featureKey: "applications", allowedRoles: ["owner", "producer"] },
   { sourceFile: "app/api/app/book-scorecards/route.ts", featureKey: "cohort_persistency", allowedRoles: ["owner"] },
   // LA-4.8 · persistency by carrier and lead source; a producer reads their own book's.
@@ -426,4 +428,31 @@ export const AGENT_API_POLICIES: AgentApiPolicy[] = [
   { sourceFile: "app/api/app/team/[userId]/reactivate/route.ts", featureKey: null, allowedRoles: ["owner"] },
   { sourceFile: "app/api/app/team/[userId]/timezone/route.ts", featureKey: null, allowedRoles: ["owner"] },
   { sourceFile: "app/api/app/team/route.ts", featureKey: null, allowedRoles: ["owner"] },
+  // Agency Module 0 (AG-0 / AG-1). "owner" here admits an agency admin too (an admin's base role is owner);
+  // a producer reaches only his own rows through lib/agency/visibility.
+  { sourceFile: "app/api/app/auth/accept-invite/route.ts", featureKey: null },
+  { sourceFile: "app/api/app/agency/upgrade/route.ts", featureKey: null, allowedRoles: ["owner"] },
+  { sourceFile: "app/api/app/agency/pool/route.ts", featureKey: "lead_assignment", allowedRoles: ["owner"] },
+  { sourceFile: "app/api/app/agency/producers/route.ts", featureKey: "team_hierarchy", allowedRoles: ["owner", "bookkeeper", "producer"] },
+  { sourceFile: "app/api/app/agency/producers/[id]/route.ts", featureKey: "team_hierarchy", allowedRoles: ["owner", "bookkeeper", "producer"] },
+  { sourceFile: "app/api/app/agency/producers/[id]/carriers/route.ts", featureKey: "team_hierarchy", allowedRoles: ["owner", "bookkeeper", "producer"] },
+  { sourceFile: "app/api/app/agency/producers/[id]/appointments/route.ts", featureKey: "team_hierarchy", allowedRoles: ["owner"] },
+  { sourceFile: "app/api/app/agency/producers/[id]/support/route.ts", featureKey: "team_hierarchy", allowedRoles: ["owner"] },
+  { sourceFile: "app/api/app/agency/producers/[id]/manager/route.ts", featureKey: "team_hierarchy", allowedRoles: ["owner"] },
+  { sourceFile: "app/api/app/agency/producers/[id]/offboard/route.ts", featureKey: "team_hierarchy", allowedRoles: ["owner"] },
+  { sourceFile: "app/api/app/agency/producers/[id]/suspend/route.ts", featureKey: "team_hierarchy", allowedRoles: ["owner"] },
+  { sourceFile: "app/api/app/agency/producers/[id]/reactivate/route.ts", featureKey: "team_hierarchy", allowedRoles: ["owner"] },
+  { sourceFile: "app/api/app/agency/producers/[id]/onboarding/route.ts", featureKey: "team_hierarchy", allowedRoles: ["owner", "bookkeeper", "producer"] },
+  { sourceFile: "app/api/app/agency/producers/[id]/money/route.ts", featureKey: "producer_payouts", allowedRoles: ["owner", "bookkeeper", "producer"] },
+  { sourceFile: "app/api/app/agency/dashboard/route.ts", featureKey: "agency_dashboard", allowedRoles: ["owner", "bookkeeper", "producer"] },
+  { sourceFile: "app/api/app/agency/scorecards/route.ts", featureKey: "producer_scorecards", allowedRoles: ["owner", "bookkeeper", "producer"] },
+  { sourceFile: "app/api/app/agency/overrides/route.ts", featureKey: "team_hierarchy", allowedRoles: ["owner", "bookkeeper", "producer"] },
+  { sourceFile: "app/api/app/agency/statements/[runId]/route.ts", featureKey: "producer_payouts", allowedRoles: ["owner", "bookkeeper", "producer"] },
+  { sourceFile: "app/api/app/agency/my-pay/route.ts", featureKey: "producer_payouts", allowedRoles: ["producer"] },
+  { sourceFile: "app/api/app/agency/payouts/route.ts", featureKey: "producer_payouts", allowedRoles: ["owner", "bookkeeper"] },
+  { sourceFile: "app/api/app/agency/attribution/route.ts", featureKey: "producer_payouts", allowedRoles: ["owner", "bookkeeper"] },
+  { sourceFile: "app/api/app/agency/splits/route.ts", featureKey: "producer_payouts", allowedRoles: ["owner", "bookkeeper"] },
+  { sourceFile: "app/api/app/agency/reconciliation/route.ts", featureKey: "producer_payouts", allowedRoles: ["owner", "bookkeeper"] },
+  { sourceFile: "app/api/app/agency/review/route.ts", featureKey: "team_qa", allowedRoles: ["owner", "producer"] },
+  { sourceFile: "app/api/app/agency/review/[id]/checks/route.ts", featureKey: "team_qa", allowedRoles: ["owner", "producer"] },
 ];

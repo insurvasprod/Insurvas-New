@@ -8,6 +8,8 @@ import { DO_NOT_CALL_DISPOSITION_KEY, type DispositionWizard } from "@/lib/dispo
 import { ensureDefaultPublisherDispositionMappings } from "@/lib/pipelines/service";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
+import { rowVisible, scopeFor, type ProducerScope } from "@/lib/agency/visibility";
+import { guardWorkItem } from "@/lib/transferInbox/scope";
 
 const uuid = z.string().uuid();
 const bodySchema = z.discriminatedUnion("action", [
@@ -30,7 +32,7 @@ function errorResponse(error: unknown) {
  * outcome list cannot be read, `outcomeOptions` is null and the wizard says so rather than offering
  * outcomes that might move nothing.
  */
-async function withOutcomeContext(tenantId: string, userId: string, wizard: DispositionWizard) {
+async function withOutcomeContext(tenantId: string, userId: string, wizard: DispositionWizard, scope: ProducerScope = null) {
   const supabase = getSupabaseServiceClient();
   // The default outcome mappings are seeded here too, not only when an outcome is completed:
   // otherwise an agency's very first call offers no outcome, so none can ever be completed. An
@@ -47,6 +49,8 @@ async function withOutcomeContext(tenantId: string, userId: string, wizard: Disp
   const current = { stageId: wizard.flow.stage_id ?? null, pipelineId: flowStage.data?.pipeline_id ?? null };
   return {
     ...wizard,
+    // AG-0.5: a callback can be handed only to the session itself or someone in its scope.
+    assignees: scope === null ? wizard.assignees : wizard.assignees.filter((assignee) => assignee.id === userId || rowVisible(scope, assignee.id)),
     currentUserId: userId,
     verification,
     outcomeOptions: outcomes?.map((outcome) => {
@@ -80,11 +84,20 @@ export async function POST(request: Request) {
   if (auth instanceof NextResponse) return auth;
   const parsed = bodySchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Choose a valid disposition action." }, { status: 400 });
+  // AG-0.5: the transfer must be one this session may see (its own, or a visible producer's); another
+  // producer's is 404 before any walk is started or read. A callback may be handed only to someone in
+  // the session's scope (or the session itself). Null scope (solo, owner/admin): unchanged.
+  const scope = await scopeFor(auth.context);
+  const hidden = await guardWorkItem(auth.context, parsed.data.work_item_id, scope);
+  if (hidden) return hidden;
+  if (parsed.data.action === "complete" && parsed.data.callback_assigned_to && parsed.data.callback_assigned_to !== auth.context.userId && !rowVisible(scope, parsed.data.callback_assigned_to)) {
+    return NextResponse.json({ error: "That person is not someone you can hand a callback to.", code: "invalid_input" }, { status: 400 });
+  }
   try {
-    if (parsed.data.action === "start") return NextResponse.json(await withOutcomeContext(auth.context.tenantId, auth.context.userId, await getDispositionWizard(auth.context.tenantId, auth.context.userId, parsed.data.work_item_id)));
+    if (parsed.data.action === "start") return NextResponse.json(await withOutcomeContext(auth.context.tenantId, auth.context.userId, await getDispositionWizard(auth.context.tenantId, auth.context.userId, parsed.data.work_item_id), scope));
     if (parsed.data.action === "answer") {
       const result = await answerDisposition(auth.context.tenantId, auth.context.userId, parsed.data);
-      return NextResponse.json({ result, wizard: await withOutcomeContext(auth.context.tenantId, auth.context.userId, await getDispositionWizard(auth.context.tenantId, auth.context.userId, parsed.data.work_item_id)) });
+      return NextResponse.json({ result, wizard: await withOutcomeContext(auth.context.tenantId, auth.context.userId, await getDispositionWizard(auth.context.tenantId, auth.context.userId, parsed.data.work_item_id), scope) });
     }
     // An application outcome is refused until verification is complete (user decision,
     // 2026-09-24). Checked before anything is written; every other outcome passes through.

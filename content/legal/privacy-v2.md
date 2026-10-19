@@ -64,10 +64,12 @@ include:
 Social Security numbers, bank account and routing numbers, and payment card numbers entered on an
 application are encrypted by the application before they are stored, with a key specific to each
 agency, and can be shown in full only to permitted roles who have completed two-step verification;
-each such reveal is logged. [COUNSEL/OWNER: health answers, medications and dates of birth are
-currently stored without field-level encryption, protected by access controls and the database
-provider's storage encryption — confirm this description, or extend field-level encryption before
-publishing.]
+each such reveal is logged. Health answers, medications, the history of changes to them and the
+health record kept with each submitted application are encrypted the same way. [COUNSEL/OWNER: true
+once migration 20261016420000 is applied and the existing records are sealed (super-admin action
+POST /api/admin/system/seal-health-data on production). Dates of birth, and the height, weight and
+tobacco use copied onto an application, are still stored without field-level encryption, protected
+by access controls and the database provider's storage encryption — confirm this description.]
 
 Agencies are responsible for having a lawful basis and any required notices and consents for the
 consumer data they put into Insurvas, including under insurance, telemarketing and health-privacy
@@ -136,8 +138,8 @@ NOTICE URL — /legal/cookies once published].
   `billing.cancelled_retention_days`]. After that the workspace can no longer be opened. The data
   is not automatically deleted at that point; **an agency can ask us to delete it** by contacting
   [CONTACT EMAIL], and we will delete or de-identify it within [NUMBER] days except where we must
-  keep it (below). [OWNER/COUNSEL: decide whether to adopt an automatic deletion period instead,
-  and build it before publishing such a promise.]
+  keep it (below). [OWNER/COUNSEL: deletion on request is built (migration 20261016430000); decide
+  whether to adopt an automatic deletion period instead before publishing such a promise.]
 - **Agencies control consumer-data retention.** The service gives agencies tools to set retention
   rules per record type and state and to run a deletion when a consumer asks; these are off unless
   the agency turns them on. Numbers on an internal do-not-call list are kept so the person is not

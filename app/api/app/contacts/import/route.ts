@@ -4,6 +4,7 @@ import { audit } from "@/lib/audit/log";
 import { parseContactCsv } from "@/lib/contacts/csv";
 import { createContact, fieldSchemaForTenant } from "@/lib/contacts/service";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
+import { refuseNarrowInAgency } from "@/lib/agency/routeScope";
 
 const CONTACT_ROLES = ["owner", "producer", "assistant"] as const;
 
@@ -15,6 +16,8 @@ const CONTACT_ROLES = ["owner", "producer", "assistant"] as const;
 export async function POST(request: NextRequest) {
   const auth = await requireFeatureRole("duplicate_detection", CONTACT_ROLES, { write: true });
   if (auth instanceof NextResponse) return auth;
+  const refused = await refuseNarrowInAgency(auth.context, "Contact import");
+  if (refused) return refused;
   const body = await request.json().catch(() => null) as { csv?: unknown } | null;
   if (typeof body?.csv !== "string") return NextResponse.json({ error: "Paste a CSV file to import" }, { status: 400 });
   let rows;

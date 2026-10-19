@@ -1,6 +1,6 @@
 // THE agent menu definition. This is the one data contract shared by the agent app and the
 // admin plan preview. Plans grant feature keys; this file never branches on a plan code.
-import type { TenantRole } from "@/lib/tenantAuth/roles";
+import { baseRoleOf, isAgencyTitle, type MemberRole } from "../tenantAuth/roles.ts";
 
 export type MenuItem = {
   /** Stable namespaced key used by the menu contract, for example `leads.inbound`. */
@@ -16,8 +16,11 @@ export type MenuItem = {
   section: string;
   /** Undefined means always visible, regardless of entitlement (Dashboard and Settings). */
   required_feature?: string;
-  /** Optional tenant role gate; entitlement and role are independent dimensions. */
-  required_roles?: readonly TenantRole[];
+  /**
+   * Optional tenant role gate; entitlement and role are independent dimensions. AG-0.2: may name an agency
+   * title (admin, manager); a title also opens what its base role opens (menuRoleAdmits).
+   */
+  required_roles?: readonly MemberRole[];
   /** Whether a real screen exists at this path today. */
   built?: boolean;
   /** False for a settings page reached from Settings, never listed in the rail itself. */
@@ -57,6 +60,9 @@ export const AGENT_MENU: MenuSection[] = [
     label: "Home",
     items: [
       item("Home", { key: "home.dashboard", label: "Dashboard", navLabel: "Home", path: "/app/dashboard", icon: "layout-dashboard", built: true }),
+      // AG-0.11 · the agency owner's home: which producers are making the agency money. A manager sees it scoped to
+      // his reports; a producer never sees it.
+      item("Home", { key: "home.agency", label: "Agency dashboard", navLabel: "Agency", path: "/app/agency", icon: "layout-dashboard", required_feature: "agency_dashboard", required_roles: ["owner", "bookkeeper", "manager"], built: true, blurb: "Which of your producers is actually making you money." }),
     ],
   },
   {
@@ -112,19 +118,37 @@ export const AGENT_MENU: MenuSection[] = [
     label: "Book",
     items: [
       item("Book", { key: "book.policies", label: "Policies", path: "/app/policies", icon: "book-user", built: true, required_feature: "book_of_business", required_roles: ["owner", "producer", "bookkeeper"], blurb: "The book you already have" }),
-      item("Book", { key: "retention.lapse-risk", label: "Lapse risk", path: "/app/lapse-risk", icon: "radar", built: true, required_feature: "chargeback_radar", required_roles: ["owner", "producer"] }),
+      item("Book", { key: "retention.lapse-risk", label: "Lapse risk", path: "/app/lapse-risk", icon: "radar", built: true, required_feature: "chargeback_radar", required_roles: ["owner", "producer", "retention"] }),
       // LA-5.3 · predicted, not observed: kept apart from Lapse risk so a guess never sits beside an emergency.
-      item("Book", { key: "retention.save-queue", label: "Save queue", path: "/app/save-queue", icon: "shield-check", built: true, required_feature: "chargeback_radar", required_roles: ["owner", "producer"], blurb: "Policies paying fine today that the radar says will stop, and the fix." }),
+      item("Book", { key: "retention.save-queue", label: "Save queue", path: "/app/save-queue", icon: "shield-check", built: true, required_feature: "chargeback_radar", required_roles: ["owner", "producer", "retention"], blurb: "Policies paying fine today that the radar says will stop, and the fix." }),
       // LA-5.4 · servicing requests (the `payment_repair` feature): asked of the carrier, proven by the next file.
-      item("Book", { key: "retention.payment-repair", label: "Servicing", path: "/app/servicing", icon: "wrench", built: true, required_feature: "payment_repair", required_roles: ["owner", "producer"], blurb: "Payment date, bank, bill-to-draft and address changes, verified by the next carrier file." }),
+      item("Book", { key: "retention.payment-repair", label: "Servicing", path: "/app/servicing", icon: "wrench", built: true, required_feature: "payment_repair", required_roles: ["owner", "producer", "retention"], blurb: "Payment date, bank, bill-to-draft and address changes, verified by the next carrier file." }),
       // LA-5.6 · reinstatement (the `winback` feature): a lapsed policy brought back before the carrier's window shuts.
-      item("Book", { key: "retention.winback", label: "Reinstatement", path: "/app/reinstatement", icon: "heart-handshake", built: true, required_feature: "winback", required_roles: ["owner", "producer"], blurb: "Lapsed policies the carrier will still take back, with the days left." }),
+      item("Book", { key: "retention.winback", label: "Reinstatement", path: "/app/reinstatement", icon: "heart-handshake", built: true, required_feature: "winback", required_roles: ["owner", "producer", "retention"], blurb: "Lapsed policies the carrier will still take back, with the days left." }),
+      // LA-5.8 · what each person working retention achieved, save rate always by reason. A rep sees their own.
+      item("Book", { key: "retention.scorecard", label: "Retention scorecard", path: "/app/retention-scorecard", icon: "chart-no-axes-combined", built: true, required_feature: "chargeback_radar", required_roles: ["owner", "producer", "retention"], blurb: "Policies worked, contact rate and save rate by reason, per person." }),
+      // LA-5.9 · whether the radar's bands separate, and whether working the queue beats the holdout.
+      item("Book", { key: "retention.results", label: "Does it work?", path: "/app/retention-results", icon: "chart-line", built: true, required_feature: "chargeback_radar", required_roles: ["owner"], blurb: "Whether the risk bands came true, and what working the queue saved, from your own book." }),
       // "Carrier appointments", not "Appointments". This is LA-0.5's vault — which carriers the
       // agent is appointed with, in which states, plus licences, E&O and CE. LA-2.11 books customer
       // appointments into a calendar, and the bare label sent anyone looking for that here. The
       // collision already cost something once: LA-2.8's first draft joined `public.appointments`
       // for its appointment tier and would have served leads on the strength of a licensing record.
       item("Book", { key: "book.appointments", label: "Carrier appointments", path: "/app/appointments", icon: "badge-check", required_feature: "appointment_vault", required_roles: ["owner", "producer"], built: true }),
+    ],
+  },
+  // Agency Module 0 (AG-1) · the Team group exists only on an agency plan: every node needs an agency feature.
+  {
+    id: "team",
+    label: "Team",
+    items: [
+      item("Team", { key: "team.producers", label: "Producers", path: "/app/producers", icon: "user-round-check", required_feature: "team_hierarchy", required_roles: ["owner", "bookkeeper", "producer"], built: true, blurb: "Everyone who writes business under your contracts." }),
+      item("Team", { key: "team.hierarchy", label: "Hierarchy & Overrides", navLabel: "Hierarchy", path: "/app/hierarchy", icon: "trending-up", required_feature: "team_hierarchy", required_roles: ["owner", "bookkeeper", "manager"], built: true, blurb: "Who reports to whom, and what the agency keeps on each producer." }),
+      item("Team", { key: "team.routing", label: "Lead routing", path: "/app/lead-routing", icon: "route", required_feature: "lead_assignment", required_roles: ["owner"], built: true, blurb: "Give every lead to a producer who can write it, before it goes cold." }),
+      item("Team", { key: "team.splits", label: "Commission splits", path: "/app/commission-splits", icon: "hand-coins", required_feature: "producer_payouts", required_roles: ["owner", "bookkeeper"], built: true, blurb: "Policies two producers share, split after the override." }),
+      item("Team", { key: "team.payouts", label: "Payout runs", navLabel: "Producer payouts", path: "/app/producer-payouts", icon: "wallet-cards", required_feature: "producer_payouts", required_roles: ["owner", "bookkeeper"], built: true, blurb: "Close a period and pay your producers, with a statement each." }),
+      item("Team", { key: "team.scorecards", label: "Producer scorecards", navLabel: "Scorecards", path: "/app/producer-scorecards", icon: "gauge", required_feature: "producer_scorecards", required_roles: ["owner", "bookkeeper", "producer"], built: true, blurb: "Who is profitable, not just busy." }),
+      item("Team", { key: "team.review", label: "Application review", path: "/app/application-review", icon: "file-check", required_feature: "team_qa", required_roles: ["owner", "producer"], built: true, blurb: "Sampled applications checked against the submission checks." }),
     ],
   },
   {
@@ -134,6 +158,11 @@ export const AGENT_MENU: MenuSection[] = [
       item("Commissions", { key: "book.ledger", label: "Commission ledger", path: "/app/ledger", icon: "receipt", required_feature: "commission_ledger", required_roles: ["owner", "producer", "bookkeeper"], built: true }),
       item("Commissions", { key: "book.statements", label: "Statements", path: "/app/statements", icon: "file-text", built: true, required_feature: "statement_ingestion", required_roles: ["owner", "bookkeeper"], blurb: "Carrier statements imported, matched to policies by a person, and posted to the commission ledger." }),
       item("Commissions", { key: "book.discrepancies", label: "Discrepancies", path: "/app/discrepancies", icon: "scale", required_feature: "discrepancy_report", required_roles: ["owner", "bookkeeper"], blurb: "What the carrier paid against what they owed.", built: true }),
+      // AG-1.4 / AG-1.12 · statement rows no producer could be given safely, and each producer's three truths.
+      item("Commissions", { key: "commissions.attribution", label: "Attribution queue", path: "/app/attribution", icon: "scale", required_feature: "producer_payouts", required_roles: ["owner", "bookkeeper"], built: true, blurb: "Statement rows we could not safely give to one producer." }),
+      item("Commissions", { key: "commissions.producer_reconciliation", label: "Producer reconciliation", navLabel: "Reconciliation", path: "/app/producer-reconciliation", icon: "badge-dollar-sign", required_feature: "producer_payouts", required_roles: ["owner", "bookkeeper"], built: true, blurb: "Expected, reported and received, per producer, never blended." }),
+      // AG-1.5 / AG-1.8 · a producer's own pay: his ledger and his statements, opened without asking anyone.
+      item("Commissions", { key: "commissions.my_pay", label: "My pay", path: "/app/my-pay", icon: "briefcase-business", required_feature: "producer_payouts", required_roles: ["producer"], built: true, blurb: "What you earned, what came back, and every statement." }),
       item("Commissions", { key: "book.rate_card", label: "Rate card", path: "/app/rate-card", icon: "calculator", built: true, required_feature: "statement_ingestion", required_roles: ["owner", "bookkeeper"], blurb: "Your contract level and commission rates per carrier, and how much of your book they can check." }),
     ],
   },
@@ -204,6 +233,8 @@ export const AGENT_MENU: MenuSection[] = [
     items: [
       // LA-7.9 · accounting settings: reporting basis, acquisition vs overhead, payouts, splits, bank matching, tax.
       item("Settings", { key: "accounting.settings", label: "Accounting settings", path: "/app/accounting-settings", icon: "list-checks", required_feature: "profit_and_loss", required_roles: ["owner", "bookkeeper"], built: true, sidebar: false, blurb: "Thresholds, categories, periods and split rules." }),
+      // LA-5.11 · everything LA-5 reads: weights, thresholds, queue, signals, campaigns, reinstatement, win-back, holdout, assignment.
+      item("Settings", { key: "retention.settings", label: "Retention settings", path: "/app/retention-settings", icon: "list-checks", required_feature: "chargeback_radar", required_roles: ["owner"], built: true, sidebar: false, blurb: "Weights, thresholds, cooling-off periods and the holdout." }),
       item("Settings", { key: "book.carrier_rules", label: "Carrier rules", path: "/app/carrier-rules", icon: "scroll-text", built: true, sidebar: false, required_feature: "statement_ingestion", required_roles: ["owner", "bookkeeper"], blurb: "Each carrier's save windows, grace, triggers and payout rules, and what is still missing." }),
     ],
   },
@@ -219,14 +250,37 @@ export const AGENT_MENU: MenuSection[] = [
 ];
 
 /** Filters the single menu definition to the features present in the cached entitlement. */
-export function buildAgentMenu(grantedFeatureKeys: Iterable<string>, role: TenantRole = "owner"): MenuSection[] {
+/**
+ * AG-0.2 · whether a menu gate admits a member. A title opens what its base role opens (an admin what an owner
+ * does, a manager what a producer does); an item may also name a title alone, so the agency dashboard can be a
+ * manager's without being every producer's.
+ */
+export function menuRoleAdmits(required: readonly MemberRole[] | undefined, role: MemberRole): boolean {
+  if (!required) return true;
+  if (required.includes(role)) return true;
+  return isAgencyTitle(role) && required.includes(baseRoleOf(role));
+}
+
+/**
+ * AG-0.5 · inside an agency these screens are the agency's business, not a producer's work: their APIs refuse a
+ * narrowed session (producer, manager, assistant, setter — lib/agency/routeScope.ts), so the menu does not offer
+ * them. A solo agent and the all-seeing roles keep every item.
+ */
+export const AGENCY_OWNER_ONLY_KEYS: ReadonlySet<string> = new Set([
+  "leads.import", "leads.lists", "leads.nurture", "leads.duplicates", "leads.campaigns",
+  "book.exceptions", "insight.vendor-returns", "insight.scoring", "insight.true-cpa", "partners.review",
+  "compliance.dashboard", "compliance.tcpa", "compliance.consent", "compliance.complaints", "compliance.deletions", "compliance.litigation",
+]);
+
+export function buildAgentMenu(grantedFeatureKeys: Iterable<string>, role: MemberRole = "owner", options: { agencyNarrow?: boolean } = {}): MenuSection[] {
   const granted = new Set(grantedFeatureKeys);
 
   return AGENT_MENU.map((section) => ({
     ...section,
     items: section.items.filter((entry) =>
       (!entry.required_feature || granted.has(entry.required_feature)) &&
-      (!entry.required_roles || entry.required_roles.includes(role)),
+      menuRoleAdmits(entry.required_roles, role) &&
+      !(options.agencyNarrow && AGENCY_OWNER_ONLY_KEYS.has(entry.key)),
     ),
   })).filter((section) => section.items.length > 0);
 }
@@ -275,7 +329,7 @@ export function featureLabel(featureKey: string): string {
   return featureKey.replace(/_/g, " ").replace(/^./, (character) => character.toUpperCase());
 }
 
-export function grantedAndBuilt(grantedFeatureKeys: Iterable<string>, role: TenantRole = "owner"): (MenuItem & { sectionLabel: string })[] {
+export function grantedAndBuilt(grantedFeatureKeys: Iterable<string>, role: MemberRole = "owner"): (MenuItem & { sectionLabel: string })[] {
   const granted = new Set(grantedFeatureKeys);
-  return allMenuItems().filter((entry) => entry.built && (!entry.required_feature || granted.has(entry.required_feature)) && (!entry.required_roles || entry.required_roles.includes(role)));
+  return allMenuItems().filter((entry) => entry.built && (!entry.required_feature || granted.has(entry.required_feature)) && menuRoleAdmits(entry.required_roles, role));
 }

@@ -7,6 +7,7 @@ import { CONTACT_OUTCOMES, PAYMENT_METHODS } from "@/lib/retention/constants";
 import { CARRIER_METHODS, ORIGINS } from "@/lib/retention/servicing";
 import { createRequest, loadPrefill, ServicingError, stepRequest } from "@/lib/retention/servicingStore";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
+import { scopeFor } from "@/lib/agency/visibility";
 
 /**
  * LA-5.4 (Notion sprint) · servicing requests. GET: what a new request starts from (the draft day the
@@ -16,7 +17,8 @@ import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
  *
  * Gated on `payment_repair`; owner and producer (a producer reaches the policies credited to them).
  */
-const ROLES = ["owner", "producer"] as const;
+// LA-5.8: a retention rep opens and tracks servicing requests.
+const ROLES = ["owner", "producer", "retention"] as const;
 const day = z.number().int().min(1, "Pick a draft day between the 1st and the 28th.").max(28, "Pick a draft day between the 1st and the 28th.");
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use a date.");
 const send = z.object({
@@ -62,7 +64,8 @@ export async function GET(request: NextRequest) {
   if (!isRecordUuid(carrierId) || !policyNumber || policyNumber.length > 120) return NextResponse.json({ error: "Choose the policy." }, { status: 400 });
   const { tenantId, userId, role } = auth.context;
   try {
-    return NextResponse.json(await loadPrefill({ tenantId, userId, role }, carrierId, policyNumber));
+    // AG-0.5 · the policy must be credited to a visible producer (agent_user_id), else 404.
+    return NextResponse.json(await loadPrefill({ tenantId, userId, role, scope: await scopeFor(auth.context) }, carrierId, policyNumber));
   } catch (error) {
     if (error instanceof ServicingError) return NextResponse.json({ error: error.message }, { status: error.status });
     console.error("[servicing] prefill:", error);
@@ -77,7 +80,9 @@ export async function POST(request: NextRequest) {
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Check the request and try again." }, { status: 400 });
   const b = parsed.data;
   const { tenantId, userId, role } = auth.context;
-  const viewer = { tenantId, userId, role };
+  // AG-0.5 · opening or stepping a request needs its policy credited to a visible producer; the retention
+  // role's scope is null (it works the whole book).
+  const viewer = { tenantId, userId, role, scope: await scopeFor(auth.context) };
   const sendDetails = (s: z.infer<typeof send> | null) => (s ? { method: s.method, formRef: s.form_ref, reference: s.reference, expectedEffectiveDate: s.expected_effective_date } : null);
   try {
     if (b.action === "create") {

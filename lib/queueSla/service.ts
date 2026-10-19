@@ -11,6 +11,7 @@ import { hasFeature } from "@/lib/entitlements/types";
 import { isSchemaGap } from "@/lib/appointments/schemaGap";
 import { isOlderThanADay } from "./digestView";
 import { shouldEmail } from "@/lib/notifications/preferences";
+import { slaKey } from "./keys";
 
 export type QueueSlaSettings = {
   tenant_id: string;
@@ -22,7 +23,7 @@ export type QueueSlaSettings = {
 };
 
 const DEFAULTS = { warn_after_seconds: 45, escalate_after_seconds: 120, partner_notify_after_seconds: 300, expire_after_seconds: 14400 };
-type SlaEvent = { id: string; tenant_id: string; work_item_id: string; lead_id: string; partner_id: string | null; rung: "warn" | "escalate" | "partner" | "expire" };
+type SlaEvent = { id: string; tenant_id: string; work_item_id: string; lead_id: string; partner_id: string | null; rung: "warn" | "escalate" | "partner" | "expire"; cycle?: number | null };
 
 // The generated Supabase types are refreshed from the live schema separately; this migration is
 // intentionally shipped with the service, so keep the narrow new-table boundary local here.
@@ -88,7 +89,7 @@ async function postPartnerNotice(event: SlaEvent, name: string, state: string | 
     message_kind: "system_card",
     card_type: null,
     card_payload: { customer: name, notice: "unclaimed_partner_notice", ...(state ? { state } : {}) },
-    event_key: `unclaimed-sla:${event.work_item_id}:partner`,
+    event_key: slaKey(event.work_item_id, event.cycle, "partner"),
     created_by: null,
   }).select("id").maybeSingle();
   if (inserted.error?.code === "23505") return;
@@ -117,7 +118,7 @@ const SETTLED_NOT_SENT = new Set(["email_delivery_disabled", "reserved_test_reci
  */
 async function sendOwedEscalationEmails(): Promise<{ sent: number; settled: number; failures: RunFailure[] }> {
   const supabase = db();
-  const owed = await supabase.from("tenant_lead_sla_events").select("id, tenant_id, work_item_id, lead_id, partner_id, email_due_at").eq("rung", "escalate").not("email_due_at", "is", null).is("email_done_at", null).order("email_due_at", { ascending: true }).limit(200);
+  const owed = await supabase.from("tenant_lead_sla_events").select("id, tenant_id, work_item_id, lead_id, partner_id, email_due_at, cycle").eq("rung", "escalate").not("email_due_at", "is", null).is("email_done_at", null).order("email_due_at", { ascending: true }).limit(200);
   if (owed.error) {
     if (isSchemaGap(owed.error)) return { sent: 0, settled: 0, failures: [] };
     throw new Error(`Could not read the owed escalation emails: ${owed.error.message}`);
@@ -125,7 +126,7 @@ async function sendOwedEscalationEmails(): Promise<{ sent: number; settled: numb
   let sent = 0;
   let settled = 0;
   const failures: RunFailure[] = [];
-  for (const row of (owed.data ?? []) as Array<{ id: string; tenant_id: string; work_item_id: string; lead_id: string; partner_id: string | null; email_due_at: string }>) {
+  for (const row of (owed.data ?? []) as Array<{ id: string; tenant_id: string; work_item_id: string; lead_id: string; partner_id: string | null; email_due_at: string; cycle?: number | null }>) {
     const settle = async (outcome: string) => {
       const update = await supabase.from("tenant_lead_sla_events").update({ email_done_at: new Date().toISOString(), email_outcome: outcome.slice(0, 200) }).eq("id", row.id).is("email_done_at", null);
       if (update.error) throw new Error(update.error.message);
@@ -149,7 +150,7 @@ async function sendOwedEscalationEmails(): Promise<{ sent: number; settled: numb
         // LA-8.4: the owner's own choice for "Unclaimed lead escalated" (the in-app alert is separate).
         if (!(await shouldEmail({ userId: owner.id, tenantId: row.tenant_id, eventKey: "unclaimed_escalation", title: `Unclaimed lead needs attention: ${name}`, link: `/app/leads/${row.lead_id}` }))) { reasons.push("not_sent: recipient_preference"); continue; }
         const email = slaEscalationEmail({ name: owner.name ?? "there", customerName: name, partnerName: partner.data?.name ?? "your partner", leadUrl: `${process.env.APP_URL ?? "http://localhost:3000"}/app/leads/${row.lead_id}` });
-        const delivery = await sendEmail({ ...email, to: owner.email!, userId: owner.id, tenantId: row.tenant_id, templateKey: "lead.sla_escalation", dedupeKey: `unclaimed-sla:${row.work_item_id}:escalated:${owner.id}` });
+        const delivery = await sendEmail({ ...email, to: owner.email!, userId: owner.id, tenantId: row.tenant_id, templateKey: "lead.sla_escalation", dedupeKey: `${slaKey(row.work_item_id, row.cycle, "escalated")}:${owner.id}` });
         if (delivery.delivered) reasons.push("sent");
         else if (SETTLED_NOT_SENT.has(delivery.reason)) reasons.push(`not_sent: ${delivery.reason}`);
         else failedReason = delivery.reason;
@@ -194,7 +195,7 @@ async function processEvent(event: SlaEvent): Promise<"no_longer_unclaimed" | nu
 
   if (event.rung === "escalate") {
     if (!owner?.id) throw new Error("No active tenant owner is available for SLA escalation");
-    const sourceKey = `unclaimed-sla:${event.work_item_id}:escalated`;
+    const sourceKey = slaKey(event.work_item_id, event.cycle, "escalated");
     const notification = await supabase.from("agent_notifications").upsert({ tenant_id: event.tenant_id, recipient_user_id: owner.id, kind: "unclaimed_sla_escalation", title: `Unclaimed lead needs attention: ${name}`, body: `${name} has been waiting unclaimed. Open the lead to claim it or coordinate coverage.`, link: `/app/leads/${event.lead_id}`, source_key: sourceKey }, { onConflict: "tenant_id,recipient_user_id,source_key" });
     if (notification.error) throw new Error(`Could not create escalation notification: ${notification.error.message}`);
     if (owner.email && await shouldEmail({ userId: owner.id, tenantId: event.tenant_id, eventKey: "unclaimed_escalation", title: `Unclaimed lead needs attention: ${name}`, link: `/app/leads/${event.lead_id}` })) {
@@ -216,7 +217,7 @@ async function processEvent(event: SlaEvent): Promise<"no_longer_unclaimed" | nu
       title: `Still unclaimed: ${name}`,
       body: `${name} has waited past the escalation time. Anyone free can claim it now.`,
       link: `/app/leads/${event.lead_id}`,
-      sourceKey: `unclaimed-sla:${event.work_item_id}:offered`,
+      sourceKey: slaKey(event.work_item_id, event.cycle, "offered"),
     });
   }
   if (event.rung === "expire") {
@@ -234,7 +235,7 @@ async function processEvent(event: SlaEvent): Promise<"no_longer_unclaimed" | nu
     // The partner hears through a notice in their channel. "Nobody claimed" itself goes to the
     // agency's owners only: Design 1's writer routes the nobody_claimed card type there.
     await postPartnerNotice(event, name, customerState(lead?.values));
-    await postPartnerSystemCard({ tenantId: event.tenant_id, partnerId: event.partner_id, leadId: event.lead_id, workItemId: event.work_item_id, eventKey: `unclaimed-sla:${event.work_item_id}:partner`, cardType: "nobody_claimed", message: `${name} was not claimed before the response window. Our team has been notified.` });
+    await postPartnerSystemCard({ tenantId: event.tenant_id, partnerId: event.partner_id, leadId: event.lead_id, workItemId: event.work_item_id, eventKey: slaKey(event.work_item_id, event.cycle, "partner"), cardType: "nobody_claimed", message: `${name} was not claimed before the response window. Our team has been notified.` });
   }
   return null;
 }

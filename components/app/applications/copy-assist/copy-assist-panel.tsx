@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/ui/status-chip";
 import type { AttemptView } from "@/lib/applications/types";
 import { cn } from "@/lib/utils";
+import { useRevealReason } from "@/components/app/reveal-reason-dialog";
 
 import { buildCopyGroups, type CopyGroup, type CopyItem } from "./copy-groups";
 
@@ -102,13 +103,13 @@ function useSharedTicks(applicationId: string, sample: boolean, surface: "web" |
 }
 
 /** One sensitive value through the audited reveal call; null (after a toast) when it can't be read. */
-async function revealValue(applicationId: string, fieldKey: string): Promise<string | null> {
+async function revealValue(applicationId: string, fieldKey: string, reason: string): Promise<string | null> {
   try {
     const res = await fetch(`/api/app/applications/attempts/${applicationId}/reveal`, {
       method: "POST",
       cache: "no-store",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ field_key: fieldKey, surface: "copy_assist" }),
+      body: JSON.stringify({ field_key: fieldKey, surface: "copy_assist", reason }),
     });
     const data = await res.json().catch(() => null);
     if (!res.ok || typeof data?.value !== "string") {
@@ -145,6 +146,7 @@ function CopyAssistBody({ attempt, caseId, sample, popout, subtitle, className }
   }, [attempt]);
   const [tab, setTab] = useState<string>(() => groups[0]?.key ?? "insured");
   const { copied, tick } = useSharedTicks(attempt.id, sample, popout ? "popout" : "web");
+  const { ask: askReason, dialog: reasonDialog } = useRevealReason();
   const [format, setFormat] = useState<Readonly<Record<string, string>>>({});
   const [revealed, setRevealed] = useState<Readonly<Record<string, { value: string; until: number }>>>({});
   const [now, setNow] = useState(() => Date.now());
@@ -183,7 +185,13 @@ function CopyAssistBody({ attempt, caseId, sample, popout, subtitle, className }
     if (item.sensitive) {
       // Reveal (audited, one field), write, tick. Sample data has no number to fetch.
       if (sample) { notify.warn("Sample data — nothing to reveal"); return; }
-      const secret = revealed[item.key]?.value ?? (await revealValue(attempt.id, item.key));
+      let secret: string | null = revealed[item.key]?.value ?? null;
+      if (secret === null) {
+        // A fresh reveal says why (the access record keeps it); a value still shown is reused.
+        const reason = await askReason(item.name);
+        if (reason === null) return;
+        secret = await revealValue(attempt.id, item.key, reason);
+      }
       if (secret === null) return;
       if (!revealed[item.key]) remember(item, secret);
       if (!(await writeClipboard(secret))) return copyFailed();
@@ -233,6 +241,7 @@ function CopyAssistBody({ attempt, caseId, sample, popout, subtitle, className }
 
   return (
     <section aria-label="Copy-assist" className={cn("flex min-w-0 flex-col rounded-[12px] border border-[var(--border)] bg-[var(--surface)]", className)}>
+      {reasonDialog}
       {header}
       {groups.length === 0 ? (
         <p className="px-4 py-6 text-sm text-[var(--muted)]">Nothing on this application to copy yet.</p>

@@ -3,6 +3,8 @@ import { z } from "zod";
 
 import { getDialerPanel } from "@/lib/dialerScripts/service";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
+import { guardLead } from "@/lib/agency/guards";
+import { scopeFor } from "@/lib/agency/visibility";
 
 // LA-2.12 audit. A setter's whole job is "work the outbound queue" and "record dispositions", and
 // permissions.ts has granted them `dialer.use` since the role was added — but every route here
@@ -16,10 +18,16 @@ export async function GET(request: NextRequest) {
   if (auth instanceof NextResponse) return auth;
   const leadId = request.nextUrl.searchParams.get("lead_id");
   if (!z.string().uuid().safeParse(leadId).success) return NextResponse.json({ error: "Choose a valid lead" }, { status: 400 });
+  // AG-0.5: in an agency the lead must be assigned to a producer in the session's scope (404 otherwise,
+  // the unassigned pool included); the panel's call history then keeps only visible agents' attempts.
+  // Null scope (solo, owner/admin): unchanged.
+  const scope = await scopeFor(auth.context);
+  const hidden = await guardLead(auth.context, leadId as string);
+  if (hidden) return hidden;
   try {
     // Cost per lead is money: owners and producers see it, a setter does not (user decision 2026-09-25).
     const includeCost = auth.context.role === "owner" || auth.context.role === "producer";
-    return NextResponse.json(await getDialerPanel({ tenantId: auth.context.tenantId, agentId: auth.context.userId, leadId: leadId as string, campaignId: request.nextUrl.searchParams.get("campaign_id"), productCode: request.nextUrl.searchParams.get("product_code"), includeCost }), { headers: { "Cache-Control": "no-store" } });
+    return NextResponse.json(await getDialerPanel({ tenantId: auth.context.tenantId, agentId: auth.context.userId, leadId: leadId as string, campaignId: request.nextUrl.searchParams.get("campaign_id"), productCode: request.nextUrl.searchParams.get("product_code"), includeCost, scope }), { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Could not load dialer guidance" }, { status: 400 });
   }

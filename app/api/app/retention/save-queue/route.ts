@@ -3,14 +3,16 @@ import { z } from "zod";
 
 import { audit } from "@/lib/audit/log";
 import { isRecordUuid } from "@/lib/ingestion/path";
-import { ACTION_TAKEN, CONTACT_OUTCOMES, SNOOZE_DAYS } from "@/lib/retention/constants";
+import { ACTION_TAKEN, CLIENT_REASONS, CONTACT_OUTCOMES, SNOOZE_DAYS } from "@/lib/retention/constants";
 import { holdCard, logSaveAttempt, SaveQueueError } from "@/lib/retention/queueStore";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
+import { scopeFor } from "@/lib/agency/visibility";
 
 /**
  * LA-5.3 (Notion sprint) · work a save-queue card: log what happened (the score, band, weight version
  * and exposure at that moment are read here, never from the browser), or snooze / dismiss it with a
- * reason. Owner and producer, as the radar; a producer only reaches policies credited to them.
+ * reason. Owner, producer and retention rep; a producer only reaches policies credited to them, and a
+ * retention rep only the cards assigned to them (LA-5.8).
  */
 const policy = {
   carrier_id: z.string().refine(isRecordUuid, "Choose the policy."),
@@ -23,6 +25,8 @@ const body = z.discriminatedUnion("action", [
     outcome: z.enum(CONTACT_OUTCOMES, { message: "Choose what happened on the call." }),
     action_taken: z.enum(ACTION_TAKEN, { message: "Choose what you did." }),
     note: z.string().trim().max(2000).nullable(),
+    // LA-5.8: what the client said when they refused, so save rate is read by reason.
+    client_reason: z.enum(CLIENT_REASONS).nullable().optional(),
   }).strict(),
   z.object({
     action: z.literal("hold"),
@@ -34,16 +38,18 @@ const body = z.discriminatedUnion("action", [
 ]);
 
 export async function POST(request: NextRequest) {
-  const auth = await requireFeatureRole("chargeback_radar", ["owner", "producer"] as const, { write: true });
+  const auth = await requireFeatureRole("chargeback_radar", ["owner", "producer", "retention"] as const, { write: true });
   if (auth instanceof NextResponse) return auth;
   const parsed = body.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Check the request and try again." }, { status: 400 });
   const b = parsed.data;
   const { tenantId, userId, role } = auth.context;
-  const viewer = { tenantId, userId, role };
+  // AG-0.5 · the card is recomputed through the session's producer scope: a policy credited to an invisible
+  // producer is "not scored for you" (404). The retention role's scope is null (it works the whole book).
+  const viewer = { tenantId, userId, role, scope: await scopeFor(auth.context) };
   try {
     if (b.action === "log_attempt") {
-      const logged = await logSaveAttempt(viewer, { carrierId: b.carrier_id, policyNumber: b.policy_number, outcome: b.outcome, actionTaken: b.action_taken, note: b.note });
+      const logged = await logSaveAttempt(viewer, { carrierId: b.carrier_id, policyNumber: b.policy_number, outcome: b.outcome, actionTaken: b.action_taken, note: b.note, clientReason: b.client_reason ?? null });
       await audit({ actorType: "tenant", actorId: userId, action: "retention.save_attempt_logged", targetType: "policy", targetId: `${b.carrier_id}:${b.policy_number}`, metadata: { tenantId, outcome: b.outcome, actionTaken: b.action_taken, score: logged.score, band: logged.band }, request });
       return NextResponse.json({ ok: true });
     }

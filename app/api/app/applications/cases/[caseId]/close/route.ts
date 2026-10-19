@@ -4,6 +4,7 @@ import { actorOf, body, failure, isUuid } from "@/lib/applications/http";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import { closeCase } from "@/lib/applications/mutations";
 import { closeCaseSchema } from "@/lib/applications/schemas";
+import { guardCase } from "@/lib/agency/guards";
 
 /** LA-3.16 · close a case as lost. Only explicitly, with a reason, and only with no live attempt. */
 export async function POST(request: Request, { params }: { params: Promise<{ caseId: string }> }) {
@@ -12,6 +13,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ cas
   const actor = actorOf(auth, request);
   const { caseId } = await params;
   if (!isUuid(caseId)) return NextResponse.json({ error: "That case could not be found." }, { status: 404 });
+  // AG-0.5 · a producer cannot open another producer's record by id (404, not 403).
+  const hidden = await guardCase(auth.context, caseId);
+  if (hidden) return hidden;
   const input = await body(request, closeCaseSchema);
   if (input instanceof NextResponse) return input;
   try {

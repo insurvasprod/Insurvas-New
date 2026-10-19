@@ -5,6 +5,8 @@ import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import { announceTransferClaim, claimWasResumed } from "@/lib/transferInbox/service";
 import { languageRefusal } from "@/lib/transferInbox/release";
+import { guardWorkItem } from "@/lib/transferInbox/scope";
+import { scopeFor } from "@/lib/agency/visibility";
 
 const bodySchema = z.object({ work_item_id: z.string().uuid() }).strict();
 
@@ -14,6 +16,11 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => null);
   const parsed = bodySchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: "Choose a valid transfer to claim" }, { status: 400 });
+  // AG-0.5: in an agency a narrow session may claim a waiting live transfer (nobody's yet) or re-open
+  // one already with him; a transfer another producer holds is 404, before the claim RPC can answer
+  // ALREADY_CLAIMED with that producer's name. Null scope (solo, owner/admin): no read, as before.
+  const hidden = await guardWorkItem(auth.context, parsed.data.work_item_id, await scopeFor(auth.context));
+  if (hidden) return hidden;
 
   const supabase = getSupabaseServiceClient();
   const { data, error } = await supabase.rpc("claim_transfer_lead", {

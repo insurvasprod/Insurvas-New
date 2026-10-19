@@ -5,6 +5,7 @@ import { db } from "@/lib/applications/db";
 import { actorOf, failure, isUuid } from "@/lib/applications/http";
 import { clientStateOf } from "@/lib/applications/prefill";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
+import { guardCase } from "@/lib/agency/guards";
 
 /** LA-3.4/3.6 · the carriers and products this agency can quote on this case, with appointment status for the client's state. */
 export async function GET(request: Request, { params }: { params: Promise<{ caseId: string }> }) {
@@ -13,6 +14,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ case
   const actor = actorOf(auth, request);
   const { caseId } = await params;
   if (!isUuid(caseId)) return NextResponse.json({ error: "That case could not be found." }, { status: 404 });
+  // AG-0.5 · a producer cannot open another producer's record by id (404, not 403).
+  const hidden = await guardCase(auth.context, caseId);
+  if (hidden) return hidden;
   try {
     const kase = await db().from("tenant_application_cases").select("lead_id, product_line").eq("tenant_id", actor.tenantId).eq("id", caseId).maybeSingle();
     if (!kase.data) return NextResponse.json({ error: "That case could not be found." }, { status: 404 });

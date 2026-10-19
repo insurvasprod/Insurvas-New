@@ -1,3 +1,4 @@
+import { scopeFor } from "@/lib/agency/visibility";
 import { guardPage } from "@/lib/entitlements/guardPage";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
@@ -25,7 +26,7 @@ export default async function ApplicationsPage({ searchParams }: { searchParams:
   if (guard.role !== "owner" && guard.role !== "producer") return <RoleGateNotice featureLabel="Applications" detail="Owners and producers work applications." />;
   const query = await searchParams;
   if (query.preview === "sample" && process.env.NODE_ENV !== "production") return <ApplicationsList rows={FIXTURE_APPLICATIONS} sample />;
-  const [rows, timeZone] = await Promise.all([orPending(listApplicationRows(guard.context.tenantId)), getViewerTimezone(guard.context.tenantId, guard.context.userId).catch(() => null)]);
+  const [rows, timeZone] = await Promise.all([orPending(scopeFor(guard.context).then((scope) => listApplicationRows(guard.context.tenantId, scope))), getViewerTimezone(guard.context.tenantId, guard.context.userId).catch(() => null)]);
   if (!rows) return <SetupPending title="Applications" />;
   return <ApplicationsList rows={rows} timeZone={timeZone ?? undefined} />;
 }

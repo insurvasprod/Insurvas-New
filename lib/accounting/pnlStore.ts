@@ -130,6 +130,9 @@ export type DrillRequest = { range: Range; basis: Basis; section: PnlLine["secti
 
 /** The entries behind one P&L line, each with a link to where it came from. */
 export async function drill(tenantId: string, d: DrillRequest) {
+  // Held money is never money in (pnl_lines puts it in its own section): a drill that pairs them,
+  // either way round, lists nothing rather than held lines under "in" (E2E 2026-10-16).
+  if ((d.section === "in" && d.entryType === "held") || (d.section === "held" && d.entryType !== "held" && d.entryType !== "reversal")) return { rows: [], more: false };
   const filter: MoneyFilter = { period: { from: d.range.from, to: d.range.to }, basis: d.basis, side: d.section === "in" || d.section === "held" ? "commission" : "cost", entryTypes: [d.entryType] };
   if (d.sourceType === "partner" && d.sourceId) filter.partnerId = d.sourceId;
   // A partner invoice can carry its campaign's vendor too; the P&L lists it under the partner.
@@ -143,9 +146,22 @@ export async function drill(tenantId: string, d: DrillRequest) {
     filter.noExpense = true;
   }
   const res = await moneyEntries(tenantId, filter, d.page);
+  // A reversal belongs where what it reverses belongs (pnl_lines): under Held only a held one, under
+  // In never one. The money view does not carry corrects_type, so it is read here, as the tax summary does.
+  let rows = res.rows;
+  if (d.entryType === "reversal" && (d.section === "in" || d.section === "held") && rows.length) {
+    const corrects = new Map<string, string | null>();
+    const ids = rows.map((r) => r.entryId);
+    for (const table of ["commission_entry", "commission_account_entry"]) {
+      const { data, error } = await db().from(table).select("id, corrects_type").in("id", ids);
+      if (error) fail(error);
+      for (const c of (data ?? []) as Loose[]) corrects.set(c.id as string, (c.corrects_type as string | null) ?? null);
+    }
+    rows = rows.filter((r) => (corrects.get(r.entryId) === "held") === (d.section === "held"));
+  }
   return {
     more: res.more,
-    rows: res.rows.map((r) => ({
+    rows: rows.map((r) => ({
       ...r,
       source: r.invoiceId ? { label: "Invoice", href: `/app/invoices?open=${r.invoiceId}` }
         : r.expenseId ? { label: "Expense", href: `/app/expenses?open=${r.expenseId}` }

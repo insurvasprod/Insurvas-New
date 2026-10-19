@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { audit } from "@/lib/audit/log";
 import { ContactConflictError, undoContactMerge } from "@/lib/contacts/service";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
+import { refuseNarrowInAgency } from "@/lib/agency/routeScope";
 
 /**
  * Restores both original contacts. Refused (409, with the reason) while a later merge that is still
@@ -11,6 +12,8 @@ import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 export async function POST(request: NextRequest) {
   const auth = await requireFeatureRole("duplicate_detection", ["owner", "producer", "assistant"] as const, { write: true });
   if (auth instanceof NextResponse) return auth;
+  const refused = await refuseNarrowInAgency(auth.context, "Contact merging");
+  if (refused) return refused;
   const body = await request.json().catch(() => null) as { merge_id?: unknown } | null;
   if (typeof body?.merge_id !== "string" || !/^[0-9a-f-]{36}$/i.test(body.merge_id)) return NextResponse.json({ error: "Choose a merge to undo" }, { status: 400 });
   try {

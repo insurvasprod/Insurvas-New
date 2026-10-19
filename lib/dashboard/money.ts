@@ -10,6 +10,7 @@ import { addMonths } from "@/lib/ledger/compute";
 import { getCommissionLedger } from "@/lib/ledger/service";
 import { getLapseRisk } from "@/lib/lapseRisk/service";
 import { roleCanViewCommission } from "@/lib/tenantAuth/permissions";
+import { rowVisible, type ProducerScope } from "@/lib/agency/visibilityCore";
 import type { TenantContext } from "@/lib/tenantAuth/requireTenant";
 
 import { HOME_MONEY, type HomeMoneyKey } from "./roleHome";
@@ -33,6 +34,17 @@ import { HOME_MONEY, type HomeMoneyKey } from "./roleHome";
  * Scope is the reader's, as on each page: the ledger, lapse risk and scorecards ask the commission
  * rule (a producer's own book); statements and discrepancies are owner and bookkeeper pages, read
  * agency-wide, and are only ever asked for when the reader can open them (roleHome gates the keys).
+ *
+ * AG-0.5 · producer isolation. `scope` is the session's producer scope (scopeFor, from the session;
+ * null = no filter, the default, so other callers and solo tenants are unchanged). With a scope:
+ *   · statements, discrepancies and owed are agency-wide by nature (no producer on a statement
+ *     count or a carrier finding), so they are never read; roleHome only gives them to the owner and
+ *     the bookkeeper, whose scope is null, so nothing a narrow home shows today is lost;
+ *   · exposure reads the ledger with the role rule AND the scope (as /app/ledger does);
+ *   · lapse risk and persistency are read only for a producer (a manager rides on producer), whose
+ *     role rule already narrows them to his own book (getLapseRisk's commission rule, loadScorecards'
+ *     agent_user_id = reader): inside his scope, and for a manager stricter than it. Any other narrow
+ *     role is never given them (those reads would not narrow it).
  *
  * Every read runs only when a key needs it, and all of them run at once. A read that fails leaves
  * its figure out rather than showing a zero it could not get.
@@ -85,15 +97,20 @@ async function discrepancyFigures(tenantId: string) {
   };
 }
 
-export async function getDashboardMoney(input: { context: TenantContext; wanted: Array<{ key: HomeMoneyKey; href: string }>; upgrade: boolean }): Promise<DashboardMoney> {
+export async function getDashboardMoney(input: { context: TenantContext; wanted: Array<{ key: HomeMoneyKey; href: string }>; upgrade: boolean; scope?: ProducerScope }): Promise<DashboardMoney> {
   const { context } = input;
-  const want = new Set(input.wanted.map((item) => item.key));
-  const canView = (producerUserId: string | null | undefined) => roleCanViewCommission(context.role, context.userId, producerUserId ?? undefined);
+  const scope: ProducerScope = input.scope ?? null;
+  // AG-0.5: under a scope, only the figures that can be narrowed to the visible producers (see above).
+  const narrowable = (key: HomeMoneyKey) => scope === null || key === "exposure" || ((key === "lapse" || key === "persistency") && context.role === "producer");
+  const wanted = input.wanted.filter((item) => narrowable(item.key));
+  const want = new Set(wanted.map((item) => item.key));
+  // The role rule (a producer sees his own) AND the session's producer scope: in an agency both must hold.
+  const canView = (producerUserId: string | null | undefined) => roleCanViewCommission(context.role, context.userId, producerUserId ?? undefined) && rowVisible(scope, producerUserId);
   const safe = <T>(promise: Promise<T>) => promise.catch((error: unknown) => { console.error("[dashboard money]", error); return null; });
 
   // Lapse risk computes the ledger itself, so when both are wanted the ledger is read once, inside it.
   const lapseRead = want.has("lapse") ? safe(getLapseRisk(context)) : Promise.resolve(null);
-  const ledgerRead = !want.has("lapse") && (want.has("exposure") || input.upgrade) ? safe(getCommissionLedger({ tenantId: context.tenantId, canView })) : Promise.resolve(null);
+  const ledgerRead = !want.has("lapse") && (want.has("exposure") || (input.upgrade && scope === null)) ? safe(getCommissionLedger({ tenantId: context.tenantId, canView })) : Promise.resolve(null);
   const today = new Date().toISOString().slice(0, 10);
 
   const [statements, discrepancies, lapse, ledgerOnly, scorecards] = await Promise.all([
@@ -138,7 +155,7 @@ export async function getDashboardMoney(input: { context: TenantContext; wanted:
   };
 
   const figures: MoneyFigure[] = [];
-  for (const item of input.wanted) {
+  for (const item of wanted) {
     const figure = build[item.key]();
     if (figure) figures.push({ key: item.key, label: HOME_MONEY[item.key].label, href: item.href, ...figure });
   }

@@ -4,6 +4,7 @@ import { audit } from "@/lib/audit/log";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import { contactSchema } from "@/lib/contacts/schemas";
 import { createContact, getContactDirectory, getContactWorkspace } from "@/lib/contacts/service";
+import { scopeFor } from "@/lib/agency/visibility";
 
 const CONTACT_ROLES = ["owner", "producer", "assistant"] as const;
 
@@ -17,8 +18,10 @@ export async function GET(request: NextRequest) {
   const params = request.nextUrl.searchParams;
   const options = { q: params.get("q") ?? "", page: Number(params.get("page") ?? 0) || 0, pageSize: Number(params.get("pageSize") ?? 25) || 25 };
   try {
-    if (params.get("view") === "directory") return NextResponse.json({ directory: await getContactDirectory(auth.context.tenantId, options) });
-    return NextResponse.json(await getContactWorkspace(auth.context.tenantId, auth.context.userId, options));
+    // AG-0.5: a narrowed agency session sees the contacts linked to its producers' leads only.
+    const scope = await scopeFor(auth.context);
+    if (params.get("view") === "directory") return NextResponse.json({ directory: await getContactDirectory(auth.context.tenantId, options, scope) });
+    return NextResponse.json(await getContactWorkspace(auth.context.tenantId, auth.context.userId, options, scope));
   } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Could not load contacts" }, { status: 500 }); }
 }
 
@@ -28,7 +31,8 @@ export async function POST(request: NextRequest) {
   const parsed = contactSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Contact details are invalid" }, { status: 400 });
   try {
-    const result = await createContact(auth.context.tenantId, auth.context.userId, parsed.data);
+    // AG-0.5: matches against contacts this session may not see are queued for the owner, not shown or merged into.
+    const result = await createContact(auth.context.tenantId, auth.context.userId, parsed.data, { scope: await scopeFor(auth.context) });
     await audit({ actorType: "tenant", actorId: auth.context.userId, action: "tenant.contact_created", targetType: "contact", targetId: result.contact.id, metadata: { outcome: result.outcome, duplicateCount: result.duplicates.length, queued: result.queued }, request });
     if (result.mergeId) await audit({ actorType: "tenant", actorId: auth.context.userId, action: "tenant.contact_merged", targetType: "merge", targetId: result.mergeId, metadata: { outcome: result.outcome, source: "auto" }, request });
     return NextResponse.json(result, { status: 201 });

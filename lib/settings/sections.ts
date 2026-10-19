@@ -173,6 +173,21 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
     ],
   },
   {
+    group: "Money & compliance", id: "retention", label: "Retention", sort_order: 15, owned_by_module: "LA-5.11", route: "/app/retention-settings", required_feature: "chargeback_radar", required_roles: OWNER,
+    description: "Everything the chargeback radar, the save queue and the retention campaigns read: scoring weights, band thresholds, queue size, cooling-off periods, the holdout and who works retention.", search_keywords: ["retention", "chargeback radar", "save queue", "lapse"],
+    items: [
+      { label: "Scoring weights", anchor: "weights", keywords: ["weights", "risk score", "signal weight", "retune"] },
+      { label: "Band thresholds", anchor: "thresholds", keywords: ["critical", "high risk", "band", "threshold"] },
+      { label: "Queue behaviour", anchor: "queue", keywords: ["cooldown", "max cards", "default sort"] },
+      { label: "Signal settings", anchor: "signals", keywords: ["sample floor", "affordability", "danger window", "months since issue"] },
+      { label: "Paper-bill campaign", anchor: "campaigns", keywords: ["talk track", "paper bill", "direct bill", "cooling-off"] },
+      { label: "Reinstatement countdown", anchor: "reinstatement", keywords: ["reinstatement", "escalation", "deadline"] },
+      { label: "Win-back cooling-off", anchor: "winback", keywords: ["win-back", "winback", "cooling-off", "affordability period"] },
+      { label: "Holdout", anchor: "holdout", keywords: ["holdout", "experiment", "control group", "effectiveness"] },
+      { label: "Retention roles and assignment", anchor: "assignment", keywords: ["retention rep", "round-robin", "assignment", "by carrier", "by exposure"] },
+    ],
+  },
+  {
     group: "Money & compliance", id: "compliance", label: "Compliance", sort_order: 20, owned_by_module: "LA-6.8", route: "/app/compliance/settings", required_feature: "tcpa_checker", required_roles: OWNER,
     description: "Complaint deadlines, record retention, legal holds, deletion requests and the transfer gate.", search_keywords: ["compliance"],
     items: [

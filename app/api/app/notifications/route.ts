@@ -7,6 +7,7 @@ import { AGENT_ALERT_EVENTS } from "@/lib/agentAlerts/presentation";
 import { AUDIBLE } from "@/lib/notify/treatments";
 import { listAgentAlerts, markAgentAlertsRead, saveAgentAlertSettings, soundTreatmentsArePersisted } from "@/lib/agentAlerts/service";
 import { touchMemberPresence } from "@/lib/tenantTeam/presence";
+import { scopeFor } from "@/lib/agency/visibility";
 
 const events = z.object(Object.fromEntries(AGENT_ALERT_EVENTS.map((event) => [event, z.boolean()])) as Record<(typeof AGENT_ALERT_EVENTS)[number], z.ZodBoolean>).strict();
 // Only the four audible treatments, each optional: a missing key means "no opinion, use the
@@ -39,7 +40,9 @@ export async function GET() {
   if (!session) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   const [auth, feedSettled] = await Promise.all([
     requireTenant(),
-    listAgentAlerts(session.tenantId, session.sub).then(
+    // AG-0.5: the scope is the verified session's (the same tenant and user requireTenant resolves), so
+    // in an agency an alert about another producer's lead is left out. Null scope: the feed as before.
+    scopeFor({ tenantId: session.tenantId, userId: session.sub }).then((scope) => listAgentAlerts(session.tenantId, session.sub, scope)).then(
       (value) => ({ ok: true as const, value }),
       (error: unknown) => ({ ok: false as const, error }),
     ),

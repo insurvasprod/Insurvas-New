@@ -14,6 +14,8 @@ import { greeting, longDate } from "@/lib/dashboard/todayMath";
 import { SetupChecklist } from "@/components/app/setup-checklist";
 import { Card } from "@/components/ui/card";
 import { listDueCallbacks } from "@/lib/callbacks/service";
+import { scopeFor, type ProducerScope } from "@/lib/agency/visibility";
+import { scopeWithSelf } from "@/lib/dashboard/scope";
 import { AppointmentCloseOutStrip } from "@/components/app/appointment-close-out-strip";
 import { PendingSummaryCard } from "@/components/app/applications/pending-summary-card";
 import Link from "next/link";
@@ -44,6 +46,20 @@ import { TableCard } from "@/components/ui/table-card";
  * callbacks, an assistant on the inbound queue, a bookkeeper on statements and money, an owner on
  * the team. Every section is gated by the menu entry of the page it opens, so nobody sees a tile
  * for a screen they cannot open.
+ *
+ * AG-0.5 · producer isolation. The session's producer scope (`scopeFor(context)`, from the session,
+ * never the request) is read once here and handed to every server-side read: null — an
+ * individual-plan tenant, or the owner/admin, bookkeeper or retention — changes nothing. For a
+ * producer, manager, assistant or setter in an agency, no section counts another producer's rows:
+ *   today      getDashboardToday({ scope }): own dials/appointments/premium as before; queue = own
+ *              assigned work; callbacks and transfers = scope + self; lapse omitted (lib/dashboard/today)
+ *   money      getDashboardMoney({ scope }): exposure through role rule AND scope; lapse/persistency a
+ *              producer's own book; agency-wide statement/discrepancy figures never read (lib/dashboard/money)
+ *   callbacks  listDueCallbacks(tenant, scope + self) — D1: tenant_callbacks.assigned_to
+ *   shortcuts  DashboardMetrics scope: the shared figures narrowed, nothing agency-wide (lib/dashboard/summaries)
+ *   pending, closeOut  client cards whose routes scope themselves (/api/app/pending/summary,
+ *              /api/app/appointments/close-out both call scopeFor)
+ *   setup      the owner's home only (a tenant-level checklist, never shown to a narrow session)
  */
 /** "4:30 PM CT" — a time with the zone it is in, as the board's callback rows read. */
 function shortTime(utc: string, timezone: string) {
@@ -61,9 +77,10 @@ function overdueLabel(utc: string, now: number) {
 }
 
 /** "Callbacks due today": its own streamed block, so the page does not wait on this read. */
-async function CallbacksCard({ tenantId, href }: { tenantId: string; href: string }) {
+async function CallbacksCard({ tenantId, href, assigned }: { tenantId: string; href: string; assigned: ProducerScope }) {
   const [callbacks, workspaceZone] = await Promise.all([
-    listDueCallbacks(tenantId),
+    // AG-0.5: `assigned` is the session's scope plus the reader (null = every callback, as before).
+    listDueCallbacks(tenantId, assigned),
     getWorkspaceTimezone(tenantId).catch(() => null),
   ]);
   const agencyZone = workspaceZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -168,7 +185,8 @@ export default async function AgentDashboardPage() {
   // it afterwards cost a second serial round trip, ~170ms of ~340ms of data time on this page,
   // for a criterion ("loads in under 1 second") with no room to spare. The greeting's two reads
   // (the agency's zone, the reader's first name) ride in the same round trip.
-  const [entitlement, onboardingState, switches, setupProgress, setupProfile, workspaceZone, firstName] = await Promise.all([
+  // AG-0.5: the producer scope rides in the same round trip (cached per request; free for a solo tenant).
+  const [entitlement, onboardingState, switches, setupProgress, setupProfile, workspaceZone, firstName, scope] = await Promise.all([
     getEntitlement(context.tenantId),
     getDashboardOnboardingState(context.tenantId),
     loadFeatureSwitches(),
@@ -176,6 +194,7 @@ export default async function AgentDashboardPage() {
     loadSetupProfile(context.tenantId),
     getWorkspaceTimezone(context.tenantId).catch(() => null),
     readFirstName(context.userId),
+    scopeFor(context),
   ]);
   const available = applyKillSwitches(entitlement.features, switches, context.tenantId);
   const tiles = visibleDashboardTiles(available, context.role);
@@ -200,7 +219,7 @@ export default async function AgentDashboardPage() {
   // Money and retention (LA-4.18) and the upgrade tile's count: one streamed read, started now so it
   // runs beside the "today" read rather than after it.
   const money: Promise<DashboardMoney> | null = home.money.length > 0 || home.upgrade
-    ? getDashboardMoney({ context, wanted: home.money, upgrade: Boolean(home.upgrade) }).catch(() => ({ figures: [], exposurePolicies: null }))
+    ? getDashboardMoney({ context, wanted: home.money, upgrade: Boolean(home.upgrade), scope }).catch(() => ({ figures: [], exposurePolicies: null }))
     : null;
 
   // eslint-disable-next-line react-hooks/purity -- a server render: "today" is as of this request.
@@ -209,7 +228,7 @@ export default async function AgentDashboardPage() {
   // One "today" read, shared by the streamed sections and the header's next-callback chip. It only
   // runs the reads this home shows (`home.reads`), and a failure is null — sections hidden, page up.
   const today: Promise<DashboardToday | null> | null = streamed.length > 0 || home.nextCallbackHref
-    ? getDashboardToday({ tenantId: context.tenantId, userId: context.userId, role: context.role, available: [...available], now: serverNow, reads: home.reads }).catch(() => null)
+    ? getDashboardToday({ tenantId: context.tenantId, userId: context.userId, role: context.role, available: [...available], now: serverNow, reads: home.reads, scope }).catch(() => null)
     : null;
 
   const callbacksHref = home.nextCallbackHref;
@@ -230,7 +249,7 @@ export default async function AgentDashboardPage() {
     // Streamed: the page shell does not wait on the due-callbacks read before its first paint.
     callbacks: shown.has("callbacks") && callbacksHref ? (
       <Suspense fallback={<CallbacksCardSkeleton />}>
-        <CallbacksCard tenantId={context.tenantId} href={callbacksHref} />
+        <CallbacksCard tenantId={context.tenantId} href={callbacksHref} assigned={scopeWithSelf(scope, context.userId)} />
       </Suspense>
     ) : null,
     // Money and retention: the strip on a money profile, a list beside the day's strip otherwise.
@@ -248,7 +267,7 @@ export default async function AgentDashboardPage() {
     // The registry's tiles as one "Your modules" list: every way in, with a live figure where the
     // reader may read it at that scope (components/app/dashboard-metrics.tsx).
     shortcuts: tiles.length > 0 ? (
-      <DashboardMetrics tiles={tiles} tenantId={context.tenantId} role={context.role} />
+      <DashboardMetrics tiles={tiles} tenantId={context.tenantId} role={context.role} userId={context.userId} scope={scope} />
     ) : (
       /* Two different empty states, because they have two different causes and two different
          answers. The entitlement genuinely granting nothing is the owner's problem to solve. A

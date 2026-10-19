@@ -5,6 +5,7 @@ import { PolicyBook } from "@/components/app/policy-book";
 import { PolicyEntryActions } from "@/components/app/policy-entry-actions";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { PageHeader } from "@/components/ui/page-header";
+import { scopeFor } from "@/lib/agency/visibility";
 import { guardPage } from "@/lib/entitlements/guardPage";
 import { loadBook, loadHandPolicies, loadIssuedAwaiting, POLICY_BOOK_PENDING_MESSAGE } from "@/lib/ingestion/policyBookStore";
 
@@ -22,7 +23,7 @@ export default async function PoliciesPage({ searchParams }: { searchParams: Pro
   if (!["owner", "producer", "bookkeeper"].includes(guard.role)) return <RoleGateNotice featureLabel="Policies" detail="Your tenant role does not include the book of business." />;
   const readOnly = guard.entitlement.access === "read_only";
   const params = await searchParams;
-  const viewer = { tenantId: guard.context.tenantId, userId: guard.context.userId, role: guard.role };
+  const viewer = { tenantId: guard.context.tenantId, userId: guard.context.userId, role: guard.role, scope: await scopeFor(guard.context) };
   const [book, hand, issued] = await Promise.all([loadBook(viewer), loadHandPolicies(viewer), loadIssuedAwaiting(viewer).catch(() => [])]);
   // The old "Entered by hand" tab address lands on the same list, filtered to that source.
   const query = new URLSearchParams([...Object.entries(params).flatMap(([key, value]) => (typeof value === "string" && key !== "view" ? [[key, value]] : [])), ...(params.view === "entered" && !params.source ? [["source", "hand"]] : [])]).toString();

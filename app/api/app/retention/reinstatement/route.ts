@@ -5,6 +5,7 @@ import { audit } from "@/lib/audit/log";
 import { isRecordUuid } from "@/lib/ingestion/path";
 import { ReinstatementError, updateCase } from "@/lib/retention/reinstatementStore";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
+import { scopeFor } from "@/lib/agency/visibility";
 
 /**
  * LA-5.6 (Notion sprint) · a step on a reinstatement case: the call, what the carrier needs (amount
@@ -27,14 +28,15 @@ const body = z.object({
 }).strict();
 
 export async function POST(request: NextRequest) {
-  const auth = await requireFeatureRole("winback", ["owner", "producer"] as const, { write: true });
+  const auth = await requireFeatureRole("winback", ["owner", "producer", "retention"] as const, { write: true });
   if (auth instanceof NextResponse) return auth;
   const parsed = body.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Check the request and try again." }, { status: 400 });
   const b = parsed.data;
   const { tenantId, userId, role } = auth.context;
   try {
-    const moved = await updateCase({ tenantId, userId, role }, b.id, {
+    // AG-0.5 · a case on a policy credited to an invisible producer is "not in your book" (404).
+    const moved = await updateCase({ tenantId, userId, role, scope: await scopeFor(auth.context) }, b.id, {
       status: b.status, declineReason: b.decline_reason, amountOwedCents: b.amount_owed_cents, monthsOwed: b.months_owed,
       requiresHealthQuestions: b.requires_health_questions, requiresSignedForm: b.requires_signed_form, requirementsNote: b.requirements_note,
       carrierReference: b.carrier_reference, note: b.note,

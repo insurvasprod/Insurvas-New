@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { hasFeature } from "@/lib/entitlements/types";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import { getVendorCards } from "@/lib/vendors/service";
+import { refuseNarrowInAgency } from "@/lib/agency/routeScope";
 
 /**
  * The Vendors roster's per-vendor facts (LA-2 §5 concept board): trialling, renewal, cost per
@@ -20,6 +21,8 @@ const roles = ["owner", "producer"] as const;
 export async function GET() {
   const auth = await requireFeatureRole("outbound_dialing", roles);
   if (auth instanceof NextResponse) return auth;
+  const refused = await refuseNarrowInAgency(auth.context, "Vendors");
+  if (refused) return refused;
   try {
     const body = await getVendorCards(auth.context.tenantId, hasFeature(auth.entitlement, "true_cpa"));
     return NextResponse.json(body, { headers: { "Cache-Control": "no-store" } });

@@ -6,6 +6,7 @@ import { isRecordUuid } from "@/lib/ingestion/path";
 import { CONTACT_INCOME_TYPES } from "@/lib/retention/income";
 import { contactForPolicy, IncomeError, readIncome, saveIncome } from "@/lib/retention/incomeStore";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
+import { scopeFor } from "@/lib/agency/visibility";
 
 /**
  * LA-5.10 (Notion sprint) · the client's monthly income, captured on a retention call (the save
@@ -38,7 +39,8 @@ export async function GET(request: NextRequest) {
   const policyNumber = request.nextUrl.searchParams.get("policy_number") ?? "";
   if (!isRecordUuid(carrierId) || !policyNumber || policyNumber.length > 120) return NextResponse.json({ error: "Choose the policy." }, { status: 400 });
   const { tenantId, userId, role } = auth.context;
-  const viewer = { tenantId, userId, role };
+  // AG-0.5 · the policy must be credited to a visible producer (agent_user_id), else 404.
+  const viewer = { tenantId, userId, role, scope: await scopeFor(auth.context) };
   try {
     return NextResponse.json(await readIncome(viewer, await contactForPolicy(viewer, carrierId, policyNumber), "save_queue"), { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
@@ -53,7 +55,8 @@ export async function PUT(request: NextRequest) {
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Check the income and try again." }, { status: 400 });
   const b = parsed.data;
   const { tenantId, userId, role } = auth.context;
-  const viewer = { tenantId, userId, role };
+  // AG-0.5 · the policy must be credited to a visible producer (agent_user_id), else 404.
+  const viewer = { tenantId, userId, role, scope: await scopeFor(auth.context) };
   try {
     const target = await contactForPolicy(viewer, b.carrier_id, b.policy_number);
     await saveIncome(viewer, target, b.income ? { monthlyDollars: b.income.monthly_dollars, incomeType: b.income.income_type, householdTotal: b.income.household_total, estimate: b.income.estimate } : null, "save_queue");

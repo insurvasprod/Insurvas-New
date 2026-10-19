@@ -2,6 +2,7 @@ import "server-only";
 
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { csvCell as sharedCsvCell } from "@/lib/csv/cell";
+import { keepVisible, scopeQuery, type ProducerScope } from "@/lib/agency/visibility";
 import {
   blockedForPage,
   mayReviewZeroClick,
@@ -49,7 +50,86 @@ function hasFlag(row: ActivityRow, flag: ActivityFlagFilter) {
   return flag === "any" ? row.integrity_flags.length > 0 : row.integrity_flags.includes(flag);
 }
 
-export async function getActivityReport(tenantId: string, actorId: string, actorRole: string, filters: ActivityFilters = {}): Promise<ActivityReport> {
+/**
+ * AG-0.5 · who a narrowed session's activity log covers. An activity row is a card served to an agent
+ * (tenant_lead_activity.agent_user_id); its producer is that agent, the way a dial is its agent's
+ * (tenant_call_attempts.agent_id, D1). A narrowed agency session — producer or setter (itself), manager
+ * (itself and its reports), assistant (the producers it assists) — sees the rows, scorecard lines, recycle
+ * counts and refused dials of the agents in its scope, and nothing of anyone else's: an ?agent_id= outside
+ * the scope reads nothing. The two writes (click, disposition) were already the acting agent's own rows only.
+ *
+ * `scope` comes from scopeFor(auth.context). Null — the default — is today's report, unchanged.
+ */
+export async function getActivityReport(tenantId: string, actorId: string, actorRole: string, filters: ActivityFilters = {}, scope: ProducerScope = null): Promise<ActivityReport> {
+  if (scope === null) return activityReport(tenantId, actorId, actorRole, filters, null);
+  const requested = optionalUuid(filters.agentId, "agent");
+  const agents = requested ? (scope.includes(requested) ? [requested] : []) : [...new Set(scope)];
+  // A setter's report is pinned to itself in SQL as well; the scope says the same.
+  if (agents.length <= 1) return activityReport(tenantId, actorId, actorRole, { ...filters, agentId: agents[0] ?? null }, agents);
+  return scopedMultiAgentReport(tenantId, actorId, actorRole, filters, agents);
+}
+
+/**
+ * Several agents (a manager, or an assistant to more than one producer): the report takes one agent, so
+ * each agent's rows are read whole (export mode), merged into the report's order and paged here; totals,
+ * scorecard and recycle counts are summed over those agents only.
+ */
+async function scopedMultiAgentReport(tenantId: string, actorId: string, actorRole: string, filters: ActivityFilters, agents: readonly string[]): Promise<ActivityReport> {
+  const page = Number.isInteger(filters.page) ? Math.max(1, filters.page as number) : 1;
+  const pageSize = Number.isInteger(filters.pageSize) ? Math.min(Math.max(1, filters.pageSize as number), 500) : 50;
+  const parts = await Promise.all(agents.map((agentId) => activityReport(tenantId, actorId, actorRole, { ...filters, agentId, exportAll: true, page: 1, includeBlocked: false }, [agentId])));
+  const all = parts.flatMap((part) => part.rows).sort((a, b) => b.served_at.localeCompare(a.served_at) || b.id.localeCompare(a.id));
+  const recycle = new Map<string, RecyclePerformanceRow>();
+  for (const row of parts.flatMap((part) => part.recycle_performance)) {
+    const seen = recycle.get(row.source_type) ?? { source_type: row.source_type, served: 0, clicked: 0, contacts: 0, contact_rate_percent: null };
+    seen.served += Number(row.served) || 0;
+    seen.clicked += Number(row.clicked) || 0;
+    seen.contacts += Number(row.contacts) || 0;
+    seen.contact_rate_percent = seen.clicked > 0 ? Math.round((1000 * seen.contacts) / seen.clicked) / 10 : null;
+    recycle.set(row.source_type, seen);
+  }
+  const rows = filters.exportAll ? all : all.slice((page - 1) * pageSize, page * pageSize);
+
+  let blocked: BlockedDialRow[] | null = null;
+  let blockedTotal: number | null = null;
+  const from = boundary(filters.from, "from date");
+  const to = boundary(filters.to, "to date");
+  const flag: ActivityFlagFilter | null = filters.flag ?? (filters.integrityOnly ? "any" : null);
+  const disposition = filters.disposition?.trim() || null;
+  if (filters.includeBlocked !== false && !flag && !disposition && from && to) {
+    const search = filters.search?.trim().toLowerCase().slice(0, 100) || "";
+    const refusals = await readBlockedDials(tenantId, actorId, actorRole, { agentId: null, campaignId: optionalUuid(filters.campaignId, "campaign"), search, from, to }, agents);
+    if (refusals) {
+      blockedTotal = refusals.length;
+      if (!filters.exportAll) {
+        const previousLast = page > 1 ? all[(page - 1) * pageSize - 1]?.served_at ?? null : null;
+        const lastPage = page * pageSize >= all.length;
+        blocked = all.length === 0
+          ? (page === 1 ? refusals : [])
+          : rows.length === 0 ? [] : blockedForPage(refusals, { windowFrom: from, windowTo: to, upper: page === 1 ? to : previousLast ?? rows[0].served_at, lower: rows[rows.length - 1].served_at, lastPage });
+      }
+    }
+  }
+  return {
+    rows,
+    total: all.length,
+    page,
+    page_size: pageSize,
+    export: Boolean(filters.exportAll),
+    scorecard: parts.flatMap((part) => part.scorecard),
+    recycle_performance: [...recycle.values()].sort((a, b) => a.source_type.localeCompare(b.source_type)),
+    blocked,
+    blocked_total: blockedTotal,
+  };
+}
+
+/** The report as it was, for one agent filter. `agents` (a narrowed scope's, at most one here) also trims what SQL returns. */
+async function activityReport(tenantId: string, actorId: string, actorRole: string, filters: ActivityFilters, agents: readonly string[] | null): Promise<ActivityReport> {
+  if (agents !== null && agents.length === 0) {
+    const page = Number.isInteger(filters.page) ? Math.max(1, filters.page as number) : 1;
+    const pageSize = Number.isInteger(filters.pageSize) ? Math.min(Math.max(1, filters.pageSize as number), 500) : 50;
+    return { rows: [], total: 0, page, page_size: pageSize, export: Boolean(filters.exportAll), scorecard: [], recycle_performance: [], blocked: null, blocked_total: null };
+  }
   const from = boundary(filters.from, "from date");
   const to = boundary(filters.to, "to date");
   if (from && to && from >= to) throw new Error("From date must be before the to date");
@@ -117,7 +197,10 @@ export async function getActivityReport(tenantId: string, actorId: string, actor
     }
   }
 
-  return { rows, total, page, page_size: pageSize, export: Boolean(filters.exportAll), scorecard: await withWorked(tenantId, data.scorecard as ScorecardRow[]), recycle_performance: recycle.data as RecyclePerformanceRow[], blocked, blocked_total: blockedTotal };
+  // With an agent pinned the report's scorecard is that agent's already; kept to the scope in case a line
+  // for anyone else is ever returned.
+  const scorecard = agents === null ? data.scorecard as ScorecardRow[] : keepVisible(agents, data.scorecard as ScorecardRow[], (row) => row.agent_user_id);
+  return { rows, total, page, page_size: pageSize, export: Boolean(filters.exportAll), scorecard: await withWorked(tenantId, scorecard), recycle_performance: recycle.data as RecyclePerformanceRow[], blocked, blocked_total: blockedTotal };
 }
 
 /**
@@ -253,6 +336,8 @@ const BLOCKED_LIMIT = 2000;
 async function readBlockedDials(
   tenantId: string, actorId: string, actorRole: string,
   f: { agentId: string | null; campaignId: string | null; search: string; from: string; to: string },
+  /** AG-0.5: a narrowed scope's agents — the refusals of anyone else are not read. Null: no such limit. */
+  agents: ProducerScope = null,
 ): Promise<BlockedDialRow[] | null> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const db = getSupabaseServiceClient() as any;
@@ -266,6 +351,7 @@ async function readBlockedDials(
     .lt("ts", f.to);
   const agent = actorRole === "setter" ? actorId : f.agentId;
   if (agent) query = query.eq("actor_id", agent);
+  query = scopeQuery(query, "actor_id", agents);
   const refused = await query.order("ts", { ascending: false }).limit(BLOCKED_LIMIT);
   if (refused.error) return null;
   const events = ((refused.data ?? []) as { id: string; actor_id: string | null; ts: string; target_id: string | null; metadata: Record<string, unknown> | null }[])

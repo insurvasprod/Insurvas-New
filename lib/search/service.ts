@@ -6,6 +6,8 @@ import { SETTINGS_SECTIONS } from "@/lib/settings/sections";
 import { searchSettings } from "@/lib/settings/registry";
 import { matchActions, suggestedActions, type WorkspaceAction } from "@/lib/search/actions";
 import type { TenantRole } from "@/lib/tenantAuth/roles";
+import { scopeQuery, type ProducerScope } from "@/lib/agency/visibility";
+import { readByLeadIds, visibleLeadIds } from "@/lib/agentTemplates/service";
 
 /**
  * Workspace search.
@@ -95,9 +97,16 @@ export async function stageNames(tenantId: string, stageIds: (string | null)[]):
   return new Map((data ?? []).map((row: { id: string; name: string }) => [row.id, row.name]));
 }
 
-async function searchLeads(tenantId: string, term: string): Promise<SearchHit[]> {
+type LeadHitRow = { id: string; values: Record<string, unknown> | null; product_line: string | null; stage_id: string | null; screening_outcome: string | null; updated_at: string };
+
+/**
+ * `scope` (AG-0.5): null searches every lead of the tenant. A narrowed agency session searches only the
+ * leads its producers hold (visibleLeadIds — the latest work item's owner, D1): each id chunk is searched
+ * with the same limit and the newest eight of the union are kept, which is the answer one query would give.
+ */
+async function searchLeads(tenantId: string, term: string, scope: ProducerScope): Promise<SearchHit[]> {
   const like = pattern(term);
-  const { data, error } = await db()
+  const query = () => db()
     .from("agent_leads")
     .select("id, values, product_line, stage_id, screening_outcome, updated_at")
     .eq("tenant_id", tenantId)
@@ -108,11 +117,18 @@ async function searchLeads(tenantId: string, term: string): Promise<SearchHit[]>
       `values->>phone.ilike.${like}`,
       `values->>phone_number.ilike.${like}`,
       `values->>email.ilike.${like}`,
-    ].join(","))
-    .order("updated_at", { ascending: false })
-    .limit(8);
-  if (error) throw new Error(error.message);
-  const rows = (data ?? []) as { id: string; values: Record<string, unknown> | null; product_line: string | null; stage_id: string | null; screening_outcome: string | null }[];
+    ].join(","));
+  let rows: LeadHitRow[];
+  if (scope === null) {
+    const { data, error } = await query().order("updated_at", { ascending: false }).limit(8);
+    if (error) throw new Error(error.message);
+    rows = (data ?? []) as LeadHitRow[];
+  } else {
+    const ids = await visibleLeadIds(tenantId, scope);
+    rows = (await readByLeadIds<LeadHitRow>(ids, (chunk) => query().in("id", chunk).order("updated_at", { ascending: false }).limit(8), "leads"))
+      .sort((a, b) => String(b.updated_at).localeCompare(String(a.updated_at)))
+      .slice(0, 8);
+  }
   const stages = await stageNames(tenantId, rows.map((row) => row.stage_id));
   return rows.map((row) => {
     const values = (row.values ?? {}) as Record<string, unknown>;
@@ -126,14 +142,18 @@ async function searchLeads(tenantId: string, term: string): Promise<SearchHit[]>
   });
 }
 
-/** By policy number or insured, which are the two things a person reads off a carrier email. */
-async function searchPolicies(tenantId: string, term: string): Promise<SearchHit[]> {
+/**
+ * By policy number or insured, which are the two things a person reads off a carrier email. The manual
+ * book (tenant_policies) carries no producer column but `created_by`; a narrowed agency session (AG-0.5)
+ * finds the policies its producers entered, and nothing else.
+ */
+async function searchPolicies(tenantId: string, term: string, scope: ProducerScope): Promise<SearchHit[]> {
   const like = pattern(term);
-  const { data, error } = await db()
+  const { data, error } = await scopeQuery(db()
     .from("tenant_policies")
     .select("id, policy_number, insured_name, carrier, annual_premium_cents, status")
     .eq("tenant_id", tenantId)
-    .or([`policy_number.ilike.${like}`, `insured_name.ilike.${like}`].join(","))
+    .or([`policy_number.ilike.${like}`, `insured_name.ilike.${like}`].join(",")), "created_by", scope)
     .order("effective_date", { ascending: false })
     .limit(5);
   if (error) throw new Error(error.message);
@@ -270,6 +290,12 @@ export async function searchWorkspace(input: {
   hiddenSettings?: readonly string[];
   query: string;
   limit?: number;
+  /**
+   * AG-0.5: the session's producer scope (scopeFor(auth.context)). Null — the default — answers as before.
+   * Narrowed: leads and policies are the scope's only, and lead lists are not offered — the agency's lists
+   * (and their received/assigned counts, which count every producer's leads) are refused to such a session.
+   */
+  scope?: ProducerScope;
 }): Promise<{ hits: SearchHit[]; total: number; truncated: boolean }> {
   const term = input.query.replace(/\s+/g, " ").trim();
   if (term.length < 2) return { hits: [], total: 0, truncated: false };
@@ -278,10 +304,11 @@ export async function searchWorkspace(input: {
   const allowed = (access: { feature: string; roles: TenantRole[] }) => can(access, granted, input.role);
   const none = Promise.resolve([] as SearchHit[]);
 
+  const scope = input.scope ?? null;
   const settled = await Promise.allSettled([
-    allowed(ACCESS.leads) ? searchLeads(input.tenantId, term) : none,
-    allowed(ACCESS.policies) ? searchPolicies(input.tenantId, term) : none,
-    allowed(ACCESS.leadLists) ? searchLeadLists(input.tenantId, term) : none,
+    allowed(ACCESS.leads) ? searchLeads(input.tenantId, term, scope) : none,
+    allowed(ACCESS.policies) ? searchPolicies(input.tenantId, term, scope) : none,
+    allowed(ACCESS.leadLists) && scope === null ? searchLeadLists(input.tenantId, term) : none,
     allowed(ACCESS.partners) ? searchPartners(input.tenantId, term) : none,
   ]);
 

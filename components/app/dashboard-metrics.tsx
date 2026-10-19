@@ -8,7 +8,8 @@ import {
 import { CountUp } from "@/components/ui/count-up";
 import { TableCard } from "@/components/ui/table-card";
 import { tileFigureShown, type DashboardTile } from "@/lib/dashboard/tiles";
-import { tileMetric } from "@/lib/dashboard/summaries";
+import { tileMetric, type TileViewer } from "@/lib/dashboard/summaries";
+import type { ProducerScope } from "@/lib/agency/visibilityCore";
 import type { TenantRole } from "@/lib/tenantAuth/roles";
 
 /**
@@ -24,6 +25,9 @@ import type { TenantRole } from "@/lib/tenantAuth/roles";
  * from (`shared` in lib/dashboard/tiles.ts), and otherwise the way in, without a number.
  *
  * Every figure streams in on its own, so one slow read holds one cell, not the card.
+ *
+ * AG-0.5: `scope` is the session's producer scope (scopeFor, on the page; default null = no filter).
+ * Under a scope each shared figure counts only what that session may see (lib/dashboard/summaries).
  */
 const ICONS: Record<string, LucideIcon> = {
   "briefcase-business": BriefcaseBusiness,
@@ -41,8 +45,8 @@ const ICONS: Record<string, LucideIcon> = {
 
 const TONE = { danger: "text-[var(--error-ink)]", warning: "text-[var(--warning-ink)]", good: "text-[var(--success-ink)]" } as const;
 
-async function MetricFigure({ tile, tenantId }: { tile: DashboardTile; tenantId: string }) {
-  const metric = await tileMetric(tile.key, tenantId);
+async function MetricFigure({ tile, tenantId, viewer }: { tile: DashboardTile; tenantId: string; viewer: TileViewer | undefined }) {
+  const metric = await tileMetric(tile.key, tenantId, viewer);
   const shown = metric ? metric.display ?? metric.value.toLocaleString("en-US") : null;
   return (
     <>
@@ -65,14 +69,17 @@ function MetricFallback() {
   );
 }
 
-export function DashboardMetrics({ tiles, tenantId, role }: { tiles: DashboardTile[]; tenantId: string; role: TenantRole }) {
+export function DashboardMetrics({ tiles, tenantId, role, userId, scope = null }: { tiles: DashboardTile[]; tenantId: string; role: TenantRole; userId?: string; scope?: ProducerScope }) {
   if (!tiles.length) return null;
+  // No scope (solo, owner/admin, bookkeeper, retention), or no reader to scope by: every figure as before.
+  const viewer: TileViewer | undefined = scope !== null && userId ? { userId, scope } : undefined;
   return (
     <TableCard title="Your modules">
       <ul className="m-0 grid list-none grid-cols-1 gap-px overflow-hidden border-t border-border bg-border p-0 sm:grid-cols-2 xl:grid-cols-3">
         {tiles.map((tile) => {
           const Icon = ICONS[tile.icon] ?? SquareStack;
-          const figure = tileFigureShown(tile, role);
+          // A scope with no reader to scope by fails closed: the way in, without a number.
+          const figure = tileFigureShown(tile, role) && (scope === null || viewer !== undefined);
           return (
             <li key={tile.key} className="bg-card">
               <Link
@@ -88,7 +95,7 @@ export function DashboardMetrics({ tiles, tenantId, role }: { tiles: DashboardTi
                 {figure && (
                   <span className="flex min-w-0 max-w-[50%] flex-col items-end gap-1 text-right">
                     <Suspense fallback={<MetricFallback />}>
-                      <MetricFigure tile={tile} tenantId={tenantId} />
+                      <MetricFigure tile={tile} tenantId={tenantId} viewer={viewer} />
                     </Suspense>
                   </span>
                 )}

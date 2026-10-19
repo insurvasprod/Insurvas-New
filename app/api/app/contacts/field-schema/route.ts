@@ -4,6 +4,7 @@ import { audit } from "@/lib/audit/log";
 import { fieldSchema } from "@/lib/contacts/schemas";
 import { fieldSchemaForTenant, saveFieldSchema } from "@/lib/contacts/service";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
+import { refuseNarrowInAgency } from "@/lib/agency/routeScope";
 
 const CONTACT_ROLES = ["owner", "producer", "assistant"] as const;
 
@@ -17,6 +18,8 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   const auth = await requireFeatureRole("duplicate_detection", CONTACT_ROLES, { write: true });
   if (auth instanceof NextResponse) return auth;
+  const refused = await refuseNarrowInAgency(auth.context, "Contact fields");
+  if (refused) return refused;
   const parsed = fieldSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Field definition is invalid" }, { status: 400 });
   try {

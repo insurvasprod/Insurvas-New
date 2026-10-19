@@ -132,7 +132,7 @@ export function AssignmentWorkspace({ canManage }: { canManage: boolean }) {
                 const pinned = draft.matchType === "fallback";
                 const skipLine = ruleSkipLine(draft.id);
                 const operator = draft.matchType === "fallback" && draft.strategy === "least_loaded" ? "fewest open first" : MATCH_OPERATOR[draft.matchType];
-                const goesTo = `Goes to ${assigneeSummary(draft.assigneeIds)}${draft.strategy === "least_loaded" ? ", fewest open first" : ", in turn"}`;
+                const goesTo = `Goes to ${assigneeSummary(draft.assigneeIds)}${draft.strategy === "least_loaded" ? ", fewest open first" : draft.strategy === "best_placement" ? ", best recent placement first" : ", in turn"}`;
                 return (
                   <li
                     key={draft.key}

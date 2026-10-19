@@ -1,3 +1,4 @@
+import { scopeFor } from "@/lib/agency/visibility";
 import { guardPage } from "@/lib/entitlements/guardPage";
 import { getLapseRisk, LAPSE_SCHEMA_PENDING_MESSAGE } from "@/lib/lapseRisk/service";
 import { loadBoard, loadSaveRates } from "@/lib/ingestion/retentionStore";
@@ -31,8 +32,8 @@ export default async function LapseRiskPage({ searchParams }: { searchParams: Pr
     );
   }
 
-  if (!["owner", "producer"].includes(guard.role)) {
-    return <RoleGateNotice featureLabel="Lapse risk" detail="Only owners and producers can view retention risk and commission exposure." />;
+  if (!["owner", "producer", "retention"].includes(guard.role)) {
+    return <RoleGateNotice featureLabel="Lapse risk" detail="Only owners, producers and retention reps can view retention risk and the advance at risk." />;
   }
 
   const { view } = await searchParams;
@@ -54,7 +55,7 @@ export default async function LapseRiskPage({ searchParams }: { searchParams: Pr
     return <LapseRiskBoard policies={legacy.policies} totals={legacy.totals} readOnly={readOnly} tabs={tabs()} />;
   }
 
-  const viewer = { tenantId: guard.context.tenantId, userId: guard.context.userId, role: guard.role };
+  const viewer = { tenantId: guard.context.tenantId, userId: guard.context.userId, role: guard.role, scope: await scopeFor(guard.context) };
   const [board, rates] = await Promise.all([loadBoard(viewer), loadSaveRates(viewer)]);
   return (
     <div className="m-stagger flex min-h-0 flex-grow flex-col gap-6">

@@ -4,6 +4,7 @@ import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isSchemaGap } from "@/lib/supabase/schemaGap";
 import { getTenantTemplateForProduct } from "@/lib/agentTemplates/service";
 import { resolveRuntimeStage } from "@/lib/pipelines/service";
+import { rowVisible, scopeFor, scopeQuery } from "@/lib/agency/visibility";
 
 import { isDue, leadNote, type Category, type ReasonSource, type WinbackBand } from "./winback";
 
@@ -214,6 +215,17 @@ export type Winback = {
   lastRun: { released: number; blocked: number } | null;
 };
 
+/**
+ * The policy owners (policy_current.agent_user_id) a viewer's win-back covers: the agency scope for a
+ * narrowed agency session (scopeFor — from the viewer's session context, never the request), else the
+ * producer himself, else null (everyone: an owner, or a solo agent's own book).
+ */
+async function winbackOwners(viewer: Viewer): Promise<readonly string[] | null> {
+  const scope = await scopeFor(viewer);
+  if (scope !== null) return scope;
+  return viewer.role === "producer" ? [viewer.userId] : null;
+}
+
 export async function loadWinback(viewer: Viewer, options: { release: boolean } = { release: true }): Promise<Winback | { available: false }> {
   let lastRun: { released: number; blocked: number } | null = null;
   try {
@@ -235,9 +247,12 @@ export async function loadWinback(viewer: Viewer, options: { release: boolean } 
     if (isSchemaGap(error as Loose)) return { available: false };
     throw error;
   }
-  if (viewer.role === "producer") {
+  // AG-0.5: who this viewer may see the policies of (policy_current.agent_user_id, D1). A narrowed agency
+  // session: its scope (a manager's reports included). Otherwise a producer: his own, as before. Null: all.
+  const owners = await winbackOwners(viewer);
+  if (owners !== null) {
     const numbers = [...new Set([...rows.map((r) => r.source_policy_number), ...claims.map((c) => c.policy_number)])];
-    const mine = new Set((await inChunks(numbers, (part) => db().from("policy_current").select("carrier_id, policy_number").eq("tenant_id", viewer.tenantId).eq("agent_user_id", viewer.userId).in("policy_number", part))).map((p: Loose) => `${p.carrier_id}|${p.policy_number}`));
+    const mine = new Set((await inChunks(numbers, (part) => scopeQuery(db().from("policy_current").select("carrier_id, policy_number").eq("tenant_id", viewer.tenantId), "agent_user_id", owners).in("policy_number", part))).map((p: Loose) => `${p.carrier_id}|${p.policy_number}`));
     rows = rows.filter((r) => mine.has(`${r.carrier_id}|${r.source_policy_number}`));
     claims = claims.filter((c) => mine.has(`${c.carrier_id}|${c.policy_number}`));
   }
@@ -277,9 +292,10 @@ export async function resolveClaim(viewer: Viewer, id: string, note: string | nu
   }
   if (!data) throw new WinbackError("That follow-up isn't here.", 404);
   if (data.resolved_at) throw new WinbackError("That follow-up is already handled.", 409);
-  if (viewer.role === "producer") {
+  const owners = await winbackOwners(viewer);
+  if (owners !== null) {
     const p = await db().from("policy_current").select("agent_user_id").eq("tenant_id", viewer.tenantId).eq("carrier_id", data.carrier_id).eq("policy_number", data.policy_number).maybeSingle();
-    if (p.data?.agent_user_id !== viewer.userId) throw new WinbackError("That follow-up isn't in your book.", 404);
+    if (!rowVisible(owners, p.data?.agent_user_id)) throw new WinbackError("That follow-up isn't in your book.", 404);
   }
   const update = await db().from("household_claim_followup").update({ resolved_at: new Date().toISOString(), resolved_by: viewer.userId, note: note?.trim() || null }).eq("tenant_id", viewer.tenantId).eq("id", id).is("resolved_at", null);
   if (update.error) throw new Error(`Could not mark it handled: ${update.error.message}`);

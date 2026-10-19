@@ -4,11 +4,14 @@ import { audit } from "@/lib/audit/log";
 import { mergeSchema } from "@/lib/contacts/schemas";
 import { ContactConflictError, mergeContacts } from "@/lib/contacts/service";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
+import { refuseNarrowInAgency } from "@/lib/agency/routeScope";
 
 /** Merges two contacts. With review_id, the queued pair is resolved in the same transaction. */
 export async function POST(request: NextRequest) {
   const auth = await requireFeatureRole("duplicate_detection", ["owner", "producer", "assistant"] as const, { write: true });
   if (auth instanceof NextResponse) return auth;
+  const refused = await refuseNarrowInAgency(auth.context, "Contact merging");
+  if (refused) return refused;
   const parsed = mergeSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Merge selection is invalid" }, { status: 400 });
   try {

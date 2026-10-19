@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import { notFound } from "next/navigation";
 
+import { guardCase } from "@/lib/agency/guards";
 import { guardPage } from "@/lib/entitlements/guardPage";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
@@ -27,6 +28,8 @@ export default async function ApplicationWorkspacePage({ params, searchParams }:
     return <Suspense><ApplicationWorkspace initial={FIXTURE_CASE} sample /></Suspense>;
   }
   if (!isUuid(caseId)) notFound();
+  // AG-0.5: another producer's case is not found, not forbidden — its existence isn't confirmed.
+  if (await guardCase(guard.context, caseId)) notFound();
   let view: Awaited<ReturnType<typeof getCaseView>>;
   // The agency's zone, so the workspace prints times as the Applications list does (and the server
   // render matches the browser's).

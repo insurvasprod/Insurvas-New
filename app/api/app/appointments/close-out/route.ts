@@ -5,6 +5,8 @@ import { audit } from "@/lib/audit/log";
 import { appointmentFacts } from "@/lib/appointments/booking";
 import { listCloseOutAppointments, markCloseOutOutcome } from "@/lib/appointments/closeOut";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
+import { scopeFor } from "@/lib/agency/visibility";
+import { guardAppointment } from "@/lib/appointments/scope";
 
 const OUTCOME_ROLES = ["owner", "producer"] as const;
 // LA-2.11-5 (20260929202000): booked -> confirmed is PATCH /api/app/appointments. 'rescheduled' is not
@@ -34,7 +36,8 @@ export async function GET() {
   const auth = await requireFeatureRole("outbound_dialing", OUTCOME_ROLES);
   if (auth instanceof NextResponse) return auth;
   try {
-    return NextResponse.json({ appointments: await listCloseOutAppointments(auth.context.tenantId) }, { headers: { "Cache-Control": "no-store" } });
+    // AG-0.5: in an agency a producer closes out only his own (or, a manager, his reports') appointments.
+    return NextResponse.json({ appointments: await listCloseOutAppointments(auth.context.tenantId, await scopeFor(auth.context), auth.context.userId) }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     return failure(error);
   }
@@ -45,6 +48,9 @@ export async function POST(request: NextRequest) {
   if (auth instanceof NextResponse) return auth;
   const parsed = bodySchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Choose a valid appointment outcome." }, { status: 400 });
+  // AG-0.5: another producer's appointment answers as one that does not exist. Null scope: unchanged.
+  const hidden = await guardAppointment(auth.context, parsed.data.appointment_id, await scopeFor(auth.context));
+  if (hidden) return hidden;
   try {
     // LA-2.11-5: nobody shows up, or fails to, for a call that has not happened. The database refuses
     // it too (APPOINTMENT_NOT_YET_HELD, 20260929202000); this answers before that is applied.

@@ -260,6 +260,21 @@ export const ROLE_HOMES: Record<TenantRole, RoleHome> = {
       { label: "Policies", opens: "book.policies" },
     ],
   },
+  // LA-5.8 · the retention rep: their own queue, the cases with a deadline, the board of what has
+  // already slipped, and their own scorecard. No money tiles — the exposure on a card is the only
+  // figure the role sees, and it is on the card.
+  retention: {
+    sections: ["shortcuts"],
+    figures: [],
+    needs: [],
+    money: [],
+    actions: [
+      { label: "Save queue", opens: "retention.save-queue" },
+      { label: "Reinstatement", opens: "retention.winback" },
+      { label: "Lapse risk", opens: "retention.lapse-risk" },
+      { label: "My scorecard", opens: "retention.scorecard" },
+    ],
+  },
 };
 
 export type HomeLink = { key: string; href: string };

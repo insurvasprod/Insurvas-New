@@ -1,9 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 
-import { DialerWorkflowError, diagnoseEmptyQueue, getDialerStats, getQueuePreview } from "@/lib/dialerScripts/service";
+import { DialerWorkflowError, diagnoseAssignedQueue, diagnoseEmptyQueue, getDialerStats, getQueuePreview } from "@/lib/dialerScripts/service";
 import { PRIORITY_TIERS } from "@/lib/dialerScripts/display";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
+import { scopeFor } from "@/lib/agency/visibility";
 
 // The same roles as every dialer route (a test pins them to rolesWith("dialer.use")). A literal
 // array because the money-route guard reads these lists statically.
@@ -28,14 +29,18 @@ export async function GET(request: NextRequest) {
   try {
     // The header's own-today figures ride along: the screen reloads this after every serve and
     // disposition, which is exactly when they change. A failed count is null, never a fake 0.
+    // AG-0.5 / AG-0.10: in an agency a narrow session lists (and counts) only the leads assigned to it;
+    // the stats were always its own. Null scope: the whole servable list, as before.
+    const scope = await scopeFor(auth.context);
     const [preview, stats] = await Promise.all([
-      getQueuePreview({ tenantId: auth.context.tenantId, agentId: auth.context.userId, tiers }),
+      getQueuePreview({ tenantId: auth.context.tenantId, agentId: auth.context.userId, tiers, scope }),
       getDialerStats({ tenantId: auth.context.tenantId, agentId: auth.context.userId }).catch(() => null),
     ]);
     // An empty list says why (LA-2.8-6), read-only: the same diagnosis Serve next gives, without
     // pressing it. Only for the whole list; a priority filter that is empty is just a filter.
     const empty = preview.available && preview.count === 0 && tiers === null
-      ? await diagnoseEmptyQueue(auth.context.tenantId, auth.context.userId).catch(() => null)
+      // A scoped list is the agent's own assigned leads, so its emptiness is diagnosed from them alone.
+      ? await (scope === null ? diagnoseEmptyQueue(auth.context.tenantId, auth.context.userId) : diagnoseAssignedQueue(auth.context.tenantId, auth.context.userId)).catch(() => null)
       : null;
     return NextResponse.json({ ...preview, stats, emptyReason: empty?.message ?? null, emptyCode: empty?.code ?? null }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {

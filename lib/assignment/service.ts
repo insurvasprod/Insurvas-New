@@ -155,7 +155,7 @@ export async function getAssignmentWorkspace(tenantId: string): Promise<Assignme
   return {
     rules: rows<AssignmentRule>(rules.data).map((rule) => ({
       ...rule,
-      strategy: rule.strategy === "least_loaded" ? "least_loaded" : "round_robin",
+      strategy: rule.strategy === "least_loaded" || rule.strategy === "best_placement" ? rule.strategy : "round_robin",
       conditions: Array.isArray(rule.conditions) ? rule.conditions : [],
     })),
     members,

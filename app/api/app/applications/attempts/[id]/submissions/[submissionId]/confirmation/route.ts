@@ -4,6 +4,7 @@ import { actorOf, failure, isUuid } from "@/lib/applications/http";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import { MAX_CONFIRMATION_BYTES } from "@/lib/applications/afterSubmitRules";
 import { attachConfirmation, confirmationUrl } from "@/lib/applications/confirmations";
+import { guardAttempt } from "@/lib/agency/guards";
 
 const NOT_FOUND = { error: "That submission could not be found." };
 
@@ -14,6 +15,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const actor = actorOf(auth, request);
   const { id, submissionId } = await params;
   if (!isUuid(id) || !isUuid(submissionId)) return NextResponse.json(NOT_FOUND, { status: 404 });
+  // AG-0.5 · a producer cannot open another producer's record by id (404, not 403).
+  const hidden = await guardAttempt(auth.context, id);
+  if (hidden) return hidden;
   try {
     return NextResponse.json(await confirmationUrl(actor, id, submissionId), { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
@@ -28,6 +32,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const actor = actorOf(auth, request);
   const { id, submissionId } = await params;
   if (!isUuid(id) || !isUuid(submissionId)) return NextResponse.json(NOT_FOUND, { status: 404 });
+  // AG-0.5 · a producer cannot open another producer's record by id (404, not 403).
+  const hidden = await guardAttempt(auth.context, id);
+  if (hidden) return hidden;
   const declared = Number(request.headers.get("content-length") ?? 0);
   if (declared > MAX_CONFIRMATION_BYTES + 64 * 1024) return NextResponse.json({ error: "The confirmation must be 10 MB or smaller.", code: "CONFIRMATION_TOO_LARGE" }, { status: 413 });
   const form = await request.formData().catch(() => null);

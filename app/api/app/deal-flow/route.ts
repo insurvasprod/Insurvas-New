@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { audit } from "@/lib/audit/log";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import { createManualDeal, dealFlowCsvHeader, dealFlowCsvLines, dealFlowExportPages, listDealFlow } from "@/lib/dealFlow/service";
+import { scopeFor, type ProducerScope } from "@/lib/agency/visibility";
 
 function queryParams(request: NextRequest) {
   const params = request.nextUrl.searchParams;
@@ -21,8 +22,8 @@ function errorResponse(error: unknown, fallback: string) { return NextResponse.j
  * starts, so a bad filter or a failed first read is still a 400. A later failure aborts the
  * download rather than ending it early, so a cut-short file never looks complete.
  */
-async function csvResponse(tenantId: string, filters: ReturnType<typeof queryParams>) {
-  const pages = dealFlowExportPages(tenantId, { ...filters, focusLeadId: undefined, page: 1 });
+async function csvResponse(tenantId: string, filters: ReturnType<typeof queryParams>, scope: ProducerScope) {
+  const pages = dealFlowExportPages(tenantId, { ...filters, focusLeadId: undefined, page: 1 }, scope);
   const first = await pages.next();
   const encoder = new TextEncoder();
   let started = false;
@@ -54,8 +55,11 @@ export async function GET(request: NextRequest) {
   if (auth instanceof NextResponse) return auth;
   try {
     const filters = queryParams(request);
-    if (request.nextUrl.searchParams.get("format") === "csv") return await csvResponse(auth.context.tenantId, filters);
-    const result = await listDealFlow(auth.context.tenantId, filters);
+    // AG-0.5: a narrowed agency session reads (and exports) the deals credited to its producers only; its
+    // ?agent_id= can narrow further inside that scope but never widen it. Scope comes from the session.
+    const scope = await scopeFor(auth.context);
+    if (request.nextUrl.searchParams.get("format") === "csv") return await csvResponse(auth.context.tenantId, filters, scope);
+    const result = await listDealFlow(auth.context.tenantId, filters, scope);
     return NextResponse.json({ ...result, readOnly: auth.entitlement.access === "read_only" });
   } catch (error) { return errorResponse(error, "Could not load daily deal flow"); }
 }

@@ -18,6 +18,8 @@ export type ModuleAccess = { inbound: boolean; outbound: boolean };
 // 2026-10-15 (owner decision): eleven short groups instead of eight long ones — no dropdown past eight.
 export const NAV_GROUPS: readonly { section: string; icon: string }[] = [
   { section: "Today", icon: "calendar-check" },
+  // Agency Module 0: only an agency plan has anything in it.
+  { section: "Team", icon: "users" },
   { section: "Leads", icon: "contact-round" },
   { section: "Sales", icon: "file-check" },
   { section: "Book", icon: "book-open" },

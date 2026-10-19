@@ -2,6 +2,7 @@ import { guardPage } from "@/lib/entitlements/guardPage";
 import { bookGapScan, buildEvidenceReport, EvidenceError, mayGenerateReports, type EvidenceScope } from "@/lib/compliance/evidenceReport";
 import { evidenceRange } from "@/lib/compliance/evidenceRange";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
+import { scopeFor } from "@/lib/agency/visibility";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { EvidenceReportView } from "@/components/app/compliance/evidence-report";
 import { PageHeader } from "@/components/ui/page-header";
@@ -20,6 +21,8 @@ export default async function EvidenceReportPage({ searchParams }: { searchParam
   if (!["owner", "producer"].includes(guard.role)) {
     return <RoleGateNotice featureLabel="Evidence report" detail="Only owners and producers can see a consumer's compliance records." />;
   }
+  // AG-0.5: inside an agency this is the agency's business, not a producer's work — its API refuses a narrow session too.
+  if ((await scopeFor(guard.context)) !== null) return <RoleGateNotice featureLabel="Evidence report" detail="In an agency, the owner and admins handle evidence report." />;
   if (!(await mayGenerateReports(guard.context.tenantId, guard.role))) {
     return <RoleGateNotice featureLabel="Evidence report" detail="Your agency has not allowed your role to generate compliance reports." />;
   }

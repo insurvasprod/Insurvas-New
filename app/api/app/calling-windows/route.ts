@@ -12,6 +12,8 @@ import {
   saveCampaignCallingWindow,
   saveTenantCallingWindow,
 } from "@/lib/callingWindow/service";
+import { refuseNarrowInAgency } from "@/lib/agency/routeScope";
+import { scopeFor } from "@/lib/agency/visibility";
 
 /**
  * LA-2.4 · the hours this agency is willing to dial in.
@@ -65,9 +67,13 @@ export async function GET() {
   const auth = await requireFeatureRole("outbound_dialing", READ_ROLES);
   if (auth instanceof NextResponse) return auth;
   try {
-    const settings = await getCallingWindows(auth.context.tenantId);
+    const [settings, scope] = await Promise.all([getCallingWindows(auth.context.tenantId), scopeFor(auth.context)]);
+    // AG-0.5: the windows, switches and state rules are the agency's configuration and every dialer
+    // needs them. `dialingStates` is the one part built from rows — every live lead's state, whoever owns
+    // it — so a narrow session inside an agency gets null, and the board falls back to the states whose
+    // rule bites (statesToList's "notable" basis).
     return NextResponse.json(
-      { ...settings, canEdit: auth.context.role === "owner" },
+      { ...settings, ...(scope === null ? {} : { dialingStates: null }), canEdit: auth.context.role === "owner" },
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch (error) {
@@ -81,6 +87,8 @@ export async function GET() {
 export async function PUT(request: NextRequest) {
   const auth = await requireFeatureRole("outbound_dialing", WRITE_ROLES, { write: true });
   if (auth instanceof NextResponse) return auth;
+  const refused = await refuseNarrowInAgency(auth.context, "Calling windows");
+  if (refused) return refused;
 
   const parsed = saveSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success)

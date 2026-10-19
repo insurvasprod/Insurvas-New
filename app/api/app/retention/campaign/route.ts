@@ -6,6 +6,7 @@ import { isRecordUuid } from "@/lib/ingestion/path";
 import { LOGGABLE_OUTCOMES } from "@/lib/retention/campaign";
 import { CampaignError, logConversionCall, saveTalkTrack } from "@/lib/retention/campaignStore";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
+import { scopeFor } from "@/lib/agency/visibility";
 
 /**
  * LA-5.5 (Notion sprint) · the paper-bill campaign. Log a call that didn't open a request (no answer,
@@ -27,13 +28,15 @@ const body = z.discriminatedUnion("action", [
 ]);
 
 export async function POST(request: NextRequest) {
-  const auth = await requireFeatureRole("payment_repair", ["owner", "producer"] as const, { write: true });
+  const auth = await requireFeatureRole("payment_repair", ["owner", "producer", "retention"] as const, { write: true });
   if (auth instanceof NextResponse) return auth;
   const parsed = body.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Check the request and try again." }, { status: 400 });
   const b = parsed.data;
   const { tenantId, userId, role } = auth.context;
-  const viewer = { tenantId, userId, role };
+  // AG-0.5 · a call is logged only on a policy credited to a visible producer (agent_user_id); null scope for
+  // the owner, bookkeeper and retention role leaves this exactly as it was.
+  const viewer = { tenantId, userId, role, scope: await scopeFor(auth.context) };
   try {
     if (b.action === "talk_track") {
       if (role !== "owner") return NextResponse.json({ error: "Only an owner can change the talk track." }, { status: 403 });

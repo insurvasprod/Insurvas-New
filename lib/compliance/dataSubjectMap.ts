@@ -113,6 +113,7 @@ export const DATA_SUBJECT_MAP: Record<string, SubjectTable> = {
   // Kept as they are: no direct identifier, and part of a record the business must keep.
   compliance_index: { action: "keep", reason: "Pointers only: rebuilt from the sources, so it follows what was purged; the do-not-call pointer stays." },
   policy_match: { action: "keep", reason: "The link between a policy and its sale: ids only, part of the policy record." },
+  application_review: { action: "keep", reason: "AG-1.11 · a review of a producer's paperwork: ids, error types and the reviewer's note to the producer; the application it points at is anonymised with it." },
   commission_entry: { action: "keep", reason: "Commission ledger: amounts and policy numbers, no personal identifiers." },
   commission_account_entry: { action: "keep", reason: "Commission account ledger: amounts only." },
   commission_discrepancy: { action: "keep", reason: "Commission discrepancies: amounts and policy numbers, part of the financial record." },

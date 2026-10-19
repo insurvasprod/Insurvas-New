@@ -12,7 +12,7 @@ import { Pager, paginate } from "@/components/ui/pager";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { TableCard } from "@/components/ui/table-card";
 import { fileDay } from "@/lib/ingestion/constants";
-import { ACTION_TAKEN, BANDS, CONTACT_OUTCOME_LABELS, CONTACT_OUTCOMES, MISSING_LABELS, SIGNAL_LABELS, SNOOZE_DAYS, type ActionTaken, type Band, type ContactOutcome, type Signal } from "@/lib/retention/constants";
+import { ACTION_TAKEN, BANDS, CLIENT_REASON_LABELS, CLIENT_REASONS, CONTACT_OUTCOME_LABELS, CONTACT_OUTCOMES, MISSING_LABELS, SIGNAL_LABELS, SNOOZE_DAYS, type ActionTaken, type Band, type ClientReason, type ContactOutcome, type Signal } from "@/lib/retention/constants";
 import { SORT_LABELS, SORTS, type QueueSort } from "@/lib/retention/queue";
 import { REQUEST_FOR_FIX, REQUEST_LABELS, STATUS_LABELS, type RequestType } from "@/lib/retention/servicing";
 import { ServicingRequestDialog } from "@/components/app/servicing-request-dialog";
@@ -87,7 +87,7 @@ export function SaveQueueBoard({ queue, sort, readOnly, canStartFix }: { queue: 
             {(band || carrier) && <ClearFiltersButton onClick={clear} />}
             <RefreshButton onClick={() => startRefresh(() => router.refresh())} refreshing={refreshing} />
           </>}>
-            <select aria-label="Sort the queue" className={toolbarControl} value={sort} onChange={(e) => router.push(e.target.value === "value" ? pathname : `${pathname}?sort=${e.target.value}`)}>
+            <select aria-label="Sort the queue" className={toolbarControl} value={sort} onChange={(e) => router.push(e.target.value === queue.settings.queueDefaultSort ? pathname : `${pathname}?sort=${e.target.value}`)}>
               {SORTS.map((s) => <option key={s} value={s}>{SORT_LABELS[s]}</option>)}
             </select>
             <select aria-label="Filter by risk" className={toolbarControl} value={band} onChange={(e) => { setBand(e.target.value); setPage(1); }}>
@@ -102,6 +102,7 @@ export function SaveQueueBoard({ queue, sort, readOnly, canStartFix }: { queue: 
             )}
             <span className="text-sm text-muted-foreground">
               {queue.usedMedium ? "Nothing is high risk: medium shown. " : ""}
+              {queue.heldOut ? `${queue.heldOut.toLocaleString("en-US")} held back for the holdout. ` : ""}
               {queue.computedAt ? `Scored ${fileDay(queue.computedAt.slice(0, 10))} · weights v${queue.weightSetVersion}` : null}
             </span>
           </DataToolbar>
@@ -133,6 +134,7 @@ export function SaveQueueBoard({ queue, sort, readOnly, canStartFix }: { queue: 
                     {card.phone ? <span className="block select-all font-medium tabular-nums text-foreground" title="Check the calling window and do-not-call list before dialling">{phoneText(card.phone)}</span> : <span className="block text-xs text-muted-foreground">No phone on file</span>}
                     <Link href={`/app/policies/carrier/${card.carrierId}/${encodeURIComponent(card.policyNumber)}`} className="block text-xs text-muted-foreground hover:underline">{card.carrierName} · {card.policyNumber}</Link>
                     {card.agentName && <span className="block text-xs text-muted-foreground">{card.agentName}</span>}
+                    {queue.showOwners && card.owner && <span className="block text-xs text-muted-foreground">Owner: {card.owner.name}</span>}
                   </td>
                   <td>
                     <span className={`inline-flex items-baseline gap-1 rounded-full border border-dashed border-current px-2.5 py-0.5 font-semibold tabular-nums ${BAND_INK[card.band]}`} title={breakdownText(card)}>
@@ -212,6 +214,7 @@ async function post(body: Record<string, unknown>) {
 
 function LogDialog({ card, onClose, onDone }: { card: SaveCard; onClose: () => void; onDone: () => void }) {
   const [outcome, setOutcome] = useState<ContactOutcome | "">("");
+  const [clientReason, setClientReason] = useState<ClientReason | "">("");
   const [action, setAction] = useState<ActionTaken>("none");
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
@@ -223,7 +226,7 @@ function LogDialog({ card, onClose, onDone }: { card: SaveCard; onClose: () => v
     setBusy(true);
     setError(null);
     try {
-      await post({ action: "log_attempt", carrier_id: card.carrierId, policy_number: card.policyNumber, outcome, action_taken: action, note: note.trim() || null });
+      await post({ action: "log_attempt", carrier_id: card.carrierId, policy_number: card.policyNumber, outcome, action_taken: action, note: note.trim() || null, client_reason: outcome === "reached_refused" && clientReason ? clientReason : null });
       notify.done("Logged. The card leaves the queue for the cooldown, and comes back sooner only if the risk rises.");
       onDone();
     } catch (e) {
@@ -248,6 +251,15 @@ function LogDialog({ card, onClose, onDone }: { card: SaveCard; onClose: () => v
               {CONTACT_OUTCOMES.map((o) => <option key={o} value={o}>{CONTACT_OUTCOME_LABELS[o]}</option>)}
             </select>
           </label>
+          {outcome === "reached_refused" && (
+            <label htmlFor="save-client-reason" className={labelClass}>
+              Why they said no
+              <select id="save-client-reason" className={field} value={clientReason} onChange={(e) => setClientReason(e.target.value as ClientReason | "")}>
+                <option value="">They didn&apos;t say, or something else</option>
+                {CLIENT_REASONS.map((r) => <option key={r} value={r}>{CLIENT_REASON_LABELS[r]}</option>)}
+              </select>
+            </label>
+          )}
           <label htmlFor="save-action" className={labelClass}>
             What you did
             <select id="save-action" className={field} value={action} onChange={(e) => setAction(e.target.value as ActionTaken)}>

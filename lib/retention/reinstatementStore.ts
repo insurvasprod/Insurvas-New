@@ -3,10 +3,13 @@ import "server-only";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isSchemaGap } from "@/lib/supabase/schemaGap";
 import { advanceAtRisk } from "@/lib/ingestion/retentionStore";
+import { rowVisible, scopeQuery, type ProducerScope } from "@/lib/agency/visibility";
 
 import { agencyToday } from "./agencyDay";
 import { settingsFromRow, type RetentionSettings } from "./constants";
 import { canMove, caseOrder, compare, daysRemaining, estimateOwed, OPEN_CASE_STATUSES, urgencyOf, type CaseStatus, type Comparison, type Urgency } from "./reinstatement";
+import { ownsCard } from "./assignment";
+import { ensureOwners, ownerOf, type Owner } from "./assignmentStore";
 
 /**
  * LA-5.6 (Notion sprint) · reinstatement cases, server side. sync_reinstatement_cases (the database)
@@ -29,7 +32,12 @@ export class ReinstatementError extends Error {
   }
 }
 
-export type Viewer = { tenantId: string; userId: string; role: string };
+/**
+ * AG-0.5 · `scope` is the session's producer scope (scopeFor). With one, only cases on policies credited to a
+ * visible producer (policy_current.agent_user_id) are listed, counted, pinned or updated; owners are still
+ * resolved across the agency first (as today). Absent or null = unchanged.
+ */
+export type Viewer = { tenantId: string; userId: string; role: string; scope?: ProducerScope };
 
 async function everyRow(build: () => Loose, max = 50_000): Promise<Loose[]> {
   const rows: Loose[] = [];
@@ -78,6 +86,8 @@ export type CaseRow = {
   workedBy: string | null;
   resolvedAt: string | null;
   note: string | null;
+  /** LA-5.8: who works the case (open cases only); escalated = moved to the writing agent near the deadline. */
+  owner: Owner | null;
 };
 
 export type Reinstatement = {
@@ -86,6 +96,8 @@ export type Reinstatement = {
   open: CaseRow[];
   closed: CaseRow[];
   settings: RetentionSettings;
+  /** LA-5.8: owners are shown only when more than one person owns cases. */
+  showOwners: boolean;
   counts: { open: number; pinned: number; noWindow: number; reinstated90: number; expired90: number; declined90: number; advanceOpenCents: number; advanceUnknown: number };
 };
 
@@ -124,21 +136,34 @@ export async function loadReinstatement(viewer: Viewer): Promise<Reinstatement |
   const policies = (await inChunks(numbers, (part) => db().from("policy_current").select("carrier_id, policy_number, agent_user_id, contact_id, paid_to_date, premium_cents, premium_mode, annualised_premium_cents, face_amount_cents, months_paid, product_code, as_of, issue_date, issued_on, effective_date").eq("tenant_id", viewer.tenantId).in("policy_number", part)))
     .filter((p: Loose) => cases.some((c) => keyOf(c) === keyOf(p)));
   const policyOf = new Map<string, Loose>(policies.map((p: Loose) => [keyOf(p), p]));
-  const visible = viewer.role === "producer" ? cases.filter((c) => policyOf.get(keyOf(c))?.agent_user_id === viewer.userId) : cases;
+  // The agency's day — the same one the banner and the database's expiry count from.
+  const today = await agencyToday(viewer.tenantId);
+  // LA-5.8: every open case has an owner, resolved across the agency before anyone filters. The
+  // advance at risk is read for all of them (the "by exposure" strategy places by it).
+  const allOpen = cases.filter((c) => OPEN_CASE_STATUSES.includes(c.status));
+  const advanceMap = await advanceAtRisk(viewer.tenantId, allOpen.map((c) => policyOf.get(keyOf(c))).filter(Boolean));
+  const owners = await ensureOwners(viewer.tenantId, "reinstatement", allOpen.map((c) => ({
+    key: keyOf(c), carrierId: c.carrier_id, writingAgentId: policyOf.get(keyOf(c))?.agent_user_id ?? null, exposureCents: advanceMap.get(keyOf(c)) ?? null, daysToDeadline: daysRemaining(c.deadline, today),
+  })), settings, { keep: new Set(allOpen.map(keyOf)) }).catch((error) => {
+    console.error("[reinstatement] owners could not be resolved", error);
+    return null;
+  });
+  const visible = (viewer.role === "producer"
+    ? cases.filter((c) => policyOf.get(keyOf(c))?.agent_user_id === viewer.userId)
+    : viewer.role === "retention"
+      ? cases.filter((c) => OPEN_CASE_STATUSES.includes(c.status) && owners?.get(keyOf(c))?.userId === viewer.userId)
+      : cases)
+    .filter((c) => rowVisible(viewer.scope ?? null, policyOf.get(keyOf(c))?.agent_user_id));
   const contactIds = [...new Set(visible.map((c) => c.contact_id ?? policyOf.get(keyOf(c))?.contact_id).filter(Boolean))] as string[];
   const userIds = [...new Set(visible.flatMap((c) => [c.worked_by, policyOf.get(keyOf(c))?.agent_user_id]).filter(Boolean))] as string[];
-  const openPolicies = visible.filter((c) => OPEN_CASE_STATUSES.includes(c.status)).map((c) => policyOf.get(keyOf(c))).filter(Boolean);
-  const [contacts, users, carriers, advanceMap] = await Promise.all([
+  const [contacts, users, carriers] = await Promise.all([
     inChunks(contactIds, (part) => db().from("contacts").select("id, first_name, last_name, primary_phone, dob").eq("tenant_id", viewer.tenantId).in("id", part)),
     userIds.length ? db().from("users").select("id, name, email").in("id", userIds) : { data: [] },
     db().from("carriers").select("id, name"),
-    advanceAtRisk(viewer.tenantId, openPolicies),
   ]);
   const contactOf = new Map<string, Loose>(contacts.map((c: Loose) => [c.id, c]));
   const userName = new Map<string, string>(((users.data ?? []) as Loose[]).map((u) => [u.id, u.name || u.email]));
   const carrierName = new Map<string, string>(((carriers.data ?? []) as Loose[]).map((c) => [c.id, c.name]));
-  // The agency's own day — the same one the banner and the database's expiry count from.
-  const today = await agencyToday(viewer.tenantId);
 
   const rows: CaseRow[] = visible.map((c) => {
     const key = keyOf(c);
@@ -162,6 +187,7 @@ export async function loadReinstatement(viewer: Viewer): Promise<Reinstatement |
       requiresHealthQuestions: c.requires_health_questions, requiresSignedForm: c.requires_signed_form, requirementsNote: c.carrier_requirements_note,
       carrierReference: c.carrier_reference, declineReason: c.decline_reason, workedBy: c.worked_by ? userName.get(c.worked_by) ?? "Someone no longer here" : null,
       resolvedAt: c.resolved_at, note: c.note,
+      owner: OPEN_CASE_STATUSES.includes(c.status) ? owners?.get(key) ?? null : null,
     };
   });
   const open = caseOrder(rows.filter((r) => OPEN_CASE_STATUSES.includes(r.status)));
@@ -172,6 +198,7 @@ export async function loadReinstatement(viewer: Viewer): Promise<Reinstatement |
     open,
     closed,
     settings,
+    showOwners: Boolean(owners) && new Set([...(owners?.values() ?? [])].map((o) => o.userId)).size > 1,
     counts: {
       open: open.length,
       pinned: open.filter((r) => r.urgency === "pinned").length,
@@ -205,9 +232,14 @@ export async function updateCase(viewer: Viewer, id: string, patch: CasePatch) {
     throw new Error(error.message);
   }
   if (!c) throw new ReinstatementError("That case isn't here.", 404);
-  if (viewer.role === "producer") {
+  if (viewer.role === "producer" || (viewer.scope ?? null) !== null) {
     const p = await db().from("policy_current").select("agent_user_id").eq("tenant_id", viewer.tenantId).eq("carrier_id", c.carrier_id).eq("policy_number", c.policy_number).maybeSingle();
-    if (p.data?.agent_user_id !== viewer.userId) throw new ReinstatementError("That case isn't in your book.", 404);
+    if (viewer.role === "producer" && p.data?.agent_user_id !== viewer.userId) throw new ReinstatementError("That case isn't in your book.", 404);
+    if (!rowVisible(viewer.scope ?? null, p.data?.agent_user_id)) throw new ReinstatementError("That case isn't in your book.", 404);
+  }
+  // LA-5.8: a retention rep works the cases assigned to them (an escalated case is the writing agent's).
+  if (viewer.role === "retention" && !ownsCard(viewer, (await ownerOf(viewer.tenantId, "reinstatement", c.carrier_id, c.policy_number)) ?? undefined)) {
+    throw new ReinstatementError("That case is assigned to someone else.", 404);
   }
   if (!OPEN_CASE_STATUSES.includes(c.status)) throw new ReinstatementError("This case is closed.", 409);
   const now = new Date().toISOString();
@@ -253,6 +285,17 @@ export async function closingSoon(viewer: Viewer): Promise<number | null> {
   if (viewer.role === "producer" && rows.length) {
     const mine = await inChunks([...new Set(rows.map((r) => r.policy_number))], (part) => db().from("policy_current").select("carrier_id, policy_number").eq("tenant_id", viewer.tenantId).eq("agent_user_id", viewer.userId).in("policy_number", part));
     const keys = new Set(mine.map(keyOf));
+    rows = rows.filter((r) => keys.has(keyOf(r)));
+  }
+  if ((viewer.scope ?? null) !== null && rows.length) {
+    const mine = await inChunks([...new Set(rows.map((r) => r.policy_number))], (part) => scopeQuery(db().from("policy_current").select("carrier_id, policy_number").eq("tenant_id", viewer.tenantId), "agent_user_id", viewer.scope ?? null).in("policy_number", part));
+    const keys = new Set(mine.map(keyOf));
+    rows = rows.filter((r) => keys.has(keyOf(r)));
+  }
+  if (viewer.role === "retention" && rows.length) {
+    // LA-5.8: a rep's pinned line counts the cases assigned to them.
+    const mine = await db().from("retention_assignment").select("carrier_id, policy_number").eq("tenant_id", viewer.tenantId).eq("queue_type", "reinstatement").eq("assigned_to_user_id", viewer.userId).is("closed_at", null).limit(5000);
+    const keys = new Set(((mine.data ?? []) as Loose[]).map(keyOf));
     rows = rows.filter((r) => keys.has(keyOf(r)));
   }
   return rows.filter((r) => (daysRemaining(r.deadline, today) ?? Infinity) <= pin).length;

@@ -6,6 +6,7 @@ import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { assertOutboundLimit, outboundLimitResponse, outboundLimitSnapshot } from "@/lib/metering/outbound";
 import { isSchemaGap, type SchemaGapNotice } from "@/lib/supabase/schemaGap";
 import { campaignExtras } from "@/lib/campaigns/extras";
+import { refuseNarrowInAgency } from "@/lib/agency/routeScope";
 
 const roles = ["owner", "producer"] as const;
 type Result<T> = { data: T; error: { message: string; code?: string } | null };
@@ -68,6 +69,8 @@ async function campaignFunnel(tenantId: string): Promise<{ rows: Record<string, 
 export async function GET() {
   const auth = await requireFeatureRole("outbound_dialing", roles);
   if (auth instanceof NextResponse) return auth;
+  const refused = await refuseNarrowInAgency(auth.context, "Campaigns");
+  if (refused) return refused;
   const db = getSupabaseServiceClient() as unknown as Db;
   // Read from `tenant_campaign_costs`, not `tenant_campaigns`. The view carries the same rows plus
   // the three numbers LA-2.1 and LA-2.2 are actually about: how many rows were rejected at scrub,
@@ -116,6 +119,8 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   const auth = await requireFeatureRole("outbound_dialing", roles, { write: true });
   if (auth instanceof NextResponse) return auth;
+  const refused = await refuseNarrowInAgency(auth.context, "Campaigns");
+  if (refused) return refused;
   const parsed = campaignSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Enter valid campaign details" }, { status: 400 });
   try {

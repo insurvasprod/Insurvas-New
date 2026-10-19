@@ -2,6 +2,7 @@ import "server-only";
 
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isSchemaGap } from "@/lib/supabase/schemaGap";
+import { rowVisible, type ProducerScope } from "@/lib/agency/visibility";
 
 import { computeRadar } from "./radarStore";
 import { IncomeRuleError, toRecord, type ContactIncomeType, type IncomeInput, type IncomeSource, type IncomeSurface } from "./income";
@@ -33,7 +34,8 @@ export class IncomeError extends Error {
   }
 }
 
-export type Viewer = { tenantId: string; userId: string; role: string };
+/** AG-0.5 · `scope` is the session's producer scope (scopeFor): a policy's income is reached only when its producer (agent_user_id) is visible. Absent/null = unchanged. */
+export type Viewer = { tenantId: string; userId: string; role: string; scope?: ProducerScope };
 
 /** Where the figure lives: the client, or — before the sale's client exists — the lead. */
 export type IncomeTarget = { contactId: string | null; leadId: string | null; unavailable: string | null };
@@ -81,7 +83,7 @@ export async function contactForApplication(viewer: Viewer, applicationId: strin
 export async function contactForPolicy(viewer: Viewer, carrierId: string, policyNumber: string): Promise<IncomeTarget> {
   const { data: p, error } = await db().from("policy_current").select("contact_id, agent_user_id").eq("tenant_id", viewer.tenantId).eq("carrier_id", carrierId).eq("policy_number", policyNumber).maybeSingle();
   if (error) throw new Error(error.message);
-  if (!p || (viewer.role === "producer" && p.agent_user_id !== viewer.userId)) throw new IncomeError("That policy isn't in your book.", 404);
+  if (!p || (viewer.role === "producer" && p.agent_user_id !== viewer.userId) || !rowVisible(viewer.scope ?? null, p.agent_user_id)) throw new IncomeError("That policy isn't in your book.", 404);
   if (!p.contact_id) return { contactId: null, leadId: null, unavailable: "No client is linked to this policy yet." };
   return { contactId: p.contact_id as string, leadId: null, unavailable: null };
 }

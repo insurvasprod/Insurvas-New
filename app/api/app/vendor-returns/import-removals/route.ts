@@ -8,6 +8,7 @@ import {
   isRemovalReason,
 } from "@/lib/leadLists/detail";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
+import { refuseNarrowInAgency } from "@/lib/agency/routeScope";
 
 /**
  * The rows the scrub removed from one list at import, as the vendor will want them: phone, reason
@@ -17,6 +18,8 @@ import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 export async function GET(request: NextRequest) {
   const auth = await requireFeatureRole("true_cpa", ["owner", "producer", "bookkeeper"]);
   if (auth instanceof NextResponse) return auth;
+  const refused = await refuseNarrowInAgency(auth.context, "Vendor returns");
+  if (refused) return refused;
   const params = request.nextUrl.searchParams;
   const campaignId = params.get("campaign_id") ?? "";
   if (!/^[0-9a-f-]{36}$/i.test(campaignId)) return NextResponse.json({ error: "Choose a list" }, { status: 400 });
@@ -40,6 +43,8 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const auth = await requireFeatureRole("true_cpa", ["owner", "producer", "bookkeeper"], { write: true });
   if (auth instanceof NextResponse) return auth;
+  const refused = await refuseNarrowInAgency(auth.context, "Vendor returns");
+  if (refused) return refused;
   const body = await request.json().catch(() => null) as { campaign_id?: unknown; reason?: unknown } | null;
   const campaignId = typeof body?.campaign_id === "string" ? body.campaign_id : "";
   if (!/^[0-9a-f-]{36}$/i.test(campaignId)) return NextResponse.json({ error: "Choose a list" }, { status: 400 });

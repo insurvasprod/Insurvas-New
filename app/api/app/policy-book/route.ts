@@ -4,6 +4,7 @@ import { z } from "zod";
 import { audit } from "@/lib/audit/log";
 import { isRecordUuid } from "@/lib/ingestion/path";
 import { deleteFilter, PolicyBookError, saveAnnotation, saveFilter } from "@/lib/ingestion/policyBookStore";
+import { scopeFor } from "@/lib/agency/visibility";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 
 /**
@@ -39,7 +40,9 @@ export async function POST(request: NextRequest) {
   const auth = await requireFeatureRole("book_of_business", roles, { write: true });
   if (auth instanceof NextResponse) return auth;
   const { tenantId, userId, role } = auth.context;
-  const viewer = { tenantId, userId, role };
+  // AG-0.5 · the annotation write finds its policy through the viewer's producer scope (agent_user_id): another
+  // producer's policy is "not in your book" (404). Saved filters are the session's own rows already.
+  const viewer = { tenantId, userId, role, scope: await scopeFor(auth.context) };
   const parsed = body.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Check the request and try again." }, { status: 400 });
   const input = parsed.data;

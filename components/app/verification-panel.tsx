@@ -17,6 +17,7 @@ import { notify } from "@/lib/notify";
 import type { TemplateField } from "@/lib/templates/constants";
 import type { VerificationState } from "@/lib/verification/progress";
 import { cn } from "@/lib/utils";
+import { useRevealReason } from "@/components/app/reveal-reason-dialog";
 
 type PanelField = TemplateField & { state: VerificationState; old_value: unknown; new_value: unknown; confirmed_at: string | null };
 type PanelSection = { section_key: string; label: string; sort_order: number; fields: PanelField[] };
@@ -115,6 +116,7 @@ export function VerificationPanel({ workItemId, readOnly, canHandoff }: { workIt
   const [drafts, setDrafts] = useState<Record<string, unknown>>({});
   const [revealed, setRevealed] = useState<Record<string, unknown>>({});
   const [revealing, setRevealing] = useState<string | null>(null);
+  const { ask: askRevealReason, dialog: revealReasonDialog } = useRevealReason();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
   const [error, setError] = useState("");
@@ -196,9 +198,12 @@ export function VerificationPanel({ workItemId, readOnly, canHandoff }: { workIt
     notify.done(state === "outstanding" ? "Field marked outstanding" : state === "corrected" ? "Correction saved" : "Field confirmed");
   }
 
-  async function reveal(key: string) {
+  async function reveal(key: string, label: string) {
+    // Each reveal says why; the audit row keeps the reason (lib/applications/revealReason.ts).
+    const reason = await askRevealReason(label);
+    if (reason === null) return;
     setRevealing(key); setFieldErrors((current) => ({ ...current, [key]: "" }));
-    const response = await fetch("/api/app/inbound/verification/reveal", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ work_item_id: workItemId, field_key: key }) });
+    const response = await fetch("/api/app/inbound/verification/reveal", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ work_item_id: workItemId, field_key: key, reason }) });
     const body = await response.json().catch(() => null);
     setRevealing(null);
     if (!response.ok) { const message = body?.error ?? "Could not reveal this field"; setFieldErrors((current) => ({ ...current, [key]: message })); notify.block(message); return; }
@@ -304,6 +309,7 @@ export function VerificationPanel({ workItemId, readOnly, canHandoff }: { workIt
 
   return (
     <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
+      {revealReasonDialog}
       {backLink}
       <PageHeader title={`Verification — ${leadName}`} actions={actions} />
       {continueError && <Callout tone="error" title={continueError} />}
@@ -387,7 +393,7 @@ export function VerificationPanel({ workItemId, readOnly, canHandoff }: { workIt
                           {isSensitive && !isEmpty(stored) && (
                             isRevealed
                               ? <button type="button" onClick={() => hide(key)} className={b.link}>Hide</button>
-                              : <button type="button" onClick={() => void reveal(key)} disabled={revealing === key} className={b.link} aria-label={`Reveal ${field.label}`}>{revealing === key ? "Revealing…" : "Reveal"}</button>
+                              : <button type="button" onClick={() => void reveal(key, field.label)} disabled={revealing === key} className={b.link} aria-label={`Reveal ${field.label}`}>{revealing === key ? "Revealing…" : "Reveal"}</button>
                           )}
                         </div>
                         <div className="ml-auto flex items-center gap-4">

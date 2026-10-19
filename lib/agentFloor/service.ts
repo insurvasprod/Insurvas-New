@@ -10,6 +10,8 @@ import { isOpenTransfer, type TransferPhase } from "@/lib/transferInbox/constant
 import { notifyAgentUser, notifyTenantAgents } from "@/lib/agentAlerts/service";
 import { productLineLabel } from "@/lib/format/productLine";
 import { languageFromLeadValues, phoneFromLeadValues } from "./leadFacts";
+import { rowVisible, type ProducerScope } from "../agency/visibilityCore";
+import { workItemVisible } from "../transferInbox/scopeCore";
 
 export type AgentAvailability = "ready" | "on_break" | "off";
 
@@ -179,9 +181,15 @@ type SlowFloor = {
 const SLOW_TTL_MS = 30_000;
 const slowCache = new Map<string, { at: number; openCalls: string; value: SlowFloor }>();
 
-async function readSlowFloor(tenantId: string, openCallsSignature: string): Promise<SlowFloor> {
+/**
+ * AG-0.5: `scope` narrows the closed-transfer counts to the transfers a visible producer held (null =
+ * the whole agency, as before). The cache is keyed by the scope too, so one producer's count is never
+ * served to another session.
+ */
+async function readSlowFloor(tenantId: string, openCallsSignature: string, scope: ProducerScope = null): Promise<SlowFloor> {
   const now = Date.now();
-  const hit = slowCache.get(tenantId);
+  const cacheKey = scope === null ? tenantId : `${tenantId}:${[...scope].sort().join(",")}`;
+  const hit = slowCache.get(cacheKey);
   // A call ending changes both halves ("After {customer}" and, once dispositioned, the count), so a
   // change in the set of open calls refreshes early rather than waiting out the 30 seconds.
   if (hit && now - hit.at < SLOW_TTL_MS && hit.openCalls === openCallsSignature) return hit.value;
@@ -190,6 +198,7 @@ async function readSlowFloor(tenantId: string, openCallsSignature: string): Prom
   const closed = (from: string, to: string | null) => {
     let query = loose().from("lead_queue").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId).not("partner_id", "is", null).gte("disposition_at", from);
     if (to) query = query.lt("disposition_at", to);
+    if (scope !== null) query = query.in("owner_user_id", scope.length ? scope : ["00000000-0000-0000-0000-000000000000"]);
     return query as Promise<LooseResult>;
   };
   const [thisHour, previousHour, ended] = await Promise.all([
@@ -208,7 +217,7 @@ async function readSlowFloor(tenantId: string, openCallsSignature: string): Prom
     closedPreviousHour: thisHour.error || previousHour.error ? null : previousHour.count ?? 0,
     lastCallByUser,
   };
-  slowCache.set(tenantId, { at: now, openCalls: openCallsSignature, value });
+  slowCache.set(cacheKey, { at: now, openCalls: openCallsSignature, value });
   return value;
 }
 
@@ -255,7 +264,16 @@ async function readFloorExtras(tenantId: string, callWorkItems: string[], handof
 
 /* ── the floor read ─────────────────────────────────────────────────────── */
 
-export async function getAgentFloor(tenantId: string, currentUserId: string, currentRole: string) {
+/**
+ * AG-0.5: `scope` is the session's producer scope (scopeFor, from the session; null = no filter, solo
+ * tenants and the all-seeing roles see the floor exactly as before). The floor is a team view, and in
+ * an agency a narrow session sees only its own part of the team: itself and the producers in its scope
+ * (a producer: himself; a manager: his reports; an assistant: the producers he assists) — their
+ * presence, their calls, their callbacks and the closed-transfer counts of their transfers. Waiting
+ * live transfers stay visible to everyone who may claim them (lib/transferInbox/scope.ts).
+ */
+export async function getAgentFloor(tenantId: string, currentUserId: string, currentRole: string, scope: ProducerScope = null) {
+  const seesMember = (userId: string) => scope === null || userId === currentUserId || rowVisible(scope, userId);
   const supabase = getSupabaseServiceClient();
   // Re-read by every open floor on each realtime change, and none of these reads depends on another:
   // they used to run as ~7 sequential round trips, now they are one. Users are embedded in the
@@ -263,7 +281,7 @@ export async function getAgentFloor(tenantId: string, currentUserId: string, cur
   // `open`, not `all`: the floor shows what is waiting and what is on a call. `all` also returned
   // every completed and expired transfer, and that history filled the 500-row cap (20260924170000).
   const [inbox, callsResult, memberRows, presenceRows, slaSettings, callbacks] = await Promise.all([
-    import("@/lib/transferInbox/service").then(({ getTransferInbox }) => getTransferInbox(tenantId, { status: "open" }, currentUserId, currentRole)),
+    import("@/lib/transferInbox/service").then(({ getTransferInbox }) => getTransferInbox(tenantId, { status: "open" }, currentUserId, currentRole, scope)),
     supabase
       .from("active_calls")
       .select("id, work_item_id, lead_id, user_id, agent_role, started_at")
@@ -276,15 +294,15 @@ export async function getAgentFloor(tenantId: string, currentUserId: string, cur
       .in("role", ["owner", "producer", "assistant"]),
     readPresence(tenantId),
     getQueueSlaSettings(tenantId),
-    listDueCallbacks(tenantId),
+    listDueCallbacks(tenantId, scope === null ? null : [...new Set([...scope, currentUserId])]),
   ]);
   const { data: calls, error: callsError } = callsResult;
   if (callsError) throw new Error(`Could not load active calls: ${callsError.message}`);
   if (memberRows.error) throw new Error(`Could not load floor members: ${memberRows.error.message}`);
 
-  const openCalls = calls ?? [];
+  const openCalls = (calls ?? []).filter((call) => seesMember(call.user_id));
   const [slow, extras] = await Promise.all([
-    readSlowFloor(tenantId, openCalls.map((call) => call.id).sort().join(",")),
+    readSlowFloor(tenantId, openCalls.map((call) => call.id).sort().join(","), scope),
     readFloorExtras(tenantId, openCalls.map((call) => call.work_item_id), currentRole === "assistant" ? [] : inbox.handoffs.map((handoff) => handoff.verificationSessionId), inbox.items.filter((item) => item.status === "la_active").map((item) => item.id)),
   ]);
   const byId = new Map(inbox.items.map((item) => [item.id, item]));
@@ -292,12 +310,12 @@ export async function getAgentFloor(tenantId: string, currentUserId: string, cur
   const facts = await leadFacts(tenantId, [
     ...waitingItems.map((item) => item.leadId),
     ...openCalls.filter((call) => !byId.has(call.work_item_id)).map((call) => call.lead_id),
-    ...[...slow.lastCallByUser.values()].map((call) => call.leadId),
+    ...[...slow.lastCallByUser.entries()].filter(([userId]) => seesMember(userId)).map(([, call]) => call.leadId),
   ]);
 
   // Same filter the separate users read applied: only active accounts appear on the floor.
   const users = new Map(
-    (memberRows.data ?? []).flatMap((row) => (row.users && row.users.status === "active" ? [[row.user_id, row.users] as const] : [])),
+    (memberRows.data ?? []).flatMap((row) => (row.users && row.users.status === "active" && seesMember(row.user_id) ? [[row.user_id, row.users] as const] : [])),
   );
   const presence = new Map(presenceRows.map((row) => [row.user_id, row]));
   const callByUser = new Map(openCalls.map((call) => [call.user_id, call]));
@@ -437,13 +455,17 @@ export async function updateAgentPresence(params: { tenantId: string; userId: st
  * after ten minutes unread, which is right for a caller on the line), each person's "Handoffs offered
  * to me" preference gates it, and an unknown kind would be dropped by the feed.
  */
-export async function createAgentFloorNudge(params: { tenantId: string; userId: string; role: string; workItemId: string; targetUserId?: string | null; idempotencyKey: string; message: string; request: Request }) {
+export async function createAgentFloorNudge(params: { tenantId: string; userId: string; role: string; workItemId: string; targetUserId?: string | null; idempotencyKey: string; message: string; request: Request; scope?: ProducerScope }) {
+  const scope = params.scope ?? null;
   const supabase = getSupabaseServiceClient();
   if (params.targetUserId && params.role !== "owner") throw new FloorActionError("Only the account owner can ask a teammate to pick up a transfer.", 403);
   if (params.targetUserId && params.targetUserId === params.userId) throw new FloorActionError("Choose a teammate other than yourself.", 400);
 
-  const item = await supabase.from("lead_queue").select("id, status, lead_id, product_line, partner_id").eq("tenant_id", params.tenantId).eq("id", params.workItemId).maybeSingle();
+  const item = await supabase.from("lead_queue").select("id, status, lead_id, product_line, partner_id, owner_user_id").eq("tenant_id", params.tenantId).eq("id", params.workItemId).maybeSingle();
   if (item.error) throw new Error(`Could not validate the transfer: ${item.error.message}`);
+  // AG-0.5: in an agency a narrow session nudges only about a transfer it may see (a waiting one, or a
+  // visible producer's); another producer's is "not found", never confirmed. Null scope: unchanged.
+  if (item.data && !workItemVisible(scope, item.data, params.userId)) throw new FloorActionError("That transfer could not be found.", 404);
   if (!item.data || !isOpenTransfer(item.data.status)) throw new FloorActionError("That transfer is no longer active.", 409);
   const queue = item.data;
 

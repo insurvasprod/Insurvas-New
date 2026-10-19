@@ -88,3 +88,18 @@ export async function startApplicationFromLead(params: {
     resumed: row.resumed,
   };
 }
+
+/**
+ * AG-0.5 · the lead a work item (lead_queue.id) is for, so a route can run `guardLead` on it before the
+ * door opens. Null when the work item is not this tenant's. The RPC still refuses anyone but the holder;
+ * the guard makes a narrow session's refusal a 404 that says nothing about another producer's lead.
+ */
+export async function workItemLeadId(tenantId: string, workItemId: string): Promise<string | null> {
+  const { data } = await getSupabaseServiceClient()
+    .from("lead_queue")
+    .select("lead_id")
+    .eq("tenant_id", tenantId)
+    .eq("id", workItemId)
+    .maybeSingle();
+  return ((data as { lead_id?: string | null } | null)?.lead_id as string | null | undefined) ?? null;
+}

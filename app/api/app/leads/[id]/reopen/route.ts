@@ -2,10 +2,14 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import { reopenExpiredLeadByLeadId } from "@/lib/queueSla/service";
+import { guardLead } from "@/lib/agency/guards";
 
 export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireFeatureRole("book_of_business", ["owner", "producer", "assistant"], { write: true });
   if (auth instanceof NextResponse) return auth;
+  // AG-0.5 · a producer cannot open another producer's record by id (404, not 403).
+  const hidden = await guardLead(auth.context, (await params).id);
+  if (hidden) return hidden;
   const id = z.string().uuid().safeParse((await params).id);
   if (!id.success) return NextResponse.json({ error: "Choose a valid lead." }, { status: 400 });
   try { return NextResponse.json({ result: await reopenExpiredLeadByLeadId({ tenantId: auth.context.tenantId, leadId: id.data, actorId: auth.context.userId }) }); }

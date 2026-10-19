@@ -2,6 +2,7 @@ import "server-only";
 
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isSchemaGap } from "@/lib/supabase/schemaGap";
+import { rowVisible, scopeQuery, type ProducerScope } from "@/lib/agency/visibility";
 
 import { ENTRY_LABELS, type EntryType } from "./commissionLedger";
 import { loadPolicyMoney } from "./commissionLedgerStore";
@@ -16,6 +17,12 @@ import { changeLabel, changeValue, fieldWord, mergeTimeline, readableDay, status
  *
  * A producer sees the policies credited to them (policy_current.agent_user_id); an owner and a
  * bookkeeper see the whole book.
+ *
+ * AG-0.5 · a Viewer may carry the producer scope from its session (`scopeFor(auth.context)`). In an agency a
+ * narrow session then sees only policies credited to a visible producer (policy_current.agent_user_id), hand
+ * policies they recorded (tenant_policies.created_by), sales they worked (deal_flow.worked_by); and on a
+ * policy page, the client's and household's other policies and the household total only over those. Absent
+ * or null = today's behaviour (the role rule above).
  */
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -32,7 +39,12 @@ export class PolicyBookError extends Error {
 export const POLICY_BOOK_PENDING_MESSAGE = "The policy list needs a database update (20261008160000).";
 export const POLICY_NOTES_PENDING_MESSAGE = "Notes and saved filters need a database update (20261008210000).";
 
-export type Viewer = { tenantId: string; userId: string; role: string };
+export type Viewer = { tenantId: string; userId: string; role: string; scope?: ProducerScope };
+
+/** AG-0.5 · a query narrowed to the viewer's visible producers on `column`; unchanged without a scope. */
+function inScope<Q extends { in(column: string, values: readonly string[]): Q }>(viewer: Viewer, query: Q, column: string): Q {
+  return scopeQuery(query, column, viewer.scope ?? null);
+}
 
 const PAGE = 1000;
 const CHUNK = 200;
@@ -135,7 +147,7 @@ export async function loadHandPolicies(viewer: Viewer): Promise<BookRow[]> {
   const read = await everyRow(() => {
     let query = db().from("tenant_policies").select("id, policy_number, insured_name, carrier, product, effective_date, annual_premium_cents, status, source").eq("tenant_id", viewer.tenantId);
     if (viewer.role === "producer") query = query.eq("created_by", viewer.userId);
-    return query.order("id");
+    return inScope(viewer, query, "created_by").order("id");
   });
   if (read.error) {
     if (isSchemaGap(read.error)) return [];
@@ -212,7 +224,8 @@ async function issuedAwaiting(viewer: Viewer, only?: { carrierId: string; policy
         agentUserId: deal?.worked_by ?? null, agentName: deal?.worked_by ? userName.get(deal.worked_by) ?? null : null,
       };
     })
-    .filter((sale) => viewer.role !== "producer" || sale.agentUserId === viewer.userId);
+    .filter((sale) => viewer.role !== "producer" || sale.agentUserId === viewer.userId)
+    .filter((sale) => rowVisible(viewer.scope ?? null, sale.agentUserId));
 }
 
 /** The recorded sales still waiting for their carrier's file, as rows of the one Policies list. */
@@ -240,7 +253,7 @@ export async function loadBook(viewer: Viewer) {
     // Ordered along the primary key (tenant first), so each page is an index range, not a scan.
     let query = db().from("policy_current").select(CURRENT_COLUMNS).eq("tenant_id", viewer.tenantId);
     if (scoped) query = query.eq("agent_user_id", viewer.userId);
-    return query.order("carrier_id").order("policy_number");
+    return inScope(viewer, query, "agent_user_id").order("carrier_id").order("policy_number");
   });
   if (read.error) {
     if (isSchemaGap(read.error)) return { available: false as const };
@@ -328,7 +341,7 @@ export async function deleteFilter(viewer: Viewer, id: string): Promise<void> {
 async function currentRow(viewer: Viewer, carrierId: string, policyNumber: string): Promise<Loose | null> {
   let query = db().from("policy_current").select("*").eq("tenant_id", viewer.tenantId).eq("carrier_id", carrierId).eq("policy_number", policyNumber);
   if (viewer.role === "producer") query = query.eq("agent_user_id", viewer.userId);
-  const { data, error } = await query.maybeSingle();
+  const { data, error } = await inScope(viewer, query, "agent_user_id").maybeSingle();
   if (error) {
     if (isSchemaGap(error)) throw new PolicyBookError(POLICY_BOOK_PENDING_MESSAGE, 503);
     throw new Error(`Could not load the policy: ${error.message}`);
@@ -355,8 +368,9 @@ export async function loadPolicy(viewer: Viewer, carrierId: string, policyNumber
     db().from("policy_event").select("event_type, snapshot_date, file_id").eq("tenant_id", t).eq("carrier_id", carrierId).eq("policy_number", policyNumber).limit(50),
     db().from("policy_annotation").select("notes, lead_vendor_id, lead_campaign_id, updated_by, updated_at").eq("tenant_id", t).eq("carrier_id", carrierId).eq("policy_number", policyNumber).maybeSingle(),
     row.application_id ? db().from("tenant_applications").select("id, created_at, submitted_at, outcome, outcome_recorded_at, draft_day, insured_role, case_id, lead_id, status").eq("tenant_id", t).eq("id", row.application_id).maybeSingle() : { data: null },
-    row.contact_id ? db().from("policy_current").select("carrier_id, policy_number, status_normalized, annualised_premium_cents, product_code").eq("tenant_id", t).eq("contact_id", row.contact_id).limit(50) : { data: [] },
-    row.household_id ? db().from("policy_current").select("carrier_id, policy_number, contact_id, status_normalized, annualised_premium_cents").eq("tenant_id", t).eq("household_id", row.household_id).limit(100) : { data: [] },
+    // AG-0.5 · the client's and household's other policies (and so the household total) over visible producers only.
+    row.contact_id ? inScope(viewer, db().from("policy_current").select("carrier_id, policy_number, status_normalized, annualised_premium_cents, product_code").eq("tenant_id", t).eq("contact_id", row.contact_id), "agent_user_id").limit(50) : { data: [] },
+    row.household_id ? inScope(viewer, db().from("policy_current").select("carrier_id, policy_number, contact_id, status_normalized, annualised_premium_cents").eq("tenant_id", t).eq("household_id", row.household_id), "agent_user_id").limit(100) : { data: [] },
     // LA-4.12: every money line the carriers reported for this policy, and the unearned advance.
     loadPolicyMoney(t, carrierId, policyNumber, { monthsPaid: row.months_paid, productCode: row.product_code, asOf: row.as_of }),
     loadPolicyExpected(t, carrierId, policyNumber),

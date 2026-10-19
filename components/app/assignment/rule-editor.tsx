@@ -130,7 +130,7 @@ export function RuleEditor({
       <fieldset className="m-0 mt-4 min-w-0 border-0 p-0">
         <legend className="text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]">Goes to</legend>
         <span className="block text-xs leading-[1.5] text-[var(--muted)]">
-          {draft.strategy === "least_loaded" ? "Whoever holds the fewest open leads first; this order breaks ties." : "In this order, round-robin."} None ticked is the whole roster.
+          {draft.strategy === "least_loaded" ? "Whoever holds the fewest open leads first; this order breaks ties." : draft.strategy === "best_placement" ? "Whoever issued the most of what they submitted in the last 90 days first; this order breaks ties." : "In this order, round-robin."} None ticked is the whole roster.
         </span>
         <div className="mt-2 max-w-[260px]">
           <label htmlFor={`${id}-strategy`} className="sr-only">How this rule picks</label>

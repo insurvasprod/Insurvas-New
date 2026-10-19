@@ -14,6 +14,7 @@ import { runStages } from "./stages";
 import { gateStatuses, shownWord, unmappedStatusEmail, type NormalizedStatus } from "./statuses";
 import { shouldEmail } from "@/lib/notifications/preferences";
 import { configuredAppOrigin } from "@/lib/urls/origin";
+import { isAgencyTenant } from "@/lib/agency/audience";
 
 /**
  * LA-4.3 (Notion sprint) · parsing registered files with their carrier's layout map, server side.
@@ -146,7 +147,7 @@ export async function parseCarrierFile(tenantId: string, fileId: string, rows?: 
   if (statement.row) raw.rows = [...raw.rows, statement.row];
   const result: ParseResult = statement.problem
     ? { fatal: statement.problem, rows: [], heldBack: [], findings: [{ findingType: "totals_mismatch", severity: "blocking", reasoning: statement.problem, payload: {} }], statedTotalCents: null, linesTotalCents: null }
-    : parseWithMap({ map: resolved.map, entries: resolved.entries, raw, previousRowCount: await previousParsedCount(tenantId, file) });
+    : parseWithMap({ map: resolved.map, entries: resolved.entries, raw, previousRowCount: await previousParsedCount(tenantId, file), requireWritingNumber: await isAgencyTenant(tenantId) });
   await writeFindings(tenantId, fileId, resolved.map, result.findings);
 
   const parser = { parser_id: resolved.map.id, parser_version: resolved.map.version };

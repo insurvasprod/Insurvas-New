@@ -20,6 +20,7 @@ import { getCommissionLedger } from "@/lib/ledger/service";
 import { STATEMENT_SCHEMA_PENDING_MESSAGE, type StatementCarrierOption, type StatementMapping } from "@/lib/ledger/statementConstants";
 import { reconcileStatements, statementTotals } from "@/lib/ledger/statementMatch";
 import { getSavedStatementMappings, getStatementLedger, listStatementCarriers } from "@/lib/ledger/statementService";
+import { rowVisible, scopeFor } from "@/lib/agency/visibility";
 import { hasTenantPermission, roleCanViewCommission } from "@/lib/tenantAuth/permissions";
 
 /**
@@ -91,7 +92,9 @@ export default async function LedgerPage({ searchParams }: { searchParams: Promi
 
   // Producers see their own policies only (LA-0.2 criterion 3); owners and bookkeepers see all. The
   // same rule scopes the statement lines: a line shows only when its matched policy does.
-  const canView = (producerUserId: string | undefined) => roleCanViewCommission(guard.role, guard.context.userId, producerUserId);
+  // AG-0.5: the role rule (a producer sees his own) AND the session's producer scope — in an agency both must hold.
+  const scope = await scopeFor(guard.context);
+  const canView = (producerUserId: string | undefined) => roleCanViewCommission(guard.role, guard.context.userId, producerUserId) && rowVisible(scope, producerUserId);
   const importParam = params.import;
   const [ledger, statements, book] = await Promise.all([
     getCommissionLedger({ tenantId: guard.context.tenantId, canView }),

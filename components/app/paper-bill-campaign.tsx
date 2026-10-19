@@ -102,6 +102,7 @@ export function PaperBillCampaign({ campaign, isOwner, readOnly }: { campaign: C
                     <StatusChip tone={TONE[r.state]}>{STATE_LABELS[r.state]}</StatusChip>
                     {r.state === "declined" && r.returnsOn && <span className="mt-1 block text-xs text-muted-foreground">Back on the list {fileDay(r.returnsOn)}</span>}
                     {r.lastAttempt && <span className="mt-1 block text-xs text-muted-foreground">{CONVERSION_OUTCOME_LABELS[r.lastAttempt.outcome]}, {fileDay(r.lastAttempt.at.slice(0, 10))}{r.lastAttempt.by ? ` · ${r.lastAttempt.by}` : ""}</span>}
+                    {campaign.showOwners && r.owner && <span className="block text-xs text-muted-foreground">Owner: {r.owner.name}</span>}
                   </td>
                   <td className="text-right">
                     {!readOnly && r.state === "remaining" && (

@@ -6,8 +6,10 @@ import { getQueueSlaSettings } from "@/lib/queueSla/service";
 import { getOldestWaitingSeconds } from "@/lib/queueSla/stats";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import type { TenantRole } from "@/lib/tenantAuth/roles";
+import type { ProducerScope } from "@/lib/agency/visibilityCore";
 
 import { hourHeatmap, leaderboard, outcomeMix, type AttemptRow, type Heatmap, type Leader, type Outcome } from "./insights";
+import { scopeWithSelf, waitingTransferOr } from "./scope";
 import { contactRate, endOfToday, greeting, lastDays, longDate, NOT_A_CONTACT } from "./todayMath";
 
 /**
@@ -20,6 +22,23 @@ import { contactRate, endOfToday, greeting, lastDays, longDate, NOT_A_CONTACT } 
  * is independent: a figure whose read fails is null and the screen says "—", rather than the whole
  * hero failing over one number. Features gate what is read at all — a plan without inbound
  * transfers is not asked about SLA breaches.
+ *
+ * AG-0.5 · producer isolation. `scope` is the session's producer scope (scopeFor, from the session;
+ * null = no filter, the default, so every other caller and every solo tenant is unchanged). With a
+ * scope (a producer, manager, assistant or setter in an agency) no figure here counts another
+ * producer's rows:
+ *   · dials, contacts, insights, appointments, premium, the setter week and the close-out were already
+ *     the reader's own ("you": agent_id / booked_by / agent_user_id / created_by / user_id = reader),
+ *     which is inside his scope (for a manager, stricter than it);
+ *   · the queue figure counts the outbound work assigned to the reader (the dialer's own scoped list,
+ *     getQueuePreview), never the agency's unassigned pool, which is the owner's to route (AG-0.10);
+ *   · the next callback and the due/overdue callbacks are those assigned to his scope or to himself;
+ *   · transfers waiting count the live ones still waiting (anyone may claim them) and those held in
+ *     his scope, never another producer's (lib/transferInbox/scopeCore workItemVisible);
+ *   · the lapse count is the agency's open signals, which carry no producer, so it is omitted (no
+ *     narrow home shows it: roleHome gives "lapse" to the owner only);
+ *   · the team standings are the owner's only and are never computed under a scope.
+ * Licences are the agency's own (tenant `licenses`: one per state, no producer column), not a producer's rows.
  */
 export type DashboardToday = {
   scope: "agency" | "you";
@@ -51,6 +70,8 @@ export type DashboardToday = {
     lapsing: number | null;
     licences: { expired: number; expiring: number; states: string[] } | null;
   };
+  /** AG-0.5: true when the figures were read under a producer scope (a narrow session in an agency). */
+  isolated: boolean;
   /** The analysis panels, from the last seven days of attempts (at most SAMPLE_LIMIT of them). */
   insights: {
     outcomes: Outcome[];
@@ -104,6 +125,7 @@ type Result = PromiseLike<{ data: unknown; error: { message: string } | null; co
 type Chain = Result & {
   eq(column: string, value: unknown): Chain;
   in(column: string, values: string[]): Chain;
+  or(filters: string): Chain;
   is(column: string, value: null): Chain;
   not(column: string, op: string, value: unknown): Chain;
   gte(column: string, value: string): Chain;
@@ -137,10 +159,17 @@ export async function readFirstName(userId: string): Promise<string | null> {
   }
 }
 
-export async function getDashboardToday(input: { tenantId: string; userId: string; role: TenantRole; available: readonly string[]; now?: number; reads?: TodayReadsInput }): Promise<DashboardToday> {
+export async function getDashboardToday(input: { tenantId: string; userId: string; role: TenantRole; available: readonly string[]; now?: number; reads?: TodayReadsInput; scope?: ProducerScope }): Promise<DashboardToday> {
   const now = input.now ?? Date.now();
   const zone = (await getWorkspaceTimezone(input.tenantId).catch(() => null)) ?? "America/New_York";
-  const scope = input.role === "owner" ? "agency" : "you";
+  // AG-0.5: the session's producer scope; null (the default) = no filter, exactly as before.
+  const producerScope: ProducerScope = input.scope ?? null;
+  const isolated = producerScope !== null;
+  // Only the owner reads the agency, and never under a scope (an owner's is always null; belt and braces).
+  const scope = input.role === "owner" && !isolated ? "agency" : "you";
+  // Callbacks and held transfers: the scope's producers plus the reader (an assistant's scope is the
+  // producers he assists, not himself). Null = no filter.
+  const heldBy = scopeWithSelf(producerScope, input.userId);
   const days = lastDays(now, zone, 14);
   const today = days[days.length - 1];
   const yesterdayStart = days[days.length - 2].start;
@@ -263,25 +292,43 @@ export async function getDashboardToday(input: { tenantId: string; userId: strin
     Promise.all(seriesReads),
     dialing ? count(attempts().gte("attempted_at", yesterdayStart).lt("attempted_at", sameTimeYesterday)) : Promise.resolve(null),
     appointmentsTodayRead,
-    dialing ? count(db().from("lead_queue").select("id", { count: "exact", head: true }).eq("tenant_id", input.tenantId).eq("status", "unclaimed").is("partner_id", null)) : Promise.resolve(null),
+    dialing ? (() => {
+      const query = db().from("lead_queue").select("id", { count: "exact", head: true }).eq("tenant_id", input.tenantId).eq("status", "unclaimed").is("partner_id", null);
+      // AG-0.5: scoped, the reader's own assigned outbound work (the dialer's scoped list), never the pool.
+      return count(isolated ? query.eq("owner_user_id", input.userId) : query);
+    })() : Promise.resolve(null),
     has("callback_calendar") && wants("callbacks") ? (async () => {
-      const result = await db().from("tenant_callbacks").select("scheduled_at_utc, customer_timezone, lead:agent_leads!tenant_callbacks_lead_id_fkey(values)").eq("tenant_id", input.tenantId).in("status", ["scheduled", "due"]).gte("scheduled_at_utc", new Date(now).toISOString()).order("scheduled_at_utc", { ascending: true }).limit(1);
+      let query = db().from("tenant_callbacks").select("scheduled_at_utc, customer_timezone, lead:agent_leads!tenant_callbacks_lead_id_fkey(values)").eq("tenant_id", input.tenantId).in("status", ["scheduled", "due"]).gte("scheduled_at_utc", new Date(now).toISOString());
+      // AG-0.5: scoped, the next callback assigned to the scope or the reader (D1: assigned_to).
+      if (heldBy !== null) query = query.in("assigned_to", [...heldBy]);
+      const result = await query.order("scheduled_at_utc", { ascending: true }).limit(1);
       const row = ((result.error ? [] : result.data ?? []) as Array<{ scheduled_at_utc: string; customer_timezone: string; lead: { values: Record<string, unknown> | null } | Array<{ values: Record<string, unknown> | null }> | null }>)[0];
       if (!row) return null;
       const lead = Array.isArray(row.lead) ? row.lead[0] : row.lead;
       return { name: leadName(lead?.values), atUtc: row.scheduled_at_utc, customerTimezone: row.customer_timezone };
     })().catch(() => null) : Promise.resolve(null),
-    has("callback_calendar") && wants("callbacks") ? listDueCallbacks(input.tenantId).catch(() => null) : Promise.resolve(null),
+    has("callback_calendar") && wants("callbacks") ? listDueCallbacks(input.tenantId, heldBy).catch(() => null) : Promise.resolve(null),
     has("inbound_transfers") && wants("inbound") ? (async () => {
       const sla = await getQueueSlaSettings(input.tenantId);
       const cutoff = new Date(now - sla.escalate_after_seconds * 1000).toISOString();
       // Both head counts on the same tenant-filtered rows: partner-sent, unclaimed — in parallel.
-      const waiting = () => db().from("lead_queue").select("id", { count: "exact", head: true }).eq("tenant_id", input.tenantId).eq("status", "unclaimed").not("partner_id", "is", null);
-      // And how long the longest one has waited: the queue SLA ladder's own read (one row).
-      const [breaching, all, oldest] = await Promise.all([count(waiting().lt("queued_at", cutoff)), count(waiting()), getOldestWaitingSeconds(input.tenantId, new Date(now)).catch(() => null)]);
+      // AG-0.5: scoped, only the transfers the session may see: still waiting, or held in its scope.
+      const visible = (query: Chain) => (heldBy === null ? query : query.or(waitingTransferOr(heldBy)));
+      const waiting = () => visible(db().from("lead_queue").select("id", { count: "exact", head: true }).eq("tenant_id", input.tenantId).eq("status", "unclaimed").not("partner_id", "is", null));
+      // And how long the longest one has waited: the queue SLA ladder's own read (one row); scoped,
+      // the same one-row read over the visible transfers.
+      const oldestRead = heldBy === null
+        ? getOldestWaitingSeconds(input.tenantId, new Date(now)).catch(() => null)
+        : (async () => {
+          const result = await visible(db().from("lead_queue").select("queued_at").eq("tenant_id", input.tenantId).eq("status", "unclaimed").not("partner_id", "is", null)).order("queued_at", { ascending: true }).limit(1);
+          const queuedAt = ((result.error ? [] : result.data ?? []) as Array<{ queued_at: string }>)[0]?.queued_at;
+          return queuedAt ? Math.max(0, Math.floor((now - Date.parse(queuedAt)) / 1000)) : null;
+        })().catch(() => null);
+      const [breaching, all, oldest] = await Promise.all([count(waiting().lt("queued_at", cutoff)), count(waiting()), oldestRead]);
       return { breaching, waiting: all, minutes: Math.round(sla.escalate_after_seconds / 60), oldest };
     })().catch(() => ({ breaching: null, waiting: null, minutes: null, oldest: null })) : Promise.resolve({ breaching: null, waiting: null, minutes: null, oldest: null }),
-    has("chargeback_radar") && wants("lapse") ? count(db().from("tenant_policy_lapse_signals").select("id", { count: "exact", head: true }).eq("tenant_id", input.tenantId).is("resolved_at", null)) : Promise.resolve(null),
+    // AG-0.5: the agency's open signals carry no producer, so a scoped session is never given the count.
+    has("chargeback_radar") && wants("lapse") && !isolated ? count(db().from("tenant_policy_lapse_signals").select("id", { count: "exact", head: true }).eq("tenant_id", input.tenantId).is("resolved_at", null)) : Promise.resolve(null),
     (input.role === "owner" || input.role === "producer") && wants("licences") ? (async () => {
       const horizon = new Date(now + 30 * 86_400_000).toISOString();
       const result = await db().from("licenses").select("state, expires_at").eq("tenant_id", input.tenantId).lte("expires_at", horizon);
@@ -328,6 +375,7 @@ export async function getDashboardToday(input: { tenantId: string; userId: strin
       lapsing,
       licences,
     },
+    isolated,
     insights,
     appointmentsWeek,
     policies30,

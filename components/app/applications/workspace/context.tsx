@@ -38,8 +38,8 @@ export type QuoteSave = {
 };
 
 export type WorkspaceActions = {
-  /** Reveal one sensitive value; writes the access record first. Null in sample mode. */
-  reveal: (fieldKey: string) => Promise<string | null>;
+  /** Reveal one sensitive value, saying why; writes the access record first. Null in sample mode. */
+  reveal: (fieldKey: string, reason: string) => Promise<string | null>;
   saveSsn: (value: string) => Promise<boolean>;
   savePayment: (input: PaymentSave) => Promise<boolean>;
   saveDraftDay: (input: { day: number | null; incomeType: string | null; incomeInputs: Record<string, unknown>; overrideReason?: string | null }) => Promise<boolean>;
@@ -235,7 +235,7 @@ export function WorkspaceProvider({ initial, sample, timeZone, children }: { ini
     }
     const ok = (x: unknown) => x !== null;
     return {
-      reveal: async (fieldKey) => (await run<{ value: string }>(() => call(`${aUrl}/reveal`, { method: "POST", body: { field_key: fieldKey } }), { reload: false }))?.value ?? null,
+      reveal: async (fieldKey, reason) => (await run<{ value: string }>(() => call(`${aUrl}/reveal`, { method: "POST", body: { field_key: fieldKey, reason } }), { reload: false }))?.value ?? null,
       saveSsn: async (value) => ok(await run(() => call(`${aUrl}/sensitive`, { method: "PUT", body: { field_key: "insured.ssn", value } }))),
       savePayment: async (input) => ok(await run(() => call(`${aUrl}/payment`, { method: "PUT", body: input }))),
       saveDraftDay: async (input) => ok(await run(() => call(`${aUrl}/draft-day`, { method: "PUT", body: { day: input.day, income_type: input.incomeType, income_inputs: input.incomeInputs, override_reason: input.overrideReason ?? null } }))),

@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { getLeadRecord } from "@/lib/leadWorkspace/record";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
+import { guardLead } from "@/lib/agency/guards";
 
 /**
  * The lead's record tabs — Attempts, Callbacks and Nurture — read when a tab opens. Read-only, and
@@ -13,6 +14,9 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
   if (auth instanceof NextResponse) return auth;
   const { id } = await params;
   if (!z.string().uuid().safeParse(id).success) return NextResponse.json({ error: "Lead not found" }, { status: 404 });
+  // AG-0.5 · a producer cannot open another producer's record by id (404, not 403).
+  const hidden = await guardLead(auth.context, id);
+  if (hidden) return hidden;
   try {
     return NextResponse.json(await getLeadRecord(auth.context.tenantId, id), { headers: { "Cache-Control": "no-store" } });
   } catch (error) {

@@ -2,6 +2,8 @@ import "server-only";
 
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import type { TenantRole } from "@/lib/tenantAuth/roles";
+import type { ProducerScope } from "@/lib/agency/visibility";
+import { readByLeadIds, visibleLeadIds } from "@/lib/agentTemplates/service";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const NOTE_MAX = 10000;
@@ -194,10 +196,23 @@ export async function deleteLeadNote(input: { tenantId: string; userId: string; 
   return (await enrich([deleted.data as NoteRow], input.tenantId))[0];
 }
 
-export async function searchLeadNotes(tenantId: string, query: string) {
+/**
+ * `scope` (AG-0.5, from scopeFor(auth.context)): null — the default — searches every note in the tenant. A
+ * narrowed agency session searches the notes on its producers' leads only (visibleLeadIds — the latest
+ * work item's owner, D1): each id chunk is searched with the same limit and the newest fifty are kept.
+ */
+export async function searchLeadNotes(tenantId: string, query: string, scope: ProducerScope = null) {
   const clean = query.replaceAll("\u0000", "").trim();
   if (clean.length < 2 || clean.length > 120) throw new Error("Search must be between 2 and 120 characters");
-  const result = await getSupabaseServiceClient().from("tenant_lead_notes").select("id, tenant_id, lead_id, author_user_id, body, visibility, idempotency_key, created_at, edited_at, deleted_at").eq("tenant_id", tenantId).is("deleted_at", null).textSearch("body", clean, { config: "simple", type: "websearch" }).order("created_at", { ascending: false }).limit(50);
+  const search = () => getSupabaseServiceClient().from("tenant_lead_notes").select("id, tenant_id, lead_id, author_user_id, body, visibility, idempotency_key, created_at, edited_at, deleted_at").eq("tenant_id", tenantId).is("deleted_at", null).textSearch("body", clean, { config: "simple", type: "websearch" });
+  if (scope !== null) {
+    const ids = await visibleLeadIds(tenantId, scope);
+    const notes = (await readByLeadIds(ids, (chunk) => search().in("lead_id", chunk).order("created_at", { ascending: false }).limit(50), "notes"))
+      .sort((a, b) => b.created_at.localeCompare(a.created_at))
+      .slice(0, 50);
+    return enrich(notes as NoteRow[], tenantId);
+  }
+  const result = await search().order("created_at", { ascending: false }).limit(50);
   if (result.error) throw new Error(`Could not search notes: ${result.error.message}`);
   return enrich((result.data ?? []) as NoteRow[], tenantId);
 }

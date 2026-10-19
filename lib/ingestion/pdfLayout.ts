@@ -45,6 +45,13 @@ export type PdfLayout = {
   total?: PdfAmount & { column: string };
   balance?: { opening: PdfAmount; activity: PdfAmount; closing: PdfAmount };
   sections?: PdfSections;
+  /**
+   * AG-1.4 · a value printed once on the statement — the agent number in its header — written into `column` on
+   * every row. A per-agent statement (Sentinel, Americo's own activity) never repeats the writing number on its
+   * lines; this is how it reaches the layout map. The first match of `pattern` (its first group if it has one)
+   * anywhere on the statement; blank when nothing matches, which an agency's file then refuses (parseWithMap).
+   */
+  stamp?: { column: string; pattern: string };
 };
 export type PdfLineInput = { pieces: Array<{ x: number; text: string }>; text: string };
 
@@ -149,6 +156,15 @@ export function pdfLayoutProblems(layout: unknown): string[] {
     }
     if (sections?.column && [...columns, ...(value.continuation ?? [])].some((column) => column?.name === sections.column)) problems.push(`The section column "${sections.column}" is also a printed column.`);
   }
+  if (value.stamp !== undefined) {
+    const stamp = value.stamp;
+    if (!stamp || typeof stamp.column !== "string" || !stamp.column.trim()) problems.push("A stamped value needs the name of the column it is written into.");
+    else if ([...columns, ...(value.continuation ?? [])].some((column) => column?.name === stamp.column) || value.sections?.column === stamp.column) problems.push(`The stamped column "${stamp.column}" is also a printed column.`);
+    if (!stamp || typeof stamp.pattern !== "string" || !stamp.pattern) problems.push("A stamped value needs the pattern that finds it.");
+    else {
+      try { new RegExp(stamp.pattern); } catch { problems.push("The stamped value's pattern is not a valid pattern."); }
+    }
+  }
   return problems;
 }
 
@@ -180,6 +196,16 @@ function assign(pieces: PdfLineInput["pieces"], columns: PdfColumn[]): string[] 
 }
 
 /** The table as a grid: the column names, then one line per row. */
+/** The first match of a stamp's pattern anywhere on the statement (its first group if it has one); "" when none. */
+export function stampFrom(lines: PdfLineInput[], pattern: string): string {
+  const re = new RegExp(pattern);
+  for (const line of lines) {
+    const hit = re.exec(line.pieces.map((piece) => piece.text).join(" "));
+    if (hit) return (hit[1] ?? hit[0]).trim();
+  }
+  return "";
+}
+
 export function pdfGrid(lines: PdfLineInput[], layout: PdfLayout): string[][] {
   const base = [...layout.columns].sort((a, b) => a.x - b.x);
   const extra = layout.continuation ? [...layout.continuation].sort((a, b) => a.x - b.x) : [];
@@ -191,6 +217,8 @@ export function pdfGrid(lines: PdfLineInput[], layout: PdfLayout): string[][] {
   const extraAt = header.length;
   header.push(...extra.map((column) => column.name));
   const sectionAt = layout.sections ? header.push(layout.sections.column) - 1 : -1;
+  const stampAt = layout.stamp ? header.push(layout.stamp.column) - 1 : -1;
+  const stampValue = layout.stamp ? stampFrom(lines, layout.stamp.pattern) : "";
   const rows: string[][] = [];
   let active = !layout.start;
   let columns = base;
@@ -209,6 +237,7 @@ export function pdfGrid(lines: PdfLineInput[], layout: PdfLayout): string[][] {
       const row = header.map(() => "");
       columns.forEach((column, index) => { row[header.indexOf(column.name)] = cells[index]; });
       if (sectionAt >= 0) row[sectionAt] = label;
+      if (stampAt >= 0) row[stampAt] = stampValue;
       rows.push(row);
       open = { cells: row, continued: false };
     } else if (open && extra.length && !open.continued) {

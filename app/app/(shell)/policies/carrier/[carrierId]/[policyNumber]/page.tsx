@@ -12,6 +12,7 @@ import { PagedBody, PagedPager, PagedProvider, PagedTableCard } from "@/componen
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
+import { scopeFor } from "@/lib/agency/visibility";
 import { guardPage } from "@/lib/entitlements/guardPage";
 import { fileDay } from "@/lib/ingestion/constants";
 import { fileHref, rowHref } from "@/lib/ingestion/trace";
@@ -41,10 +42,11 @@ export default async function PolicyPage({ params }: { params: Promise<{ carrier
   const policyNumber = decodeURIComponent(raw);
   if (!isRecordUuid(carrierId) || !policyNumber || policyNumber.length > 100) notFound();
 
-  const view = await loadPolicy({ tenantId: guard.context.tenantId, userId: guard.context.userId, role: guard.role }, carrierId, policyNumber);
+  const viewer = { tenantId: guard.context.tenantId, userId: guard.context.userId, role: guard.role, scope: await scopeFor(guard.context) };
+  const view = await loadPolicy(viewer, carrierId, policyNumber);
   if (!view) {
     // Module 4 · Door 1: a sale recorded as issued is in the book before its carrier file lists it.
-    const awaiting = await loadIssuedAwaitingOne({ tenantId: guard.context.tenantId, userId: guard.context.userId, role: guard.role }, carrierId, policyNumber).catch(() => null);
+    const awaiting = await loadIssuedAwaitingOne(viewer, carrierId, policyNumber).catch(() => null);
     if (awaiting) return <PolicyAwaitingFile sale={awaiting} />;
     return (
       <div className="m-stagger flex flex-col gap-6">

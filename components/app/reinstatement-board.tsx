@@ -131,6 +131,7 @@ export function ReinstatementBoard({ data, readOnly }: { data: Reinstatement; re
                       {r.requiresSignedForm && <span className="block text-xs text-muted-foreground">Signed form</span>}
                       {r.declineReason && <span className="mt-1 block text-xs text-muted-foreground">{r.declineReason}</span>}
                       {r.workedBy && <span className="block text-xs text-muted-foreground">{r.workedBy}</span>}
+                      {data.showOwners && r.owner && <span className="block text-xs text-muted-foreground">Owner: {r.owner.name}{r.owner.escalated ? " · moved to the writing agent" : ""}</span>}
                     </td>
                     <td className="text-right">
                       {!readOnly && view === "open" && (

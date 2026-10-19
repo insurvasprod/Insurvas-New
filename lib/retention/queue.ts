@@ -12,9 +12,9 @@
  * Pure; relative imports only.
  */
 
-import { BANDS, type Band, type Confidence, type RetentionSettings } from "./constants.ts";
+import { BANDS, QUEUE_DEFAULT_SORTS, type Band, type Confidence, type RetentionSettings } from "./constants.ts";
 
-export const SORTS = ["value", "score", "exposure", "next_draft", "months"] as const;
+export const SORTS = QUEUE_DEFAULT_SORTS;
 export type QueueSort = (typeof SORTS)[number];
 export const SORT_LABELS: Record<QueueSort, string> = {
   value: "Risk × money (default)",
@@ -62,6 +62,8 @@ export type QueueCandidate = {
   failedAt?: string | null;
   /** LA-5.5: the paper-bill campaign found no bank account. It is on the queue whatever its score, so the risk decides what else to try. */
   noBankAccount?: boolean;
+  /** LA-5.9: held back for the holdout — never shown here. Past due takes it out of the holdout (and onto LA-4.16). */
+  inHoldout?: boolean;
 };
 
 const IN_FORCE = new Set(["active", "approved_unpaid"]);
@@ -98,7 +100,10 @@ export function compareCards(sort: QueueSort) {
 export const reachesQueue = (c: Pick<QueueCandidate, "confidence">) => c.confidence !== "low";
 
 /** The queue: eligible cards in order, capped. With nothing at the queue band, medium fills it when the setting says so. */
-export function buildQueue<T extends QueueCandidate>(all: T[], settings: RetentionSettings, today: string, sort: QueueSort = "value"): { cards: T[]; total: number; usedMedium: boolean; lowConfidence: number } {
+export function buildQueue<T extends QueueCandidate>(everything: T[], settings: RetentionSettings, today: string, sort: QueueSort = "value"): { cards: T[]; total: number; usedMedium: boolean; lowConfidence: number; heldOut: number } {
+  // LA-5.9: a held-out policy is not worked — not even a failed fix or a no-bank hand-over. Counted.
+  const heldOut = everything.filter((c) => c.inHoldout && !isEmergency(c)).length;
+  const all = everything.filter((c) => !c.inHoldout);
   // A fix the file did not show is back whatever its band or confidence — never over an emergency. The
   // cooldown from the call that started the fix does not hide it, nor does a hold made before it failed;
   // a snooze or dismissal made after the failure does.
@@ -119,5 +124,5 @@ export function buildQueue<T extends QueueCandidate>(all: T[], settings: Retenti
     usedMedium = cards.length > 0;
   }
   const sorted = [...failed.sort(compareCards(sort)), ...[...cards].sort(compareCards(sort))];
-  return { cards: sorted.slice(0, settings.maxCards), total: sorted.length, usedMedium, lowConfidence };
+  return { cards: sorted.slice(0, settings.maxCards), total: sorted.length, usedMedium, lowConfidence, heldOut };
 }

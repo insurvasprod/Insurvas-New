@@ -2,16 +2,21 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import { getAgentTemplate, updateAgentLead } from "@/lib/agentTemplates/service";
+import { LeadPhoneScreeningError } from "@/lib/compliance/phoneEdit";
 import { audit } from "@/lib/audit/log";
 import { getLeadWorkspace } from "@/lib/leadWorkspace/service";
 import { leadLineageAndNext } from "@/lib/leadWorkspace/lineage";
 import { hasTenantPermission } from "@/lib/tenantAuth/permissions";
 import { recordOwnerStageFix } from "@/lib/pipelines/views";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
+import { guardLead } from "@/lib/agency/guards";
 
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireFeatureRole("book_of_business", ["owner", "producer", "assistant"]);
   if (auth instanceof NextResponse) return auth;
+  // AG-0.5 · a producer cannot open another producer's record by id (404, not 403).
+  const hidden = await guardLead(auth.context, (await params).id);
+  if (hidden) return hidden;
   try {
     const id = (await params).id;
     // The lineage read runs alongside; nothing from it is returned unless the workspace read — which
@@ -30,6 +35,9 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireFeatureRole("book_of_business", ["owner", "producer", "assistant"], { write: true });
   if (auth instanceof NextResponse) return auth;
+  // AG-0.5 · a producer cannot open another producer's record by id (404, not 403).
+  const hidden = await guardLead(auth.context, (await params).id);
+  if (hidden) return hidden;
   const body = await request.json().catch(() => null) as { values?: unknown; stage_id?: string; stage_key?: string } | null;
   if (!body?.values || !(body.stage_id || body.stage_key)) return NextResponse.json({ error: "Lead values and stage are required" }, { status: 400 });
   try {
@@ -43,13 +51,15 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       return NextResponse.json({ error: "Move a lead with a disposition: pick the outcome that sends it to that stage.", code: "move_needs_disposition" }, { status: 403 });
     }
     const template = await getAgentTemplate(auth.context.tenantId, auth.context.userId);
-    const lead = await updateAgentLead(auth.context.tenantId, leadId, template, body.values, requestedStage);
+    const lead = await updateAgentLead(auth.context.tenantId, leadId, template, body.values, requestedStage, auth.context.userId);
     if (changesStage && current.data) {
       await recordOwnerStageFix({ tenantId: auth.context.tenantId, leadId, fromPipelineId: current.data.pipeline_id, fromStageId: current.data.stage_id, toPipelineId: lead.pipeline_id, toStageId: lead.stage_id, actorId: auth.context.userId });
     }
     await audit({ actorType: "tenant", actorId: auth.context.userId, action: "tenant.lead_stage_changed", targetType: "agent_lead", targetId: lead.id, metadata: { operation: "updated", stageId: lead.stage_id }, request });
     return NextResponse.json({ lead });
   } catch (error) {
+    // A changed number that is listed, invalid or could not be screened: nothing was saved.
+    if (error instanceof LeadPhoneScreeningError) return NextResponse.json({ error: error.message, code: error.code }, { status: error.status });
     return NextResponse.json({ error: error instanceof Error ? error.message : "Could not update lead" }, { status: 400 });
   }
 }

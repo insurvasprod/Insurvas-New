@@ -1,3 +1,4 @@
+import { scopeFor } from "@/lib/agency/visibility";
 import { guardPage } from "@/lib/entitlements/guardPage";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
@@ -28,7 +29,7 @@ export default async function SalesPerformancePage({ searchParams }: { searchPar
     const now = Date.now();
     return <SalesPerformance report={buildSalesReport(sampleReportInput(now), defaultWindow(now, "UTC"))} sample />;
   }
-  const loaded = await orPending(loadSalesReport(guard.context.tenantId));
+  const loaded = await orPending(scopeFor(guard.context).then((scope) => loadSalesReport(guard.context.tenantId, {}, undefined, scope)));
   if (!loaded) return <SetupPending title="Sales performance" />;
   return <SalesPerformance report={loaded.report} timeZone={loaded.timeZone} />;
 }

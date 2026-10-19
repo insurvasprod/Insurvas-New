@@ -4,6 +4,7 @@ import { audit } from "@/lib/audit/log";
 import { loadQueues, QUEUES_PENDING_MESSAGE, QueueError, resolveItem, saveRule } from "@/lib/ingestion/exceptionQueuesStore";
 import { exceptionsRequest } from "@/lib/ingestion/exceptionsRequest";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
+import { refuseNarrowInAgency } from "@/lib/agency/routeScope";
 
 /**
  * LA-4.9 (Notion sprint) · the exception queues (premiums inside: owner, producer, bookkeeper). The writing agents own
@@ -11,6 +12,14 @@ import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
  * (with who and what, audited) or, for the owner, sets who owns a queue.
  */
 const roles = ["owner", "producer", "bookkeeper"] as const;
+/**
+ * AG-0.5 · in an agency the exception queues are the agency's reconciliation desk, not a producer's own work:
+ * every item's choices are agency-wide (recent submitted sales, a carrier's whole policy list, clients by last
+ * name), and resolving one links or merges across producers' books. Filtering those down would still leave the
+ * resolutions reaching other books, so a narrow session (producer, manager, assistant, setter) is refused here.
+ * An individual-plan tenant and the all-seeing roles are unchanged.
+ */
+const AGENCY_DESK = "Reconciliation";
 const SEES_ALL = new Set(["owner", "bookkeeper"]);
 function failure(error: unknown) {
   if (error instanceof QueueError) return NextResponse.json({ error: error.message }, { status: error.status });
@@ -21,6 +30,8 @@ function failure(error: unknown) {
 export async function GET() {
   const auth = await requireFeatureRole("statement_ingestion", roles);
   if (auth instanceof NextResponse) return auth;
+  const refused = await refuseNarrowInAgency(auth.context, AGENCY_DESK);
+  if (refused) return refused;
   try {
     const view = await loadQueues({ tenantId: auth.context.tenantId, userId: auth.context.userId, seesAll: SEES_ALL.has(auth.context.role) });
     return NextResponse.json({ ok: true, ...view, message: view.available ? null : QUEUES_PENDING_MESSAGE }, { headers: { "Cache-Control": "no-store" } });
@@ -32,6 +43,8 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   const auth = await requireFeatureRole("statement_ingestion", roles, { write: true });
   if (auth instanceof NextResponse) return auth;
+  const refused = await refuseNarrowInAgency(auth.context, AGENCY_DESK);
+  if (refused) return refused;
   const parsed = exceptionsRequest.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Check the request and try again." }, { status: 400 });
   const body = parsed.data;

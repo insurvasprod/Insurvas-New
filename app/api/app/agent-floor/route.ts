@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import { FloorActionError, createAgentFloorNudge, getAgentFloor, updateAgentPresence } from "@/lib/agentFloor/service";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
+import { scopeFor } from "@/lib/agency/visibility";
 
 const roles = ["owner", "producer", "assistant"] as const;
 const bodySchema = z.discriminatedUnion("action", [
@@ -22,7 +23,10 @@ export async function GET() {
   const auth = await requireFeatureRole("inbound_transfers", roles);
   if (auth instanceof NextResponse) return auth;
   try {
-    return NextResponse.json(await getAgentFloor(auth.context.tenantId, auth.context.userId, auth.context.role));
+    // AG-0.5: the floor is a team view. In an agency a producer, manager or assistant sees only itself
+    // and the producers in its scope (presence, calls, callbacks, closed counts), plus the waiting live
+    // transfers anyone may claim. Null scope (solo, owner/admin): the whole floor, as before.
+    return NextResponse.json(await getAgentFloor(auth.context.tenantId, auth.context.userId, auth.context.role, await scopeFor(auth.context)));
   } catch (error) {
     console.error("Agent Floor load failed", error);
     return NextResponse.json({ error: "The Agent Floor is temporarily unavailable." }, { status: 503 });
@@ -39,7 +43,7 @@ export async function POST(request: Request) {
     if (parsed.data.action === "presence") {
       return NextResponse.json({ presence: await updateAgentPresence({ tenantId: auth.context.tenantId, userId: auth.context.userId, status: parsed.data.status, request }) });
     }
-    return NextResponse.json({ nudge: await createAgentFloorNudge({ tenantId: auth.context.tenantId, userId: auth.context.userId, role: auth.context.role, workItemId: parsed.data.work_item_id, targetUserId: parsed.data.target_user_id, idempotencyKey: parsed.data.idempotency_key, message: parsed.data.message, request }) });
+    return NextResponse.json({ nudge: await createAgentFloorNudge({ tenantId: auth.context.tenantId, userId: auth.context.userId, role: auth.context.role, workItemId: parsed.data.work_item_id, targetUserId: parsed.data.target_user_id, idempotencyKey: parsed.data.idempotency_key, message: parsed.data.message, request, scope: await scopeFor(auth.context) }) });
   } catch (error) {
     if (error instanceof FloorActionError) return NextResponse.json({ error: error.message }, { status: error.status });
     console.error("Agent Floor action failed", error);

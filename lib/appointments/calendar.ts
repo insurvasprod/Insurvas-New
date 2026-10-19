@@ -4,6 +4,8 @@ import { getSupabaseServiceClient } from "@/lib/supabase/service";
 
 import { faceAmountCents, productLabel } from "./appointmentFacts";
 import { isSchemaGap } from "./schemaGap";
+import { appointmentVisible } from "./scopeCore";
+import type { ProducerScope } from "../agency/visibilityCore";
 
 /**
  * The diary. LA-2.11 asks for a day and week calendar and there was never a screen for either —
@@ -84,10 +86,17 @@ const BASE_COLUMNS = "id, lead_id, agent_user_id, booked_by, starts_at_utc, dura
 /** A rebooking that still stands; a cancelled or moved one frees the no-show again. */
 const LIVE_REBOOKING = ["booked", "confirmed", "pending", "showed"];
 
+/**
+ * AG-0.5: `scope` and `viewerId` (scopeFor, from the session) keep the appointments on the calendars
+ * of the producers in scope and the ones the viewer booked (lib/appointments/scope.ts), before any lead
+ * or name is read. Omitted / null = every appointment, as before.
+ */
 export async function appointmentsInRange(
   tenantId: string,
   fromIso: string,
   toIso: string,
+  scope: ProducerScope = null,
+  viewerId = "",
 ): Promise<CalendarAppointment[]> {
   const db = getSupabaseServiceClient() as unknown as Db;
 
@@ -107,7 +116,7 @@ export async function appointmentsInRange(
   const hasRebook = !isSchemaGap(appointments.error);
   if (!hasRebook) appointments = await read(BASE_COLUMNS);
   if (appointments.error) throw new Error(`Could not load the calendar: ${appointments.error.message}`);
-  const rows = appointments.data ?? [];
+  const rows = (appointments.data ?? []).filter((row) => appointmentVisible(scope, { agentUserId: text(row.agent_user_id) || null, bookedBy: text(row.booked_by) || null }, viewerId));
   if (rows.length === 0) return [];
 
   const leadIds = [...new Set(rows.map((row) => text(row.lead_id)).filter(Boolean))];

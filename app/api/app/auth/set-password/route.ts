@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
 
   const supabase = getSupabaseServiceClient();
   const [{ data: user }, { data: memberships }] = await Promise.all([
-    supabase.from("users").select("email, name").eq("id", invitation.user_id).maybeSingle<{ email: string; name: string }>(),
+    supabase.from("users").select("email, name, status").eq("id", invitation.user_id).maybeSingle<{ email: string; name: string; status: string }>(),
     supabase
       .from("tenant_users")
       .select("role, accepted_at, invited_at, tenants(name)")
@@ -71,6 +71,9 @@ export async function GET(request: NextRequest) {
     expiresAt: invitation.expires_at,
     organization: membership?.tenants?.name ?? (rows.length > 1 ? `${rows.length} workspaces` : null),
     role: membership ? TENANT_ROLE_LABELS[membership.role] ?? null : null,
+    // AG-0.6 · an invite for someone who already has an Insurvas account (another agency): he accepts
+    // without choosing a new password, so his sign-in elsewhere is untouched.
+    hasAccount: invitation.purpose === "invite" && user.status === "active",
   });
 }
 

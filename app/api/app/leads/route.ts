@@ -6,6 +6,7 @@ import { listPipelines } from "@/lib/pipelines/service";
 import { audit } from "@/lib/audit/log";
 import { leadWorkFacts } from "@/lib/agentTemplates/leadWorkFacts";
 import { hasTenantPermission } from "@/lib/tenantAuth/permissions";
+import { scopeFor } from "@/lib/agency/visibility";
 
 // LA-2.12. The book of business is the licensed agent's — it carries premiums, quotes and
 // applications, which is the exact list a setter may not see. The setter is excluded by naming the
@@ -18,9 +19,12 @@ export async function GET(request: NextRequest) {
   if (auth instanceof NextResponse) return auth;
   try {
     // Pipelines are tenant-scoped and don't depend on the template, so they load alongside it.
-    const [template, pipelines] = await Promise.all([
+    // AG-0.5: a narrowed agency session (producer, manager, assistant) gets its producers' leads only.
+    // The scope comes from the session; null (solo tenant, owner, bookkeeper) reads the book as before.
+    const [template, pipelines, scope] = await Promise.all([
       getAgentTemplate(auth.context.tenantId, auth.context.userId),
       listPipelines(auth.context.tenantId),
+      scopeFor(auth.context),
     ]);
     const params = request.nextUrl.searchParams;
     const direction = params.get("direction") === "desc" ? "desc" : "asc";
@@ -32,6 +36,7 @@ export async function GET(request: NextRequest) {
       params.get("filter_value") ?? "",
       params.get("sort") ?? "",
       direction,
+      scope,
     );
     // Who holds each lead, and — for roles that may see money — what it was quoted at. The board's
     // Unassigned and annualised figures are counted from these, not stored.

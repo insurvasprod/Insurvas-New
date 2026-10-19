@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 
 import { audit } from "@/lib/audit/log";
+import { getClientIp } from "@/lib/request/clientInfo";
 import { EXEMPT_REASONS, ENTITY_TYPES, TAX_CATEGORIES, TIN_TYPES } from "@/lib/accounting/taxCore";
 import { categoryMap, categoryTotals, contractors, revealTaxId, saveProfile, setCategory, TaxError, taxSettings } from "@/lib/accounting/taxStore";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
@@ -60,7 +61,7 @@ export async function POST(request: NextRequest) {
       // LA-8.2: a payee's tax ID is often their SSN; whoever the agency allows still needs two-factor.
       const blocked = await secondFactorBlock(auth.context);
       if (blocked) return blocked;
-      const value = await revealTaxId(tenantId, userId, role, b.profile_id, request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null);
+      const value = await revealTaxId(tenantId, userId, role, b.profile_id, getClientIp(request));
       await audit({ actorType: "tenant", actorId: userId, action: "accounting.tax_id_revealed", targetType: "payee_tax_profile", targetId: b.profile_id, metadata: { tenantId }, request });
       return NextResponse.json({ value }, { headers: { "Cache-Control": "no-store" } });
     }

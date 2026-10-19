@@ -11,6 +11,7 @@ import {
   recordExemption,
   revokeExemption,
 } from "@/lib/suppression/exemptions";
+import { refuseNarrowInAgency } from "@/lib/agency/routeScope";
 
 /**
  * LA-2.3-3 · the exemptions that clear federal/state DNC for one number.
@@ -54,6 +55,8 @@ function failure(error: unknown, fallback: string) {
 export async function GET(request: NextRequest) {
   const auth = await requireFeatureRole("tcpa_checker", READ_ROLES);
   if (auth instanceof NextResponse) return auth;
+  const refused = await refuseNarrowInAgency(auth.context, "DNC exemptions");
+  if (refused) return refused;
   const params = request.nextUrl.searchParams;
   try {
     // `?certificates=<phone>`: the consent certificates on leads with this number, for the form.
@@ -74,6 +77,8 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const auth = await requireFeatureRole("tcpa_checker", WRITE_ROLES, { write: true });
   if (auth instanceof NextResponse) return auth;
+  const refused = await refuseNarrowInAgency(auth.context, "DNC exemptions");
+  if (refused) return refused;
   const parsed = recordSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Enter a valid exemption" }, { status: 400 });
   const body = parsed.data;
@@ -116,6 +121,8 @@ export async function POST(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   const auth = await requireFeatureRole("tcpa_checker", WRITE_ROLES, { write: true });
   if (auth instanceof NextResponse) return auth;
+  const refused = await refuseNarrowInAgency(auth.context, "DNC exemptions");
+  if (refused) return refused;
   const parsed = revokeSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Send the exemption and a reason" }, { status: 400 });
   try {

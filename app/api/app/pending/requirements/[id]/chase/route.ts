@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { actorOf, failure, isUuid } from "@/lib/applications/http";
 import { chaseRequirement } from "@/lib/applications/pending";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
+import { guardRequirement } from "@/lib/agency/guards";
 
 /**
  * LA-3.18 · "Log a chase", one click: chase_count + 1, last_chased_at = now, last_chased_by = the
@@ -14,6 +15,9 @@ async function chase(request: Request, { params }: { params: Promise<{ id: strin
   const actor = actorOf(auth, request);
   const { id } = await params;
   if (!isUuid(id)) return NextResponse.json({ error: "That requirement could not be found." }, { status: 404 });
+  // AG-0.5 · a producer cannot open another producer's record by id (404, not 403).
+  const hidden = await guardRequirement(auth.context, id);
+  if (hidden) return hidden;
   try {
     return NextResponse.json(await chaseRequirement(actor, id));
   } catch (error) {

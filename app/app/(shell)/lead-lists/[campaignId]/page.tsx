@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { guardPage } from "@/lib/entitlements/guardPage";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { LeadListDetailView } from "@/components/app/lead-list-detail";
+import { scopeFor } from "@/lib/agency/visibility";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 // LA-8.2: times show in the viewer's own display timezone, else the agency's.
 import { getViewerTimezone } from "@/lib/users/viewerTimezone";
@@ -23,6 +24,8 @@ export default async function LeadListDetailPage({ params }: { params: Promise<{
   // The same roles as the index this opens from.
   if (!["owner", "producer", "assistant"].includes(guard.role))
     return <RoleGateNotice featureLabel="Lead lists" detail="Only owners, producers and assistants can hand out leads." />;
+  // AG-0.5: inside an agency this is the agency's business, not a producer's work — its API refuses a narrow session too.
+  if ((await scopeFor(guard.context)) !== null) return <RoleGateNotice featureLabel="Lead lists" detail="In an agency, the owner and admins handle lead lists." />;
 
   const { campaignId } = await params;
   if (!UUID.test(campaignId)) notFound();

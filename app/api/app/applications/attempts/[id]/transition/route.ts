@@ -4,6 +4,7 @@ import { actorOf, body, failure, isUuid } from "@/lib/applications/http";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import { transition } from "@/lib/applications/mutations";
 import { transitionSchema } from "@/lib/applications/schemas";
+import { guardAttempt } from "@/lib/agency/guards";
 
 /**
  * LA-3 · move an attempt (STATUS-MODEL §4). `ready` is refused while QA fails. `submitted` is not
@@ -16,6 +17,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const actor = actorOf(auth, request);
   const { id } = await params;
   if (!isUuid(id)) return NextResponse.json({ error: "That application could not be found." }, { status: 404 });
+  // AG-0.5 · a producer cannot open another producer's record by id (404, not 403).
+  const hidden = await guardAttempt(auth.context, id);
+  if (hidden) return hidden;
   const input = await body(request, transitionSchema);
   if (input instanceof NextResponse) return input;
   try {

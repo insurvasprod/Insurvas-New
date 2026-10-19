@@ -6504,7 +6504,7 @@ export type Database = {
         | "cancelled";
       tenant_status: "provisioning" | "active" | "suspended" | "cancelled";
       tenant_user_role:
-        "owner" | "producer" | "assistant" | "bookkeeper" | "setter";
+        "owner" | "producer" | "assistant" | "bookkeeper" | "setter" | "retention";
       user_status:
         | "pending_verification"
         | "active"

@@ -159,6 +159,18 @@ export const REQUIRED_TARGETS: Record<CarrierFileType, string[]> = {
   commissions: ["policy_number", "amount_cents", "entry_type"],
 };
 
+/**
+ * Fields a map must READ before it may be published — the required ones plus the writing number (AG-1.4's
+ * amendment to LA-4.3 / LA-4.4: a mapped field on every carrier profile). The writing number is mapped but its
+ * CELL is not required: a row with a blank one falls back to the application record (AG-1.4 rule 2), and an
+ * agency's file whose column is missing altogether raises in parseWithMap.
+ */
+export const MAPPED_TARGETS: Record<CarrierFileType, string[]> = {
+  policies: [...REQUIRED_TARGETS.policies, "agent_identifier"],
+  new_business: [...REQUIRED_TARGETS.new_business, "agent_identifier"],
+  commissions: [...REQUIRED_TARGETS.commissions, "agent_identifier"],
+};
+
 export type LayoutMap = {
   id: string;
   version: number;
@@ -219,7 +231,7 @@ export function mapProblems(map: Pick<LayoutMap, "fileType">, entries: LayoutEnt
       for (const value of values) if (!field.enumValues?.includes(value)) problems.push(`"${field.label}": "${value}" is not one of ${field.enumValues?.join(", ")}.`);
     }
   }
-  for (const key of REQUIRED_TARGETS[map.fileType]) if (!seen.has(key)) problems.push(`A ${map.fileType} map must read "${fields.get(key)?.label}".`);
+  for (const key of MAPPED_TARGETS[map.fileType]) if (!seen.has(key)) problems.push(`A ${map.fileType} map must read "${fields.get(key)?.label}".`);
   return problems;
 }
 
@@ -417,6 +429,12 @@ export type ParseInput = {
   raw: { headerRow: number; columns: RawColumn[]; preamble: string[][]; rows: RawRow[]; sheetName: string | null };
   /** Rows in the previous file of this carrier and type, for the swing check; null when none. */
   previousRowCount: number | null;
+  /**
+   * AG-1.4's amendment to LA-4.3 / LA-4.4: in an agency every row is some producer's money, so the writing
+   * number is required — a map that does not read it, or a file without its column, RAISES rather than
+   * defaulting to anyone. A solo agent has one writing number per carrier and is not asked.
+   */
+  requireWritingNumber?: boolean;
 };
 
 export type ParseResult = {
@@ -482,6 +500,17 @@ export function parseWithMap(input: ParseInput): ParseResult {
     findings.push({ findingType: "required_column_missing", severity: "blocking", reasoning: `The file has no ${names} column, which this map requires.`, payload: { columns: missingRequired.map((entry) => entry.sourceColumn) } });
     return result(`Required column ${names} is missing, so nothing was read from this file.`);
   }
+  if (input.requireWritingNumber) {
+    const writer = entries.find((entry) => entry.targetField === "agent_identifier");
+    if (!writer || !present(writer)) {
+      const reasoning = writer
+        ? `The file has no "${writer.sourceColumn}" column — the writing number. In an agency every row must name its producer, so nothing was read rather than guess whose it is.`
+        : "This map does not read the writing number. In an agency every row must name its producer, so nothing was read: map the carrier's writing-agent column first.";
+      findings.push({ findingType: "required_column_missing", severity: "blocking", reasoning, payload: { columns: writer ? [writer.sourceColumn] : [], field: "agent_identifier" } });
+      return result(writer ? `The writing-number column "${writer.sourceColumn}" is missing, so nothing was read from this file.` : "This map does not read the writing number, which an agency's file must have.");
+    }
+  }
+  const writerEntry = input.requireWritingNumber ? entries.find((entry) => entry.targetField === "agent_identifier") : undefined;
   const mapped = new Set(input.entries.flatMap((entry) => parts(entry) ?? [entry.sourceColumn]).map((name) => name.trim()));
   const unknown = raw.columns.filter((column) => column.header.trim() !== "" && !mapped.has(column.header.trim())).map((column) => column.header);
   if (unknown.length) findings.push({ findingType: "unknown_column", severity: "warning", reasoning: `${unknown.length === 1 ? "A column" : `${unknown.length} columns`} this map does not read: ${unknown.map((name) => `"${name}"`).join(", ")}. Every value is kept in the raw rows.`, payload: { columns: unknown } });
@@ -517,6 +546,15 @@ export function parseWithMap(input: ParseInput): ParseResult {
       else { rowOk = false; heldBack.push({ rowNumber: row.rowNumber, field: entry.targetField, reason: converted.reason }); }
     }
     if (rowOk) rows.push({ rowNumber: row.rowNumber, values });
+  }
+
+  // AG-1.4: an agency's file whose writing-number column is blank on EVERY row names no producer at all (a
+  // statement whose header stamp found nothing, a carrier that stopped printing it) — raise, never default.
+  // A blank on SOME rows is fine: those rows fall back to the application record (AG-1.4 rule 2).
+  if (writerEntry && rows.length && rows.every((row) => row.values.agent_identifier === null || row.values.agent_identifier === undefined || String(row.values.agent_identifier).trim() === "")) {
+    const reasoning = `Every row's writing number ("${writerEntry.sourceColumn}") is blank. In an agency every row must name its producer, so nothing was read rather than guess whose it is.`;
+    findings.push({ findingType: "required_column_missing", severity: "blocking", reasoning, payload: { columns: [writerEntry.sourceColumn], field: "agent_identifier" } });
+    return result(`The writing number ("${writerEntry.sourceColumn}") is blank on every row, so nothing was read from this file.`);
   }
 
   if (heldBack.length) {

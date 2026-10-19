@@ -2,6 +2,7 @@ import "server-only";
 
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isMissingFunction, isMissingSchema } from "./schemaGap";
+import { scopeQuery, type ProducerScope } from "@/lib/agency/visibility";
 
 /**
  * What the four pipeline views (Stages · Board · Table · List) need beyond the leads themselves,
@@ -47,7 +48,7 @@ type Result = { data: unknown; error: { message: string; code?: string } | null 
 type Query = PromiseLike<Result> & {
   select(columns: string, options?: { count?: "exact"; head?: boolean }): Query;
   eq(column: string, value: unknown): Query;
-  in(column: string, values: unknown[]): Query;
+  in(column: string, values: readonly unknown[]): Query;
   not(column: string, operator: string, value: unknown): Query;
   gte(column: string, value: unknown): Query;
   order(column: string, options?: { ascending?: boolean }): Query;
@@ -65,14 +66,19 @@ export const CALL_PATH_ONLY: Record<string, string> = {
   suppress: "Do not call adds the number to the do-not-call list. Record it from the lead or the dialer, where the suppression is written.",
 };
 
-export async function pipelineViewContext(tenantId: string): Promise<PipelineViewContext> {
+/**
+ * `scope` (AG-0.5, from scopeFor(auth.context)): a narrowed agency session counts only its producers' work
+ * items (lead_queue.owner_user_id) in the unmapped-outcome uses and the stage drift. Null — the default —
+ * counts the whole agency, as before. Stages, rules and mappings are the agency's configuration, not rows.
+ */
+export async function pipelineViewContext(tenantId: string, scope: ProducerScope = null): Promise<PipelineViewContext> {
   const client = db();
   const [stagesWithRules, pipelines, mappings, dispositions, queueStages] = await Promise.all([
     client.from("tenant_pipeline_stages").select("id, pipeline_id, time_allowed_minutes, counts_as_worked, tenant_pipelines!inner(tenant_id)").eq("tenant_pipelines.tenant_id", tenantId),
     client.from("tenant_pipelines").select("id, status").eq("tenant_id", tenantId),
     client.from("stage_dispositions").select("stage_id, disposition_key").eq("tenant_id", tenantId),
     client.from("dispositions").select("disposition_key, label, is_active, next_action, next_action_minutes, sort_order").eq("tenant_id", tenantId).order("sort_order"),
-    client.from("lead_queue").select("lead_id, stage_id").eq("tenant_id", tenantId).limit(5000),
+    scopeQuery(client.from("lead_queue").select("lead_id, stage_id").eq("tenant_id", tenantId), "owner_user_id", scope).limit(5000),
   ]);
   const schemaReady = !isMissingSchema(stagesWithRules.error) && !isMissingSchema(pipelines.error);
 
@@ -117,7 +123,7 @@ export async function pipelineViewContext(tenantId: string): Promise<PipelineVie
   const unmappedKeys = [...active.keys()].filter((key) => !mappedKeys.has(key));
   const uses = await Promise.all(
     unmappedKeys.map(async (key) => {
-      const result = await client.from("lead_queue").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId).eq("disposition", key);
+      const result = await scopeQuery(client.from("lead_queue").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId).eq("disposition", key), "owner_user_id", scope);
       return [key, (result as unknown as { count: number | null }).count ?? 0] as const;
     }),
   );

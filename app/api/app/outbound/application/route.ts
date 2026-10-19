@@ -3,7 +3,8 @@ import { z } from "zod";
 
 import { audit } from "@/lib/audit/log";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
-import { OutboundApplicationError, startApplicationFromLead } from "@/lib/outboundApplication/service";
+import { OutboundApplicationError, startApplicationFromLead, workItemLeadId } from "@/lib/outboundApplication/service";
+import { guardLead } from "@/lib/agency/guards";
 import { maskSensitivePanel } from "@/lib/verification/sensitive";
 import { getVerificationPanel, updateVerificationField, VerificationError } from "@/lib/verification/service";
 
@@ -29,6 +30,11 @@ import { getVerificationPanel, updateVerificationField, VerificationError } from
  * writes an audit row first. Until 2026-09-24 this route returned them in full on all three verbs.
  */
 const APPLICATION_ROLES = ["owner", "producer"] as const;
+
+/** AG-0.5 · refuses (404) a narrow session whose scope does not include the producer holding this work item's lead. */
+async function hiddenWorkItem(context: { tenantId: string; userId: string }, workItemId: string) {
+  return guardLead(context, (await workItemLeadId(context.tenantId, workItemId)) ?? workItemId);
+}
 
 const startSchema = z.object({
   work_item_id: z.string().uuid(),
@@ -68,6 +74,8 @@ export async function POST(request: Request) {
 
   const parsed = startSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Choose a valid lead to start an application on" }, { status: 400 });
+  const hidden = await hiddenWorkItem(auth.context, parsed.data.work_item_id);
+  if (hidden) return hidden;
 
   try {
     const started = await startApplicationFromLead({
@@ -110,6 +118,8 @@ export async function GET(request: Request) {
   const workItemId = new URL(request.url).searchParams.get("work_item_id");
   const parsed = z.string().uuid().safeParse(workItemId);
   if (!parsed.success) return NextResponse.json({ error: "Choose a valid lead" }, { status: 400 });
+  const hidden = await hiddenWorkItem(auth.context, parsed.data);
+  if (hidden) return hidden;
 
   try {
     return NextResponse.json(maskSensitivePanel(await getVerificationPanel(auth.context.tenantId, auth.context.userId, parsed.data)));
@@ -125,6 +135,8 @@ export async function PATCH(request: Request) {
 
   const parsed = fieldSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Choose a valid field and verification state" }, { status: 400 });
+  const hidden = await hiddenWorkItem(auth.context, parsed.data.work_item_id);
+  if (hidden) return hidden;
 
   try {
     const updated = await updateVerificationField({

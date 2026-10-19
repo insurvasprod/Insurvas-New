@@ -2,6 +2,7 @@ import "server-only";
 
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isSchemaGap } from "@/lib/supabase/schemaGap";
+import { scopeQuery, type ProducerScope } from "@/lib/agency/visibility";
 
 import { flaggedFiles } from "./carrierAccountsStore";
 import { unearnedAdvance } from "./commissionLedger";
@@ -27,7 +28,12 @@ export class RetentionError extends Error {
   }
 }
 
-export type Viewer = { tenantId: string; userId: string; role: string };
+/**
+ * AG-0.5 · `scope` is the session's producer scope (scopeFor). With one, the board reads only policies credited
+ * to a visible producer (policy_current.agent_user_id) and the save rates count only calls a visible producer
+ * made. Absent or null (individual plan, owner, bookkeeper, the retention role) = exactly as before.
+ */
+export type Viewer = { tenantId: string; userId: string; role: string; scope?: ProducerScope };
 
 async function everyRow(build: () => Loose, max = 50_000): Promise<Loose[]> {
   const rows: Loose[] = [];
@@ -57,7 +63,7 @@ export async function loadBoard(viewer: Viewer, only?: { carrierId: string; poli
     let q = db().from("policy_current").select(POLICY_COLUMNS).eq("tenant_id", viewer.tenantId).not("status_normalized", "in", "(submitted,declined,withdrawn)");
     if (viewer.role === "producer") q = q.eq("agent_user_id", viewer.userId);
     if (only) q = q.eq("carrier_id", only.carrierId).eq("policy_number", only.policyNumber);
-    return q.order("carrier_id").order("policy_number");
+    return scopeQuery(q, "agent_user_id", viewer.scope ?? null).order("carrier_id").order("policy_number");
   });
   // "Today" is the agency's day the book was computed for (policy_current.as_of, its own time zone),
   // not UTC, which runs a day ahead in US evenings.
@@ -197,7 +203,7 @@ export async function logOutcome(viewer: Viewer, input: { carrierId: string; pol
 
 /** Save rates from logged calls the next file has marked, per reason, carrier and agent. */
 export async function loadSaveRates(viewer: Viewer) {
-  const { data, error } = await db().from("retention_action").select("reason, carrier_id, acted_by, result").eq("tenant_id", viewer.tenantId).gte("acted_at", new Date(Date.now() - 365 * 86_400_000).toISOString()).limit(20_000);
+  const { data, error } = await scopeQuery(db().from("retention_action").select("reason, carrier_id, acted_by, result").eq("tenant_id", viewer.tenantId), "acted_by", viewer.scope ?? null).gte("acted_at", new Date(Date.now() - 365 * 86_400_000).toISOString()).limit(20_000);
   if (error) {
     if (isSchemaGap(error)) return { available: false as const };
     throw new Error(error.message);

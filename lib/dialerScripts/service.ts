@@ -16,6 +16,7 @@ import { decideDialLicence, leadStateBeforeServe, type LicenceDecision } from ".
 import { checkCallbackInCallingWindow } from "@/lib/dispositions/callbackWindow";
 import { dialerVocabulary, type DialerVocabulary, type DispositionVocabularyRow } from "./outcomes";
 import { isPlaceholderDisclosure } from "./disclosureStatus";
+import { rowVisible, type ProducerScope } from "../agency/visibilityCore";
 
 type Row = Record<string, unknown>;
 type Result<T> = { data: T; error: { message: string; code?: string } | null };
@@ -520,7 +521,13 @@ async function readCallbackWindow(tenantId: string, state: string): Promise<Call
   }
 }
 
-export async function getDialerPanel(input: { tenantId: string; agentId?: string; leadId: string; campaignId?: string | null; productCode?: string | null; includeCost?: boolean }) {
+/**
+ * AG-0.5: `scope` (scopeFor, from the session) — the route has already refused a lead outside it
+ * (guardLead). Here it narrows the one list on the panel that is other agents' rows: the call history,
+ * whose attempts belong to the agent who dialled them (D1: tenant_call_attempts.agent_id). Omitted /
+ * null = every attempt on the lead, as before.
+ */
+export async function getDialerPanel(input: { tenantId: string; agentId?: string; leadId: string; campaignId?: string | null; productCode?: string | null; includeCost?: boolean; scope?: ProducerScope }) {
   const db = getSupabaseServiceClient() as unknown as Db;
   let queueQuery = db.from("lead_queue").select("id, status, claimed_by").eq("tenant_id", input.tenantId).eq("lead_id", input.leadId).eq("status", "claimed").order("claimed_at", { ascending: false }).limit(1);
   if (input.agentId) queueQuery = queueQuery.eq("claimed_by", input.agentId);
@@ -530,7 +537,7 @@ export async function getDialerPanel(input: { tenantId: string; agentId?: string
     readPanelLead(db, input.tenantId, input.leadId),
     db.from("tenant_rebuttals").select("id, objection_key, label, body, sort_order").eq("tenant_id", input.tenantId).eq("is_active", true).order("sort_order"),
     db.from("tenant_consent_artefacts").select("provider, certificate_id, certificate_url, captured_at, consent_timestamp, capture_status").eq("tenant_id", input.tenantId).eq("lead_id", input.leadId).order("captured_at", { ascending: false }).limit(1).maybeSingle<Row>(),
-    db.from("tenant_call_attempts").select("id, attempt_number, attempted_at, slot, disposition, dial_clicked_at, disclosure_confirmed_at").eq("tenant_id", input.tenantId).eq("lead_id", input.leadId).order("attempt_number", { ascending: false }).limit(20),
+    db.from("tenant_call_attempts").select("id, attempt_number, attempted_at, slot, disposition, dial_clicked_at, disclosure_confirmed_at, agent_id").eq("tenant_id", input.tenantId).eq("lead_id", input.leadId).order("attempt_number", { ascending: false }).limit(20),
     queueQuery.maybeSingle<Row>(),
     // LA-2.13 criterion 1: "every served lead carries the reason it was chosen, in plain language".
     //
@@ -695,7 +702,7 @@ export async function getDialerPanel(input: { tenantId: string; agentId?: string
     // relation is tolerated, because the panel is compliance-gated and must still open.
     selectionReason: selectionReason(selectionResult),
     consent,
-    attemptHistory: (Array.isArray(attemptsResult.data) ? attemptsResult.data as Row[] : []).map((row) => ({
+    attemptHistory: (Array.isArray(attemptsResult.data) ? attemptsResult.data as Row[] : []).filter((row) => !input.scope || text(row.agent_id) === input.agentId || rowVisible(input.scope, text(row.agent_id) || null)).map((row) => ({
       id: text(row.id), attemptNumber: Number(row.attempt_number ?? 0), attemptedAt: text(row.attempted_at), slot: text(row.slot), disposition: text(row.disposition) || null, dialClicked: Boolean(row.dial_clicked_at), disclosureConfirmed: Boolean(row.disclosure_confirmed_at),
     })),
   };
@@ -1002,12 +1009,28 @@ function workableStates(context: LicenceContext): string[] | null {
  * fails leaves its fact out rather than failing the press.
  */
 export async function diagnoseEmptyQueue(tenantId: string, agentId?: string): Promise<{ code: string; message: string }> {
+  return diagnoseQueue(tenantId, agentId, false);
+}
+
+/**
+ * AG-0.5 / AG-0.10 · the same diagnosis for an agency's producer, manager or setter, who is served only
+ * the leads assigned to him: "is anything waiting" is asked of his own assigned work, not of the
+ * agency's pool, and the retry-timer counts (agency-wide lead counts) are left out.
+ */
+export async function diagnoseAssignedQueue(tenantId: string, agentId: string): Promise<{ code: string; message: string }> {
+  return diagnoseQueue(tenantId, agentId, true);
+}
+
+async function diagnoseQueue(tenantId: string, agentId: string | undefined, assignedOnly: boolean): Promise<{ code: string; message: string }> {
   const db = getSupabaseServiceClient() as unknown as Db;
   const now = Date.now();
   const nowIso = new Date(now).toISOString();
+  const scoped = assignedOnly && Boolean(agentId);
   const [campaigns, waiting, licence, agentZone] = await Promise.all([
     db.from("tenant_campaigns").select("name, status, scrub_status").eq("tenant_id", tenantId),
-    db.from("lead_queue").select("id").eq("tenant_id", tenantId).eq("status", "unclaimed").limit(1),
+    scoped
+      ? db.from("lead_queue").select("id").eq("tenant_id", tenantId).eq("status", "claimed").eq("owner_user_id", agentId as string).is("disposition", null).limit(1)
+      : db.from("lead_queue").select("id").eq("tenant_id", tenantId).eq("status", "unclaimed").limit(1),
     agentId ? loadLicenceContext(db, tenantId, agentId).catch(() => null) : Promise.resolve(null),
     readAgentTimezone(db, tenantId, agentId),
   ]);
@@ -1043,11 +1066,14 @@ export async function diagnoseEmptyQueue(tenantId: string, agentId?: string): Pr
   }
 
   // Timers: retry / nurture leads whose next dial is still ahead (agent_leads_retry_due_idx), and
-  // retry leads that are due but wait for an untried slot. Scoped to the workable states.
-  const scoped = (query: Query) => (states ? query.in("values->>state", states) : query);
+  // retry leads that are due but wait for an untried slot. Scoped to the workable states. Not for a
+  // session served only its assigned leads: these count the whole agency's leads (AG-0.5), and a fact
+  // left out is honest.
+  if (scoped) return explainEmptyQueue(facts);
+  const inStates = (query: Query) => (states ? query.in("values->>state", states) : query);
   const [ahead, dueRetry] = await Promise.all([
-    scoped(db.from("agent_leads").select("next_dial_after", { count: "exact" }).eq("tenant_id", tenantId).in("lead_state", ["retry", "nurture"]).gt("next_dial_after", nowIso)).order("next_dial_after", { ascending: true }).limit(1),
-    scoped(db.from("agent_leads").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId).eq("lead_state", "retry").lte("next_dial_after", nowIso)),
+    inStates(db.from("agent_leads").select("next_dial_after", { count: "exact" }).eq("tenant_id", tenantId).in("lead_state", ["retry", "nurture"]).gt("next_dial_after", nowIso)).order("next_dial_after", { ascending: true }).limit(1),
+    inStates(db.from("agent_leads").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId).eq("lead_state", "retry").lte("next_dial_after", nowIso)),
   ]);
   const aheadRows = (ahead.data as Row[] | null) ?? [];
   const aheadCount = (ahead as unknown as { count?: number | null }).count ?? aheadRows.length;
@@ -1128,7 +1154,8 @@ async function readOpenLeadLoad(db: Db, tenantId: string, agentId: string): Prom
  * up to MAX_REFUSED_PER_SERVE. The refused leads are released only after the loop, so the loop
  * cannot be handed the same lead twice.
  */
-export async function serveNextLead(input: { tenantId: string; agentId: string }): Promise<ServeResult> {
+export async function serveNextLead(input: { tenantId: string; agentId: string; scope?: ProducerScope }): Promise<ServeResult & { emptyReason?: string | null }> {
+  if (input.scope) return serveNextAssignedLead({ tenantId: input.tenantId, agentId: input.agentId, scope: input.scope });
   const db = getSupabaseServiceClient() as unknown as Db;
   const refused: Array<{ row: Row; state: string | null; message: string }> = [];
   let licence: LicenceContext | null = null;
@@ -1178,6 +1205,39 @@ export async function serveNextLead(input: { tenantId: string; agentId: string }
   return { served: chosen ? servedView(chosen) : null, refused: refused.map(({ state, message }) => ({ state, message })), atCapacity };
 }
 
+/** How far down the queue list an agency producer's Serve next looks for the leads assigned to him. */
+const ASSIGNED_SERVE_WINDOW = 100;
+
+/**
+ * AG-0.5 / AG-0.10 · Serve next for a narrow session in an agency.
+ *
+ * In an agency the leads are the agency's and the owner routes them: a producer works the leads assigned
+ * to him and does not take from the unassigned pool (lib/agency/routing.ts). serve_next_lead claims from
+ * that pool whenever a pool lead ranks first, and its body is the database's (no DDL here), so for a
+ * scoped session the serve goes through the same two functions the queue list and the pick use: the
+ * queue preview (every gate — window, suppression, licence, campaign, tier — already applied, in tier
+ * order) narrowed to the rows assigned to this agent, then serve_lead_by_id on the first of them, which
+ * re-checks every gate and locks it. What this gives up against serve_next_lead is the weighted campaign
+ * draw and the score among the agent's own leads: they are served in tier order, newest first. An
+ * individual-plan tenant and the all-seeing roles never come here.
+ */
+async function serveNextAssignedLead(input: { tenantId: string; agentId: string; scope: ProducerScope }): Promise<ServeResult & { emptyReason?: string | null }> {
+  const preview = await getQueuePreview({ tenantId: input.tenantId, agentId: input.agentId, tiers: null, limit: ASSIGNED_SERVE_WINDOW, scope: input.scope });
+  const refused: ServeResult["refused"] = [];
+  if (preview.available) {
+    for (const row of preview.rows.slice(0, MAX_REFUSED_PER_SERVE + 1)) {
+      const result = await serveLeadById({ tenantId: input.tenantId, agentId: input.agentId, workItemId: row.workItemId, scope: input.scope });
+      if (result.served) return { served: result.served, refused, atCapacity: null };
+      // A licence refusal is handed back and reported, exactly as Serve next reports it; a lead that
+      // went to someone else in the meantime is simply skipped.
+      if (result.refusal.code === "not_licensed") refused.push({ state: row.state, message: result.refusal.message });
+    }
+  }
+  // Nothing served: the empty queue explains itself from this agent's own assigned work.
+  const emptyReason = refused.length ? null : (await diagnoseAssignedQueue(input.tenantId, input.agentId).catch(() => null))?.message ?? null;
+  return { served: null, refused, atCapacity: null, emptyReason };
+}
+
 export type PickResult =
   | { served: ReturnType<typeof servedView>; refusal: null }
   | { served: null; refusal: { code: string; message: string } };
@@ -1194,8 +1254,22 @@ export type PickResult =
  *
  * Throws SchemaPendingError before migration 20260924323100.
  */
-export async function serveLeadById(input: { tenantId: string; agentId: string; workItemId: string }): Promise<PickResult> {
+/**
+ * AG-0.5 / AG-0.10: may a scoped session pick this work item? Only one assigned to a producer in its scope
+ * (in practice its own: serve_lead_by_id refuses anyone else's as taken). The unassigned pool and another
+ * producer's lead answer exactly as a lead that is not in the queue.
+ */
+async function pickOutsideScope(db: Db, input: { tenantId: string; agentId: string; workItemId: string; scope: ProducerScope }): Promise<boolean> {
+  const owner = await db.from("lead_queue").select("owner_user_id").eq("tenant_id", input.tenantId).eq("id", input.workItemId).maybeSingle<Row>();
+  if (owner.error) throw new DialerWorkflowError(503, `The lead queue could not be read: ${owner.error.message}`);
+  const ownerId = text(owner.data?.owner_user_id) || null;
+  return !owner.data || (ownerId !== input.agentId && !rowVisible(input.scope, ownerId));
+}
+
+export async function serveLeadById(input: { tenantId: string; agentId: string; workItemId: string; scope?: ProducerScope }): Promise<PickResult> {
   const db = getSupabaseServiceClient() as unknown as Db;
+  // AG-0.5: a scoped session (an agency's producer, manager or setter) picks only its own assigned work.
+  if (input.scope && (await pickOutsideScope(db, { ...input, scope: input.scope }))) return { served: null, refusal: { code: "not_found", message: pickRefusalMessage("not_found") } };
   const result = await db.rpc("serve_lead_by_id", { p_tenant_id: input.tenantId, p_agent_user_id: input.agentId, p_work_item_id: input.workItemId });
   if (result.error) {
     if (isPendingSchema(result.error)) throw new SchemaPendingError();
@@ -1233,14 +1307,14 @@ export async function serveLeadById(input: { tenantId: string; agentId: string; 
  * open-lead ceiling and ownership all apply, and a refusal is the pick's own sentence rather than a
  * different lead served in its place. The newest work item that is still in the queue is the one.
  */
-export async function serveLeadByLeadId(input: { tenantId: string; agentId: string; leadId: string }): Promise<PickResult> {
+export async function serveLeadByLeadId(input: { tenantId: string; agentId: string; leadId: string; scope?: ProducerScope }): Promise<PickResult> {
   const db = getSupabaseServiceClient() as unknown as Db;
   const item = await db.from("lead_queue").select("id, status").eq("tenant_id", input.tenantId).eq("lead_id", input.leadId).order("queued_at", { ascending: false }).limit(5);
   if (item.error) throw new DialerWorkflowError(503, `The lead queue could not be read: ${item.error.message}`);
   const rows = (Array.isArray(item.data) ? item.data : []) as Row[];
   const open = rows.find((row) => text(row.status) === "unclaimed" || text(row.status) === "claimed");
   if (!open) return { served: null, refusal: { code: "not_found", message: "This lead is not in the dialer queue, so it cannot be called from here. Open it from Leads instead." } };
-  return serveLeadById({ tenantId: input.tenantId, agentId: input.agentId, workItemId: text(open.id) });
+  return serveLeadById({ tenantId: input.tenantId, agentId: input.agentId, workItemId: text(open.id), scope: input.scope });
 }
 
 export type QueuePreviewRow = {
@@ -1263,21 +1337,32 @@ export type QueuePreview = { available: true; count: number; capped: boolean; ca
  * 20260924323100). Everything in it is servable to this agent right now; nothing is claimed by
  * reading it. Before the migration the list is unavailable and says so; Serve next still works.
  */
-export async function getQueuePreview(input: { tenantId: string; agentId: string; tiers: number[] | null; limit?: number }): Promise<QueuePreview> {
+/**
+ * AG-0.5 / AG-0.10: with a `scope` (an agency's producer, manager, assistant or setter) the list is the
+ * agent's OWN assigned leads only: the unassigned pool is the owner's to route, and the count is of his
+ * rows, never the agency's. The preview reads its window of the list (up to 100 rows, the function's
+ * own ceiling) and keeps the rows assigned to this agent; when that window was full, `capped` says the
+ * list may go on. Omitted / null = the full list and count, as before.
+ */
+export async function getQueuePreview(input: { tenantId: string; agentId: string; tiers: number[] | null; limit?: number; scope?: ProducerScope }): Promise<QueuePreview> {
   const db = getSupabaseServiceClient() as unknown as Db;
-  const result = await db.rpc("dialer_queue_preview", { p_tenant_id: input.tenantId, p_agent_user_id: input.agentId, p_tiers: input.tiers, p_limit: input.limit ?? 25, p_cap: 1000 });
+  const limit = input.limit ?? 25;
+  const result = await db.rpc("dialer_queue_preview", { p_tenant_id: input.tenantId, p_agent_user_id: input.agentId, p_tiers: input.tiers, p_limit: input.scope ? ASSIGNED_SERVE_WINDOW : limit, p_cap: 1000 });
   if (result.error) {
     if (isPendingSchema(result.error)) return { available: false, message: "The queue list needs a database update that has not been applied yet. Serve next lead still works." };
     throw new DialerWorkflowError(503, `The lead queue could not be read: ${result.error.message}`);
   }
   const body = (result.data && typeof result.data === "object" ? result.data : {}) as Row;
   const now = new Date().toISOString();
-  const rows = (Array.isArray(body.rows) ? body.rows : []) as Row[];
+  const allRows = (Array.isArray(body.rows) ? body.rows : []) as Row[];
+  const own = input.scope ? allRows.filter((row) => row.assigned_to_you === true) : allRows;
+  const rows = input.scope ? own.slice(0, limit) : allRows;
+  const windowFull = allRows.length >= ASSIGNED_SERVE_WINDOW && (Number(body.count ?? 0) || 0) > ASSIGNED_SERVE_WINDOW;
   return {
     available: true,
-    count: Number(body.count ?? 0) || 0,
-    capped: body.capped === true,
-    cap: Number(body.cap ?? 1000) || 1000,
+    count: input.scope ? own.length : Number(body.count ?? 0) || 0,
+    capped: input.scope ? windowFull : body.capped === true,
+    cap: input.scope ? ASSIGNED_SERVE_WINDOW : Number(body.cap ?? 1000) || 1000,
     rows: rows.map((row) => {
       const state = text(row.state) || null;
       const timezone = state ? STATE_TIMEZONES[state] ?? null : null;

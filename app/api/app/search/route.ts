@@ -6,6 +6,7 @@ import { getEntitlement } from "@/lib/entitlements/get";
 import { effectiveFeatures } from "@/lib/features/killSwitch";
 import { searchWorkspace, suggestWorkspace } from "@/lib/search/service";
 import { planHiddenSettingsSections } from "@/lib/tenantTeam/seats";
+import { scopeFor } from "@/lib/agency/visibility";
 
 const querySchema = z.object({
   q: z.string().trim().max(100),
@@ -51,6 +52,8 @@ export async function GET(request: NextRequest) {
       hiddenSettings: planHiddenSettingsSections(entitlement.limits.max_seats),
       query: parsed.data.q,
       limit: parsed.data.limit,
+      // AG-0.5: a narrowed agency session finds its producers' leads and policies only (scope from the session).
+      scope: await scopeFor(auth.context),
     });
     return NextResponse.json(result, { headers: { "Cache-Control": "no-store" } });
   } catch {

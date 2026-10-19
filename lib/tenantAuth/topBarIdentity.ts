@@ -2,7 +2,7 @@ import "server-only";
 import { cache } from "react";
 
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
-import { TENANT_ROLE_LABELS, type TenantRole } from "./roles";
+import { MEMBER_ROLE_LABELS, type MemberRole, type TenantRole } from "./roles";
 import { readAvatar } from "@/lib/users/avatar";
 
 /**
@@ -12,14 +12,15 @@ import { readAvatar } from "@/lib/users/avatar";
  * every route. This is display copy for one component, so it is its own cached read rather than
  * two more columns on the hot path.
  */
-export async function readTopBarIdentity(input: { userId: string; tenantId: string; role: TenantRole }) {
+export async function readTopBarIdentity(input: { userId: string; tenantId: string; role: TenantRole; memberRole?: MemberRole }) {
   const { user, tenant, avatar } = await prefetchTopBarIdentity(input.userId, input.tenantId);
   return {
     // A blank name is possible on an invited account that has not finished onboarding; the email
     // is the next best thing a person recognises as themselves.
     name: user?.name?.trim() || user?.email?.split("@")[0] || "Your account",
     email: user?.email ?? "",
-    roleLabel: TENANT_ROLE_LABELS[input.role],
+    // AG-0.2: an agency admin reads "Admin", not the "Owner" whose authority the title rides on.
+    roleLabel: MEMBER_ROLE_LABELS[input.memberRole ?? input.role],
     workspaceName: tenant?.name?.trim() || "Your workspace",
     // The profile picture's version, so the bar can show it in place of the initials; null when none.
     avatarVersion: avatar?.version ?? null,
