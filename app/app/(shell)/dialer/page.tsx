@@ -1,4 +1,4 @@
-import { guardPage } from "@/lib/entitlements/guardPage";
+import { actAsPagePermission, guardPage } from "@/lib/entitlements/guardPage";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { DialerWorkspace } from "@/components/app/dialer-workspace";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
@@ -10,7 +10,7 @@ export default async function DialerPage({ searchParams }: { searchParams: Promi
   const guard = await guardPage("outbound_dialing");
   if (!guard.entitled) return <FeatureGateNotice guard={guard} featureLabel="Dialer" description="Every number is checked against the enabled DNC vendors before dialing." />;
   // LA-2.12 audit: a setter belongs here. Derived from the permission rather than re-listed.
-  if (!hasTenantPermission(guard.role, "dialer.use")) {
+  if (!actAsPagePermission(guard, "dialer.use")) {
     return <RoleGateNotice featureLabel="Dialer" detail="Only owners, producers and setters can place calls." />;
   }
   const readOnly = guard.entitlement.access === "read_only";

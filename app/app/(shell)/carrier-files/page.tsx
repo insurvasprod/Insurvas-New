@@ -1,4 +1,4 @@
-import { guardPage } from "@/lib/entitlements/guardPage";
+import { actAsPagePermission, guardPage } from "@/lib/entitlements/guardPage";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { ViewTabs } from "@/components/app/book-of-business-views";
@@ -18,7 +18,6 @@ import { isoDate } from "@/lib/ingestion/path";
 import { listPolicyChanges } from "@/lib/ingestion/snapshotStore";
 import { listOpenUnmappedStatuses } from "@/lib/ingestion/statusAdmin";
 import { shownWord } from "@/lib/ingestion/statuses";
-import { hasTenantPermission } from "@/lib/tenantAuth/permissions";
 
 /**
  * Book of Business › Carrier files (LA-4.1, Notion sprint): every policy file and commission file a
@@ -33,7 +32,7 @@ export default async function CarrierFilesPage({ searchParams }: { searchParams:
   if (!guard.entitled) {
     return <FeatureGateNotice guard={guard} featureLabel="Carrier files" description="Bring in every policy and commission file your carriers send, however it arrives." />;
   }
-  if (!hasTenantPermission(guard.role, "statements.view")) {
+  if (!actAsPagePermission(guard, "statements.view")) {
     return <RoleGateNotice featureLabel="Carrier files" detail="Carrier files are received and managed by the account owner or a bookkeeper." />;
   }
 

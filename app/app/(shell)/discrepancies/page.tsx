@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { guardPage } from "@/lib/entitlements/guardPage";
+import { actAsPagePermission, guardPage } from "@/lib/entitlements/guardPage";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { ViewTabs } from "@/components/app/book-of-business-views";
@@ -11,7 +11,6 @@ import { loadPayTimingGaps } from "@/lib/ingestion/carrierRulesStore";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
 import { DISCREPANCY_SCHEMA_PENDING_MESSAGE, listDiscrepancies } from "@/lib/discrepancies/service";
-import { hasTenantPermission } from "@/lib/tenantAuth/permissions";
 
 /**
  * Book of Business › Discrepancies: "You appear to be owed $X".
@@ -32,7 +31,7 @@ export default async function DiscrepanciesPage({ searchParams }: { searchParams
   if (!guard.entitled) {
     return <FeatureGateNotice guard={guard} featureLabel="Discrepancies" description="What each carrier paid against what your contract says it owes, with a dispute letter for each one." />;
   }
-  if (!hasTenantPermission(guard.role, "statements.view")) {
+  if (!actAsPagePermission(guard, "statements.view")) {
     return <RoleGateNotice featureLabel="Discrepancies" detail="Discrepancies are worked by the account owner or a bookkeeper." />;
   }
 

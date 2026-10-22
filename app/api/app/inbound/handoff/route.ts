@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
-import { hasTenantPermission } from "@/lib/tenantAuth/permissions";
+import { anyRoleHasPermission } from "@/lib/tenantAuth/permissions";
+import { contextRoles } from "@/lib/tenantAuth/requireTenant";
 import { acceptBufferHandoff, BufferHandoffError, getBufferHandoffContext, listPendingBufferHandoffs, offerBufferHandoff } from "@/lib/bufferHandoff/service";
 import { rowVisible, scopeFor } from "@/lib/agency/visibility";
 import { guardWorkItem } from "@/lib/transferInbox/scope";
@@ -27,7 +28,7 @@ export async function GET(request: Request) {
   if (auth instanceof NextResponse) return auth;
   try {
     if (auth.context.role === "assistant") {
-      if (!hasTenantPermission(auth.context.role, "inbound.buffer")) return NextResponse.json({ error: "Your role cannot offer handoffs." }, { status: 403 });
+      if (!anyRoleHasPermission(contextRoles(auth.context), "inbound.buffer")) return NextResponse.json({ error: "Your role cannot offer handoffs." }, { status: 403 });
       // AG-0.5: in an agency the buffer is offered only the producers he assists.
       return NextResponse.json(await getBufferHandoffContext(auth.context.tenantId, auth.context.userId, await scopeFor(auth.context)));
     }
@@ -43,7 +44,7 @@ export async function POST(request: Request) {
   if (body.data.action === "offer") {
     const auth = await requireFeatureRole("inbound_transfers", ["assistant"], { write: true });
     if (auth instanceof NextResponse) return auth;
-    if (!hasTenantPermission(auth.context.role, "inbound.buffer")) return NextResponse.json({ error: "Your role cannot offer handoffs.", code: "buffer_role_required" }, { status: 403 });
+    if (!anyRoleHasPermission(contextRoles(auth.context), "inbound.buffer")) return NextResponse.json({ error: "Your role cannot offer handoffs.", code: "buffer_role_required" }, { status: 403 });
     // AG-0.5: the transfer must be one the buffer may see (his own claim), and in an agency the caller
     // goes only to a producer in his scope. Null scope: unchanged.
     const scope = await scopeFor(auth.context);

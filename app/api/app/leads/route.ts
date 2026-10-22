@@ -5,7 +5,8 @@ import { createAgentLead, getAgentTemplate, listAgentLeads } from "@/lib/agentTe
 import { listPipelines } from "@/lib/pipelines/service";
 import { audit } from "@/lib/audit/log";
 import { leadWorkFacts } from "@/lib/agentTemplates/leadWorkFacts";
-import { hasTenantPermission } from "@/lib/tenantAuth/permissions";
+import { anyRoleHasPermission } from "@/lib/tenantAuth/permissions";
+import { contextRoles } from "@/lib/tenantAuth/requireTenant";
 import { scopeFor } from "@/lib/agency/visibility";
 
 // LA-2.12. The book of business is the licensed agent's — it carries premiums, quotes and
@@ -40,7 +41,7 @@ export async function GET(request: NextRequest) {
     );
     // Who holds each lead, and — for roles that may see money — what it was quoted at. The board's
     // Unassigned and annualised figures are counted from these, not stored.
-    const money = hasTenantPermission(auth.context.role, "money.view");
+    const money = anyRoleHasPermission(contextRoles(auth.context), "money.view");
     const facts = await leadWorkFacts(auth.context.tenantId, leads.map((lead) => lead.id), money);
     const enriched = leads.map((lead) => {
       const fact = facts.get(lead.id);

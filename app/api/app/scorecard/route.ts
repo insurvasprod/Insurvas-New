@@ -2,7 +2,8 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { requireTenant } from "@/lib/tenantAuth/requireTenant";
 import { getRoster, getScorecard } from "@/lib/setters/service";
-import { hasTenantPermission } from "@/lib/tenantAuth/permissions";
+import { anyRoleHasPermission } from "@/lib/tenantAuth/permissions";
+import { contextRoles } from "@/lib/tenantAuth/requireTenant";
 import { scopeFor } from "@/lib/agency/visibility";
 
 // LA-2.12. Every role that has a scorecard at all, which is not the same as every role that sees
@@ -24,7 +25,7 @@ export async function GET(request: NextRequest) {
     const scorecard = await getScorecard(auth.context.tenantId, auth.context.userId, auth.context.role, sinceDays, scope);
     // The roster is the owner's view of who is on shift. A setter sees their own numbers, not a
     // list of their colleagues' working hours.
-    const roster = hasTenantPermission(auth.context.role, "scorecard.view.all")
+    const roster = anyRoleHasPermission(contextRoles(auth.context), "scorecard.view.all")
       ? await getRoster(auth.context.tenantId, scope, auth.context.userId)
       : [];
     return NextResponse.json({ ...scorecard, roster }, { headers: { "Cache-Control": "no-store" } });
