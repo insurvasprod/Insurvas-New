@@ -153,3 +153,13 @@ export function initialPeriodsRemaining(duration: CouponDuration, durationPeriod
   if (duration === "once") return 1;
   return durationPeriods;
 }
+
+/**
+ * A coupon that removes the whole price for good: 100% off, forever. Checkout never opens the payment
+ * provider for one (lib/checkout/start.ts): no card page, no Whop membership, nothing that could ever be
+ * charged, now or at renewal. A 100% coupon for a limited time is NOT a full comp — the price returns,
+ * so that buyer still goes through the card page.
+ */
+export function isFullComp(coupon: { discountType: DiscountType; percentOff: number | null; duration: CouponDuration }): boolean {
+  return coupon.discountType === "percent" && (coupon.percentOff ?? 0) >= 100 && coupon.duration === "forever";
+}

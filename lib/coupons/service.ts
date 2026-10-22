@@ -9,7 +9,7 @@ import "server-only";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { buildProvider } from "@/lib/payments/registry";
 import { WhopProvider } from "@/lib/payments/whop/provider";
-import { durationInMonths, type BillingCycle, type CouponDuration, type DiscountType } from "./discount";
+import { durationInMonths, isFullComp, type BillingCycle, type CouponDuration, type DiscountType } from "./discount";
 import { deactivateCouponWith, type DeactivatableCoupon, type DeactivateOutcome } from "./deactivate";
 
 export type CreateCouponInput = {
@@ -79,7 +79,11 @@ export async function deactivateCoupon(couponId: string): Promise<DeactivateOutc
   );
 }
 
-export async function createCoupon(input: CreateCouponInput): Promise<{ id: string; whopPromoCodeId: string }> {
+export async function createCoupon(input: CreateCouponInput): Promise<{ id: string; whopPromoCodeId: string | null }> {
+  // 100% off forever never reaches Whop: checkout starts the plan with no payment page at all
+  // (lib/checkout/fullComp.ts). It is deliberately NOT created there either, so no Whop page can redeem it.
+  if (isFullComp(input)) return insertCoupon(input, null);
+
   const companyId = process.env.WHOP_ACCOUNT_ID;
   if (!companyId) throw new ProviderNotConfiguredError("WHOP_ACCOUNT_ID is not set");
 
@@ -106,6 +110,10 @@ export async function createCoupon(input: CreateCouponInput): Promise<{ id: stri
     maxRedemptions: input.maxRedemptions,
   });
 
+  return insertCoupon(input, promo.promoCodeId);
+}
+
+async function insertCoupon(input: CreateCouponInput, whopPromoCodeId: string | null): Promise<{ id: string; whopPromoCodeId: string | null }> {
   const supabase = getSupabaseServiceClient();
   const { data, error } = await supabase
     .from("coupons")
@@ -121,22 +129,23 @@ export async function createCoupon(input: CreateCouponInput): Promise<{ id: stri
       expires_at: input.expiresAt,
       restricted_to_plan_ids:
         input.restrictedToPlanIds && input.restrictedToPlanIds.length > 0 ? input.restrictedToPlanIds : null,
-      whop_promo_code_id: promo.promoCodeId,
+      whop_promo_code_id: whopPromoCodeId,
       created_by: input.createdBy,
     })
     .select("id")
     .single();
 
   if (error) {
+    if (!whopPromoCodeId) throw new Error(`Coupon not recorded: ${error.message}`);
     // The promo exists at Whop but we could not record it. Loud, because the discount is live and
     // invisible to us — a customer could redeem a code our books have never heard of.
     console.error(
-      `[coupons] Whop promo ${promo.promoCodeId} (${input.code}) was created but NOT recorded locally: ${error.message}`,
+      `[coupons] Whop promo ${whopPromoCodeId} (${input.code}) was created but NOT recorded locally: ${error.message}`,
     );
     throw new Error(`Coupon created at the provider but not recorded: ${error.message}`);
   }
 
-  return { id: data.id, whopPromoCodeId: promo.promoCodeId };
+  return { id: data.id, whopPromoCodeId };
 }
 
 export type ApplyResult = "ok" | "not_found" | "inactive" | "expired" | "exhausted" | "plan_restricted" | "billing_cycle_restricted" | "already_has_coupon";
