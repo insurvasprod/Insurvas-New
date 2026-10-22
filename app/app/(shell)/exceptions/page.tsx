@@ -1,5 +1,5 @@
 import { scopeFor } from "@/lib/agency/visibility";
-import { guardPage } from "@/lib/entitlements/guardPage";
+import { actAsPagePermission, guardPage } from "@/lib/entitlements/guardPage";
 import { ExceptionQueues } from "@/components/app/exception-queues";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
@@ -8,7 +8,6 @@ import { StatStrip, StatTile } from "@/components/ui/stat";
 import { agencyToday } from "@/lib/ingestion/agencyDay";
 import { ageDays } from "@/lib/ingestion/exceptionQueues";
 import { loadQueues, QUEUES_PENDING_MESSAGE } from "@/lib/ingestion/exceptionQueuesStore";
-import { hasTenantPermission } from "@/lib/tenantAuth/permissions";
 
 /**
  * Book of Business › Exceptions (LA-4.9, Notion sprint): the three exception queues. Everyone sees
@@ -18,7 +17,7 @@ export default async function ExceptionsPage() {
   const guard = await guardPage("statement_ingestion");
   if (!guard.entitled) return <FeatureGateNotice guard={guard} featureLabel="Exceptions" description="Policies with no sale, sales with no policy, and clients who may be one person." />;
   // Premiums are inside: owner, producer and bookkeeper, as the API.
-  if (!hasTenantPermission(guard.role, "policies.view")) return <RoleGateNotice featureLabel="Exceptions" detail="Exceptions are cleared by producers, bookkeepers and the account owner." />;
+  if (!actAsPagePermission(guard, "policies.view")) return <RoleGateNotice featureLabel="Exceptions" detail="Exceptions are cleared by producers, bookkeepers and the account owner." />;
   // AG-0.5: inside an agency these are operations — every item's choices reach across producers' books — so a
   // narrow session is refused, as the API refuses it. A solo tenant and the all-seeing roles are unchanged.
   if ((await scopeFor(guard.context)) !== null) return <RoleGateNotice reason="agency" featureLabel="Exceptions" detail="In an agency, the owner, admins and the bookkeeper clear exceptions." />;

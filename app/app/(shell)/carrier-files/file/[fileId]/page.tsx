@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { guardPage } from "@/lib/entitlements/guardPage";
+import { actAsPagePermission, guardPage } from "@/lib/entitlements/guardPage";
 import { FILE_STATUS_LABELS, fileDay, type CarrierFileStatus, type CarrierFileType } from "@/lib/ingestion/constants";
 import { clearlyBetter } from "@/lib/ingestion/fileCheck";
 import { checkCarrierFile } from "@/lib/ingestion/fileCheckStore";
@@ -10,7 +10,6 @@ import { libraryCarriers, unfinishedSteps } from "@/lib/ingestion/registry";
 import { fileHref, rowHref } from "@/lib/ingestion/trace";
 import { pdfBalanceReview } from "@/lib/ingestion/rawLayer";
 import { loadFileTrace } from "@/lib/ingestion/traceStore";
-import { hasTenantPermission } from "@/lib/tenantAuth/permissions";
 import { CarrierFileAttribute } from "@/components/app/carrier-file-attribute";
 import { CarrierFileDownload } from "@/components/app/carrier-file-download";
 import { CarrierFileReread } from "@/components/app/carrier-file-reread";
@@ -35,7 +34,7 @@ const size = (bytes: number) => (bytes < 1024 ? `${bytes} B` : bytes < 1024 * 10
 export default async function CarrierFilePage({ params, searchParams }: { params: Promise<{ fileId: string }>; searchParams: Promise<{ page?: string }> }) {
   const guard = await guardPage("statement_ingestion");
   if (!guard.entitled) return <FeatureGateNotice guard={guard} featureLabel="Carrier files" description="Bring in every policy and commission file your carriers send, however it arrives." />;
-  if (!hasTenantPermission(guard.role, "statements.view")) return <RoleGateNotice featureLabel="Carrier files" detail="Carrier files, and the rows in them, are opened by the account owner or a bookkeeper." />;
+  if (!actAsPagePermission(guard, "statements.view")) return <RoleGateNotice featureLabel="Carrier files" detail="Carrier files, and the rows in them, are opened by the account owner or a bookkeeper." />;
   const { fileId } = await params;
   if (!isRecordUuid(fileId)) notFound();
   const { page } = await searchParams;

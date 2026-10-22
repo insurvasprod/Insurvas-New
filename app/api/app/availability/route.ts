@@ -5,7 +5,8 @@ import { audit } from "@/lib/audit/log";
 import { getCalendarSettings, saveAgencyBookingSettings, saveCalendarSettings } from "@/lib/appointments/availability";
 import { BLOCK_REPEATS } from "@/lib/appointments/calendarMath";
 import { SchemaGapError } from "@/lib/appointments/schemaGap";
-import { hasTenantPermission } from "@/lib/tenantAuth/permissions";
+import { anyRoleHasPermission } from "@/lib/tenantAuth/permissions";
+import { contextRoles } from "@/lib/tenantAuth/requireTenant";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import { rowVisible, scopeFor } from "@/lib/agency/visibility";
 
@@ -85,7 +86,7 @@ export async function GET() {
 export async function PUT(request: NextRequest) {
   const auth = await requireFeatureRole("outbound_dialing", CALENDAR_ROLES, { write: true });
   if (auth instanceof NextResponse) return auth;
-  if (!hasTenantPermission(auth.context.role, "calendar.manage"))
+  if (!anyRoleHasPermission(contextRoles(auth.context), "calendar.manage"))
     return NextResponse.json({ error: "Your role cannot change the calendar", code: "role_not_allowed" }, { status: 403 });
 
   const parsed = saveSchema.safeParse(await request.json().catch(() => null));

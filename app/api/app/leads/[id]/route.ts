@@ -6,7 +6,8 @@ import { LeadPhoneScreeningError } from "@/lib/compliance/phoneEdit";
 import { audit } from "@/lib/audit/log";
 import { getLeadWorkspace } from "@/lib/leadWorkspace/service";
 import { leadLineageAndNext } from "@/lib/leadWorkspace/lineage";
-import { hasTenantPermission } from "@/lib/tenantAuth/permissions";
+import { anyRoleHasPermission } from "@/lib/tenantAuth/permissions";
+import { contextRoles } from "@/lib/tenantAuth/requireTenant";
 import { recordOwnerStageFix } from "@/lib/pipelines/views";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { guardLead } from "@/lib/agency/guards";
@@ -23,7 +24,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     // carries the tenant and setter checks — succeeds first.
     const [data, extra] = await Promise.all([
       getLeadWorkspace(auth.context.tenantId, auth.context.userId, auth.context.role, id),
-      leadLineageAndNext(auth.context.tenantId, id, hasTenantPermission(auth.context.role, "money.view")).catch(() => null),
+      leadLineageAndNext(auth.context.tenantId, id, anyRoleHasPermission(contextRoles(auth.context), "money.view")).catch(() => null),
     ]);
     return NextResponse.json({ ...data, lineage: extra?.lineage ?? null, nextAction: extra?.nextAction ?? null, readOnly: auth.entitlement.access === "read_only" });
   } catch (error) {

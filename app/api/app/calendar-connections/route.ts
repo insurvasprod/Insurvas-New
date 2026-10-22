@@ -10,7 +10,8 @@ import {
   startCalendarConnection,
   syncCalendarBusy,
 } from "@/lib/appointments/linkedCalendars";
-import { hasTenantPermission } from "@/lib/tenantAuth/permissions";
+import { anyRoleHasPermission } from "@/lib/tenantAuth/permissions";
+import { contextRoles } from "@/lib/tenantAuth/requireTenant";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 
 /**
@@ -40,7 +41,7 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   const auth = await requireFeatureRole("outbound_dialing", CALENDAR_ROLES, { write: true });
   if (auth instanceof NextResponse) return auth;
-  if (!hasTenantPermission(auth.context.role, "calendar.manage"))
+  if (!anyRoleHasPermission(contextRoles(auth.context), "calendar.manage"))
     return NextResponse.json({ error: "Your role cannot change the calendar", code: "role_not_allowed" }, { status: 403 });
   const parsed = postSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Choose a calendar action" }, { status: 400 });
@@ -71,7 +72,7 @@ export async function POST(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   const auth = await requireFeatureRole("outbound_dialing", CALENDAR_ROLES, { write: true });
   if (auth instanceof NextResponse) return auth;
-  if (!hasTenantPermission(auth.context.role, "calendar.manage"))
+  if (!anyRoleHasPermission(contextRoles(auth.context), "calendar.manage"))
     return NextResponse.json({ error: "Your role cannot change the calendar", code: "role_not_allowed" }, { status: 403 });
   const id = request.nextUrl.searchParams.get("id") ?? "";
   if (!z.string().uuid().safeParse(id).success) return NextResponse.json({ error: "Choose a linked calendar" }, { status: 400 });

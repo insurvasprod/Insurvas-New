@@ -1,12 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { guardPage } from "@/lib/entitlements/guardPage";
+import { actAsPagePermission, guardPage } from "@/lib/entitlements/guardPage";
 import { fileDay } from "@/lib/ingestion/constants";
 import { isRecordUuid } from "@/lib/ingestion/path";
 import { fileHref, rowHref } from "@/lib/ingestion/trace";
 import { loadRowTrace } from "@/lib/ingestion/traceStore";
-import { hasTenantPermission } from "@/lib/tenantAuth/permissions";
 import { CarrierFileDownload } from "@/components/app/carrier-file-download";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
@@ -31,7 +30,7 @@ const cents = (n: number) => `${n < 0 ? "−" : ""}$${(Math.abs(n) / 100).toLoca
 export default async function RawRowPage({ params }: { params: Promise<{ fileId: string; rowNumber: string }> }) {
   const guard = await guardPage("statement_ingestion");
   if (!guard.entitled) return <FeatureGateNotice guard={guard} featureLabel="Carrier files" description="Bring in every policy and commission file your carriers send, however it arrives." />;
-  if (!hasTenantPermission(guard.role, "statements.view")) return <RoleGateNotice featureLabel="Carrier files" detail="Carrier files, and the rows in them, are opened by the account owner or a bookkeeper." />;
+  if (!actAsPagePermission(guard, "statements.view")) return <RoleGateNotice featureLabel="Carrier files" detail="Carrier files, and the rows in them, are opened by the account owner or a bookkeeper." />;
   const { fileId, rowNumber } = await params;
   const n = Number(rowNumber);
   if (!isRecordUuid(fileId) || !Number.isInteger(n) || n < 1) notFound();

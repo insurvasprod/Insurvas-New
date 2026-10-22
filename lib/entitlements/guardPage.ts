@@ -9,6 +9,7 @@ import { featureKillState } from "@/lib/features/killSwitch";
 import { allMenuItems } from "@/lib/menu/definition";
 import { APP_PATH_HEADER, isHiddenPath } from "@/lib/tenantAuth/teamAccess";
 import type { TenantRole } from "@/lib/tenantAuth/roles";
+import { rolesWithPermission, type TenantPermission } from "@/lib/tenantAuth/permissions";
 import type { TenantContext } from "@/lib/tenantAuth/requireTenant";
 
 /**
@@ -92,4 +93,13 @@ export function actAsPage(guard: PageGuardResult, allowed: readonly TenantRole[]
     guard.role = acting.role;
   }
   return true;
+}
+
+/**
+ * The same gate for a page that admits a PERMISSION rather than a list of roles: true when any role the member
+ * holds carries it (the dialer for an assistant who is also a setter). Replaces `hasTenantPermission(guard.role, …)`
+ * as a gate, which read the main role only.
+ */
+export function actAsPagePermission(guard: PageGuardResult, permission: TenantPermission): boolean {
+  return actAsPage(guard, rolesWithPermission(permission));
 }
